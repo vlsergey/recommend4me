@@ -20,8 +20,10 @@ export function CaptureButton() {
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger render={<Button variant="ghost" size="icon" aria-label="Слежение в браузере" title="Слежение в браузере" />}>
-          <RadarIcon />
+        <DialogTrigger
+          render={<Button variant="ghost" className="px-2 lg:px-3" aria-label="Расширение для Firefox" title="Расширение для Firefox: как подключить, что оно присылает" />}
+        >
+          <RadarIcon /> <span className="hidden lg:inline">Расширение</span>
         </DialogTrigger>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           {open && (
