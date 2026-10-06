@@ -38,16 +38,22 @@ class Database(
     val dsl: DSLContext = DSL.using(pool, SQLDialect.H2)
 
     init {
-        migrate(listOf("classpath:db/$kind"), "flyway_schema_history", classLoader)
-        if (pluginMigrations.isNotEmpty()) migrate(pluginMigrations, "plugin_schema_history", classLoader)
+        migrate(listOf("classpath:db/$kind"), "flyway_schema_history", classLoader, shared = false)
+        if (pluginMigrations.isNotEmpty()) migrate(pluginMigrations, "plugin_schema_history", classLoader, shared = true)
     }
 
-    private fun migrate(locations: List<String>, table: String, classLoader: ClassLoader) {
+    /**
+     * Applies the migrations of [locations] with their own history [table]. The source's own
+     * migrations come to a schema the application's have filled already ([shared]): their history
+     * starts from an empty baseline, version 0, so that their first migration is applied too.
+     */
+    private fun migrate(locations: List<String>, table: String, classLoader: ClassLoader, shared: Boolean) {
         val result = Flyway.configure(classLoader)
             .dataSource(pool)
             .locations(*locations.toTypedArray())
             .table(table)
-            .baselineOnMigrate(false)
+            .baselineOnMigrate(shared)
+            .baselineVersion("0")
             .load()
             .migrate()
         if (result.migrationsExecuted > 0) log.info("{}: {} migrations of {} applied", name, result.migrationsExecuted, locations)
