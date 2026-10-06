@@ -2,6 +2,10 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.api.ItemsApi
 import io.github.vlsergey.recommend4me.api.model.FacetFilter
+import io.github.vlsergey.recommend4me.api.model.FacetValueUse
+import io.github.vlsergey.recommend4me.api.model.LinkedItem
+import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.correction.FacetValues
 import io.github.vlsergey.recommend4me.api.model.ItemDetails
 import io.github.vlsergey.recommend4me.api.model.ItemPage
 import io.github.vlsergey.recommend4me.api.model.ItemSort
@@ -31,6 +35,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ResponseStatusException
 import java.net.URI
 import java.time.Duration
 import java.time.Instant
@@ -63,19 +68,56 @@ class ItemsController(
 
     override fun listFacets(type: String): ResponseEntity<List<FacetFilter>> = ResponseEntity.ok(list.facets(type))
 
+    override fun listFacetValues(source: String, facet: String, query: String?, limit: Int): ResponseEntity<List<FacetValueUse>> {
+        val store = stores.source(source) ?: return ResponseEntity.notFound().build()
+        if (store.source.schema.facet(facet) == null) return ResponseEntity.notFound().build()
+        val piece = query?.trim()?.lowercase().orEmpty()
+        return ResponseEntity.ok(
+            FacetValues.of(store, facet).asSequence()
+                .filter { piece.isEmpty() || piece in it.name.lowercase() || piece in it.key.lowercase() }
+                // A value beginning with what was typed before one only holding it
+                .sortedBy { if (it.name.lowercase().startsWith(piece)) 0 else 1 }
+                .take(limit.coerceIn(1, 500))
+                .map { FacetValueUse(it.key, it.name, it.items) }
+                .toList(),
+        )
+    }
+
+    override fun lookupItems(type: String, query: String, limit: Int): ResponseEntity<List<LinkedItem>> {
+        val typeStore = stores.type(type) ?: return ResponseEntity.notFound().build()
+        val line = query.trim()
+        if (line.isEmpty()) return ResponseEntity.ok(emptyList())
+        val wanted = limit.coerceIn(1, 100)
+        val found = LinkedHashMap<ItemKey, LinkedItem>()
+        // The address of a work's page first: what the user pastes from the site
+        if (line.startsWith("http")) typeStore.sources.forEach { s ->
+            val id = runCatching { s.source.itemIdOf(line) }.getOrNull() ?: return@forEach
+            val head = s.items.find(id) ?: return@forEach
+            found[ItemKey(s.id, id)] = LinkedItem(s.id, id, Corrected.title(head.title, s.corrections.fieldsOf(id)), head.url)
+        }
+        typeStore.sources.forEach { s ->
+            val titled = s.corrections.allFields().filter { (_, f) -> f[Corrected.TITLE]?.lowercase()?.contains(line.lowercase()) == true }.keys
+            (s.items.findByTitle(line, wanted) + s.items.heads(titled).values).forEach { head ->
+                found.putIfAbsent(ItemKey(s.id, head.id), LinkedItem(s.id, head.id, Corrected.title(head.title, s.corrections.fieldsOf(head.id)), head.url))
+            }
+        }
+        return ResponseEntity.ok(found.values.take(wanted))
+    }
+
     override fun getItem(source: String, item: String): ResponseEntity<ItemDetails> =
         details.read(ItemKey(source, item))?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun refreshItem(source: String, item: String): ResponseEntity<ItemDetails> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (store.items.find(item) == null) return ResponseEntity.notFound().build()
-        if (store.source.modes.none { it != SourceMode.BROWSER }) return ResponseEntity.status(HttpStatus.CONFLICT).build()
-        try {
-            if (!store.source.refresh(item, contexts.of(source))) return ResponseEntity.status(HttpStatus.CONFLICT).build()
+        if (store.source.modes.none { it != SourceMode.BROWSER }) throw ResponseStatusException(HttpStatus.CONFLICT, "Этот источник не скачивает страницы сам: откройте работу в браузере")
+        val refreshed = try {
+            store.source.refresh(item, contexts.of(source))
         } catch (e: Exception) {
             log.warn("{}: {} was not loaded: {}", source, item, e.message)
-            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build()
+            throw ResponseStatusException(HttpStatus.BAD_GATEWAY, "Сайт не ответил: ${e.message}")
         }
+        if (!refreshed) throw ResponseStatusException(HttpStatus.CONFLICT, "Источник не смог скачать страницу работы")
         textVectors.refresh(store, only = listOf(item))
         recommendations.scoreItem(ItemKey(source, item))
         return getItem(source, item)
@@ -84,16 +126,16 @@ class ItemsController(
     override fun rateItem(source: String, item: String, ratingRequest: RatingRequest): ResponseEntity<ItemSummary> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         val head = store.items.find(item) ?: return ResponseEntity.notFound().build()
-        if (ratingRequest.grade !in Grades.RANGE) return ResponseEntity.badRequest().build()
+        if (ratingRequest.grade !in Grades.RANGE) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Оценка — от ${Grades.MIN} до ${Grades.MAX}")
         store.ratings.rate(item, head.version, ratingRequest.grade, Instant.now())
         events.publishEvent(GradesChanged(store.type, source, item))
         return card(ItemKey(source, item))
     }
 
-    override fun unrateItem(source: String, item: String): ResponseEntity<ItemSummary> {
+    override fun unrateItem(source: String, item: String, version: String?): ResponseEntity<ItemSummary> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         val head = store.items.find(item) ?: return ResponseEntity.notFound().build()
-        store.ratings.unrate(item, head.version)
+        store.ratings.unrate(item, version ?: head.version)
         events.publishEvent(GradesChanged(store.type, source, item))
         return card(ItemKey(source, item))
     }
@@ -113,7 +155,7 @@ class ItemsController(
         }
 
     override fun markPicture(source: String, item: String, position: Int, mark: Mark): ResponseEntity<Unit> {
-        if (mark.mark != 1 && mark.mark != -1) return ResponseEntity.badRequest().build()
+        if (mark.mark != 1 && mark.mark != -1) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Отметка — +1 или −1")
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         val picture = store.pictures.find(item, position, null) ?: return ResponseEntity.notFound().build()
         store.marks.markPicture(item, position, picture.url, mark.mark, Instant.now())
@@ -129,7 +171,7 @@ class ItemsController(
     }
 
     override fun markReview(source: String, item: String, reviewId: String, mark: Mark): ResponseEntity<Unit> {
-        if (mark.mark != 1 && mark.mark != -1) return ResponseEntity.badRequest().build()
+        if (mark.mark != 1 && mark.mark != -1) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Отметка — +1 или −1")
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (reviewId !in store.reviews.ids(item)) return ResponseEntity.notFound().build()
         store.marks.markReview(item, reviewId, mark.mark, Instant.now())
@@ -152,7 +194,7 @@ class ItemsController(
 
     override fun giveMatchFeedback(matchFeedbackRequest: MatchFeedbackRequest): ResponseEntity<Unit> {
         val r = matchFeedbackRequest
-        if (r.verdict !in -1..1) return ResponseEntity.badRequest().build()
+        if (r.verdict !in -1..1) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Ответ — +1, 0 или −1")
         val store = stores.source(r.markSource) ?: return ResponseEntity.notFound().build()
         store.marks.setFeedback(
             MarkKind.valueOf(r.kind.value),

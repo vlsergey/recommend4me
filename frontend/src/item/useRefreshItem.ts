@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type ItemDetails, type ItemRef } from "@/api/client";
+import { api, unwrap, type ItemDetails, type ItemRef } from "@/api/client";
 import { toast } from "@/components/ui/toast";
 import { applyDetails } from "./lists";
 
@@ -10,14 +10,9 @@ import { applyDetails } from "./lists";
 export function useRefreshItem(ref: ItemRef) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (): Promise<ItemDetails> => {
-      const result = await api.POST("/api/items/{source}/{item}/refresh", { params: { path: { source: ref.source, item: ref.item } } });
-      if (!result.data) {
-        const status = result.response.status;
-        throw new Error(status === 502 ? "сайт не отдал страницу" : status === 409 ? "этот источник не умеет скачивать страницы" : `HTTP ${status}`);
-      }
-      return result.data;
-    },
+    // Why it failed (the site did not answer, the source cannot download) the backend says itself
+    mutationFn: async (): Promise<ItemDetails> =>
+      unwrap(await api.POST("/api/items/{source}/{item}/refresh", { params: { path: { source: ref.source, item: ref.item } } })),
     onSuccess: (details) => applyDetails(queryClient, details, ref),
     onError: (error) => toast.add({ title: "Страница не загрузилась", description: error.message, type: "error" }),
   });

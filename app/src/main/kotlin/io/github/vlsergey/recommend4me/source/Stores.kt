@@ -21,6 +21,8 @@ import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
 import io.github.vlsergey.recommend4me.setvector.SetVectorRepository
 import io.github.vlsergey.recommend4me.signal.SignalRepository
 import io.github.vlsergey.recommend4me.signal.SignalsChanged
+import io.github.vlsergey.recommend4me.suggestion.SuggestionRepository
+import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
@@ -41,12 +43,16 @@ class SourceStore(val source: Source, val folder: Path, databases: Databases, ev
     val textVectors = TextVectorRepository(dbs.source.dsl)
     val setVectors = SetVectorRepository(dbs.source.dsl)
     val pages = CapturedPageRepository(dbs.source.dsl)
+    val valueNames = ValueNameRepository(dbs.source.dsl)
 
     val corrections = CorrectionRepository(dbs.corrections.dsl)
 
     val ratings = RatingRepository(dbs.ratings.dsl)
     val marks = MarkRepository(source.id, dbs.ratings.dsl)
     val signals = SignalRepository(dbs.ratings.dsl) { events.publishEvent(SignalsChanged(source.contentType)) }
+
+    /** What is worked out of the source's facets, in the model database of its content type. */
+    val suggestions = SuggestionRepository(databases.model(source.contentType), source.id)
 
     /** The source database, for the source's own tables. */
     val sourceDsl = dbs.source.dsl

@@ -1,0 +1,275 @@
+/*
+ * What page.js puts into the sites' pages. Inserted by the extension, not by the page: a site's
+ * own rules about inline styles do not apply. Every rule names an element or a class of its own,
+ * so the site's look is touched only where the user corrected something.
+ */
+
+r4m-panel, r4m-head, r4m-line, r4m-why, r4m-facet, r4m-error, r4m-label {
+  display: block;
+}
+
+r4m-panel {
+  box-sizing: border-box;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #c9ced6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2328;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-align: left;
+}
+
+r4m-panel.r4m-floating {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483000;
+  width: min(420px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: auto;
+  margin: 0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+}
+
+r4m-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+r4m-head .r4m-spacer {
+  flex: 1;
+}
+
+r4m-panel.r4m-folded > :not(r4m-head) {
+  display: none;
+}
+
+r4m-panel.r4m-folded r4m-head {
+  margin-bottom: 0;
+}
+
+r4m-panel a.r4m-link {
+  color: #0b62c4;
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+r4m-line, r4m-why, r4m-facet {
+  margin: 4px 0;
+}
+
+r4m-why {
+  font-size: 12px;
+}
+
+r4m-label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+r4m-error {
+  color: #b42318;
+  font-size: 12px;
+}
+
+r4m-panel .r4m-muted {
+  color: #6a737d;
+}
+
+r4m-panel .r4m-up {
+  color: #1a7f37;
+}
+
+r4m-panel .r4m-down {
+  color: #b42318;
+}
+
+/* --- Buttons --- */
+
+[data-r4m].r4m-button, [data-r4m].r4m-grade, [data-r4m].r4m-yes, [data-r4m].r4m-no, [data-r4m].r4m-mark {
+  display: inline-block;
+  box-sizing: border-box;
+  margin: 0 2px;
+  padding: 0 6px;
+  min-width: 22px;
+  height: 22px;
+  border: 1px solid #c9ced6;
+  border-radius: 4px;
+  background: #f6f8fa;
+  color: #1f2328;
+  font: 600 12px/20px system-ui, sans-serif;
+  text-align: center;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+[data-r4m].r4m-grade {
+  min-width: 26px;
+}
+
+[data-r4m].r4m-grade.r4m-current, [data-r4m].r4m-mark.r4m-current {
+  background: #0b62c4;
+  border-color: #0b62c4;
+  color: #ffffff;
+}
+
+[data-r4m].r4m-yes {
+  color: #1a7f37;
+}
+
+[data-r4m].r4m-no {
+  color: #b42318;
+}
+
+/* --- Scores, red to green --- */
+
+r4m-score {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: #ffffff;
+  font: 700 13px/20px system-ui, sans-serif;
+}
+
+r4m-score.r4m-s0, r4m-score.r4m-s1 { background: #b42318; }
+r4m-score.r4m-s2, r4m-score.r4m-s3 { background: #d4572a; }
+r4m-score.r4m-s4 { background: #c98a12; }
+r4m-score.r4m-s5 { background: #a19412; }
+r4m-score.r4m-s6 { background: #6f9a1c; }
+r4m-score.r4m-s7 { background: #3f9426; }
+r4m-score.r4m-s8, r4m-score.r4m-s9, r4m-score.r4m-s10 { background: #1a7f37; }
+
+r4m-badge {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+r4m-grade-mark {
+  color: #c98a12;
+  font: 700 13px/20px system-ui, sans-serif;
+}
+
+/* --- Values of facets --- */
+
+r4m-chips, r4m-tools, r4m-marks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  vertical-align: middle;
+}
+
+r4m-chips {
+  margin-left: 4px;
+}
+
+r4m-tools {
+  margin: 0 4px 0 1px;
+}
+
+r4m-chip {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin: 2px 4px 2px 0;
+  padding: 1px 2px 1px 8px;
+  border: 1px solid #c9ced6;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1f2328;
+  font: 12px/20px system-ui, sans-serif;
+}
+
+r4m-chip.r4m-suggested {
+  border-style: dashed;
+  border-color: #0b62c4;
+  background: #eef5ff;
+}
+
+r4m-chip.r4m-added {
+  border-color: #1a7f37;
+  background: #effaf2;
+}
+
+r4m-chip.r4m-removed-chip > span {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+r4m-chip.r4m-doubted-chip {
+  border-color: #c98a12;
+}
+
+r4m-chip .r4m-chance {
+  color: #6a737d;
+  font-size: 11px;
+}
+
+r4m-doubt {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: #c98a12;
+  color: #ffffff;
+  font: 700 11px/16px system-ui, sans-serif;
+  text-align: center;
+  cursor: help;
+}
+
+.r4m-removed {
+  text-decoration: line-through !important;
+  opacity: 0.45 !important;
+}
+
+.r4m-doubted {
+  outline: 1px dashed #c98a12 !important;
+  outline-offset: 1px;
+}
+
+/* The tools of a site's value show on hover, or always on a value already corrected */
+r4m-tools [data-r4m].r4m-no {
+  opacity: 0.25;
+}
+
+r4m-tools:hover [data-r4m].r4m-no, .r4m-doubted + r4m-tools [data-r4m].r4m-no {
+  opacity: 1;
+}
+
+form.r4m-add {
+  display: inline-block;
+  margin: 2px 0;
+}
+
+form.r4m-add input {
+  box-sizing: border-box;
+  width: 180px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid #c9ced6;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #1f2328;
+  font: 12px system-ui, sans-serif;
+}
+
+/* --- Marks of reviews and pictures --- */
+
+r4m-marks {
+  margin: 4px 0;
+}
+
+r4m-marks.r4m-picture-marks {
+  display: flex;
+}
+
+.r4m-marked {
+  box-shadow: inset 3px 0 0 #0b62c4;
+}

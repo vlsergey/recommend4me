@@ -11,8 +11,10 @@ import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection as ApiFacetCorrection
 
@@ -40,8 +42,14 @@ class CorrectionsController(
     override fun correctFacet(source: String, item: String, facetCorrection: ApiFacetCorrection): ResponseEntity<ItemDetails> {
         val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
         val c = facetCorrection
-        if (store.source.schema.facet(c.facet) == null || c.key.isBlank()) return ResponseEntity.badRequest().build()
-        store.corrections.setFacet(item, c.facet, c.key.trim(), c.added, c.name?.trim()?.takeIf { it.isNotEmpty() }, Instant.now())
+        if (store.source.schema.facet(c.facet) == null) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "У источника нет поля «${c.facet}»")
+        val name = c.name?.trim()?.takeIf { it.isNotEmpty() }
+        val key = c.key?.trim()?.takeIf { it.isNotEmpty() }
+            ?: name?.let { FacetValues.keyOf(store, c.facet, it) }
+            ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Не указано значение")
+        // A name is kept for a value the site does not name: one the user made up
+        val known = store.items.facetNames(c.facet, listOf(key)).isNotEmpty()
+        store.corrections.setFacet(item, c.facet, key, c.added, name.takeIf { !known }, Instant.now())
         return corrected(store, item)
     }
 
@@ -53,7 +61,7 @@ class CorrectionsController(
 
     override fun correctField(source: String, item: String, field: String, fieldCorrection: FieldCorrection): ResponseEntity<ItemDetails> {
         val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
-        if (!knownField(store, field)) return ResponseEntity.badRequest().build()
+        if (!knownField(store, field)) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "У источника нет поля «$field»")
         store.corrections.setField(item, field, fieldCorrection.content, Instant.now())
         return corrected(store, item)
     }
@@ -74,8 +82,9 @@ class CorrectionsController(
 
     override fun linkItem(source: String, item: String, itemRef: ItemRef): ResponseEntity<ItemDetails> {
         val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
-        val other = itemOf(itemRef.source, itemRef.item) ?: return ResponseEntity.badRequest().build()
-        if (other.type != store.type || (other.id == store.id && itemRef.item == item)) return ResponseEntity.badRequest().build()
+        val other = itemOf(itemRef.source, itemRef.item) ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Такой работы нет")
+        if (other.type != store.type) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Работы разного типа нельзя склеить")
+        if (other.id == store.id && itemRef.item == item) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Работу нельзя склеить с ней самой")
         if (other.id == store.id) store.corrections.link(item, itemRef.item, Instant.now())
         else stores.typeOf(source).links.link(ItemKey(source, item), ItemKey(itemRef.source, itemRef.item), Instant.now())
         return corrected(store, item)

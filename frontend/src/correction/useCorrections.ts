@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type ItemDetails, type ItemRef } from "@/api/client";
 import { applyDetails, ITEMS, removeFromLists } from "@/item/lists";
+import { suggestionsKey } from "@/suggestion/useSuggestions";
 
 /** The fields a correction overrides: the title, a text, a number. */
 export const titleField = "title";
@@ -17,8 +18,10 @@ export function useCorrections(item: ItemRef, typeId: string) {
 
   const done = (details: ItemDetails) => {
     applyDetails(queryClient, details, item);
-    // The counts of the filter values change with the values of the item
+    // The counts of the filter values change with the values of the item; an answered suggestion
+    // is no longer listed, and a correction taken back may list it again
     queryClient.invalidateQueries({ queryKey: ["facets", typeId] });
+    queryClient.invalidateQueries({ queryKey: suggestionsKey(item) });
     return details;
   };
 
@@ -29,18 +32,21 @@ export function useCorrections(item: ItemRef, typeId: string) {
     resetField: async (field: string) =>
       done(unwrap(await api.DELETE("/api/items/{source}/{item}/corrections/fields/{field}", { params: { path: { ...path, field } } }))),
 
-    /** Adds a value of a facet ([added]) or takes away one the site gives. */
-    setFacet: async (facet: string, key: string, added: boolean, name?: string) =>
-      done(unwrap(await api.PUT("/api/items/{source}/{item}/corrections/facets", { params: { path }, body: { facet, key, added, name } }))),
+    /**
+     * Adds a value of a facet ([added]) or takes away one the site gives. A value is named by its
+     * key, or by its name alone: the backend finds it among the facet's values or makes it up.
+     */
+    setFacet: async (facet: string, value: { key?: string; name?: string }, added: boolean) =>
+      done(unwrap(await api.PUT("/api/items/{source}/{item}/corrections/facets", { params: { path }, body: { facet, ...value, added } }))),
 
     resetFacet: async (facet: string, key: string) =>
       done(unwrap(await api.DELETE("/api/items/{source}/{item}/corrections/facets", { params: { path, query: { facet, key } } }))),
 
     /** The other item becomes a part of this card: it leaves the lists at once. */
     link: async (other: ItemRef) => {
-      const result = await api.POST("/api/items/{source}/{item}/links", { params: { path }, body: { source: other.source, item: other.item } });
-      if (result.response.status === 400) throw new Error("это работа другого типа или неизвестная");
-      const details = done(unwrap(result));
+      const details = done(
+        unwrap(await api.POST("/api/items/{source}/{item}/links", { params: { path }, body: { source: other.source, item: other.item } })),
+      );
       removeFromLists(queryClient, other);
       return details;
     },

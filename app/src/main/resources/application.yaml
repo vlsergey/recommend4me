@@ -23,6 +23,11 @@ spring:
   threads:
     virtual:
       enabled: true
+  mvc:
+    problemdetails:
+      # AN ERROR SAYS WHAT WENT WRONG: application/problem+json with the reason as "detail", which
+      # the interface shows the user as it is
+      enabled: true
   web:
     resources:
       cache:

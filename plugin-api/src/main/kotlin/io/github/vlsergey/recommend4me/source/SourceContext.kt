@@ -33,6 +33,9 @@ interface SourceContext {
 
     /** The items in the order the user wants them worked on: the graded, then by prediction, then the newest. */
     fun itemsInOrder(): List<String>
+
+    /** A value the source's jobs keep across restarts ([Job.state]), read outside of a job. */
+    fun jobState(key: String): String?
 }
 
 /** Settings of one source, kept by the application. */

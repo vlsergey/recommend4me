@@ -1,6 +1,6 @@
 {
   "name": "recommend4me-firefox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "The Firefox extension of recommend4me's browser tracking mode.",
   "scripts": {

@@ -31,6 +31,8 @@ class SourceContexts(private val stores: Stores, private val settings: Settings,
 
         override fun gradedItems(): Set<String> = store.ratings.gradedItems()
 
+        override fun jobState(key: String): String? = this@SourceContexts.settings.get("job.${store.id}.$key")
+
         override fun itemsInOrder(): List<String> {
             val graded = store.ratings.gradedItems()
             val predictions = stores.typeOf(store.id).models.predictions(store.id)

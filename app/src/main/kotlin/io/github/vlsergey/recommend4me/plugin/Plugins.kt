@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.scorer.Scorer
 import io.github.vlsergey.recommend4me.search.SearchProvider
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.Source
+import io.github.vlsergey.recommend4me.suggestion.FacetSuggester
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
@@ -24,6 +25,7 @@ class Plugins(
     imageEncoders: ObjectProvider<ImageEncoder>,
     scorers: ObjectProvider<Scorer>,
     searches: ObjectProvider<SearchProvider>,
+    suggesters: ObjectProvider<FacetSuggester>,
     types: ObjectProvider<ContentType>,
     private val settings: Settings,
 ) {
@@ -32,6 +34,7 @@ class Plugins(
     val imageEncoders: List<ImageEncoder> = imageEncoders.orderedStream().toList()
     val scorers: List<Scorer> = scorers.orderedStream().toList()
     val search: SearchProvider? = searches.orderedStream().toList().firstOrNull()
+    val suggester: FacetSuggester? = suggesters.orderedStream().toList().firstOrNull()
     private val allTypes = types.orderedStream().toList()
 
     init {
@@ -40,9 +43,9 @@ class Plugins(
         }
         require(this.sources.map { it.id }.distinct().size == this.sources.size) { "Two sources of one id: ${this.sources.map { it.id }}" }
         log.info(
-            "sources {}, text encoders {}, picture encoders {}, scorers {}, search {}",
+            "sources {}, text encoders {}, picture encoders {}, scorers {}, search {}, suggester {}",
             this.sources.map { it.id }, this.textEncoders.map { it.id }, this.imageEncoders.map { it.id },
-            this.scorers.map { it.id }, search?.id,
+            this.scorers.map { it.id }, search?.id, suggester?.id,
         )
     }
 

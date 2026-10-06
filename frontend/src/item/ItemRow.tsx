@@ -45,7 +45,7 @@ export const ItemRow = forwardRef<HTMLElement, ItemViewProps>(function ItemRow({
           <span title={summary.updatedAt}>{ago(summary.updatedAt)}</span>
           <NumberLine type={type} summary={summary} />
           <PreviousRating type={type} summary={summary} />
-          <SignalBadges signals={summary.signals} />
+          <SignalBadges source={type.sources.find((s) => s.id === summary.source)} signals={summary.signals} />
           <LinkedBadges type={type} linked={summary.linked} />
         </div>
         {summary.searchMatch ? (

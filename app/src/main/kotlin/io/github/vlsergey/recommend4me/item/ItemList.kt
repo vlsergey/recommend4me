@@ -25,8 +25,8 @@ enum class ItemOrder { SCORE, UPDATED, NUMBER }
 @Component
 class ItemList(private val stores: Stores, private val works: Works, private val cards: ItemCards, private val search: Search) {
 
-    /** A facet as the filters of a content type know it: the shared key of its sources' facets, or "<source>:<key>". */
-    private fun filterId(store: SourceStore, facet: io.github.vlsergey.recommend4me.source.FacetDef) = facet.shared ?: "${store.id}:${facet.key}"
+    /** A facet as the filters of a content type know it: the shared key of its sources' facets, or "<source>.<key>" — as the model does. */
+    private fun filterId(store: SourceStore, facet: io.github.vlsergey.recommend4me.source.FacetDef) = FeatureNames.facetId(store.source, facet)
 
     /** One row of the list before its card is read. */
     private class Row(val key: ItemKey, val updatedAt: Instant, val graded: Boolean, val prediction: Double?, val number: Double?)

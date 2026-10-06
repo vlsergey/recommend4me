@@ -6,6 +6,11 @@
  * The application says which addresses it wants (GET /api/capture/patterns); nothing else leaves
  * the browser. A page is sent when it has loaded, and again when its content grows while the user
  * is on it, at most once every few seconds and not after a minute.
+ *
+ * AND THE SITE AS THE APPLICATION'S INTERFACE: on the same pages page.js shows what the
+ * application knows of the work and lets the user grade it, correct its tags, mark its reviews and
+ * pictures (see page.js). Its calls to the application go through here: the page's own origin may
+ * not call the application, the extension may.
  */
 
 /** The wanted addresses, as regular expressions, and when they were asked for. */
@@ -17,9 +22,9 @@ const PATTERNS_TTL = 10 * 60 * 1000;
 const recent = [];
 const RECENT = 20;
 
+/** Whether a source of the application wants the page. */
 async function wanted(url) {
-  const { server, enabled } = await loadSettings();
-  if (!enabled) return false;
+  const { server } = await loadSettings();
   if (Date.now() - patternsAt > PATTERNS_TTL) {
     try {
       const response = await fetch(`${server}/api/capture/patterns`);
@@ -36,7 +41,10 @@ async function wanted(url) {
   return patterns.some((re) => re.test(url));
 }
 
-/** The script put into a wanted page: sends its DOM now and whenever it grows, for a minute. */
+/**
+ * The script put into a wanted page: sends its DOM now and whenever it grows, for a minute. What
+ * page.js puts into the page (every element marked data-r4m) is neither sent nor counted as growth.
+ */
 function watchPage() {
   if (window.__recommend4meWatching) return;
   window.__recommend4meWatching = true;
@@ -45,15 +53,26 @@ function watchPage() {
   const started = Date.now();
   let lastLength = 0;
   let timer = null;
+  const ours = (node) => node.nodeType === 1 && (node.hasAttribute("data-r4m") || node.closest("[data-r4m]"));
   const send = () => {
-    const html = document.documentElement.outerHTML;
+    const copy = document.documentElement.cloneNode(true);
+    copy.querySelectorAll("[data-r4m]").forEach((e) => e.remove());
+    copy.querySelectorAll(".r4m-removed, .r4m-doubted").forEach((e) => e.classList.remove("r4m-removed", "r4m-doubted"));
+    const html = copy.outerHTML;
     // Grown by less than a hundredth: a counter ticked, nothing new to read
     if (Math.abs(html.length - lastLength) < lastLength / 100) return;
     lastLength = html.length;
     browser.runtime.sendMessage({ type: "capture", url: location.href, html });
   };
   send();
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver((mutations) => {
+    const theirs = mutations.some((m) => {
+      const target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+      if (target && ours(target)) return false;
+      if (m.type !== "childList") return true;
+      return [...m.addedNodes, ...m.removedNodes].some((n) => !(n.nodeType === 1 && n.hasAttribute("data-r4m")));
+    });
+    if (!theirs) return;
     if (Date.now() - started > LIMIT) {
       observer.disconnect();
       return;
@@ -65,11 +84,21 @@ function watchPage() {
 }
 
 async function inject(tabId, url) {
-  if (!(await wanted(url))) return;
+  const { enabled, decorate } = await loadSettings();
+  if (!(enabled || decorate) || !(await wanted(url))) return;
+  if (enabled) {
+    try {
+      await browser.scripting.executeScript({ target: { tabId }, func: watchPage });
+    } catch (e) {
+      console.warn("recommend4me: cannot watch", url, e);
+    }
+  }
+  if (!decorate) return;
   try {
-    await browser.scripting.executeScript({ target: { tabId }, func: watchPage });
+    await browser.scripting.insertCSS({ target: { tabId }, files: ["page.css"] });
+    await browser.scripting.executeScript({ target: { tabId }, files: ["page.js"] });
   } catch (e) {
-    console.warn("recommend4me: cannot watch", url, e);
+    console.warn("recommend4me: cannot show the work on", url, e);
   }
 }
 
@@ -109,6 +138,8 @@ async function capture(url, html, tabId) {
     if (tabId !== undefined) {
       await browser.action.setBadgeBackgroundColor({ color: "#2e7d32", tabId });
       await browser.action.setBadgeText({ text: result.items.length ? String(result.items.length) : "✓", tabId });
+      // The page shows the work as the application knows it now
+      browser.tabs.sendMessage(tabId, { type: "captured", url }).catch(() => {});
     }
   } catch (e) {
     entry.error = String(e.message || e);
@@ -122,8 +153,39 @@ async function capture(url, html, tabId) {
   return entry;
 }
 
+/**
+ * A call of page.js to the application: only to its API, only from the extension's own scripts.
+ * Answers {ok, status, data, error}: the body as JSON, or the "detail" of an error.
+ */
+async function call(message, sender) {
+  if (sender.id !== browser.runtime.id || typeof message.path !== "string" || !message.path.startsWith("/api/")) {
+    return { ok: false, status: 0, error: "not allowed" };
+  }
+  const { server } = await loadSettings();
+  try {
+    const response = await fetch(`${server}${message.path}`, {
+      method: message.method || "GET",
+      headers: message.body === undefined ? {} : { "Content-Type": "application/json" },
+      body: message.body === undefined ? undefined : JSON.stringify(message.body),
+    });
+    const text = await response.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (e) {
+      data = null;
+    }
+    if (!response.ok) return { ok: false, status: response.status, error: (data && data.detail) || `HTTP ${response.status}` };
+    return { ok: true, status: response.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, error: "Приложение recommend4me не отвечает" };
+  }
+}
+
 browser.runtime.onMessage.addListener((message, sender) => {
   if (message.type === "capture") return capture(message.url, message.html, sender.tab && sender.tab.id);
+  if (message.type === "api") return call(message, sender);
+  if (message.type === "server") return loadSettings().then((s) => s.server);
   if (message.type === "recent") return Promise.resolve(recent);
   if (message.type === "status") return status();
   if (message.type === "send-now") return sendNow(message.tabId);

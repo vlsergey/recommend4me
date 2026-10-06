@@ -1,9 +1,14 @@
 package io.github.vlsergey.recommend4me.source.ficbook
 
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.CardDecor
+import io.github.vlsergey.recommend4me.source.FacetDecor
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberScale
+import io.github.vlsergey.recommend4me.source.PageDecor
+import io.github.vlsergey.recommend4me.source.PictureDecor
+import io.github.vlsergey.recommend4me.source.ReviewDecor
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
@@ -30,7 +35,7 @@ class Ficbook : Source {
             FacetDef(DIRECTION, "Направленность", filter = true, onCard = true),
             FacetDef(RATING, "Рейтинг", filter = true, onCard = true),
             FacetDef(STATUS, "Статус", filter = true),
-            FacetDef(TAG, "Метка", shared = "tag", searchWeight = 0.9f),
+            FacetDef(TAG, "Метка", shared = "tag", searchWeight = 0.9f, suggest = true),
             FacetDef(CHARACTER, "Персонаж", searchWeight = 0.8f),
             FacetDef(PAIRING, "Пэйринг", searchWeight = 0.7f),
             FacetDef(SERIES, "Серия", searchWeight = 0.7f),
@@ -59,11 +64,24 @@ class Ficbook : Source {
 
     override fun itemUrl(itemId: String) = "$BASE/readfic/$itemId"
 
+    override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
+
+    override val pageDecor = PageDecor(
+        panelAfter = "section.fanfic-hat",
+        facets = listOf(FacetDecor(TAG, "section.fanfic-hat a.tag")),
+        reviews = ReviewDecor("article.comment-container[id^='com']", idPrefix = "com"),
+        pictures = PictureDecor("img.fic-cover"),
+        cards = CardDecor("article.fanfic-inline", ".fanfic-inline-title a[href^='/readfic/']"),
+    )
+
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
 
     companion object {
         const val ID = "ficbook"
         const val BASE = "https://ficbook.net"
+
+        /** A work's page, a part of it, its comments. */
+        private val ITEM_ADDRESS = Regex("^https?://(?:www\\.)?ficbook\\.net/readfic/([0-9a-f-]+)(?:[/?#]|$)")
 
         const val AUTHOR = "author"
         const val FANDOM = "fandom"

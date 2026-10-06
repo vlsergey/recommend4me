@@ -12,8 +12,10 @@ import io.github.vlsergey.recommend4me.api.model.ScorerQuality as ApiScorerQuali
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Grades
 import io.github.vlsergey.recommend4me.source.Stores
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 import java.time.ZoneOffset
 
@@ -36,7 +38,7 @@ class ModelController(
 
     override fun chooseScorer(type: String, scorerChoice: ScorerChoice): ResponseEntity<ModelInfo> {
         if (stores.type(type) == null) return ResponseEntity.notFound().build()
-        val summary = recommendations.chooseScorer(type, scorerChoice.scorer) ?: return ResponseEntity.badRequest().build()
+        val summary = recommendations.chooseScorer(type, scorerChoice.scorer) ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Нет способа оценки «${scorerChoice.scorer}»")
         return ResponseEntity.ok(summary.toApi())
     }
 

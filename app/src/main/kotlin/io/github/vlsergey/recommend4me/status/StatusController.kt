@@ -34,7 +34,7 @@ class StatusController(
                     WorkStatus("pictures", p.analyzed, p.total, p.running, p.failed, p.perMinute),
                     WorkStatus("texts", texts, texts, textVectors.running()),
                     WorkStatus("parts", partsTotal - parts.pending(), partsTotal, parts.running()),
-                    WorkStatus("sets", 0, 0, sets.running()),
+                    WorkStatus("sets", sets.done, sets.total, sets.running()),
                 ),
             ),
         )

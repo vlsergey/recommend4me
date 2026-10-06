@@ -29,6 +29,17 @@ export function valueRef(facetId: string, key: string): string {
   return `${facetId}=${key}`;
 }
 
+/**
+ * A remembered selection without the facets of the old "<source>:<key>" ids (now
+ * "<source>.<key>"): the backend knows them no more, and they would hide nothing.
+ */
+export function validSelection(s: FacetSelection): FacetSelection {
+  const current = (facetId: string) => !facetId.includes(":");
+  const hidden = s.hidden.filter((ref) => current(ref.slice(0, Math.max(0, ref.indexOf("=")))));
+  const hiddenWithout = s.hiddenWithout.filter(current);
+  return hidden.length === s.hidden.length && hiddenWithout.length === s.hiddenWithout.length ? s : { hidden, hiddenWithout };
+}
+
 /** A list this long gets a line to find a value in. */
 const FINDABLE = 15;
 

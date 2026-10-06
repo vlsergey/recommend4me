@@ -19,6 +19,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/scorer-pairwise` | Pairwise logistic ranking (RankNet with a line), C chosen by cross-validation. |
 | `plugins/scorer-knn` | k nearest rated neighbours by cosine — a baseline. |
 | `plugins/search-lucene` | Search by words and by meaning over one Lucene index per content type. |
+| `plugins/suggester-tags` | The tags a work should have, from its text, its other tags and every other work. |
 | `plugins/source-author-today` | author.today, browser tracking only. |
 | `plugins/source-ficbook` | ficbook.net, browser tracking only. |
 | `browser-extension` | The Firefox extension of the browser tracking mode. |
@@ -51,11 +52,12 @@ Every source has up to three modes:
 - **browser tracking** — the pages the user opens in Firefox are sent by the extension and parsed;
   nothing is requested from the site by the application.
 
-author.today and ficbook have only the third.
+author.today and ficbook have only the third: their catalogues are never scraped whole.
 
 ## Storage
 
-H2, one file per level of data, under the data folder (`%LOCALAPPDATA%ecommend4me` on
+H2, one file per level of data, under the data folder (`%LOCALAPPDATA%
+ecommend4me` on
 Windows, `~/.local/share/recommend4me` elsewhere; `recommend4me.data-dir`):
 
 ```
@@ -70,7 +72,8 @@ sources/<source>/ratings.mv.db     the user's own data: grades, marks on picture
 sources/<source>/images/           picture files
 types/<type>/corrections.mv.db     duplicates merged across the sources of a type
 types/<type>/model.mv.db           the trained model, the predictions, the likeness to the marks,
-                                   the directions of the set embeddings — all recomputable
+                                   the directions of the set embeddings, the suggested tags — all
+                                   recomputable
 types/<type>/search-index/         the search index
 models/                            ONNX graphs of the encoders
 backups/                           corrections and ratings, zipped on every start
@@ -121,9 +124,41 @@ For every content type:
 
 Scorers implement `Scorer`; anything that maps a row of features to a number fits.
 
+## Suggested tags
+
+Authors tag their books carelessly or not at all. For every facet a source marks `suggest`
+(the tags of author.today and ficbook) the application works out the values a work should have
+and shows them to confirm or reject; it also marks the site's values that do not fit the work.
+The work is the `FacetSuggester` plugin's (`suggester-tags`): it is handed every item of the
+source — the mean direction of its texts' vectors, its values with the user's corrections, the
+values the user confirmed and rejected — and every value with the vector of its name as a query.
+`suggester-tags` weighs three witnesses by a logistic regression learnt from the catalogue: the
+share of the nearest texts having the value, how much nearer the text is to the value's name than
+texts usually are, and how much more often the value goes with the work's other values than by
+chance. Every count leaves the work itself out, so a site's value nothing else supports comes out
+unlikely.
+
+A confirmation is a correction adding the value, a rejection one taking it away: the model, the
+filters and the search see them at once. The suggestions are kept in the model database with
+what each was made of (a fingerprint of the work's values, the user's answers and its texts),
+made again a few seconds after the work changes, at once for a work that never had any; the
+suggester is fitted again when the user's answers have grown by ten or a tenth, and twice a day.
+
+## The site as the interface
+
+On the pages the sources want, the extension also shows the work as the application knows it,
+so the site itself is an interface of the application (`GET /api/pages?url=`): a panel with the
+prediction, the grade buttons, what the prediction rests on and the tags; on the site's own tag
+elements a button to take each away and the user's and the suggested tags after them; "+ / −" on
+every review and picture of the work; the prediction and the grade on every card of a list
+(`POST /api/pages/cards`). A source says where these go by `PageDecor` — CSS selectors of its
+pages — and which work a page or a card's link is of by `Source.itemIdOf`. Everything is changed
+through the same calls as the application's own interface.
+
 ## Browser tracking
 
 The extension asks the application which addresses it wants (`GET /api/capture/patterns`) and
-sends every such page the user opens — its rendered DOM — to `POST /api/capture`. The application
+sends every such page the user opens — its rendered DOM, without what the extension itself put
+into it — to `POST /api/capture`. The application
 keeps the page (`captured_page`), hands it to the source whose patterns match, and re-parses kept
 pages when a parser's version grows.

@@ -100,14 +100,14 @@ class ScenarioTest {
         assertEquals(2, list(view = ItemView.UNRATED).total)
 
         // A tag the user adds is filtered by like the site's
-        val corrected = corrections.correctFacet("test", "w2", FacetCorrection("tag", "fantasy", true)).body!!
+        val corrected = corrections.correctFacet("test", "w2", FacetCorrection(facet = "tag", added = true, key = "fantasy")).body!!
         assertEquals(FacetValueInfo.Corrected.ADDED, corrected.allFacets.single().propertyValues.single { it.key == "fantasy" }.corrected)
-        assertEquals(3, list(hidden = listOf("test:tag=romance")).total)
-        val notFantasy = list(hidden = listOf("test:tag=fantasy", "test:tag=dragons"))
+        assertEquals(3, list(hidden = listOf("test.tag=romance")).total)
+        val notFantasy = list(hidden = listOf("test.tag=fantasy", "test.tag=dragons"))
         assertEquals(listOf("w2"), notFantasy.items.map { it.item })
 
         assertEquals("w3", list(sort = ItemSort.NUMBER, sortNumber = "test.likes").items.first().item)
         assertEquals("A boy finds a dragon egg", items.getItem("test", "w1").body!!.texts.single().content)
-        assertEquals("test:tag", items.listFacets("books").body!!.single().id)
+        assertEquals("test.tag", items.listFacets("books").body!!.single().id)
     }
 }

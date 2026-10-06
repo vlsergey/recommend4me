@@ -35,6 +35,22 @@ export function removeFromLists(queryClient: QueryClient, ref: ItemRef) {
   }));
 }
 
+/** The card of the work the item is of: a list shows a work once, under the item that stands for it. */
+function ofWork(card: ItemSummary, item: ItemSummary): boolean {
+  return sameItem(card, item) || card.work === item.work;
+}
+
+/**
+ * The card after a grade of an item of its work: the item's own card is replaced; the card of
+ * the work under another of its items takes the grade over (a grade from a page the browser
+ * extension sent, of an item linked to the card's).
+ */
+function graded(card: ItemSummary, updated: ItemSummary): ItemSummary {
+  if (sameItem(card, updated)) return updated;
+  const { grade, previousGrade, previousGradeVersion } = updated;
+  return { ...card, grade, previousGrade, previousGradeVersion };
+}
+
 /**
  * A grade changed: a card graded in the "unrated" view leaves it at once, so the next one moves
  * up under the cursor; one ungraded in the "rated" view leaves that. Elsewhere it is replaced.
@@ -46,10 +62,10 @@ export function applyGrade(queryClient: QueryClient, updated: ItemSummary) {
     return {
       ...data,
       pages: data.pages.map((page) => {
-        const had = page.items.some((s) => sameItem(s, updated));
+        const had = page.items.some((s) => ofWork(s, updated));
         return {
           total: leaves && had ? page.total - 1 : page.total,
-          items: leaves ? page.items.filter((s) => !sameItem(s, updated)) : page.items.map((s) => (sameItem(s, updated) ? updated : s)),
+          items: leaves ? page.items.filter((s) => !ofWork(s, updated)) : page.items.map((s) => (ofWork(s, updated) ? graded(s, updated) : s)),
         };
       }),
     };

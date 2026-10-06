@@ -1,24 +1,8 @@
-import type { SourceMode } from "./api/client";
+import type { CatalogueProgress, SourceMode } from "./api/client";
 
 /** A score with one decimal at most, the Russian way: 7,5. */
 export function score(value: number): string {
   return (Math.round(value * 10) / 10).toLocaleString("ru-RU");
-}
-
-/** Where a search found a work, when the search names a field by a code rather than a label. */
-const SEARCH_FIELD_LABEL: Record<string, string> = {
-  TITLE: "название",
-  CREATOR: "автор",
-  AUTHOR: "автор",
-  TAG: "теги",
-  FACET: "признаки",
-  OVERVIEW: "описание",
-  ANNOTATION: "аннотация",
-  CHANGELOG: "changelog",
-};
-
-export function searchFieldLabel(field: string): string {
-  return SEARCH_FIELD_LABEL[field] ?? field.toLowerCase();
 }
 
 /** The phases of a job: the application's own and the ones the sources name. */
@@ -46,6 +30,25 @@ export const MODE_LABEL: Record<SourceMode, string> = {
   BROWSER: "Слежение в браузере",
 };
 
+/**
+ * How far the whole catalogue of a source is loaded, across the runs of its job: "Каталог: лента
+ * 120 / 650 страниц", "Каталог: страницы работ 20 000 / 27 516", "Каталог загружен".
+ */
+export function catalogueLabel(c: CatalogueProgress): string {
+  if (c.complete) return "Каталог загружен";
+  const of = c.total > 0 ? `${number(c.done)} / ${number(c.total)}` : number(c.done);
+  switch (c.stage) {
+    case "none":
+      return "Полный сбор каталога не запускался";
+    case "feed":
+      return `Каталог: лента ${of} страниц`;
+    case "details":
+      return `Каталог: страницы работ ${of}`;
+    default:
+      return `Каталог: ${phaseLabel(c.stage)} ${of}`;
+  }
+}
+
 /** The background work of the application, as `/api/status` names it. */
 export const WORK_LABEL: Record<string, { title: string; about: string }> = {
   pictures: {
@@ -56,30 +59,6 @@ export const WORK_LABEL: Record<string, { title: string; about: string }> = {
   parts: { title: "Главы", about: "Тексты глав, нарезанные на фрагменты; у каждого фрагмента свой вектор." },
   sets: { title: "Наборы", about: "Пересчёт направлений наборов: скриншотов, отзывов, фрагментов текста." },
 };
-
-/** The user's own actions on a site, as the sources name them. */
-const SIGNAL_LABEL: Record<string, string> = {
-  liked: "лайк",
-  like: "лайк",
-  bookmarked: "в закладках",
-  bookmark: "в закладках",
-  favorite: "в избранном",
-  favourite: "в избранном",
-  shelf: "полка",
-  library: "в библиотеке",
-  read: "прочитано",
-  reading: "читаю",
-  played: "сыграно",
-  watched: "отслеживаю",
-  subscribed: "подписка",
-  rating: "моя оценка",
-};
-
-/** "лайк", "полка: читаю" — a signal and its value; a yes/no value shows the name only. */
-export function signalLabel(name: string, value: string): string {
-  const label = SIGNAL_LABEL[name] ?? name;
-  return value === "" || value === "true" || value === "1" ? label : `${label}: ${SIGNAL_LABEL[value] ?? value}`;
-}
 
 export function formatDate(iso: string | undefined): string {
   if (!iso) return "";

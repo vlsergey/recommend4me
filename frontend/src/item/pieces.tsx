@@ -8,12 +8,14 @@ import {
   type ItemSummary,
   type LinkedItem,
   type SearchMatch,
+  type SignalInfo,
+  type SourceInfo,
 } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ALL_GRADES, gradeLabel, sourceTitle, typeIcon } from "@/contenttype/types";
-import { compact, score, searchFieldLabel, signalLabel } from "@/i18n";
+import { compact, score } from "@/i18n";
 import { useLadder } from "@/model/useModel";
 import { cn } from "@/lib/utils";
 
@@ -184,15 +186,32 @@ export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[];
   );
 }
 
+/** The values of a yes/no signal: the signal's name says it all. */
+const FLAG = new Set(["", "true", "1", "yes"]);
+
+/**
+ * "Нравится", "Полка: читаю", "Реакция: весело, грустно" — a signal and its values with the names
+ * its source gives them; a value may be several joined by ",", a yes/no one shows the name only.
+ */
+function signalLabel(info: SignalInfo | undefined, key: string, value: string): string {
+  const label = info?.label ?? key;
+  const values = value
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => !FLAG.has(v))
+    .map((v) => info?.values[v] ?? v);
+  return values.length === 0 ? label : `${label}: ${values.join(", ")}`;
+}
+
 /** The user's own actions on the site: liked it, put it on a shelf. */
-export function SignalBadges({ signals, className }: { signals?: Record<string, string>; className?: string }) {
+export function SignalBadges({ source, signals, className }: { source?: SourceInfo; signals?: Record<string, string>; className?: string }) {
   const entries = Object.entries(signals ?? {});
   if (entries.length === 0) return null;
   return (
     <span className={cn("inline-flex flex-wrap gap-1", className)}>
-      {entries.map(([name, value]) => (
-        <Badge key={name} variant="outline" className="border-primary/40 font-normal" title="Ваше действие на сайте">
-          {signalLabel(name, value)}
+      {entries.map(([key, value]) => (
+        <Badge key={key} variant="outline" className="border-primary/40 font-normal" title="Ваше действие на сайте">
+          {signalLabel(source?.signals.find((s) => s.key === key), key, value)}
         </Badge>
       ))}
     </span>
@@ -264,10 +283,9 @@ export function SearchMatchLine({ match, className }: { match: SearchMatch; clas
       at = end;
     });
   if (at < match.text.length) parts.push({ text: match.text.slice(at), found: false });
-  const field = searchFieldLabel(match.field);
   return (
     <p className={cn("text-xs leading-snug text-muted-foreground", className)}>
-      <span className="font-medium text-foreground/70">{match.byMeaning ? `по смыслу · ${field}` : field}: </span>
+      <span className="font-medium text-foreground/70">{match.byMeaning ? `по смыслу · ${match.field}` : match.field}: </span>
       {parts.map((p, i) =>
         p.found ? (
           <mark key={i} className="rounded-sm bg-maybe/35 px-0.5 text-foreground">

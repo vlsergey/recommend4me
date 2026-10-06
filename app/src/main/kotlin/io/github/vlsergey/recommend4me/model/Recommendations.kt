@@ -309,6 +309,14 @@ class Recommendations(
         val reviewMatches: List<MarkLikeness.Match>,
     )
 
+    /** What pushed the prediction of the work most, strongest first — no more than the dialog's first lines, for a page of the site. */
+    fun explanation(key: ItemKey): List<Contribution> {
+        val type = stores.typeOf(key.source)
+        val model = load(type) ?: return emptyList()
+        val input = inputOf(type, key, likenesses.stored(type)) ?: return emptyList()
+        return explain(model, input, type)
+    }
+
     fun details(key: ItemKey): Details {
         val type = stores.typeOf(key.source)
         val store = type.source(key.source)!!

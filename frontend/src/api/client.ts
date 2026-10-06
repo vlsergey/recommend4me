@@ -38,21 +38,35 @@ export type SourceSettings = Schemas["SourceSettings"];
 export type SettingValue = Schemas["SettingValue"];
 export type WorkStatus = Schemas["WorkStatus"];
 export type CapturedPageInfo = Schemas["CapturedPageInfo"];
+export type RatingRecord = Schemas["RatingRecord"];
+export type SignalInfo = Schemas["SignalInfo"];
+export type CatalogueProgress = Schemas["CatalogueProgress"];
+export type FacetSuggestions = Schemas["FacetSuggestions"];
+export type SuggestedValue = Schemas["SuggestedValue"];
+export type FacetValueUse = Schemas["FacetValueUse"];
 
-/** Returns the body of a successful response or throws with the HTTP status. */
+/**
+ * The failure of a call as the user should read it: the backend answers an error as
+ * application/problem+json with a `detail` in Russian; without one, the HTTP status.
+ */
+export function failure(result: { error?: unknown; response: Response }): Error {
+  const error = result.error;
+  const detail = typeof error === "object" && error !== null && "detail" in error ? error.detail : undefined;
+  return new Error(typeof detail === "string" && detail !== "" ? detail : `HTTP ${result.response.status}`);
+}
+
+/** Returns the body of a successful response or throws with the reason the backend gave. */
 export function unwrap<T>(result: { data?: T; error?: unknown; response: Response }): T {
-  if (result.data === undefined) {
-    throw new Error(`HTTP ${result.response.status}`);
-  }
+  if (result.data === undefined) throw failure(result);
   return result.data;
 }
 
 /**
- * Throws with the HTTP status unless the response is a success: for the calls that return
- * nothing, which openapi-fetch reports as an `error` field rather than by throwing.
+ * Throws with the reason the backend gave unless the response is a success: for the calls that
+ * return nothing, which openapi-fetch reports as an `error` field rather than by throwing.
  */
 export function ensureOk(result: { error?: unknown; response: Response }): void {
-  if (!result.response.ok) throw new Error(`HTTP ${result.response.status}`);
+  if (!result.response.ok) throw failure(result);
 }
 
 /** The key of an item across sources: one card, one cache entry. */

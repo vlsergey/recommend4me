@@ -123,6 +123,21 @@ class ItemRepository(
         return out
     }
 
+    /** Every named value of one facet: key to name. */
+    fun facetNames(facet: String): Map<String, String> =
+        db.select(FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME).from(FACET_VALUE).where(FACET_VALUE.FACET.eq(facet))
+            .fetchMap({ it.value1()!! }, { it.value2()!! })
+
+    /** How many items have each value of a facet, as the site gives them. */
+    fun valueUses(facet: String): Map<String, Int> =
+        db.select(ITEM_FACET.VALUE_KEY, DSL.count()).from(ITEM_FACET).where(ITEM_FACET.FACET.eq(facet))
+            .groupBy(ITEM_FACET.VALUE_KEY).fetchMap({ it.value1()!! }, { it.value2()!! })
+
+    /** The items whose title holds [piece], any case, the newest first. */
+    fun findByTitle(piece: String, limit: Int): List<StoredItem> =
+        db.select(HEAD).from(ITEM).where(DSL.lower(ITEM.TITLE).contains(piece.lowercase()))
+            .orderBy(ITEM.UPDATED_AT.desc()).limit(limit).fetch(::head)
+
     /** Every named value of every facet: facet to key to name. */
     fun allFacetNames(): Map<String, Map<String, String>> =
         db.select(FACET_VALUE.FACET, FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME).from(FACET_VALUE).fetch()

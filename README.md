@@ -29,11 +29,15 @@ folder of jars in `plugins/`:
 | `scorer-pairwise` | pairwise logistic ranking (RankNet with a line), the default |
 | `scorer-knn` | the k nearest graded works by cosine, a baseline |
 | `search-lucene` | search by words (English and Russian forms) and by meaning |
+| `suggester-tags` | the tags a work should have, from its text and its other tags, to confirm or reject |
 
 A source has up to three modes: **scrape all** (the whole catalogue, resumable), **updates** (what
 is new since the last time) and **browser tracking**: the pages you open in Firefox are sent to the
 application by its extension ([`browser-extension`](browser-extension/README.md)) and read there —
-the application requests nothing from such a site itself.
+the application requests nothing from such a site itself. The same extension makes the site an
+interface of the application: on a work's page it shows the prediction, grades the work, corrects
+its tags in place, offers the suggested ones and marks its reviews and pictures; on a list it
+shows the prediction of every card.
 
 How it fits together — storage by level and file, the model, the plugin contract — is in
 [docs/architecture.md](docs/architecture.md).

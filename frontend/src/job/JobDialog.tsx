@@ -3,8 +3,8 @@ import type { JobStatus, SourceInfo } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { compact, formatDate, MODE_LABEL, phaseLabel, timeLeft } from "@/i18n";
-import { isActive, useCancelJob, useStartJob } from "./useJobs";
+import { catalogueLabel, compact, formatDate, MODE_LABEL, phaseLabel, timeLeft } from "@/i18n";
+import { catalogueUnfinished, isActive, useCancelJob, useStartJob } from "./useJobs";
 
 type Props = {
   source: SourceInfo | null;
@@ -24,7 +24,17 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
   const whole = source?.modes.includes("SCRAPE_ALL");
   const updates = source?.modes.includes("UPDATES");
   const left = job && active ? timeLeft(job.phaseStartedAt, job.processed, job.total) : undefined;
-  const resumeWhole = job?.resumable === "SCRAPE_ALL" && !active;
+  const catalogue = whole ? job?.catalogue : undefined;
+  const resumeWhole = catalogueUnfinished(job) && !active;
+  // A loaded catalogue leaves the updates to do: they are the main button then
+  const updatesFirst = updates && (!whole || catalogue?.complete === true);
+  const wholeLabel = resumeWhole
+    ? "Продолжить загрузку каталога"
+    : catalogue?.complete
+      ? "Пройти каталог заново"
+      : catalogue?.stage === "none"
+        ? "Начать загрузку каталога"
+        : "Загрузить весь каталог";
 
   return (
     <Dialog open={source !== null} onOpenChange={onOpenChange}>
@@ -65,6 +75,15 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
                 <Stat label="Работ в базе" value={compact(job.items)} />
                 <Stat label="Новых за загрузку" value={compact(job.newItems)} />
                 <Stat label="Ошибок" value={compact(job.errors)} />
+              </div>
+            )}
+
+            {catalogue && (
+              <div className="flex flex-col gap-1.5 text-sm">
+                <span className={catalogue.complete ? "text-yes" : catalogue.stage === "none" ? "text-muted-foreground" : undefined}>
+                  {catalogueLabel(catalogue)}
+                </span>
+                {!catalogue.complete && catalogue.total > 0 && <Progress value={(catalogue.done / catalogue.total) * 100} />}
               </div>
             )}
 
@@ -125,7 +144,7 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
                   </Button>
                   {updates && (
                     <Button
-                      variant={whole ? "outline" : "default"}
+                      variant={updatesFirst ? "default" : "outline"}
                       onClick={() => start.mutate({ source: source.id, mode: "UPDATES" }, { onSuccess: () => onOpenChange(false) })}
                       disabled={start.isPending}
                     >
@@ -134,10 +153,11 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
                   )}
                   {whole && (
                     <Button
+                      variant={updatesFirst ? "outline" : "default"}
                       onClick={() => start.mutate({ source: source.id, mode: "SCRAPE_ALL" }, { onSuccess: () => onOpenChange(false) })}
                       disabled={start.isPending}
                     >
-                      <DatabaseIcon /> {resumeWhole ? "Продолжить загрузку каталога" : "Загрузить весь каталог"}
+                      <DatabaseIcon /> {wholeLabel}
                     </Button>
                   )}
                 </>

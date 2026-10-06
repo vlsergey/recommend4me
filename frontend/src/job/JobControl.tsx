@@ -17,14 +17,17 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { findSource, useTypes } from "@/contenttype/types";
-import { formatDate, MODE_LABEL, phaseLabel, timeLeft } from "@/i18n";
+import { catalogueLabel, formatDate, MODE_LABEL, phaseLabel, timeLeft } from "@/i18n";
 import { ITEMS } from "@/item/lists";
 import { JobDialog } from "./JobDialog";
-import { isActive, useCancelJob, useJobs, useStartJob } from "./useJobs";
+import { catalogueUnfinished, isActive, useCancelJob, useJobs, useStartJob } from "./useJobs";
 
 type Props = { type: ContentTypeInfo; onNeedSettings: () => void };
 
-/** The sources of the type that scrape by themselves: the others are filled by the browser extension. */
+/**
+ * The sources of the type that scrape by themselves: the others (the book sites) are filled by
+ * the browser extension only, and have nothing to start or stop here.
+ */
 function scraping(type: ContentTypeInfo): SourceInfo[] {
   return type.sources.filter((s) => s.modes.includes("SCRAPE_ALL") || s.modes.includes("UPDATES"));
 }
@@ -92,7 +95,7 @@ export function JobControl({ type, onNeedSettings }: Props) {
         <button
           className="flex min-w-0 flex-1 flex-col gap-1 text-left sm:w-64 sm:flex-none"
           onClick={() => setDialog(s.source)}
-          title="Подробнее о загрузке"
+          title={s.catalogue && s.mode === "SCRAPE_ALL" ? catalogueLabel(s.catalogue) : "Подробнее о загрузке"}
         >
           <div className="flex justify-between gap-2 text-xs">
             <span className="truncate">
@@ -130,7 +133,7 @@ export function JobControl({ type, onNeedSettings }: Props) {
     .filter((j) => j.state === "DONE" && j.finishedAt)
     .sort((a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? ""))[0];
   const notLoggedIn = ours.filter((j) => j.loggedIn === false);
-  const resumable = ours.filter((j) => j.resumable === "SCRAPE_ALL");
+  const resumable = ours.filter((j) => sources.some((s) => s.id === j.source && s.modes.includes("SCRAPE_ALL")) && catalogueUnfinished(j));
 
   return (
     <div className="flex items-center gap-2">
@@ -149,20 +152,26 @@ export function JobControl({ type, onNeedSettings }: Props) {
             <ChevronDownIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-auto min-w-64">
-            {sources.map((s, i) => (
-              <DropdownMenuGroup key={s.id}>
-                {i > 0 && <DropdownMenuSeparator />}
-                <DropdownMenuLabel>{s.title}</DropdownMenuLabel>
-                {s.modes.includes("UPDATES") && (
-                  <DropdownMenuItem onClick={() => start.mutate({ source: s.id, mode: "UPDATES" })}>
-                    <DownloadIcon /> {MODE_LABEL.UPDATES}
+            {sources.map((s, i) => {
+              const catalogue = s.modes.includes("SCRAPE_ALL") ? jobOf(s.id)?.catalogue : undefined;
+              return (
+                <DropdownMenuGroup key={s.id}>
+                  {i > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuLabel>
+                    {s.title}
+                    {catalogue && <div className="font-normal text-muted-foreground">{catalogueLabel(catalogue)}</div>}
+                  </DropdownMenuLabel>
+                  {s.modes.includes("UPDATES") && (
+                    <DropdownMenuItem onClick={() => start.mutate({ source: s.id, mode: "UPDATES" })}>
+                      <DownloadIcon /> {MODE_LABEL.UPDATES}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => setDialog(s.id)}>
+                    <DatabaseIcon /> {s.modes.includes("SCRAPE_ALL") ? `${MODE_LABEL.SCRAPE_ALL}…` : "Подробнее…"}
                   </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={() => setDialog(s.id)}>
-                  <DatabaseIcon /> {s.modes.includes("SCRAPE_ALL") ? `${MODE_LABEL.SCRAPE_ALL}…` : "Подробнее…"}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            ))}
+                </DropdownMenuGroup>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -183,7 +192,13 @@ export function JobControl({ type, onNeedSettings }: Props) {
         </Tooltip>
       )}
       {resumable.map((j) => (
-        <Button key={j.source} variant="outline" onClick={() => setDialog(j.source)} title="Загрузка всего каталога не закончена" className="hidden sm:inline-flex">
+        <Button
+          key={j.source}
+          variant="outline"
+          onClick={() => setDialog(j.source)}
+          title={j.catalogue ? `Загрузка всего каталога не закончена. ${catalogueLabel(j.catalogue)}` : "Загрузка всего каталога не закончена"}
+          className="hidden sm:inline-flex"
+        >
           <DatabaseIcon />
           <span className="hidden 2xl:inline">{sources.length > 1 ? `${titleOf(j.source)}: продолжить` : "Продолжить загрузку каталога"}</span>
         </Button>

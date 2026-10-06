@@ -1,10 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, unwrap, type JobStatus, type SourceMode } from "@/api/client";
+import { api, failure, unwrap, type JobStatus, type SourceMode } from "@/api/client";
 
 export const ACTIVE = new Set<JobStatus["state"]>(["RUNNING", "CANCELLING"]);
 
 export function isActive(job: JobStatus | undefined): boolean {
   return job !== undefined && ACTIVE.has(job.state);
+}
+
+/**
+ * The load of the whole catalogue was started and has not come to the end: it can be continued,
+ * across runs of the job and restarts of the application.
+ */
+export function catalogueUnfinished(job: JobStatus | undefined): boolean {
+  const c = job?.catalogue;
+  return c ? !c.complete && c.stage !== "none" : job?.resumable === "SCRAPE_ALL";
 }
 
 /** The jobs of every scraping source: fast while one runs, otherwise now and then. */
@@ -26,9 +35,10 @@ export function useStartJob() {
     mutationFn: async ({ source, mode }: { source: string; mode: SourceMode }) => {
       const result = await api.POST("/api/sources/{source}/job", { params: { path: { source } }, body: { mode } });
       // 409: one runs already, or the source has no such mode — the answer is the job as it is
-      const job = result.data ?? (result.error as JobStatus | undefined);
-      if (!job) throw new Error(`HTTP ${result.response.status}`);
-      return job;
+      if (result.data) return result.data;
+      const job = result.error as Partial<JobStatus> | undefined;
+      if (result.response.status === 409 && job?.state) return job as JobStatus;
+      throw failure(result);
     },
     onSuccess: (job) => queryClient.setQueryData<JobStatus[]>(["jobs"], (jobs) => putJob(jobs, job)),
   });

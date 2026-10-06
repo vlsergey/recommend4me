@@ -157,11 +157,7 @@ function ModelDetails({ type, m }: { type: ContentTypeInfo; m: ModelInfo }) {
     onSuccess: trained,
   });
   const choose = useMutation({
-    mutationFn: async (scorer: string) => {
-      const result = await api.PUT("/api/types/{type}/model/scorer", { params: { path: { type: type.id } }, body: { scorer } });
-      if (result.response.status === 400) throw new Error("нет такого способа");
-      return unwrap(result);
-    },
+    mutationFn: async (scorer: string) => unwrap(await api.PUT("/api/types/{type}/model/scorer", { params: { path: { type: type.id } }, body: { scorer } })),
     onSuccess: trained,
   });
   const compare = async () =>

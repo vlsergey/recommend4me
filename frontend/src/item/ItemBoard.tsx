@@ -72,7 +72,7 @@ export function ItemBoard({ type, view, sort, search, facets, sources, layout, o
   const items: ItemSummary[] = useMemo(() => {
     const seen = new Set<string>();
     return (list.data?.pages.flatMap((p) => p.items) ?? []).filter((s) => {
-      const key = refKey(s);
+      const key = s.work;
       return !seen.has(key) && !!seen.add(key);
     });
   }, [list.data]);
@@ -167,7 +167,7 @@ export function ItemBoard({ type, view, sort, search, facets, sources, layout, o
       </div>
     );
   }
-  if (list.isError) return <div className="py-20 text-center text-destructive">Ошибка загрузки: {String(list.error)}</div>;
+  if (list.isError) return <div className="py-20 text-center text-destructive">Ошибка загрузки: {list.error.message}</div>;
   if (items.length === 0) {
     const allRated = view === "UNRATED" && !search && !isFiltered(facets) && sources.length === 0;
     return (

@@ -5,8 +5,10 @@ import io.github.vlsergey.recommend4me.api.model.SettingValue
 import io.github.vlsergey.recommend4me.api.model.SourceSettings
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Source
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ResponseStatusException
 
 /** The settings the sources declare, editable in the interface; a secret is never sent back. */
 @RestController
@@ -19,7 +21,7 @@ class SettingsController(private val plugins: Plugins, private val settings: Set
         val s = plugins.source(source) ?: return ResponseEntity.notFound().build()
         val store = settings.of(source)
         requestBody.forEach { (key, value) ->
-            if (s.settings.none { it.key == key }) return ResponseEntity.badRequest().build()
+            if (s.settings.none { it.key == key }) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "У источника нет настройки «$key»")
             store.set(key, value.trim().takeIf { it.isNotEmpty() })
         }
         return ResponseEntity.ok(of(s))

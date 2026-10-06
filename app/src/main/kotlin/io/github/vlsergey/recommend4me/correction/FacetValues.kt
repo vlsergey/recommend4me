@@ -1,0 +1,33 @@
+package io.github.vlsergey.recommend4me.correction
+
+import io.github.vlsergey.recommend4me.source.SourceStore
+
+/** A value of a facet with its name and how many items have it, the user's corrections counted. */
+data class FacetValueUse(val key: String, val name: String, val items: Int)
+
+/**
+ * The values of a facet of a source, as the user picks one to add: the site's and the ones the
+ * user made up, with how many items have each.
+ */
+object FacetValues {
+
+    fun of(store: SourceStore, facet: String): List<FacetValueUse> {
+        val uses = HashMap(store.items.valueUses(facet))
+        val names = HashMap(store.items.facetNames(facet))
+        store.corrections.allFacets().filter { it.facet == facet }.forEach { c ->
+            uses.merge(c.key, if (c.added) 1 else -1, Int::plus)
+            c.name?.let { names.putIfAbsent(c.key, it) }
+        }
+        return uses.map { (key, n) -> FacetValueUse(key, names[key] ?: key, n.coerceAtLeast(0)) }
+            .sortedWith(compareByDescending<FacetValueUse> { it.items }.thenBy { it.name.lowercase() })
+    }
+
+    /**
+     * The key of a value the user names: a value of the facet with that name or key, any case — or
+     * a new one, its name in lower case.
+     */
+    fun keyOf(store: SourceStore, facet: String, name: String): String {
+        val wanted = name.trim().lowercase()
+        return of(store, facet).firstOrNull { it.name.lowercase() == wanted || it.key.lowercase() == wanted }?.key ?: wanted
+    }
+}

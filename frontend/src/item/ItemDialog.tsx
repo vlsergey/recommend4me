@@ -1,25 +1,29 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
-import { api, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemSummary, type SourceInfo } from "@/api/client";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, RefreshCwIcon, XIcon } from "lucide-react";
+import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemSummary, type RatingRecord, type SourceInfo } from "@/api/client";
+import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { gradeLabel, useSource } from "@/contenttype/types";
+import { gradeLabel, sourceTitle, useSource } from "@/contenttype/types";
 import { FacetCorrections } from "@/correction/FacetCorrections";
 import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor";
 import { Links } from "@/correction/Links";
 import { titleField, useCorrections, type Corrections } from "@/correction/useCorrections";
 import { ago, compact, formatDate } from "@/i18n";
+import { cn } from "@/lib/utils";
 import { FeatureBars } from "@/model/FeatureBars";
 import { Parts } from "@/part/Parts";
 import { PictureMatches, Pictures } from "@/picture/Pictures";
 import { ReviewMatches, Reviews } from "@/review/Reviews";
+import { writeItemHash } from "./itemHash";
 import { ItemNumbers } from "./ItemNumbers";
 import { ItemTexts } from "./ItemTexts";
 import { itemKey } from "./lists";
 import { Cover, GRADE_TEXT, KEY_GRADES, PreviousRating, RatingButtons, ScoreBadge, SignalBadges } from "./pieces";
+import { useTakeBackGrade } from "./useRateItem";
 import { useRefreshItem } from "./useRefreshItem";
 
 type Props = {
@@ -43,6 +47,15 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }
   useEffect(() => {
     if (index !== null && index >= items.length) onIndex(items.length > 0 ? items.length - 1 : null);
   }, [index, items.length, onIndex]);
+
+  // The address names the open work, for a link to it; closing the dialog takes it out
+  const source = summary?.source;
+  const item = summary?.item;
+  useEffect(() => {
+    if (source === undefined || item === undefined) return;
+    writeItemHash({ source, item });
+    return () => writeItemHash(null);
+  }, [source, item]);
 
   const rate = (grade: Grade | null) => {
     if (!summary || index === null) return;
@@ -167,7 +180,7 @@ function Shell({
                   <span className="text-white/65">{source.reviewsLabel ?? "Отзывы"}</span> {compact(d.reviewCount)}
                 </span>
               )}
-              <SignalBadges signals={summary.signals} className="[&>*]:border-white/40 [&>*]:text-white" />
+              <SignalBadges source={source} signals={summary.signals} className="[&>*]:border-white/40 [&>*]:text-white" />
             </DialogDescription>
           </div>
           <ScoreBadge type={type} summary={summary} className="h-10 min-w-16 text-lg" />
@@ -259,29 +272,54 @@ function Details({
           </section>
         )}
         <Separator />
-        <FacetCorrections typeId={type.id} source={source} facets={d.allFacets} corrections={corrections} />
+        <FacetCorrections item={ref} source={source} facets={d.allFacets} corrections={corrections} />
         <ItemNumbers numbers={d.allNumbers} source={source} corrections={corrections} />
         <Separator />
         <Links type={type} summary={d.summary} corrections={corrections} />
-        {d.ratings.length > 0 && (
-          <section>
-            <h4 className="mb-2 text-sm font-semibold">Мои оценки</h4>
-            <ul className="flex flex-col gap-1 text-sm">
-              {d.ratings.map((r) => (
-                <li key={`${r.version}-${r.ratedAt}`} className="flex justify-between gap-2">
-                  <span className="truncate" title={formatDate(r.ratedAt)}>
-                    {r.version || formatDate(r.ratedAt)}
-                  </span>
-                  <span className={GRADE_TEXT[r.grade as Grade]}>
-                    {r.grade} · {gradeLabel(type, r.grade as Grade)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {d.ratings.length > 0 && <Ratings type={type} details={d} />}
       </aside>
     </div>
+  );
+}
+
+/**
+ * The grades of every item of the work, newest first: the item of each when it is not this one,
+ * and a cross to take one back — an old version's grade, or one given to the work on another site.
+ */
+function Ratings({ type, details: d }: { type: ContentTypeInfo; details: ItemDetails }) {
+  const takeBack = useTakeBackGrade(d.summary);
+  const itemOf = (r: RatingRecord) =>
+    sameItem(r, d.summary)
+      ? undefined
+      : `${sourceTitle(type, r.source)} · ${d.summary.linked.find((l) => sameItem(l, r))?.title ?? r.item}`;
+  return (
+    <section>
+      <h4 className="mb-2 text-sm font-semibold">Мои оценки</h4>
+      <ul className="flex flex-col gap-1 text-sm">
+        {d.ratings.map((r) => (
+          <li key={`${r.source}/${r.item}-${r.version}-${r.ratedAt}`} className="group/rating flex items-center gap-2">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className={cn("truncate", !r.current && "text-muted-foreground")} title={formatDate(r.ratedAt)}>
+                {r.version || formatDate(r.ratedAt)}
+                {!r.current && r.version && " · прежняя версия"}
+              </span>
+              {itemOf(r) && <span className="truncate text-xs text-muted-foreground">{itemOf(r)}</span>}
+            </span>
+            <span className={cn("shrink-0", GRADE_TEXT[r.grade as Grade])}>
+              {r.grade} · {gradeLabel(type, r.grade as Grade)}
+            </span>
+            <AsyncButton
+              variant="ghost"
+              size="icon-xs"
+              title="Снять эту оценку"
+              onClick={() => takeBack(r)}
+              icon={<XIcon />}
+              className="text-muted-foreground opacity-0 transition-opacity group-hover/rating:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

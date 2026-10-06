@@ -51,6 +51,19 @@ interface Source {
     /** The page of the item on the site. */
     fun itemUrl(itemId: String): String
 
+    /**
+     * The item a page of the site is about — a work's page, a chapter of it, its reviews — or null
+     * when the address is not one item's. The extension shows the item's panel on such a page, and
+     * a card linking to it gets the item's prediction.
+     */
+    fun itemIdOf(url: String): String? = null
+
+    /** The user's own actions on the site the source reads ([SiteSignals]), with the names to show. */
+    val signals: List<SignalDef> get() = emptyList()
+
+    /** How the extension marks the site's pages up; null — it does not. */
+    val pageDecor: PageDecor? get() = null
+
     // --- Browser tracking ---
 
     /** The addresses of the pages the source wants from the browser, matched against the whole URL. */
@@ -83,6 +96,12 @@ interface Source {
     /** Whether [refresh] would bring something the item lacks: the details of its current version. */
     fun needsRefresh(itemId: String, context: SourceContext): Boolean = false
 
+    /**
+     * How far the whole catalogue is loaded ([SourceMode.SCRAPE_ALL]): what it is doing and how much
+     * of it is done, across restarts; null — the source does not tell.
+     */
+    fun scrapeProgress(context: SourceContext): ScrapeProgress? = null
+
     // --- Background work of its own ---
 
     /**
@@ -105,6 +124,13 @@ interface Source {
     /** Headers of a picture download: a referer, a user agent. */
     fun pictureHeaders(url: String, context: SourceContext): Map<String, String> = emptyMap()
 }
+
+/**
+ * How far a scrape of the whole catalogue has got: [stage] — what it does now or would do next
+ * ("feed", "details"); [done] of [total] in it; [complete] — the catalogue is loaded and only
+ * updates are left.
+ */
+class ScrapeProgress(val stage: String, val done: Int, val total: Int, val complete: Boolean)
 
 /** A page the browser sent: its address, the DOM as the user saw it, and when. */
 class CapturedPage(

@@ -29,6 +29,8 @@ dependencies {
 
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.h2)
+    // The suggestions of tags, worked out by the plugin of this build
+    testImplementation(project(":plugins:suggester-tags"))
 }
 
 // --- jOOQ: the classes of the tables of every kind of database file, generated from its migrations ---

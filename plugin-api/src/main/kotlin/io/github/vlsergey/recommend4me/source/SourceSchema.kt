@@ -45,6 +45,12 @@ class FacetDef(
     val names: Boolean = false,
     /** An item without a value of it is listed under this name in the filter (a game with no status is "in development"); null — no such line. */
     val noneLabel: String? = null,
+    /**
+     * The values a work should have are worked out from its text and its other values, and shown
+     * to the user to confirm or reject — for tags a site leaves to its authors, who set them
+     * carelessly or not at all.
+     */
+    val suggest: Boolean = false,
 )
 
 /** How the model reads a number. */
@@ -83,6 +89,12 @@ class TextDef(
     /** Hidden under a spoiler in the interface until opened. */
     val spoiler: Boolean = false,
 )
+
+/**
+ * A kind of the user's own actions on the site ([SiteSignals]): its [label], and the names of its
+ * values ([values], by the value as the source writes it); a value not named is shown as it is.
+ */
+class SignalDef(val key: String, val label: String, val values: Map<String, String> = emptyMap())
 
 /** A setting of a source the user can change in the interface: a cookie, a delay between requests. */
 class SettingDef(

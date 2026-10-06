@@ -1,31 +1,38 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { PlusIcon, Undo2Icon, XIcon } from "lucide-react";
-import type { FacetInfo, FacetValueInfo, ItemFacet, SourceInfo } from "@/api/client";
+import { api, unwrap, type FacetValueInfo, type ItemFacet, type ItemRef, type SourceInfo, type SuggestedValue } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useFacets } from "@/facet/FacetFilters";
 import { cn } from "@/lib/utils";
+import { DoubtMark, SuggestedValues } from "@/suggestion/Suggestions";
+import { suggestionsOf, useSuggestions } from "@/suggestion/useSuggestions";
 import { EditButton } from "./FieldEditor";
 import type { Corrections } from "./useCorrections";
+
+/** How many values of a facet the line of a new value offers. */
+const OFFERED = 30;
 
 /**
  * Every facet of the item, the user's corrections included: a value the user added is outlined,
  * one the user took away is crossed out. In editing, a site's value can be taken away, a
- * correction taken back, and a value of any facet of the source added.
+ * correction taken back, and a value of any facet of the source added. Below them the
+ * application's suggestions to answer; a site's value it doubts is marked on its chip.
  */
 export function FacetCorrections({
-  typeId,
+  item,
   source,
   facets,
   corrections,
 }: {
-  typeId: string;
+  item: ItemRef;
   source?: SourceInfo;
   facets: ItemFacet[];
   corrections: Corrections;
 }) {
   const [editing, setEditing] = useState(false);
+  const suggestions = useSuggestions(item, source);
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center gap-1">
@@ -38,17 +45,40 @@ export function FacetCorrections({
           <div className="mb-1 text-xs text-muted-foreground">{f.label}</div>
           <div className="flex flex-wrap gap-1">
             {f.values.map((v) => (
-              <FacetValue key={v.key} facet={f.facet} value={v} editing={editing} corrections={corrections} />
+              <FacetValue
+                key={v.key}
+                facet={f.facet}
+                value={v}
+                doubt={suggestionsOf(suggestions.data, f.facet)?.doubted.find((d) => d.key === v.key)}
+                editing={editing}
+                corrections={corrections}
+              />
             ))}
           </div>
         </div>
       ))}
-      {editing && source && <AddFacetValue typeId={typeId} facets={source.facets} corrections={corrections} />}
+      {editing && source && <AddFacetValue source={source} corrections={corrections} />}
+      {suggestions.data && <SuggestedValues suggestions={suggestions.data} corrections={corrections} />}
     </section>
   );
 }
 
-function FacetValue({ facet, value, editing, corrections }: { facet: string; value: FacetValueInfo; editing: boolean; corrections: Corrections }) {
+function FacetValue({
+  facet,
+  value,
+  doubt,
+  editing,
+  corrections,
+}: {
+  facet: string;
+  value: FacetValueInfo;
+  /** The application doubts the site's value: it does not look like the work. */
+  doubt?: SuggestedValue;
+  editing: boolean;
+  corrections: Corrections;
+}) {
+  // A value the user already answered for is not in doubt any more
+  const doubted = doubt !== undefined && !value.corrected;
   return (
     <Badge
       variant={value.corrected === "ADDED" ? "outline" : "secondary"}
@@ -56,12 +86,16 @@ function FacetValue({ facet, value, editing, corrections }: { facet: string; val
         "font-normal",
         value.corrected === "REMOVED" && "text-muted-foreground line-through",
         value.corrected === "ADDED" && "border-dashed border-primary/50",
-        editing && "pr-0.5",
+        doubted && "border-maybe/60",
+        (editing || doubted) && "pr-0.5",
       )}
       title={value.corrected === "REMOVED" ? "Убрано вами" : value.corrected === "ADDED" ? "Добавлено вами" : undefined}
     >
       {value.name}
-      {editing &&
+      {doubted ? (
+        <DoubtMark facet={facet} value={doubt} corrections={corrections} />
+      ) : (
+        editing &&
         (value.corrected ? (
           <AsyncButton
             variant="ghost"
@@ -77,37 +111,52 @@ function FacetValue({ facet, value, editing, corrections }: { facet: string; val
             size="icon-xs"
             className="size-4 rounded-sm"
             title="Убрать: значение сайта неверно"
-            onClick={() => corrections.setFacet(facet, value.key, false)}
+            onClick={() => corrections.setFacet(facet, { key: value.key }, false)}
             icon={<XIcon className="size-3" />}
           />
-        ))}
+        ))
+      )}
     </Badge>
   );
 }
 
-/** A made-up key for a value the user names: the name in lower case, spaces as hyphens. */
-function keyOf(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, "-");
-}
-
 /**
- * Adding a value: the facet from the source's facets, the value typed — one the filters know is
- * offered as it is typed and taken with its key; a new one gets a key made of its name.
+ * Adding a value: the facet from the source's facets, the value typed — the facet's values the
+ * site or the user gave are offered as it is typed and one picked is taken with its key; a new
+ * one is sent by its name alone, and the backend makes its key.
  */
-function AddFacetValue({ typeId, facets, corrections }: { typeId: string; facets: FacetInfo[]; corrections: Corrections }) {
+function AddFacetValue({ source, corrections }: { source: SourceInfo; corrections: Corrections }) {
+  const facets = source.facets;
   const [facetKey, setFacetKey] = useState(facets[0]?.key ?? "");
   const [name, setName] = useState("");
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(name.trim()), 250);
+    return () => clearTimeout(t);
+  }, [name]);
   const listId = useId();
-  const known = useFacets(typeId);
-  if (facets.length === 0) return null;
   const facet = facets.find((f) => f.key === facetKey) ?? facets[0];
-  const values = known.data?.find((f) => f.id === facet.id)?.values ?? [];
+  const known = useQuery({
+    queryKey: ["facet-values", source.id, facet?.key, query],
+    enabled: facet !== undefined,
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/sources/{source}/facets/{facet}/values", {
+          params: { path: { source: source.id, facet: facet!.key }, query: { query: query || undefined, limit: OFFERED } },
+        }),
+      ),
+    // The offers do not blink away at every letter
+    placeholderData: keepPreviousData,
+  });
+  if (!facet) return null;
+  const values = known.data ?? [];
   const typed = name.trim();
-  const existing = values.find((v) => v.name.toLowerCase() === typed.toLowerCase() || v.key === typed);
+  // The values kept from another facet only stand in while its own come: never taken by key
+  const existing = known.isPlaceholderData ? undefined : values.find((v) => v.name.toLowerCase() === typed.toLowerCase());
+  const isNew = typed !== "" && query === typed && known.isSuccess && !known.isPlaceholderData && !known.isFetching && !existing;
 
   const add = async () => {
-    if (existing) await corrections.setFacet(facet.key, existing.key, true, existing.name);
-    else await corrections.setFacet(facet.key, keyOf(typed), true, typed);
+    await corrections.setFacet(facet.key, existing ? { key: existing.key } : { name: typed }, true);
     setName("");
   };
 
@@ -131,7 +180,7 @@ function AddFacetValue({ typeId, facets, corrections }: { typeId: string; facets
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && typed && add().catch(() => {})}
           list={listId}
-          placeholder={values.length ? "Начните вводить…" : "Название"}
+          placeholder="Начните вводить…"
           className="h-8"
         />
         <datalist id={listId}>
@@ -141,7 +190,7 @@ function AddFacetValue({ typeId, facets, corrections }: { typeId: string; facets
         </datalist>
         <AsyncButton size="icon" variant="outline" onClick={add} disabled={!typed} title={existing ? "Добавить" : "Добавить новое значение"} icon={<PlusIcon />} />
       </div>
-      {typed && !existing && values.length > 0 && <div className="text-xs text-muted-foreground">Новое значение: такого ещё нет ни у одной работы</div>}
+      {isNew && <div className="text-xs text-muted-foreground">Новое значение: такого ещё нет ни у одной работы</div>}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
 import java.time.ZoneOffset
 
@@ -29,6 +30,7 @@ class ItemDetailsReader(
     private val plugins: Plugins,
     private val cards: ItemCards,
     private val recommendations: Recommendations,
+    private val works: Works,
 ) {
     fun read(key: ItemKey): ItemDetails? {
         val store = stores.source(key.source) ?: return null
@@ -68,7 +70,7 @@ class ItemDetailsReader(
                 numbers[def.key]?.let { NumberValue(def.key, def.label, it, Corrected.numberField(def.key) in fields) }
             },
             explanation = model.explanation.map { it.toApi() },
-            ratings = store.ratings.ofItem(key.id).map { RatingRecord(it.version, it.grade, it.ratedAt.atOffset(ZoneOffset.UTC)) },
+            ratings = ratings(type, key),
             reviews = model.reviews.map { (r, influence) ->
                 ReviewInfo(
                     reviewId = r.reviewId, content = r.content, author = r.author, stars = r.stars,
@@ -108,4 +110,14 @@ class ItemDetailsReader(
             canRefresh = store.source.modes.any { it != SourceMode.BROWSER },
         )
     }
+
+    /** The grades of every item of the work [key] is of, newest first. */
+    fun ratings(type: io.github.vlsergey.recommend4me.source.TypeStore, key: ItemKey): List<RatingRecord> =
+        works.of(type).members(key).flatMap { m ->
+            val s = stores.source(m.source) ?: return@flatMap emptyList()
+            val version = s.items.find(m.id)?.version
+            s.ratings.ofItem(m.id).map {
+                RatingRecord(source = m.source, item = m.id, version = it.version, grade = it.grade, ratedAt = it.ratedAt.atOffset(ZoneOffset.UTC), current = it.version == version)
+            }
+        }.sortedByDescending { it.ratedAt }
 }

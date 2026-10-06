@@ -113,4 +113,8 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
     override fun gradedItems(): Set<String> = emptySet()
 
     override fun itemsInOrder(): List<String> = heads.keys.toList()
+
+    val jobStates = HashMap<String, String>()
+
+    override fun jobState(key: String): String? = jobStates[key]
 }

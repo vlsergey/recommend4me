@@ -22,8 +22,9 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { typeIcon, useTypes } from "@/contenttype/types";
-import { FacetFilters, NOTHING_HIDDEN, type FacetSelection } from "@/facet/FacetFilters";
+import { FacetFilters, NOTHING_HIDDEN, validSelection, type FacetSelection } from "@/facet/FacetFilters";
 import { ItemBoard, type Layout } from "@/item/ItemBoard";
+import { HashItemDialog } from "@/item/ItemRefDialog";
 import { ITEMS } from "@/item/lists";
 import { BY_SCORE, validSort, type SortChoice } from "@/item/sort";
 import { JobControl } from "@/job/JobControl";
@@ -72,7 +73,7 @@ export function App() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-2 text-muted-foreground">
         <TelescopeIcon className="size-12 opacity-50" />
         {types.isError ? (
-          <div className="text-destructive">Приложение не отвечает: {String(types.error)}</div>
+          <div className="text-destructive">Приложение не отвечает: {types.error.message}</div>
         ) : (
           <div>Нет ни одного источника: установите плагин сайта и перезапустите приложение.</div>
         )}
@@ -89,7 +90,8 @@ function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: Con
   const [storedSort, setSort] = usePref<SortChoice>(`sort:${type.id}`, BY_SCORE);
   const sort = validSort(storedSort, type);
   const [layout, setLayout] = usePref<Layout>("layout", "grid");
-  const [facets, setFacets] = usePref<FacetSelection>(`hidden:${type.id}`, NOTHING_HIDDEN);
+  const [storedFacets, setFacets] = usePref<FacetSelection>(`hidden:${type.id}`, NOTHING_HIDDEN);
+  const facets = useMemo(() => validSelection(storedFacets), [storedFacets]);
   const [hiddenSources, setHiddenSources] = usePref<string[]>(`hiddenSources:${type.id}`, []);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -327,6 +329,7 @@ function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: Con
       </div>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <HashItemDialog />
     </div>
   );
 }

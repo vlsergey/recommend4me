@@ -1,7 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, unwrap, type Grade, type ItemRef, type ItemSummary } from "@/api/client";
+import { toast } from "@/components/ui/toast";
 import { ItemDialog } from "./ItemDialog";
+import { readItemHash, writeItemHash } from "./itemHash";
 import { itemKey } from "./lists";
 import { useRateItem } from "./useRateItem";
 
@@ -18,6 +20,15 @@ export function ItemRefDialog({ item, onClose }: { item: ItemRef | null; onClose
   const rate = useRateItem();
   const onRate = useCallback((summary: ItemSummary, grade: Grade | null) => rate.mutate({ summary, grade }), [rate]);
   const summary = item && details.data ? details.data.summary : undefined;
+
+  // An item the application does not know opens nothing: say so instead of staying silent
+  const failed = item !== null && details.isError ? details.error.message : null;
+  useEffect(() => {
+    if (failed === null) return;
+    toast.add({ title: "Работа не открылась", description: failed, type: "error" });
+    onClose();
+  }, [failed, onClose]);
+
   return (
     <ItemDialog
       items={summary ? [summary] : []}
@@ -28,4 +39,22 @@ export function ItemRefDialog({ item, onClose }: { item: ItemRef | null; onClose
       ratedLeaves={false}
     />
   );
+}
+
+/**
+ * The dialog of the item the address names, `#item=<source>/<item>`: the browser extension links
+ * to it. A link followed while the application is open opens its item too.
+ */
+export function HashItemDialog() {
+  const [item, setItem] = useState(readItemHash);
+  useEffect(() => {
+    const onHash = () => setItem(readItemHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const close = useCallback(() => {
+    setItem(null);
+    writeItemHash(null);
+  }, []);
+  return <ItemRefDialog item={item} onClose={close} />;
 }

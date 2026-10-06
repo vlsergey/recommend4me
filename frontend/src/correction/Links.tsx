@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLinkIcon, Link2Icon, Loader2Icon, SearchIcon, UnlinkIcon } from "lucide-react";
-import { api, refKey, sameItem, unwrap, type ContentTypeInfo, type ItemSummary } from "@/api/client";
+import { CheckIcon, ExternalLinkIcon, Link2Icon, Loader2Icon, SearchIcon, UnlinkIcon } from "lucide-react";
+import { api, refKey, sameItem, unwrap, type ContentTypeInfo, type ItemRef, type ItemSummary } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sourceTitle } from "@/contenttype/types";
-import { Cover } from "@/item/pieces";
 import type { Corrections } from "./useCorrections";
 
 const FOUND = 8;
 
 /**
  * The other items that are this same work — on another site, or twice on one — and a search to
- * add one: the works of the same content type, picked by a click.
+ * add one: the items of the same content type by a piece of the title or by the address of the
+ * page, each item by itself, picked by a click.
  */
 export function Links({ type, summary, corrections }: { type: ContentTypeInfo; summary: ItemSummary; corrections: Corrections }) {
   const [searching, setSearching] = useState(false);
@@ -75,18 +75,13 @@ function LinkSearch({
   }, [input]);
 
   const found = useQuery({
-    queryKey: ["link-search", type.id, search],
+    queryKey: ["link-lookup", type.id, search],
     enabled: search !== "",
     queryFn: async () =>
-      unwrap(
-        await api.GET("/api/types/{type}/items", {
-          params: { path: { type: type.id }, query: { view: "ALL", search, limit: FOUND + 1 + summary.linked.length } },
-        }),
-      ),
+      unwrap(await api.GET("/api/types/{type}/lookup", { params: { path: { type: type.id }, query: { query: search, limit: FOUND + 1 } } })),
   });
-  const candidates = (found.data?.items ?? [])
-    .filter((s) => !sameItem(s, summary) && !summary.linked.some((l) => sameItem(l, s)))
-    .slice(0, FOUND);
+  const candidates = (found.data ?? []).filter((s) => !sameItem(s, summary)).slice(0, FOUND);
+  const linked = (s: ItemRef) => summary.linked.some((l) => sameItem(l, s));
 
   return (
     <div className="mt-2 flex flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
@@ -97,7 +92,7 @@ function LinkSearch({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), onDone())}
-          placeholder="Название или автор"
+          placeholder="Название или адрес страницы работы"
           className="h-8 pl-8"
           type="search"
         />
@@ -110,26 +105,29 @@ function LinkSearch({
       {!found.isFetching && search && candidates.length === 0 && <div className="text-xs text-muted-foreground">Ничего не найдено</div>}
       <ul className="flex flex-col gap-1">
         {candidates.map((s) => (
-          <li key={refKey(s)}>
+          <li key={refKey(s)} className="flex items-center gap-1">
             <AsyncButton
               variant="ghost"
-              className="h-auto w-full justify-start gap-2 px-1 py-1 text-left font-normal"
+              className="h-auto min-w-0 flex-1 justify-start gap-2 px-1 py-1 text-left font-normal"
               onClick={async () => {
                 await corrections.link(s);
                 onDone();
               }}
-              title="Связать: это та же работа"
+              disabled={linked(s)}
+              title={linked(s) ? "Уже связана с этой работой" : "Связать: это та же работа"}
+              icon={linked(s) ? <CheckIcon /> : <Link2Icon />}
             >
-              <Cover typeId={type.id} summary={s} className="aspect-[2/1] w-14 shrink-0 rounded" />
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm">{s.title}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {sourceTitle(type, s.source)}
-                  {s.version && ` · ${s.version}`}
-                  {s.linked.length > 0 && ` · связано: ${s.linked.length}`}
+                  {linked(s) && " · уже связана"}
                 </span>
               </span>
             </AsyncButton>
+            <a href={s.url} target="_blank" rel="noreferrer" className="shrink-0 p-1 text-muted-foreground hover:text-foreground" title="Страница на сайте">
+              <ExternalLinkIcon className="size-3.5" />
+            </a>
           </li>
         ))}
       </ul>

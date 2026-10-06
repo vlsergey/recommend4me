@@ -100,6 +100,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
                 out[key] = ItemSummary(
                     source = source,
                     item = id,
+                    work = clusters.representative(key).toString(),
                     title = title,
                     version = head.version,
                     url = head.url,

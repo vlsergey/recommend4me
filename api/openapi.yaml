@@ -7,6 +7,9 @@ info:
     some of them; a model learns the order of the grades and puts every other work on the user's
     own 0..10 scale.
 
+    An error is answered as application/problem+json (the Problem schema): its "detail" says, in
+    the user's language, what went wrong.
+
 tags:
   - name: types
   - name: items
@@ -16,6 +19,8 @@ tags:
   - name: settings
   - name: capture
   - name: status
+  - name: pages
+  - name: suggestions
 
 paths:
   /api/types:
@@ -114,6 +119,70 @@ paths:
                 items:
                   $ref: '#/components/schemas/FacetFilter'
 
+  /api/types/{type}/lookup:
+    get:
+      tags: [items]
+      operationId: lookupItems
+      summary: Works of a content type by a piece of the title or by the address of the work's page, each item apart
+      description: |
+        Unlike the list, every item is found by itself, linked to others or not: what the user
+        looks for when saying two items are one work.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: The items found, the address first, then by the title
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LinkedItem'
+
+  /api/sources/{source}/facets/{facet}/values:
+    get:
+      tags: [items]
+      operationId: listFacetValues
+      summary: The values of a facet of a source, by how many items have each, for a value to be added
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - name: facet
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: A piece of the name, any case; all when none
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: The values, the most used first; the ones the user made up among them
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FacetValueUse'
+        '404':
+          description: No such source or facet
+
   /api/items/{source}/{item}:
     get:
       tags: [items]
@@ -128,6 +197,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ItemDetails'
+        '404':
+          description: No such item
+
+  /api/items/{source}/{item}/suggestions:
+    get:
+      tags: [suggestions]
+      operationId: getSuggestions
+      summary: The values the work should have, worked out from its text and its other values
+      description: |
+        For every facet its source suggests values of: the values to add, the likeliest first, and
+        the site's values that do not fit. The user confirms one by adding it (correctFacet, added)
+        and rejects one by taking it away (correctFacet, not added); an answered value is no longer
+        listed. Made at once for a work that never had suggestions.
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      responses:
+        '200':
+          description: The suggestions, one entry per facet
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FacetSuggestions'
         '404':
           description: No such item
 
@@ -177,10 +271,15 @@ paths:
     delete:
       tags: [items]
       operationId: unrateItem
-      summary: Takes back the grade of the item's current version
+      summary: Takes back the grade of the item's current version, or of the version named
       parameters:
         - $ref: '#/components/parameters/Source'
         - $ref: '#/components/parameters/Item'
+        - name: version
+          in: query
+          description: An earlier version whose grade is taken back; the current one when none
+          schema:
+            type: string
       responses:
         '200':
           description: The item's card without the grade
@@ -651,6 +750,52 @@ paths:
                 items:
                   $ref: '#/components/schemas/CapturedPageInfo'
 
+  /api/pages:
+    get:
+      tags: [pages]
+      operationId: getPage
+      summary: What the browser extension shows on a page of a site
+      description: |
+        How the source marks its pages up, and - on a work's page - the work as the application
+        knows it: the prediction, the grade, the facets with the user's corrections, the
+        suggestions, the marks of its pictures and reviews.
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageView'
+        '404':
+          description: No source knows the page
+
+  /api/pages/cards:
+    post:
+      tags: [pages]
+      operationId: getCards
+      summary: The prediction and the grade of the works the cards of a list link to
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardsRequest'
+      responses:
+        '200':
+          description: One entry per link the application knows the work of
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardView'
+
   /api/status:
     get:
       tags: [status]
@@ -704,6 +849,20 @@ components:
         type: string
 
   schemas:
+    Problem:
+      type: object
+      description: An error (RFC 9457)
+      properties:
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+          description: What went wrong, as the user is shown it
+        instance:
+          type: string
+
     Grade:
       type: integer
       minimum: 1
@@ -739,7 +898,7 @@ components:
 
     SourceInfo:
       type: object
-      required: [id, title, homepage, modes, texts, facets, numbers, versioned]
+      required: [id, title, homepage, modes, texts, facets, numbers, versioned, signals]
       properties:
         id:
           type: string
@@ -769,6 +928,25 @@ components:
           type: string
         versioned:
           type: boolean
+        signals:
+          type: array
+          description: The kinds of the user's own actions on the site, with the names to show
+          items:
+            $ref: '#/components/schemas/SignalInfo'
+
+    SignalInfo:
+      type: object
+      required: [key, label, values]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        values:
+          type: object
+          description: The names of the values; a value not named is shown as it is
+          additionalProperties:
+            type: string
 
     SourceMode:
       type: string
@@ -776,11 +954,11 @@ components:
 
     FacetInfo:
       type: object
-      required: [id, key, label, filter, onCard]
+      required: [id, key, label, filter, onCard, suggest]
       properties:
         id:
           type: string
-          description: The facet as the filters of the content type know it - its shared key, or "<source>:<key>"
+          description: The facet as the filters and the model of the content type know it - its shared key, or "<source>.<key>"
         key:
           type: string
           description: The facet's key within its source
@@ -790,6 +968,9 @@ components:
           type: boolean
         onCard:
           type: boolean
+        suggest:
+          type: boolean
+          description: The application suggests values of it to confirm or reject
 
     NumberInfo:
       type: object
@@ -797,6 +978,7 @@ components:
       properties:
         id:
           type: string
+          description: The number as the sorting and the model know it - its shared key, or "<source>.<key>"
         key:
           type: string
         label:
@@ -887,8 +1069,13 @@ components:
 
     ItemSummary:
       type: object
-      required: [source, item, title, version, url, updatedAt, facets, numbers, hasCover, pictureCount, linked]
+      required: [source, item, title, version, url, updatedAt, facets, numbers, hasCover, pictureCount, linked, work]
       properties:
+        work:
+          type: string
+          description: |
+            The work the item is of, as "<source>/<item>" of the item that stands for it in the
+            list; the item's own key when it is linked to no other
         source:
           type: string
         item:
@@ -909,6 +1096,7 @@ components:
             $ref: '#/components/schemas/ItemFacet'
         numbers:
           type: object
+          description: By the number's key within the item's source (SourceInfo.numbers[].key), corrections applied
           additionalProperties:
             type: number
             format: double
@@ -917,7 +1105,9 @@ components:
         pictureCount:
           type: integer
         grade:
-          $ref: '#/components/schemas/Grade'
+          description: The grade of the work's current version - given to this item or to another item of the same work
+          allOf:
+            - $ref: '#/components/schemas/Grade'
         previousGrade:
           $ref: '#/components/schemas/Grade'
         previousGradeVersion:
@@ -943,7 +1133,7 @@ components:
       properties:
         field:
           type: string
-          description: The name of the field it was found in
+          description: The name of the field it was found in, as the user is shown it
         byMeaning:
           type: boolean
           description: Found by meaning alone; the text is then the phrase of the field nearest by meaning
@@ -1089,6 +1279,7 @@ components:
             $ref: '#/components/schemas/FeatureContribution'
         ratings:
           type: array
+          description: The grades of every item of the work, newest first
           items:
             $ref: '#/components/schemas/RatingRecord'
         reviews:
@@ -1249,8 +1440,16 @@ components:
 
     RatingRecord:
       type: object
-      required: [version, grade, ratedAt]
+      required: [source, item, version, grade, ratedAt, current]
       properties:
+        source:
+          type: string
+        item:
+          type: string
+          description: The item of the work graded - this one or one linked to it
+        current:
+          type: boolean
+          description: The grade is of the item's current version
         version:
           type: string
         grade:
@@ -1283,16 +1482,19 @@ components:
 
     FacetCorrection:
       type: object
-      required: [facet, key, added]
+      required: [facet, added]
       properties:
         facet:
           type: string
           description: The facet's key within the item's source
         key:
           type: string
+          description: |
+            The value's key; when none, the value is found by its name among the facet's values
+            (any case), and a new one gets the name in lower case as its key
         name:
           type: string
-          description: The name of a value the user makes up
+          description: The name of a value the user makes up; required without a key
         added:
           type: boolean
           description: true - the value is added; false - the site's value is taken away
@@ -1353,6 +1555,24 @@ components:
         items:
           type: integer
           description: Items of the source in the database
+        catalogue:
+          $ref: '#/components/schemas/CatalogueProgress'
+
+    CatalogueProgress:
+      type: object
+      required: [stage, done, total, complete]
+      description: How far the whole catalogue is loaded, across runs of the job
+      properties:
+        stage:
+          type: string
+          description: What the scrape does now or would do next ("feed", "details"); "none" - never started
+        done:
+          type: integer
+        total:
+          type: integer
+        complete:
+          type: boolean
+          description: The catalogue is loaded; only updates are left
 
     ScorerInfo:
       type: object
@@ -1592,3 +1812,181 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkStatus'
+
+    SuggestedValue:
+      type: object
+      required: [key, name, chance]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        chance:
+          type: number
+          format: double
+          description: The chance the work has the value, 0..1
+
+    FacetSuggestions:
+      type: object
+      required: [facet, label, suggested, doubted]
+      properties:
+        facet:
+          type: string
+          description: The facet's key within the item's source
+        label:
+          type: string
+        suggested:
+          type: array
+          description: Values to add, the likeliest first
+          items:
+            $ref: '#/components/schemas/SuggestedValue'
+        doubted:
+          type: array
+          description: The site's values that do not fit the work
+          items:
+            $ref: '#/components/schemas/SuggestedValue'
+
+    FacetDecorInfo:
+      type: object
+      required: [facet, values]
+      properties:
+        facet:
+          type: string
+        values:
+          type: string
+
+    ReviewDecorInfo:
+      type: object
+      required: [selector, idAttribute, idPrefix]
+      properties:
+        selector:
+          type: string
+        idAttribute:
+          type: string
+        idPrefix:
+          type: string
+
+    CardDecorInfo:
+      type: object
+      required: [selector, link]
+      properties:
+        selector:
+          type: string
+        link:
+          type: string
+
+    PageDecorInfo:
+      type: object
+      required: [facets]
+      description: CSS selectors of the site's own elements the extension marks up (the plugin API's PageDecor)
+      properties:
+        panelAfter:
+          type: string
+        facets:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetDecorInfo'
+        reviews:
+          $ref: '#/components/schemas/ReviewDecorInfo'
+        pictures:
+          type: string
+          description: The selector of the work's images on its page
+        cards:
+          $ref: '#/components/schemas/CardDecorInfo'
+
+    PagePicture:
+      type: object
+      required: [position, url]
+      properties:
+        position:
+          type: integer
+        url:
+          type: string
+        mark:
+          type: integer
+
+    PageItem:
+      type: object
+      required: [summary, facets, suggestions, explanation, grades, pictures, reviewMarks, ratings]
+      properties:
+        summary:
+          $ref: '#/components/schemas/ItemSummary'
+        facets:
+          type: array
+          description: The facets the page marks up or the application suggests values of, corrections included
+          items:
+            $ref: '#/components/schemas/ItemFacet'
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetSuggestions'
+        explanation:
+          type: array
+          description: What pushed the prediction most, strongest first
+          items:
+            $ref: '#/components/schemas/FeatureContribution'
+        grades:
+          type: array
+          description: The labels of the grades 1..5 of the work's content type
+          items:
+            type: string
+        pictures:
+          type: array
+          items:
+            $ref: '#/components/schemas/PagePicture'
+        reviewMarks:
+          type: object
+          description: The user's marks of the work's reviews, by review id
+          additionalProperties:
+            type: integer
+        ratings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RatingRecord'
+
+    PageView:
+      type: object
+      required: [source, sourceTitle, decor]
+      properties:
+        source:
+          type: string
+        sourceTitle:
+          type: string
+        decor:
+          $ref: '#/components/schemas/PageDecorInfo'
+        itemId:
+          type: string
+          description: The work the page is of, when it is a work's page - known to the application or not yet
+        item:
+          $ref: '#/components/schemas/PageItem'
+
+    CardsRequest:
+      type: object
+      required: [url, links]
+      properties:
+        url:
+          type: string
+          description: The address of the page the cards are on
+        links:
+          type: array
+          items:
+            type: string
+
+    CardView:
+      type: object
+      required: [link, source, item, title]
+      properties:
+        link:
+          type: string
+          description: The link as it was sent
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        grade:
+          $ref: '#/components/schemas/Grade'
+        prediction:
+          type: number
+          format: double

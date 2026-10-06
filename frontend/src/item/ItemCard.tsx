@@ -58,7 +58,7 @@ export const ItemCard = forwardRef<HTMLElement, ItemViewProps>(function ItemCard
           <span title={summary.updatedAt}>{ago(summary.updatedAt)}</span>
           <NumberLine type={type} summary={summary} />
           <PreviousRating type={type} summary={summary} />
-          <SignalBadges signals={summary.signals} />
+          <SignalBadges source={type.sources.find((s) => s.id === summary.source)} signals={summary.signals} />
         </div>
 
         {summary.searchMatch && <SearchMatchLine match={summary.searchMatch} className="line-clamp-3" />}

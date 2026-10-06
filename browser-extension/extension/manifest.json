@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "recommend4me",
-  "version": "0.1.0",
-  "description": "Отправляет страницы книг и игр, которые вы открываете, в локальное приложение recommend4me — режим слежения.",
+  "version": "0.2.0",
+  "description": "Отправляет страницы книг и игр, которые вы открываете, в локальное приложение recommend4me, и показывает на них прогноз, оценку, теги и подсказки.",
   "browser_specific_settings": {
     "gecko": {
       "id": "recommend4me@vlsergey",

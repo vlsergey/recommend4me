@@ -1,9 +1,15 @@
 package io.github.vlsergey.recommend4me.source.authortoday
 
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.CardDecor
+import io.github.vlsergey.recommend4me.source.FacetDecor
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberScale
+import io.github.vlsergey.recommend4me.source.PageDecor
+import io.github.vlsergey.recommend4me.source.PictureDecor
+import io.github.vlsergey.recommend4me.source.ReviewDecor
+import io.github.vlsergey.recommend4me.source.SignalDef
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
@@ -28,7 +34,7 @@ class AuthorToday : Source {
             FacetDef(AUTHOR, "Автор", feature = true, shared = "author", searchWeight = 1.0f, onCard = true, names = true),
             FacetDef(GENRE, "Жанр", filter = true, onCard = true, searchWeight = 0.8f),
             FacetDef(FORM, "Форма", filter = true),
-            FacetDef(TAG, "Тег", shared = "tag", searchWeight = 0.9f),
+            FacetDef(TAG, "Тег", shared = "tag", searchWeight = 0.9f, suggest = true),
             FacetDef(STATUS, "Статус", filter = true, onCard = true),
             FacetDef(SERIES, "Цикл", searchWeight = 0.7f),
         ),
@@ -56,11 +62,45 @@ class AuthorToday : Source {
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 
+    override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
+
+    override val signals = listOf(
+        SignalDef(
+            SIGNAL_LIBRARY, "Полка",
+            mapOf("Reading" to "читаю", "Saved" to "отложено", "Finished" to "прочитано", "Disliked" to "не понравилось", "Purchased" to "куплено"),
+        ),
+        SignalDef(SIGNAL_LIKED, "Нравится", mapOf("yes" to "да")),
+        SignalDef(
+            SIGNAL_REACTION, "Реакция",
+            mapOf(
+                "Perfect" to "превосходно", "Waiting" to "жду продолжения", "ImpossibleToPutDown" to "не оторваться",
+                "Boring" to "скучно", "Funny" to "весело", "Sadly" to "грустно", "Cute" to "очень мило",
+                "Wisely" to "заставляет задуматься", "Facepalm" to "фейспалм", "DoNotRecommend" to "не рекомендую",
+                "Obscene" to "слов нет, цензурных", "Unclear" to "сложно оценить",
+            ),
+        ),
+        SignalDef(SIGNAL_HIDDEN, "Не интересно", mapOf("yes" to "да")),
+    )
+
+    override val pageDecor = PageDecor(
+        panelAfter = ".book-meta-panel",
+        facets = listOf(
+            FacetDecor(TAG, ".book-meta-panel .tags a"),
+            FacetDecor(GENRE, ".book-meta-panel .book-genres a[href^='/work/genre/']"),
+        ),
+        reviews = ReviewDecor("article.post[id^='post_']", idPrefix = "post_"),
+        pictures = PictureDecor(".book-cover img.cover-image"),
+        cards = CardDecor(".book-row", ".book-title a[href^='/work/']"),
+    )
+
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = AuthorTodayPages(context).read(page)
 
     companion object {
         const val ID = "author.today"
         const val BASE = "https://author.today"
+
+        /** A work's page, its reviews, a chapter in the reader. */
+        private val ITEM_ADDRESS = Regex("^https?://(?:www\\.)?author\\.today/(?:work|reader)/(\\d+)(?:[/?#]|$)")
 
         const val AUTHOR = "author"
         const val GENRE = "genre"

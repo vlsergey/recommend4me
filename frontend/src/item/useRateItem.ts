@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, unwrap, type ContentTypeInfo, type Grade, type ItemRef, type ItemSummary } from "@/api/client";
+import { api, unwrap, type ContentTypeInfo, type Grade, type ItemRef, type ItemSummary, type RatingRecord } from "@/api/client";
 import { toast } from "@/components/ui/toast";
 import { findSource, gradeLabel } from "@/contenttype/types";
 import { applyGrade, itemKey, ITEMS } from "./lists";
@@ -47,6 +47,27 @@ export function useRateItem() {
         },
       });
     },
-    onError: (error) => toast.add({ title: "Не удалось сохранить оценку", description: String(error), type: "error" }),
+    onError: (error) => toast.add({ title: "Не удалось сохранить оценку", description: error.message, type: "error" }),
   });
+}
+
+/**
+ * Takes back one grade of the work's history: of an earlier version, or of another item of the
+ * work. The shown item is read anew — its card's grade may come from the grade taken back — and
+ * its card is updated in the lists as a new grade of it would be.
+ */
+export function useTakeBackGrade(shown: ItemRef) {
+  const queryClient = useQueryClient();
+  return async (record: RatingRecord) => {
+    unwrap(
+      await api.DELETE("/api/items/{source}/{item}/rating", {
+        params: { path: { source: record.source, item: record.item }, query: { version: record.version || undefined } },
+      }),
+    );
+    const details = unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: { source: shown.source, item: shown.item } } }));
+    queryClient.setQueryData(itemKey(shown), details);
+    applyGrade(queryClient, details.summary);
+    const type = findSource(queryClient.getQueryData<ContentTypeInfo[]>(["types"]), shown.source)?.type;
+    queryClient.invalidateQueries({ queryKey: ["model", type?.id] });
+  };
 }

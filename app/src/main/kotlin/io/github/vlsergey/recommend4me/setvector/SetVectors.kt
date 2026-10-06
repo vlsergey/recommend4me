@@ -49,12 +49,24 @@ class SetVectors(
 
     fun running(): Boolean = busy
 
+    /** How far the current pass has got: sets made, of the sets it found to make. */
+    @Volatile
+    private var doneNow = 0
+
+    @Volatile
+    private var totalNow = 0
+
+    val done: Int get() = doneNow
+    val total: Int get() = totalNow
+
     @Order(6)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         worker.execute {
             while (!stopping) {
                 try {
+                    doneNow = 0
+                    totalNow = 0
                     stores.types.forEach { refresh(it) }
                 } catch (_: InterruptedException) {
                     Thread.currentThread().interrupt()
@@ -117,12 +129,14 @@ class SetVectors(
                 if (todoSet.isEmpty()) continue
                 busy = true
                 val todo = contexts.of(s.id).itemsInOrder().filter { it in todoSet }
+                totalNow += todo.size
                 log.info("{}: making {} vectors of {} items", s.id, kind.key, todo.size)
                 for (ids in todo.chunked(CHUNK)) {
                     if (stopping) return made
                     val sets = members(s, kind, encoder, ids)
                     ids.forEach { id -> embedding.embedding.of(sets[id].orEmpty())?.let { s.setVectors.save(id, kind, embedding.id, have.getValue(id), it) } }
                     made += ids.size
+                    doneNow += ids.size
                     unannounced += ids.size
                     // The model learns the new vectors as they come, not once at the end of hours
                     if (unannounced >= ANNOUNCE_EVERY || System.currentTimeMillis() - announcedAt >= ANNOUNCE_AFTER.toMillis()) {

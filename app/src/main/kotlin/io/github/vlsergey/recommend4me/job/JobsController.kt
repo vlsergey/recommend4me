@@ -2,7 +2,9 @@ package io.github.vlsergey.recommend4me.job
 
 import io.github.vlsergey.recommend4me.api.JobsApi
 import io.github.vlsergey.recommend4me.api.model.JobRequest
+import io.github.vlsergey.recommend4me.api.model.CatalogueProgress
 import io.github.vlsergey.recommend4me.api.model.JobStatus
+import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.HttpStatus
@@ -13,7 +15,7 @@ import io.github.vlsergey.recommend4me.api.model.JobState as ApiJobState
 import io.github.vlsergey.recommend4me.api.model.SourceMode as ApiSourceMode
 
 @RestController
-class JobsController(private val jobs: Jobs, private val stores: Stores) : JobsApi {
+class JobsController(private val jobs: Jobs, private val stores: Stores, private val contexts: SourceContexts) : JobsApi {
 
     override fun listJobs(): ResponseEntity<List<JobStatus>> =
         ResponseEntity.ok(stores.sources.filter { s -> s.source.modes.any { it != SourceMode.BROWSER } }.map { status(it.id) })
@@ -46,6 +48,14 @@ class JobsController(private val jobs: Jobs, private val stores: Stores) : JobsA
             loggedIn = p.loggedIn,
             startedAt = p.startedAt?.atOffset(ZoneOffset.UTC),
             finishedAt = p.finishedAt?.atOffset(ZoneOffset.UTC),
+            catalogue = catalogue(source),
         )
+    }
+
+    /** How far the whole catalogue is loaded, as the source tells it. */
+    private fun catalogue(source: String): CatalogueProgress? {
+        val store = stores.source(source) ?: return null
+        if (SourceMode.SCRAPE_ALL !in store.source.modes) return null
+        return store.source.scrapeProgress(contexts.of(source))?.let { CatalogueProgress(it.stage, it.done, it.total, it.complete) }
     }
 }
