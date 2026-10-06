@@ -65,8 +65,11 @@ class Ficbook : Source {
         Regex("https://ficbook\\.net/(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*|popular-fanfics[^/?#]*|home/[^?#]*)([/?#].*)?"),
     )
 
-    /** 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever the order of its names. */
-    override val parserVersion = 2
+    /**
+     * 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever
+     * the order of its names. 3: whether a work is fan fiction, by its fandom.
+     */
+    override val parserVersion = 3
 
     override fun itemUrl(itemId: String) = "$BASE/readfic/$itemId"
 

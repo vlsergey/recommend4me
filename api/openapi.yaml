@@ -1163,7 +1163,8 @@ components:
         chance:
           type: number
           format: double
-          description: The model's chance that the work has the value, 0..1, whenever the model has one; the interface shows it by a value the user has not answered on
+          nullable: true
+          description: The model's chance that the work has the value, 0..1, whenever the model has one (null otherwise); the interface shows it by a value the user has not answered on
         inferred:
           type: boolean
           description: The model gave the value, the site did not
@@ -2218,11 +2219,14 @@ components:
 
     CharacterInfo:
       type: object
-      required: [character, names, url]
+      required: [character, value, names, url]
       properties:
         character:
           type: string
           description: The character's id within the catalogue
+        value:
+          type: string
+          description: The key of the character as a value of the facet "characters" of the works
         names:
           type: array
           description: Every name it goes by, the main one first

@@ -172,12 +172,15 @@ The catalogue is asked only when the user asks — a search by the button with t
 a universe added, its characters refreshed from the universes screen or a site's page — and
 what it answered is kept.
 
-Every work of the type has three facets of the application's own beside the source's
+Every work of the type has four facets of the application's own beside the source's
 (`UniverseFacets`), their values kept as the user's corrections and worked out by the model as
 any facet's:
 
+- `kind` — fan fiction or an original work: the site's when it says (ficbook by the fandom
+  "originals", author.today by the genre "Фанфик"), suggested otherwise;
 - `universe` — the universes of the dictionary the work is fan fiction of, one or several:
-  suggested from the work's fandom, tags and texts, to be confirmed;
+  suggested from the work's fandom, tags and texts to a work not known to be original, to be
+  confirmed;
 - `characters` — its main characters: of the characters of its confirmed universes and the
   original characters (ОЖП, ОМП), every name of a character held against the line the site writes
   them in (`SourceSchema.universeLine`, shown above), the tags, the description and the chapters;

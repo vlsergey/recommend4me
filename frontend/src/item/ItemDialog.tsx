@@ -18,6 +18,7 @@ import { FeatureBars } from "@/model/FeatureBars";
 import { Parts } from "@/part/Parts";
 import { PictureMatches, Pictures } from "@/picture/Pictures";
 import { ReviewMatches, Reviews } from "@/review/Reviews";
+import { FANFIC_FACETS, FanficSection } from "@/universe/FanficSection";
 import { writeItemHash } from "./itemHash";
 import { ItemNumbers } from "./ItemNumbers";
 import { ItemTexts } from "./ItemTexts";
@@ -264,6 +265,12 @@ function Details({
       </div>
 
       <aside className="flex flex-col gap-5">
+        {type.universes && (
+          <>
+            <FanficSection type={type} source={source} details={d} corrections={corrections} />
+            <Separator />
+          </>
+        )}
         {d.explanation.length > 0 && (
           <section className="flex flex-col gap-3">
             <h4 className="text-sm font-semibold">Почему такой прогноз</h4>
@@ -272,7 +279,14 @@ function Details({
           </section>
         )}
         <Separator />
-        <FacetCorrections item={ref} source={source} facets={d.allFacets} corrections={corrections} />
+        <FacetCorrections
+          item={ref}
+          source={source}
+          facets={d.allFacets}
+          corrections={corrections}
+          // The fan fiction's facets are answered in their own section above
+          except={type.universes ? FANFIC_FACETS : undefined}
+        />
         <ItemNumbers numbers={d.allNumbers} source={source} corrections={corrections} />
         <Separator />
         <Links type={type} summary={d.summary} corrections={corrections} />

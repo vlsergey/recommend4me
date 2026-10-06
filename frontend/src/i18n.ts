@@ -85,8 +85,9 @@ export function ago(iso: string): string {
   return RELATIVE.format(Math.round(seconds / (86400 * 365)), "year");
 }
 
-export function percent(x: number | undefined): string {
-  return x === undefined ? "—" : `${Math.round(x * 100)}%`;
+/** A share as a percent; "—" when there is none, absent or null in the JSON alike. */
+export function percent(x: number | null | undefined): string {
+  return x == null ? "—" : `${Math.round(x * 100)}%`;
 }
 
 export function compact(n: number): string {

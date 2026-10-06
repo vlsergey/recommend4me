@@ -6,9 +6,13 @@ import { cn } from "@/lib/utils";
 /** Below one half the model thinks the work more likely has the value not than has it. */
 const HALF = 0.5;
 
-/** The model's chance is shown only by a value the user has not answered on. */
+/**
+ * The model's chance is shown only by a value the user has not answered on, and only when the
+ * model has one: a value the model has no chance of comes with none — null in the JSON, not only
+ * absent — and shows none.
+ */
 export function shownChance(value: FacetValueInfo): number | undefined {
-  return value.corrected ? undefined : value.chance;
+  return value.corrected || value.chance == null ? undefined : value.chance;
 }
 
 /** The model more likely says no than yes to a value the user has not answered on. */

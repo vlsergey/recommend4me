@@ -60,7 +60,8 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             val added = corrections.filter { it.facet == def.key && it.added }.associate { it.key to it.name }
             val original = def.original?.let { texts[it] }
             if (keys.isEmpty() && removed.isEmpty() && original == null) return@mapNotNull null
-            val own = chances?.get(def.key).orEmpty()
+            // The chances of a facet the model works on now: none of one it no longer does
+            val own = if (def.suggest || def.infer) chances?.get(def.key).orEmpty() else emptyMap()
             val siteKeys = site[def.key].orEmpty().toSet()
             fun name(key: String) = added[key] ?: names[def.key]?.get(key) ?: key
             fun info(key: String, corrected: FacetValueInfo.Corrected?) = FacetValueInfo(

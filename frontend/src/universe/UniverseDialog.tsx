@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRightIcon, ExternalLinkIcon, Loader2Icon, OrbitIcon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
+import { ChevronRightIcon, ExternalLinkIcon, LinkIcon, Loader2Icon, OrbitIcon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
 import { api, ensureOk, unwrap, type CharacterInfo, type ContentTypeInfo, type FoundUniverse, type UniverseInfo } from "@/api/client";
+import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,29 @@ import { cn } from "@/lib/utils";
 /** The cache key of the dictionary: ["universes", type]; a universe's characters lie under it. */
 const UNIVERSES = "universes";
 
-const sameUniverse = (a: { catalogue: string; universe: string }, b: { catalogue: string; universe: string }) =>
+/** The dictionary of universes of a content type. */
+export function useUniverses(typeId: string, enabled = true) {
+  return useQuery({
+    queryKey: [UNIVERSES, typeId],
+    enabled,
+    queryFn: async () => unwrap(await api.GET("/api/types/{type}/universes", { params: { path: { type: typeId } } })),
+  });
+}
+
+/** The query of the characters of a universe of the dictionary, as the catalogue gave them. */
+export function charactersQuery(typeId: string, u: { catalogue: string; universe: string }) {
+  return {
+    queryKey: [UNIVERSES, typeId, u.catalogue, u.universe, "characters"],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/types/{type}/universes/{catalogue}/{universe}/characters", {
+          params: { path: { type: typeId, catalogue: u.catalogue, universe: u.universe } },
+        }),
+      ),
+  };
+}
+
+const sameUniverse =(a: { catalogue: string; universe: string }, b: { catalogue: string; universe: string }) =>
   a.catalogue === b.catalogue && a.universe === b.universe;
 
 /**
@@ -54,10 +77,7 @@ function useDictionaryChanged(typeId: string) {
 }
 
 function UniverseDetails({ type }: { type: ContentTypeInfo }) {
-  const universes = useQuery({
-    queryKey: [UNIVERSES, type.id],
-    queryFn: async () => unwrap(await api.GET("/api/types/{type}/universes", { params: { path: { type: type.id } } })),
-  });
+  const universes = useUniverses(type.id);
 
   return (
     <>
@@ -72,7 +92,10 @@ function UniverseDetails({ type }: { type: ContentTypeInfo }) {
         </DialogDescription>
       </DialogHeader>
 
-      <AddFromCatalogue type={type} dictionary={universes.data} />
+      <section className="flex flex-col gap-2 text-sm">
+        <h4 className="font-semibold">Добавить из Викиданных</h4>
+        <CatalogueSearch type={type} dictionary={universes.data} />
+      </section>
 
       <section className="flex flex-col gap-2 text-sm">
         <h4 className="flex items-center gap-2 font-semibold">
@@ -176,15 +199,7 @@ function UniverseRow({ type, universe: u }: { type: ContentTypeInfo; universe: U
 /** Every character of a universe as the dictionary keeps it, with a line to find one by any of its names. */
 function Characters({ type, universe: u }: { type: ContentTypeInfo; universe: UniverseInfo }) {
   const [filter, setFilter] = useState("");
-  const characters = useQuery({
-    queryKey: [UNIVERSES, type.id, u.catalogue, u.universe, "characters"],
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/types/{type}/universes/{catalogue}/{universe}/characters", {
-          params: { path: { type: type.id, catalogue: u.catalogue, universe: u.universe } },
-        }),
-      ),
-  });
+  const characters = useQuery(charactersQuery(type.id, u));
 
   if (characters.isLoading) return <Loader2Icon className="ml-9 size-4 animate-spin text-muted-foreground" />;
   if (characters.isError) return <p className="ml-9 text-destructive">Не удалось загрузить персонажей: {characters.error.message}</p>;
@@ -225,8 +240,23 @@ function CharacterRow({ character: c }: { character: CharacterInfo }) {
   );
 }
 
-/** The search of the catalogue by a name: on the button or Enter only, never as the user types. */
-function AddFromCatalogue({ type, dictionary }: { type: ContentTypeInfo; dictionary?: UniverseInfo[] }) {
+/**
+ * A work the universes found are for: a universe found is added to the dictionary and linked to
+ * the work at once, and one of the dictionary already is linked by a button of its own.
+ */
+export type UniverseForWork = {
+  /** The work has the universe of the value (and the user did not take it away). */
+  linked: (value: string) => boolean;
+  /** Links the work to the universe of the value. */
+  link: (value: string) => Promise<unknown>;
+};
+
+/**
+ * The search of the catalogue by a name: on the button or Enter only, never as the user types.
+ * Each universe found is added to the dictionary by its button — and, with [forWork], linked to
+ * that work as well.
+ */
+export function CatalogueSearch({ type, dictionary, forWork }: { type: ContentTypeInfo; dictionary?: UniverseInfo[]; forWork?: UniverseForWork }) {
   const [query, setQuery] = useState("");
   const search = useMutation({
     mutationFn: async (q: string) =>
@@ -238,8 +268,7 @@ function AddFromCatalogue({ type, dictionary }: { type: ContentTypeInfo; diction
   };
 
   return (
-    <section className="flex flex-col gap-2 text-sm">
-      <h4 className="font-semibold">Добавить из Викиданных</h4>
+    <div className="flex flex-col gap-2 text-sm">
       <form
         className="flex gap-2"
         onSubmit={(e) => {
@@ -256,40 +285,87 @@ function AddFromCatalogue({ type, dictionary }: { type: ContentTypeInfo; diction
       {search.data && search.data.length === 0 && <p className="text-muted-foreground">По запросу «{search.variables}» ничего не нашлось.</p>}
       {search.data && search.data.length > 0 && (
         <ul className="flex flex-col divide-y rounded-lg border">
-          {search.data.map((f) => (
-            <FoundRow
-              key={`${f.catalogue}:${f.universe}`}
-              type={type}
-              found={f}
-              // The dictionary as it is now, not as it was at the search: a universe added or removed since shows so
-              added={dictionary ? dictionary.some((u) => sameUniverse(u, f)) : f.added}
-            />
-          ))}
+          {search.data.map((f) => {
+            // The dictionary as it is now, not as it was at the search: a universe added or removed since shows so
+            const entry = dictionary?.find((u) => sameUniverse(u, f));
+            return (
+              <FoundRow
+                key={`${f.catalogue}:${f.universe}`}
+                type={type}
+                found={f}
+                added={dictionary ? entry !== undefined : f.added}
+                entry={entry}
+                forWork={forWork}
+              />
+            );
+          })}
         </ul>
       )}
-    </section>
+    </div>
   );
 }
 
-function FoundRow({ type, found: f, added }: { type: ContentTypeInfo; found: FoundUniverse; added: boolean }) {
+function FoundRow({
+  type,
+  found: f,
+  added,
+  entry,
+  forWork,
+}: {
+  type: ContentTypeInfo;
+  found: FoundUniverse;
+  added: boolean;
+  /** The universe as the dictionary has it, when it has it. */
+  entry?: UniverseInfo;
+  forWork?: UniverseForWork;
+}) {
   const changed = useDictionaryChanged(type.id);
-  // The spinner stays until the dictionary below shows the universe
+  // The spinner stays until the dictionary below shows the universe (and the work its link)
   const add = useMutation({
-    mutationFn: async () =>
-      unwrap(await api.POST("/api/types/{type}/universes", { params: { path: { type: type.id } }, body: { catalogue: f.catalogue, universe: f.universe } })),
-    onSuccess: () => changed(false),
+    mutationFn: async () => {
+      const universe = unwrap(
+        await api.POST("/api/types/{type}/universes", { params: { path: { type: type.id } }, body: { catalogue: f.catalogue, universe: f.universe } }),
+      );
+      if (forWork) await forWork.link(universe.value);
+      return universe;
+    },
+    onSettled: () => changed(false),
   });
+
+  if (forWork)
+    return (
+      <li className="flex flex-col gap-1 px-3 py-2">
+        <div className="flex items-start gap-2">
+          <FoundName found={f} />
+          {entry && forWork.linked(entry.value) ? (
+            <span className="shrink-0 text-xs text-muted-foreground">уже у работы</span>
+          ) : entry ? (
+            <AsyncButton size="sm" variant="outline" onClick={() => forWork.link(entry.value)} title="Вселенная уже в словаре: связать с ней работу" icon={<LinkIcon />}>
+              Связать с работой
+            </AsyncButton>
+          ) : added ? (
+            <span className="shrink-0 text-xs text-muted-foreground">уже в словаре</span>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => add.mutate()}
+              disabled={add.isPending}
+              title="Добавить в словарь вместе с персонажами из Викиданных и связать с ней работу"
+            >
+              {add.isPending ? <Loader2Icon className="animate-spin" /> : <PlusIcon />}
+              {add.isPending ? "Добавляется…" : "Добавить и связать"}
+            </Button>
+          )}
+        </div>
+        {add.isError && <p className="text-destructive">Не удалось добавить: {add.error.message}</p>}
+      </li>
+    );
 
   return (
     <li className="flex flex-col gap-1 px-3 py-2">
       <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <a href={f.url} target="_blank" rel="noreferrer" className="font-medium underline-offset-2 hover:underline" title="Страница в Викиданных">
-            {f.name}
-          </a>
-          <span className="ml-2 font-mono text-xs text-muted-foreground">{f.universe}</span>
-          {f.description && <div className="text-muted-foreground">{f.description}</div>}
-        </div>
+        <FoundName found={f} />
         {added ? (
           <span className="shrink-0 text-xs text-muted-foreground">уже в словаре</span>
         ) : (
@@ -301,5 +377,17 @@ function FoundRow({ type, found: f, added }: { type: ContentTypeInfo; found: Fou
       </div>
       {add.isError && <p className="text-destructive">Не удалось добавить: {add.error.message}</p>}
     </li>
+  );
+}
+
+function FoundName({ found: f }: { found: FoundUniverse }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <a href={f.url} target="_blank" rel="noreferrer" className="font-medium underline-offset-2 hover:underline" title="Страница в Викиданных">
+        {f.name}
+      </a>
+      <span className="ml-2 font-mono text-xs text-muted-foreground">{f.universe}</span>
+      {f.description && <div className="text-muted-foreground">{f.description}</div>}
+    </div>
   );
 }

@@ -29,11 +29,13 @@ export function SuggestedValues({ suggestions, corrections }: { suggestions: Fac
 }
 
 /** The answer is a correction of the facet, after which the value is no longer suggested. */
-function SuggestedChip({ facet, value, corrections }: { facet: string; value: SuggestedValue; corrections: Corrections }) {
+export function SuggestedChip({ facet, value, corrections }: { facet: string; value: SuggestedValue; corrections: Corrections }) {
+  // The contract gives every suggestion a chance; a null one is still not shown as "0%"
+  const chance = value.chance == null ? undefined : value.chance;
   return (
-    <Badge variant="outline" className="border-dashed pr-0.5 font-normal" title={`Вероятность ${percent(value.chance)}`}>
+    <Badge variant="outline" className="border-dashed pr-0.5 font-normal" title={chance !== undefined ? `Вероятность ${percent(chance)}` : undefined}>
       {value.name}
-      <span className="text-muted-foreground tabular-nums">({percent(value.chance)})</span>
+      {chance !== undefined && <span className="text-muted-foreground tabular-nums">({percent(chance)})</span>}
       <FacetAnswers facet={facet} value={{ key: value.key }} corrections={corrections} />
     </Badge>
   );

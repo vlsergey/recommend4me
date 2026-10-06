@@ -21,21 +21,28 @@ const OFFERED = 30;
  * writes as one line, that line as the site has it. Each value says how likely the model finds it
  * (until the user answers on it) and takes the user's ✓ or ✕; a value the user added is outlined,
  * one the model worked out dotted, one the user took away crossed out. In editing a value of any
- * facet of the source can be added. Below them the application's suggestions to answer.
+ * facet of the source can be added. Below them the application's suggestions to answer. The
+ * facets of [except] are answered elsewhere: neither their values, nor their suggestions, nor
+ * the adding of them are here.
  */
 export function FacetCorrections({
   item,
   source,
-  facets,
+  facets: allFacets,
   corrections,
+  except = [],
 }: {
   item: ItemRef;
   source?: SourceInfo;
   facets: ItemFacet[];
   corrections: Corrections;
+  except?: readonly string[];
 }) {
   const [editing, setEditing] = useState(false);
   const suggestions = useSuggestions(item, source);
+  const facets = allFacets.filter((f) => !except.includes(f.facet));
+  const suggested = suggestions.data?.filter((s) => !except.includes(s.facet));
+  const addable = source && { ...source, facets: source.facets.filter((f) => !except.includes(f.key)) };
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center gap-1">
@@ -54,8 +61,8 @@ export function FacetCorrections({
           </div>
         </div>
       ))}
-      {editing && source && <AddFacetValue source={source} corrections={corrections} />}
-      {suggestions.data && <SuggestedValues suggestions={suggestions.data} corrections={corrections} />}
+      {editing && addable && <AddFacetValue source={addable} corrections={corrections} />}
+      {suggested && <SuggestedValues suggestions={suggested} corrections={corrections} />}
     </section>
   );
 }
@@ -66,7 +73,8 @@ const CORRECTED_TITLE: Record<NonNullable<FacetValueInfo["corrected"]>, string> 
   REMOVED: "Убрано вами",
 };
 
-function FacetValue({ facet, value, corrections }: { facet: string; value: FacetValueInfo; corrections: Corrections }) {
+/** A value of the work's facet: its marks, its chance and the user's ✓ or ✕ on it. */
+export function FacetValue({ facet, value, corrections }: { facet: string; value: FacetValueInfo; corrections: Corrections }) {
   return (
     <Badge
       variant={value.corrected === "ADDED" ? "outline" : "secondary"}

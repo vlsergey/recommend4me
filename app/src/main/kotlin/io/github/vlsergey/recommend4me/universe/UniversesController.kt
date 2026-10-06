@@ -55,7 +55,9 @@ class UniversesController(private val stores: Stores, private val universes: Uni
     }
 
     override fun listCharacters(type: String, catalogue: String, universe: String): ResponseEntity<List<CharacterInfo>> =
-        ResponseEntity.ok(typeOf(type).universes.characters(catalogue, universe).map { CharacterInfo(it.id, it.names, it.url, it.description) })
+        ResponseEntity.ok(typeOf(type).universes.characters(catalogue, universe).map {
+            CharacterInfo(character = it.id, value = UniverseFacet.valueOf(catalogue, it.id), names = it.names, url = it.url, description = it.description)
+        })
 
     private fun StoredUniverse.toApi(works: Int) = UniverseInfo(
         catalogue = catalogue,

@@ -8,7 +8,9 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
  * Their values are kept as the user's corrections of the work's source — the site has none — and
  * worked out by the model, as any facet's:
  *
- * - the universes are suggested, to be confirmed: the work's characters are chosen within them;
+ * - the kind — fan fiction or an original work — is the site's when it says, suggested otherwise;
+ * - the universes are suggested, to be confirmed, to a work not known to be original: the work's
+ *   characters are chosen within them;
  * - the main characters are worked out of the characters of the work's universes and the original
  *   characters, the pairings of pairs of the work's characters — given to the work at once.
  */
@@ -25,8 +27,12 @@ object UniverseFacet {
         suggest = true,
     )
 
+    /** The values of the kind of a work, with their names. */
+    val KINDS = mapOf(UniverseFacets.FANFICTION to "Фанфик", UniverseFacets.ORIGINAL to "Оригинальное произведение")
+
     /** The facets of a source of a type with universes: its line of characters and pairings shown above the worked out ones. */
     fun defs(schema: SourceSchema): List<FacetDef> = listOf(
+        FacetDef(UniverseFacets.KIND, "Фанфик или оригинал", filter = true, shared = UniverseFacets.KIND, onCard = true, suggest = true),
         DEF,
         FacetDef(
             UniverseFacets.CHARACTERS, "Главные персонажи",

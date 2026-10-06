@@ -95,6 +95,8 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     @Order(4)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
+        // What was worked out of facets a source no longer has the model work on is forgotten
+        stores.sources.forEach { s -> s.suggestions.keepOnly(facetsOf(s).map { it.key }) }
         worker.execute {
             stores.sources.filter { facetsOf(it).isNotEmpty() }.forEach { s ->
                 try {
@@ -213,8 +215,20 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
         val type = stores.typeOf(store.id)
         if (!type.type.universes) return null
         return when (facet.key) {
-            // Every universe of the dictionary, linked to a work or not yet
-            UniverseFacets.UNIVERSE -> Vocabulary(type.universes.all().associate { it.value to it.name }, null)
+            UniverseFacets.KIND -> {
+                store.items.nameFacetValues(UniverseFacets.KIND, UniverseFacet.KINDS)
+                Vocabulary(UniverseFacet.KINDS, null)
+            }
+            // Every universe of the dictionary, linked to a work or not yet — to a work not known to be original
+            UniverseFacets.UNIVERSE -> {
+                val kinds = HashMap<String, List<String>>()
+                store.items.forEachFacet(UniverseFacets.KIND) { id, keys -> kinds[id] = keys }
+                store.corrections.allFacets().filter { it.facet == UniverseFacets.KIND }.groupBy { it.itemId }.forEach { (id, own) ->
+                    kinds[id] = Corrected.facets(mapOf(UniverseFacets.KIND to kinds[id].orEmpty()), own)[UniverseFacets.KIND].orEmpty()
+                }
+                val all = type.universes.all().associate { it.value to it.name }
+                Vocabulary(all) { id -> if (kinds[id] == listOf(UniverseFacets.ORIGINAL)) emptySet() else all.keys }
+            }
             UniverseFacets.CHARACTERS -> {
                 // Every character of every universe — by all its names: the fans write the one they like —
                 // and the original characters; a work is given those of its own universes

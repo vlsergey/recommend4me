@@ -1,0 +1,520 @@
+import { useState, type ReactNode } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { CheckIcon, Loader2Icon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import type { ContentTypeInfo, FacetValueInfo, ItemDetails, SourceInfo, SuggestedValue, UniverseInfo } from "@/api/client";
+import { AsyncButton } from "@/components/AsyncButton";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { FacetValue } from "@/correction/FacetCorrections";
+import type { Corrections } from "@/correction/useCorrections";
+import { ChanceMark, InferredMark } from "@/facet/FacetValueMarks";
+import { percent } from "@/i18n";
+import { cn } from "@/lib/utils";
+import { SuggestedChip } from "@/suggestion/Suggestions";
+import { useSuggestions } from "@/suggestion/useSuggestions";
+import { CatalogueSearch, charactersQuery, useUniverses } from "./UniverseDialog";
+
+/** The facets the application gives every work of a type with universes (the backend's UniverseFacets). */
+const KIND = "kind";
+const UNIVERSE = "universe";
+const CHARACTERS = "characters";
+const PAIRINGS = "pairings";
+
+/** The facets this section answers: the generic list of the work's facets leaves them out. */
+export const FANFIC_FACETS: readonly string[] = [KIND, UNIVERSE, CHARACTERS, PAIRINGS];
+
+const FANFICTION = "fanfiction";
+const ORIGINAL = "original";
+
+/** The two kinds of a work, as the control names them. */
+const KINDS = [
+  { key: FANFICTION, name: "Фанфик" },
+  { key: ORIGINAL, name: "Оригинал" },
+];
+
+/** The original characters, of no universe: every work may have them besides its universes' characters. */
+const ORIGINAL_CHARACTERS = [
+  { key: "oc:female", name: "ОЖП (оригинальный женский персонаж)" },
+  { key: "oc:male", name: "ОМП (оригинальный мужской персонаж)" },
+];
+
+/** The key of the pairing of two characters: one whatever their order. */
+const pairingKey = (a: string, b: string) => "pair:" + [a, b].sort().join("|");
+
+/** The work has the value: the site or the model gave it, or the user added it, and the user did not take it away. */
+const has = (v: FacetValueInfo) => v.corrected !== "REMOVED";
+
+/** The user said the work has the value. */
+const answeredYes = (v: FacetValueInfo | undefined) => v?.corrected === "ADDED" || v?.corrected === "CONFIRMED";
+
+const SELECT =
+  "h-8 min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring dark:bg-input/30";
+
+/**
+ * Whether the work is fan fiction, of which universes, with which main characters and pairings —
+ * everything the site says on it, the model's chances and the user's answers, in one place. For
+ * the works of a type with universes only.
+ */
+export function FanficSection({
+  type,
+  source,
+  details: d,
+  corrections,
+}: {
+  type: ContentTypeInfo;
+  source: SourceInfo;
+  details: ItemDetails;
+  corrections: Corrections;
+}) {
+  const ref = { source: d.summary.source, item: d.summary.item };
+  const suggestions = useSuggestions(ref, source);
+  const facetOf = (key: string) => d.allFacets.find((f) => f.facet === key);
+  const valuesOf = (key: string) => facetOf(key)?.values ?? [];
+  const suggestedOf = (key: string) => suggestions.data?.find((s) => s.facet === key)?.suggested ?? [];
+  const labelOf = (key: string, fallback: string) => facetOf(key)?.label ?? source.facets.find((f) => f.key === key)?.label ?? fallback;
+
+  const kinds = valuesOf(KIND).filter(has);
+  // Known to be original: of the kinds exactly "original" stays, the user's answers counted
+  const original = kinds.length === 1 && kinds[0].key === ORIGINAL;
+
+  return (
+    <section className="flex flex-col gap-4">
+      <h4 className="text-sm font-semibold">Фанфик</h4>
+      <KindChoice label={labelOf(KIND, "Фанфик или оригинал")} values={valuesOf(KIND)} suggested={suggestedOf(KIND)} corrections={corrections} />
+      {!original && (
+        <Universes
+          type={type}
+          label={labelOf(UNIVERSE, "Вселенная")}
+          values={valuesOf(UNIVERSE)}
+          suggested={suggestedOf(UNIVERSE)}
+          corrections={corrections}
+        />
+      )}
+      <Characters
+        type={type}
+        label={labelOf(CHARACTERS, "Главные персонажи")}
+        original={facetOf(CHARACTERS)?.original}
+        values={valuesOf(CHARACTERS)}
+        universes={valuesOf(UNIVERSE).filter(has)}
+        corrections={corrections}
+      />
+      <Pairings
+        label={labelOf(PAIRINGS, "Пэйринги")}
+        original={facetOf(PAIRINGS)?.original}
+        values={valuesOf(PAIRINGS)}
+        characters={valuesOf(CHARACTERS).filter(has)}
+        corrections={corrections}
+      />
+    </section>
+  );
+}
+
+/** A part of the section: its label, the site's line when there is one, then the rest. */
+function Block({ label, original, children }: { label: string; original?: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      {original && <div className="text-xs break-words text-muted-foreground/80">На сайте: {original}</div>}
+      {children}
+    </div>
+  );
+}
+
+/** The work's values of a facet as chips, and the suggested ones dashed after them; a dash when there are none. */
+function Chips({ facet, values, suggested = [], corrections }: { facet: string; values: FacetValueInfo[]; suggested?: SuggestedValue[]; corrections: Corrections }) {
+  if (values.length === 0 && suggested.length === 0) return <div className="text-sm text-muted-foreground">—</div>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {values.map((v) => (
+        <FacetValue key={v.key} facet={facet} value={v} corrections={corrections} />
+      ))}
+      {suggested.map((v) => (
+        <SuggestedChip key={v.key} facet={facet} value={v} corrections={corrections} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Fan fiction or an original work: two buttons, the one the user chose pressed. Each shows what
+ * the site or the model says of it — "≈" when the model gave it, its chance — and a suggested
+ * kind its chance dashed. Choosing a kind confirms it and says no to the other when the work has
+ * it; pressing the chosen one again takes the answers back.
+ */
+function KindChoice({
+  label,
+  values,
+  suggested,
+  corrections,
+}: {
+  label: string;
+  values: FacetValueInfo[];
+  suggested: SuggestedValue[];
+  corrections: Corrections;
+}) {
+  const valueOf = (key: string) => values.find((v) => v.key === key);
+
+  const choose = async (key: string) => {
+    const other = KINDS.find((k) => k.key !== key)!.key;
+    const theirs = valueOf(other);
+    if (answeredYes(valueOf(key))) {
+      await corrections.resetFacet(KIND, key);
+      if (theirs?.corrected === "REMOVED") await corrections.resetFacet(KIND, other);
+      return;
+    }
+    await corrections.setFacet(KIND, { key }, true);
+    // A kind only the user gave is taken back; one the site or the model gave is answered no
+    if (theirs?.corrected === "ADDED") await corrections.resetFacet(KIND, other);
+    else if (theirs && has(theirs)) await corrections.setFacet(KIND, { key: other }, false);
+  };
+
+  // What the site and the model say, the user's answers aside: every value but one the user added
+  const said = values.filter((v) => v.corrected !== "ADDED");
+  const nameOf = (key: string) => KINDS.find((k) => k.key === key)?.name ?? key;
+
+  return (
+    <Block label={label}>
+      <div className="grid grid-cols-2 gap-1" role="group" aria-label={label}>
+        {KINDS.map((k) => {
+          const v = valueOf(k.key);
+          const s = suggested.find((x) => x.key === k.key);
+          const pressed = answeredYes(v);
+          return (
+            <AsyncButton
+              key={k.key}
+              variant={pressed ? "default" : "outline"}
+              aria-pressed={pressed}
+              onClick={() => choose(k.key)}
+              title={pressed ? "Ваш ответ. Нажмите, чтобы снять его" : `Да, это ${k.name.toLowerCase()}`}
+              icon={pressed ? <CheckIcon /> : undefined}
+              className="h-auto min-h-8 flex-wrap whitespace-normal"
+            >
+              {v?.inferred && !v.corrected && <InferredMark />}
+              <span className={cn(v?.corrected === "REMOVED" && "line-through")}>{k.name}</span>
+              {v && <ChanceMark value={v} />}
+              {!v && s && s.chance != null && <span className="text-muted-foreground tabular-nums">({percent(s.chance)})</span>}
+            </AsyncButton>
+          );
+        })}
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {said.length > 0 && said.map((v) => `${v.inferred ? "Модель" : "Сайт"}: ${nameOf(v.key).toLowerCase()}`).join(" · ")}
+        {said.length > 0 && suggested.length > 0 && " · "}
+        {suggested.length > 0 && `Подсказка: ${suggested.map((s) => nameOf(s.key).toLowerCase()).join(", ")}`}
+        {said.length === 0 && suggested.length === 0 && "Ни сайт, ни модель не говорят"}
+      </div>
+    </Block>
+  );
+}
+
+/**
+ * The work's universes and the suggested ones; a universe of the dictionary is added by the
+ * picker, one not yet in the dictionary is found in the catalogue — added to the dictionary and
+ * linked to the work at once.
+ */
+function Universes({
+  type,
+  label,
+  values,
+  suggested,
+  corrections,
+}: {
+  type: ContentTypeInfo;
+  label: string;
+  values: FacetValueInfo[];
+  suggested: SuggestedValue[];
+  corrections: Corrections;
+}) {
+  const dictionary = useUniverses(type.id);
+  const linked = (value: string) => values.some((v) => v.key === value && has(v));
+  const link = (value: string) => corrections.setFacet(UNIVERSE, { key: value }, true);
+  const options: Option[] = (dictionary.data ?? []).map((u) => ({
+    key: u.value,
+    name: u.name,
+    note: u.description,
+    names: [u.name],
+    taken: linked(u.value),
+  }));
+
+  return (
+    <Block label={label}>
+      <Chips facet={UNIVERSE} values={values} suggested={suggested} corrections={corrections} />
+      <div className="flex flex-wrap items-start gap-1">
+        <Picker
+          label="Добавить вселенную"
+          placeholder="Найти вселенную словаря"
+          options={options}
+          loading={dictionary.isLoading}
+          error={dictionary.error?.message}
+          empty="Словарь вселенных пуст: найдите вселенную в Викиданных"
+          onPick={link}
+        />
+        <Dialog>
+          <DialogTrigger render={<Button variant="ghost" size="sm" title="Найти вселенную в Викиданных, добавить её в словарь и связать с работой" />}>
+            <SearchIcon /> Найти в Викиданных…
+          </DialogTrigger>
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Найти вселенную в Викиданных</DialogTitle>
+              <DialogDescription>Найденная вселенная добавляется в словарь вместе с персонажами и сразу связывается с этой работой.</DialogDescription>
+            </DialogHeader>
+            {/* The keys of the work's dialog (grades, steps) stay out of the search; Escape still closes it */}
+            <div onKeyDown={(e) => e.key !== "Escape" && e.stopPropagation()}>
+              <CatalogueSearch type={type} dictionary={dictionary.data} forWork={{ linked, link }} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </Block>
+  );
+}
+
+/**
+ * The work's main characters, the site's line above them. The picker offers the characters of
+ * every universe the work is linked to, by any of their names, the original characters, and a
+ * name of the user's own.
+ */
+function Characters({
+  type,
+  label,
+  original,
+  values,
+  universes,
+  corrections,
+}: {
+  type: ContentTypeInfo;
+  label: string;
+  original?: string;
+  values: FacetValueInfo[];
+  /** The universes the work has. */
+  universes: FacetValueInfo[];
+  corrections: Corrections;
+}) {
+  const dictionary = useUniverses(type.id, universes.length > 0);
+  const linked = universes
+    .map((v) => dictionary.data?.find((u) => u.value === v.key))
+    .filter((u): u is UniverseInfo => u !== undefined);
+  const characters = useQueries({ queries: linked.map((u) => charactersQuery(type.id, u)) });
+
+  const taken = (key: string) => values.some((v) => v.key === key && has(v));
+  // A character of several of the work's universes is offered once, with every universe it is of
+  const byKey = new Map<string, Option & { universes: string[] }>();
+  linked.forEach((u, i) => {
+    for (const c of characters[i].data ?? []) {
+      const key = `${u.catalogue}:${c.character}`;
+      const known = byKey.get(key);
+      if (known) known.universes.push(u.name);
+      else
+        byKey.set(key, {
+          key,
+          name: c.names[0] ?? c.character,
+          names: c.names.length > 0 ? c.names : [c.character],
+          universes: [u.name],
+          taken: taken(key),
+        });
+    }
+  });
+  const options: Option[] = [
+    ...[...byKey.values()].map((o) => ({
+      ...o,
+      note: [o.names.slice(1).join(", "), o.universes.join(", ")].filter((x) => x !== "").join(" — "),
+    })),
+    ...ORIGINAL_CHARACTERS.map((c) => ({ key: c.key, name: c.name, names: [c.name], taken: taken(c.key) })),
+  ];
+  const failed = characters.find((q) => q.isError)?.error?.message ?? dictionary.error?.message;
+
+  return (
+    <Block label={label} original={original}>
+      <Chips facet={CHARACTERS} values={values} corrections={corrections} />
+      <Picker
+        label="Добавить персонажа"
+        placeholder="Найти персонажа по любому имени"
+        options={options}
+        loading={dictionary.isLoading || characters.some((q) => q.isLoading)}
+        error={failed}
+        empty={universes.length === 0 ? "Работа не связана ни с одной вселенной: есть только оригинальные персонажи" : undefined}
+        onPick={(key) => corrections.setFacet(CHARACTERS, { key }, true)}
+        onName={(name) => corrections.setFacet(CHARACTERS, { name }, true)}
+      />
+    </Block>
+  );
+}
+
+/** The work's pairings, the site's line above them; a new one is two of the work's characters. */
+function Pairings({
+  label,
+  original,
+  values,
+  characters,
+  corrections,
+}: {
+  label: string;
+  original?: string;
+  values: FacetValueInfo[];
+  /** The characters the work has. */
+  characters: FacetValueInfo[];
+  corrections: Corrections;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [a, setA] = useState("");
+  const [b, setB] = useState("");
+  const known = (key: string) => characters.some((c) => c.key === key);
+  const ready = known(a) && known(b) && a !== b;
+
+  const add = async () => {
+    await corrections.setFacet(PAIRINGS, { key: pairingKey(a, b) }, true);
+    setA("");
+    setB("");
+    setAdding(false);
+  };
+
+  const select = (value: string, onChange: (value: string) => void, other: string) => (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={SELECT}>
+      <option value="">Персонаж…</option>
+      {characters.map((c) => (
+        <option key={c.key} value={c.key} disabled={c.key === other}>
+          {c.name}
+        </option>
+      ))}
+    </select>
+  );
+
+  return (
+    <Block label={label} original={original}>
+      <Chips facet={PAIRINGS} values={values} corrections={corrections} />
+      {!adding ? (
+        <Button variant="ghost" size="sm" className="self-start" onClick={() => setAdding(true)} disabled={characters.length < 2} title={characters.length < 2 ? "Сначала нужны хотя бы два персонажа работы" : undefined}>
+          <PlusIcon /> Добавить пэйринг
+        </Button>
+      ) : (
+        <div className="flex flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            Добавить пэйринг: два персонажа работы
+            <Button variant="ghost" size="icon-xs" onClick={() => setAdding(false)} title="Закрыть">
+              <XIcon />
+            </Button>
+          </div>
+          <div className="flex items-center gap-1">
+            {select(a, setA, b)}
+            <span className="text-muted-foreground">/</span>
+            {select(b, setB, a)}
+            <AsyncButton size="icon" variant="outline" onClick={add} disabled={!ready} title="Добавить пэйринг" icon={<PlusIcon />} />
+          </div>
+        </div>
+      )}
+    </Block>
+  );
+}
+
+/** A value to pick: its key, its name, a note under it, every name it is found by, and whether the work has it already. */
+type Option = { key: string; name: string; note?: string; names: string[]; taken: boolean };
+
+/**
+ * A button that opens a list of values to add, every one of them, narrowed by a line that looks in
+ * all their names; one the work has already is shown, not offered. With [onName], a typed name is
+ * added as a value of the user's own.
+ */
+function Picker({
+  label,
+  placeholder,
+  options,
+  loading,
+  error,
+  empty,
+  onPick,
+  onName,
+}: {
+  label: string;
+  placeholder: string;
+  options: Option[];
+  loading?: boolean;
+  error?: string;
+  /** What to say when there is nothing to offer. */
+  empty?: string;
+  onPick: (key: string) => Promise<unknown>;
+  onName?: (name: string) => Promise<unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const close = () => {
+    setOpen(false);
+    setFilter("");
+  };
+
+  if (!open)
+    return (
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        <PlusIcon /> {label}
+      </Button>
+    );
+
+  const needle = filter.trim().toLocaleLowerCase("ru-RU");
+  const shown = needle === "" ? options : options.filter((o) => o.names.some((n) => n.toLocaleLowerCase("ru-RU").includes(needle)));
+  const typed = filter.trim();
+
+  return (
+    <div className="flex w-full flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        {label}
+        <Button variant="ghost" size="icon-xs" onClick={close} title="Закрыть">
+          <XIcon />
+        </Button>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input
+          autoFocus
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && close()}
+          placeholder={placeholder}
+          className="h-8"
+        />
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{needle === "" ? options.length : `${shown.length} из ${options.length}`}</span>
+      </div>
+      {loading && <Loader2Icon className="size-4 animate-spin text-muted-foreground" />}
+      {error && <p className="text-xs text-destructive">Не удалось загрузить: {error}</p>}
+      {!loading && options.length === 0 && empty && <p className="text-xs text-muted-foreground">{empty}</p>}
+      {shown.length > 0 && (
+        <ul className="flex max-h-72 flex-col divide-y overflow-y-auto rounded-lg border">
+          {shown.map((o) => (
+            <li key={o.key}>
+              <AsyncButton
+                variant="ghost"
+                onClick={async () => {
+                  await onPick(o.key);
+                  close();
+                }}
+                disabled={o.taken}
+                title={o.taken ? "Уже у работы" : "Добавить работе"}
+                className="h-auto w-full flex-col items-start gap-0 rounded-none px-2 py-1 text-left whitespace-normal"
+              >
+                <span>
+                  {o.name}
+                  {o.taken && <span className="ml-1 text-xs font-normal text-muted-foreground">· уже у работы</span>}
+                </span>
+                {o.note && <span className="text-xs font-normal text-muted-foreground">{o.note}</span>}
+              </AsyncButton>
+            </li>
+          ))}
+        </ul>
+      )}
+      {onName && typed !== "" && (
+        <AsyncButton
+          variant="outline"
+          size="sm"
+          className="h-auto self-start whitespace-normal"
+          onClick={async () => {
+            await onName(typed);
+            close();
+          }}
+          title="Добавить персонажа под этим именем: его нет среди персонажей вселенных работы"
+          icon={<PlusIcon />}
+        >
+          Добавить своё имя «{typed}»
+        </AsyncButton>
+      )}
+    </div>
+  );
+}

@@ -58,7 +58,8 @@ class AuthorToday : Source {
         Regex("https://author\\.today/(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"),
     )
 
-    override val parserVersion = 1
+    /** 2: whether a work is fan fiction, by its genres. */
+    override val parserVersion = 2
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 

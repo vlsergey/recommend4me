@@ -22,6 +22,7 @@ import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.STATUS
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.TAG
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.VIEWS
+import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -87,7 +88,12 @@ class AuthorTodayPages(private val context: SourceContext) {
 
     private fun writeGenres(id: String, form: FacetValue?, genres: List<FacetValue>) {
         form?.let { items.setFacet(id, FORM, listOf(it)) }
-        if (genres.isNotEmpty()) items.setFacet(id, GENRE, genres)
+        if (genres.isNotEmpty()) {
+            items.setFacet(id, GENRE, genres)
+            // The site's genre "Фанфик" is what fan fiction is filed under; a work shown without it is an original one
+            val fanfiction = genres.any { it.key == FANFICTION_GENRE }
+            items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(if (fanfiction) UniverseFacets.FANFICTION else UniverseFacets.ORIGINAL)))
+        }
     }
 
     /** "/work/genre/all/any/novel" is the form (Роман); "/work/genre/<slug>" a genre. */
@@ -269,6 +275,9 @@ class AuthorTodayPages(private val context: SourceContext) {
         private val READER = Regex("/reader/(\\d+)/(\\d+)/?")
         private val WORK_ID = Regex("^/work/(\\d+)")
         private val AUTHOR_LOGIN = Regex("^/u/([^/?#]+)")
+
+        /** The genre fan fiction is filed under. */
+        private const val FANFICTION_GENRE = "fanfiction"
         private val LIBRARY_STATE = Regex("state:\\s*'([A-Za-z]+)'")
         private val LOGGED_IN = Regex("isAuthenticated:\\s*(true|false)")
         private val LIKE_BUTTON = Regex("name: 'like-button', params: \\{targetId: \\d+, likeCount: (\\d+), type: 'Work', disabled: \\w+, voteId: ([^}\\s]+)\\s*}")

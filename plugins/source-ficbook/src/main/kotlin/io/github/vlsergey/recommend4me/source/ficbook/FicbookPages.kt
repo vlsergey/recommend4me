@@ -27,6 +27,7 @@ import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.SERIES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.STATUS
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.TAG
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.WORDS
+import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -109,7 +110,12 @@ class FicbookPages(private val context: SourceContext) {
             val fandoms = dd.select("a[href^=/fanfiction/]").map { a ->
                 FacetValue(a.attr("href").removePrefix("/fanfiction/").substringBefore('?'), a.text().trim())
             }
-            if (fandoms.isNotEmpty()) items.setFacet(id, FANDOM, fandoms)
+            if (fandoms.isNotEmpty()) {
+                items.setFacet(id, FANDOM, fandoms)
+                // A work of the fandom "originals" is an original one; of any other, fan fiction
+                val original = fandoms.all { it.key == ORIGINALS }
+                items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(if (original) UniverseFacets.ORIGINAL else UniverseFacets.FANFICTION)))
+            }
         }
         info["Серия"]?.selectFirst("a[href^=/series/]")?.let { a ->
             items.setFacet(id, SERIES, listOf(FacetValue(a.attr("href").removePrefix("/series/").substringBefore('?'), a.text().trim())))
@@ -225,6 +231,9 @@ class FicbookPages(private val context: SourceContext) {
         /** A work's address: "/readfic/<id>", "/readfic/<id>/<part>", "/readfic/<id>/comments". */
         private val READFIC = Regex("/readfic/([0-9a-f-]+)/?([^/]*)/?")
         private val AUTHOR_ID = Regex("^/authors/([^/?#]+)")
+
+        /** The fandom of the original works. */
+        private const val ORIGINALS = "no_fandom/originals"
 
         /** A pairing as written, "A/B": one pairing whatever the order of its names — the key has them sorted. */
         private fun pairing(written: String): FacetValue =

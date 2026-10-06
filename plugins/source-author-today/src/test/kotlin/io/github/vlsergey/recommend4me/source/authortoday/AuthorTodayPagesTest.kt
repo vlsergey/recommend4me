@@ -34,6 +34,10 @@ class AuthorTodayPagesTest {
         assertEquals("Джон Голд", context.facetNames.getValue("author")["siu_tower_of_god"])
         assertEquals(listOf("novel"), facets["form"])
         assertEquals(listOf("popadantsy-v-magicheskie-miry", "wuxia", "sf-action"), facets["genre"])
+        // Not filed under "Фанфик": an original work
+        assertEquals(listOf("original"), facets["kind"])
+        // A fan fiction of the list is one
+        assertTrue(context.facets.values.any { it["genre"].orEmpty().contains("fanfiction") && it["kind"] == listOf("fanfiction") })
         assertEquals(listOf("in-progress"), facets["status"])
         assertEquals(listOf("54335"), facets["series"])
         val numbers = context.numbers.getValue("661269")

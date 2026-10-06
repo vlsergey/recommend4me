@@ -76,6 +76,13 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
         }
     }
 
+    /** Forgets everything of the facets the model no longer works on: those not in [facets]. */
+    fun keepOnly(facets: Collection<String>) {
+        db.deleteFrom(FACET_SUGGESTION).where(FACET_SUGGESTION.SOURCE.eq(source), FACET_SUGGESTION.FACET.notIn(facets)).execute()
+        db.deleteFrom(FACET_SUGGESTION_BASIS).where(FACET_SUGGESTION_BASIS.SOURCE.eq(source), FACET_SUGGESTION_BASIS.FACET.notIn(facets)).execute()
+        db.deleteFrom(FACET_SUGGESTER).where(FACET_SUGGESTER.SOURCE.eq(source), FACET_SUGGESTER.FACET.notIn(facets)).execute()
+    }
+
     /** The chances of the items [ids]: item to facet to value to chance. */
     fun ofItems(ids: Collection<String>): Map<String, Map<String, Map<String, Chance>>> {
         val out = HashMap<String, HashMap<String, HashMap<String, Chance>>>()

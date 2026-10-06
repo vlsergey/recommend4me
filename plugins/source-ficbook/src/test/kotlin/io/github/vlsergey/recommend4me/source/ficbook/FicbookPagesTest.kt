@@ -30,6 +30,7 @@ class FicbookPagesTest {
         val facets = context.facets.getValue(work)
         assertEquals(listOf("019492f9-69b1-7040-8a90-9de7e3cbb01e"), facets["author"])
         assertEquals(listOf("no_fandom/originals"), facets["fandom"])
+        assertEquals(listOf("original"), facets["kind"])
         assertEquals(listOf("mixed"), facets["direction"])
         assertEquals(listOf("NC-17"), facets["rating"])
         assertEquals(listOf("finished"), facets["status"])
@@ -44,6 +45,7 @@ class FicbookPagesTest {
         assertEquals(mapOf("likes" to 2.0, "pages" to 180.0, "words" to 68967.0, "parts" to 20.0), numbers)
         assertTrue(context.texts.getValue(work).getValue("annotation").startsWith("Молодой хирург"))
         assertEquals(listOf("rouling_dzhoan___garri_potter".let { "books/$it" }, "anime_and_manga/naruto"), context.facets.getValue("9876543")["fandom"])
+        assertEquals(listOf("fanfiction"), context.facets.getValue("9876543")["kind"])
         assertEquals(Instant.parse("2026-08-02T14:55:00Z"), context.heads.getValue("9876543").updatedAt)
     }
 
