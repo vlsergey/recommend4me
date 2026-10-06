@@ -5,14 +5,32 @@ import io.github.vlsergey.recommend4me.api.model.CapturePatterns
 import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.CaptureResult
 import io.github.vlsergey.recommend4me.api.model.CapturedPageInfo
+import io.github.vlsergey.recommend4me.api.model.ExtensionInfo
 import io.github.vlsergey.recommend4me.api.model.LinkedItem
 import io.github.vlsergey.recommend4me.source.Stores
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+import tools.jackson.databind.json.JsonMapper
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.ZoneOffset
 
 @RestController
-class CaptureController(private val captures: Captures, private val stores: Stores) : CaptureApi {
+class CaptureController(
+    private val captures: Captures,
+    private val stores: Stores,
+    private val json: JsonMapper,
+    /** The folder of the extension: the distribution's extension/, or the repository's when run from a build. */
+    @Value("\${recommend4me.extension-dir:}") private val extensionDir: String,
+) : CaptureApi {
+
+    override fun getExtension(): ResponseEntity<ExtensionInfo> {
+        val manifest = extensionDir.takeIf { it.isNotBlank() }?.let { Path.of(it).toAbsolutePath().normalize().resolve("manifest.json") }
+            ?.takeIf { Files.isRegularFile(it) } ?: return ResponseEntity.ok(ExtensionInfo())
+        val version = runCatching { json.readTree(manifest.toFile()).get("version")?.asString() }.getOrNull()
+        return ResponseEntity.ok(ExtensionInfo(manifest.toString(), version))
+    }
 
     override fun getCapturePatterns(): ResponseEntity<List<CapturePatterns>> =
         ResponseEntity.ok(captures.patterns().map { (source, patterns) -> CapturePatterns(source, patterns) })

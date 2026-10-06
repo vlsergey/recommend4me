@@ -716,6 +716,19 @@ paths:
                 items:
                   $ref: '#/components/schemas/CapturePatterns'
 
+  /api/capture/extension:
+    get:
+      tags: [capture]
+      operationId: getExtension
+      summary: Where the Firefox extension lies on this machine, for the browser to load it
+      responses:
+        '200':
+          description: The extension
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtensionInfo'
+
   /api/capture:
     post:
       tags: [capture]
@@ -1746,6 +1759,15 @@ components:
           description: Regular expressions over the whole address
           items:
             type: string
+
+    ExtensionInfo:
+      type: object
+      properties:
+        manifest:
+          type: string
+          description: The absolute path of the extension's manifest.json on the machine the application runs on; none when it is not there
+        version:
+          type: string
 
     CaptureRequest:
       type: object

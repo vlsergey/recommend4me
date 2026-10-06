@@ -36,6 +36,11 @@ fun main(args: Array<String>) {
         System.setProperty("spring.config.additional-location", "optional:file:${Path.of(dataDir).resolve("application.yaml")}")
     }
 
+    // The Firefox extension, loaded by the browser from its manifest.json on this disk
+    if (System.getProperty("recommend4me.extension-dir") == null) {
+        installed("extension")?.let { System.setProperty("recommend4me.extension-dir", it.toString()) }
+    }
+
     val parent = Thread.currentThread().contextClassLoader
     val loader = URLClassLoader("plugins", pluginJars().map { it.toUri().toURL() }.toTypedArray(), parent)
     Thread.currentThread().contextClassLoader = loader
@@ -67,8 +72,11 @@ private fun pluginJars(): List<Path> {
 }
 
 /** `plugins` beside the folder of the application's own jar (`lib`); null when run from a build. */
-private fun installedPlugins(): Path? {
+private fun installedPlugins(): Path? = installed("plugins")
+
+/** A folder of the installed application, beside `lib`; null when run from a build or when it is missing. */
+private fun installed(name: String): Path? {
     val location = Path.of(Application::class.java.protectionDomain.codeSource.location.toURI())
     if (!Files.isRegularFile(location)) return null
-    return location.parent?.parent?.resolve("plugins")?.takeIf { it.isDirectory() }
+    return location.parent?.parent?.resolve(name)?.takeIf { it.isDirectory() }
 }

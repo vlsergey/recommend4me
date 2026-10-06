@@ -157,16 +157,11 @@ val buildFrontend = tasks.register<Exec>("buildFrontend") {
     outputs.dir(frontendDir.dir("dist"))
 }
 
-// --- The Firefox extension of the browser tracking mode, served for download at /extension/ ---
+// --- The Firefox extension of the browser tracking mode: a folder of the distribution, extension/ ---
 
-val extensionZip = tasks.register<Zip>("extensionZip") {
-    from(rootProject.layout.projectDirectory.dir("browser-extension/extension"))
-    archiveFileName = "recommend4me-firefox.zip"
-    destinationDirectory = layout.buildDirectory.dir("extension")
-}
+val extensionDir = rootProject.layout.projectDirectory.dir("browser-extension/extension")
 
 tasks.named<ProcessResources>("processResources") {
-    from(extensionZip) { into("static/extension") }
     if (!project.hasProperty("skipFrontend")) {
         dependsOn(buildFrontend)
         from(frontendDir.dir("dist")) { into("static") }
@@ -194,6 +189,8 @@ distributions {
         contents {
             // Every plugin in a folder of its own: plugins/<name>/
             pluginProjects.forEach { p -> from(p.tasks.named("pluginDist")) { into("plugins/${p.name}") } }
+            // Firefox loads the extension from its manifest.json on the disk
+            from(extensionDir) { into("extension") }
         }
     }
 }
@@ -205,6 +202,7 @@ tasks.named<JavaExec>("run") {
     val dirs = pluginProjects.map { it.layout.buildDirectory.dir("plugin").get().asFile.absolutePath } +
         (project.findProperty("pluginDirs") as String?).orEmpty().split(';').filter { it.isNotBlank() }
     systemProperty("recommend4me.plugin-dirs", dirs.joinToString(File.pathSeparator))
+    systemProperty("recommend4me.extension-dir", extensionDir.asFile.absolutePath)
 }
 
 tasks.withType<Test>().configureEach {

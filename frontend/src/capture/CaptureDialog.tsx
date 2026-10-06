@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { DownloadIcon, ExternalLinkIcon, Loader2Icon, RadarIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, ExternalLinkIcon, Loader2Icon, RadarIcon } from "lucide-react";
 import { api, unwrap, type ItemRef } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -8,7 +8,6 @@ import { findSource, useTypes } from "@/contenttype/types";
 import { ago, formatDate } from "@/i18n";
 import { ItemRefDialog } from "@/item/ItemRefDialog";
 
-const EXTENSION = "/extension/recommend4me-firefox.zip";
 const DEFAULT_ADDRESS = "http://127.0.0.1:8095";
 
 /**
@@ -46,6 +45,10 @@ function CaptureDetails({ onOpenItem }: { onOpenItem: (ref: ItemRef) => void }) 
     queryKey: ["capture", "patterns"],
     queryFn: async () => unwrap(await api.GET("/api/capture/patterns")),
   });
+  const extension = useQuery({
+    queryKey: ["capture", "extension"],
+    queryFn: async () => unwrap(await api.GET("/api/capture/extension")),
+  });
   const recent = useQuery({
     queryKey: ["capture", "recent"],
     queryFn: async () => unwrap(await api.GET("/api/capture/recent")),
@@ -70,25 +73,16 @@ function CaptureDetails({ onOpenItem }: { onOpenItem: (ref: ItemRef) => void }) 
 
       <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm">
         <li>
-          Скачайте расширение:{" "}
-          <a href={EXTENSION} download className="inline-flex items-center gap-1 font-medium underline underline-offset-2">
-            <DownloadIcon className="size-3.5" /> recommend4me-firefox.zip
-          </a>
-          .
-        </li>
-        <li>
           Откройте в Firefox адрес <Code>about:debugging#/runtime/this-firefox</Code> — его нужно вставить в адресную строку
           вручную, по ссылке Firefox его не откроет.
         </li>
         <li>
-          Нажмите «Загрузить временное дополнение…» и выберите скачанный zip — или <Code>manifest.json</Code> из
-          распакованной папки.
+          Нажмите «Загрузить временное дополнение…» и выберите файл расширения — вставьте его путь в поле имени файла:
+          <ManifestPath manifest={extension.data?.manifest} loading={extension.isLoading} />
         </li>
         <li>
           Готово: расширение работает, пока Firefox не перезапустится; после перезапуска его нужно загрузить снова тем же
-          способом. Насовсем его можно установить в Firefox Developer Edition, Nightly или ESR: там в <Code>about:config</Code>{" "}
-          задайте <Code>xpinstall.signatures.required</Code> = <Code>false</Code> и установите zip через «Установить
-          дополнение из файла…» на странице <Code>about:addons</Code>.
+          способом. После обновления приложения нажмите у расширения «Перезагрузить» на той же странице.
         </li>
       </ol>
 
@@ -171,6 +165,33 @@ function CaptureDetails({ onOpenItem }: { onOpenItem: (ref: ItemRef) => void }) 
         </ul>
       </section>
     </>
+  );
+}
+
+/** The path of the extension's manifest.json on this machine, with a button to copy it. */
+function ManifestPath({ manifest, loading }: { manifest?: string; loading: boolean }) {
+  const [copied, setCopied] = useState(false);
+  if (loading) return <Loader2Icon className="mt-1 size-4 animate-spin text-muted-foreground" />;
+  if (!manifest) {
+    return (
+      <p className="mt-1 text-destructive">
+        Приложение не знает, где лежит расширение: запустите его из установленной папки (там есть папка <Code>extension</Code>).
+      </p>
+    );
+  }
+  const copy = async () => {
+    await navigator.clipboard.writeText(manifest);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <Code>{manifest}</Code>
+      <Button variant="outline" size="sm" onClick={copy} title="Скопировать путь">
+        {copied ? <CheckIcon /> : <CopyIcon />}
+        {copied ? "Скопировано" : "Скопировать"}
+      </Button>
+    </div>
   );
 }
 

@@ -23,16 +23,13 @@ a switch, and a button to send the open page whatever the patterns say.
 
 ## Installing
 
-A stock Firefox keeps only signed extensions, so there are two ways in:
-
-**A temporary add-on** — on any Firefox. Download `recommend4me-firefox.zip` from the application
-(`http://127.0.0.1:8095/extension/recommend4me-firefox.zip`, or the link in its "Слежение в
-браузере" dialog), open `about:debugging#/runtime/this-firefox`, press "Load Temporary Add-on…"
-and choose the zip (or `extension/manifest.json` of this folder). It lasts until Firefox is closed.
-
-**A permanent install** — on Firefox Developer Edition, Nightly or ESR only: set
-`xpinstall.signatures.required` to `false` in `about:config`, then install the zip from
-`about:addons` → ⚙ → "Install Add-on From File…".
+A stock Firefox keeps only signed extensions, so the extension is loaded as **a temporary
+add-on**, from its `manifest.json` on the disk: the application's distribution has it in
+`extension/` (when run from this repository, `browser-extension/extension/`). The application's
+"Слежение в браузере" dialog shows the full path with a button to copy it. Open
+`about:debugging#/runtime/this-firefox`, press "Load Temporary Add-on…" and paste the path into
+the file name field. It lasts until Firefox is closed; after the application is updated, press
+"Reload" by the extension on the same page.
 
 The address of the application (by default `http://127.0.0.1:8095`) is set on the extension's
 options page.
