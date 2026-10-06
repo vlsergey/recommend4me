@@ -1,0 +1,91 @@
+package io.github.vlsergey.recommend4me.source.ficbook
+
+import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.FacetDef
+import io.github.vlsergey.recommend4me.source.NumberDef
+import io.github.vlsergey.recommend4me.source.NumberScale
+import io.github.vlsergey.recommend4me.source.Source
+import io.github.vlsergey.recommend4me.source.SourceContext
+import io.github.vlsergey.recommend4me.source.SourceMode
+import io.github.vlsergey.recommend4me.source.SourceSchema
+import io.github.vlsergey.recommend4me.source.TextDef
+
+/**
+ * ficbook.net — fanfics and originals, read in the browser and seen by the extension only: the
+ * site checks its visitors, and the application requests no page of it. What a page shows is kept:
+ * the cards of every list, a work's header with its table of contents, the text of every part read,
+ * and the readers' comments ("Отзывы") as the opinions of other people about the work.
+ */
+class Ficbook : Source {
+    override val id = ID
+    override val title = "Книга Фанфиков"
+    override val contentType = "books"
+    override val homepage = BASE
+    override val modes = setOf(SourceMode.BROWSER)
+
+    override val schema = SourceSchema(
+        facets = listOf(
+            FacetDef(AUTHOR, "Автор", shared = "author", searchWeight = 1.0f, onCard = true, names = true),
+            FacetDef(FANDOM, "Фэндом", filter = true, onCard = true, searchWeight = 0.9f),
+            FacetDef(DIRECTION, "Направленность", filter = true, onCard = true),
+            FacetDef(RATING, "Рейтинг", filter = true, onCard = true),
+            FacetDef(STATUS, "Статус", filter = true),
+            FacetDef(TAG, "Метка", shared = "tag", searchWeight = 0.9f),
+            FacetDef(CHARACTER, "Персонаж", searchWeight = 0.8f),
+            FacetDef(PAIRING, "Пэйринг", searchWeight = 0.7f),
+            FacetDef(SERIES, "Серия", searchWeight = 0.7f),
+        ),
+        numbers = listOf(
+            NumberDef(WORDS, "Слов", NumberScale.LOG, sortable = true),
+            NumberDef(PAGES, "Страниц", NumberScale.LOG),
+            NumberDef(PARTS, "Частей", NumberScale.LOG),
+            NumberDef(LIKES, "Нравится", NumberScale.LOG, sortable = true),
+            NumberDef(COMMENTS, "Отзывы", NumberScale.LOG),
+        ),
+        texts = listOf(
+            TextDef(ANNOTATION, "Описание", block = "text:annotation", searchWeight = 0.6f),
+            TextDef(NOTES, "Примечания", block = "text:notes", searchWeight = 0.5f),
+            TextDef(DEDICATION, "Посвящение", searchWeight = 0.3f),
+        ),
+        reviewsLabel = "Отзывы",
+        partsLabel = "Части",
+    )
+
+    override val capturePatterns = listOf(
+        Regex("https://ficbook\\.net/(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*|popular-fanfics[^/?#]*|home/[^?#]*)([/?#].*)?"),
+    )
+
+    override val parserVersion = 1
+
+    override fun itemUrl(itemId: String) = "$BASE/readfic/$itemId"
+
+    override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
+
+    companion object {
+        const val ID = "ficbook"
+        const val BASE = "https://ficbook.net"
+
+        const val AUTHOR = "author"
+        const val FANDOM = "fandom"
+        const val DIRECTION = "direction"
+        const val RATING = "rating"
+        const val STATUS = "status"
+        const val TAG = "tag"
+        const val CHARACTER = "character"
+        const val PAIRING = "pairing"
+        const val SERIES = "series"
+
+        const val WORDS = "words"
+        const val PAGES = "pages"
+        const val PARTS = "parts"
+        const val LIKES = "likes"
+        const val COMMENTS = "comments"
+
+        const val ANNOTATION = "annotation"
+        const val NOTES = "notes"
+        const val DEDICATION = "dedication"
+
+        /** The part of a work of one part, whose text is on the work's own page. */
+        const val ONLY_PART = "text"
+    }
+}

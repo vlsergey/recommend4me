@@ -36,12 +36,15 @@ class PartRepository(private val db: DSLContext) {
             if (known == null) {
                 db.insertInto(PART)
                     .set(PART.ITEM_ID, itemId).set(PART.PART_ID, id)
-                    .set(PART.POSITION, p.position).set(PART.TITLE, p.title?.take(1000))
+                    // A part whose place the page does not tell goes after the known ones
+                    .set(PART.POSITION, if (p.position >= 0) p.position else UNKNOWN_POSITION).set(PART.TITLE, p.title?.take(1000))
                     .set(PART.CONTENT, p.content).set(PART.PUBLISHED_AT, p.publishedAt)
                     .execute()
                 return@forEach
             }
-            var update = db.update(PART).set(PART.POSITION, p.position).set(PART.TITLE, p.title?.take(1000))
+            var update = db.update(PART).set(PART.ITEM_ID, itemId)
+            if (p.position >= 0) update = update.set(PART.POSITION, p.position)
+            if (p.title != null) update = update.set(PART.TITLE, p.title.take(1000))
             if (p.publishedAt != null) update = update.set(PART.PUBLISHED_AT, p.publishedAt)
             if (p.content != null && p.content != known.value1()) {
                 update = update.set(PART.CONTENT, p.content).setNull(PART.ENCODER).setNull(PART.ENCODED_HASH)
@@ -120,5 +123,6 @@ class PartRepository(private val db: DSLContext) {
 
     companion object {
         private const val BATCH = 500
+        private const val UNKNOWN_POSITION = 1_000_000
     }
 }

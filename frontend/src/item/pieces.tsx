@@ -1,0 +1,331 @@
+import { useState } from "react";
+import { StarIcon } from "lucide-react";
+import {
+  pictureSrc,
+  type ContentTypeInfo,
+  type Grade,
+  type ItemFacet,
+  type ItemSummary,
+  type LinkedItem,
+  type SearchMatch,
+} from "@/api/client";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ALL_GRADES, gradeLabel, sourceTitle, typeIcon } from "@/contenttype/types";
+import { compact, score, searchFieldLabel, signalLabel } from "@/i18n";
+import { useLadder } from "@/model/useModel";
+import { cn } from "@/lib/utils";
+
+/** Keys 1..5 give that grade. */
+export const KEY_GRADES: Record<string, Grade> = { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 };
+
+/**
+ * One colour per grade, red to green. The chosen one is IMPORTANT (`!`): the outline button
+ * paints its own background in the dark theme (`dark:bg-input/30`), a variant that outranks a
+ * plain class, and the chosen grade looked exactly like the others there.
+ */
+const ACTIVE: Record<Grade, string> = {
+  1: "bg-grade-1! text-white! border-grade-1! hover:bg-grade-1/90!",
+  2: "bg-grade-2! text-black! border-grade-2! hover:bg-grade-2/90!",
+  3: "bg-grade-3! text-black! border-grade-3! hover:bg-grade-3/90!",
+  4: "bg-grade-4! text-black! border-grade-4! hover:bg-grade-4/90!",
+  5: "bg-grade-5! text-white! border-grade-5! hover:bg-grade-5/90!",
+};
+
+const HOVER: Record<Grade, string> = {
+  1: "hover:border-grade-1 hover:text-grade-1",
+  2: "hover:border-grade-2 hover:text-grade-2",
+  3: "hover:border-grade-3 hover:text-grade-3",
+  4: "hover:border-grade-4 hover:text-grade-4",
+  5: "hover:border-grade-5 hover:text-grade-5",
+};
+
+export const GRADE_TEXT: Record<Grade, string> = {
+  1: "text-grade-1",
+  2: "text-grade-2",
+  3: "text-grade-3",
+  4: "text-grade-4",
+  5: "text-grade-5",
+};
+
+/**
+ * The five grades; pressing the chosen one again takes the grade back. [labels] adds the
+ * content type's words to the digits where there is room (the item dialog), cards show digits only.
+ */
+export function RatingButtons({
+  type,
+  value,
+  onRate,
+  size = "default",
+  labels = false,
+  className,
+}: {
+  type: ContentTypeInfo;
+  value?: Grade;
+  onRate: (grade: Grade | null) => void;
+  size?: "sm" | "default" | "lg";
+  labels?: boolean;
+  className?: string;
+}) {
+  const ladder = useLadder(type.id);
+  return (
+    <div className={cn("grid grid-cols-5 gap-1", className)}>
+      {ALL_GRADES.map((g) => (
+        <Tooltip key={g}>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size={size}
+                className={cn("w-full min-w-0 px-1", value === g ? ACTIVE[g] : HOVER[g])}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRate(value === g ? null : g);
+                }}
+              />
+            }
+          >
+            <span className="font-semibold tabular-nums">{g}</span>
+            {/* A phone has room for the digits only: a cut word says nothing */}
+            {labels && <span className="hidden truncate text-xs font-normal sm:inline">{gradeLabel(type, g)}</span>}
+          </TooltipTrigger>
+          <TooltipContent>
+            {value === g ? "Снять оценку" : gradeLabel(type, g)}
+            {value !== g && ladder[g] !== undefined && ` (на вашей шкале ${score(ladder[g])})`} · клавиша{" "}
+            <kbd className="font-mono">{g}</kbd>
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
+const TONE: Record<Grade, string> = {
+  1: "bg-grade-1 text-white",
+  2: "bg-grade-2 text-black",
+  3: "bg-grade-3 text-black",
+  4: "bg-grade-4 text-black",
+  5: "bg-grade-5 text-white",
+};
+
+/** Colour of a score: that of the grade whose place on the user's scale is nearest; evenly spread before training. */
+export function scoreTone(value: number, ladder: Partial<Record<Grade, number>>): string {
+  const places = ALL_GRADES.map((g) => [g, ladder[g] ?? ((g - 1) * 10) / (ALL_GRADES.length - 1)] as const);
+  const nearest = places.reduce((a, b) => (Math.abs(b[1] - value) < Math.abs(a[1] - value) ? b : a));
+  return TONE[nearest[0]];
+}
+
+/** A score shown on 0..10: above it the scale goes on, and the badge says so; below it is simply 0. */
+export function shownScore(value: number): string {
+  if (value > 10) return "10+";
+  return score(Math.max(0, value));
+}
+
+export function ScoreBadge({ type, summary, className }: { type: ContentTypeInfo; summary: ItemSummary; className?: string }) {
+  const p = summary.prediction;
+  const ladder = useLadder(type.id);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            className={cn(
+              "inline-flex h-7 min-w-14 items-center justify-center gap-1 rounded-full px-2 text-sm font-semibold tabular-nums shadow-sm",
+              p ? scoreTone(p.score, ladder) : "bg-background/80 text-muted-foreground",
+              className,
+            )}
+          />
+        }
+      >
+        <StarIcon className="size-3.5 fill-current" />
+        {p ? shownScore(p.score) : "—"}
+      </TooltipTrigger>
+      <TooltipContent>
+        {p
+          ? `Место на вашей шкале: ${score(Math.max(0, p.score))} (0 — середина «${gradeLabel(type, 1)}», 10 — середина «${gradeLabel(type, 5)}»)`
+          : "Прогноза ещё нет: модели нужны ваши оценки"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * The facets shown on a card, value by value; a value the user took away is crossed out, one the
+ * user added is outlined. [limit] cuts the list, the rest go into "+N" with their names in its title.
+ */
+export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[]; limit?: number; className?: string }) {
+  const values = facets.flatMap((f) => f.values.map((v) => ({ facet: f, value: v })));
+  const shown = limit === undefined ? values : values.slice(0, limit);
+  const rest = values.slice(shown.length);
+  if (values.length === 0) return null;
+  return (
+    <div className={cn("flex flex-wrap gap-1", className)}>
+      {shown.map(({ facet, value }) => (
+        <Badge
+          key={`${facet.facet}=${value.key}`}
+          variant={value.corrected === "ADDED" ? "outline" : "secondary"}
+          className={cn(
+            "font-normal",
+            value.corrected === "REMOVED" && "text-muted-foreground line-through",
+            value.corrected === "ADDED" && "border-dashed border-primary/50",
+          )}
+          title={`${facet.label}${value.corrected === "REMOVED" ? " · убрано вами" : value.corrected === "ADDED" ? " · добавлено вами" : ""}`}
+        >
+          {value.name}
+        </Badge>
+      ))}
+      {rest.length > 0 && (
+        <Badge variant="outline" className="font-normal text-muted-foreground" title={rest.map((r) => r.value.name).join(", ")}>
+          +{rest.length}
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+/** The user's own actions on the site: liked it, put it on a shelf. */
+export function SignalBadges({ signals, className }: { signals?: Record<string, string>; className?: string }) {
+  const entries = Object.entries(signals ?? {});
+  if (entries.length === 0) return null;
+  return (
+    <span className={cn("inline-flex flex-wrap gap-1", className)}>
+      {entries.map(([name, value]) => (
+        <Badge key={name} variant="outline" className="border-primary/40 font-normal" title="Ваше действие на сайте">
+          {signalLabel(name, value)}
+        </Badge>
+      ))}
+    </span>
+  );
+}
+
+/** Where the work comes from, when its content type has several sources. */
+export function SourceBadge({ type, source, className }: { type: ContentTypeInfo; source: string; className?: string }) {
+  if (type.sources.length < 2) return null;
+  return (
+    <Badge variant="outline" className={cn("font-normal", className)}>
+      {sourceTitle(type, source)}
+    </Badge>
+  );
+}
+
+/** The other items of the same work: the site of each, linking to its page there. */
+export function LinkedBadges({ type, linked, className }: { type: ContentTypeInfo; linked: LinkedItem[]; className?: string }) {
+  if (linked.length === 0) return null;
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-1", className)}>
+      <span>также:</span>
+      {linked.map((l) => (
+        <a
+          key={`${l.source}/${l.item}`}
+          href={l.url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={l.title}
+          className="underline-offset-2 hover:underline"
+        >
+          {sourceTitle(type, l.source)}
+        </a>
+      ))}
+    </span>
+  );
+}
+
+/** The numbers of a card with the labels its source gives them: "лайки 1,2 тыс." */
+export function NumberLine({ type, summary, limit = 3 }: { type: ContentTypeInfo; summary: ItemSummary; limit?: number }) {
+  const declared = type.sources.find((s) => s.id === summary.source)?.numbers ?? [];
+  const label = (key: string) => declared.find((n) => n.key === key)?.label ?? key;
+  const entries = Object.entries(summary.numbers).slice(0, limit);
+  return (
+    <>
+      {entries.map(([key, value]) => (
+        <span key={key} className="whitespace-nowrap" title={`${label(key)}: ${value.toLocaleString("ru-RU")}`}>
+          <span className="text-muted-foreground/80">{label(key)}</span> {compact(value)}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/**
+ * What a search found in the work: the field, and the piece of its text with the words found
+ * marked; found by meaning alone, the phrase of the field nearest by meaning.
+ */
+export function SearchMatchLine({ match, className }: { match: SearchMatch; className?: string }) {
+  const parts: { text: string; found: boolean }[] = [];
+  let at = 0;
+  [...match.highlights]
+    .sort((a, b) => a.start - b.start)
+    .forEach(({ start, end }) => {
+      if (start < at) return;
+      if (start > at) parts.push({ text: match.text.slice(at, start), found: false });
+      parts.push({ text: match.text.slice(start, end), found: true });
+      at = end;
+    });
+  if (at < match.text.length) parts.push({ text: match.text.slice(at), found: false });
+  const field = searchFieldLabel(match.field);
+  return (
+    <p className={cn("text-xs leading-snug text-muted-foreground", className)}>
+      <span className="font-medium text-foreground/70">{match.byMeaning ? `по смыслу · ${field}` : field}: </span>
+      {parts.map((p, i) =>
+        p.found ? (
+          <mark key={i} className="rounded-sm bg-maybe/35 px-0.5 text-foreground">
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </p>
+  );
+}
+
+/** The grade of an earlier version, when the current one is not graded yet or differs. */
+export function PreviousRating({ type, summary }: { type: ContentTypeInfo; summary: ItemSummary }) {
+  const g = summary.previousGrade as Grade | undefined;
+  if (!g) return null;
+  return (
+    <Badge
+      variant="outline"
+      className={GRADE_TEXT[g]}
+      title={`Оценка версии ${summary.previousGradeVersion ?? ""}: ${gradeLabel(type, g)}`}
+    >
+      ранее: {gradeLabel(type, g)}
+    </Badge>
+  );
+}
+
+/** The cover — the preview, or the original where [full] — or the type's icon when there is none. */
+export function Cover({
+  typeId,
+  summary,
+  className,
+  full = false,
+}: {
+  typeId: string;
+  summary: ItemSummary;
+  className?: string;
+  full?: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (!summary.hasCover || failed) {
+    const Icon = typeIcon(typeId);
+    return (
+      <div className={cn("flex items-center justify-center bg-muted text-muted-foreground", className)}>
+        <Icon className="size-10 opacity-40" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={pictureSrc(summary, 0, full)}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className={cn("bg-muted object-cover", className)}
+    />
+  );
+}

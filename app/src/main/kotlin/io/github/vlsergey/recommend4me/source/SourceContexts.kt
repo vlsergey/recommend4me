@@ -62,6 +62,7 @@ class SourceContexts(private val stores: Stores, private val settings: Settings,
         }
         override fun saveReviews(itemId: String, reviews: List<ReviewData>) = store.reviews.save(itemId, reviews)
         override fun reviewIds(itemId: String): Set<String> = store.reviews.ids(itemId)
+        override fun reviewContents(itemId: String): Map<String, String> = store.reviews.ofItem(itemId).associate { it.reviewId to it.content }
         override fun saveParts(itemId: String, parts: List<PartData>) {
             store.parts.save(itemId, parts)
             if (parts.any { it.content != null }) events.publishEvent(PartsSaved(store.id))

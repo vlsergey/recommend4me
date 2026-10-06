@@ -97,6 +97,9 @@ interface ItemStore {
 
     fun reviewIds(itemId: String): Set<String>
 
+    /** The texts of the item's stored reviews, by id: a review read whole is not replaced by its excerpt. */
+    fun reviewContents(itemId: String): Map<String, String>
+
     /** Stores parts of the item's text, a known one updated; none is deleted. */
     fun saveParts(itemId: String, parts: List<PartData>)
 
@@ -142,7 +145,7 @@ data class ReviewData(
 data class PartData(
     /** Unique within the item. */
     val id: String,
-    /** The order of the parts. */
+    /** The order of the parts; negative when the page does not tell it — a known part keeps its own. */
     val position: Int,
     val title: String?,
     /** The text; null when only the table of contents names the part. */
