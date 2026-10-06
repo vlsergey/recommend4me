@@ -172,10 +172,20 @@ The catalogue is asked only when the user asks — a search by the button with t
 a universe added, its characters refreshed from the universes screen or a site's page — and
 what it answered is kept.
 
-Every work of the type has the facet `universe` (`UniverseFacet`), the application's own beside the
-source's: its values are the universes of the dictionary, the user's links of a work to one are
-the corrections of the facet, and the model suggests the links from the work's fandom, tags and
-texts as for any facet. Taking a universe out of the dictionary takes its links with it.
+Every work of the type has three facets of the application's own beside the source's
+(`UniverseFacets`), their values kept as the user's corrections and worked out by the model as
+any facet's:
+
+- `universe` — the universes of the dictionary the work is fan fiction of, one or several:
+  suggested from the work's fandom, tags and texts, to be confirmed;
+- `characters` — its main characters: of the characters of its confirmed universes and the
+  original characters (ОЖП, ОМП), every name of a character held against the line the site writes
+  them in (`SourceSchema.universeLine`, shown above), the tags, the description and the chapters;
+- `pairings` — pairs of the work's characters, one whatever their order.
+
+The characters and the pairings are given to the work at once when more likely than not; the
+site's own strings stay its facets as they are, for the model and as what the model reads.
+Taking a universe out of the dictionary takes its links with it.
 
 ## The site as the interface
 

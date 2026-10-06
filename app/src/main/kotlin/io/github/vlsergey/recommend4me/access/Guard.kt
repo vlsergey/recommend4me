@@ -4,7 +4,6 @@ import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -36,17 +35,14 @@ private val log = LoggerFactory.getLogger(Guard::class.java)
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
-class Guard(
-    @Value("\${recommend4me.access.hosts:}") hosts: List<String>,
-    @Value("\${recommend4me.access.networks:}") networks: List<String>,
-) : OncePerRequestFilter() {
+class Guard(settings: AccessSettings) : OncePerRequestFilter() {
 
-    private val addresses = Addresses(networks.filter { it.isNotBlank() }.map(::Network))
+    private val addresses = Addresses(settings.networks.map(::Network))
 
     private val names: Set<String> = buildSet {
         addAll(LOCAL_NAMES)
         runCatching { InetAddress.getLocalHost().hostName.lowercase() }.getOrNull()?.let(::add)
-        hosts.map { hostname(it) }.filter { it.isNotEmpty() }.forEach(::add)
+        settings.hosts.map { hostname(it) }.filter { it.isNotEmpty() }.forEach(::add)
     }
 
     fun ours(host: String): Boolean {

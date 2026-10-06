@@ -41,12 +41,13 @@ class SourceStore(val source: Source, contentType: ContentType, val folder: Path
      */
     val schema: SourceSchema =
         if (contentType.universes) SourceSchema(
-            facets = source.schema.facets + UniverseFacet.DEF,
+            facets = source.schema.facets + UniverseFacet.defs(source.schema),
             numbers = source.schema.numbers,
             texts = source.schema.texts,
             reviewsLabel = source.schema.reviewsLabel,
             partsLabel = source.schema.partsLabel,
             versioned = source.schema.versioned,
+            universeLine = source.schema.universeLine,
         ) else source.schema
 
     private val dbs = databases.of(source.id)

@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
+import io.github.vlsergey.recommend4me.universe.UniverseFacets
 
 /**
  * ficbook.net — fanfics and originals, read in the browser and seen by the extension only: the
@@ -36,10 +37,10 @@ class Ficbook : Source {
             FacetDef(RATING, "Рейтинг", filter = true, onCard = true),
             FacetDef(STATUS, "Статус", filter = true),
             FacetDef(TAG, "Метка", shared = "tag", searchWeight = 0.9f, suggest = true),
-            // Authors write the pairings and characters as they please: the values are worked out,
-            // what the site says is the line above them and what the model learns from
-            FacetDef(PAIRING, "Пэйринг", searchWeight = 0.7f, infer = true, original = PAIRINGS_LINE),
-            FacetDef(CHARACTER, "Главные персонажи", searchWeight = 0.8f, infer = true, original = PAIRINGS_LINE),
+            // The pairings and characters as the authors write them: the site's strings, kept as they
+            // are; the application works the characters and pairings of the universes out of them
+            FacetDef(PAIRING, "Пэйринг на сайте", searchWeight = 0.7f),
+            FacetDef(CHARACTER, "Персонаж на сайте", searchWeight = 0.8f),
             FacetDef(SERIES, "Серия", searchWeight = 0.7f),
         ),
         numbers = listOf(
@@ -57,6 +58,7 @@ class Ficbook : Source {
         ),
         reviewsLabel = "Отзывы",
         partsLabel = "Части",
+        universeLine = PAIRINGS_LINE,
     )
 
     override val capturePatterns = listOf(
@@ -74,9 +76,10 @@ class Ficbook : Source {
         panelAfter = "section.fanfic-hat",
         facets = listOf(
             FacetDecor(TAG, "section.fanfic-hat a.tag"),
-            // The worked out values go in lines of their own under the site's block of them
-            FacetDecor(PAIRING, after = PAIRINGS_BLOCK),
-            FacetDecor(CHARACTER, after = PAIRINGS_BLOCK),
+            // The universes, characters and pairings worked out go in lines of their own under the site's block of them
+            FacetDecor(UniverseFacets.UNIVERSE, after = PAIRINGS_BLOCK),
+            FacetDecor(UniverseFacets.CHARACTERS, after = PAIRINGS_BLOCK),
+            FacetDecor(UniverseFacets.PAIRINGS, after = PAIRINGS_BLOCK),
         ),
         reviews = ReviewDecor("article.comment-container[id^='com']", idPrefix = "com"),
         pictures = PictureDecor("img.fic-cover"),

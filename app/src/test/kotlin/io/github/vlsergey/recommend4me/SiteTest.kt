@@ -75,14 +75,15 @@ class SiteTest {
         fun fakeCatalogue(): UniverseCatalogue = FakeCatalogue()
     }
 
-    /** A catalogue of one universe of space opera with two characters. */
+    /** A catalogue of two universes of space opera, each with the same two characters. */
     class FakeCatalogue : UniverseCatalogue {
         override val id = "fake"
         override val title = "Fake"
         private val space = UniverseEntry("U1", "Space opera", "Ships and pilots", "https://fake.example/U1")
+        private val fleet = UniverseEntry("U2", "Fleet", "More ships", "https://fake.example/U2")
 
         override fun findUniverses(name: String, languages: List<String>) = if ("space" in name.lowercase()) listOf(space) else emptyList()
-        override fun universe(id: String, languages: List<String>) = space.takeIf { it.id == id }
+        override fun universe(id: String, languages: List<String>) = listOf(space, fleet).firstOrNull { it.id == id }
         override fun characters(id: String, languages: List<String>) = listOf(
             UniverseCharacter("C1", listOf("Pilot", "The Pilot"), null, "https://fake.example/C1"),
             UniverseCharacter("C2", listOf("Captain"), "Of the fleet", "https://fake.example/C2"),
@@ -107,6 +108,7 @@ class SiteTest {
                 TextDef("annotation", "Аннотация", block = "text:annotation"),
                 TextDef("pairings", "Пэйринги на сайте", searchByMeaning = true),
             ),
+            universeLine = "pairings",
         )
         override val modes = setOf(SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://site\\.example/work/.*"))
@@ -265,11 +267,45 @@ class SiteTest {
         assertTrue(items.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
         corrections.correctFacet("site", "u1", FacetCorrection(facet = "universe", added = true, key = "fake:U1"))
         assertEquals("Space opera", items.getItem("site", "u1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.single().name)
-        assertEquals(1, universes.listUniverses("books").body!!.single().works)
+        assertEquals(1, universes.listUniverses("books").body!!.single { it.universe == "U1" }.works)
 
         // Removed, it takes its links with it
         universes.removeUniverse("books", "fake", "U1")
-        assertTrue(universes.listUniverses("books").body!!.isEmpty())
+        assertTrue(universes.listUniverses("books").body!!.none { it.universe == "U1" })
         assertTrue(items.getItem("site", "u1").body!!.allFacets.none { it.facet == "universe" })
+    }
+
+    @Test
+    fun `the characters and the pairings of a work are worked out within its universes`() {
+        universes.addUniverse("books", UniverseRef("fake", "U2"))
+        // Works of the universe, the site's line naming its pairing, and works of no universe
+        repeat(12) { k ->
+            capture("p$k|Pilots $k|space|Pilots fly starships in orbit near planets $k|Pilot/Captain")
+            capture("q$k|Knights $k|dragons|A knight guards the princess in the castle $k|Knight/Princess")
+        }
+        repeat(12) { k -> corrections.correctFacet("site", "p$k", FacetCorrection(facet = "universe", added = true, key = "fake:U2")) }
+        // The user's word on half of them
+        repeat(6) { k ->
+            listOf("fake:C1", "fake:C2").forEach { corrections.correctFacet("site", "p$k", FacetCorrection(facet = "characters", added = true, key = it)) }
+            corrections.correctFacet("site", "p$k", FacetCorrection(facet = "pairings", added = true, key = "pair:fake:C1|fake:C2"))
+        }
+        val store = stores.source("site")!!
+        textVectors.refresh(store)
+        suggestions.refresh(store)
+        // The pairings are made of the characters the model gave: once more, over what it gave
+        suggestions.refresh(store)
+
+        val facets = items.getItem("site", "p9").body!!.allFacets
+        val characters = facets.single { it.facet == "characters" }.propertyValues
+        assertEquals(setOf("fake:C1", "fake:C2"), characters.filter { it.inferred == true }.map { it.key }.toSet(), "characters $characters")
+        assertEquals("Pilot", characters.single { it.key == "fake:C1" }.name)
+        val pairing = facets.single { it.facet == "pairings" }.propertyValues.single()
+        assertEquals("pair:fake:C1|fake:C2", pairing.key)
+        assertEquals("Pilot / Captain", pairing.name)
+        // A work of no universe has no characters of it: only its site's line
+        val outside = items.getItem("site", "q9").body!!.allFacets.filter { it.facet == "characters" || it.facet == "pairings" }
+        assertTrue(outside.all { it.propertyValues.isEmpty() && it.original == "Knight/Princess" }, "outside $outside")
+        // Its site's line is shown above
+        assertEquals("Pilot/Captain", facets.single { it.facet == "characters" }.original)
     }
 }

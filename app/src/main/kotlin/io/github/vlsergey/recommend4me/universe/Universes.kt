@@ -20,8 +20,9 @@ class FoundUniverse(val catalogue: String, val entry: UniverseEntry, val added: 
  * characters as the catalogue gave them. The catalogue is asked only when the user asks — a search
  * by the button, a universe added, its characters refreshed — and what it answered is kept.
  *
- * The universe's name is written as the name of the value of the facet "universe" in every source
- * of the type, so the works linked to it name it as any value of a facet.
+ * The names of the universe and of its characters are written as the names of the values of the
+ * facets "universe" and "characters" in every source of the type, so the works name them as any
+ * value of a facet.
  */
 @Service
 class Universes(
@@ -51,7 +52,11 @@ class Universes(
         val characters = catalogue.characters(id, languages)
         type.universes.save(catalogueId, entry, characters, Instant.now())
         val value = UniverseFacet.valueOf(catalogueId, id)
-        type.sources.forEach { it.items.nameFacetValues(UniverseFacet.KEY, mapOf(value to entry.name)) }
+        val names = characters.associate { UniverseFacet.valueOf(catalogueId, it.id) to it.names.first() }
+        type.sources.forEach {
+            it.items.nameFacetValues(UniverseFacet.KEY, mapOf(value to entry.name))
+            it.items.nameFacetValues(UniverseFacets.CHARACTERS, names)
+        }
         log.info("{}: the universe {} ({}) has {} characters", typeId, entry.name, value, characters.size)
         dictionaryChanged(type)
         return type.universes.find(catalogueId, id)!!

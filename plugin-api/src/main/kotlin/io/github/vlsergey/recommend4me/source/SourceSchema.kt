@@ -14,6 +14,12 @@ class SourceSchema(
     val partsLabel: String? = null,
     /** Whether an item has a version that changes (a game's release) or is the same work whatever is added to it (a book). */
     val versioned: Boolean = false,
+    /**
+     * The key of the text ([texts]) where the site writes the characters and pairings of a work as
+     * its author pleases ("Пэйринг и персонажи"): shown above the characters and pairings the
+     * application works out of it ([UniverseFacets][io.github.vlsergey.recommend4me.universe.UniverseFacets]).
+     */
+    val universeLine: String? = null,
 ) {
     fun facet(key: String): FacetDef? = facets.firstOrNull { it.key == key }
     fun number(key: String): NumberDef? = numbers.firstOrNull { it.key == key }

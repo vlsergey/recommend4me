@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.access
 
 import org.apache.catalina.connector.Connector
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.tomcat.servlet.TomcatServletWebServerFactory
 import org.springframework.boot.web.server.WebServerFactoryCustomizer
 import org.springframework.stereotype.Component
@@ -17,11 +16,10 @@ private val log = LoggerFactory.getLogger(Listeners::class.java)
  * the moment of the start.
  */
 @Component
-class Listeners(@Value("\${recommend4me.access.networks:}") networks: List<String>) :
-    WebServerFactoryCustomizer<TomcatServletWebServerFactory> {
+class Listeners(settings: AccessSettings) : WebServerFactoryCustomizer<TomcatServletWebServerFactory> {
 
-    private val addresses = Addresses(networks.filter { it.isNotBlank() }.map(::Network))
-    private val opened = networks.any { it.isNotBlank() }
+    private val addresses = Addresses(settings.networks.map(::Network))
+    private val opened = settings.networks.isNotEmpty()
 
     override fun customize(factory: TomcatServletWebServerFactory) {
         val own = addresses.own()
