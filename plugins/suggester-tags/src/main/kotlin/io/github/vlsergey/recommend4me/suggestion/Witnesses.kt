@@ -203,12 +203,60 @@ internal class Witnesses(private val task: SuggestionTask) {
      * left it untagged, it did not deny it every value — unless the user said no to one of them.
      */
     fun forEachExample(set: Int, visit: (FloatArray, Boolean) -> Unit) {
-        val labelled = (0 until n).filter { assigned[it].isNotEmpty() || task.rejected[it].isNotEmpty() }.toIntArray()
-        blocks(labelled).forEach { block ->
+        forEachExample { x, positive ->
+            keepViews(arrayOf(x), set)
+            visit(x, positive)
+        }
+    }
+
+    /**
+     * Every example with every view: of the items with a value or a word of the user, every value
+     * the item may have ([SuggestionTask.allowed]) and every one it has.
+     */
+    private fun forEachExample(visit: (FloatArray, Boolean) -> Unit) {
+        blocks(labelled()).forEach { block ->
             features(block).forEachIndexed { b, values ->
-                keepViews(values, set)
-                val has = assigned[block[b]].toHashSet()
-                values.forEachIndexed { v, x -> visit(x, v in has) }
+                val i = block[b]
+                val has = assigned[i].toHashSet()
+                val may = task.allowed[i]?.toHashSet()
+                values.forEachIndexed { v, x -> if (may == null || v in may || v in has) visit(x, v in has) }
+            }
+        }
+    }
+
+    private fun labelled(): IntArray = (0 until n).filter { assigned[it].isNotEmpty() || task.rejected[it].isNotEmpty() }.toIntArray()
+
+    /** How many examples there are, of every set of views alike. */
+    fun exampleCount(): Long = labelled().sumOf { i ->
+        val may = task.allowed[i]?.toHashSet() ?: return@sumOf m.toLong()
+        (may + assigned[i].toSet()).size.toLong()
+    }
+
+    /**
+     * Every example worked out once and held: a fitting reads them at every step of every set of
+     * views, and working them out — the neighbours, the pairs — costs far more than reading them.
+     */
+    fun hold(): HeldExamples {
+        val count = exampleCount().toInt()
+        val xs = FloatArray(count * features)
+        val positive = BooleanArray(count)
+        var k = 0
+        forEachExample { x, has ->
+            x.copyInto(xs, k * features)
+            positive[k] = has
+            k++
+        }
+        return HeldExamples(xs, positive, features) { x, set -> keepViews(arrayOf(x), set) }
+    }
+
+    /** Examples held in memory: each one handed over as the views of a set see it. */
+    class HeldExamples(private val xs: FloatArray, private val positive: BooleanArray, private val features: Int, private val keep: (FloatArray, Int) -> Unit) {
+        fun forEach(set: Int, visit: (FloatArray, Boolean) -> Unit) {
+            val x = FloatArray(features)
+            for (k in positive.indices) {
+                xs.copyInto(x, 0, k * features, (k + 1) * features)
+                keep(x, set)
+                visit(x, positive[k])
             }
         }
     }

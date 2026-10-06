@@ -31,14 +31,23 @@ import kotlin.math.ln1p
  */
 class TagSuggester : FacetSuggester {
     /** With the version of the witnesses: weights fitted on other witnesses are fitted again. */
-    override val id = "tag-witnesses-2"
+    override val id = "tag-witnesses-3"
 
     override fun fit(task: SuggestionTask): FittedSuggester? {
         val positives = task.assigned.sumOf { it.distinct().size }.toLong()
         if (positives == 0L || positives == task.itemCount.toLong() * task.valueCount) return null
         val witnesses = Witnesses(task)
         val sets = witnesses.viewSets() + 0
-        return Fitted(sets.associateWith { set -> Logistic.fit(witnesses.features) { visit -> witnesses.forEachExample(set, visit) } })
+        // The examples worked out once when they fit in memory, worked out anew at every step when not
+        val held = if (witnesses.exampleCount() * witnesses.features <= HELD_FLOATS) witnesses.hold() else null
+        return Fitted(sets.associateWith { set ->
+            Logistic.fit(witnesses.features) { visit -> if (held != null) held.forEach(set, visit) else witnesses.forEachExample(set, visit) }
+        })
+    }
+
+    companion object {
+        /** The floats of examples a fitting holds at most: memory, not meaning. */
+        private const val HELD_FLOATS = 64L * 1024 * 1024
     }
 
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? {

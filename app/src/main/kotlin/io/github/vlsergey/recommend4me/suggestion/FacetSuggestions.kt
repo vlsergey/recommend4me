@@ -62,7 +62,12 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     private val scheduled = AtomicBoolean(false)
     private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
-    fun facetsOf(store: SourceStore): List<FacetDef> = store.schema.facets.filter { it.suggest || it.infer }
+    /**
+     * The facets the model works on, in the order they are worked out: those it gives values of
+     * first — their values are the context of the others, and the pairings are of the characters
+     * given before them — so that one round settles them all.
+     */
+    fun facetsOf(store: SourceStore): List<FacetDef> = store.schema.facets.filter { it.suggest || it.infer }.sortedBy { !it.infer }
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) = changed(event.source)
@@ -117,27 +122,31 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     fun refresh(store: SourceStore) {
         val suggester = plugins.suggester ?: return
         val encoder = plugins.textEncoder() ?: return
-        locks.computeIfAbsent(store.id) { ReentrantLock() }.withLock {
-            facetsOf(store).forEach { facet -> refreshFacet(store, facet, suggester, encoder, null) }
-        }
+        facetsOf(store).forEach { facet -> lockOf(store, facet).withLock { refreshFacet(store, facet, suggester, encoder, null) } }
     }
 
+    /** One lock a facet: a page waits only for the facet it asks of, not for a long fitting of another. */
+    private fun lockOf(store: SourceStore, facet: FacetDef) = locks.computeIfAbsent("${store.id}/${facet.key}") { ReentrantLock() }
+
     /**
-     * The chances of one item made now, for a page that asks for them, by the weights fitted last
-     * (fitted now only when there are none); not waiting long for a refresh under way.
+     * The chances of one item of the [facets] made now, for a page that asks for them, by the
+     * weights fitted last (fitted now only when there are none); not waiting long for a refresh of
+     * a facet under way — that one is left to the background.
      */
-    private fun refreshNow(store: SourceStore, itemId: String) {
+    private fun refreshNow(store: SourceStore, itemId: String, facets: List<FacetDef>) {
         val suggester = plugins.suggester ?: return
         val encoder = plugins.textEncoder() ?: return
-        val lock = locks.computeIfAbsent(store.id) { ReentrantLock() }
-        if (!lock.tryLock(WAIT_SECONDS, TimeUnit.SECONDS)) {
-            changed(store.id)
-            return
-        }
-        try {
-            facetsOf(store).forEach { facet -> refreshFacet(store, facet, suggester, encoder, itemId) }
-        } finally {
-            lock.unlock()
+        facets.forEach { facet ->
+            val lock = lockOf(store, facet)
+            if (!lock.tryLock(WAIT_SECONDS, TimeUnit.SECONDS)) {
+                changed(store.id)
+                return@forEach
+            }
+            try {
+                refreshFacet(store, facet, suggester, encoder, itemId)
+            } finally {
+                lock.unlock()
+            }
         }
     }
 
@@ -145,7 +154,8 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     private fun refreshFacet(store: SourceStore, facet: FacetDef, suggester: FacetSuggester, encoder: TextEncoder, only: String?) {
         val started = System.currentTimeMillis()
         val vocabulary = universeVocabulary(store, facet)
-        val data = FacetData.load(store, facet, encoder, vocabulary?.values.orEmpty(), ofValues = vocabulary == null, mentions = vocabulary?.mentions)
+        val data = FacetData.load(store, facet, encoder, vocabulary?.values.orEmpty(), ofValues = vocabulary == null, mentions = vocabulary?.mentions, allowed = vocabulary?.allowed)
+        val read = System.currentTimeMillis() - started
         if (data.values.isEmpty()) return
         val now = Instant.now()
         val stored = store.suggestions.suggester(facet.key)?.takeIf { it.suggester == suggester.id }
@@ -156,7 +166,7 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
             else -> {
                 val made = suggester.fit(data.task) ?: return
                 store.suggestions.saveSuggester(facet.key, suggester.id, now, data.basis, made.pack())
-                log.info("{}: the suggester of {} fitted on {} items, {} values in {} ms", store.id, facet.key, data.ids.size, data.values.size, System.currentTimeMillis() - started)
+                log.info("{}: the suggester of {} fitted on {} items, {} values in {} ms, {} of them reading", store.id, facet.key, data.ids.size, data.values.size, System.currentTimeMillis() - started, read)
                 made
             }
         }
@@ -237,8 +247,35 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
                 store.corrections.allFacets().filter { it.facet == UniverseFacets.KIND }.groupBy { it.itemId }.forEach { (id, own) ->
                     kinds[id] = Corrected.facets(mapOf(UniverseFacets.KIND to kinds[id].orEmpty()), own)[UniverseFacets.KIND].orEmpty()
                 }
-                val all = type.universes.all().associate { it.value to it.name }
-                Vocabulary(all, allowed = { id -> if (kinds[id] == listOf(UniverseFacets.ORIGINAL)) emptySet() else all.keys })
+                val universes = type.universes.all()
+                val all = universes.associate { it.value to it.name }
+                fun original(id: String) = kinds[id] == listOf(UniverseFacets.ORIGINAL)
+                // A universe is named by its characters ("Гарри", "Хогвартс") and by its own name
+                val ofCharacter = HashMap<String, MutableSet<String>>()
+                val names = HashMap<String, List<String>>()
+                universes.forEach { u ->
+                    names[u.value] = listOf(u.name)
+                    type.universes.characters(u.catalogue, u.id).forEach { c ->
+                        val value = UniverseFacet.valueOf(u.catalogue, c.id)
+                        names[value] = c.names
+                        ofCharacter.getOrPut(value) { HashSet() } += u.value
+                    }
+                }
+                val counter = Mentions(names)
+                Vocabulary(
+                    all,
+                    allowed = { id -> if (original(id)) emptySet() else all.keys },
+                    // How many times the work's texts name each universe, by itself or by a character of it
+                    mentions = { id ->
+                        if (original(id)) null else {
+                            val out = HashMap<String, Int>()
+                            counter.count(store.workTexts(id)).forEach { (value, n) ->
+                                (ofCharacter[value] ?: setOf(value).filter { it in all }).forEach { out.merge(it, n, Int::plus) }
+                            }
+                            out
+                        }
+                    },
+                )
             }
             UniverseFacets.CHARACTERS -> {
                 // Every character of every universe — by all its names: the fans write the one they like —
@@ -321,12 +358,14 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
         val site = store.items.facets(itemId)
         ensure(store, itemId, facets, site, corrections)
         val chances = store.suggestions.ofItems(listOf(itemId))[itemId].orEmpty()
+        val values = Corrected.facets(site, corrections)
+        // A fan fiction of no universe yet is offered the likeliest ones, likely or not: it has one
+        val unplaced = UniverseFacets.FANFICTION in values[UniverseFacets.KIND].orEmpty() && values[UniverseFacets.UNIVERSE].isNullOrEmpty()
         return facets.filter { it.suggest && !it.infer }.map { facet ->
             val answered = corrections.filter { it.facet == facet.key }.map { it.key }.toSet()
             val current = site[facet.key].orEmpty().toSet()
-            val suggested = chances[facet.key].orEmpty().values
-                .filter { !it.had && it.key !in answered && it.key !in current && it.chance > ModelValues.LIKELY }
-                .sortedByDescending { it.chance }
+            val open = chances[facet.key].orEmpty().values.filter { !it.had && it.key !in answered && it.key !in current }.sortedByDescending { it.chance }
+            val suggested = if (facet.key == UniverseFacets.UNIVERSE && unplaced) open.take(UNIVERSES_OFFERED) else open.filter { it.chance > ModelValues.LIKELY }
             ItemFacetSuggestions(facet, suggested, store.items.facetNames(facet.key, suggested.map { it.key }))
         }
     }
@@ -342,7 +381,8 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
         if (store.items.find(itemId) == null) return null
         val corrections = store.corrections.facetsOf(itemId)
         val site = store.items.facets(itemId)
-        ensure(store, itemId, facets, site, corrections, now = true)
+        // The facet and those worked out before it, its values made of theirs: not the long fittings after it
+        ensure(store, itemId, facets.take(facets.indexOf(def) + 1), site, corrections, now = true)
         val chances = store.suggestions.ofItems(listOf(itemId))[itemId].orEmpty()[facet].orEmpty().values
         val answered = corrections.filter { it.facet == facet }.map { it.key }.toSet()
         val current = site[facet].orEmpty().toSet()
@@ -365,9 +405,11 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
         val fingerprint = FacetData.fingerprint(
             site, corrections, store.textVectors.hashes(encoder.id, itemId).values, store.parts.windowCount(itemId, encoder.id),
         )
-        val known = facets.map { store.suggestions.fingerprint(itemId, it.key) }
-        if (known.any { it == null } || (now && known.any { it != fingerprint })) refreshNow(store, itemId)
-        else if (known.any { it != fingerprint }) changed(store.id)
+        val known = facets.associateWith { store.suggestions.fingerprint(itemId, it.key) }
+        val stale = facets.filter { known[it] != fingerprint }
+        if (stale.isEmpty()) return
+        if (now || stale.any { known[it] == null }) refreshNow(store, itemId, stale)
+        else changed(store.id)
     }
 
     @PreDestroy
@@ -381,6 +423,9 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
 
         /** How long a page waits for a refresh under way before its item is left to it. */
         private const val WAIT_SECONDS = 5L
+
+        /** How many universes a fan fiction of none is offered: the user's choice. */
+        private const val UNIVERSES_OFFERED = 3
 
         /** Items scored at once and written in one transaction: memory, not meaning. */
         private const val CHUNK = 2_000
@@ -417,6 +462,7 @@ internal class FacetData(
         fun load(
             store: SourceStore, facet: FacetDef, encoder: TextEncoder, known: Map<String, String> = emptyMap(), ofValues: Boolean = true,
             mentions: ((String) -> Map<String, Int>?)? = null,
+            allowed: ((String) -> Set<String>)? = null,
         ): FacetData {
             val schema = store.schema
             val ids = store.items.keys().map { it.id }
@@ -466,6 +512,7 @@ internal class FacetData(
                 context = context,
                 contextCount = contextIndex.size,
                 mentions = ids.map { id -> mentions?.invoke(id)?.mapNotNull { (key, n) -> index[key]?.let { it to n } }?.toMap() },
+                allowed = ids.map { id -> allowed?.invoke(id)?.let(::indices) },
             )
             val hashes = HashMap<String, MutableList<String>>()
             store.textVectors.hashes(encoder.id).forEach { (k, hash) -> hashes.getOrPut(k.first) { ArrayList() } += hash }

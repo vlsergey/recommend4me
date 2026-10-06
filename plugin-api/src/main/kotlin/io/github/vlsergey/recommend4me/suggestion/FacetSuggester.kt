@@ -41,6 +41,12 @@ class SuggestionTask(
      * item whose texts were not counted, an empty map for one that names none.
      */
     val mentions: List<Map<Int, Int>?> = List(assigned.size) { null },
+    /**
+     * The values each item may have at all — a work's characters are of its universes — null for
+     * an item that may have any. A value outside them is no example of the item: not one it lacks,
+     * one it cannot have; its chance is still worked out.
+     */
+    val allowed: List<IntArray?> = List(assigned.size) { null },
 ) {
     val itemCount: Int get() = assigned.size
     val valueCount: Int get() = values.rows
@@ -50,8 +56,10 @@ class SuggestionTask(
         require(views.all { it.vectors.rows == itemCount && it.vectors.cols == values.cols }) {
             "Views of ${views.map { "${it.vectors.rows}×${it.vectors.cols}" }}, $itemCount items, values of ${values.cols}"
         }
-        require(confirmed.size == itemCount && rejected.size == itemCount && context.size == itemCount && mentions.size == itemCount) {
-            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${mentions.size} mentions"
+        require(
+            confirmed.size == itemCount && rejected.size == itemCount && context.size == itemCount && mentions.size == itemCount && allowed.size == itemCount,
+        ) {
+            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${mentions.size} mentions, ${allowed.size} allowed"
         }
     }
 }

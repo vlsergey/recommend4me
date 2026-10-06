@@ -109,6 +109,19 @@ class TagSuggesterTest {
     }
 
     @Test
+    fun `a value an item may not have is no example of it`() {
+        val c = catalogue()
+        c.texts += text(0); c.tags += IntArray(0); c.context += intArrayOf(0)
+        // A space work may have only the space values and the noise, a dragons' one only its own
+        val allowed = c.context.map { if (it.single() == 0) intArrayOf(0, 1, 4) else intArrayOf(2, 3, 4) }
+        val task = task(c).let { t -> SuggestionTask(t.views, t.values, t.assigned, t.confirmed, t.rejected, t.context, t.contextCount, allowed = allowed) }
+        val all = Witnesses(task(c)).exampleCount()
+        assertTrue(Witnesses(task).exampleCount() * 5 < all * 3 + 1, "fewer examples: ${Witnesses(task).exampleCount()} of $all")
+        val scores = TagSuggester().fit(task)!!.on(task).of(intArrayOf(c.texts.size - 1))[0]
+        assertTrue(scores[0] > 0.5f, "space for a space text: ${scores.toList()}")
+    }
+
+    @Test
     fun `a value the texts name often is likelier than one they never name`() {
         val c = catalogue()
         // Neither the texts nor any context tell; the works name their own values, now and then another

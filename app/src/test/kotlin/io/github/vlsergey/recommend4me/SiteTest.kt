@@ -323,5 +323,11 @@ class SiteTest {
         assertEquals(0, offered.single { it.key == "oc:male" }.mentions)
         assertEquals("Captain", offered.find { it.key == "fake:C2" }?.name ?: "Captain")
         assertEquals(404, suggestionsApi.getCandidates("site", "n1", "nope").statusCode.value())
+
+        // A fan fiction of no universe is offered the likeliest universes, likely or not
+        capture("f1|Fleet tales|space|Ships of the fleet|")
+        corrections.correctFacet("site", "f1", FacetCorrection(facet = "kind", added = true, key = "fanfiction"))
+        val universe = suggestionsApi.getSuggestions("site", "f1").body!!.single { it.facet == "universe" }
+        assertEquals(listOf("fake:U2"), universe.suggested.map { it.key })
     }
 }
