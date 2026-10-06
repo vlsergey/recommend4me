@@ -46,6 +46,10 @@ server:
 logging:
   level:
     io.github.vlsergey.recommend4me: INFO
+    # "H2 2.4 is newer than the version Flyway has been verified with", once for every database file
+    org.flywaydb.core.internal.database.base.Database: ERROR
+    # Spring's look for Gson, which the application does not use
+    org.springframework.core.annotation.MergedAnnotation: ERROR
   # THE LOG GOES TWO WAYS: to the console and to a rolling file in the data folder
   file:
     name: ${recommend4me.data-dir}/app.log
