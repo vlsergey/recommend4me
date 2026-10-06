@@ -41,6 +41,8 @@ class FacetDef(
     val searchWeight: Float = 0f,
     /** Shown on the card of an item. */
     val onCard: Boolean = false,
+    /** The facet names who made the work — the author, the developer: a search for the whole name finds the work first. */
+    val names: Boolean = false,
     /** An item without a value of it is listed under this name in the filter (a game with no status is "in development"); null — no such line. */
     val noneLabel: String? = null,
 )

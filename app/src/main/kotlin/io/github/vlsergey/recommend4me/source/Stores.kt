@@ -1,0 +1,80 @@
+package io.github.vlsergey.recommend4me.source
+
+import io.github.vlsergey.recommend4me.capture.CapturedPageRepository
+import io.github.vlsergey.recommend4me.contenttype.ContentType
+import io.github.vlsergey.recommend4me.correction.CorrectionRepository
+import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
+import io.github.vlsergey.recommend4me.database.Databases
+import io.github.vlsergey.recommend4me.folder.DataFolder
+import io.github.vlsergey.recommend4me.item.ItemRepository
+import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
+import io.github.vlsergey.recommend4me.mark.MarkRepository
+import io.github.vlsergey.recommend4me.model.ModelRepository
+import io.github.vlsergey.recommend4me.part.PartRepository
+import io.github.vlsergey.recommend4me.picture.PictureFiles
+import io.github.vlsergey.recommend4me.picture.PictureRepository
+import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.rating.RatingRepository
+import io.github.vlsergey.recommend4me.review.ReviewRepository
+import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
+import io.github.vlsergey.recommend4me.setvector.SetVectorRepository
+import io.github.vlsergey.recommend4me.signal.SignalRepository
+import io.github.vlsergey.recommend4me.signal.SignalsChanged
+import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
+import org.springframework.context.ApplicationEventPublisher
+import org.springframework.stereotype.Component
+import java.nio.file.Path
+
+/** Everything of one source: its plugin, its folder and the repositories over its three database files. */
+class SourceStore(val source: Source, val folder: Path, databases: Databases, events: ApplicationEventPublisher) {
+    val id: String get() = source.id
+    val type: String get() = source.contentType
+
+    private val dbs = databases.of(source.id)
+
+    val items = ItemRepository(dbs.source.dsl) { ids -> events.publishEvent(ItemsChanged(source.id, ids.toList())) }
+    val pictures = PictureRepository(dbs.source.dsl)
+    val files = PictureFiles(folder)
+    val reviews = ReviewRepository(dbs.source.dsl)
+    val parts = PartRepository(dbs.source.dsl)
+    val textVectors = TextVectorRepository(dbs.source.dsl)
+    val setVectors = SetVectorRepository(dbs.source.dsl)
+    val pages = CapturedPageRepository(dbs.source.dsl)
+
+    val corrections = CorrectionRepository(dbs.corrections.dsl)
+
+    val ratings = RatingRepository(dbs.ratings.dsl)
+    val marks = MarkRepository(source.id, dbs.ratings.dsl)
+    val signals = SignalRepository(dbs.ratings.dsl) { events.publishEvent(SignalsChanged(source.contentType)) }
+
+    /** The source database, for the source's own tables. */
+    val sourceDsl = dbs.source.dsl
+}
+
+/** Everything of one content type: its sources, the links across them, what is learnt. */
+class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases: Databases) {
+    val id: String get() = type.id
+
+    val links = TypeLinkRepository(databases.typeCorrections(type.id))
+    val models = ModelRepository(databases.model(type.id))
+    val embeddings = SetEmbeddingRepository(databases.model(type.id))
+    val likeness = MarkLikenessRepository(databases.model(type.id))
+
+    fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
+}
+
+/** The stores of every source and content type. */
+@Component
+class Stores(plugins: Plugins, databases: Databases, folder: DataFolder, events: ApplicationEventPublisher) {
+
+    val sources: List<SourceStore> = plugins.sources.map { SourceStore(it, folder.source(it.id), databases, events) }
+
+    val types: List<TypeStore> = plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases) }
+
+    fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
+
+    fun type(id: String): TypeStore? = types.firstOrNull { it.id == id }
+
+    fun typeOf(sourceId: String): TypeStore = types.first { t -> t.sources.any { it.id == sourceId } }
+}

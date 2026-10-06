@@ -1,0 +1,77 @@
+package io.github.vlsergey.recommend4me.plugin
+
+import io.github.vlsergey.recommend4me.contenttype.ContentType
+import io.github.vlsergey.recommend4me.encoder.ImageEncoder
+import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.scorer.Scorer
+import io.github.vlsergey.recommend4me.search.SearchProvider
+import io.github.vlsergey.recommend4me.settings.Settings
+import io.github.vlsergey.recommend4me.source.Source
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.stereotype.Component
+
+private val log = LoggerFactory.getLogger(Plugins::class.java)
+
+/**
+ * What the plugins brought: the sources, the encoders, the scorers, the search, the content types —
+ * and which of several of a kind is in use.
+ */
+@Component
+class Plugins(
+    sources: ObjectProvider<Source>,
+    textEncoders: ObjectProvider<TextEncoder>,
+    imageEncoders: ObjectProvider<ImageEncoder>,
+    scorers: ObjectProvider<Scorer>,
+    searches: ObjectProvider<SearchProvider>,
+    types: ObjectProvider<ContentType>,
+    private val settings: Settings,
+) {
+    val sources: List<Source> = sources.orderedStream().toList()
+    val textEncoders: List<TextEncoder> = textEncoders.orderedStream().toList()
+    val imageEncoders: List<ImageEncoder> = imageEncoders.orderedStream().toList()
+    val scorers: List<Scorer> = scorers.orderedStream().toList()
+    val search: SearchProvider? = searches.orderedStream().toList().firstOrNull()
+    private val allTypes = types.orderedStream().toList()
+
+    init {
+        for (s in this.sources) {
+            require(allTypes.any { it.id == s.contentType }) { "The source ${s.id} is of an unknown content type ${s.contentType}" }
+        }
+        require(this.sources.map { it.id }.distinct().size == this.sources.size) { "Two sources of one id: ${this.sources.map { it.id }}" }
+        log.info(
+            "sources {}, text encoders {}, picture encoders {}, scorers {}, search {}",
+            this.sources.map { it.id }, this.textEncoders.map { it.id }, this.imageEncoders.map { it.id },
+            this.scorers.map { it.id }, search?.id,
+        )
+    }
+
+    /** The content types that have a source. */
+    val types: List<ContentType> get() = allTypes.filter { t -> sources.any { it.contentType == t.id } }
+
+    fun type(id: String): ContentType? = types.firstOrNull { it.id == id }
+
+    fun source(id: String): Source? = sources.firstOrNull { it.id == id }
+
+    fun sourcesOf(typeId: String): List<Source> = sources.filter { it.contentType == typeId }
+
+    /** The text encoder in use: the one named by the setting `encoder.text`, or the first that is ready. */
+    fun textEncoder(): TextEncoder? = choose(textEncoders, "encoder.text", { it.id }, { it.ready() })
+
+    fun imageEncoder(): ImageEncoder? = choose(imageEncoders, "encoder.image", { it.id }, { it.ready() })
+
+    /** The scorer a content type is ranked by: the one named by `scorer.<type>`, or the pairwise ranking, or the first. */
+    fun scorer(typeId: String): Scorer? =
+        scorers.firstOrNull { it.id == settings.get("scorer.$typeId") }
+            ?: scorers.firstOrNull { it.id == DEFAULT_SCORER }
+            ?: scorers.firstOrNull()
+
+    private fun <T> choose(all: List<T>, setting: String, id: (T) -> String, ready: (T) -> Boolean): T? {
+        val named = settings.get(setting)
+        return all.firstOrNull { id(it) == named && ready(it) } ?: all.firstOrNull(ready)
+    }
+
+    companion object {
+        const val DEFAULT_SCORER = "pairwise-logistic"
+    }
+}

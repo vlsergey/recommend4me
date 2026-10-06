@@ -10,8 +10,7 @@ import org.gradle.api.artifacts.component.ProjectComponentIdentifier
  * `pluginDist` lays the plugin out as it is installed: build/plugin/<name>/, its jar beside the libraries.
  */
 plugins {
-    id("recommend4me.kotlin")
-    id("org.jetbrains.kotlin.plugin.spring")
+    id("recommend4me.spring")
 }
 
 val catalog = the<VersionCatalogsExtension>().named("libs")

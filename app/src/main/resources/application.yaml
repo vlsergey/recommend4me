@@ -1,0 +1,59 @@
+recommend4me:
+  # The data folder — the databases, pictures, models, logs — is where an operating system keeps an
+  # application's local data: %LOCALAPPDATA% on Windows (not Roaming: gigabytes must not travel with
+  # the profile), ~/.local/share elsewhere. The launcher sets it; a personal application.yaml in it
+  # (spring.config.additional-location) may set anything else.
+  data-dir: ${LOCALAPPDATA:${user.home}/.local/share}/recommend4me
+  backup:
+    # How many startup backups of the user's own files to keep
+    keep: 10
+  access:
+    # Who may connect, beyond this machine: networks (CIDR) the requests may come from, and the
+    # addresses of this machine to listen on — those of its network adapters inside these networks.
+    # Nothing by default: the application is this machine's only. A personal application.yaml in
+    # the data folder opens it further.
+    networks: []
+    # More names this machine is reached by, beyond localhost and its own name; a name beginning
+    # with a dot stands for every name ending so
+    hosts: []
+
+spring:
+  application:
+    name: recommend4me
+  threads:
+    virtual:
+      enabled: true
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          # THE PAGE IS ASKED FOR AGAIN EVERY TIME: without a Cache-Control a browser keeps it by its
+          # own reckoning, and after a new build a reload showed the old interface. Asked again, an
+          # unchanged page costs a 304; a new build is seen at once
+          no-cache: true
+  servlet:
+    multipart:
+      max-request-size: 64MB
+      max-file-size: 64MB
+
+server:
+  port: 8095
+  tomcat:
+    # A captured page is the whole DOM of a long chapter: megabytes
+    max-http-form-post-size: 64MB
+    max-swallow-size: 64MB
+
+logging:
+  level:
+    io.github.vlsergey.recommend4me: INFO
+  # THE LOG GOES TWO WAYS: to the console and to a rolling file in the data folder
+  file:
+    name: ${recommend4me.data-dir}/app.log
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 7
+  pattern:
+    # ONE PROCESS, ONE APPLICATION: no pid and no application name on every line
+    console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%t] %-40.40logger{39} : %m%n%wEx"

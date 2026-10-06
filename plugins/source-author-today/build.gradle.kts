@@ -1,1 +1,3 @@
-plugins { id("recommend4me.kotlin") }
+plugins {
+    id("recommend4me.addon")
+}

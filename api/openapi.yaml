@@ -1,0 +1,1594 @@
+openapi: 3.0.3
+info:
+  title: recommend4me
+  version: 0.1.0
+  description: |
+    A local recommender of works — games, books — collected from sites by plugins. The user grades
+    some of them; a model learns the order of the grades and puts every other work on the user's
+    own 0..10 scale.
+
+tags:
+  - name: types
+  - name: items
+  - name: corrections
+  - name: jobs
+  - name: model
+  - name: settings
+  - name: capture
+  - name: status
+
+paths:
+  /api/types:
+    get:
+      tags: [types]
+      operationId: listTypes
+      summary: The content types with their sources and what the sources know of their items
+      responses:
+        '200':
+          description: Content types that have at least one source
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContentTypeInfo'
+
+  /api/types/{type}/items:
+    get:
+      tags: [items]
+      operationId: listItems
+      summary: A page of the works of a content type, one card per work
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: view
+          in: query
+          schema:
+            $ref: '#/components/schemas/ItemView'
+        - name: sort
+          in: query
+          schema:
+            $ref: '#/components/schemas/ItemSort'
+        - name: sortNumber
+          in: query
+          description: The number to sort by when sort is NUMBER (a facet id of the numbers)
+          schema:
+            type: string
+        - name: search
+          in: query
+          description: A line searched by meaning and by words; the order is then the relevance
+          schema:
+            type: string
+        - name: hidden
+          in: query
+          description: Values of filter facets not shown, as "<facet id>=<value key>"
+          schema:
+            type: array
+            items:
+              type: string
+        - name: hiddenWithout
+          in: query
+          description: Filter facets whose works without any value of them are not shown
+          schema:
+            type: array
+            items:
+              type: string
+        - name: source
+          in: query
+          description: Only the works of these sources; all when none
+          schema:
+            type: array
+            items:
+              type: string
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 60
+      responses:
+        '200':
+          description: The page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPage'
+
+  /api/types/{type}/facets:
+    get:
+      tags: [items]
+      operationId: listFacets
+      summary: The filter facets of a content type with their values and how many works have each
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The facets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FacetFilter'
+
+  /api/items/{source}/{item}:
+    get:
+      tags: [items]
+      operationId: getItem
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      responses:
+        '200':
+          description: Everything known of the item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+        '404':
+          description: No such item
+
+  /api/items/{source}/{item}/refresh:
+    post:
+      tags: [items]
+      operationId: refreshItem
+      summary: Downloads the item's page again now, if its source can
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      responses:
+        '200':
+          description: The item after the download
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+        '404':
+          description: No such item
+        '409':
+          description: The source cannot download pages
+        '502':
+          description: The site did not answer
+
+  /api/items/{source}/{item}/rating:
+    put:
+      tags: [items]
+      operationId: rateItem
+      summary: Grades the item's current version
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatingRequest'
+      responses:
+        '200':
+          description: The item's card after the grade
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemSummary'
+    delete:
+      tags: [items]
+      operationId: unrateItem
+      summary: Takes back the grade of the item's current version
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      responses:
+        '200':
+          description: The item's card without the grade
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemSummary'
+
+  /api/items/{source}/{item}/pictures/{position}:
+    get:
+      tags: [items]
+      operationId: getPicture
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - $ref: '#/components/parameters/Position'
+        - name: full
+          in: query
+          description: The original instead of the preview
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: The picture
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '302':
+          description: Not kept here; the site's address
+        '404':
+          description: No such picture
+
+  /api/items/{source}/{item}/pictures/{position}/mark:
+    put:
+      tags: [items]
+      operationId: markPicture
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - $ref: '#/components/parameters/Position'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Mark'
+      responses:
+        '204':
+          description: Marked
+        '404':
+          description: No such picture
+    delete:
+      tags: [items]
+      operationId: unmarkPicture
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - $ref: '#/components/parameters/Position'
+      responses:
+        '204':
+          description: Unmarked
+
+  /api/items/{source}/{item}/reviews/{reviewId}/mark:
+    put:
+      tags: [items]
+      operationId: markReview
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - $ref: '#/components/parameters/ReviewId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Mark'
+      responses:
+        '204':
+          description: Marked
+        '404':
+          description: No such review
+    delete:
+      tags: [items]
+      operationId: unmarkReview
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - $ref: '#/components/parameters/ReviewId'
+      responses:
+        '204':
+          description: Unmarked
+
+  /api/items/{source}/{item}/parts/{partId}:
+    get:
+      tags: [items]
+      operationId: getPart
+      summary: The text of a part of the work, as it was read
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - name: partId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The part
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartText'
+        '404':
+          description: No such part, or its text is not kept
+
+  /api/match-feedback:
+    post:
+      tags: [items]
+      operationId: giveMatchFeedback
+      summary: The user's word on a match shown for a mark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchFeedbackRequest'
+      responses:
+        '204':
+          description: Kept
+
+  /api/items/{source}/{item}/corrections/facets:
+    put:
+      tags: [corrections]
+      operationId: correctFacet
+      summary: Adds a value of a facet to the item, or takes one the site gives away
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacetCorrection'
+      responses:
+        '200':
+          description: The item after the correction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+    delete:
+      tags: [corrections]
+      operationId: uncorrectFacet
+      summary: Takes back a correction of a facet value
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - name: facet
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The item after the correction is taken back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+
+  /api/items/{source}/{item}/corrections/fields/{field}:
+    put:
+      tags: [corrections]
+      operationId: correctField
+      summary: Overrides a field of the item ("title", "text:<key>", "number:<key>")
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - $ref: '#/components/parameters/Field'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldCorrection'
+      responses:
+        '200':
+          description: The item after the correction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+    delete:
+      tags: [corrections]
+      operationId: uncorrectField
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - $ref: '#/components/parameters/Field'
+      responses:
+        '200':
+          description: The item with the site's value of the field again
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+
+  /api/items/{source}/{item}/links:
+    post:
+      tags: [corrections]
+      operationId: linkItem
+      summary: Says the item and another one (of any source of the type) are one work
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemRef'
+      responses:
+        '200':
+          description: The item after the link
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+        '400':
+          description: The other item is of another content type, or unknown
+    delete:
+      tags: [corrections]
+      operationId: unlinkItem
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - name: otherSource
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: otherItem
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The item after the link is taken back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
+
+  /api/jobs:
+    get:
+      tags: [jobs]
+      operationId: listJobs
+      summary: The job of every source that scrapes
+      responses:
+        '200':
+          description: Jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobStatus'
+
+  /api/sources/{source}/job:
+    post:
+      tags: [jobs]
+      operationId: startJob
+      parameters:
+        - $ref: '#/components/parameters/Source'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+      responses:
+        '202':
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+        '409':
+          description: A job of the source is already running, or the source has no such mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+    delete:
+      tags: [jobs]
+      operationId: cancelJob
+      parameters:
+        - $ref: '#/components/parameters/Source'
+      responses:
+        '200':
+          description: The job is being stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+
+  /api/types/{type}/model:
+    get:
+      tags: [model]
+      operationId: getModel
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The model of the content type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInfo'
+
+  /api/types/{type}/model/train:
+    post:
+      tags: [model]
+      operationId: trainModel
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The model after training
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInfo'
+
+  /api/types/{type}/model/scorer:
+    put:
+      tags: [model]
+      operationId: chooseScorer
+      summary: Makes a scorer the one the content type is ranked by, and trains it
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScorerChoice'
+      responses:
+        '200':
+          description: The model after training
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInfo'
+        '400':
+          description: No such scorer
+
+  /api/types/{type}/model/compare:
+    post:
+      tags: [model]
+      operationId: compareScorers
+      summary: Cross-validates every scorer on the current grades; nothing is kept
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The quality of every scorer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScorerQuality'
+
+  /api/settings:
+    get:
+      tags: [settings]
+      operationId: getSettings
+      responses:
+        '200':
+          description: The settings of every source
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SourceSettings'
+
+  /api/sources/{source}/settings:
+    put:
+      tags: [settings]
+      operationId: updateSourceSettings
+      parameters:
+        - $ref: '#/components/parameters/Source'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Setting keys to values; an empty value takes a setting away
+              additionalProperties:
+                type: string
+      responses:
+        '200':
+          description: The source's settings after the change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceSettings'
+
+  /api/capture/patterns:
+    get:
+      tags: [capture]
+      operationId: getCapturePatterns
+      summary: The addresses whose pages the browser extension sends
+      responses:
+        '200':
+          description: The patterns of every source with browser tracking
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CapturePatterns'
+
+  /api/capture:
+    post:
+      tags: [capture]
+      operationId: capturePage
+      summary: A page the user opened, sent by the browser extension
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaptureRequest'
+      responses:
+        '200':
+          description: What the page gave
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaptureResult'
+
+  /api/capture/recent:
+    get:
+      tags: [capture]
+      operationId: recentCaptures
+      summary: The pages received last, newest first
+      responses:
+        '200':
+          description: The pages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CapturedPageInfo'
+
+  /api/status:
+    get:
+      tags: [status]
+      operationId: getStatus
+      summary: The background work of the application
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+
+components:
+  parameters:
+    Type:
+      name: type
+      in: path
+      required: true
+      schema:
+        type: string
+    Source:
+      name: source
+      in: path
+      required: true
+      schema:
+        type: string
+    Item:
+      name: item
+      in: path
+      required: true
+      schema:
+        type: string
+    Position:
+      name: position
+      in: path
+      required: true
+      schema:
+        type: integer
+    ReviewId:
+      name: reviewId
+      in: path
+      required: true
+      schema:
+        type: string
+    Field:
+      name: field
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    Grade:
+      type: integer
+      minimum: 1
+      maximum: 5
+      description: |
+        The user's grade, an order and not a number: 1 - do not like it, 2 - can be played (read),
+        3 - liked it on the whole, 4 - very good, 5 - give me more.
+
+    ContentTypeInfo:
+      type: object
+      required: [id, title, grades, verb, sources, numbers]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        grades:
+          type: array
+          description: The labels of the grades 1..5
+          items:
+            type: string
+        verb:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceInfo'
+        numbers:
+          type: array
+          description: The numbers the list can be sorted by
+          items:
+            $ref: '#/components/schemas/NumberInfo'
+
+    SourceInfo:
+      type: object
+      required: [id, title, homepage, modes, texts, facets, numbers, versioned]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        homepage:
+          type: string
+        modes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceMode'
+        facets:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetInfo'
+        numbers:
+          type: array
+          items:
+            $ref: '#/components/schemas/NumberInfo'
+        texts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TextInfo'
+        reviewsLabel:
+          type: string
+        partsLabel:
+          type: string
+        versioned:
+          type: boolean
+
+    SourceMode:
+      type: string
+      enum: [SCRAPE_ALL, UPDATES, BROWSER]
+
+    FacetInfo:
+      type: object
+      required: [id, key, label, filter, onCard]
+      properties:
+        id:
+          type: string
+          description: The facet as the filters of the content type know it - its shared key, or "<source>:<key>"
+        key:
+          type: string
+          description: The facet's key within its source
+        label:
+          type: string
+        filter:
+          type: boolean
+        onCard:
+          type: boolean
+
+    NumberInfo:
+      type: object
+      required: [id, key, label]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        label:
+          type: string
+
+    TextInfo:
+      type: object
+      required: [key, label, spoiler]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        spoiler:
+          type: boolean
+
+    ItemView:
+      type: string
+      description: UNRATED - works whose current version has no grade; RATED - graded; ALL - everything
+      enum: [UNRATED, RATED, ALL]
+      default: UNRATED
+
+    ItemSort:
+      type: string
+      description: SCORE - by prediction; UPDATED - newest update first; NUMBER - by a number, the largest first
+      enum: [SCORE, UPDATED, NUMBER]
+      default: SCORE
+
+    FacetValueInfo:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        corrected:
+          type: string
+          enum: [ADDED, REMOVED]
+          description: The user's correction of the site's value; a REMOVED value is shown crossed out
+
+    ItemFacet:
+      type: object
+      required: [facet, label, values]
+      properties:
+        facet:
+          type: string
+          description: The facet's key within its source
+        label:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetValueInfo'
+
+    Prediction:
+      type: object
+      required: [score]
+      properties:
+        score:
+          type: number
+          format: double
+          description: |
+            The work's place on the user's own scale: the centre of the lowest grade is 0, of the
+            highest 10; works beyond the extreme grades go beyond 0..10
+
+    ItemRef:
+      type: object
+      required: [source, item]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+
+    LinkedItem:
+      type: object
+      required: [source, item, title, url]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+
+    ItemSummary:
+      type: object
+      required: [source, item, title, version, url, updatedAt, facets, numbers, hasCover, pictureCount, linked]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        version:
+          type: string
+        url:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        facets:
+          type: array
+          description: The facets shown on a card
+          items:
+            $ref: '#/components/schemas/ItemFacet'
+        numbers:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+        hasCover:
+          type: boolean
+        pictureCount:
+          type: integer
+        grade:
+          $ref: '#/components/schemas/Grade'
+        previousGrade:
+          $ref: '#/components/schemas/Grade'
+        previousGradeVersion:
+          type: string
+        prediction:
+          $ref: '#/components/schemas/Prediction'
+        searchMatch:
+          $ref: '#/components/schemas/SearchMatch'
+        signals:
+          type: object
+          description: The user's own actions on the site (liked, on a shelf)
+          additionalProperties:
+            type: string
+        linked:
+          type: array
+          description: The other items that are this same work
+          items:
+            $ref: '#/components/schemas/LinkedItem'
+
+    SearchMatch:
+      type: object
+      required: [field, byMeaning, text, highlights]
+      properties:
+        field:
+          type: string
+          description: The name of the field it was found in
+        byMeaning:
+          type: boolean
+          description: Found by meaning alone; the text is then the phrase of the field nearest by meaning
+        text:
+          type: string
+        highlights:
+          type: array
+          items:
+            $ref: '#/components/schemas/TextRange'
+
+    TextRange:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: integer
+        end:
+          type: integer
+
+    ItemPage:
+      type: object
+      required: [total, items]
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemSummary'
+
+    FacetFilter:
+      type: object
+      required: [id, label, itemsWithout, values]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        noneLabel:
+          type: string
+          description: The name of the works without a value of the facet; none - they are not a line of the filter
+        itemsWithout:
+          type: integer
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacetValueUse'
+
+    FacetValueUse:
+      type: object
+      required: [key, name, items]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        items:
+          type: integer
+
+    TextValue:
+      type: object
+      required: [key, label, content, spoiler, corrected]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        content:
+          type: string
+        spoiler:
+          type: boolean
+        corrected:
+          type: boolean
+
+    NumberValue:
+      type: object
+      required: [key, label, value, corrected]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+          format: double
+        corrected:
+          type: boolean
+
+    PartInfo:
+      type: object
+      required: [partId, position, hasText]
+      properties:
+        partId:
+          type: string
+        position:
+          type: integer
+        title:
+          type: string
+        hasText:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+
+    PartText:
+      type: object
+      required: [partId, position, content]
+      properties:
+        partId:
+          type: string
+        position:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+
+    ItemDetails:
+      type: object
+      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh]
+      properties:
+        summary:
+          $ref: '#/components/schemas/ItemSummary'
+        titleCorrected:
+          type: boolean
+        allFacets:
+          type: array
+          description: Every facet of the item, corrections included
+          items:
+            $ref: '#/components/schemas/ItemFacet'
+        texts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TextValue'
+        allNumbers:
+          type: array
+          items:
+            $ref: '#/components/schemas/NumberValue'
+        explanation:
+          type: array
+          description: Features that pushed the prediction most, strongest first
+          items:
+            $ref: '#/components/schemas/FeatureContribution'
+        ratings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RatingRecord'
+        reviews:
+          type: array
+          description: The reviews that move the work most either way, strongest first; or the newest
+          items:
+            $ref: '#/components/schemas/ReviewInfo'
+        reviewCount:
+          type: integer
+        pictures:
+          type: array
+          items:
+            $ref: '#/components/schemas/PictureInfo'
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartInfo'
+        pictureMatches:
+          type: array
+          items:
+            $ref: '#/components/schemas/PictureMatch'
+        reviewMatches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewMatch'
+        canRefresh:
+          type: boolean
+          description: The source can download the item's page again
+
+    MatchFeedbackRequest:
+      type: object
+      required: [kind, markSource, markItem, markRef, matchSource, matchItem, matchRef, verdict]
+      properties:
+        kind:
+          type: string
+          enum: [PICTURE, REVIEW]
+        markSource:
+          type: string
+        markItem:
+          type: string
+        markRef:
+          type: string
+          description: The marked picture's position or the marked review's id
+        matchSource:
+          type: string
+        matchItem:
+          type: string
+        matchRef:
+          type: string
+        verdict:
+          type: integer
+          minimum: -1
+          maximum: 1
+          description: +1 alike in the sense meant, -1 alike in another sense, 0 takes the word back
+
+    PictureMatch:
+      type: object
+      required: [position, markSource, markItem, markTitle, markPosition, mark, strength]
+      properties:
+        position:
+          type: integer
+        markSource:
+          type: string
+        markItem:
+          type: string
+        markTitle:
+          type: string
+        markPosition:
+          type: integer
+        verdict:
+          type: integer
+        mark:
+          type: integer
+        strength:
+          type: number
+          format: double
+          description: |
+            How surprising the likeness is: -ln of the chance that as many random pictures of the
+            catalogue would come as close; chance gives about 1, 3 one work in twenty, 5 one in 150
+
+    ReviewMatch:
+      type: object
+      required: [reviewId, content, markSource, markItem, markReviewId, markTitle, markContent, mark, strength]
+      properties:
+        reviewId:
+          type: string
+        content:
+          type: string
+        markSource:
+          type: string
+        markItem:
+          type: string
+        markReviewId:
+          type: string
+        markTitle:
+          type: string
+        markContent:
+          type: string
+        verdict:
+          type: integer
+        mark:
+          type: integer
+        strength:
+          type: number
+          format: double
+
+    ReviewInfo:
+      type: object
+      required: [reviewId, content]
+      properties:
+        reviewId:
+          type: string
+        author:
+          type: string
+        stars:
+          type: number
+          format: double
+        content:
+          type: string
+        postedAt:
+          type: string
+          format: date-time
+        influence:
+          type: number
+          format: double
+          description: Points of the 0..10 scale the review moves the work, left out of the reviews' set and of their likeness to the marked ones
+        mark:
+          type: integer
+
+    Mark:
+      type: object
+      required: [mark]
+      properties:
+        mark:
+          type: integer
+          minimum: -1
+          maximum: 1
+          description: +1 a reason to pick the work, -1 a reason to drop it
+
+    PictureInfo:
+      type: object
+      required: [position, hasFull, analyzed]
+      properties:
+        position:
+          type: integer
+          description: 0 the cover, 1.. the screenshots
+        hasFull:
+          type: boolean
+        analyzed:
+          type: boolean
+        mark:
+          type: integer
+        influence:
+          type: number
+          format: double
+        error:
+          type: string
+
+    RatingRecord:
+      type: object
+      required: [version, grade, ratedAt]
+      properties:
+        version:
+          type: string
+        grade:
+          $ref: '#/components/schemas/Grade'
+        ratedAt:
+          type: string
+          format: date-time
+
+    FeatureContribution:
+      type: object
+      required: [feature, label, contribution, present]
+      properties:
+        feature:
+          type: string
+        label:
+          type: string
+        contribution:
+          type: number
+          format: double
+          description: Points of the 0..10 scale the feature moves the work
+        present:
+          type: boolean
+
+    RatingRequest:
+      type: object
+      required: [grade]
+      properties:
+        grade:
+          $ref: '#/components/schemas/Grade'
+
+    FacetCorrection:
+      type: object
+      required: [facet, key, added]
+      properties:
+        facet:
+          type: string
+          description: The facet's key within the item's source
+        key:
+          type: string
+        name:
+          type: string
+          description: The name of a value the user makes up
+        added:
+          type: boolean
+          description: true - the value is added; false - the site's value is taken away
+
+    FieldCorrection:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+
+    JobRequest:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          $ref: '#/components/schemas/SourceMode'
+
+    JobState:
+      type: string
+      enum: [IDLE, RUNNING, CANCELLING, DONE, CANCELLED, FAILED]
+
+    JobStatus:
+      type: object
+      required: [source, state, processed, total, newItems, errors, items]
+      properties:
+        source:
+          type: string
+        state:
+          $ref: '#/components/schemas/JobState'
+        mode:
+          $ref: '#/components/schemas/SourceMode'
+        resumable:
+          $ref: '#/components/schemas/SourceMode'
+        phase:
+          type: string
+        phaseStartedAt:
+          type: string
+          format: date-time
+        processed:
+          type: integer
+        total:
+          type: integer
+        newItems:
+          type: integer
+        errors:
+          type: integer
+        message:
+          type: string
+        loggedIn:
+          type: boolean
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        items:
+          type: integer
+          description: Items of the source in the database
+
+    ScorerInfo:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+
+    ScorerChoice:
+      type: object
+      required: [scorer]
+      properties:
+        scorer:
+          type: string
+
+    ModelMetrics:
+      type: object
+      required: [folds, concordance, concordanceSe]
+      description: Out-of-fold quality from cross-validation over works
+      properties:
+        folds:
+          type: integer
+        concordance:
+          type: number
+          format: double
+          description: Share of pairs of works of different grades put in the right order
+        concordanceSe:
+          type: number
+          format: double
+        spearman:
+          type: number
+          format: double
+        auc:
+          type: number
+          format: double
+          description: ROC AUC of liked (above "can be played") against disliked
+
+    ModelCandidate:
+      type: object
+      required: [parameter, metrics]
+      properties:
+        parameter:
+          type: number
+          format: double
+        metrics:
+          $ref: '#/components/schemas/ModelMetrics'
+
+    ScorerQuality:
+      type: object
+      required: [scorer, title, candidates]
+      properties:
+        scorer:
+          type: string
+        title:
+          type: string
+        chosen:
+          $ref: '#/components/schemas/ModelCandidate'
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelCandidate'
+
+    GradeOnScale:
+      type: object
+      required: [grade, score, ratings]
+      properties:
+        grade:
+          $ref: '#/components/schemas/Grade'
+        score:
+          type: number
+          format: double
+        ratings:
+          type: integer
+
+    ModelInfo:
+      type: object
+      required: [trained, training, stale, textEncoderReady, imageEncoderReady, ladder, ratingCounts, features, candidates, topPositive, topNegative, scorers, scorer]
+      properties:
+        trained:
+          type: boolean
+        training:
+          type: boolean
+        stale:
+          type: boolean
+        textEncoderReady:
+          type: boolean
+        imageEncoderReady:
+          type: boolean
+        scorer:
+          type: string
+          description: The scorer the type is ranked by
+        scorers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScorerInfo'
+        trainedAt:
+          type: string
+          format: date-time
+        parameter:
+          type: number
+          format: double
+        ladder:
+          type: array
+          items:
+            $ref: '#/components/schemas/GradeOnScale'
+        ratingCounts:
+          type: array
+          items:
+            type: integer
+        features:
+          type: integer
+        metrics:
+          $ref: '#/components/schemas/ModelMetrics'
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModelCandidate'
+        topPositive:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureContribution'
+        topNegative:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureContribution'
+
+    SettingValue:
+      type: object
+      required: [key, label, kind, secret, set]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        kind:
+          type: string
+          enum: [TEXT, NUMBER]
+        secret:
+          type: boolean
+        set:
+          type: boolean
+        value:
+          type: string
+          description: The value; never given for a secret
+        hint:
+          type: string
+
+    SourceSettings:
+      type: object
+      required: [source, title, values]
+      properties:
+        source:
+          type: string
+        title:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettingValue'
+
+    CapturePatterns:
+      type: object
+      required: [source, patterns]
+      properties:
+        source:
+          type: string
+        patterns:
+          type: array
+          description: Regular expressions over the whole address
+          items:
+            type: string
+
+    CaptureRequest:
+      type: object
+      required: [url, html]
+      properties:
+        url:
+          type: string
+        html:
+          type: string
+          description: The DOM of the page as the user saw it
+
+    CaptureResult:
+      type: object
+      required: [items]
+      properties:
+        source:
+          type: string
+          description: The source that took the page; none - no source wants it
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LinkedItem'
+
+    CapturedPageInfo:
+      type: object
+      required: [source, url, capturedAt]
+      properties:
+        source:
+          type: string
+        url:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
+
+    WorkStatus:
+      type: object
+      required: [name, done, total, running]
+      properties:
+        name:
+          type: string
+          description: pictures, texts, parts, sets
+        done:
+          type: integer
+        total:
+          type: integer
+        failed:
+          type: integer
+        running:
+          type: boolean
+        perMinute:
+          type: number
+          format: double
+
+    Status:
+      type: object
+      required: [work]
+      properties:
+        work:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkStatus'
