@@ -70,14 +70,15 @@ folder beside the installed ones (a plugin of another repository):
 
 ### Neural encoders
 
-The encoders' files go into `<data>/models` — `%LOCALAPPDATA%ecommend4memodels` on Windows (not into git); from there:
+The encoders' files go into the `models` folder of the data folder (not into git):
+ecommend4memodels` on Windows (not into git); from there:
 
 ```bash
-curl -L -o models/e5-small.onnx https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/model.onnx
+curl -L -o "$LOCALAPPDATA/recommend4me/models/e5-small.onnx" https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/model.onnx
 ```
 
 ```bash
-curl -L -o models/e5-small-tokenizer.json https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/tokenizer.json
+curl -L -o "$LOCALAPPDATA/recommend4me/models/e5-small-tokenizer.json" https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/tokenizer.json
 ```
 
 SigLIP2 is exported by [`plugins/encoder-siglip2/tools/export_siglip2_naflex.py`](plugins/encoder-siglip2/tools/export_siglip2_naflex.py).
