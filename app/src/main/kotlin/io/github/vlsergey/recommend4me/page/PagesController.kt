@@ -82,7 +82,7 @@ class PagesController(
         val pictureMarks = store.marks.pictureMarksOf(itemId)
         return PageItem(
             summary = summary,
-            facets = cards.facets(store, site, chances, corrections, names, texts) { it in wanted },
+            facets = cards.facets(store, site, chances, corrections, names, texts, empty = true) { it in wanted },
             suggestions = suggested,
             explanation = recommendations.explanation(key).take(EXPLAINED).map { it.toApi() },
             grades = type.type.grades,

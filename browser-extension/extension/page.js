@@ -27,6 +27,9 @@
   /** The facet the application gives every work of a type with universes: the universes of fan fiction. */
   const UNIVERSE = "universe";
 
+  /** The facets that say which values a work may have — its universes, their characters, the pairs of them — hinted by its candidates. */
+  const CHOSEN = ["universe", "characters", "pairings"];
+
   /** How long a shown work is not read again for every new send of a growing page. */
   const RELOAD_AFTER = 15 * 1000;
 
@@ -316,7 +319,29 @@
     return chip;
   }
 
-  /** A field to add a value by its name, with the facet's values as hints. */
+  /** "упоминается 3 раза" — how often the work's texts name a candidate; empty when they were not counted. */
+  function mentionsText(n) {
+    if (n === undefined || n === null) return "";
+    if (n === 0) return "не упоминается";
+    const tens = n % 100, ones = n % 10;
+    const word = tens >= 11 && tens <= 14 ? "раз" : ones === 1 ? "раз" : ones >= 2 && ones <= 4 ? "раза" : "раз";
+    return `упоминается ${n} ${word}`;
+  }
+
+  /** A hint of the field: its name to put in, and what goes after it — the browser shows the label in place of the value. */
+  function hint(name, note) {
+    const option = el("option");
+    option.value = name;
+    option.label = note ? `${name} — ${note}` : name;
+    return option;
+  }
+
+  /**
+   * A field to add a value by its name, with hints: the facet's values as they are typed, how many
+   * works have each; of a facet that says which values the work may have, every candidate with
+   * the model's chance and how often the work's texts name it, the likeliest first — added by its
+   * key.
+   */
   function addField(item, facet, label) {
     const form = el("form", "r4m-add");
     const list = el("datalist");
@@ -325,31 +350,49 @@
     input.type = "text";
     input.placeholder = `+ ${lower(label)}`;
     input.setAttribute("list", list.id);
-    let timer = null;
-    input.addEventListener("input", () => {
-      clearTimeout(timer);
-      timer = setTimeout(async () => {
-        const s = item.summary;
+    const s = item.summary;
+    /** The key of a candidate by its name: two of one name are told apart by the hint, the first taken. */
+    const keys = new Map();
+    if (CHOSEN.includes(facet)) {
+      let asked = false;
+      input.addEventListener("focus", async () => {
+        if (asked) return;
+        asked = true;
         try {
-          const values = await api("GET", `/api/sources/${enc(s.source)}/facets/${enc(facet)}/values?query=${enc(input.value)}&limit=20`);
+          const candidates = await api("GET", `/api/items/${enc(s.source)}/${enc(s.item)}/candidates?facet=${enc(facet)}`);
           list.textContent = "";
-          values.forEach((v) => {
-            const option = el("option");
-            option.value = v.name;
-            option.textContent = `${v.items}`;
-            list.appendChild(option);
+          candidates.forEach((c) => {
+            if (!keys.has(c.name)) keys.set(c.name, c.key);
+            const note = [c.chance !== undefined && c.chance !== null ? percent(c.chance) : "", mentionsText(c.mentions)].filter(Boolean).join(" · ");
+            list.appendChild(hint(c.name, note));
           });
         } catch (e) {
           // No hints: the value is added by its name all the same
+          asked = false;
         }
-      }, 250);
-    });
+      });
+    } else {
+      let timer = null;
+      input.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+          try {
+            const values = await api("GET", `/api/sources/${enc(s.source)}/facets/${enc(facet)}/values?query=${enc(input.value)}&limit=20`);
+            list.textContent = "";
+            values.forEach((v) => list.appendChild(hint(v.name, `работ: ${v.items}`)));
+          } catch (e) {
+            // No hints: the value is added by its name all the same
+          }
+        }, 250);
+      });
+    }
     // The site's own keys must not see the typing
     ["keydown", "keyup", "keypress"].forEach((t) => input.addEventListener(t, (e) => e.stopPropagation()));
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const name = input.value.trim();
-      if (name) act(() => correct(item, facet, { name }, true));
+      const key = keys.get(name);
+      if (name) act(() => correct(item, facet, key ? { key } : { name }, true));
     });
     form.appendChild(input);
     form.appendChild(list);

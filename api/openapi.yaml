@@ -2107,7 +2107,10 @@ components:
           $ref: '#/components/schemas/ItemSummary'
         facets:
           type: array
-          description: The facets the page marks up or the application suggests values of, corrections included
+          description: |
+            The facets the page marks up or the application suggests or works out values of, corrections
+            included — every one, with its label, those the work has no values of too
+
           items:
             $ref: '#/components/schemas/ItemFacet'
         suggestions:

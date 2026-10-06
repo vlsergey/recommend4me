@@ -196,6 +196,8 @@ class SiteTest {
         assertEquals(".tags a", page.decor.facets.single().propertyValues)
         val item = assertNotNull(page.item)
         assertEquals(5, item.grades.size)
+        // A facet the work has no values of comes too, named: the page adds values to it
+        assertEquals("Вселенная", item.facets.single { it.facet == "universe" }.label)
 
         // The tags of its kind are suggested for the untagged work
         val suggested = item.suggestions.single { it.facet == "tag" }.suggested.map { it.key }

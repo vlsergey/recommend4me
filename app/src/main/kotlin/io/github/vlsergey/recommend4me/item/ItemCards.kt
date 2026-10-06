@@ -48,6 +48,8 @@ class ItemCards(private val stores: Stores, private val works: Works) {
         corrections: List<FacetCorrection>,
         names: Map<String, Map<String, String>>,
         texts: Map<String, String> = emptyMap(),
+        /** Every facet asked for, one the work has no values of included: a page adds values to it. */
+        empty: Boolean = false,
         only: (String) -> Boolean,
     ): List<ItemFacet> {
         val schema = store.schema
@@ -59,7 +61,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             val removed = corrections.filter { it.facet == def.key && !it.added && it.key in had }.map { it.key }
             val added = corrections.filter { it.facet == def.key && it.added }.associate { it.key to it.name }
             val original = def.original?.let { texts[it] }
-            if (keys.isEmpty() && removed.isEmpty() && original == null) return@mapNotNull null
+            if (!empty && keys.isEmpty() && removed.isEmpty() && original == null) return@mapNotNull null
             // The chances of a facet the model works on now: none of one it no longer does
             val own = if (def.suggest || def.infer) chances?.get(def.key).orEmpty() else emptyMap()
             val siteKeys = site[def.key].orEmpty().toSet()
