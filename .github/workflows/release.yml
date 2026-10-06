@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 24
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build
         run: ./gradlew build distZip --console=plain
