@@ -42,7 +42,7 @@ class CorrectionsController(
     override fun correctFacet(source: String, item: String, facetCorrection: ApiFacetCorrection): ResponseEntity<ItemDetails> {
         val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
         val c = facetCorrection
-        if (store.source.schema.facet(c.facet) == null) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "У источника нет поля «${c.facet}»")
+        if (store.schema.facet(c.facet) == null) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "У источника нет поля «${c.facet}»")
         val name = c.name?.trim()?.takeIf { it.isNotEmpty() }
         val key = c.key?.trim()?.takeIf { it.isNotEmpty() }
             ?: name?.let { FacetValues.keyOf(store, c.facet, it) }
@@ -75,8 +75,8 @@ class CorrectionsController(
     /** "title", "text:<a text of the source>", "number:<a number of the source>". */
     private fun knownField(store: SourceStore, field: String): Boolean = when {
         field == Corrected.TITLE -> true
-        field.startsWith("text:") -> store.source.schema.text(field.removePrefix("text:")) != null
-        field.startsWith("number:") -> store.source.schema.number(field.removePrefix("number:")) != null
+        field.startsWith("text:") -> store.schema.text(field.removePrefix("text:")) != null
+        field.startsWith("number:") -> store.schema.number(field.removePrefix("number:")) != null
         else -> false
     }
 

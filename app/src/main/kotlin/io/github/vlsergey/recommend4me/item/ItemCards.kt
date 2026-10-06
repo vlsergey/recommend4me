@@ -50,7 +50,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
         texts: Map<String, String> = emptyMap(),
         only: (String) -> Boolean,
     ): List<ItemFacet> {
-        val schema = store.source.schema
+        val schema = store.schema
         val base = ModelValues.of(schema, site, chances)
         val corrected = Corrected.facets(base, corrections)
         return schema.facets.filter { only(it.key) }.mapNotNull { def ->
@@ -106,7 +106,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             val facets = store.items.facetsOf(ids)
             val corrections = store.corrections.facetsOf(ids)
             val fields = store.corrections.fieldsOf(ids)
-            val onCard = store.source.schema.facets.filter { it.onCard }.map { it.key }.toSet()
+            val onCard = store.schema.facets.filter { it.onCard }.map { it.key }.toSet()
             val chances = store.suggestions.ofItems(ids)
             val names = onCard.associateWith { facet ->
                 store.items.facetNames(facet, ids.flatMap { facets[it]?.get(facet).orEmpty() + chances[it]?.get(facet)?.keys.orEmpty() })

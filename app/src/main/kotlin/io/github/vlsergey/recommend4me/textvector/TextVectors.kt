@@ -100,7 +100,7 @@ class TextVectors(
         if (only == null && !flag.compareAndSet(false, true)) return 0
         running = true
         try {
-            val keys = store.source.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
+            val keys = store.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
             if (keys.isEmpty()) return 0
             val stored = if (only == null) store.textVectors.hashes(encoder.id) else only.flatMap { store.textVectors.hashes(encoder.id, it).entries }.associate { it.toPair() }
             val known = if (only == null) store.textVectors.keys() else only.flatMap { store.textVectors.keys(it) }.toSet()

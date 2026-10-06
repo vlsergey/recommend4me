@@ -24,6 +24,9 @@
   };
   const enc = encodeURIComponent;
 
+  /** The facet the application gives every work of a type with universes: the universes of fan fiction. */
+  const UNIVERSE = "universe";
+
   /** How long a shown work is not read again for every new send of a growing page. */
   const RELOAD_AFTER = 15 * 1000;
 
@@ -288,12 +291,17 @@
     return out;
   }
 
-  /** A value as a chip: its name and [answers]. */
+  /** A value as a chip: its name and [answers]; a universe the work is linked to, ↻ to ask the catalogue for its characters again. */
   function valueChip(item, facet, v) {
     const chip = el("r4m-chip", { ADDED: "r4m-added", CONFIRMED: "r4m-confirmed", REMOVED: "r4m-removed-chip" }[v.corrected] || null);
     if (v.inferred) chip.classList.add("r4m-inferred-chip");
     chip.appendChild(el("span", null, v.name));
     answers(item, facet, v).forEach((e) => chip.appendChild(e));
+    const at = v.key.indexOf(":");
+    if (facet === UNIVERSE && v.corrected !== "REMOVED" && at > 0) {
+      chip.appendChild(button("↻", "Обновить персонажей вселенной из справочника", () =>
+        api("POST", `/api/types/${enc(view.type)}/universes`, { catalogue: v.key.substring(0, at), universe: v.key.substring(at + 1) }), "r4m-button"));
+    }
     return chip;
   }
 

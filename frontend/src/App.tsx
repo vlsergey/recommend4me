@@ -37,6 +37,7 @@ import { SettingsDialog } from "@/settings/SettingsDialog";
 import { SourceFilter } from "@/source/SourceFilter";
 import { WorkProgress } from "@/status/WorkProgress";
 import { ThemeToggle } from "@/theme/ThemeToggle";
+import { UniverseButton } from "@/universe/UniverseDialog";
 
 const VIEWS: { view: ItemView; label: string }[] = [
   { view: "UNRATED", label: "Без оценки" },
@@ -175,6 +176,7 @@ function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: Con
           </div>
           <WorkProgress />
           <ModelButton type={type} />
+          <UniverseButton type={type} />
           <CaptureButton />
           <ThemeToggle />
           <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} aria-label="Настройки" title="Настройки" className="relative">

@@ -50,16 +50,16 @@ object FeatureNames {
         val numberLabels = HashMap<String, String>()
         val blockLabels = HashMap<String, String>()
         sources.forEach { s ->
-            s.source.schema.facets.forEach { facetLabels.putIfAbsent(facetId(s.source, it), it.label) }
-            s.source.schema.numbers.forEach { numberLabels.putIfAbsent(numberId(s.source, it), it.label) }
-            s.source.schema.texts.forEach { t -> t.block?.let { blockLabels.putIfAbsent(it, t.label) } }
+            s.schema.facets.forEach { facetLabels.putIfAbsent(facetId(s.source, it), it.label) }
+            s.schema.numbers.forEach { numberLabels.putIfAbsent(numberId(s.source, it), it.label) }
+            s.schema.texts.forEach { t -> t.block?.let { blockLabels.putIfAbsent(it, t.label) } }
         }
         // The names of the facet values, asked of every source that has the facet
         val wanted = features.mapNotNull(::parseFacet).groupBy({ it.first }, { it.second })
         val names = HashMap<Pair<String, String>, String>()
         wanted.forEach { (facetId, keys) ->
             sources.forEach { s ->
-                s.source.schema.facets.filter { facetId(s.source, it) == facetId }.forEach { def ->
+                s.schema.facets.filter { facetId(s.source, it) == facetId }.forEach { def ->
                     s.items.facetNames(def.key, keys).forEach { (key, name) -> names.putIfAbsent(facetId to key, name) }
                     s.corrections.allFacets().filter { it.facet == def.key && it.name != null }.forEach { names.putIfAbsent(facetId to it.key, it.name!!) }
                 }

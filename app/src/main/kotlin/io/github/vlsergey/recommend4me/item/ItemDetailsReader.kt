@@ -36,7 +36,7 @@ class ItemDetailsReader(
         val store = stores.source(key.source) ?: return null
         val type = stores.typeOf(key.source)
         val summary = cards.cards(type, listOf(key)).firstOrNull() ?: return null
-        val schema = store.source.schema
+        val schema = store.schema
         val site = store.items.facets(key.id)
         val corrections = store.corrections.facetsOf(key.id)
         val fields = store.corrections.fieldsOf(key.id)

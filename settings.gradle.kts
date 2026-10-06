@@ -19,6 +19,7 @@ include(
     "libs:matrix",
     "libs:onnx",
     "app",
+    "plugins:catalogue-wikidata",
     "plugins:encoder-e5",
     "plugins:encoder-siglip2",
     "plugins:scorer-pairwise",

@@ -18,6 +18,8 @@ object FacetValues {
             uses.merge(c.key, if (c.added) 1 else -1, Int::plus)
             c.name?.let { names.putIfAbsent(c.key, it) }
         }
+        // A value named but on no item yet — a universe of the dictionary — is a value all the same
+        names.keys.forEach { uses.putIfAbsent(it, 0) }
         return uses.map { (key, n) -> FacetValueUse(key, names[key] ?: key, n.coerceAtLeast(0)) }
             .sortedWith(compareByDescending<FacetValueUse> { it.items }.thenBy { it.name.lowercase() })
     }

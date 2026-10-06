@@ -93,7 +93,7 @@ class ItemList(private val stores: Stores, private val works: Works, private val
 
     /** The values of the number [numberId] (shared, or "<source>.<key>") of the source's items, as the user corrected them. */
     private fun numberOf(s: SourceStore, numberId: String): Map<String, Double> {
-        val def = s.source.schema.numbers.firstOrNull { FeatureNames.numberId(s.source, it) == numberId } ?: return emptyMap()
+        val def = s.schema.numbers.firstOrNull { FeatureNames.numberId(s.source, it) == numberId } ?: return emptyMap()
         val site = s.items.number(def.key)
         val overrides = s.corrections.allFields().mapNotNull { (id, fields) ->
             fields[Corrected.numberField(def.key)]?.toDoubleOrNull()?.let { id to it }
@@ -107,7 +107,7 @@ class ItemList(private val stores: Stores, private val works: Works, private val
      * adds later is not hidden: it shows. Null when no facet of the source is filtered.
      */
     private fun facetFilter(s: SourceStore, hidden: Map<String, Set<String>>, hiddenWithout: Set<String>): ((String) -> Boolean)? {
-        val filtered = s.source.schema.facets.filter { it.filter && (filterId(s, it) in hidden || filterId(s, it) in hiddenWithout) }
+        val filtered = s.schema.facets.filter { it.filter && (filterId(s, it) in hidden || filterId(s, it) in hiddenWithout) }
         if (filtered.isEmpty()) return null
         val corrections = s.corrections.allFacets().groupBy { it.itemId }
         val values = filtered.associateWith { def -> valuesOf(s, def, corrections) }
@@ -125,7 +125,7 @@ class ItemList(private val stores: Stores, private val works: Works, private val
         val byItem = HashMap<String, List<String>>()
         s.items.forEachFacet(def.key) { id, keys -> byItem[id] = keys }
         if (def.infer) s.suggestions.ofFacets(listOf(def.key)).forEach { (id, chances) ->
-            byItem[id] = ModelValues.of(s.source.schema, mapOf(def.key to byItem[id].orEmpty()), chances)[def.key].orEmpty()
+            byItem[id] = ModelValues.of(s.schema, mapOf(def.key to byItem[id].orEmpty()), chances)[def.key].orEmpty()
         }
         corrections.forEach { (id, list) ->
             val own = list.filter { it.facet == def.key }
@@ -147,7 +147,7 @@ class ItemList(private val stores: Stores, private val works: Works, private val
         type.sources.forEach { s ->
             total += s.items.count()
             val corrections = s.corrections.allFacets().groupBy { it.itemId }
-            s.source.schema.facets.filter { it.filter }.forEach { def ->
+            s.schema.facets.filter { it.filter }.forEach { def ->
                 val group = groups.getOrPut(filterId(s, def)) { Group(def.label, def.noneLabel) }
                 valuesOf(s, def, corrections).values.forEach { keys ->
                     if (keys.isNotEmpty()) group.with++

@@ -119,6 +119,7 @@ class ScenarioTest {
 
         assertEquals("w3", list(sort = ItemSort.NUMBER, sortNumber = "test.likes").items.first().item)
         assertEquals("A boy finds a dragon egg", items.getItem("test", "w1").body!!.texts.single().content)
-        assertEquals("test.tag", items.listFacets("books").body!!.single().id)
+        // The source's filter facet, and the universe the application gives every book
+        assertEquals(listOf("test.tag", "universe"), items.listFacets("books").body!!.map { it.id })
     }
 }

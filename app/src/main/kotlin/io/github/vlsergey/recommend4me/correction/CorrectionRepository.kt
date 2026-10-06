@@ -31,6 +31,14 @@ class CorrectionRepository(private val db: DSLContext) {
             .execute()
     }
 
+    /** Takes every correction of the value away, from every item; returns the items that had one. */
+    fun removeFacetValue(facet: String, key: String): List<String> {
+        val items = db.select(FACET_CORRECTION.ITEM_ID).from(FACET_CORRECTION)
+            .where(FACET_CORRECTION.FACET.eq(facet), FACET_CORRECTION.VALUE_KEY.eq(key)).fetch { it.value1()!! }
+        db.deleteFrom(FACET_CORRECTION).where(FACET_CORRECTION.FACET.eq(facet), FACET_CORRECTION.VALUE_KEY.eq(key)).execute()
+        return items
+    }
+
     fun facetsOf(itemId: String): List<FacetCorrection> = facetsOf(listOf(itemId))[itemId].orEmpty()
 
     fun facetsOf(ids: Collection<String>): Map<String, List<FacetCorrection>> {

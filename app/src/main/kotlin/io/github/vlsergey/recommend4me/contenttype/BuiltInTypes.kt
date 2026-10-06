@@ -21,5 +21,6 @@ class BuiltInTypes {
         title = "Книги",
         grades = listOf("Не нравится", "Можно почитать", "В целом понравилась", "Очень хорошая", "Хочу ещё"),
         verb = "читать",
+        universes = true,
     )
 }

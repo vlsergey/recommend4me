@@ -24,14 +24,30 @@ import io.github.vlsergey.recommend4me.signal.SignalsChanged
 import io.github.vlsergey.recommend4me.suggestion.SuggestionRepository
 import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
+import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.universe.UniverseRepository
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 
 /** Everything of one source: its plugin, its folder and the repositories over its three database files. */
-class SourceStore(val source: Source, val folder: Path, databases: Databases, events: ApplicationEventPublisher) {
+class SourceStore(val source: Source, contentType: ContentType, val folder: Path, databases: Databases, events: ApplicationEventPublisher) {
     val id: String get() = source.id
     val type: String get() = source.contentType
+
+    /**
+     * What the application knows of the source's items: the source's own schema, and the facets
+     * the application gives every item of the content type — the universe of fan fiction.
+     */
+    val schema: SourceSchema =
+        if (contentType.universes) SourceSchema(
+            facets = source.schema.facets + UniverseFacet.DEF,
+            numbers = source.schema.numbers,
+            texts = source.schema.texts,
+            reviewsLabel = source.schema.reviewsLabel,
+            partsLabel = source.schema.partsLabel,
+            versioned = source.schema.versioned,
+        ) else source.schema
 
     private val dbs = databases.of(source.id)
 
@@ -63,6 +79,7 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val id: String get() = type.id
 
     val links = TypeLinkRepository(databases.typeCorrections(type.id))
+    val universes = UniverseRepository(databases.typeCorrections(type.id))
     val models = ModelRepository(databases.model(type.id))
     val embeddings = SetEmbeddingRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
@@ -74,7 +91,7 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
 @Component
 class Stores(plugins: Plugins, databases: Databases, folder: DataFolder, events: ApplicationEventPublisher) {
 
-    val sources: List<SourceStore> = plugins.sources.map { SourceStore(it, folder.source(it.id), databases, events) }
+    val sources: List<SourceStore> = plugins.sources.map { SourceStore(it, plugins.type(it.contentType)!!, folder.source(it.id), databases, events) }
 
     val types: List<TypeStore> = plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases) }
 

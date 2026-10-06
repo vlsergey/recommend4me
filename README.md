@@ -29,6 +29,7 @@ folder of jars in `plugins/`:
 | `scorer-pairwise` | pairwise logistic ranking (RankNet with a line), the default |
 | `scorer-knn` | the k nearest graded works by cosine, a baseline |
 | `search-lucene` | search by words (English and Russian forms) and by meaning |
+| `catalogue-wikidata` | the universes of fan fiction and their characters from Wikidata, asked only when you press the button |
 | `suggester-tags` | the chance of every tag of a work from its texts and its other tags; tags to confirm or reject, pairings and characters worked out |
 
 A source has up to three modes: **scrape all** (the whole catalogue, resumable), **updates** (what

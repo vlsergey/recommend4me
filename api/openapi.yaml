@@ -21,6 +21,7 @@ tags:
   - name: status
   - name: pages
   - name: suggestions
+  - name: universes
 
 paths:
   /api/types:
@@ -600,6 +601,115 @@ paths:
               schema:
                 $ref: '#/components/schemas/JobStatus'
 
+  /api/types/{type}/universes:
+    get:
+      tags: [universes]
+      operationId: listUniverses
+      summary: The dictionary of universes of the type, with how many characters and works each has
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The universes, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UniverseInfo'
+    post:
+      tags: [universes]
+      operationId: addUniverse
+      summary: Adds a universe of a catalogue to the dictionary with its characters - or refreshes it
+      description: The catalogue is asked now; it may take seconds.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniverseRef'
+      responses:
+        '200':
+          description: The universe as the dictionary has it now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '404':
+          description: No such catalogue or entry
+
+  /api/types/{type}/universes/search:
+    get:
+      tags: [universes]
+      operationId: searchUniverses
+      summary: What the catalogues find by a name - asked only by the user's button
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The entries found, the likeliest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FoundUniverse'
+
+  /api/types/{type}/universes/{catalogue}/{universe}:
+    delete:
+      tags: [universes]
+      operationId: removeUniverse
+      summary: Takes the universe out of the dictionary, and every work's link to it
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: catalogue
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: universe
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Removed
+
+  /api/types/{type}/universes/{catalogue}/{universe}/characters:
+    get:
+      tags: [universes]
+      operationId: listCharacters
+      summary: The characters of a universe of the dictionary, as the catalogue gave them
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: catalogue
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: universe
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The characters, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CharacterInfo'
+
   /api/types/{type}/model:
     get:
       tags: [model]
@@ -890,7 +1000,7 @@ components:
 
     ContentTypeInfo:
       type: object
-      required: [id, title, grades, verb, sources, numbers]
+      required: [id, title, grades, verb, sources, numbers, universes]
       properties:
         id:
           type: string
@@ -903,6 +1013,9 @@ components:
             type: string
         verb:
           type: string
+        universes:
+          type: boolean
+          description: Works of the type may be fan fiction - it has a dictionary of universes, and every work the facet "universe"
         sources:
           type: array
           items:
@@ -1995,12 +2108,15 @@ components:
 
     PageView:
       type: object
-      required: [source, sourceTitle, decor]
+      required: [source, sourceTitle, type, decor]
       properties:
         source:
           type: string
         sourceTitle:
           type: string
+        type:
+          type: string
+          description: The content type of the source's works
         decor:
           $ref: '#/components/schemas/PageDecorInfo'
         itemId:
@@ -2039,3 +2155,80 @@ components:
         prediction:
           type: number
           format: double
+
+    UniverseRef:
+      type: object
+      required: [catalogue, universe]
+      properties:
+        catalogue:
+          type: string
+          description: The catalogue the universe is of ("wikidata")
+        universe:
+          type: string
+          description: The universe's id within the catalogue ("Q8337")
+
+    UniverseInfo:
+      type: object
+      required: [catalogue, universe, value, name, url, characters, works, addedAt, refreshedAt]
+      properties:
+        catalogue:
+          type: string
+        universe:
+          type: string
+        value:
+          type: string
+          description: The key of the universe as a value of the facet "universe" of the works
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+          description: The universe's page in the catalogue
+        characters:
+          type: integer
+        works:
+          type: integer
+          description: The works the user linked to it
+        addedAt:
+          type: string
+          format: date-time
+        refreshedAt:
+          type: string
+          format: date-time
+          description: When its characters were last asked of the catalogue
+
+    FoundUniverse:
+      type: object
+      required: [catalogue, universe, name, url, added]
+      properties:
+        catalogue:
+          type: string
+        universe:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+        added:
+          type: boolean
+          description: The dictionary has it already
+
+    CharacterInfo:
+      type: object
+      required: [character, names, url]
+      properties:
+        character:
+          type: string
+          description: The character's id within the catalogue
+        names:
+          type: array
+          description: Every name it goes by, the main one first
+          items:
+            type: string
+        description:
+          type: string
+        url:
+          type: string

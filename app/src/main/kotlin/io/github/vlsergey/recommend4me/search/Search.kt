@@ -83,7 +83,7 @@ class Search(
 
     /** The documents of the items [ids] of a source, read in one batch per table. */
     fun documents(s: SourceStore, ids: List<String>): Map<ItemKey, SearchDocument> {
-        val schema = s.source.schema
+        val schema = s.schema
         val heads = s.items.heads(ids)
         val chances = s.suggestions.ofItems(ids)
         val facets = s.items.facetsOf(ids).mapValues { (id, site) -> ModelValues.of(schema, site, chances[id]) }

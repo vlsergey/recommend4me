@@ -98,6 +98,14 @@ export function number(n: number): string {
   return n.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 }
 
+const PLURAL = new Intl.PluralRules("ru-RU");
+
+/** A count with the word in its Russian form: plural(5, "персонаж", "персонажа", "персонажей") — "5 персонажей". */
+export function plural(n: number, one: string, few: string, many: string): string {
+  const form = PLURAL.select(n);
+  return `${number(n)} ${form === "one" ? one : form === "few" ? few : many}`;
+}
+
 /** "2 ч 15 мин", "40 мин", "меньше минуты" — a duration in seconds as people say it. */
 export function duration(seconds: number): string {
   if (!isFinite(seconds) || seconds <= 0) return "";

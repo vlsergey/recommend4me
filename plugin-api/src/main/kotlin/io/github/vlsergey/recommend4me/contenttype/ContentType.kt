@@ -14,6 +14,11 @@ class ContentType(
     val grades: List<String>,
     /** What the user does with a work: "play", "read" — for the hints of the interface. */
     val verb: String,
+    /**
+     * Works of the type may be written in the universes of others — fan fiction: the type has a
+     * dictionary of universes and their characters, and every work of it the facet "universe".
+     */
+    val universes: Boolean = false,
 ) {
     init {
         require(grades.size == 5) { "A content type labels five grades, $id labels ${grades.size}" }

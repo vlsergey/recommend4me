@@ -27,6 +27,11 @@ import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
 import io.github.vlsergey.recommend4me.textvector.TextVectors
+import io.github.vlsergey.recommend4me.api.model.UniverseRef
+import io.github.vlsergey.recommend4me.universe.UniverseCatalogue
+import io.github.vlsergey.recommend4me.universe.UniverseCharacter
+import io.github.vlsergey.recommend4me.universe.UniverseEntry
+import io.github.vlsergey.recommend4me.universe.UniversesController
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -65,6 +70,23 @@ class SiteTest {
 
         @Bean
         fun wordsEncoder(): TextEncoder = WordsEncoder()
+
+        @Bean
+        fun fakeCatalogue(): UniverseCatalogue = FakeCatalogue()
+    }
+
+    /** A catalogue of one universe of space opera with two characters. */
+    class FakeCatalogue : UniverseCatalogue {
+        override val id = "fake"
+        override val title = "Fake"
+        private val space = UniverseEntry("U1", "Space opera", "Ships and pilots", "https://fake.example/U1")
+
+        override fun findUniverses(name: String, languages: List<String>) = if ("space" in name.lowercase()) listOf(space) else emptyList()
+        override fun universe(id: String, languages: List<String>) = space.takeIf { it.id == id }
+        override fun characters(id: String, languages: List<String>) = listOf(
+            UniverseCharacter("C1", listOf("Pilot", "The Pilot"), null, "https://fake.example/C1"),
+            UniverseCharacter("C2", listOf("Captain"), "Of the fleet", "https://fake.example/C2"),
+        )
     }
 
     /**
@@ -130,6 +152,7 @@ class SiteTest {
     @Autowired lateinit var stores: Stores
     @Autowired lateinit var textVectors: TextVectors
     @Autowired lateinit var suggestions: FacetSuggestions
+    @Autowired lateinit var universes: UniversesController
 
     private fun capture(body: String) = captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
 
@@ -191,7 +214,7 @@ class SiteTest {
         // Confirmed, it is the work's; rejected, it is no longer suggested
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = true, key = "space"))
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = false, key = "ships"))
-        val after = suggestionsApi.getSuggestions("site", "x1").body!!.single()
+        val after = suggestionsApi.getSuggestions("site", "x1").body!!.single { it.facet == "tag" }
         assertTrue(after.suggested.none { it.key == "space" || it.key == "ships" }, "after the answers ${after.suggested}")
         val facets = pages.getPage("https://site.example/work/x1").body!!.item!!.facets.single { it.facet == "tag" }.propertyValues
         assertEquals(FacetValueInfo.Corrected.ADDED, facets.single { it.key == "space" }.corrected)
@@ -226,5 +249,27 @@ class SiteTest {
         // An error says what is wrong
         val error = assertThrows<ResponseStatusException> { corrections.correctFacet("site", "x1", FacetCorrection(facet = "nope", added = true, key = "x")) }
         assertTrue(error.reason!!.contains("nope"))
+    }
+
+    @Test
+    fun `a universe found by the button joins the dictionary with its characters, and works are linked to it`() {
+        capture("u1|Lone pilot|space|A pilot alone in orbit|")
+        assertEquals(listOf("U1"), universes.searchUniverses("books", "Space").body!!.map { it.universe })
+        val added = universes.addUniverse("books", UniverseRef("fake", "U1")).body!!
+        assertEquals("fake:U1", added.value)
+        assertEquals(2, added.characters)
+        assertEquals(true, universes.searchUniverses("books", "space").body!!.single().added)
+        assertEquals(listOf("Pilot", "The Pilot"), universes.listCharacters("books", "fake", "U1").body!!.single { it.character == "C1" }.names)
+
+        // The universe is a value to pick for any work, linked to none yet; linked, it names itself
+        assertTrue(items.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
+        corrections.correctFacet("site", "u1", FacetCorrection(facet = "universe", added = true, key = "fake:U1"))
+        assertEquals("Space opera", items.getItem("site", "u1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.single().name)
+        assertEquals(1, universes.listUniverses("books").body!!.single().works)
+
+        // Removed, it takes its links with it
+        universes.removeUniverse("books", "fake", "U1")
+        assertTrue(universes.listUniverses("books").body!!.isEmpty())
+        assertTrue(items.getItem("site", "u1").body!!.allFacets.none { it.facet == "universe" })
     }
 }

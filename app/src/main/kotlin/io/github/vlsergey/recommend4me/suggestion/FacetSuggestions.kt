@@ -12,6 +12,7 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
+import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.vector.Vectors
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
@@ -58,7 +59,7 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     private val scheduled = AtomicBoolean(false)
     private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
-    fun facetsOf(store: SourceStore): List<FacetDef> = store.source.schema.facets.filter { it.suggest || it.infer }
+    fun facetsOf(store: SourceStore): List<FacetDef> = store.schema.facets.filter { it.suggest || it.infer }
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) = changed(event.source)
@@ -138,7 +139,9 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     /** The facet worked out: of every item whose fingerprint changed — of the item [only], by the weights fitted last, when given. */
     private fun refreshFacet(store: SourceStore, facet: FacetDef, suggester: FacetSuggester, encoder: TextEncoder, only: String?) {
         val started = System.currentTimeMillis()
-        val data = FacetData.load(store, facet, encoder)
+        // The universes of the dictionary are the values of the universe facet, linked to a work or not yet
+        val dictionary = if (facet.key == UniverseFacet.KEY) stores.typeOf(store.id).universes.all().map { it.value } else emptyList()
+        val data = FacetData.load(store, facet, encoder, dictionary)
         if (data.values.isEmpty()) return
         val now = Instant.now()
         val stored = store.suggestions.suggester(facet.key)?.takeIf { it.suggester == suggester.id }
@@ -264,17 +267,18 @@ internal class FacetData(
                     textHashes.sorted().joinToString("\u0001") + "\u0002" + windows,
             )
 
-        fun load(store: SourceStore, facet: FacetDef, encoder: TextEncoder): FacetData {
-            val schema = store.source.schema
+        /** [known]: values of the facet the application knows besides the items' — the universes of the dictionary. */
+        fun load(store: SourceStore, facet: FacetDef, encoder: TextEncoder, known: List<String> = emptyList()): FacetData {
+            val schema = store.schema
             val ids = store.items.keys().map { it.id }
             val site = HashMap<String, HashMap<String, MutableList<String>>>()
             store.items.forEachFacetValue { id, f, key -> site.getOrPut(id) { HashMap() }.getOrPut(f) { ArrayList() } += key }
             val corrections = store.corrections.allFacets().groupBy { it.itemId }
             val corrected = ids.associateWith { id -> Corrected.facets(site[id].orEmpty(), corrections[id].orEmpty()) }
 
-            // Every value of the facet the site or the user gave any item
+            // Every value of the facet the site or the user gave any item, and every value known besides
             val values = (corrected.values.flatMap { it[facet.key].orEmpty() } +
-                corrections.values.flatten().filter { it.facet == facet.key }.map { it.key }).distinct().sorted()
+                corrections.values.flatten().filter { it.facet == facet.key }.map { it.key } + known).distinct().sorted()
             val index = values.withIndex().associate { (i, k) -> k to i }
 
             // The other facets' values as the context
@@ -319,7 +323,8 @@ internal class FacetData(
                 val id = ids[i]
                 fingerprint(site[id].orEmpty(), corrections[id].orEmpty(), hashes[id].orEmpty(), windowCounts[id] ?: 0)
             }
-            val basis = Vectors.keyOf(ids.indices.sortedBy { ids[it] }.joinToString(",") { "${ids[it]}:${fingerprints[it]}" })
+            // The values chosen from are part of what is learnt: a universe added or removed fits again
+            val basis = Vectors.keyOf(ids.indices.sortedBy { ids[it] }.joinToString(",") { "${ids[it]}:${fingerprints[it]}" } + "\u0002" + values.joinToString("\u0001"))
             return FacetData(ids, values, task, fingerprints, basis)
         }
 

@@ -56,6 +56,7 @@ class PagesController(
             PageView(
                 source = store.id,
                 sourceTitle = store.source.title,
+                type = store.type,
                 decor = decor?.toApi() ?: PageDecorInfo(emptyList()),
                 itemId = itemId,
                 item = itemId?.takeIf { store.items.find(it) != null }?.let { item(store, it, decor) },
@@ -67,7 +68,7 @@ class PagesController(
         val key = ItemKey(store.id, itemId)
         val type = stores.typeOf(store.id)
         val summary = cards.cards(type, listOf(key)).firstOrNull() ?: return null
-        val schema = store.source.schema
+        val schema = store.schema
         val wanted = decor?.facets.orEmpty().map { it.facet }.toSet() + schema.facets.filter { it.suggest || it.infer }.map { it.key }
         // First: a work just opened gets its chances made here
         val suggested = suggestions.ofItem(store, itemId).map { it.toApi() }

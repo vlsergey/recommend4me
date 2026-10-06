@@ -44,6 +44,10 @@ export type CatalogueProgress = Schemas["CatalogueProgress"];
 export type FacetSuggestions = Schemas["FacetSuggestions"];
 export type SuggestedValue = Schemas["SuggestedValue"];
 export type FacetValueUse = Schemas["FacetValueUse"];
+export type UniverseRef = Schemas["UniverseRef"];
+export type UniverseInfo = Schemas["UniverseInfo"];
+export type FoundUniverse = Schemas["FoundUniverse"];
+export type CharacterInfo = Schemas["CharacterInfo"];
 
 /**
  * The failure of a call as the user should read it: the backend answers an error as

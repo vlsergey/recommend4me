@@ -19,6 +19,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/scorer-pairwise` | Pairwise logistic ranking (RankNet with a line), C chosen by cross-validation. |
 | `plugins/scorer-knn` | k nearest rated neighbours by cosine — a baseline. |
 | `plugins/search-lucene` | Search by words and by meaning over one Lucene index per content type. |
+| `plugins/catalogue-wikidata` | The universes of fan fiction and their characters, from Wikidata. |
 | `plugins/suggester-tags` | The tags a work should have, from its text, its other tags and every other work. |
 | `plugins/source-author-today` | author.today, browser tracking only. |
 | `plugins/source-ficbook` | ficbook.net, browser tracking only. |
@@ -158,6 +159,23 @@ The chances are kept in the model database with what each was made of (a fingerp
 work's values, the user's answers, its texts and chapters). The suggester is fitted again
 whenever anything it learns from changes, and every work is then worked out again; a work a page
 asks for that never had chances gets them at once, by the weights fitted last.
+
+## Universes
+
+A content type may have universes (`ContentType.universes`: books) — works may be fan fiction of
+someone else's world. The type keeps a dictionary of the universes the user agreed on, each with
+its characters, in its corrections database. A universe comes from a catalogue plugin
+(`UniverseCatalogue`; `catalogue-wikidata`): a universe is a Wikidata item — a franchise, a series,
+a work — and its characters whatever is said to be in it or in its parts, with every name and
+alias in the user's languages (`recommend4me.languages`), the way the fans write them among them.
+The catalogue is asked only when the user asks — a search by the button with the variants shown,
+a universe added, its characters refreshed from the universes screen or a site's page — and
+what it answered is kept.
+
+Every work of the type has the facet `universe` (`UniverseFacet`), the application's own beside the
+source's: its values are the universes of the dictionary, the user's links of a work to one are
+the corrections of the facet, and the model suggests the links from the work's fandom, tags and
+texts as for any facet. Taking a universe out of the dictionary takes its links with it.
 
 ## The site as the interface
 

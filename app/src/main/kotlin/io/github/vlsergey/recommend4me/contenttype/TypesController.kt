@@ -8,38 +8,41 @@ import io.github.vlsergey.recommend4me.api.model.SignalInfo
 import io.github.vlsergey.recommend4me.api.model.SourceInfo
 import io.github.vlsergey.recommend4me.api.model.TextInfo
 import io.github.vlsergey.recommend4me.model.FeatureNames
-import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 import io.github.vlsergey.recommend4me.api.model.SourceMode as ApiSourceMode
 
 /** The content types and what their sources know of their items: the interface is built of it. */
 @RestController
-class TypesController(private val plugins: Plugins) : TypesApi {
+class TypesController(private val stores: Stores) : TypesApi {
 
-    override fun listTypes(): ResponseEntity<List<ContentTypeInfo>> = ResponseEntity.ok(plugins.types.map { type ->
-        val sources = plugins.sourcesOf(type.id)
+    override fun listTypes(): ResponseEntity<List<ContentTypeInfo>> = ResponseEntity.ok(stores.types.filter { it.sources.isNotEmpty() }.map { t ->
+        val type = t.type
         ContentTypeInfo(
             id = type.id,
             title = type.title,
             grades = type.grades,
             verb = type.verb,
-            sources = sources.map { s ->
+            universes = type.universes,
+            sources = t.sources.map { store ->
+                val s = store.source
+                val schema = store.schema
                 SourceInfo(
                     id = s.id,
                     title = s.title,
                     homepage = s.homepage,
                     modes = s.modes.map { ApiSourceMode.valueOf(it.name) },
-                    texts = s.schema.texts.map { TextInfo(it.key, it.label, it.spoiler) },
-                    facets = s.schema.facets.map { FacetInfo(FeatureNames.facetId(s, it), it.key, it.label, it.filter, it.onCard, it.suggest, it.infer, it.original) },
-                    numbers = s.schema.numbers.map { NumberInfo(FeatureNames.numberId(s, it), it.key, it.label) },
-                    versioned = s.schema.versioned,
-                    reviewsLabel = s.schema.reviewsLabel,
-                    partsLabel = s.schema.partsLabel,
+                    texts = schema.texts.map { TextInfo(it.key, it.label, it.spoiler) },
+                    facets = schema.facets.map { FacetInfo(FeatureNames.facetId(s, it), it.key, it.label, it.filter, it.onCard, it.suggest, it.infer, it.original) },
+                    numbers = schema.numbers.map { NumberInfo(FeatureNames.numberId(s, it), it.key, it.label) },
+                    versioned = schema.versioned,
+                    reviewsLabel = schema.reviewsLabel,
+                    partsLabel = schema.partsLabel,
                     signals = s.signals.map { SignalInfo(it.key, it.label, it.values) },
                 )
             },
-            numbers = sources.flatMap { s -> s.schema.numbers.filter { it.sortable }.map { NumberInfo(FeatureNames.numberId(s, it), it.key, it.label) } }
+            numbers = t.sources.flatMap { store -> store.schema.numbers.filter { it.sortable }.map { NumberInfo(FeatureNames.numberId(store.source, it), it.key, it.label) } }
                 .distinctBy { it.id },
         )
     })

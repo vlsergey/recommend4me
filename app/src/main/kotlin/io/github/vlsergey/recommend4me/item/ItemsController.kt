@@ -70,7 +70,7 @@ class ItemsController(
 
     override fun listFacetValues(source: String, facet: String, query: String?, limit: Int): ResponseEntity<List<FacetValueUse>> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
-        if (store.source.schema.facet(facet) == null) return ResponseEntity.notFound().build()
+        if (store.schema.facet(facet) == null) return ResponseEntity.notFound().build()
         val piece = query?.trim()?.lowercase().orEmpty()
         return ResponseEntity.ok(
             FacetValues.of(store, facet).asSequence()
