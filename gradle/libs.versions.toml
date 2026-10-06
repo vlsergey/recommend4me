@@ -1,0 +1,47 @@
+[versions]
+kotlin = "2.4.20"
+spring-boot = "4.1.1"
+jooq = "3.21.7"
+lucene = "10.5.2"
+onnxruntime = "1.20.0"
+djl = "0.33.0"
+twelvemonkeys = "3.15.0"
+javif = "0.1.0"
+jsoup = "1.23.2"
+javacpp = "1.5.14"
+openblas = "0.3.34-1.5.14"
+openapi-generator = "7.25.0"
+
+[libraries]
+spring-boot-bom = { module = "org.springframework.boot:spring-boot-dependencies", version.ref = "spring-boot" }
+spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure" }
+spring-boot-starter-webmvc = { module = "org.springframework.boot:spring-boot-starter-webmvc" }
+spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test" }
+spring-context = { module = "org.springframework:spring-context" }
+jackson-kotlin = { module = "tools.jackson.module:jackson-module-kotlin" }
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+slf4j-api = { module = "org.slf4j:slf4j-api" }
+jooq = { module = "org.jooq:jooq", version.ref = "jooq" }
+jooq-meta-extensions = { module = "org.jooq:jooq-meta-extensions", version.ref = "jooq" }
+flyway-core = { module = "org.flywaydb:flyway-core" }
+hikari = { module = "com.zaxxer:HikariCP" }
+h2 = { module = "com.h2database:h2" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
+lucene-core = { module = "org.apache.lucene:lucene-core", version.ref = "lucene" }
+lucene-analysis-common = { module = "org.apache.lucene:lucene-analysis-common", version.ref = "lucene" }
+lucene-highlighter = { module = "org.apache.lucene:lucene-highlighter", version.ref = "lucene" }
+onnxruntime-gpu = { module = "com.microsoft.onnxruntime:onnxruntime_gpu", version.ref = "onnxruntime" }
+djl-tokenizers = { module = "ai.djl.huggingface:tokenizers", version.ref = "djl" }
+imageio-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
+javif = { module = "org.glavo:avif", version.ref = "javif" }
+javacpp = { module = "org.bytedeco:javacpp", version.ref = "javacpp" }
+openblas = { module = "org.bytedeco:openblas", version.ref = "openblas" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+jooq-codegen = { id = "org.jooq.jooq-codegen-gradle", version.ref = "jooq" }
+openapi-generator = { id = "org.openapi.generator", version.ref = "openapi-generator" }

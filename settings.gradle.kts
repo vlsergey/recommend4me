@@ -1,0 +1,29 @@
+pluginManagement {
+    includeBuild("build-logic")
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+}
+
+rootProject.name = "recommend4me"
+
+include(
+    "plugin-api",
+    "libs:matrix",
+    "libs:onnx",
+    "app",
+    "plugins:encoder-e5",
+    "plugins:encoder-siglip2",
+    "plugins:scorer-pairwise",
+    "plugins:scorer-knn",
+    "plugins:search-lucene",
+    "plugins:source-author-today",
+    "plugins:source-ficbook",
+)

@@ -1,0 +1,21 @@
+package io.github.vlsergey.recommend4me.contenttype
+
+/**
+ * A kind of works ranked together: graded on one scale and put in order by one model, whichever
+ * source they came from. A plugin may declare one as a bean; the application declares `games`
+ * and `books`.
+ *
+ * [title] and the labels of [grades] are shown to the user as they are.
+ */
+class ContentType(
+    val id: String,
+    val title: String,
+    /** The labels of the grades 1..5, lowest first: what "1" means for a game is not what it means for a book. */
+    val grades: List<String>,
+    /** What the user does with a work: "play", "read" — for the hints of the interface. */
+    val verb: String,
+) {
+    init {
+        require(grades.size == 5) { "A content type labels five grades, $id labels ${grades.size}" }
+    }
+}

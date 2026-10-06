@@ -1,0 +1,23 @@
+# Build
+build/
+.gradle/
+.kotlin/
+node_modules/
+frontend/dist/
+frontend/src/api/schema.d.ts
+browser-extension/dist/
+
+# Local state: databases, pictures, logs — they live in the data folder, never here
+*.db
+*.db-wal
+*.db-shm
+*.mv.db
+*.trace.db
+data/
+models/
+*.hprof
+
+# IDE
+.idea/
+*.iml
+.vscode/
