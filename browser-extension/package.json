@@ -1,0 +1,14 @@
+{
+  "name": "recommend4me-firefox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Firefox extension of recommend4me's browser tracking mode.",
+  "scripts": {
+    "lint": "web-ext lint --source-dir extension",
+    "dev": "web-ext run --source-dir extension",
+    "build": "web-ext build --source-dir extension --artifacts-dir dist --overwrite-dest"
+  },
+  "devDependencies": {
+    "web-ext": "^8.3.0"
+  }
+}

@@ -6,7 +6,7 @@ export function score(value: number): string {
 }
 
 /** Where a search found a work, when the search names a field by a code rather than a label. */
-export const SEARCH_FIELD_LABEL: Record<string, string> = {
+const SEARCH_FIELD_LABEL: Record<string, string> = {
   TITLE: "название",
   CREATOR: "автор",
   AUTHOR: "автор",
@@ -22,7 +22,7 @@ export function searchFieldLabel(field: string): string {
 }
 
 /** The phases of a job: the application's own and the ones the sources name. */
-export const JOB_PHASE_LABEL: Record<string, string> = {
+const JOB_PHASE_LABEL: Record<string, string> = {
   dictionary: "Словарь тегов",
   feed: "Лента обновлений",
   catalogue: "Каталог",
@@ -117,20 +117,6 @@ export function compact(n: number): string {
 /** A number as it is written: 1 234,5. */
 export function number(n: number): string {
   return n.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
-}
-
-const PLURAL = new Intl.PluralRules("ru");
-
-/** The word for a count: plural(5, ["работа", "работы", "работ"]) — "работ". */
-export function plural(n: number, [one, few, many]: [string, string, string]): string {
-  switch (PLURAL.select(n)) {
-    case "one":
-      return one;
-    case "few":
-      return few;
-    default:
-      return many;
-  }
 }
 
 /** "2 ч 15 мин", "40 мин", "меньше минуты" — a duration in seconds as people say it. */

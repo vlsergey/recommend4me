@@ -44,7 +44,7 @@ class PartRepository(private val db: DSLContext) {
             }
             var update = db.update(PART).set(PART.ITEM_ID, itemId)
             if (p.position >= 0) update = update.set(PART.POSITION, p.position)
-            if (p.title != null) update = update.set(PART.TITLE, p.title.take(1000))
+            p.title?.let { update = update.set(PART.TITLE, it.take(1000)) }
             if (p.publishedAt != null) update = update.set(PART.PUBLISHED_AT, p.publishedAt)
             if (p.content != null && p.content != known.value1()) {
                 update = update.set(PART.CONTENT, p.content).setNull(PART.ENCODER).setNull(PART.ENCODED_HASH)

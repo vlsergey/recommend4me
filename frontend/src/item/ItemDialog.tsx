@@ -204,7 +204,7 @@ function Shell({
         >
           <ChevronRightIcon />
         </Button>
-        <Button variant="outline" size="sm" render={<a href={summary.url} target="_blank" rel="noreferrer" />} title="Открыть на сайте (o)">
+        <Button variant="outline" size="sm" nativeButton={false} render={<a href={summary.url} target="_blank" rel="noreferrer" />} title="Открыть на сайте (o)">
           <ExternalLinkIcon /> {source.title}
         </Button>
         {d?.canRefresh && <RefreshButton item={ref} />}

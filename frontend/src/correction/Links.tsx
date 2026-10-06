@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLinkIcon, Link2Icon, Loader2Icon, SearchIcon, UnlinkIcon } from "lucide-react";
 import { api, refKey, sameItem, unwrap, type ContentTypeInfo, type ItemSummary } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sourceTitle } from "@/contenttype/types";
 import { Cover } from "@/item/pieces";
@@ -21,9 +22,9 @@ export function Links({ type, summary, corrections }: { type: ContentTypeInfo; s
       <div className="mb-2 flex items-center gap-1">
         <h4 className="text-sm font-semibold">Та же работа</h4>
         {!searching && (
-          <AsyncButton variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setSearching(true)} icon={<Link2Icon />}>
-            связать…
-          </AsyncButton>
+          <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setSearching(true)}>
+            <Link2Icon /> связать…
+          </Button>
         )}
       </div>
       {summary.linked.length === 0 && !searching && (
@@ -132,9 +133,9 @@ function LinkSearch({
           </li>
         ))}
       </ul>
-      <AsyncButton variant="ghost" size="sm" onClick={onDone} className="self-end">
+      <Button variant="ghost" size="sm" onClick={onDone} className="self-end">
         Готово
-      </AsyncButton>
+      </Button>
     </div>
   );
 }

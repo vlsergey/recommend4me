@@ -96,7 +96,14 @@ function Ladder({ type, ladder }: { type: ContentTypeInfo; ladder: GradeOnScale[
                   <span key={l.grade} className={cn("size-3.5 rounded-full ring-2 ring-background", GRADE_DOT[l.grade])} />
                 ))}
               </div>
-              <div className={cn("absolute left-1/2 w-max -translate-x-1/2 text-center text-xs leading-tight", i % 2 === 0 ? "top-5" : "bottom-5")}>
+              <div
+                className={cn(
+                  "absolute w-max text-xs leading-tight",
+                  // A label at an end of the scale stands inside it, not beyond the dialog's edge
+                  at < 15 ? "left-0 text-left" : at > 85 ? "right-0 text-right" : "left-1/2 -translate-x-1/2 text-center",
+                  i % 2 === 0 ? "top-5" : "bottom-5",
+                )}
+              >
                 <div className="font-semibold tabular-nums">{score(group[0].score)}</div>
                 <div className="text-muted-foreground">{group.map((l) => `${l.grade} · ${gradeLabel(type, l.grade as Grade)}`).join(", ")}</div>
               </div>

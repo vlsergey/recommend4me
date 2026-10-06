@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>recommend4me — настройки</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>body { width: auto; max-width: 560px; } input[type=text] { width: 100%; padding: 4px; }</style>
+</head>
+<body>
+  <h1>recommend4me</h1>
+  <p>
+    <label for="server">Адрес приложения</label><br>
+    <input type="text" id="server" placeholder="http://127.0.0.1:8095">
+  </p>
+  <p><label><input type="checkbox" id="enabled"> Отправлять страницы (режим слежения)</label></p>
+  <button id="save">Сохранить</button>
+  <p id="saved" class="ok"></p>
+  <p class="muted">
+    Расширение отправляет приложению только страницы тех сайтов, которые нужны его источникам —
+    список адресов оно берёт у самого приложения. Другие страницы никуда не уходят.
+  </p>
+  <script src="settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

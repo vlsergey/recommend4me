@@ -1,24 +1,43 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownWideNarrowIcon, Gamepad2Icon, HeartIcon, KeyboardIcon, LayoutGridIcon, ListIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, SparklesIcon } from "lucide-react";
-import { api, unwrap, type GameSort, type GameView } from "@/api/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowDownWideNarrowIcon,
+  ChevronDownIcon,
+  HashIcon,
+  KeyboardIcon,
+  LayoutGridIcon,
+  ListIcon,
+  Loader2Icon,
+  RefreshCcwIcon,
+  SearchIcon,
+  SettingsIcon,
+  SparklesIcon,
+  TelescopeIcon,
+} from "lucide-react";
+import type { ContentTypeInfo, ItemView } from "@/api/client";
+import { CaptureButton } from "@/capture/CaptureDialog";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { GameBoard, type Layout } from "@/games/GameBoard";
-import { ImageProgress } from "@/images/ImageProgress";
-import { ReviewProgress } from "@/reviews/ReviewProgress";
+import { typeIcon, useTypes } from "@/contenttype/types";
+import { FacetFilters, NOTHING_HIDDEN, type FacetSelection } from "@/facet/FacetFilters";
+import { ItemBoard, type Layout } from "@/item/ItemBoard";
+import { ITEMS } from "@/item/lists";
+import { BY_SCORE, validSort, type SortChoice } from "@/item/sort";
+import { JobControl } from "@/job/JobControl";
+import { useJobs } from "@/job/useJobs";
+import { cn } from "@/lib/utils";
 import { usePref } from "@/lib/usePref";
 import { ModelButton } from "@/model/ModelDialog";
-import { NOTHING_HIDDEN, PrefixFilters, type PrefixSelection } from "@/prefix/PrefixFilters";
 import { useModel } from "@/model/useModel";
 import { SettingsDialog } from "@/settings/SettingsDialog";
-import { SyncControl } from "@/sync/SyncControl";
+import { SourceFilter } from "@/source/SourceFilter";
+import { WorkProgress } from "@/status/WorkProgress";
 import { ThemeToggle } from "@/theme/ThemeToggle";
 
-const VIEWS: { view: GameView; label: string }[] = [
+const VIEWS: { view: ItemView; label: string }[] = [
   { view: "UNRATED", label: "Без оценки" },
   { view: "RATED", label: "Оценённые" },
   { view: "ALL", label: "Все" },
@@ -26,45 +45,83 @@ const VIEWS: { view: GameView; label: string }[] = [
 
 const HOTKEYS: [string, string][] = [
   ["/", "поиск"],
-  ["← → ↑ ↓ / h j k l", "выбор игры"],
-  ["Enter / Пробел", "открыть игру"],
-  ["1 … 5", "оценка: не нравится … дайте ещё"],
-  ["в окне игры: ← →", "предыдущая · следующая"],
-  ["в окне игры: o", "открыть тред"],
+  ["← → ↑ ↓ / h j k l", "выбор работы"],
+  ["Enter / Пробел", "открыть работу"],
+  ["1 … 5", "оценка: не нравится … хочу ещё"],
+  ["в окне работы: ← →", "предыдущая · следующая"],
+  ["в окне работы: o", "открыть на сайте"],
   ["Esc", "закрыть окно"],
 ];
 
+/** The content types as tabs; the chosen one is remembered, and the whole screen below is its own. */
 export function App() {
+  const types = useTypes();
+  const [chosen, setChosen] = usePref<string>("type", "");
+  const list = types.data ?? [];
+  const type = list.find((t) => t.id === chosen) ?? list[0];
+
+  if (types.isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+        <Loader2Icon className="size-8 animate-spin" />
+      </div>
+    );
+  }
+  if (!type) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2 text-muted-foreground">
+        <TelescopeIcon className="size-12 opacity-50" />
+        {types.isError ? (
+          <div className="text-destructive">Приложение не отвечает: {String(types.error)}</div>
+        ) : (
+          <div>Нет ни одного источника: установите плагин сайта и перезапустите приложение.</div>
+        )}
+      </div>
+    );
+  }
+  // A new type is a new screen: its filters, its order, its search
+  return <TypeScreen key={type.id} type={type} types={list} onType={setChosen} />;
+}
+
+function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: ContentTypeInfo[]; onType: (id: string) => void }) {
   const queryClient = useQueryClient();
-  const [view, setView] = usePref<GameView>("view", "UNRATED");
-  const [sort, setSort] = usePref<GameSort>("sort", "SCORE");
+  const [view, setView] = usePref<ItemView>("view", "UNRATED");
+  const [storedSort, setSort] = usePref<SortChoice>(`sort:${type.id}`, BY_SCORE);
+  const sort = validSort(storedSort, type);
   const [layout, setLayout] = usePref<Layout>("layout", "grid");
-  const [prefixes, setPrefixes] = usePref<PrefixSelection>("hiddenPrefixes", NOTHING_HIDDEN);
+  const [facets, setFacets] = usePref<FacetSelection>(`hidden:${type.id}`, NOTHING_HIDDEN);
+  const [hiddenSources, setHiddenSources] = usePref<string[]>(`hiddenSources:${type.id}`, []);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [total, setTotal] = useState<number | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const jobs = useJobs();
+
+  // The list asks for the shown sources by name, and for none when all are shown
+  const sources = useMemo(() => {
+    const hidden = type.sources.filter((s) => hiddenSources.includes(s.id));
+    return hidden.length === 0 ? [] : type.sources.filter((s) => !hiddenSources.includes(s.id)).map((s) => s.id);
+  }, [type, hiddenSources]);
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300);
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const settings = useQuery({ queryKey: ["settings"], queryFn: async () => unwrap(await api.GET("/api/settings")) });
-
   // After a retraining the list is NOT re-sorted under the cursor; a button offers it instead
-  const model = useModel();
+  const model = useModel(type.id);
   const shownTrainedAt = useRef<string | undefined>(undefined);
   const [fresh, setFresh] = useState(false);
   useEffect(() => {
-    const trainedAt = model.data?.trainedAt ?? "";
+    if (!model.data) return;
+    const trainedAt = model.data.trainedAt ?? "";
     if (shownTrainedAt.current === undefined) shownTrainedAt.current = trainedAt;
-    else if (trainedAt !== shownTrainedAt.current && !model.data?.training) setFresh(true);
+    else if (trainedAt !== shownTrainedAt.current && !model.data.training) setFresh(true);
   }, [model.data]);
   const resort = () => {
     shownTrainedAt.current = model.data?.trainedAt ?? "";
     setFresh(false);
-    queryClient.invalidateQueries({ queryKey: ["games"] });
+    queryClient.invalidateQueries({ queryKey: [ITEMS, type.id] });
   };
 
   const onTotal = useCallback((t: number | undefined) => setTotal(t), []);
@@ -73,7 +130,7 @@ export function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "/" || (e.target as HTMLElement).closest("input, textarea, [role=dialog]")) return;
+      if (e.key !== "/" || (e.target as HTMLElement).closest("input, textarea, select, [role=dialog]")) return;
       e.preventDefault();
       searchRef.current?.focus();
     };
@@ -81,32 +138,53 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const notLoggedIn = jobs.data?.some((j) => j.loggedIn === false);
+  const sortTab = search ? "RELEVANCE" : sort.sort === "NUMBER" ? `NUMBER:${sort.number}` : sort.sort;
+  const chosenNumber = type.numbers.find((n) => n.id === sort.number);
+  // One or two numbers are tabs of their own; more go into a list
+  const numberTabs = type.numbers.length <= 2 ? type.numbers : [];
+  const numberMenu = type.numbers.length > 2 ? type.numbers : [];
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur supports-backdrop-filter:bg-background/70">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center gap-1 px-4 sm:gap-3">
           <div className="flex items-center gap-2 font-semibold">
-            <Gamepad2Icon className="size-5" />
-            <span className="hidden md:inline">F95 рекомендации</span>
+            <TelescopeIcon className="hidden size-5 sm:block" />
+            <span className="hidden 2xl:inline">recommend4me</span>
           </div>
+          {types.length > 1 && (
+            <Tabs value={type.id} onValueChange={(v) => onType(String(v))}>
+              <TabsList>
+                {types.map((t) => {
+                  const Icon = typeIcon(t.id);
+                  return (
+                    <TabsTrigger key={t.id} value={t.id} className="px-2 sm:px-3" title={t.title}>
+                      <Icon /> <span className="hidden lg:inline">{t.title}</span>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </Tabs>
+          )}
           {/* On a phone the progress takes what the icons leave; on a wide screen it sits in the middle */}
           <div className="mx-1 min-w-0 flex-1 sm:mx-auto sm:flex-none">
-            <SyncControl settings={settings.data} onNeedCookie={() => setSettingsOpen(true)} />
+            <JobControl type={type} onNeedSettings={() => setSettingsOpen(true)} />
           </div>
-          <ImageProgress />
-          <ReviewProgress />
-          <ModelButton />
+          <WorkProgress />
+          <ModelButton type={type} />
+          <CaptureButton />
           <ThemeToggle />
           <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} aria-label="Настройки" title="Настройки" className="relative">
             <SettingsIcon />
-            {settings.data && !settings.data.cookieSet && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-maybe" />}
+            {notLoggedIn && <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-maybe" />}
           </Button>
         </div>
       </header>
 
       <div className="mx-auto max-w-[1800px] px-4">
         <div className="flex flex-wrap items-center gap-3 py-4">
-          <Tabs value={view} onValueChange={(v) => setView(v as GameView)}>
+          <Tabs value={view} onValueChange={(v) => setView(v as ItemView)}>
             <TabsList>
               {VIEWS.map((v) => (
                 <TabsTrigger key={v.view} value={v.view} className="px-3">
@@ -124,42 +202,86 @@ export function App() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && (setSearchInput(""), e.currentTarget.blur())}
-              placeholder="Поиск по смыслу и словам: «sci-fi с романтикой», имя разработчика…"
+              placeholder="Поиск по смыслу и словам: «космос и романтика», имя автора…"
               className="pr-8 pl-8"
               type="search"
             />
-            <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border px-1 font-mono text-[10px] text-muted-foreground pointer-fine:block">/</kbd>
+            <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border px-1 font-mono text-[10px] text-muted-foreground pointer-fine:block">
+              /
+            </kbd>
           </div>
 
-          <Tabs value={search ? "RELEVANCE" : sort} onValueChange={(v) => v !== "RELEVANCE" && setSort(v as GameSort)}>
-            <TabsList>
-              {search && (
-                <TabsTrigger value="RELEVANCE" className="px-3">
-                  <SearchIcon /> По релевантности
+          <div className="flex items-center gap-1">
+            <Tabs
+              value={sortTab}
+              onValueChange={(v) => {
+                const value = String(v);
+                if (value === "RELEVANCE") return;
+                if (value.startsWith("NUMBER:")) setSort({ sort: "NUMBER", number: value.slice("NUMBER:".length) });
+                else setSort({ sort: value as SortChoice["sort"] });
+              }}
+            >
+              <TabsList>
+                {search && (
+                  <TabsTrigger value="RELEVANCE" className="px-3">
+                    <SearchIcon /> По релевантности
+                  </TabsTrigger>
+                )}
+                {/* A phone's width holds them only with short names; while searching, the others are off and hidden there */}
+                <TabsTrigger value="SCORE" className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")} disabled={!!search}>
+                  <SparklesIcon /> <span className="sm:hidden">Прогноз</span>
+                  <span className="hidden sm:inline">По прогнозу</span>
                 </TabsTrigger>
-              )}
-              {/* A phone's width holds the three only with short names; while searching, the others are off and hidden there */}
-              <TabsTrigger value="SCORE" className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")} disabled={!!search}>
-                <SparklesIcon /> <span className="sm:hidden">Прогноз</span>
-                <span className="hidden sm:inline">По прогнозу</span>
-              </TabsTrigger>
-              <TabsTrigger value="UPDATED" className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")} disabled={!!search}>
-                <ArrowDownWideNarrowIcon /> <span className="sm:hidden">Дата</span>
-                <span className="hidden sm:inline">По дате</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="POPULAR"
-                className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")}
-                disabled={!!search}
-                title="Самые залайканные — те, во что вы скорее всего уже играли"
-              >
-                <HeartIcon /> <span className="sm:hidden">Популярные</span>
-                <span className="hidden sm:inline">По популярности</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+                <TabsTrigger value="UPDATED" className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")} disabled={!!search}>
+                  <ArrowDownWideNarrowIcon /> <span className="sm:hidden">Дата</span>
+                  <span className="hidden sm:inline">По дате</span>
+                </TabsTrigger>
+                {numberTabs.map((n) => (
+                  <TabsTrigger
+                    key={n.id}
+                    value={`NUMBER:${n.id}`}
+                    className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")}
+                    disabled={!!search}
+                    title={`Сначала больше: ${n.label}`}
+                  >
+                    <HashIcon /> {n.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+            {numberMenu.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant={sort.sort === "NUMBER" && !search ? "secondary" : "ghost"}
+                      size="sm"
+                      disabled={!!search}
+                      className={cn(sort.sort === "NUMBER" && !search && "ring-1 ring-border")}
+                    />
+                  }
+                >
+                  <HashIcon /> {sort.sort === "NUMBER" && chosenNumber ? chosenNumber.label : "По числу"}
+                  <ChevronDownIcon className="opacity-60" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-auto min-w-48">
+                  <DropdownMenuRadioGroup
+                    value={sort.sort === "NUMBER" ? (sort.number ?? "") : ""}
+                    onValueChange={(v) => setSort({ sort: "NUMBER", number: String(v) })}
+                  >
+                    {numberMenu.map((n) => (
+                      <DropdownMenuRadioItem key={n.id} value={n.id}>
+                        {n.label}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
 
-          <PrefixFilters value={prefixes} onChange={setPrefixes} />
+          <SourceFilter type={type} hidden={hiddenSources} onChange={setHiddenSources} />
+          <FacetFilters type={type.id} value={facets} onChange={setFacets} />
 
           {fresh && (
             <Button variant="secondary" size="sm" onClick={resort}>
@@ -200,11 +322,11 @@ export function App() {
         </div>
 
         <main className="pb-10">
-          <GameBoard view={view} sort={sort} search={search} prefixes={prefixes} layout={layout} onTotal={onTotal} />
+          <ItemBoard type={type} view={view} sort={sort} search={search} facets={facets} sources={sources} layout={layout} onTotal={onTotal} />
         </main>
       </div>
 
-      {settings.data && <SettingsDialog settings={settings.data} open={settingsOpen} onOpenChange={setSettingsOpen} />}
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

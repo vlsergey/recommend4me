@@ -155,7 +155,16 @@ val buildFrontend = tasks.register<Exec>("buildFrontend") {
     outputs.dir(frontendDir.dir("dist"))
 }
 
+// --- The Firefox extension of the browser tracking mode, served for download at /extension/ ---
+
+val extensionZip = tasks.register<Zip>("extensionZip") {
+    from(rootProject.layout.projectDirectory.dir("browser-extension/extension"))
+    archiveFileName = "recommend4me-firefox.zip"
+    destinationDirectory = layout.buildDirectory.dir("extension")
+}
+
 tasks.named<ProcessResources>("processResources") {
+    from(extensionZip) { into("static/extension") }
     if (!project.hasProperty("skipFrontend")) {
         dependsOn(buildFrontend)
         from(frontendDir.dir("dist")) { into("static") }
@@ -181,7 +190,8 @@ distributions {
     main {
         distributionBaseName = "recommend4me"
         contents {
-            pluginDists.forEach { dist -> from(dist) { into("plugins") } }
+            // Every plugin in a folder of its own: plugins/<name>/
+            pluginProjects.forEach { p -> from(p.tasks.named("pluginDist")) { into("plugins/${p.name}") } }
         }
     }
 }

@@ -1,113 +1,159 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2Icon, TriangleAlertIcon } from "lucide-react";
-import { api, unwrap, type Settings, type SettingsUpdate } from "@/api/client";
+import { api, unwrap, type SettingValue, type SourceSettings } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type Props = { settings: Settings; open: boolean; onOpenChange: (open: boolean) => void };
+export function useSettings() {
+  return useQuery({ queryKey: ["settings"], queryFn: async () => unwrap(await api.GET("/api/settings")) });
+}
 
-export function SettingsDialog({ settings, open, onOpenChange }: Props) {
+type Props = { open: boolean; onOpenChange: (open: boolean) => void };
+
+/** The settings of every source that has any: logins, pauses between requests and the like. */
+export function SettingsDialog({ open, onOpenChange }: Props) {
+  const settings = useSettings();
+  const sources = (settings.data ?? []).filter((s) => s.values.length > 0);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        {open && <SettingsForm settings={settings} onDone={() => onOpenChange(false)} />}
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Настройки</DialogTitle>
+          <DialogDescription>Хранятся в локальной базе приложения. У каждого сайта свои.</DialogDescription>
+        </DialogHeader>
+        {settings.isError && <div className="text-sm text-destructive">Не удалось загрузить настройки</div>}
+        {settings.data && sources.length === 0 && <div className="text-sm text-muted-foreground">Настраивать нечего.</div>}
+        {open && sources.map((s) => <SourceForm key={s.source} settings={s} />)}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Закрыть
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function SettingsForm({ settings, onDone }: { settings: Settings; onDone: () => void }) {
+/**
+ * The settings of one source. A secret is never shown: only whether it is set; typing a value
+ * replaces it, the button beside it takes it away. Only what was changed is sent.
+ */
+function SourceForm({ settings }: { settings: SourceSettings }) {
   const queryClient = useQueryClient();
-  const [cookie, setCookie] = useState("");
-  const [userAgent, setUserAgent] = useState(settings.userAgent);
-  const [delay, setDelay] = useState(settings.requestDelayMs);
-  const [pages, setPages] = useState(settings.maxPagesPerSync);
+  const initial = () => Object.fromEntries(settings.values.map((v) => [v.key, v.secret ? "" : (v.value ?? "")]));
+  const [draft, setDraft] = useState<Record<string, string>>(initial);
+  const [saved, setSaved] = useState(false);
 
   const save = useMutation({
-    mutationFn: async (body: SettingsUpdate) => unwrap(await api.PUT("/api/settings", { body })),
+    mutationFn: async (body: Record<string, string>) =>
+      unwrap(await api.PUT("/api/sources/{source}/settings", { params: { path: { source: settings.source } }, body })),
     onSuccess: (data) => {
-      queryClient.setQueryData(["settings"], data);
-      onDone();
+      queryClient.setQueryData<SourceSettings[]>(["settings"], (all) => all?.map((s) => (s.source === data.source ? data : s)));
+      setDraft(Object.fromEntries(data.values.map((v) => [v.key, v.secret ? "" : (v.value ?? "")])));
+      setSaved(true);
     },
   });
 
-  const submit = (clearCookie = false) =>
-    save.mutate({
-      cookie: clearCookie ? "" : cookie.trim() === "" ? undefined : cookie,
-      userAgent,
-      requestDelayMs: delay,
-      maxPagesPerSync: pages,
-    });
+  const changed = Object.fromEntries(
+    settings.values
+      .filter((v) => (v.secret ? draft[v.key] !== "" : draft[v.key] !== (v.value ?? "")))
+      .map((v) => [v.key, draft[v.key]]),
+  );
+  const set = (key: string, value: string) => {
+    setSaved(false);
+    setDraft({ ...draft, [key]: value });
+  };
 
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Настройки</DialogTitle>
-        <DialogDescription>Хранятся в локальной базе приложения.</DialogDescription>
-      </DialogHeader>
+    <section className="flex flex-col gap-4 rounded-lg border p-4">
+      <h3 className="font-semibold">{settings.title}</h3>
+      {settings.values.map((v) => (
+        <Field
+          key={v.key}
+          id={`${settings.source}-${v.key}`}
+          value={v}
+          draft={draft[v.key] ?? ""}
+          onChange={(x) => set(v.key, x)}
+          onClear={() => save.mutate({ [v.key]: "" })}
+          busy={save.isPending}
+        />
+      ))}
+      {save.isError && <div className="text-sm text-destructive">Не удалось сохранить: {String(save.error.message)}</div>}
+      <div className="flex items-center justify-end gap-2">
+        {saved && Object.keys(changed).length === 0 && (
+          <span className="inline-flex items-center gap-1 text-xs text-yes">
+            <CheckCircle2Icon className="size-3.5" /> сохранено
+          </span>
+        )}
+        <Button onClick={() => save.mutate(changed)} disabled={save.isPending || Object.keys(changed).length === 0}>
+          Сохранить
+        </Button>
+      </div>
+    </section>
+  );
+}
 
-      <div className="grid gap-2">
-        <Label htmlFor="cookie" className="flex items-center gap-2">
-          Cookie сессии f95zone
-          {settings.cookieSet ? (
+function Field({
+  id,
+  value: v,
+  draft,
+  onChange,
+  onClear,
+  busy,
+}: {
+  id: string;
+  value: SettingValue;
+  draft: string;
+  onChange: (value: string) => void;
+  onClear: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id} className="flex items-center gap-2">
+        {v.label}
+        {v.secret &&
+          (v.set ? (
             <span className="inline-flex items-center gap-1 text-xs text-yes">
-              <CheckCircle2Icon className="size-3.5" /> задан
+              <CheckCircle2Icon className="size-3.5" /> задано
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-xs text-maybe">
-              <TriangleAlertIcon className="size-3.5" /> не задан
+              <TriangleAlertIcon className="size-3.5" /> не задано
             </span>
+          ))}
+      </Label>
+      {v.secret ? (
+        <div className="flex items-start gap-2">
+          <textarea
+            id={id}
+            rows={3}
+            value={draft}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={v.set ? "оставьте пустым, чтобы не менять" : "новое значение"}
+            autoComplete="off"
+            spellCheck={false}
+            className="min-h-16 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+          />
+          {v.set && (
+            <Button variant="destructive" size="sm" onClick={onClear} disabled={busy}>
+              Удалить
+            </Button>
           )}
-        </Label>
-        <textarea
-          id="cookie"
-          rows={4}
-          value={cookie}
-          onChange={(e) => setCookie(e.target.value)}
-          placeholder={settings.cookieSet ? "оставьте пустым, чтобы не менять" : "xf_user=…; xf_session=…; …"}
-          className="min-h-20 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        </div>
+      ) : (
+        <Input
+          id={id}
+          type={v.kind === "NUMBER" ? "number" : "text"}
+          value={draft}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={v.set ? undefined : "по умолчанию"}
         />
-        <p className="text-xs text-muted-foreground">
-          Без входа f95zone прячет спойлеры — жанр, changelog, заметки разработчика. Войдите на сайт в браузере, откройте
-          DevTools → Network, выберите любой запрос к f95zone.to и скопируйте значение заголовка <code>Cookie</code>.
-        </p>
-      </div>
-
-      <div className="grid gap-2">
-        <Label htmlFor="ua">User-Agent</Label>
-        <Input id="ua" value={userAgent} onChange={(e) => setUserAgent(e.target.value)} />
-        <p className="text-xs text-muted-foreground">Лучше тот же, что у браузера, из которого взят cookie.</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="delay">Пауза между запросами, мс</Label>
-          <Input id="delay" type="number" min={0} value={delay} onChange={(e) => setDelay(Number(e.target.value))} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="pages">Страниц ленты по умолчанию</Label>
-          <Input id="pages" type="number" min={1} max={400} value={pages} onChange={(e) => setPages(Number(e.target.value))} />
-        </div>
-      </div>
-
-      {save.isError && <div className="text-sm text-destructive">Не удалось сохранить: {String(save.error)}</div>}
-
-      <DialogFooter>
-        {settings.cookieSet && (
-          <Button variant="destructive" onClick={() => submit(true)} disabled={save.isPending} className="sm:mr-auto">
-            Удалить cookie
-          </Button>
-        )}
-        <Button variant="outline" onClick={onDone}>
-          Отмена
-        </Button>
-        <Button onClick={() => submit()} disabled={save.isPending}>
-          Сохранить
-        </Button>
-      </DialogFooter>
-    </>
+      )}
+      {v.hint && <p className="text-xs text-muted-foreground">{v.hint}</p>}
+    </div>
   );
 }

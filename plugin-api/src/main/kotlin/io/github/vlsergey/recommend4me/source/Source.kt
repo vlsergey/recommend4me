@@ -83,6 +83,17 @@ interface Source {
     /** Whether [refresh] would bring something the item lacks: the details of its current version. */
     fun needsRefresh(itemId: String, context: SourceContext): Boolean = false
 
+    // --- Background work of its own ---
+
+    /**
+     * Called once the application is up: a source may start background work of its own here (the
+     * reviews of f95zone read without end), on threads of its own, until [stop].
+     */
+    fun start(context: SourceContext) {}
+
+    /** Called when the application stops. */
+    fun stop() {}
+
     // --- Pictures ---
 
     /**
