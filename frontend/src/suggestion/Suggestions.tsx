@@ -1,34 +1,8 @@
-import { CheckIcon, XIcon } from "lucide-react";
 import type { FacetSuggestions, SuggestedValue } from "@/api/client";
-import { AsyncButton } from "@/components/AsyncButton";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { FacetAnswers } from "@/correction/FacetAnswers";
 import type { Corrections } from "@/correction/useCorrections";
 import { percent } from "@/i18n";
-
-/** ✓ and ✗ of a suggestion: the answer is a correction of the facet, after which it is no longer listed. */
-function Answers({ yes, no, onAnswer }: { yes: string; no: string; onAnswer: (added: boolean) => Promise<unknown> }) {
-  return (
-    <>
-      <AsyncButton
-        variant="ghost"
-        size="icon-xs"
-        className="size-4 rounded-sm text-yes"
-        title={yes}
-        onClick={() => onAnswer(true)}
-        icon={<CheckIcon className="size-3" />}
-      />
-      <AsyncButton
-        variant="ghost"
-        size="icon-xs"
-        className="size-4 rounded-sm text-destructive"
-        title={no}
-        onClick={() => onAnswer(false)}
-        icon={<XIcon className="size-3" />}
-      />
-    </>
-  );
-}
 
 /**
  * The values the application suggests adding, facet by facet, the likeliest first: each one
@@ -54,36 +28,13 @@ export function SuggestedValues({ suggestions, corrections }: { suggestions: Fac
   );
 }
 
+/** The answer is a correction of the facet, after which the value is no longer suggested. */
 function SuggestedChip({ facet, value, corrections }: { facet: string; value: SuggestedValue; corrections: Corrections }) {
   return (
     <Badge variant="outline" className="border-dashed pr-0.5 font-normal" title={`Вероятность ${percent(value.chance)}`}>
       {value.name}
-      <span className="text-muted-foreground tabular-nums">{percent(value.chance)}</span>
-      <Answers
-        yes="Да, это есть у работы"
-        no="Нет, этого у работы нет"
-        onAnswer={(added) => corrections.setFacet(facet, { key: value.key }, added)}
-      />
+      <span className="text-muted-foreground tabular-nums">({percent(value.chance)})</span>
+      <FacetAnswers facet={facet} value={{ key: value.key }} corrections={corrections} />
     </Badge>
-  );
-}
-
-/**
- * A site's value that does not look like the work: a "?" that says how unlikely it is, with ✓ to
- * keep it and ✗ to take it away. Goes inside the value's chip.
- */
-export function DoubtMark({ facet, value, corrections }: { facet: string; value: SuggestedValue; corrections: Corrections }) {
-  return (
-    <>
-      <Tooltip>
-        <TooltipTrigger render={<span className="cursor-help font-semibold text-maybe" />}>?</TooltipTrigger>
-        <TooltipContent>Не похоже на эту работу ({percent(value.chance)})</TooltipContent>
-      </Tooltip>
-      <Answers
-        yes="Оставить: значение сайта верно"
-        no="Убрать: значение сайта неверно"
-        onAnswer={(added) => corrections.setFacet(facet, { key: value.key }, added)}
-      />
-    </>
   );
 }

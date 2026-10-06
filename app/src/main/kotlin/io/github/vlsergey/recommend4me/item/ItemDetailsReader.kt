@@ -40,9 +40,15 @@ class ItemDetailsReader(
         val site = store.items.facets(key.id)
         val corrections = store.corrections.facetsOf(key.id)
         val fields = store.corrections.fieldsOf(key.id)
+        val chances = store.suggestions.ofItems(listOf(key.id))[key.id]
         val names = schema.facets.associate { def ->
-            def.key to store.items.facetNames(def.key, site[def.key].orEmpty() + corrections.filter { it.facet == def.key }.map { it.key })
+            def.key to store.items.facetNames(
+                def.key,
+                site[def.key].orEmpty() + corrections.filter { it.facet == def.key }.map { it.key } + chances?.get(def.key)?.keys.orEmpty(),
+            )
         }
+        // A facet's own line as the site writes it is shown with the facet, not among the texts
+        val originals = schema.facets.mapNotNull { it.original }.toSet()
         val siteTexts = store.items.texts(key.id)
         val texts = Corrected.texts(siteTexts, fields)
         val siteNumbers = store.items.numbers(key.id)
@@ -62,8 +68,8 @@ class ItemDetailsReader(
         return ItemDetails(
             summary = summary,
             titleCorrected = Corrected.TITLE in fields,
-            allFacets = cards.facets(store, site, corrections, names) { true },
-            texts = schema.texts.mapNotNull { def ->
+            allFacets = cards.facets(store, site, chances, corrections, names, texts) { true },
+            texts = schema.texts.filter { it.key !in originals }.mapNotNull { def ->
                 texts[def.key]?.let { TextValue(def.key, def.label, it, def.spoiler, Corrected.textField(def.key) in fields) }
             },
             allNumbers = schema.numbers.mapNotNull { def ->

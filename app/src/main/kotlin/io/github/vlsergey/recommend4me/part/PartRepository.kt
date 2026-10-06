@@ -101,6 +101,14 @@ class PartRepository(private val db: DSLContext) {
             .groupBy(PART_VECTOR.ITEM_ID)
             .fetch().associate { it.value1()!! to it.value2()!! }
 
+    /** How many window vectors by [encoder] the item has. */
+    fun windowCount(itemId: String, encoder: String): Int =
+        db.fetchCount(
+            db.select(PART_VECTOR.WINDOW_NO).from(PART_VECTOR)
+                .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+                .where(PART_VECTOR.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder)),
+        )
+
     /** Every window vector by [encoder] of the items. */
     fun windows(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> {
         val out = HashMap<String, MutableList<FloatArray>>()

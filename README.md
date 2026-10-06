@@ -29,7 +29,7 @@ folder of jars in `plugins/`:
 | `scorer-pairwise` | pairwise logistic ranking (RankNet with a line), the default |
 | `scorer-knn` | the k nearest graded works by cosine, a baseline |
 | `search-lucene` | search by words (English and Russian forms) and by meaning |
-| `suggester-tags` | the tags a work should have, from its text and its other tags, to confirm or reject |
+| `suggester-tags` | the chance of every tag of a work from its texts and its other tags; tags to confirm or reject, pairings and characters worked out |
 
 A source has up to three modes: **scrape all** (the whole catalogue, resumable), **updates** (what
 is new since the last time) and **browser tracking**: the pages you open in Firefox are sent to the

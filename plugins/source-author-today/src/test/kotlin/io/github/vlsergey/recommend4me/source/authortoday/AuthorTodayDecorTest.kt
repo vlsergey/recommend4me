@@ -37,13 +37,13 @@ class AuthorTodayDecorTest {
         assertTrue(doc.select(decor.panelAfter!!).isNotEmpty())
 
         val tags = decor.facets.first { it.facet == AuthorToday.TAG }
-        val shown = doc.select(tags.values).map { (it.attr("title").ifBlank { it.text() }).trim().lowercase() }
+        val shown = doc.select(tags.values!!).map { (it.attr("title").ifBlank { it.text() }).trim().lowercase() }
         assertEquals(context.facets.getValue("216859").getValue(AuthorToday.TAG).sorted(), shown.sorted())
 
         val genres = decor.facets.first { it.facet == AuthorToday.GENRE }
         val names = context.facetNames.getValue(AuthorToday.GENRE)
         val genreNames = context.facets.getValue("216859").getValue(AuthorToday.GENRE).map { names.getValue(it).lowercase() }
-        val genreElements = doc.select(genres.values).map { it.text().trim().lowercase() }
+        val genreElements = doc.select(genres.values!!).map { it.text().trim().lowercase() }
         assertTrue(genreElements.containsAll(genreNames), "$genreElements hold $genreNames")
 
         val cover = doc.select(decor.pictures!!.selector).map { it.attr("src").substringBefore('?') }

@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.api.model.PageItem
 import io.github.vlsergey.recommend4me.api.model.PagePicture
 import io.github.vlsergey.recommend4me.api.model.PageView
 import io.github.vlsergey.recommend4me.api.model.ReviewDecorInfo
+import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.item.ItemCards
 import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -66,17 +67,22 @@ class PagesController(
         val key = ItemKey(store.id, itemId)
         val type = stores.typeOf(store.id)
         val summary = cards.cards(type, listOf(key)).firstOrNull() ?: return null
-        val wanted = decor?.facets.orEmpty().map { it.facet }.toSet() + store.source.schema.facets.filter { it.suggest }.map { it.key }
+        val schema = store.source.schema
+        val wanted = decor?.facets.orEmpty().map { it.facet }.toSet() + schema.facets.filter { it.suggest || it.infer }.map { it.key }
+        // First: a work just opened gets its chances made here
+        val suggested = suggestions.ofItem(store, itemId).map { it.toApi() }
         val site = store.items.facets(itemId)
         val corrections = store.corrections.facetsOf(itemId)
+        val chances = store.suggestions.ofItems(listOf(itemId))[itemId]
         val names = wanted.associateWith { facet ->
-            store.items.facetNames(facet, site[facet].orEmpty() + corrections.filter { it.facet == facet }.map { it.key })
+            store.items.facetNames(facet, site[facet].orEmpty() + corrections.filter { it.facet == facet }.map { it.key } + chances?.get(facet)?.keys.orEmpty())
         }
+        val texts = Corrected.texts(store.items.texts(itemId), store.corrections.fieldsOf(itemId))
         val pictureMarks = store.marks.pictureMarksOf(itemId)
         return PageItem(
             summary = summary,
-            facets = cards.facets(store, site, corrections, names) { it in wanted },
-            suggestions = suggestions.ofItem(store, itemId).map { it.toApi() },
+            facets = cards.facets(store, site, chances, corrections, names, texts) { it in wanted },
+            suggestions = suggested,
             explanation = recommendations.explanation(key).take(EXPLAINED).map { it.toApi() },
             grades = type.type.grades,
             pictures = store.pictures.ofItem(itemId, plugins.imageEncoder()?.id).map { p ->
@@ -109,7 +115,7 @@ class PagesController(
         private fun hostOf(url: String): String? = runCatching { URI(url).host?.removePrefix("www.") }.getOrNull()
 
         private fun PageDecor.toApi() = PageDecorInfo(
-            facets = facets.map { FacetDecorInfo(it.facet, it.values) },
+            facets = facets.map { FacetDecorInfo(facet = it.facet, propertyValues = it.values, after = it.after) },
             panelAfter = panelAfter,
             reviews = reviews?.let { ReviewDecorInfo(it.selector, it.idAttribute, it.idPrefix) },
             pictures = pictures?.selector,

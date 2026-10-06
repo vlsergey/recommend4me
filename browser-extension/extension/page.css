@@ -203,25 +203,49 @@ r4m-chip.r4m-removed-chip > span {
   opacity: 0.55;
 }
 
-r4m-chip.r4m-doubted-chip {
-  border-color: #c98a12;
+r4m-chip.r4m-confirmed {
+  border-color: #1a7f37;
 }
 
-r4m-chip .r4m-chance {
-  color: #6a737d;
-  font-size: 11px;
+r4m-chip.r4m-inferred-chip {
+  border-style: dotted;
 }
 
-r4m-doubt {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  background: #c98a12;
-  color: #ffffff;
-  font: 700 11px/16px system-ui, sans-serif;
-  text-align: center;
+/* The model's chance, while the user has not answered; in amber when the work more likely has it not */
+r4m-chance {
+  color: #8b949e;
+  font: 11px/20px system-ui, sans-serif;
   cursor: help;
+}
+
+r4m-chance.r4m-unlikely {
+  color: #c98a12;
+  font-weight: 700;
+}
+
+r4m-inferred {
+  color: #0b62c4;
+  font: 700 12px/20px system-ui, sans-serif;
+  cursor: help;
+}
+
+r4m-original {
+  display: block;
+  margin: 0 0 2px;
+  color: #6a737d;
+  font: 12px/1.4 system-ui, sans-serif;
+}
+
+/* A facet's block put into the site's page, outside the panel */
+r4m-facet:not(r4m-panel r4m-facet) {
+  display: block;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border: 1px solid #c9ced6;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2328;
+  font: 13px/1.45 system-ui, sans-serif;
 }
 
 .r4m-removed {
@@ -234,13 +258,13 @@ r4m-doubt {
   outline-offset: 1px;
 }
 
-/* The tools of a site's value show on hover, or always on a value already corrected */
-r4m-tools [data-r4m].r4m-no {
+/* The ✓ and ✕ of a site's value show on hover, or always on a value already answered or doubted */
+r4m-tools [data-r4m].r4m-no, r4m-tools [data-r4m].r4m-yes:not(.r4m-current) {
   opacity: 0.25;
 }
 
-r4m-tools:hover [data-r4m].r4m-no, .r4m-doubted + r4m-tools [data-r4m].r4m-no {
-  opacity: 1;
+r4m-tools:hover [data-r4m], .r4m-doubted + r4m-tools [data-r4m] {
+  opacity: 1 !important;
 }
 
 form.r4m-add {

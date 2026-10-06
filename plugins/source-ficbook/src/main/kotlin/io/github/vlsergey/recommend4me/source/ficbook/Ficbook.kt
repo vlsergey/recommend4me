@@ -36,8 +36,10 @@ class Ficbook : Source {
             FacetDef(RATING, "Рейтинг", filter = true, onCard = true),
             FacetDef(STATUS, "Статус", filter = true),
             FacetDef(TAG, "Метка", shared = "tag", searchWeight = 0.9f, suggest = true),
-            FacetDef(CHARACTER, "Персонаж", searchWeight = 0.8f),
-            FacetDef(PAIRING, "Пэйринг", searchWeight = 0.7f),
+            // Authors write the pairings and characters as they please: the values are worked out,
+            // what the site says is the line above them and what the model learns from
+            FacetDef(PAIRING, "Пэйринг", searchWeight = 0.7f, infer = true, original = PAIRINGS_LINE),
+            FacetDef(CHARACTER, "Главные персонажи", searchWeight = 0.8f, infer = true, original = PAIRINGS_LINE),
             FacetDef(SERIES, "Серия", searchWeight = 0.7f),
         ),
         numbers = listOf(
@@ -51,6 +53,7 @@ class Ficbook : Source {
             TextDef(ANNOTATION, "Описание", block = "text:annotation", searchWeight = 0.6f),
             TextDef(NOTES, "Примечания", block = "text:notes", searchWeight = 0.5f),
             TextDef(DEDICATION, "Посвящение", searchWeight = 0.3f),
+            TextDef(PAIRINGS_LINE, "Пэйринг и персонажи на сайте", searchWeight = 0.7f, searchByMeaning = true),
         ),
         reviewsLabel = "Отзывы",
         partsLabel = "Части",
@@ -60,7 +63,8 @@ class Ficbook : Source {
         Regex("https://ficbook\\.net/(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*|popular-fanfics[^/?#]*|home/[^?#]*)([/?#].*)?"),
     )
 
-    override val parserVersion = 1
+    /** 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever the order of its names. */
+    override val parserVersion = 2
 
     override fun itemUrl(itemId: String) = "$BASE/readfic/$itemId"
 
@@ -68,7 +72,12 @@ class Ficbook : Source {
 
     override val pageDecor = PageDecor(
         panelAfter = "section.fanfic-hat",
-        facets = listOf(FacetDecor(TAG, "section.fanfic-hat a.tag")),
+        facets = listOf(
+            FacetDecor(TAG, "section.fanfic-hat a.tag"),
+            // The worked out values go in lines of their own under the site's block of them
+            FacetDecor(PAIRING, after = PAIRINGS_BLOCK),
+            FacetDecor(CHARACTER, after = PAIRINGS_BLOCK),
+        ),
         reviews = ReviewDecor("article.comment-container[id^='com']", idPrefix = "com"),
         pictures = PictureDecor("img.fic-cover"),
         cards = CardDecor("article.fanfic-inline", ".fanfic-inline-title a[href^='/readfic/']"),
@@ -102,6 +111,10 @@ class Ficbook : Source {
         const val ANNOTATION = "annotation"
         const val NOTES = "notes"
         const val DEDICATION = "dedication"
+        const val PAIRINGS_LINE = "pairingsLine"
+
+        /** The block of a work's header with its pairings and characters. */
+        private const val PAIRINGS_BLOCK = "section.fanfic-hat .description > .mb-10:has(a.pairing-link)"
 
         /** The part of a work of one part, whose text is on the work's own page. */
         const val ONLY_PART = "text"

@@ -7,6 +7,8 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.suggestion.FacetChancesChanged
+import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
@@ -46,6 +48,9 @@ class Search(
     @EventListener
     fun vectorsChanged(event: TextVectorsChanged) = queue(event.source, event.ids)
 
+    @EventListener
+    fun chancesChanged(event: FacetChancesChanged) = queue(event.source, event.ids)
+
     private fun queue(source: String, ids: Collection<String>) {
         val type = stores.typeOf(source).id
         pending.computeIfAbsent(type) { ConcurrentHashMap.newKeySet() } += ids.map { ItemKey(source, it) }
@@ -80,7 +85,8 @@ class Search(
     fun documents(s: SourceStore, ids: List<String>): Map<ItemKey, SearchDocument> {
         val schema = s.source.schema
         val heads = s.items.heads(ids)
-        val facets = s.items.facetsOf(ids)
+        val chances = s.suggestions.ofItems(ids)
+        val facets = s.items.facetsOf(ids).mapValues { (id, site) -> ModelValues.of(schema, site, chances[id]) }
         val facetCorrections = s.corrections.facetsOf(ids)
         val fields = s.corrections.fieldsOf(ids)
         val texts = s.items.textsOf(ids)

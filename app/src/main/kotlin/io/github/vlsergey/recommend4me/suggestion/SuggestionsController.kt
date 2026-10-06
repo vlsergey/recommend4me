@@ -11,7 +11,6 @@ fun ItemFacetSuggestions.toApi() = ApiFacetSuggestions(
     facet = facet.key,
     label = facet.label,
     suggested = suggested.map { SuggestedValue(it.key, names[it.key] ?: it.key, it.chance) },
-    doubted = doubted.map { SuggestedValue(it.key, names[it.key] ?: it.key, it.chance) },
 )
 
 @RestController

@@ -20,6 +20,7 @@ import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.NOTES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.ONLY_PART
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAGES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRING
+import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRINGS_LINE
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PARTS
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.RATING
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.SERIES
@@ -114,9 +115,11 @@ class FicbookPages(private val context: SourceContext) {
             items.setFacet(id, SERIES, listOf(FacetValue(a.attr("href").removePrefix("/series/").substringBefore('?'), a.text().trim())))
         }
         info["Пэйринг и персонажи"]?.let { dd ->
+            // The line as the site shows it: what the application works the pairings and characters out from
+            items.setTexts(id, mapOf(PAIRINGS_LINE to PageText.of(dd)))
             val groups = dd.select("a").map { it.text().trim() }.flatMap { it.split(", ") }.map { it.trim() }.filter { it.isNotEmpty() }
-            items.setFacet(id, PAIRING, groups.filter { '/' in it }.map { FacetValue(it.lowercase(), it) })
-            items.setFacet(id, CHARACTER, groups.flatMap { it.split('/') }.map { it.trim() }.distinct().map { FacetValue(it.lowercase(), it) })
+            items.setFacet(id, PAIRING, groups.filter { '/' in it }.map(::pairing).distinctBy { it.key })
+            items.setFacet(id, CHARACTER, groups.flatMap { it.split('/') }.map { it.trim() }.filter { it.isNotEmpty() }.distinct().map { FacetValue(it.lowercase(), it) })
         }
         info["Размер"]?.text()?.let { size ->
             items.setNumbers(
@@ -222,6 +225,10 @@ class FicbookPages(private val context: SourceContext) {
         /** A work's address: "/readfic/<id>", "/readfic/<id>/<part>", "/readfic/<id>/comments". */
         private val READFIC = Regex("/readfic/([0-9a-f-]+)/?([^/]*)/?")
         private val AUTHOR_ID = Regex("^/authors/([^/?#]+)")
+
+        /** A pairing as written, "A/B": one pairing whatever the order of its names — the key has them sorted. */
+        private fun pairing(written: String): FacetValue =
+            FacetValue(written.split('/').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.sorted().joinToString("/"), written)
 
         private fun workId(href: String): String? = READFIC.matchEntire(href.substringBefore('?').substringBefore('#'))?.groupValues?.get(1)
     }

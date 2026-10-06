@@ -51,6 +51,15 @@ class FacetDef(
      * carelessly or not at all.
      */
     val suggest: Boolean = false,
+    /**
+     * The values of the facet are worked out from the work's texts and its other values and given
+     * to it as its own — the site's values are only examples to learn from (pairings and
+     * characters a site leaves to its authors to write as they please). The values the site gives
+     * that do not fit are shown marked; the user corrects the worked out ones as any other.
+     */
+    val infer: Boolean = false,
+    /** The key of a text ([TextDef]) holding the facet's values as the site writes them: shown above the worked out values, and read by the suggester. */
+    val original: String? = null,
 )
 
 /** How the model reads a number. */

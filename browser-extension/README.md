@@ -8,9 +8,11 @@ page leaves the browser.
 
 **The site as the application's interface.** On the same pages the extension shows what the
 application knows of the work: a panel after the work's header with the prediction, the grade
-buttons, what the prediction rests on and the suggested tags; on the site's own tags a ✕ to take
-one away (↺ brings it back), a "?" on a tag that does not fit the work, the tags you added and the
-suggested ones (dashed, ✓ / ✕) after them, a field to add a tag; "+ / −" under every review and
+buttons, what the prediction rests on and the suggested tags; beside every tag of the site the
+model's confidence in brackets (in amber when the work more likely has it not) and your ✓ (it
+has it) and ✕ (it has it not), pressed again to take the answer back; the tags you added and the
+suggested ones (dashed, ✓ / ✕) after them, a field to add a tag; on ficbook, the worked out
+pairings and main characters in lines of their own under the site's; "+ / −" under every review and
 picture of the work; on a list, the prediction and your grade on every card. Where these go each
 source says itself (`GET /api/pages`); the switch is on the options page. What the extension puts
 into a page is never sent back with it.

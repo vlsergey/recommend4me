@@ -35,9 +35,11 @@ class FicbookDecorTest {
         source.capture(CapturedPage("https://ficbook.net/readfic/$work", html, now), context)
         val doc = Jsoup.parse(html, "https://ficbook.net/readfic/$work")
         assertTrue(doc.select(decor.panelAfter!!).isNotEmpty())
-        val tags = decor.facets.single()
-        val shown = doc.select(tags.values).map { it.text().trim().lowercase() }
+        val tags = decor.facets.single { it.facet == Ficbook.TAG }
+        val shown = doc.select(tags.values!!).map { it.text().trim().lowercase() }
         assertEquals(context.facets.getValue(work).getValue(Ficbook.TAG).sorted(), shown.sorted())
+        // The worked out pairings and characters go under the site's block of them
+        decor.facets.filter { it.after != null }.forEach { assertEquals(1, doc.select(it.after!!).size, it.after) }
         val cover = doc.select(decor.pictures!!.selector).map { it.attr("src") }
         assertEquals(context.pictures[work]?.filterNotNull() ?: cover, cover)
     }

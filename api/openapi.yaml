@@ -204,12 +204,11 @@ paths:
     get:
       tags: [suggestions]
       operationId: getSuggestions
-      summary: The values the work should have, worked out from its text and its other values
+      summary: The values the work more likely has than not and lacks, worked out from its texts and its other values
       description: |
-        For every facet its source suggests values of: the values to add, the likeliest first, and
-        the site's values that do not fit. The user confirms one by adding it (correctFacet, added)
-        and rejects one by taking it away (correctFacet, not added); an answered value is no longer
-        listed. Made at once for a work that never had suggestions.
+        For every facet its source suggests values of. The user confirms one by adding it
+        (correctFacet, added) and rejects one by taking it away (correctFacet, not added); an
+        answered value is no longer listed. Made at once for a work that never had any.
       parameters:
         - $ref: '#/components/parameters/Source'
         - $ref: '#/components/parameters/Item'
@@ -417,7 +416,12 @@ paths:
     put:
       tags: [corrections]
       operationId: correctFacet
-      summary: Adds a value of a facet to the item, or takes one the site gives away
+      summary: The user's word on a value of a facet - the work has it (added) or has it not
+      description: |
+        added: true gives the work a value it lacks (ADDED) or confirms one the site or the model
+        gave it (CONFIRMED); added: false says the work has it not (REMOVED). Either is applied
+        over any chance of the model; taking the correction back (uncorrectFacet) leaves the value
+        to the site and the model again.
       parameters:
         - $ref: '#/components/parameters/Source'
         - $ref: '#/components/parameters/Item'
@@ -967,7 +971,7 @@ components:
 
     FacetInfo:
       type: object
-      required: [id, key, label, filter, onCard, suggest]
+      required: [id, key, label, filter, onCard, suggest, infer]
       properties:
         id:
           type: string
@@ -984,6 +988,14 @@ components:
         suggest:
           type: boolean
           description: The application suggests values of it to confirm or reject
+        infer:
+          type: boolean
+          description: |
+            The application works the values out and gives them to the work as its own; the site's
+            line of them (ItemFacet.original) is only what it learns from
+        original:
+          type: string
+          description: The key of the text holding the facet's values as the site writes them
 
     NumberInfo:
       type: object
@@ -1030,8 +1042,18 @@ components:
           type: string
         corrected:
           type: string
-          enum: [ADDED, REMOVED]
-          description: The user's correction of the site's value; a REMOVED value is shown crossed out
+          enum: [ADDED, CONFIRMED, REMOVED]
+          description: |
+            The user's word on the value: ADDED - the user gave it; CONFIRMED - the user said the
+            work has it (the site or the model gave it); REMOVED - the user said the work has it
+            not (shown crossed out)
+        chance:
+          type: number
+          format: double
+          description: The model's chance that the work has the value, 0..1, whenever the model has one; the interface shows it by a value the user has not answered on
+        inferred:
+          type: boolean
+          description: The model gave the value, the site did not
 
     ItemFacet:
       type: object
@@ -1046,6 +1068,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FacetValueInfo'
+        original:
+          type: string
+          description: The facet's values as the site writes them, shown above the worked out ones
 
     Prediction:
       type: object
@@ -1850,7 +1875,12 @@ components:
 
     FacetSuggestions:
       type: object
-      required: [facet, label, suggested, doubted]
+      required: [facet, label, suggested]
+      description: |
+        The values of a facet the work lacks and more likely has than not, the likeliest first - to
+        confirm or reject. The chances of the values it has come with the values (FacetValueInfo).
+        A facet the application works out (FacetInfo.infer) has none: such values are given to the
+        work at once.
       properties:
         facet:
           type: string
@@ -1859,22 +1889,19 @@ components:
           type: string
         suggested:
           type: array
-          description: Values to add, the likeliest first
-          items:
-            $ref: '#/components/schemas/SuggestedValue'
-        doubted:
-          type: array
-          description: The site's values that do not fit the work
           items:
             $ref: '#/components/schemas/SuggestedValue'
 
     FacetDecorInfo:
       type: object
-      required: [facet, values]
+      required: [facet]
+      description: The site's elements of the facet's values (values), or the element after which a line of the facet's values goes (after)
       properties:
         facet:
           type: string
         values:
+          type: string
+        after:
           type: string
 
     ReviewDecorInfo:

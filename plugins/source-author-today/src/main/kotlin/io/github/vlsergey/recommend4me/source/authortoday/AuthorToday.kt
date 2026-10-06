@@ -83,7 +83,8 @@ class AuthorToday : Source {
     )
 
     override val pageDecor = PageDecor(
-        panelAfter = ".book-meta-panel",
+        // After the whole card of the book: within it the columns are laid out by hand
+        panelAfter = ".book-panel",
         facets = listOf(
             FacetDecor(TAG, ".book-meta-panel .tags a"),
             FacetDecor(GENRE, ".book-meta-panel .book-genres a[href^='/work/genre/']"),

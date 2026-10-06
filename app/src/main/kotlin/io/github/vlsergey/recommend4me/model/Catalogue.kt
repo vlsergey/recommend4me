@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import org.slf4j.LoggerFactory
@@ -114,6 +115,8 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
             if (facet in facetIds) facets.getOrPut(id) { HashMap() }.getOrPut(facet) { ArrayList() } += key
         }
         val facetCorrections = s.corrections.allFacets().groupBy { it.itemId }
+        // The values the model gives the items of the facets it works out
+        val chances = s.suggestions.ofFacets(s.source.schema.facets.filter { it.infer && it.feature }.map { it.key })
         val numberDefs = s.source.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numbers = HashMap<String, HashMap<String, Double>>()
         s.items.forEachNumber { id, key, value -> if (key in numberDefs) numbers.getOrPut(id) { HashMap() }[key] = value }
@@ -121,7 +124,8 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
         val signals = s.signals.all()
         return s.items.keys().map { k ->
             val categorical = LinkedHashSet<String>()
-            Corrected.facets(facets[k.id].orEmpty(), facetCorrections[k.id].orEmpty()).forEach { (facet, keys) ->
+            val base = ModelValues.of(s.source.schema, facets[k.id].orEmpty(), chances[k.id])
+            Corrected.facets(base, facetCorrections[k.id].orEmpty()).forEach { (facet, keys) ->
                 val facetId = facetIds[facet] ?: return@forEach
                 keys.forEach { categorical += FeatureNames.facet(facetId, it) }
             }
@@ -141,7 +145,8 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
         val head = s.items.find(key.id) ?: return null
         val facetIds = s.source.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
         val categorical = LinkedHashSet<String>()
-        Corrected.facets(s.items.facets(key.id), s.corrections.facetsOf(key.id)).forEach { (facet, keys) ->
+        val base = ModelValues.of(s.source.schema, s.items.facets(key.id), s.suggestions.ofItems(listOf(key.id))[key.id])
+        Corrected.facets(base, s.corrections.facetsOf(key.id)).forEach { (facet, keys) ->
             val facetId = facetIds[facet] ?: return@forEach
             keys.forEach { categorical += FeatureNames.facet(facetId, it) }
         }

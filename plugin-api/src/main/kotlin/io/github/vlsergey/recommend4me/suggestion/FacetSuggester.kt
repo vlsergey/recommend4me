@@ -3,16 +3,27 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.matrix.Matrix
 
 /**
- * Everything a suggester knows of one facet of one source ([FacetDef.suggest][io.github.vlsergey.recommend4me.source.FacetDef.suggest]):
- * every item — the vector of its text and the values it has — and every value that may be
- * suggested, with the vector of its name.
+ * One view of the items' texts: a vector per item, of unit length, a row of zeros for an item
+ * without it — the description, the chapters read, the facet's values as the site writes them.
  *
- * Rows of [items] and of the lists are items, rows of [values] values; the lists hold indices of
- * [values].
+ * [ofValues]: the view is the item's own values of the facet as the site writes them. Its likeness
+ * to a value's name would only repeat what the site gave the item; only what the items alike in
+ * it have says something.
+ */
+class TextView(val name: String, val vectors: Matrix, val ofValues: Boolean = false)
+
+/**
+ * Everything a suggester knows of one facet of one source ([FacetDef.suggest][io.github.vlsergey.recommend4me.source.FacetDef.suggest],
+ * [FacetDef.infer][io.github.vlsergey.recommend4me.source.FacetDef.infer]): every item — its texts
+ * in several views, the facet's values it has, the values of its other facets — and every value
+ * that may be suggested, with the vector of its name.
+ *
+ * Rows of the views and of the lists are items, rows of [values] values; [assigned], [confirmed]
+ * and [rejected] hold indices of [values], [context] indices of the [contextCount] values of the
+ * other facets.
  */
 class SuggestionTask(
-    /** One row per item, of unit length; a row of zeros for an item whose text is not encoded. */
-    val items: Matrix,
+    val views: List<TextView>,
     /** One row per value: the vector of its name as a query, of unit length; zeros when not encoded. */
     val values: Matrix,
     /** The values each item has now: the site's, with the user's corrections applied. */
@@ -21,31 +32,38 @@ class SuggestionTask(
     val confirmed: List<IntArray>,
     /** The values the user said the item does not have: taken from it, or rejected when suggested. */
     val rejected: List<IntArray>,
+    /** The values of the item's other facets — its fandom, its tags, its author. */
+    val context: List<IntArray>,
+    val contextCount: Int,
 ) {
-    init {
-        require(items.rows == assigned.size && items.rows == confirmed.size && items.rows == rejected.size) {
-            "${items.rows} items, ${assigned.size} assigned, ${confirmed.size} confirmed, ${rejected.size} rejected"
-        }
-        require(items.cols == values.cols) { "Items of ${items.cols} numbers, values of ${values.cols}" }
-    }
-
-    val itemCount: Int get() = items.rows
+    val itemCount: Int get() = assigned.size
     val valueCount: Int get() = values.rows
+
+    init {
+        require(views.isNotEmpty()) { "No view of the texts" }
+        require(views.all { it.vectors.rows == itemCount && it.vectors.cols == values.cols }) {
+            "Views of ${views.map { "${it.vectors.rows}×${it.vectors.cols}" }}, $itemCount items, values of ${values.cols}"
+        }
+        require(confirmed.size == itemCount && rejected.size == itemCount && context.size == itemCount) {
+            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts"
+        }
+    }
 }
 
 /**
- * A way of working out the values of a facet an item should have from its text and its other
+ * A way of working out the values of a facet an item should have from its texts and its other
  * values. Learns from every item of the source: the values the site and the user gave them are
- * the examples, the user's word on a suggestion counts most.
+ * the examples. What the user said of a work is the application's to apply over the chances.
  */
 interface FacetSuggester {
     /** Stable: kept with the fitted state. */
     val id: String
 
-    fun fit(task: SuggestionTask): FittedSuggester
+    /** Learns from every item of [task]; null when there is nothing to learn from — no item has a value, or every item has all. */
+    fun fit(task: SuggestionTask): FittedSuggester?
 
-    /** A state kept by [FittedSuggester.pack]. */
-    fun unpack(bytes: ByteArray): FittedSuggester
+    /** A state kept by [FittedSuggester.pack]; null when it does not fit tasks of [task]'s shape — it is fitted again. */
+    fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester?
 }
 
 interface FittedSuggester {

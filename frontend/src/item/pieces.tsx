@@ -3,6 +3,7 @@ import { StarIcon } from "lucide-react";
 import {
   pictureSrc,
   type ContentTypeInfo,
+  type FacetValueInfo,
   type Grade,
   type ItemFacet,
   type ItemSummary,
@@ -15,7 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ALL_GRADES, gradeLabel, sourceTitle, typeIcon } from "@/contenttype/types";
-import { compact, score } from "@/i18n";
+import { INFERRED_BORDER, shownChance, unlikely } from "@/facet/FacetValueMarks";
+import { compact, percent, score } from "@/i18n";
 import { useLadder } from "@/model/useModel";
 import { cn } from "@/lib/utils";
 
@@ -152,9 +154,29 @@ export function ScoreBadge({ type, summary, className }: { type: ContentTypeInfo
   );
 }
 
+const CORRECTED_NOTE: Record<NonNullable<FacetValueInfo["corrected"]>, string> = {
+  ADDED: " · добавлено вами",
+  CONFIRMED: " · подтверждено вами",
+  REMOVED: " · убрано вами",
+};
+
+/** The title of a value's chip on a card: its facet, the user's word or the model's chance, and whether the model gave it. */
+function facetValueTitle(facet: ItemFacet, value: FacetValueInfo): string {
+  const chance = shownChance(value);
+  return (
+    facet.label +
+    (value.corrected ? CORRECTED_NOTE[value.corrected] : "") +
+    (chance !== undefined ? ` · модель: ${percent(chance)}` : "") +
+    (unlikely(value) ? " — скорее этого у работы нет" : "") +
+    (value.inferred ? " · вычислено по описанию, главам и другим тегам" : "")
+  );
+}
+
 /**
  * The facets shown on a card, value by value; a value the user took away is crossed out, one the
- * user added is outlined. [limit] cuts the list, the rest go into "+N" with their names in its title.
+ * user added is outlined, one the model worked out is dotted and marked "≈", one the model more
+ * likely says no to is amber-edged. [limit] cuts the list, the rest go into "+N" with their names
+ * in its title.
  */
 export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[]; limit?: number; className?: string }) {
   const values = facets.flatMap((f) => f.values.map((v) => ({ facet: f, value: v })));
@@ -169,11 +191,14 @@ export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[];
           variant={value.corrected === "ADDED" ? "outline" : "secondary"}
           className={cn(
             "font-normal",
+            value.inferred && INFERRED_BORDER,
             value.corrected === "REMOVED" && "text-muted-foreground line-through",
             value.corrected === "ADDED" && "border-dashed border-primary/50",
+            unlikely(value) && "border-maybe/60",
           )}
-          title={`${facet.label}${value.corrected === "REMOVED" ? " · убрано вами" : value.corrected === "ADDED" ? " · добавлено вами" : ""}`}
+          title={facetValueTitle(facet, value)}
         >
+          {value.inferred && <span className="text-muted-foreground">≈</span>}
           {value.name}
         </Badge>
       ))}

@@ -31,7 +31,7 @@ class TypesController(private val plugins: Plugins) : TypesApi {
                     homepage = s.homepage,
                     modes = s.modes.map { ApiSourceMode.valueOf(it.name) },
                     texts = s.schema.texts.map { TextInfo(it.key, it.label, it.spoiler) },
-                    facets = s.schema.facets.map { FacetInfo(FeatureNames.facetId(s, it), it.key, it.label, it.filter, it.onCard, it.suggest) },
+                    facets = s.schema.facets.map { FacetInfo(FeatureNames.facetId(s, it), it.key, it.label, it.filter, it.onCard, it.suggest, it.infer, it.original) },
                     numbers = s.schema.numbers.map { NumberInfo(FeatureNames.numberId(s, it), it.key, it.label) },
                     versioned = s.schema.versioned,
                     reviewsLabel = s.schema.reviewsLabel,

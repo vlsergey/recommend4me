@@ -13,6 +13,8 @@ import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.suggestion.Chance
+import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
@@ -34,27 +36,47 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             id to Graded(current?.grade, earlier?.grade, earlier?.version)
         }.toMap()
 
-    /** The facets of an item for the interface: every value with its name and the user's correction. */
+    /**
+     * The facets of an item for the interface: every value with its name, the user's word on it,
+     * the model's chance of it, and whether the model gave it; [texts] give the site's own line of
+     * a facet that has one ([FacetDef.original][io.github.vlsergey.recommend4me.source.FacetDef.original]).
+     */
     fun facets(
         store: SourceStore,
         site: Map<String, List<String>>,
+        chances: Map<String, Map<String, Chance>>?,
         corrections: List<FacetCorrection>,
         names: Map<String, Map<String, String>>,
+        texts: Map<String, String> = emptyMap(),
         only: (String) -> Boolean,
     ): List<ItemFacet> {
-        val corrected = Corrected.facets(site, corrections)
-        return store.source.schema.facets.filter { only(it.key) }.mapNotNull { def ->
+        val schema = store.source.schema
+        val base = ModelValues.of(schema, site, chances)
+        val corrected = Corrected.facets(base, corrections)
+        return schema.facets.filter { only(it.key) }.mapNotNull { def ->
             val keys = corrected[def.key].orEmpty()
-            val removed = corrections.filter { it.facet == def.key && !it.added && it.key in site[def.key].orEmpty() }.map { it.key }
+            val had = base[def.key].orEmpty().toSet()
+            val removed = corrections.filter { it.facet == def.key && !it.added && it.key in had }.map { it.key }
             val added = corrections.filter { it.facet == def.key && it.added }.associate { it.key to it.name }
-            if (keys.isEmpty() && removed.isEmpty()) return@mapNotNull null
+            val original = def.original?.let { texts[it] }
+            if (keys.isEmpty() && removed.isEmpty() && original == null) return@mapNotNull null
+            val own = chances?.get(def.key).orEmpty()
+            val siteKeys = site[def.key].orEmpty().toSet()
             fun name(key: String) = added[key] ?: names[def.key]?.get(key) ?: key
+            fun info(key: String, corrected: FacetValueInfo.Corrected?) = FacetValueInfo(
+                key = key,
+                name = name(key),
+                corrected = corrected,
+                chance = own[key]?.chance,
+                inferred = (key in had && key !in siteKeys).takeIf { it },
+            )
             ItemFacet(
                 facet = def.key,
                 label = def.label,
                 propertyValues = keys.map { k ->
-                    FacetValueInfo(k, name(k), if (k in added && k !in site[def.key].orEmpty()) FacetValueInfo.Corrected.ADDED else null)
-                } + removed.map { FacetValueInfo(it, name(it), FacetValueInfo.Corrected.REMOVED) },
+                    info(k, if (k in added) (if (k in had) FacetValueInfo.Corrected.CONFIRMED else FacetValueInfo.Corrected.ADDED) else null)
+                } + removed.map { info(it, FacetValueInfo.Corrected.REMOVED) },
+                original = original,
             )
         }
     }
@@ -85,7 +107,10 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             val corrections = store.corrections.facetsOf(ids)
             val fields = store.corrections.fieldsOf(ids)
             val onCard = store.source.schema.facets.filter { it.onCard }.map { it.key }.toSet()
-            val names = onCard.associateWith { facet -> store.items.facetNames(facet, ids.flatMap { facets[it]?.get(facet).orEmpty() }) }
+            val chances = store.suggestions.ofItems(ids)
+            val names = onCard.associateWith { facet ->
+                store.items.facetNames(facet, ids.flatMap { facets[it]?.get(facet).orEmpty() + chances[it]?.get(facet)?.keys.orEmpty() })
+            }
             val numbers = store.items.numbersOf(ids)
             val pictures = store.pictures.countsOf(ids)
             val ratings = store.ratings.all().filter { it.itemId in ids.toSet() }
@@ -105,7 +130,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
                     version = head.version,
                     url = head.url,
                     updatedAt = head.updatedAt.atOffset(ZoneOffset.UTC),
-                    facets = facets(store, facets[id].orEmpty(), corrections[id].orEmpty(), names) { it in onCard },
+                    facets = facets(store, facets[id].orEmpty(), chances[id], corrections[id].orEmpty(), names) { it in onCard },
                     numbers = Corrected.numbers(numbers[id].orEmpty(), fields[id].orEmpty()),
                     hasCover = pictures[id]?.second ?: false,
                     pictureCount = pictures[id]?.first ?: 0,

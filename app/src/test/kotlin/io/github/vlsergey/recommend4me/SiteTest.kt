@@ -67,15 +67,24 @@ class SiteTest {
         fun wordsEncoder(): TextEncoder = WordsEncoder()
     }
 
-    /** A site whose pages are "<id>|<title>|<tags>|<annotation>", with a tag to suggest. */
+    /**
+     * A site whose pages are "<id>|<title>|<tags>|<annotation>|<pairings>": tags to suggest, and
+     * pairings the application works out from the line the site writes them in.
+     */
     class SiteSource : Source {
         override val id = "site"
         override val title = "Site"
         override val contentType = "books"
         override val homepage = "https://site.example"
         override val schema = SourceSchema(
-            facets = listOf(FacetDef("tag", "Метка", suggest = true)),
-            texts = listOf(TextDef("annotation", "Аннотация", block = "text:annotation")),
+            facets = listOf(
+                FacetDef("tag", "Метка", suggest = true),
+                FacetDef("pairing", "Пэйринг", infer = true, original = "pairings"),
+            ),
+            texts = listOf(
+                TextDef("annotation", "Аннотация", block = "text:annotation"),
+                TextDef("pairings", "Пэйринги на сайте", searchByMeaning = true),
+            ),
         )
         override val modes = setOf(SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://site\\.example/work/.*"))
@@ -88,10 +97,11 @@ class SiteTest {
         )
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
-            val (id, title, tags, annotation) = page.html.split('|')
+            val (id, title, tags, annotation, pairings) = page.html.split('|')
             context.items.upsert(ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")), page.capturedAt)
             context.items.setFacet(id, "tag", tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it.replaceFirstChar(Char::uppercase)) })
-            context.items.setTexts(id, mapOf("annotation" to annotation))
+            context.items.setFacet(id, "pairing", pairings.split(", ").filter { it.isNotBlank() }.map { FacetValue(it.lowercase(), it) })
+            context.items.setTexts(id, mapOf("annotation" to annotation, "pairings" to pairings))
             return listOf(id)
         }
     }
@@ -99,7 +109,7 @@ class SiteTest {
     /** Texts as bags of their words, hashed into a few dimensions: alike words, alike vectors. */
     class WordsEncoder : TextEncoder {
         override val id = "words"
-        override val dim = 64
+        override val dim = 512
         override fun ready() = true
 
         override fun encode(texts: List<String>, kind: TextKind): List<FloatArray?> = texts.map { text ->
@@ -123,16 +133,32 @@ class SiteTest {
 
     private fun capture(body: String) = captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
 
-    /** Forty works of two kinds, and one of the first kind the site gave no tags. */
+    /**
+     * Forty works of two kinds, one of the first kind the site gave a dragons' tag by mistake, and
+     * one of the first kind it gave nothing.
+     */
     private fun catalogue() {
         repeat(20) { k ->
-            capture("s$k|Space $k|space,ships|Starships cross the galaxy, pilots fight in orbit near distant planets $k")
-            capture("d$k|Dragons $k|dragons,magic|A dragon guards the castle, wizards cast spells and magic $k")
+            // As on a site: some works with one tag of their two, some untagged, some without pairings
+            fun tags(one: String, two: String) = when {
+                k % 5 == 0 -> ""
+                k % 3 == 0 -> one
+                else -> "$one,$two"
+            }
+            // And some crossovers: the other kind's pairing beside the own one
+            fun pairing(own: String, other: String) = when {
+                k % 4 == 0 -> ""
+                k % 7 == 3 -> "$own, $other"
+                else -> own
+            }
+            capture("s$k|Space $k|${tags("space", "ships")}|Starships cross the galaxy, pilots fight in orbit near distant planets $k|${pairing("Pilot/Captain", "Knight/Princess")}")
+            capture("d$k|Dragons $k|${tags("dragons", "magic")}|A dragon guards the castle, wizards cast spells and magic $k|${pairing("Knight/Princess", "Pilot/Captain")}")
         }
-        capture("x1|Lost fleet|${""}|Pilots of starships lost beyond the galaxy fight near planets")
+        capture("w1|Wrong tag|space,ships,magic|Starships cross the galaxy, pilots fight in orbit near distant planets|Pilot/Captain")
+        capture("x1|Lost fleet||Pilots of starships lost beyond the galaxy fight near planets|")
         val store = stores.source("site")!!
         textVectors.refresh(store)
-        suggestions.refresh(store, null)
+        suggestions.refresh(store)
     }
 
     @Test
@@ -147,22 +173,38 @@ class SiteTest {
         assertEquals(5, item.grades.size)
 
         // The tags of its kind are suggested for the untagged work
-        val suggested = item.suggestions.single().suggested.map { it.key }
-        assertTrue("space" in suggested && "ships" in suggested, "suggested $suggested")
+        val suggested = item.suggestions.single { it.facet == "tag" }.suggested.map { it.key }
+        assertTrue("space" in suggested, "suggested $suggested")
         assertTrue("dragons" !in suggested, "suggested $suggested")
+
+        // The pairing of its kind is given to it at once, marked as the model's
+        val pairing = item.facets.single { it.facet == "pairing" }.propertyValues.single()
+        assertEquals("pilot/captain", pairing.key)
+        assertEquals(true, pairing.inferred)
+        assertTrue(pairing.chance!! > 0.5, "the chance ${pairing.chance}")
+
+        // Every site's value comes with its chance; the mistaken one is less likely than the work's own kind
+        val wrong = items.getItem("site", "w1").body!!.allFacets.single { it.facet == "tag" }.propertyValues
+        assertTrue(wrong.all { it.chance != null }, "chances $wrong")
+        assertTrue(wrong.single { it.key == "magic" }.chance!! < wrong.single { it.key == "space" }.chance!!, "magic on a space work: $wrong")
 
         // Confirmed, it is the work's; rejected, it is no longer suggested
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = true, key = "space"))
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = false, key = "ships"))
         val after = suggestionsApi.getSuggestions("site", "x1").body!!.single()
         assertTrue(after.suggested.none { it.key == "space" || it.key == "ships" }, "after the answers ${after.suggested}")
-        val facets = pages.getPage("https://site.example/work/x1").body!!.item!!.facets.single().propertyValues
+        val facets = pages.getPage("https://site.example/work/x1").body!!.item!!.facets.single { it.facet == "tag" }.propertyValues
         assertEquals(FacetValueInfo.Corrected.ADDED, facets.single { it.key == "space" }.corrected)
+
+        // A site's value the user says the work has is confirmed
+        corrections.correctFacet("site", "w1", FacetCorrection(facet = "tag", added = true, key = "ships"))
+        val confirmed = items.getItem("site", "w1").body!!.allFacets.single { it.facet == "tag" }.propertyValues.single { it.key == "ships" }
+        assertEquals(FacetValueInfo.Corrected.CONFIRMED, confirmed.corrected)
 
         // A value added by its name finds the site's key, any case; a new one gets its name in lower case
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = true, name = "MAGIC"))
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = true, name = "Космос"))
-        val values = items.getItem("site", "x1").body!!.allFacets.single().propertyValues
+        val values = items.getItem("site", "x1").body!!.allFacets.single { it.facet == "tag" }.propertyValues
         assertEquals(setOf("space", "magic", "космос"), values.filter { it.corrected == FacetValueInfo.Corrected.ADDED }.map { it.key }.toSet())
         assertEquals("Космос", values.single { it.key == "космос" }.name)
         assertEquals(listOf("magic"), items.listFacetValues("site", "tag", "mag", 10).body!!.map { it.key })

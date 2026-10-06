@@ -4,6 +4,9 @@ import io.github.vlsergey.recommend4me.api.model.FacetFilter
 import io.github.vlsergey.recommend4me.api.model.FacetValueUse
 import io.github.vlsergey.recommend4me.api.model.ItemPage
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.correction.FacetCorrection
+import io.github.vlsergey.recommend4me.source.FacetDef
+import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.search.Search
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -107,15 +110,7 @@ class ItemList(private val stores: Stores, private val works: Works, private val
         val filtered = s.source.schema.facets.filter { it.filter && (filterId(s, it) in hidden || filterId(s, it) in hiddenWithout) }
         if (filtered.isEmpty()) return null
         val corrections = s.corrections.allFacets().groupBy { it.itemId }
-        val values = filtered.associate { def ->
-            val byItem = HashMap<String, List<String>>()
-            s.items.forEachFacet(def.key) { id, keys -> byItem[id] = keys }
-            corrections.forEach { (id, list) ->
-                val own = list.filter { it.facet == def.key }
-                if (own.isNotEmpty()) byItem[id] = Corrected.facets(mapOf(def.key to byItem[id].orEmpty()), own)[def.key].orEmpty()
-            }
-            def to byItem
-        }
+        val values = filtered.associateWith { def -> valuesOf(s, def, corrections) }
         return { id ->
             values.all { (def, byItem) ->
                 val keys = byItem[id].orEmpty()
@@ -123,6 +118,20 @@ class ItemList(private val stores: Stores, private val works: Works, private val
                 if (keys.isEmpty()) id2 !in hiddenWithout else keys.any { it !in hidden[id2].orEmpty() }
             }
         }
+    }
+
+    /** Every item's values of one facet as the user sees them: the site's, the model's of a facet it works out, the user's corrections on top. */
+    private fun valuesOf(s: SourceStore, def: FacetDef, corrections: Map<String, List<FacetCorrection>>): Map<String, List<String>> {
+        val byItem = HashMap<String, List<String>>()
+        s.items.forEachFacet(def.key) { id, keys -> byItem[id] = keys }
+        if (def.infer) s.suggestions.ofFacets(listOf(def.key)).forEach { (id, chances) ->
+            byItem[id] = ModelValues.of(s.source.schema, mapOf(def.key to byItem[id].orEmpty()), chances)[def.key].orEmpty()
+        }
+        corrections.forEach { (id, list) ->
+            val own = list.filter { it.facet == def.key }
+            if (own.isNotEmpty()) byItem[id] = Corrected.facets(mapOf(def.key to byItem[id].orEmpty()), own)[def.key].orEmpty()
+        }
+        return byItem
     }
 
     /** The filter facets of a content type: their values with how many works have each, and the works with none. */
@@ -140,13 +149,7 @@ class ItemList(private val stores: Stores, private val works: Works, private val
             val corrections = s.corrections.allFacets().groupBy { it.itemId }
             s.source.schema.facets.filter { it.filter }.forEach { def ->
                 val group = groups.getOrPut(filterId(s, def)) { Group(def.label, def.noneLabel) }
-                val byItem = HashMap<String, List<String>>()
-                s.items.forEachFacet(def.key) { id, keys -> byItem[id] = keys }
-                corrections.forEach { (id, list) ->
-                    val own = list.filter { it.facet == def.key }
-                    if (own.isNotEmpty()) byItem[id] = Corrected.facets(mapOf(def.key to byItem[id].orEmpty()), own)[def.key].orEmpty()
-                }
-                byItem.values.forEach { keys ->
+                valuesOf(s, def, corrections).values.forEach { keys ->
                     if (keys.isNotEmpty()) group.with++
                     keys.forEach { group.uses.merge(it, 1, Int::plus) }
                 }

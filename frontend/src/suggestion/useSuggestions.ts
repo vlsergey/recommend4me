@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, unwrap, type FacetSuggestions, type ItemRef, type SourceInfo } from "@/api/client";
+import { api, unwrap, type ItemRef, type SourceInfo } from "@/api/client";
 
 export function suggestionsKey(ref: ItemRef) {
   return ["suggestions", ref.source, ref.item];
 }
 
 /**
- * The values the application suggests for the item's facets, and the site's values it doubts;
- * asked for only when the source has a facet to suggest values of.
+ * The values the application suggests for the item's facets — ones the work lacks and more likely
+ * has than not; asked for only when the source has a facet to suggest values of.
  */
 export function useSuggestions(ref: ItemRef, source: SourceInfo | undefined) {
   return useQuery({
@@ -16,9 +16,4 @@ export function useSuggestions(ref: ItemRef, source: SourceInfo | undefined) {
     queryFn: async () =>
       unwrap(await api.GET("/api/items/{source}/{item}/suggestions", { params: { path: { source: ref.source, item: ref.item } } })),
   });
-}
-
-/** The suggestions of one facet, or none. */
-export function suggestionsOf(all: FacetSuggestions[] | undefined, facet: string): FacetSuggestions | undefined {
-  return all?.find((s) => s.facet === facet);
 }

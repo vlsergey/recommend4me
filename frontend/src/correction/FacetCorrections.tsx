@@ -1,13 +1,15 @@
 import { useEffect, useId, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { PlusIcon, Undo2Icon, XIcon } from "lucide-react";
-import { api, unwrap, type FacetValueInfo, type ItemFacet, type ItemRef, type SourceInfo, type SuggestedValue } from "@/api/client";
+import { PlusIcon } from "lucide-react";
+import { api, unwrap, type FacetValueInfo, type ItemFacet, type ItemRef, type SourceInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ChanceMark, INFERRED_BORDER, InferredMark, unlikely } from "@/facet/FacetValueMarks";
 import { cn } from "@/lib/utils";
-import { DoubtMark, SuggestedValues } from "@/suggestion/Suggestions";
-import { suggestionsOf, useSuggestions } from "@/suggestion/useSuggestions";
+import { SuggestedValues } from "@/suggestion/Suggestions";
+import { useSuggestions } from "@/suggestion/useSuggestions";
+import { FacetAnswers } from "./FacetAnswers";
 import { EditButton } from "./FieldEditor";
 import type { Corrections } from "./useCorrections";
 
@@ -15,10 +17,11 @@ import type { Corrections } from "./useCorrections";
 const OFFERED = 30;
 
 /**
- * Every facet of the item, the user's corrections included: a value the user added is outlined,
- * one the user took away is crossed out. In editing, a site's value can be taken away, a
- * correction taken back, and a value of any facet of the source added. Below them the
- * application's suggestions to answer; a site's value it doubts is marked on its chip.
+ * Every facet of the item, the user's corrections included. Above the values of a facet the site
+ * writes as one line, that line as the site has it. Each value says how likely the model finds it
+ * (until the user answers on it) and takes the user's ✓ or ✕; a value the user added is outlined,
+ * one the model worked out dotted, one the user took away crossed out. In editing a value of any
+ * facet of the source can be added. Below them the application's suggestions to answer.
  */
 export function FacetCorrections({
   item,
@@ -37,22 +40,16 @@ export function FacetCorrections({
     <section className="flex flex-col gap-3">
       <div className="flex items-center gap-1">
         <h4 className="text-sm font-semibold">Признаки</h4>
-        <EditButton onClick={() => setEditing(!editing)} title={editing ? "Закончить исправления" : "Исправить признаки"} />
+        <EditButton onClick={() => setEditing(!editing)} title={editing ? "Закончить добавление" : "Добавить значение признака"} />
       </div>
       {facets.length === 0 && !editing && <div className="text-sm text-muted-foreground">—</div>}
       {facets.map((f) => (
         <div key={f.facet}>
           <div className="mb-1 text-xs text-muted-foreground">{f.label}</div>
+          {f.original && <div className="mb-1 text-xs break-words text-muted-foreground/80">На сайте: {f.original}</div>}
           <div className="flex flex-wrap gap-1">
             {f.values.map((v) => (
-              <FacetValue
-                key={v.key}
-                facet={f.facet}
-                value={v}
-                doubt={suggestionsOf(suggestions.data, f.facet)?.doubted.find((d) => d.key === v.key)}
-                editing={editing}
-                corrections={corrections}
-              />
+              <FacetValue key={v.key} facet={f.facet} value={v} corrections={corrections} />
             ))}
           </div>
         </div>
@@ -63,59 +60,29 @@ export function FacetCorrections({
   );
 }
 
-function FacetValue({
-  facet,
-  value,
-  doubt,
-  editing,
-  corrections,
-}: {
-  facet: string;
-  value: FacetValueInfo;
-  /** The application doubts the site's value: it does not look like the work. */
-  doubt?: SuggestedValue;
-  editing: boolean;
-  corrections: Corrections;
-}) {
-  // A value the user already answered for is not in doubt any more
-  const doubted = doubt !== undefined && !value.corrected;
+const CORRECTED_TITLE: Record<NonNullable<FacetValueInfo["corrected"]>, string> = {
+  ADDED: "Добавлено вами",
+  CONFIRMED: "Подтверждено вами",
+  REMOVED: "Убрано вами",
+};
+
+function FacetValue({ facet, value, corrections }: { facet: string; value: FacetValueInfo; corrections: Corrections }) {
   return (
     <Badge
       variant={value.corrected === "ADDED" ? "outline" : "secondary"}
       className={cn(
-        "font-normal",
-        value.corrected === "REMOVED" && "text-muted-foreground line-through",
+        "pr-0.5 font-normal",
+        value.inferred && INFERRED_BORDER,
+        value.corrected === "REMOVED" && "text-muted-foreground",
         value.corrected === "ADDED" && "border-dashed border-primary/50",
-        doubted && "border-maybe/60",
-        (editing || doubted) && "pr-0.5",
+        unlikely(value) && "border-maybe/60",
       )}
-      title={value.corrected === "REMOVED" ? "Убрано вами" : value.corrected === "ADDED" ? "Добавлено вами" : undefined}
+      title={value.corrected ? CORRECTED_TITLE[value.corrected] : undefined}
     >
-      {value.name}
-      {doubted ? (
-        <DoubtMark facet={facet} value={doubt} corrections={corrections} />
-      ) : (
-        editing &&
-        (value.corrected ? (
-          <AsyncButton
-            variant="ghost"
-            size="icon-xs"
-            className="size-4 rounded-sm"
-            title={value.corrected === "ADDED" ? "Убрать добавленное" : "Вернуть как на сайте"}
-            onClick={() => corrections.resetFacet(facet, value.key)}
-            icon={value.corrected === "ADDED" ? <XIcon className="size-3" /> : <Undo2Icon className="size-3" />}
-          />
-        ) : (
-          <AsyncButton
-            variant="ghost"
-            size="icon-xs"
-            className="size-4 rounded-sm"
-            title="Убрать: значение сайта неверно"
-            onClick={() => corrections.setFacet(facet, { key: value.key }, false)}
-            icon={<XIcon className="size-3" />}
-          />
-        ))
-      )}
+      {value.inferred && <InferredMark />}
+      <span className={cn(value.corrected === "REMOVED" && "line-through")}>{value.name}</span>
+      <ChanceMark value={value} />
+      <FacetAnswers facet={facet} value={value} corrections={corrections} />
     </Badge>
   );
 }

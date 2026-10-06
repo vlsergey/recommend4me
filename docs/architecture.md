@@ -124,32 +124,48 @@ For every content type:
 
 Scorers implement `Scorer`; anything that maps a row of features to a number fits.
 
-## Suggested tags
+## Tags worked out
 
-Authors tag their books carelessly or not at all. For every facet a source marks `suggest`
-(the tags of author.today and ficbook) the application works out the values a work should have
-and shows them to confirm or reject; it also marks the site's values that do not fit the work.
-The work is the `FacetSuggester` plugin's (`suggester-tags`): it is handed every item of the
-source — the mean direction of its texts' vectors, its values with the user's corrections, the
-values the user confirmed and rejected — and every value with the vector of its name as a query.
-`suggester-tags` weighs three witnesses by a logistic regression learnt from the catalogue: the
-share of the nearest texts having the value, how much nearer the text is to the value's name than
-texts usually are, and how much more often the value goes with the work's other values than by
-chance. Every count leaves the work itself out, so a site's value nothing else supports comes out
-unlikely.
+Authors tag their works carelessly or not at all, and write their pairings and characters as
+they please. For every facet a source marks `suggest` (the tags of author.today and ficbook) or
+`infer` (ficbook's pairings and main characters) the model gives the chance of every value a
+work has, and of every value it lacks that it more likely has than not:
 
-A confirmation is a correction adding the value, a rejection one taking it away: the model, the
-filters and the search see them at once. The suggestions are kept in the model database with
-what each was made of (a fingerprint of the work's values, the user's answers and its texts),
-made again a few seconds after the work changes, at once for a work that never had any; the
-suggester is fitted again when the user's answers have grown by ten or a tenth, and twice a day.
+- every value of the site is shown — none is hidden — with the chance in brackets, marked when
+  the work more likely has it not;
+- of a `suggest` facet, a value the work lacks and more likely has is a suggestion to confirm;
+- of an `infer` facet, such a value is the work's at once (marked as worked out): the site's
+  line of the values (`FacetDef.original`, kept as a text) is shown above, and is what the model
+  learns from beside the description, the chapters and the other tags.
+
+The user says of any value that the work has it (✓) or has it not (✕): a correction, applied over
+any chance, seen at once by the model, the filters and the search.
+
+The work is the `FacetSuggester` plugin's (`suggester-tags`). It is handed every item of the
+source — its texts in several views (the description, the chapters read, the site's own line of
+the values), its values with the user's corrections, the values of its other facets — and every
+value with the vector of its name as a query. It weighs its witnesses by a logistic regression
+over every work and every value: in every view, the share of the value among the other works
+weighed by likeness on the work's own scale; how much nearer the view is to the value's name
+than usually; how much more often the value goes with the work's other values, and with the
+values of its other facets, than by chance. Nothing in it is chosen by hand: every count leaves
+the work itself out and is drawn by the Jeffreys half; the regression is Firth's (the
+likelihood with the Jeffreys prior), finite where a witness tells the examples apart outright; a
+work with no value of the facet at all is unknown, not denied; and the weights are learnt for
+every set of views the works have, so a work is judged by the views it has.
+
+The chances are kept in the model database with what each was made of (a fingerprint of the
+work's values, the user's answers, its texts and chapters). The suggester is fitted again
+whenever anything it learns from changes, and every work is then worked out again; a work a page
+asks for that never had chances gets them at once, by the weights fitted last.
 
 ## The site as the interface
 
 On the pages the sources want, the extension also shows the work as the application knows it,
 so the site itself is an interface of the application (`GET /api/pages?url=`): a panel with the
 prediction, the grade buttons, what the prediction rests on and the tags; on the site's own tag
-elements a button to take each away and the user's and the suggested tags after them; "+ / −" on
+elements the model's chance and the user's ✓ and ✕, the user's and the suggested tags after
+them; the worked out pairings and characters in lines of their own under the site's; "+ / −" on
 every review and picture of the work; the prediction and the grade on every card of a list
 (`POST /api/pages/cards`). A source says where these go by `PageDecor` — CSS selectors of its
 pages — and which work a page or a card's link is of by `Source.itemIdOf`. Everything is changed

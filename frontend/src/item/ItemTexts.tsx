@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
  */
 export function ItemTexts({ texts, source, corrections }: { texts: TextValue[]; source?: SourceInfo; corrections: Corrections }) {
   const [adding, setAdding] = useState<string | null>(null);
-  const missing = (source?.texts ?? []).filter((t) => !texts.some((v) => v.key === t.key));
+  // A facet's line as the site writes it is shown with the facet, not among the texts
+  const facetLines = new Set((source?.facets ?? []).map((f) => f.original));
+  const missing = (source?.texts ?? []).filter((t) => !texts.some((v) => v.key === t.key) && !facetLines.has(t.key));
   const added = missing.find((t) => t.key === adding);
   return (
     <>

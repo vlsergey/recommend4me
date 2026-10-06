@@ -21,6 +21,7 @@ import io.github.vlsergey.recommend4me.setvector.SetVectorsChanged
 import io.github.vlsergey.recommend4me.signal.SignalsChanged
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.suggestion.FacetChancesChanged
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
@@ -105,6 +106,10 @@ class Recommendations(
 
     @EventListener
     fun signalsChanged(event: SignalsChanged) = scheduleRetrain(event.type)
+
+    /** The model gave works other pairings, characters: features of the works. */
+    @EventListener
+    fun chancesChanged(event: FacetChancesChanged) = scheduleRetrain(stores.typeOf(event.source).id)
 
     @EventListener
     fun setVectorsChanged(event: SetVectorsChanged) {

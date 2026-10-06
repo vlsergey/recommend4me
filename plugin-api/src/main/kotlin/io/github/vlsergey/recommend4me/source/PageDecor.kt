@@ -20,11 +20,19 @@ class PageDecor(
 )
 
 /**
- * The site's elements of the values of a facet on a work's page. Each is matched to a value by its
- * `title` or its text against the value's name or key, ignoring case; the values the user added
- * are put after the last of them.
+ * A facet on a work's page, one of two ways:
+ *
+ * - [values]: the site's own elements of its values. Each is matched to a value by its `title` or
+ *   its text against the value's name or key, ignoring case, and gets the user's buttons in place;
+ *   the values the user added and the suggested ones are put after the last of them;
+ * - [after]: the element after which a line of the facet's values is put whole — for a facet the
+ *   application works out ([FacetDef.infer]), whose values are not the site's.
  */
-class FacetDecor(val facet: String, val values: String)
+class FacetDecor(val facet: String, val values: String? = null, val after: String? = null) {
+    init {
+        require((values == null) != (after == null)) { "A facet is marked up in place or after an element: $facet" }
+    }
+}
 
 /**
  * The reviews on a page: [selector] picks every review, its id is the attribute [idAttribute] with

@@ -178,29 +178,20 @@
       root.appendChild(why);
     }
 
-    // The facets the page does not show in place, and the suggestions of all
-    (item.facets || []).forEach((facet) => {
-      if (placed.has(facet.facet)) return;
-      const suggestions = (item.suggestions || []).find((x) => x.facet === facet.facet);
-      root.appendChild(facetBlock(item, facet, suggestions));
-    });
-    (item.suggestions || []).forEach((x) => {
-      if (placed.has(x.facet) || (item.facets || []).some((f) => f.facet === x.facet)) return;
-      root.appendChild(facetBlock(item, { facet: x.facet, label: x.label, values: [] }, x));
-    });
-    (view.decor.facets || []).forEach((decor) => {
-      if (!placed.has(decor.facet)) return;
-      const label = labelOf(item, decor.facet);
-      const line = el("r4m-line", "r4m-muted", `${label}: ✕ у значения на странице — убрать, пунктир — подсказка`);
-      line.appendChild(addField(item, decor.facet, label));
-      root.appendChild(line);
+    // The facets the page does not show, in the panel
+    facetsOf(item).forEach(({ facet, suggestions }) => {
+      if (!placed.has(facet.facet)) root.appendChild(facetBlock(item, facet, suggestions, true));
     });
     place(root);
   }
 
-  function labelOf(item, facet) {
-    const f = (item.facets || []).find((x) => x.facet === facet) || (item.suggestions || []).find((x) => x.facet === facet);
-    return f ? f.label : facet;
+  /** Every facet of the item with its suggestions, those only suggested included. */
+  function facetsOf(item) {
+    const out = (item.facets || []).map((facet) => ({ facet, suggestions: (item.suggestions || []).find((x) => x.facet === facet.facet) }));
+    (item.suggestions || []).forEach((x) => {
+      if (!out.some((f) => f.facet.facet === x.facet)) out.push({ facet: { facet: x.facet, label: x.label, values: [] }, suggestions: x });
+    });
+    return out;
   }
 
   /** Puts the panel after the element the source names, or folded in a corner. */
@@ -266,23 +257,54 @@
     return `${Math.round(chance * 100)}%`;
   }
 
-  /** A suggested value: a dashed chip with its chance, ✓ to add it and ✕ to say the work has it not. */
-  function suggestedChip(item, facet, v) {
-    const chip = el("r4m-chip", "r4m-suggested");
-    chip.title = `Подсказка: вероятность ${percent(v.chance)}`;
+  /**
+   * What goes beside a value: the model's chance in brackets while the user has not answered —
+   * a "?" when the work more likely has it not — and the user's ✓ (it has it) and ✕ (it has it
+   * not); a value answered shows the answer, pressed again it is taken back.
+   */
+  function answers(item, facet, v) {
+    const out = [];
+    if (v.inferred) out.push(Object.assign(el("r4m-inferred", null, "≈"), { title: "Вычислено по описанию, главам и другим тегам" }));
+    if (v.corrected === "REMOVED") {
+      out.push(button("↺", "Вернуть: вы сказали, что этого у работы нет", () => uncorrect(item, facet, v.key), "r4m-yes"));
+      return out;
+    }
+    if (v.corrected === "ADDED") {
+      out.push(button("✕", "Убрать: добавлено вами", () => uncorrect(item, facet, v.key), "r4m-no"));
+      return out;
+    }
+    if (v.corrected === "CONFIRMED") {
+      out.push(button("✓", "Вы подтвердили; нажмите, чтобы снять подтверждение", () => uncorrect(item, facet, v.key), "r4m-yes r4m-current"));
+    } else {
+      if (v.chance !== undefined && v.chance !== null) {
+        const unlikely = v.chance < 0.5;
+        out.push(Object.assign(el("r4m-chance", unlikely ? "r4m-unlikely" : null, `(${percent(v.chance)})`), {
+          title: unlikely ? "Модель считает, что скорее этого у работы нет" : "Уверенность модели",
+        }));
+      }
+      out.push(button("✓", "Да, это у работы есть", () => correct(item, facet, { key: v.key }, true), "r4m-yes"));
+    }
+    out.push(button("✕", "Нет, этого у работы нет", () => correct(item, facet, { key: v.key }, false), "r4m-no"));
+    return out;
+  }
+
+  /** A value as a chip: its name and [answers]. */
+  function valueChip(item, facet, v) {
+    const chip = el("r4m-chip", { ADDED: "r4m-added", CONFIRMED: "r4m-confirmed", REMOVED: "r4m-removed-chip" }[v.corrected] || null);
+    if (v.inferred) chip.classList.add("r4m-inferred-chip");
     chip.appendChild(el("span", null, v.name));
-    chip.appendChild(el("span", "r4m-chance", percent(v.chance)));
-    chip.appendChild(button("✓", "Да, это про эту работу", () => correct(item, facet, { key: v.key }, true), "r4m-yes"));
-    chip.appendChild(button("✕", "Нет, это не про неё", () => correct(item, facet, { key: v.key }, false), "r4m-no"));
+    answers(item, facet, v).forEach((e) => chip.appendChild(e));
     return chip;
   }
 
-  /** A value the user added: a chip with ✕ to take the addition back. */
-  function addedChip(item, facet, v) {
-    const chip = el("r4m-chip", "r4m-added");
-    chip.title = "Добавлено вами";
+  /** A suggested value: a dashed chip with its chance, ✓ to add it and ✕ to say the work has it not. */
+  function suggestedChip(item, facet, v) {
+    const chip = el("r4m-chip", "r4m-suggested");
+    chip.title = "Подсказка";
     chip.appendChild(el("span", null, v.name));
-    chip.appendChild(button("✕", "Убрать", () => uncorrect(item, facet, v.key), "r4m-no"));
+    chip.appendChild(el("r4m-chance", null, `(${percent(v.chance)})`));
+    chip.appendChild(button("✓", "Да, это у работы есть", () => correct(item, facet, { key: v.key }, true), "r4m-yes"));
+    chip.appendChild(button("✕", "Нет, этого у работы нет", () => correct(item, facet, { key: v.key }, false), "r4m-no"));
     return chip;
   }
 
@@ -326,71 +348,56 @@
     return form;
   }
 
-  /** The facet in the panel: its values with their corrections, the suggestions, the field to add one. */
-  function facetBlock(item, facet, suggestions) {
+  /**
+   * A facet as a block: its label, the site's own line of it when the panel shows it, its values
+   * with the user's answers, the suggestions, the field to add one.
+   */
+  function facetBlock(item, facet, suggestions, inPanel) {
     const block = el("r4m-facet");
     block.appendChild(el("r4m-label", null, facet.label));
-    const doubted = new Map(((suggestions && suggestions.doubted) || []).map((v) => [v.key, v]));
-    (facet.values || []).forEach((v) => {
-      if (v.corrected === "ADDED") {
-        block.appendChild(addedChip(item, facet.facet, v));
-        return;
-      }
-      const chip = el("r4m-chip", v.corrected === "REMOVED" ? "r4m-removed-chip" : null);
-      chip.appendChild(el("span", null, v.name));
-      if (v.corrected === "REMOVED") {
-        chip.title = "Убрано вами";
-        chip.appendChild(button("↺", "Вернуть", () => uncorrect(item, facet.facet, v.key), "r4m-yes"));
-      } else {
-        const doubt = doubted.get(v.key);
-        if (doubt) {
-          chip.classList.add("r4m-doubted-chip");
-          chip.title = `Не похоже на эту работу (${percent(doubt.chance)})`;
-          chip.appendChild(button("✓", "Оставить", () => correct(item, facet.facet, { key: v.key }, true), "r4m-yes"));
-        }
-        chip.appendChild(button("✕", "Убрать", () => correct(item, facet.facet, { key: v.key }, false), "r4m-no"));
-      }
-      block.appendChild(chip);
-    });
-    ((suggestions && suggestions.suggested) || []).forEach((v) => block.appendChild(suggestedChip(item, facet.facet, v)));
-    block.appendChild(addField(item, facet.facet, facet.label));
+    if (inPanel && facet.original) block.appendChild(el("r4m-original", null, `На сайте: ${facet.original}`));
+    const line = el("r4m-chips");
+    (facet.values || []).forEach((v) => line.appendChild(valueChip(item, facet.facet, v)));
+    ((suggestions && suggestions.suggested) || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
+    line.appendChild(addField(item, facet.facet, facet.label));
+    block.appendChild(line);
     return block;
   }
 
   /**
-   * The facet on the site's own elements: ✕ on each value (↺ on one taken away), a "?" on a
-   * value that does not fit, the user's values and the suggestions after the last. False when the
-   * page shows none of the facet's elements.
+   * The facet on the page: on the site's own elements of its values ([decor.values]) — the
+   * answers beside each, the user's values and the suggestions after the last — or as a block of
+   * its own after the element [decor.after]. False when the page has neither.
    */
   function facetInPlace(item, decor) {
+    const facet = (item.facets || []).find((f) => f.facet === decor.facet) || { facet: decor.facet, label: decor.facet, values: [] };
+    const suggestions = (item.suggestions || []).find((x) => x.facet === decor.facet);
+    if (decor.after) {
+      const anchor = document.querySelector(decor.after);
+      if (!anchor) return false;
+      // After the blocks of the facets put there before it, in the order the source lists them
+      let at = anchor;
+      while (at.nextElementSibling && at.nextElementSibling.tagName === "R4M-FACET") at = at.nextElementSibling;
+      at.insertAdjacentElement("afterend", facetBlock(item, facet, suggestions, false));
+      return true;
+    }
     const elements = [...document.querySelectorAll(decor.values)].filter((e) => !e.closest("[data-r4m]"));
     if (!elements.length) return false;
-    const facet = (item.facets || []).find((f) => f.facet === decor.facet) || { facet: decor.facet, values: [] };
-    const suggestions = (item.suggestions || []).find((x) => x.facet === decor.facet);
-    const doubted = new Map(((suggestions && suggestions.doubted) || []).map((v) => [v.key, v]));
     const values = facet.values || [];
     elements.forEach((e) => {
       const label = lower(e.getAttribute("title") || e.textContent);
       const v = values.find((x) => lower(x.name) === label || lower(x.key) === label);
       if (!v || v.corrected === "ADDED") return;
+      if (v.corrected === "REMOVED") e.classList.add("r4m-removed");
+      else if (v.corrected !== "CONFIRMED" && v.chance !== undefined && v.chance !== null && v.chance < 0.5) e.classList.add("r4m-doubted");
       const tools = el("r4m-tools");
-      if (v.corrected === "REMOVED") {
-        e.classList.add("r4m-removed");
-        tools.appendChild(button("↺", "Вернуть: вы убрали это значение", () => uncorrect(item, decor.facet, v.key), "r4m-yes"));
-      } else {
-        const doubt = doubted.get(v.key);
-        if (doubt) {
-          e.classList.add("r4m-doubted");
-          tools.appendChild(el("r4m-doubt", null, "?")).title = `Не похоже на эту работу (${percent(doubt.chance)})`;
-          tools.appendChild(button("✓", "Оставить", () => correct(item, decor.facet, { key: v.key }, true), "r4m-yes"));
-        }
-        tools.appendChild(button("✕", "Убрать: к этой работе не относится", () => correct(item, decor.facet, { key: v.key }, false), "r4m-no"));
-      }
+      answers(item, decor.facet, v).forEach((a) => tools.appendChild(a));
       e.insertAdjacentElement("afterend", tools);
     });
     const after = el("r4m-chips");
-    values.filter((v) => v.corrected === "ADDED").forEach((v) => after.appendChild(addedChip(item, decor.facet, v)));
+    values.filter((v) => v.corrected === "ADDED" || (v.inferred && v.corrected !== "REMOVED")).forEach((v) => after.appendChild(valueChip(item, decor.facet, v)));
     ((suggestions && suggestions.suggested) || []).forEach((v) => after.appendChild(suggestedChip(item, decor.facet, v)));
+    after.appendChild(addField(item, decor.facet, facet.label));
     const last = elements[elements.length - 1];
     (last.nextElementSibling && last.nextElementSibling.tagName === "R4M-TOOLS" ? last.nextElementSibling : last)
       .insertAdjacentElement("afterend", after);
