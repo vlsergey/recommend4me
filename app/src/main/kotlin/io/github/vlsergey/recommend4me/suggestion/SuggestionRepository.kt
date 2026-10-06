@@ -11,8 +11,11 @@ import java.time.Instant
 /** The fitted state of a facet's suggester, and the fingerprint of the whole facet it was fitted on. */
 class StoredSuggester(val suggester: String, val fittedAt: Instant, val basis: Long, val content: ByteArray)
 
-/** The chance of a value of an item's facet: one the item had when worked out ([had]), or one it lacked. */
-data class Chance(val itemId: String, val facet: String, val key: String, val had: Boolean, val chance: Double)
+/**
+ * The chance of a value of an item's facet: one the item had when worked out ([had]), or one it
+ * lacked; and how many times the item's texts name it, when they were counted.
+ */
+data class Chance(val itemId: String, val facet: String, val key: String, val had: Boolean, val chance: Double, val mentions: Int? = null)
 
 /**
  * What the model says of the values of one source's facets, in the model database of its content
@@ -62,6 +65,7 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
                         .set(FACET_SUGGESTION.SOURCE, source).set(FACET_SUGGESTION.ITEM_ID, c.itemId).set(FACET_SUGGESTION.FACET, facet)
                         .set(FACET_SUGGESTION.VALUE_KEY, c.key.take(500)).set(FACET_SUGGESTION.KIND, if (c.had) HAD else LACKED)
                         .set(FACET_SUGGESTION.CHANCE, c.chance)
+                        .set(FACET_SUGGESTION.MENTIONS, c.mentions)
                 }).execute()
             }
             made.entries.chunked(BATCH).forEach { chunk ->
@@ -87,10 +91,10 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
     fun ofItems(ids: Collection<String>): Map<String, Map<String, Map<String, Chance>>> {
         val out = HashMap<String, HashMap<String, HashMap<String, Chance>>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(FACET_SUGGESTION.ITEM_ID, FACET_SUGGESTION.FACET, FACET_SUGGESTION.VALUE_KEY, FACET_SUGGESTION.KIND, FACET_SUGGESTION.CHANCE)
+            db.select(FACET_SUGGESTION.ITEM_ID, FACET_SUGGESTION.FACET, FACET_SUGGESTION.VALUE_KEY, FACET_SUGGESTION.KIND, FACET_SUGGESTION.CHANCE, FACET_SUGGESTION.MENTIONS)
                 .from(FACET_SUGGESTION)
                 .where(FACET_SUGGESTION.SOURCE.eq(source), FACET_SUGGESTION.ITEM_ID.`in`(chunk))
-                .fetch { r -> put(out, Chance(r.value1()!!, r.value2()!!, r.value3()!!, r.value4() == HAD, r.value5()!!)) }
+                .fetch { r -> put(out, Chance(r.value1()!!, r.value2()!!, r.value3()!!, r.value4() == HAD, r.value5()!!, r.value6())) }
         }
         return out
     }
@@ -99,11 +103,11 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
     fun ofFacets(facets: Collection<String>): Map<String, Map<String, Map<String, Chance>>> {
         val out = HashMap<String, HashMap<String, HashMap<String, Chance>>>()
         if (facets.isEmpty()) return out
-        db.select(FACET_SUGGESTION.ITEM_ID, FACET_SUGGESTION.FACET, FACET_SUGGESTION.VALUE_KEY, FACET_SUGGESTION.KIND, FACET_SUGGESTION.CHANCE)
+        db.select(FACET_SUGGESTION.ITEM_ID, FACET_SUGGESTION.FACET, FACET_SUGGESTION.VALUE_KEY, FACET_SUGGESTION.KIND, FACET_SUGGESTION.CHANCE, FACET_SUGGESTION.MENTIONS)
             .from(FACET_SUGGESTION)
             .where(FACET_SUGGESTION.SOURCE.eq(source), FACET_SUGGESTION.FACET.`in`(facets))
             .fetchSize(5000).fetchLazy().use { cursor ->
-                cursor.forEach { r -> put(out, Chance(r.value1()!!, r.value2()!!, r.value3()!!, r.value4() == HAD, r.value5()!!)) }
+                cursor.forEach { r -> put(out, Chance(r.value1()!!, r.value2()!!, r.value3()!!, r.value4() == HAD, r.value5()!!, r.value6())) }
             }
         return out
     }

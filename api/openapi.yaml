@@ -225,6 +225,37 @@ paths:
         '404':
           description: No such item
 
+  /api/items/{source}/{item}/candidates:
+    get:
+      tags: [suggestions]
+      operationId: getCandidates
+      summary: Every value the work may be given of a facet that says which, to choose among
+      description: |
+        Of the facets of the universes - "characters" (the characters of the work's universes and
+        the original ones), "pairings" (pairs of its characters), "universe" - every value the work
+        does not have and the user has not answered on, with the model's chance and how many times
+        the work's own texts name it (a character in the chapters read, two characters in one
+        paragraph); the likeliest first, then the most named.
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+        - name: facet
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Candidate'
+        '404':
+          description: No such item
+
   /api/items/{source}/{item}/refresh:
     post:
       tags: [items]
@@ -2156,6 +2187,24 @@ components:
         prediction:
           type: number
           format: double
+
+    Candidate:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        chance:
+          type: number
+          format: double
+          nullable: true
+          description: The model's chance that the work has the value, 0..1; none before the model has learnt anything
+        mentions:
+          type: integer
+          nullable: true
+          description: How many times the work's texts name it (in how many paragraphs, of a pairing); none when not counted
 
     UniverseRef:
       type: object

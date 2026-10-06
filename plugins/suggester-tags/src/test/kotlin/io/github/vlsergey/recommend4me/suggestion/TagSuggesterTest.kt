@@ -107,4 +107,19 @@ class TagSuggesterTest {
         val scores = TagSuggester().fit(task)!!.on(task).of(intArrayOf(c.tags.size - 1))[0]
         assertTrue(maxOf(scores[2], scores[3]) > 0.5f && minOf(scores[2], scores[3]) > 100 * maxOf(scores[0], scores[1]), "dragons from the chapters: ${scores.toList()}")
     }
+
+    @Test
+    fun `a value the texts name often is likelier than one they never name`() {
+        val c = catalogue()
+        // Neither the texts nor any context tell; the works name their own values, now and then another
+        c.context.replaceAll { IntArray(0) }
+        val blank = c.texts.map { text(9) }.toMutableList()
+        val mentions = c.tags.mapIndexed { k, own -> own.associateWith { 5 + k % 7 } + mapOf((k % 5) to 1) }.toMutableList<Map<Int, Int>?>()
+        blank += text(9); c.tags += IntArray(0); c.context += IntArray(0); mentions += mapOf(3 to 12)
+        val task = task(c, listOf(blank)).let { t ->
+            SuggestionTask(t.views, t.values, t.assigned, t.confirmed, t.rejected, t.context, t.contextCount, mentions)
+        }
+        val scores = TagSuggester().fit(task)!!.on(task).of(intArrayOf(c.tags.size - 1))[0]
+        assertTrue(scores[3] > 0.5f && scores[3] > 10 * scores[0], "the named value: ${scores.toList()}")
+    }
 }

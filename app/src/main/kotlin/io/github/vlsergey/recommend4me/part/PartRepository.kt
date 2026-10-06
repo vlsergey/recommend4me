@@ -64,6 +64,12 @@ class PartRepository(private val db: DSLContext) {
             StoredPart(it.partId!!, it.position!!, it.title, true, it.publishedAt) to content
         }
 
+    /** The texts of every part of the item that has one, streamed in their order. */
+    fun forEachContent(itemId: String, action: (String) -> Unit) {
+        db.select(PART.CONTENT).from(PART).where(PART.ITEM_ID.eq(itemId), PART.CONTENT.isNotNull).orderBy(PART.POSITION)
+            .fetchSize(1).fetchLazy().use { cursor -> cursor.forEach { action(it.value1()!!) } }
+    }
+
     /** The parts whose text has no vectors by [encoder] yet, at most [limit]. */
     fun toEncode(encoder: String, limit: Int): List<PartToEncode> =
         db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT).from(PART)

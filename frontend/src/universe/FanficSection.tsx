@@ -1,18 +1,20 @@
 import { useState, type ReactNode } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { CheckIcon, Loader2Icon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
-import type { ContentTypeInfo, FacetValueInfo, ItemDetails, SourceInfo, SuggestedValue, UniverseInfo } from "@/api/client";
+import type { Candidate, ContentTypeInfo, FacetValueInfo, ItemDetails, ItemRef, SourceInfo, SuggestedValue, UniverseInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { FacetAnswers } from "@/correction/FacetAnswers";
 import { FacetValue } from "@/correction/FacetCorrections";
 import type { Corrections } from "@/correction/useCorrections";
 import { ChanceMark, InferredMark } from "@/facet/FacetValueMarks";
-import { percent } from "@/i18n";
+import { percent, plural } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { SuggestedChip } from "@/suggestion/Suggestions";
-import { useSuggestions } from "@/suggestion/useSuggestions";
+import { useCandidates, useSuggestions } from "@/suggestion/useSuggestions";
 import { CatalogueSearch, charactersQuery, useUniverses } from "./UniverseDialog";
 
 /** The facets the application gives every work of a type with universes (the backend's UniverseFacets). */
@@ -93,6 +95,7 @@ export function FanficSection({
       )}
       <Characters
         type={type}
+        item={ref}
         label={labelOf(CHARACTERS, "Главные персонажи")}
         original={facetOf(CHARACTERS)?.original}
         values={valuesOf(CHARACTERS)}
@@ -100,6 +103,7 @@ export function FanficSection({
         corrections={corrections}
       />
       <Pairings
+        item={ref}
         label={labelOf(PAIRINGS, "Пэйринги")}
         original={facetOf(PAIRINGS)?.original}
         values={valuesOf(PAIRINGS)}
@@ -277,6 +281,7 @@ function Universes({
  */
 function Characters({
   type,
+  item,
   label,
   original,
   values,
@@ -284,6 +289,7 @@ function Characters({
   corrections,
 }: {
   type: ContentTypeInfo;
+  item: ItemRef;
   label: string;
   original?: string;
   values: FacetValueInfo[];
@@ -322,16 +328,18 @@ function Characters({
     })),
     ...ORIGINAL_CHARACTERS.map((c) => ({ key: c.key, name: c.name, names: [c.name], taken: taken(c.key) })),
   ];
-  const failed = characters.find((q) => q.isError)?.error?.message ?? dictionary.error?.message;
+  const candidates = useCandidates(item, CHARACTERS, true);
+  const failed = characters.find((q) => q.isError)?.error?.message ?? dictionary.error?.message ?? candidates.error?.message;
 
   return (
     <Block label={label} original={original}>
       <Chips facet={CHARACTERS} values={values} corrections={corrections} />
+      <Named facet={CHARACTERS} candidates={candidates.data} corrections={corrections} />
       <Picker
         label="Добавить персонажа"
         placeholder="Найти персонажа по любому имени"
-        options={options}
-        loading={dictionary.isLoading || characters.some((q) => q.isLoading)}
+        options={ranked(options, candidates.data)}
+        loading={dictionary.isLoading || characters.some((q) => q.isLoading) || candidates.isLoading}
         error={failed}
         empty={universes.length === 0 ? "Работа не связана ни с одной вселенной: есть только оригинальные персонажи" : undefined}
         onPick={(key) => corrections.setFacet(CHARACTERS, { key }, true)}
@@ -343,12 +351,14 @@ function Characters({
 
 /** The work's pairings, the site's line above them; a new one is two of the work's characters. */
 function Pairings({
+  item,
   label,
   original,
   values,
   characters,
   corrections,
 }: {
+  item: ItemRef;
   label: string;
   original?: string;
   values: FacetValueInfo[];
@@ -359,8 +369,16 @@ function Pairings({
   const [adding, setAdding] = useState(false);
   const [a, setA] = useState("");
   const [b, setB] = useState("");
-  const known = (key: string) => characters.some((c) => c.key === key);
+  // The work's characters and the original ones: they pair with anyone, listed among the main ones or not
+  const members = [
+    ...characters.map((c) => ({ key: c.key, name: c.name })),
+    ...ORIGINAL_CHARACTERS.filter((o) => !characters.some((c) => c.key === o.key)),
+  ];
+  const known = (key: string) => members.some((c) => c.key === key);
   const ready = known(a) && known(b) && a !== b;
+  // Every pair of them the work lacks, the likeliest first: the backend pairs a work's characters once it has one
+  const candidates = useCandidates(item, PAIRINGS, characters.length > 0);
+  const pairs: Option[] = (candidates.data ?? []).map((c) => ({ key: c.key, name: c.name, names: [c.name], taken: false }));
 
   const add = async () => {
     await corrections.setFacet(PAIRINGS, { key: pairingKey(a, b) }, true);
@@ -372,7 +390,7 @@ function Pairings({
   const select = (value: string, onChange: (value: string) => void, other: string) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={SELECT}>
       <option value="">Персонаж…</option>
-      {characters.map((c) => (
+      {members.map((c) => (
         <option key={c.key} value={c.key} disabled={c.key === other}>
           {c.name}
         </option>
@@ -383,14 +401,26 @@ function Pairings({
   return (
     <Block label={label} original={original}>
       <Chips facet={PAIRINGS} values={values} corrections={corrections} />
+      <Named facet={PAIRINGS} candidates={candidates.data} corrections={corrections} />
+      {characters.length > 0 && (
+        <Picker
+          label="Выбрать пэйринг"
+          placeholder="Найти пару по имени персонажа"
+          options={ranked(pairs, candidates.data)}
+          loading={candidates.isLoading}
+          error={candidates.error?.message}
+          empty="Все пары персонажей работы уже отвечены"
+          onPick={(key) => corrections.setFacet(PAIRINGS, { key }, true)}
+        />
+      )}
       {!adding ? (
-        <Button variant="ghost" size="sm" className="self-start" onClick={() => setAdding(true)} disabled={characters.length < 2} title={characters.length < 2 ? "Сначала нужны хотя бы два персонажа работы" : undefined}>
-          <PlusIcon /> Добавить пэйринг
+        <Button variant="ghost" size="sm" className="self-start" onClick={() => setAdding(true)}>
+          <PlusIcon /> Составить пэйринг
         </Button>
       ) : (
         <div className="flex flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            Добавить пэйринг: два персонажа работы
+            Добавить пэйринг: два персонажа работы или ОМП / ОЖП
             <Button variant="ghost" size="icon-xs" onClick={() => setAdding(false)} title="Закрыть">
               <XIcon />
             </Button>
@@ -407,8 +437,64 @@ function Pairings({
   );
 }
 
-/** A value to pick: its key, its name, a note under it, every name it is found by, and whether the work has it already. */
-type Option = { key: string; name: string; note?: string; names: string[]; taken: boolean };
+/**
+ * A value to pick: its key, its name, a mark after it (the model's chance, the mentions), a note
+ * under it, every name it is found by, and whether the work has it already.
+ */
+type Option = { key: string; name: string; mark?: string; note?: string; names: string[]; taken: boolean };
+
+/** "упоминается 3 раза" — how often the work's texts name a candidate; nothing when they were not counted. */
+function mentionsText(c: Candidate): string | undefined {
+  if (c.mentions == null) return undefined;
+  if (c.mentions === 0) return "не упоминается";
+  return `упоминается ${plural(c.mentions, "раз", "раза", "раз")}`;
+}
+
+/** "87% · упоминается 3 раза" */
+function candidateMark(c: Candidate): string {
+  return [c.chance != null ? percent(c.chance) : undefined, mentionsText(c)].filter((x) => x !== undefined).join(" · ");
+}
+
+/**
+ * The options in the order of the candidates — the likeliest first, then the most named — each
+ * with its chance and mentions; those the backend does not offer (the work has them, the user
+ * answered on them) after them, in their own order.
+ */
+function ranked(options: Option[], candidates: Candidate[] | undefined): Option[] {
+  if (!candidates) return options;
+  const rank = new Map(candidates.map((c, i) => [c.key, i]));
+  const byKey = new Map(candidates.map((c) => [c.key, c]));
+  return options
+    .map((o, i) => ({ o, i, r: rank.get(o.key) ?? candidates.length + i }))
+    .sort((x, y) => x.r - y.r)
+    .map(({ o }) => {
+      const c = byKey.get(o.key);
+      return c ? { ...o, mark: candidateMark(c) } : o;
+    });
+}
+
+/**
+ * The candidates the work's texts name, as chips to confirm or refute: a character the chapters
+ * name, two characters named in one paragraph. Nothing when the texts name none.
+ */
+function Named({ facet, candidates, corrections }: { facet: string; candidates: Candidate[] | undefined; corrections: Corrections }) {
+  const named = (candidates ?? []).filter((c) => (c.mentions ?? 0) > 0);
+  if (named.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-xs text-muted-foreground">Упоминаются в текстах работы</div>
+      <div className="flex flex-wrap gap-1">
+        {named.map((c) => (
+          <Badge key={c.key} variant="outline" className="border-dashed pr-0.5 font-normal" title={mentionsText(c)}>
+            {c.name}
+            <span className="text-muted-foreground tabular-nums">({candidateMark(c)})</span>
+            <FacetAnswers facet={facet} value={{ key: c.key }} corrections={corrections} />
+          </Badge>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * A button that opens a list of values to add, every one of them, narrowed by a line that looks in
@@ -492,7 +578,8 @@ function Picker({
               >
                 <span>
                   {o.name}
-                  {o.taken && <span className="ml-1 text-xs font-normal text-muted-foreground">· уже у работы</span>}
+                  {o.mark && <span className="ml-1 text-xs font-normal text-muted-foreground tabular-nums">{o.mark}</span>}
+                  {o.taken &&<span className="ml-1 text-xs font-normal text-muted-foreground">· уже у работы</span>}
                 </span>
                 {o.note && <span className="text-xs font-normal text-muted-foreground">{o.note}</span>}
               </AsyncButton>

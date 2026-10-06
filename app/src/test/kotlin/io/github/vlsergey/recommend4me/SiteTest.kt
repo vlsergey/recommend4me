@@ -307,5 +307,19 @@ class SiteTest {
         assertTrue(outside.all { it.propertyValues.isEmpty() && it.original == "Knight/Princess" }, "outside $outside")
         // Its site's line is shown above
         assertEquals("Pilot/Captain", facets.single { it.facet == "characters" }.original)
+
+        // A new work of the universe: every character it may have is offered, with how often its texts name them
+        capture("n1|The captain|space|The captain commands. The captain waits. The captain sleeps|")
+        corrections.correctFacet("site", "n1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
+        textVectors.refresh(store)
+        val given = items.getItem("site", "n1").body!!.allFacets.find { it.facet == "characters" }?.propertyValues.orEmpty().map { it.key }
+        val offered = suggestionsApi.getCandidates("site", "n1", "characters").body!!
+        assertEquals(setOf("fake:C1", "fake:C2", "oc:female", "oc:male"), (offered.map { it.key } + given).toSet(), "offered $offered, given $given")
+        assertTrue(offered.none { it.key in given }, "offered $offered, given $given")
+        assertTrue(offered.zipWithNext().all { (a, b) -> a.chance!! >= b.chance!! }, "the likeliest first: $offered")
+        offered.find { it.key == "fake:C2" }?.let { assertEquals(3, it.mentions) }
+        assertEquals(0, offered.single { it.key == "oc:male" }.mentions)
+        assertEquals("Captain", offered.find { it.key == "fake:C2" }?.name ?: "Captain")
+        assertEquals(404, suggestionsApi.getCandidates("site", "n1", "nope").statusCode.value())
     }
 }

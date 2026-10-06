@@ -43,6 +43,7 @@ export type SignalInfo = Schemas["SignalInfo"];
 export type CatalogueProgress = Schemas["CatalogueProgress"];
 export type FacetSuggestions = Schemas["FacetSuggestions"];
 export type SuggestedValue = Schemas["SuggestedValue"];
+export type Candidate = Schemas["Candidate"];
 export type FacetValueUse = Schemas["FacetValueUse"];
 export type UniverseRef = Schemas["UniverseRef"];
 export type UniverseInfo = Schemas["UniverseInfo"];

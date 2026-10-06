@@ -35,6 +35,12 @@ class SuggestionTask(
     /** The values of the item's other facets — its fandom, its tags, its author. */
     val context: List<IntArray>,
     val contextCount: Int,
+    /**
+     * How many times the item's own texts name each value — a character mentioned in the chapters,
+     * two named in one paragraph: value index to count, the values not named left out; null for an
+     * item whose texts were not counted, an empty map for one that names none.
+     */
+    val mentions: List<Map<Int, Int>?> = List(assigned.size) { null },
 ) {
     val itemCount: Int get() = assigned.size
     val valueCount: Int get() = values.rows
@@ -44,8 +50,8 @@ class SuggestionTask(
         require(views.all { it.vectors.rows == itemCount && it.vectors.cols == values.cols }) {
             "Views of ${views.map { "${it.vectors.rows}×${it.vectors.cols}" }}, $itemCount items, values of ${values.cols}"
         }
-        require(confirmed.size == itemCount && rejected.size == itemCount && context.size == itemCount) {
-            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts"
+        require(confirmed.size == itemCount && rejected.size == itemCount && context.size == itemCount && mentions.size == itemCount) {
+            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${mentions.size} mentions"
         }
     }
 }

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type ItemDetails, type ItemRef } from "@/api/client";
 import { applyDetails, ITEMS, removeFromLists } from "@/item/lists";
-import { suggestionsKey } from "@/suggestion/useSuggestions";
+import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
 
 /** The fields a correction overrides: the title, a text, a number. */
 export const titleField = "title";
@@ -22,6 +22,7 @@ export function useCorrections(item: ItemRef, typeId: string) {
     // is no longer listed, and a correction taken back may list it again
     queryClient.invalidateQueries({ queryKey: ["facets", typeId] });
     queryClient.invalidateQueries({ queryKey: suggestionsKey(item) });
+    queryClient.invalidateQueries({ queryKey: candidatesKey(item) });
     return details;
   };
 

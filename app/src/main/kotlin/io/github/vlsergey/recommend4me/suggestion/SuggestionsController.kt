@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.api.SuggestionsApi
+import io.github.vlsergey.recommend4me.api.model.Candidate
 import io.github.vlsergey.recommend4me.api.model.FacetSuggestions as ApiFacetSuggestions
 import io.github.vlsergey.recommend4me.api.model.SuggestedValue
 import io.github.vlsergey.recommend4me.source.Stores
@@ -20,5 +21,11 @@ class SuggestionsController(private val stores: Stores, private val suggestions:
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (store.items.find(item) == null) return ResponseEntity.notFound().build()
         return ResponseEntity.ok(suggestions.ofItem(store, item).map { it.toApi() })
+    }
+
+    override fun getCandidates(source: String, item: String, facet: String): ResponseEntity<List<Candidate>> {
+        val store = stores.source(source) ?: return ResponseEntity.notFound().build()
+        val found = suggestions.candidates(store, item, facet) ?: return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(found.suggested.map { Candidate(it.key, found.names[it.key] ?: it.key, it.chance, it.mentions) })
     }
 }

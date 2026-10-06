@@ -23,6 +23,8 @@ dependencies {
     // original as AVIF, read by javif, a pure Java AV1 decoder
     implementation(libs.imageio.webp)
     implementation(libs.javif)
+    // The stemmer of Russian words: a character is found however its name is declined
+    implementation(libs.lucene.analysis.common)
 
     jooqCodegen(platform(libs.spring.boot.bom))
     jooqCodegen(libs.h2)

@@ -23,6 +23,8 @@ import kotlin.math.sqrt
  *                                value with the item's other values of the facet
  *     has context                the item has values of other facets
  *     · context, · its max       the same with those: its fandom, its tags, its author
+ *     counted                    the item's own texts were counted for names of the values
+ *     · mentions                 log(1 + how many times they name the value)
  *     rarity                     the log share of the items having the value
  *
  * EVERY COUNT LEAVES THE ITEM OUT: what the item says of its own values does not vouch for them,
@@ -249,6 +251,14 @@ internal class Witnesses(private val task: SuggestionTask) {
             val own = 1 + 3 * views.size
             together.write(i, out, own, flagged = true)
             withContext.write(i, out, own + 3, flagged = true)
+            // How often the item's own texts name the value
+            task.mentions[i]?.let { named ->
+                val at = own + 6
+                for (v in 0 until m) {
+                    out[v][at] = 1f
+                    out[v][at + 1] = ln(1.0 + (named[v] ?: 0)).toFloat()
+                }
+            }
             out
         }
     }
@@ -315,8 +325,8 @@ internal class Witnesses(private val task: SuggestionTask) {
     }
 
     companion object {
-        /** The bias, three of every view, three of the facet's own values, three of the context, the rarity. */
-        fun featuresOf(views: Int) = 1 + 3 * views + 3 + 3 + 1
+        /** The bias, three of every view, three of the facet's own values, three of the context, two of the mentions, the rarity. */
+        fun featuresOf(views: Int) = 1 + 3 * views + 3 + 3 + 2 + 1
 
         /** Half an item drawn to every count each way: the Jeffreys prior of a share. */
         private const val JEFFREYS = 0.5
