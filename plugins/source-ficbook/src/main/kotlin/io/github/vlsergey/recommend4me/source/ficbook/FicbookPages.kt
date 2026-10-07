@@ -178,7 +178,7 @@ class FicbookPages(private val context: SourceContext) {
         if (parts.isNotEmpty()) items.saveParts(id, parts)
         // A work of one part has its text on its own page, without a table of contents
         else doc.selectFirst("#content")?.let { content ->
-            val text = PageText.of(content)
+            val text = PageText.of(content, NOT_THE_TEXT)
             if (text.isNotBlank()) items.saveParts(id, listOf(PartData(ONLY_PART, 0, title, text)))
         }
         return id
@@ -188,7 +188,7 @@ class FicbookPages(private val context: SourceContext) {
 
     private fun part(doc: Document, id: String, partId: String, now: Instant): String? {
         val content = doc.selectFirst("#content") ?: return null
-        val text = PageText.of(content)
+        val text = PageText.of(content, NOT_THE_TEXT)
         if (text.isBlank()) return null
         if (items.find(id) == null) {
             val title = doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null } ?: return null
@@ -234,6 +234,12 @@ class FicbookPages(private val context: SourceContext) {
 
         /** The fandom of the original works. */
         private const val ORIGINALS = "no_fandom/originals"
+
+        /**
+         * What the site puts into the text of a part that is not the text: the promotion of another
+         * work, put by its scripts into a placeholder among the paragraphs; and the scripts and styles.
+         */
+        private const val NOT_THE_TEXT = ".js-fanfic-text-promo-placeholder, [class*=promo], script, style"
 
         /** A pairing as written, "A/B": one pairing whatever the order of its names — the key has them sorted. */
         private fun pairing(written: String): FacetValue =

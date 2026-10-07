@@ -70,9 +70,10 @@ class Ficbook : Source {
 
     /**
      * 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever
-     * the order of its names. 3: whether a work is fan fiction, by its fandom.
+     * the order of its names. 3: whether a work is fan fiction, by its fandom. 4: the promotion of
+     * another work the site puts among the paragraphs of a part is not its text.
      */
-    override val parserVersion = 3
+    override val parserVersion = 4
 
     override fun itemUrl(itemId: String) = "$BASE/readfic/$itemId"
 
