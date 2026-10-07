@@ -81,23 +81,26 @@ class SiteTest {
         fun fakeCatalogue(): UniverseCatalogue = FakeCatalogue()
     }
 
-    /** A catalogue of two universes of space opera, each with the same two characters and a station, a place. */
+    /** A catalogue of two universes of space opera, each with the same two characters and a station, a place; its texts in English. */
     class FakeCatalogue : UniverseCatalogue {
         override val id = "fake"
         override val title = "Fake"
-        private val space = UniverseEntry("U1", "Space opera", "Ships and pilots", "https://fake.example/U1")
-        private val fleet = UniverseEntry("U2", "Fleet", "More ships", "https://fake.example/U2")
+        private fun en(text: String) = mapOf("en" to text)
+        private fun entries(languages: List<String>) = listOf(
+            UniverseEntry("U1", en("Space opera"), en("Ships and pilots"), "https://fake.example/U1", languages),
+            UniverseEntry("U2", en("Fleet"), en("More ships"), "https://fake.example/U2", languages),
+        )
 
-        override fun findUniverses(name: String, languages: List<String>) = if ("space" in name.lowercase()) listOf(space) else emptyList()
-        override fun universe(id: String, languages: List<String>) = listOf(space, fleet).firstOrNull { it.id == id }
+        override fun findUniverses(name: String, languages: List<String>) = if ("space" in name.lowercase()) entries(languages).take(1) else emptyList()
+        override fun universe(id: String, languages: List<String>) = entries(languages).firstOrNull { it.id == id }
         override fun characters(id: String, languages: List<String>) = listOf(
-            UniverseCharacter("C1", listOf("Pilot", "The Pilot"), null, "https://fake.example/C1", listOf("K1")),
-            UniverseCharacter("C2", listOf("Captain"), "Of the fleet", "https://fake.example/C2", listOf("K1")),
-            UniverseCharacter("S1", listOf("Station"), "Where ships dock", "https://fake.example/S1", listOf("K2")),
+            UniverseCharacter("C1", en("Pilot"), mapOf("en" to listOf("The Pilot")), emptyMap(), "https://fake.example/C1", languages, listOf("K1")),
+            UniverseCharacter("C2", en("Captain"), emptyMap(), en("Of the fleet"), "https://fake.example/C2", languages, listOf("K1")),
+            UniverseCharacter("S1", en("Station"), emptyMap(), en("Where ships dock"), "https://fake.example/S1", languages, listOf("K2")),
         )
 
         override fun classes(ids: Collection<String>, languages: List<String>) =
-            listOf(UniverseClass("K1", "person", true), UniverseClass("K2", "place", false)).filter { it.id in ids }
+            listOf(UniverseClass("K1", en("person"), true, languages), UniverseClass("K2", en("place"), false, languages)).filter { it.id in ids }
     }
 
     /**

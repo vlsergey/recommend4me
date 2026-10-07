@@ -21,6 +21,8 @@ class StoredUniverse(
     val refreshedAt: Instant,
     val characters: Int,
     val entries: Int,
+    /** The languages the catalogue was asked in for it; none of a universe saved before they were kept. */
+    val languages: List<String>,
 ) {
     val value: String get() = UniverseFacet.valueOf(catalogue, id)
 }
@@ -44,12 +46,24 @@ class ClassInUniverse(val id: String, val name: String, val character: Boolean, 
  * is kept — a class by the user's word on it within the universe, else when its entries are
  * characters; an entry the catalogue gave no class is kept: nothing says it is not one.
  */
-class UniverseRepository(private val db: DSLContext) {
+class UniverseRepository(
+    private val db: DSLContext,
+    /** The user's languages: the texts are shown in the first of them that has one. */
+    private val languages: List<String>,
+) {
 
-    fun all(): List<StoredUniverse> = db.selectFrom(UNIVERSE).orderBy(UNIVERSE.NAME).fetch().map { u ->
+    fun all(): List<StoredUniverse> = db.selectFrom(UNIVERSE).fetch().map { u ->
         val entries = entries(u.catalogue!!, u.universeId!!)
-        StoredUniverse(u.catalogue!!, u.universeId!!, u.name!!, u.description, u.url!!, u.addedAt!!, u.refreshedAt!!, entries.count { it.included }, entries.size)
-    }
+        StoredUniverse(
+            // Of a universe saved before the texts were kept by language, the ones shown then
+            u.catalogue!!, u.universeId!!,
+            if (u.labels != null) shown(u.labels) ?: u.universeId!! else u.name!!,
+            if (u.labels != null) shown(u.descriptions) else u.description,
+            u.url!!,
+            u.addedAt!!, u.refreshedAt!!, entries.count { it.included }, entries.size,
+            u.languages?.split(',')?.filter { it.isNotEmpty() }.orEmpty(),
+        )
+    }.sortedBy { it.name.lowercase() }
 
     fun find(catalogue: String, id: String): StoredUniverse? = all().firstOrNull { it.catalogue == catalogue && it.id == id }
 
@@ -60,12 +74,15 @@ class UniverseRepository(private val db: DSLContext) {
     fun save(catalogue: String, entry: UniverseEntry, characters: List<UniverseCharacter>, classes: List<UniverseClass>, now: Instant) {
         db.transaction { tx ->
             val t = tx.dsl()
+            val asked = entry.languages.joinToString(",")
             t.insertInto(UNIVERSE)
                 .set(UNIVERSE.CATALOGUE, catalogue).set(UNIVERSE.UNIVERSE_ID, entry.id).set(UNIVERSE.NAME, entry.name.take(1000))
                 .set(UNIVERSE.DESCRIPTION, entry.description?.take(2000)).set(UNIVERSE.URL, entry.url.take(2000))
+                .set(UNIVERSE.LABELS, encode(entry.labels)).set(UNIVERSE.DESCRIPTIONS, encode(entry.descriptions)).set(UNIVERSE.LANGUAGES, asked)
                 .set(UNIVERSE.ADDED_AT, now).set(UNIVERSE.REFRESHED_AT, now)
                 .onDuplicateKeyUpdate()
                 .set(UNIVERSE.NAME, entry.name.take(1000)).set(UNIVERSE.DESCRIPTION, entry.description?.take(2000))
+                .set(UNIVERSE.LABELS, encode(entry.labels)).set(UNIVERSE.DESCRIPTIONS, encode(entry.descriptions)).set(UNIVERSE.LANGUAGES, asked)
                 .set(UNIVERSE.URL, entry.url.take(2000)).set(UNIVERSE.REFRESHED_AT, now)
                 .execute()
             t.deleteFrom(UNIVERSE_CHARACTER).where(UNIVERSE_CHARACTER.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER.UNIVERSE_ID.eq(entry.id)).execute()
@@ -76,6 +93,8 @@ class UniverseRepository(private val db: DSLContext) {
                         .set(UNIVERSE_CHARACTER.CHARACTER_ID, c.id).set(UNIVERSE_CHARACTER.NAMES, c.names.joinToString("\n"))
                         .set(UNIVERSE_CHARACTER.DESCRIPTION, c.description?.take(2000)).set(UNIVERSE_CHARACTER.URL, c.url.take(2000))
                         .set(UNIVERSE_CHARACTER.SEX, c.sex?.name)
+                        .set(UNIVERSE_CHARACTER.LABELS, encode(c.labels)).set(UNIVERSE_CHARACTER.ALIASES, encodeAll(c.aliases))
+                        .set(UNIVERSE_CHARACTER.DESCRIPTIONS, encode(c.descriptions))
                 }).execute()
             }
             characters.flatMap { c -> c.classes.distinct().map { c.id to it } }.chunked(BATCH).forEach { chunk ->
@@ -89,9 +108,9 @@ class UniverseRepository(private val db: DSLContext) {
                 t.batch(chunk.map { c ->
                     t.insertInto(UNIVERSE_CLASS)
                         .set(UNIVERSE_CLASS.CATALOGUE, catalogue).set(UNIVERSE_CLASS.CLASS_ID, c.id)
-                        .set(UNIVERSE_CLASS.NAME, c.name.take(1000)).set(UNIVERSE_CLASS.IS_CHARACTER, c.character)
+                        .set(UNIVERSE_CLASS.NAME, c.name.take(1000)).set(UNIVERSE_CLASS.IS_CHARACTER, c.character).set(UNIVERSE_CLASS.LABELS, encode(c.labels))
                         .onDuplicateKeyUpdate()
-                        .set(UNIVERSE_CLASS.NAME, c.name.take(1000)).set(UNIVERSE_CLASS.IS_CHARACTER, c.character)
+                        .set(UNIVERSE_CLASS.NAME, c.name.take(1000)).set(UNIVERSE_CLASS.IS_CHARACTER, c.character).set(UNIVERSE_CLASS.LABELS, encode(c.labels))
                 }).execute()
             }
         }
@@ -118,7 +137,17 @@ class UniverseRepository(private val db: DSLContext) {
         return db.selectFrom(UNIVERSE_CHARACTER).where(UNIVERSE_CHARACTER.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER.UNIVERSE_ID.eq(id))
             .fetch { r ->
                 val own = ofEntry[r.characterId!!].orEmpty()
-                val character = UniverseCharacter(r.characterId!!, r.names!!.split('\n'), r.description, r.url!!, own, r.sex?.let(CharacterSex::valueOf))
+                val sex = r.sex?.let(CharacterSex::valueOf)
+                val character = if (r.labels != null) {
+                    UniverseCharacter(r.characterId!!, decode(r.labels), decodeAll(r.aliases), decode(r.descriptions), r.url!!, languages, own, sex)
+                } else {
+                    // Saved before the texts were kept by language: its texts as they were shown then
+                    val names = r.names!!.split('\n')
+                    UniverseCharacter(
+                        r.characterId!!, mapOf(SHOWN to names.first()), mapOf(SHOWN to names.drop(1)), listOfNotNull(r.description?.let { SHOWN to it }).toMap(),
+                        r.url!!, languages + SHOWN, own, sex,
+                    )
+                }
                 val choice = choices[r.characterId!!]
                 KeptEntry(character, choice ?: (own.isEmpty() || own.any { kept[it] == true }), choice)
             }
@@ -142,7 +171,8 @@ class UniverseRepository(private val db: DSLContext) {
         return counts.mapValues { (cls, n) ->
             val character = known[cls]?.isCharacter ?: false
             val choice = choices[cls]
-            ClassInUniverse(cls, known[cls]?.name ?: cls, character, n, choice ?: character, choice)
+            val name = known[cls]?.let { if (it.labels != null) shown(it.labels) else it.name } ?: cls
+            ClassInUniverse(cls, name, character, n, choice ?: character, choice)
         }
     }
 
@@ -172,7 +202,24 @@ class UniverseRepository(private val db: DSLContext) {
         }
     }
 
+    /** The text of [byLanguage] (as kept: [encode]) in the first of the user's languages that has one; null when none does, or none was kept. */
+    private fun shown(byLanguage: String?): String? = decode(byLanguage).let { texts -> languages.firstNotNullOfOrNull { texts[it] } }
+
     companion object {
         private const val BATCH = 1000
+
+        /** The language of the texts of an entry saved before they were kept by language: the ones shown then, the last choice. */
+        private const val SHOWN = ""
+
+        /** Texts by language as kept: a line each, "<language><TAB><text>". */
+        private fun encode(texts: Map<String, String>): String = encodeAll(texts.mapValues { listOf(it.value) })
+
+        private fun encodeAll(texts: Map<String, List<String>>): String =
+            texts.flatMap { (lang, list) -> list.map { "$lang\t${it.replace('\n', ' ')}" } }.joinToString("\n")
+
+        private fun decodeAll(kept: String?): Map<String, List<String>> =
+            kept.orEmpty().lines().filter { '\t' in it }.groupBy({ it.substringBefore('\t') }, { it.substringAfter('\t') })
+
+        private fun decode(kept: String?): Map<String, String> = decodeAll(kept).mapValues { it.value.first() }
     }
 }

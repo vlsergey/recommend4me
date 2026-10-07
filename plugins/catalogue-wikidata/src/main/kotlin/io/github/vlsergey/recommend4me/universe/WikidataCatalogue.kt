@@ -23,7 +23,8 @@ import java.time.format.DateTimeFormatter
  * characters and whatever else they want. Its sex or gender (P21) comes with it too.
  *
  * Every name is asked for in the user's languages: the label and every alias, so that "Невилл
- * Лонгботтом" of the fans is found as an alias of "Невилл Долгопупс" of the translation.
+ * Лонгботтом" of the fans is found as an alias of "Невилл Долгопупс" of the translation — and the
+ * labels and descriptions are answered in each of them that has them.
  */
 class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
     override val id = "wikidata"
@@ -96,10 +97,9 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
             }
         }
         return byCharacter.map { (character, n) ->
-            val ordered = languages.mapNotNull { n.labels[it] } + languages.flatMap { lang -> n.aliases.filter { it.first == lang }.map { it.second } }
             UniverseCharacter(
-                character, ordered.distinct(), languages.firstNotNullOfOrNull { n.descriptions[it] }, "$PAGE$character", classes[character].orEmpty(),
-                sexes[character]?.let(::sexOf),
+                character, n.labels, n.aliases.groupBy({ it.first }, { it.second }), n.descriptions, "$PAGE$character", languages,
+                classes[character].orEmpty(), sexes[character]?.let(::sexOf),
             )
         }.filter { it.names.isNotEmpty() }
     }
@@ -135,7 +135,7 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
                     name.path("value").asString()
             }
         }
-        return items.map { id -> UniverseClass(id, languages.firstNotNullOfOrNull { names[id]?.get(it) } ?: id, id in characters) }
+        return items.map { id -> UniverseClass(id, names[id].orEmpty(), id in characters, languages) }
     }
 
     /** The rows a query of the query service answers; sent in the body, as a list of hundreds of items does not fit an address. */
@@ -168,7 +168,7 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         value.trim().toLongOrNull()?.let { Duration.ofSeconds(it.coerceAtLeast(0)) }
             ?: runCatching { Duration.between(Instant.now(), ZonedDateTime.parse(value.trim(), DateTimeFormatter.RFC_1123_DATE_TIME)).coerceAtLeast(Duration.ZERO) }.getOrNull()
 
-    /** The items [ids] with their names and descriptions in the first of [languages] that has one, in the order given. */
+    /** The items [ids] with their names and descriptions in every one of [languages] that has them, in the order given. */
     private fun entries(ids: List<String>, languages: List<String>): List<UniverseEntry> {
         val items = ids.filter { ITEM.matches(it) }
         if (items.isEmpty()) return emptyList()
@@ -178,8 +178,8 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         return items.mapNotNull { id ->
             val e = entities.path(id)
             if (e.isMissingNode || e.has("missing")) return@mapNotNull null
-            fun first(field: String) = languages.firstNotNullOfOrNull { e.path(field).path(it).path("value").asString(null) }
-            UniverseEntry(id, first("labels") ?: id, first("descriptions"), "$PAGE$id")
+            fun byLanguage(field: String) = languages.mapNotNull { lang -> e.path(field).path(lang).path("value").asString(null)?.let { lang to it } }.toMap()
+            UniverseEntry(id, byLanguage("labels"), byLanguage("descriptions"), "$PAGE$id", languages)
         }
     }
 

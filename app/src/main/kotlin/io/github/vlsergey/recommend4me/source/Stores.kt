@@ -26,6 +26,7 @@ import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseRepository
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 import java.nio.file.Path
@@ -76,11 +77,11 @@ class SourceStore(val source: Source, contentType: ContentType, val folder: Path
 }
 
 /** Everything of one content type: its sources, the links across them, what is learnt. */
-class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases: Databases) {
+class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases: Databases, languages: List<String>) {
     val id: String get() = type.id
 
     val links = TypeLinkRepository(databases.typeCorrections(type.id))
-    val universes = UniverseRepository(databases.typeCorrections(type.id))
+    val universes = UniverseRepository(databases.typeCorrections(type.id), languages)
     val models = ModelRepository(databases.model(type.id))
     val embeddings = SetEmbeddingRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
@@ -90,11 +91,15 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
 
 /** The stores of every source and content type. */
 @Component
-class Stores(plugins: Plugins, databases: Databases, folder: DataFolder, events: ApplicationEventPublisher) {
+class Stores(
+    plugins: Plugins, databases: Databases, folder: DataFolder, events: ApplicationEventPublisher,
+    /** The user's languages, their first first: what the texts of the dictionaries are shown in. */
+    @Value("\${recommend4me.languages:ru,en}") languages: List<String>,
+) {
 
     val sources: List<SourceStore> = plugins.sources.map { SourceStore(it, plugins.type(it.contentType)!!, folder.source(it.id), databases, events) }
 
-    val types: List<TypeStore> = plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases) }
+    val types: List<TypeStore> = plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases, languages) }
 
     fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
 

@@ -6,7 +6,9 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
+import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import java.time.Instant
 
@@ -64,6 +66,26 @@ class Universes(
         log.info("{}: the universe {} ({}) has {} entries of {} classes, {} of them kept as characters", typeId, entry.name, value, characters.size, classes.size, stored.characters)
         dictionaryChanged(type)
         return stored
+    }
+
+    /**
+     * The universes asked of their catalogue in other languages than the user's now — or before
+     * the texts were kept by language — asked again, one by one, in the background: their names and
+     * descriptions are then there in every language of the user.
+     */
+    @EventListener(ApplicationReadyEvent::class)
+    fun askInNewLanguages() {
+        val stale = stores.types.filter { it.type.universes }.flatMap { t -> t.universes.all().filter { it.languages != languages }.map { t to it } }
+        if (stale.isEmpty()) return
+        Thread({
+            stale.forEach { (t, u) ->
+                try {
+                    add(t.id, u.catalogue, u.id)
+                } catch (e: Exception) {
+                    log.warn("{}: the universe {} was not asked again in {}: {}", t.id, u.value, languages, e.message)
+                }
+            }
+        }, "universes-languages").apply { isDaemon = true }.start()
     }
 
     /** The user's word on a class of the universe's entries — kept, left out, or null: as the catalogue says. */
