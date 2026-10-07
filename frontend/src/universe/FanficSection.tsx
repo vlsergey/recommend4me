@@ -394,7 +394,7 @@ function Characters({
       <Named facet={CHARACTERS} candidates={candidates.data} corrections={corrections} />
       <Picker
         label="Добавить персонажа"
-        placeholder="Найти персонажа по любому имени"
+        placeholder="Найти персонажа по любому имени или по Q-номеру"
         options={ranked(options, candidates.data)}
         loading={dictionary.isLoading || characters.some((q) => q.isLoading) || candidates.isLoading}
         error={failed}
@@ -555,8 +555,8 @@ function Named({ facet, candidates, corrections }: { facet: string; candidates: 
 
 /**
  * A button that opens a list of values to add, every one of them, narrowed by a line that looks in
- * all their names; one the work has already is shown, not offered. With [onName], a typed name is
- * added as a value of the user's own.
+ * all their names and finds an id of the catalogue exactly; one the work has already is shown, not
+ * offered. With [onName], a typed name is added as a value of the user's own.
  */
 function Picker({
   label,
@@ -593,7 +593,12 @@ function Picker({
     );
 
   const needle = filter.trim().toLocaleLowerCase("ru-RU");
-  const shown = needle === "" ? options : options.filter((o) => o.names.some((n) => n.toLocaleLowerCase("ru-RU").includes(needle)));
+  // An id of the catalogue — "Q23991129", or its page's address pasted whole — finds its entry exactly
+  const id = needle.split(/[/?#]/).filter((s) => s !== "").pop() ?? "";
+  const shown =
+    needle === ""
+      ? options
+      : options.filter((o) => o.key.toLocaleLowerCase("ru-RU").endsWith(`:${id}`) || o.names.some((n) => n.toLocaleLowerCase("ru-RU").includes(needle)));
   const typed = filter.trim();
 
   return (
