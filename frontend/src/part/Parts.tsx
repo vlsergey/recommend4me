@@ -4,13 +4,15 @@ import { BookOpenTextIcon, ChevronDownIcon, Loader2Icon } from "lucide-react";
 import { api, unwrap, type ItemRef, type PartInfo } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDay } from "@/i18n";
+import { InfluenceBadge } from "@/mark/MarkButtons";
 import { cn } from "@/lib/utils";
 
 const FIRST_SHOWN = 20;
 
 /**
  * The parts of the work — chapters — as one line: how many, from when to when, how many of them
- * read (their text kept); opened, the list in order, and a part whose text is kept opens it in place.
+ * read (their text kept), how many of those raise the prediction and how many lower it; opened,
+ * the list in order, each read part with the points it moves the work by, opening its text in place.
  */
 export function Parts({ item, label, parts }: { item: ItemRef; label: string; parts: PartInfo[] }) {
   const [listed, setListed] = useState(false);
@@ -19,8 +21,11 @@ export function Parts({ item, label, parts }: { item: ItemRef; label: string; pa
   if (parts.length === 0) return null;
   const sorted = [...parts].sort((a, b) => a.position - b.position);
   const shown = all ? sorted : sorted.slice(0, FIRST_SHOWN);
-  const dates = sorted.map((p) => p.publishedAt).filter((d): d is string => d !== undefined).sort();
+  const dates = sorted.map((p) => p.publishedAt).filter((d): d is string => d != null).sort();
   const read = parts.filter((p) => p.hasText).length;
+  // What the chapters read do to the prediction, each by itself
+  const up = parts.filter((p) => p.influence != null && p.influence > 0).length;
+  const down = parts.filter((p) => p.influence != null && p.influence < 0).length;
   return (
     <section>
       <button className="inline-flex flex-wrap items-center gap-x-1 text-left text-sm hover:underline" onClick={() => setListed(!listed)} aria-expanded={listed}>
@@ -30,6 +35,12 @@ export function Parts({ item, label, parts }: { item: ItemRef; label: string; pa
           {parts.length}
           {dates.length > 0 && ` · ${formatDay(dates[0])} — ${formatDay(dates[dates.length - 1])}`}
           {` · текст сохранён у ${read}`}
+          {up + down > 0 && (
+            <span title="Сколько сохранённых глав повышают прогноз и сколько понижают — каждая сама по себе">
+              {" · "}
+              <span className="text-yes">повышают {up}</span>, <span className="text-no">понижают {down}</span>
+            </span>
+          )}
         </span>
       </button>
       {listed && (
@@ -44,6 +55,13 @@ export function Parts({ item, label, parts }: { item: ItemRef; label: string; pa
             >
               <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{p.position}</span>
               <span className={cn("min-w-0 flex-1 truncate", !p.hasText && "text-muted-foreground")}>{p.title ?? `#${p.position}`}</span>
+              {p.influence != null && (
+                <InfluenceBadge
+                  influence={p.influence}
+                  className="shrink-0 shadow-none"
+                  title="Прогноз как есть минус прогноз без текста этой главы, в баллах вашей шкалы"
+                />
+              )}
               {p.publishedAt && <span className="shrink-0 text-xs text-muted-foreground">{formatDate(p.publishedAt)}</span>}
               {p.hasText && <ChevronDownIcon className={cn("size-4 shrink-0 text-muted-foreground", open !== p.partId && "-rotate-90")} />}
             </button>

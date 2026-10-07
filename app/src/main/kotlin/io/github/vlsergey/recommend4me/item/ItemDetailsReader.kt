@@ -99,7 +99,9 @@ class ItemDetailsReader(
                     influence = model.pictures[p.position], error = p.error,
                 )
             },
-            parts = store.parts.ofItem(key.id).map { PartInfo(it.partId, it.position, it.hasText, it.title, it.publishedAt?.atOffset(ZoneOffset.UTC)) },
+            parts = store.parts.ofItem(key.id).map {
+                PartInfo(it.partId, it.position, it.hasText, it.title, it.publishedAt?.atOffset(ZoneOffset.UTC), model.parts[it.partId])
+            },
             pictureMatches = model.pictureMatches.map {
                 PictureMatch(
                     position = it.ref?.toIntOrNull() ?: 0, markSource = it.mark.owner.source, markItem = it.mark.owner.id,

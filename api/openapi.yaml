@@ -1572,6 +1572,11 @@ components:
         publishedAt:
           type: string
           format: date-time
+        influence:
+          type: number
+          format: double
+          nullable: true
+          description: Points of the user's scale the part's text moves the work by - the prediction as it is minus without this part; none when its text is not kept or the model reads no text of parts
 
     PartText:
       type: object

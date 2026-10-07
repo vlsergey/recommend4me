@@ -127,6 +127,17 @@ class PartRepository(private val db: DSLContext) {
         return out
     }
 
+    /** The window vectors by [encoder] of the item's parts: part to its windows in order. */
+    fun windowsByPart(itemId: String, encoder: String): Map<String, List<FloatArray>> {
+        val out = LinkedHashMap<String, MutableList<FloatArray>>()
+        db.select(PART_VECTOR.PART_ID, PART_VECTOR.VEC).from(PART_VECTOR)
+            .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+            .where(PART_VECTOR.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder))
+            .orderBy(PART.POSITION, PART_VECTOR.WINDOW_NO)
+            .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += Vectors.fromHalf(it.value2()!!) }
+        return out
+    }
+
     /** [n] window vectors of the catalogue drawn at random. */
     fun sample(n: Int, encoder: String): List<FloatArray> =
         db.select(PART_VECTOR.VEC).from(PART_VECTOR)

@@ -312,6 +312,8 @@ class Recommendations(
         val pictures: Map<Int, Double>,
         val pictureMatches: List<MarkLikeness.Match>,
         val reviewMatches: List<MarkLikeness.Match>,
+        /** What every part whose text is kept moves the work by, in points: part to points. */
+        val parts: Map<String, Double> = emptyMap(),
     )
 
     /** What moves the prediction of the work, part by part, strongest first — for a page of the site. */
@@ -339,6 +341,7 @@ class Recommendations(
             pictureInfluence(type, key, model, input, stored),
             pictureMatches(type, key, stored),
             reviewMatches(type, key, stored, reviews),
+            partInfluence(type, key, model, input),
         )
     }
 
@@ -493,6 +496,30 @@ class Recommendations(
         return list.indices.map { i -> list[i] to (full - model.scale.score(raw[i + 1].toDouble())) as Double? }
             .sortedByDescending { abs(it.second ?: 0.0) }
             .take(REVIEWS_SHOWN)
+    }
+
+    /**
+     * What every part of the work — a chapter whose text is kept — moves it by, in points: the
+     * score as it is minus the score with that part's windows left out of the set of the text's
+     * windows. None when the model reads no text of parts.
+     */
+    private fun partInfluence(type: TypeStore, key: ItemKey, model: TrainedModel, input: ItemInput): Map<String, Double> {
+        val encoder = plugins.textEncoder() ?: return emptyMap()
+        if (model.layout.offsetOf(SetKind.PARTS.key) == null) return emptyMap()
+        val embedding = type.embeddings.find(SetKind.PARTS)?.takeIf { it.encoder == encoder.id }?.embedding ?: return emptyMap()
+        val byPart = type.source(key.source)!!.parts.windowsByPart(key.id, encoder.id)
+        if (byPart.isEmpty()) return emptyMap()
+        val parts = byPart.keys.toList()
+        val windows = parts.flatMap { byPart.getValue(it) }
+        val owners = parts.flatMap { id -> List(byPart.getValue(id).size) { id } }
+        val projections = embedding.project(windows)
+        val others = input.vectors - SetKind.PARTS.key
+        fun inputWith(set: FloatArray?) = input.withVectors(others + listOfNotNull(set?.let { SetKind.PARTS.key to it }))
+        val inputs = listOf(inputWith(embedding.quantiles(projections, null))) +
+            parts.map { id -> inputWith(embedding.quantiles(projections, BooleanArray(windows.size) { owners[it] != id })) }
+        val raw = model.scores(model.layout.matrix(inputs))
+        val full = model.scale.score(raw[0].toDouble())
+        return parts.withIndex().associate { (i, id) -> id to full - model.scale.score(raw[i + 1].toDouble()) }
     }
 
     /** The pictures of other works marked by the user that the work's pictures are most alike, strongest first. */
