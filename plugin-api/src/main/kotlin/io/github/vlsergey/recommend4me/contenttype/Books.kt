@@ -28,6 +28,15 @@ object Books {
 
     val TAG = StandardFacet("tag", "Тег", role = FacetRole.CONTENT, searchWeight = 0.9f, suggest = true)
 
+    /** The value of a signal that is either set or not. */
+    val YES = StandardValue("yes", "да")
+
+    /** The user marked the work read on the site: on its shelf of the finished, with its box "read" ticked. */
+    val READ = StandardSignal("read", "Прочитано", listOf(YES))
+
+    /** The user liked the work on the site. */
+    val LIKED = StandardSignal("liked", "Понравилось", listOf(YES))
+
     val TYPE = ContentType(
         id = ID,
         title = "Книги",
@@ -35,5 +44,6 @@ object Books {
         verb = "читать",
         universes = true,
         facets = listOf(AUTHOR, STATUS, UniverseFacets.KIND_FACET, TAG),
+        signals = listOf(READ, LIKED),
     )
 }

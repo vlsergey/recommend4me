@@ -21,6 +21,8 @@ class ContentType(
     val universes: Boolean = false,
     /** The facets every source of the type maps its own onto ([StandardFacet]). */
     val facets: List<StandardFacet> = emptyList(),
+    /** The user's actions on a site every source of the type tells alike ([StandardSignal]). */
+    val signals: List<StandardSignal> = emptyList(),
 ) {
     init {
         require(grades.size == 5) { "A content type labels five grades, $id labels ${grades.size}" }

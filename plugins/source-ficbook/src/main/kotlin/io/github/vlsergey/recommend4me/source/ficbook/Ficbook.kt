@@ -13,6 +13,7 @@ import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.PictureDecor
 import io.github.vlsergey.recommend4me.source.ReviewDecor
 import io.github.vlsergey.recommend4me.source.Source
+import io.github.vlsergey.recommend4me.source.SignalDef
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
@@ -72,9 +73,16 @@ class Ficbook : Source {
     /**
      * 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever
      * the order of its names. 3: whether a work is fan fiction, by its fandom. 4: the promotion of
-     * another work the site puts among the paragraphs of a part is not its text.
+     * another work the site puts among the paragraphs of a part is not its text. 5: the standard
+     * statuses; the user's marks of a work — liked, read, followed.
      */
-    override val parserVersion = 4
+    override val parserVersion = 5
+
+    override val signals = listOf(
+        Books.READ.asSignal(),
+        Books.LIKED.asSignal(),
+        SignalDef(SIGNAL_FOLLOWED, "Слежу за обновлениями", mapOf(Books.YES.key to Books.YES.label)),
+    )
 
     override fun itemUrl(itemId: String) = "$BASE/readfic/$itemId"
 
@@ -108,6 +116,7 @@ class Ficbook : Source {
         const val DIRECTION = "direction"
         const val RATING = "rating"
         const val STATUS = "status"
+        const val SIGNAL_FOLLOWED = "followed"
         const val TAG = "tag"
         const val CHARACTER = "character"
         const val PAIRING = "pairing"

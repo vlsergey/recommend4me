@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.contenttype
 
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
+import io.github.vlsergey.recommend4me.source.SignalDef
 
 /**
  * A FACET EVERY SOURCE OF A CONTENT TYPE FILLS ALIKE — the author, the status, the tags: one facet
@@ -36,3 +37,13 @@ class StandardFacet(
 
 /** A value of a [StandardFacet] with a closed list of them: its stable key and its name. */
 class StandardValue(val key: String, val label: String)
+
+/**
+ * A USER'S OWN ACTION ON A SITE EVERY SOURCE OF A CONTENT TYPE TELLS ALIKE — read the work, liked
+ * it: one signal for the model and the card, whichever site it was done on. A source sets it under
+ * [key] to one of [values], mapping its own marks onto it (a shelf "finished" — read), besides any
+ * signal of its own.
+ */
+class StandardSignal(val key: String, val label: String, val values: List<StandardValue>) {
+    fun asSignal() = SignalDef(key, label, values.associate { it.key to it.label })
+}

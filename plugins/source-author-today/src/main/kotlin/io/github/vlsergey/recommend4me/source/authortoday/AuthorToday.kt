@@ -62,8 +62,8 @@ class AuthorToday : Source {
         Regex("https://author\\.today/(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"),
     )
 
-    /** 2: whether a work is fan fiction, by its genres. */
-    override val parserVersion = 2
+    /** 2: whether a work is fan fiction, by its genres. 3: the standard statuses; the shelf of the finished as the standard "read". */
+    override val parserVersion = 3
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 
@@ -74,7 +74,8 @@ class AuthorToday : Source {
             SIGNAL_LIBRARY, "Полка",
             mapOf("Reading" to "читаю", "Saved" to "отложено", "Finished" to "прочитано", "Disliked" to "не понравилось", "Purchased" to "куплено"),
         ),
-        SignalDef(SIGNAL_LIKED, "Нравится", mapOf("yes" to "да")),
+        Books.READ.asSignal(),
+        Books.LIKED.asSignal(),
         SignalDef(
             SIGNAL_REACTION, "Реакция",
             mapOf(
@@ -127,7 +128,6 @@ class AuthorToday : Source {
 
         /** The user's own: the shelf of the library the work is on. */
         const val SIGNAL_LIBRARY = "library"
-        const val SIGNAL_LIKED = "liked"
         const val SIGNAL_REACTION = "reaction"
         const val SIGNAL_HIDDEN = "hidden"
     }

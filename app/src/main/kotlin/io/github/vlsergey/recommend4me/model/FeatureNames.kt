@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.picture.PictureRepository
+import io.github.vlsergey.recommend4me.source.SignalDef
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.likeness.MarkLikeness
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -49,7 +51,9 @@ object FeatureNames {
         val facetLabels = HashMap<String, String>()
         val numberLabels = HashMap<String, String>()
         val blockLabels = HashMap<String, String>()
+        val signals = HashMap<String, SignalDef>()
         sources.forEach { s ->
+            s.source.signals.forEach { signals.putIfAbsent(it.key, it) }
             s.schema.facets.forEach { facetLabels.putIfAbsent(facetId(s.source, it), it.label) }
             s.schema.numbers.forEach { numberLabels.putIfAbsent(numberId(s.source, it), it.label) }
             s.schema.texts.forEach { t -> t.block?.let { blockLabels.putIfAbsent(it, t.label) } }
@@ -69,12 +73,20 @@ object FeatureNames {
             parseFacet(feature)?.let { (facetId, key) -> "${facetLabels[facetId] ?: facetId}: ${names[facetId to key] ?: key}" }
                 ?: when (val group = feature.substringBefore(':')) {
                     "num" -> numberLabels[feature.removePrefix("num:")] ?: feature
-                    "signal" -> "Моё на сайте: " + feature.removePrefix("signal:").replace(":", " = ")
+                    "signal" -> "Моё на сайте: " + signalLabel(feature.removePrefix("signal:"), signals)
                     "prev" -> "Оценка прошлой версии: " + feature.removePrefix("prev:")
                     "source" -> "Источник: " + (sources.firstOrNull { it.id == feature.removePrefix("source:") }?.source?.title ?: feature)
                     else -> BLOCKS[feature] ?: blockLabels[feature] ?: group
                 }
         }
+    }
+
+    /** "<name>:<value>" of a signal as its source names it: "Понравилось" of a mark set or not, "Полка: прочитано" of any other. */
+    private fun signalLabel(nameAndValue: String, signals: Map<String, SignalDef>): String {
+        val name = nameAndValue.substringBefore(':')
+        val value = nameAndValue.substringAfter(':')
+        val def = signals[name] ?: return "$name = $value"
+        return if (value == Books.YES.key) def.label else "${def.label}: ${def.values[value] ?: value}"
     }
 
     /** The parts an explanation switches off as a whole besides the facets and single blocks. */

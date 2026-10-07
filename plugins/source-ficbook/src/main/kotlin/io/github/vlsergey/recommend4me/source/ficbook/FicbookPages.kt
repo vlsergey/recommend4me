@@ -179,6 +179,7 @@ class FicbookPages(private val context: SourceContext) {
         )
         doc.select("a[href=/readfic/$id/comments#comments-list]").firstNotNullOfOrNull { PageText.number(it.text()) }
             ?.let { items.setNumbers(id, mapOf(COMMENTS to it.toDouble())) }
+        marks(doc, id)
         if (parts.isNotEmpty()) items.saveParts(id, parts)
         // A work of one part has its text on its own page, without a table of contents
         else doc.selectFirst("#content")?.let { content ->
@@ -186,6 +187,24 @@ class FicbookPages(private val context: SourceContext) {
             if (text.isNotBlank()) items.saveParts(id, listOf(PartData(ONLY_PART, 0, title, text)))
         }
         return id
+    }
+
+    /**
+     * The user's own marks of the work in the buttons of its header — liked, read, followed: a
+     * button pressed is coloured "success". Read only of a page of a user logged in, the one that
+     * has the menu of their liked works: to anyone else the page tells nothing of them.
+     */
+    private fun marks(doc: Document, id: String) {
+        if (doc.selectFirst("a[href=/home/liked_fanfics]") == null) return
+        fun pressed(icon: String): Boolean? =
+            doc.select(".hat-actions-container button:has(svg.$icon)").firstOrNull()?.let { b -> b.classNames().any { it.startsWith("ds-btn-success") } }
+        pressed("ic_thumbs-up")?.let { context.signals.set(id, Books.LIKED.key, Books.YES.key.takeIf { _ -> it }) }
+        pressed("ic_star-empty")?.let { context.signals.set(id, Ficbook.SIGNAL_FOLLOWED, Books.YES.key.takeIf { _ -> it }) }
+        // The box "read" of the work, ticked or not
+        when {
+            doc.selectFirst("button:has(svg.ic_checkbox-checked2)") != null -> context.signals.set(id, Books.READ.key, Books.YES.key)
+            doc.selectFirst("button:has(svg.ic_checkbox-unchecked2)") != null -> context.signals.set(id, Books.READ.key, null)
+        }
     }
 
     // --- A part ---
@@ -198,6 +217,7 @@ class FicbookPages(private val context: SourceContext) {
             val title = doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null } ?: return null
             items.upsert(ItemHead(id, "$BASE/readfic/$id", title), now)
         }
+        marks(doc, id)
         val area = doc.selectFirst(".title-area")
         items.saveParts(
             id,

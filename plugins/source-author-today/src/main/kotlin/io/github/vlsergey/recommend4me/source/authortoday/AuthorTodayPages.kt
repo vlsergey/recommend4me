@@ -83,8 +83,14 @@ class AuthorTodayPages(private val context: SourceContext) {
         )
         card.selectFirst(".annotation")?.let { items.setTexts(id, mapOf(ANNOTATION to PageText.of(it))) }
         cover(card.selectFirst("img"))?.let { items.setPictures(id, listOf(it)) }
-        if (loggedIn) library(card.selectFirst("library-button"))?.let { context.signals.set(id, AuthorToday.SIGNAL_LIBRARY, it.takeIf { s -> s != "None" }) }
+        if (loggedIn) library(card.selectFirst("library-button"))?.let { shelf(id, it) }
         id
+    }
+
+    /** The shelf of the user's library the work is on — "None" when on none — and, of the shelf of the finished, the standard "read". */
+    private fun shelf(id: String, shelf: String) {
+        context.signals.set(id, AuthorToday.SIGNAL_LIBRARY, shelf.takeIf { it != "None" })
+        context.signals.set(id, Books.READ.key, Books.YES.key.takeIf { shelf == SHELF_FINISHED })
     }
 
     private fun writeGenres(id: String, form: FacetValue?, genres: List<FacetValue>) {
@@ -191,10 +197,8 @@ class AuthorTodayPages(private val context: SourceContext) {
         (cover(doc.selectFirst(".book-cover img.cover-image")) ?: doc.selectFirst("meta[property=og:image]")?.attr("content")?.takeIf { "/content/" in it })
             ?.let { items.setPictures(id, listOf(it)) }
         if (loggedIn) {
-            library(doc.selectFirst(".book-action-panel library-button, library-button"))?.let {
-                context.signals.set(id, AuthorToday.SIGNAL_LIBRARY, it.takeIf { s -> s != "None" })
-            }
-            like?.let { context.signals.set(id, AuthorToday.SIGNAL_LIKED, if (it.groupValues[2] != "null") "yes" else null) }
+            library(doc.selectFirst(".book-action-panel library-button, library-button"))?.let { shelf(id, it) }
+            like?.let { context.signals.set(id, Books.LIKED.key, Books.YES.key.takeIf { _ -> it.groupValues[2] != "null" }) }
             MARKS.find(html)?.groupValues?.get(1)?.let { marks ->
                 val values = Regex("\"?([A-Za-z]+)\"?").findAll(marks).map { it.groupValues[1] }.filter { it != "null" }.toList()
                 context.signals.set(id, AuthorToday.SIGNAL_REACTION, values.sorted().joinToString(",").ifEmpty { null })
@@ -285,6 +289,9 @@ class AuthorTodayPages(private val context: SourceContext) {
         private val LIKE_BUTTON = Regex("name: 'like-button', params: \\{targetId: \\d+, likeCount: (\\d+), type: 'Work', disabled: \\w+, voteId: ([^}\\s]+)\\s*}")
         private val MARKS = Regex("\"workMarks\":(\\[[^\\]]*]|null)")
         private val HIDDEN = Regex("\"isDisliked\":(true|false)")
+
+        /** The shelf of the works the user has read through. */
+        private const val SHELF_FINISHED = "Finished"
 
         /** The statuses of the site by their text, to the standard ones. */
         private val STATUSES = mapOf("в процессе" to Books.Status.IN_PROGRESS, "весь текст" to Books.Status.FINISHED, "заморожен" to Books.Status.FROZEN)

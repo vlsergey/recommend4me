@@ -66,6 +66,37 @@ class FicbookPagesTest {
         assertEquals(setOf(work), context.heads.keys)
     }
 
+    /** A work's page as the site shows it to a user logged in ([loggedIn]): the buttons of its header as they are on the site, pressed or not. */
+    private fun marked(loggedIn: Boolean, liked: Boolean, followed: Boolean, read: Boolean) = """
+        <html><body>
+        ${if (loggedIn) """<a href="/home/liked_fanfics">Понравившиеся работы</a>""" else ""}
+        <h1 class="heading">Работа</h1>
+        <section class="fanfic-hat"><div class="hat-actions-container"><div class="d-flex flex-wrap gap-8">
+          <button type="button" class="ds-btn ds-btn-primary ds-btn-mini${if (liked) " ds-btn-success-filled" else ""} jsVueComponent"><svg class="ic_thumbs-up svg-icon"></svg><span>8</span></button>
+          <button type="button" class="ds-btn ds-btn-primary ds-btn-mini${if (followed) " ds-btn-success-filled" else ""} jsVueComponent"><svg class="ic_star-empty svg-icon"></svg> 4</button>
+        </div>
+        <button type="button" class="ds-btn ds-btn-regular ds-btn-mini${if (read) " ds-btn-success" else ""} jsVueComponent"><svg class="${if (read) "ic_checkbox-checked2" else "ic_checkbox-unchecked2"} svg-icon"></svg> Прочитано</button>
+        </div></section>
+        </body></html>
+    """.trimIndent()
+
+    @Test
+    fun `the user's marks of a work are its signals, read only of a user logged in`() {
+        val context = MemorySourceContext()
+        source.capture(CapturedPage("https://ficbook.net/readfic/123", marked(loggedIn = true, liked = true, followed = false, read = true), now), context)
+        assertEquals(mapOf("123" to "yes"), context.signals.withSignal("liked"))
+        assertEquals(mapOf("123" to "yes"), context.signals.withSignal("read"))
+        assertEquals(emptyMap(), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
+        // Unread and unliked again: the signals go
+        source.capture(CapturedPage("https://ficbook.net/readfic/123", marked(loggedIn = true, liked = false, followed = true, read = false), now), context)
+        assertEquals(emptyMap(), context.signals.withSignal("liked"))
+        assertEquals(emptyMap(), context.signals.withSignal("read"))
+        assertEquals(mapOf("123" to "yes"), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
+        // A page of no user says nothing of the marks: they stay
+        source.capture(CapturedPage("https://ficbook.net/readfic/123", marked(loggedIn = false, liked = false, followed = false, read = false), now), context)
+        assertEquals(mapOf("123" to "yes"), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
+    }
+
     @Test
     fun `a part gives its text, and comments are the readers' opinions`() {
         val context = MemorySourceContext()
