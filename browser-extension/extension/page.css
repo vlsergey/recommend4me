@@ -142,6 +142,8 @@ r4m-score.r4m-s5 { background: #a19412; }
 r4m-score.r4m-s6 { background: #6f9a1c; }
 r4m-score.r4m-s7 { background: #3f9426; }
 r4m-score.r4m-s8, r4m-score.r4m-s9, r4m-score.r4m-s10 { background: #1a7f37; }
+/* A work known, its prediction still worked out */
+r4m-score.r4m-pending-score { background: #8b949e; }
 
 r4m-badge {
   display: inline-flex;

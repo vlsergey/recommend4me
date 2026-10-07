@@ -120,7 +120,8 @@
   function render() {
     clear();
     if (!view) return;
-    cards(true);
+    pendingSince = Date.now();
+    cards();
     const item = view.item;
     if (!item && !view.itemId) return;
     const placed = new Set();
@@ -505,14 +506,29 @@
 
   // --- Cards of a list ---
 
-  /** The prediction and the grade on every card not yet marked; [again] — all of them anew. */
-  async function cards(again) {
+  /**
+   * How often a list asks again for the works whose prediction is still worked out — a work first
+   * seen is read by the text model and scored seconds after it is saved — and for how long: the
+   * patience of a page, not meaning.
+   */
+  const PENDING_EVERY = 4 * 1000;
+  const PENDING_FOR = 2 * 60 * 1000;
+  let pendingSince = 0;
+  let pendingTimer = null;
+
+  /**
+   * The prediction and the grade on every card of a work the application knows, all the cards in
+   * one call. A badge is filled in place, never taken off: a work whose prediction is still worked
+   * out shows "…" and is asked for again every few seconds, the others are not asked again.
+   */
+  async function cards() {
     const decor = view && view.decor.cards;
     if (!decor) return;
-    if (again) document.querySelectorAll("r4m-badge").forEach((b) => b.remove());
     const wanted = [];
     document.querySelectorAll(decor.selector).forEach((card) => {
-      if (card.querySelector("r4m-badge") || card.closest("[data-r4m]")) return;
+      if (card.closest("[data-r4m]")) return;
+      const badge = card.querySelector("r4m-badge");
+      if (badge && !badge.classList.contains("r4m-pending")) return;
       const link = card.querySelector(decor.link);
       if (link && link.getAttribute("href")) wanted.push({ card, link });
     });
@@ -524,18 +540,29 @@
       return;
     }
     const byLink = new Map(known.map((k) => [k.link, k]));
+    let pending = false;
     wanted.forEach(({ card, link }) => {
+      // A work the application does not know yet gets its badge once the page that shows it is saved
       const k = byLink.get(link.getAttribute("href"));
-      if (!k || card.querySelector("r4m-badge")) return;
-      const badge = el("r4m-badge");
-      if (k.prediction !== undefined && k.prediction !== null) {
-        badge.appendChild(el("r4m-score", scoreClass(k.prediction), k.prediction.toFixed(1)));
+      if (!k) return;
+      let badge = card.querySelector("r4m-badge");
+      if (!badge) {
+        badge = el("r4m-badge");
+        link.insertAdjacentElement("beforebegin", badge);
       }
+      badge.textContent = "";
+      const scored = k.prediction !== undefined && k.prediction !== null;
+      badge.appendChild(scored ? el("r4m-score", scoreClass(k.prediction), k.prediction.toFixed(1)) : el("r4m-score", "r4m-pending-score", "…"));
       if (k.grade) badge.appendChild(el("r4m-grade-mark", null, `★${k.grade}`));
-      if (!badge.childNodes.length) return;
-      badge.title = "recommend4me: прогноз из 10" + (k.grade ? ", ★ — ваша оценка" : "");
-      link.insertAdjacentElement("beforebegin", badge);
+      const waiting = !scored && !k.grade;
+      badge.classList.toggle("r4m-pending", waiting);
+      pending = pending || waiting;
+      badge.title = waiting
+        ? "recommend4me: прогноз ещё считается"
+        : "recommend4me: прогноз из 10" + (k.grade ? ", ★ — ваша оценка" : "");
     });
+    clearTimeout(pendingTimer);
+    if (pending && Date.now() - pendingSince < PENDING_FOR) pendingTimer = setTimeout(cards, PENDING_EVERY);
   }
 
   // Lists that load more cards as the user scrolls
@@ -544,12 +571,18 @@
     const theirs = mutations.some((m) => [...m.addedNodes].some((n) => n.nodeType === 1 && !n.hasAttribute("data-r4m")));
     if (!theirs) return;
     clearTimeout(cardsTimer);
-    cardsTimer = setTimeout(() => cards(false), 800);
+    cardsTimer = setTimeout(cards, 800);
   }).observe(document.body, { childList: true, subtree: true });
 
-  // A page sent again as it grows: the work is read anew once it is first saved, and then seldom
+  // A page sent again as it grows. A list: the works it just saved get their badges, the page is
+  // not read anew. A work's page: read anew once it is first saved, and then seldom
   browser.runtime.onMessage.addListener((m) => {
     if (m.type !== "captured" || m.url !== location.href) return;
+    if (view && !view.item && !view.itemId) {
+      pendingSince = Date.now();
+      cards();
+      return;
+    }
     if (!view || !view.item || Date.now() - loadedAt > RELOAD_AFTER) load();
   });
 
