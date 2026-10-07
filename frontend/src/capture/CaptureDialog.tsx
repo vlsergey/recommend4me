@@ -21,7 +21,7 @@ export function CaptureButton() {
     <>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger
-          render={<Button variant="ghost" className="px-2 lg:px-3" aria-label="Расширение для Firefox" title="Расширение для Firefox: как подключить, что оно присылает" />}
+          render={<Button variant="ghost" className="px-2 lg:px-3" aria-label="Расширение для Firefox и Safari на iPad" title="Расширение для Firefox и скрипт для Safari на iPad: как подключить, что они присылают" />}
         >
           <RadarIcon /> <span className="hidden lg:inline">Расширение</span>
         </DialogTrigger>
@@ -87,6 +87,8 @@ function CaptureDetails({ onOpenItem }: { onOpenItem: (ref: ItemRef) => void }) 
           способом. После обновления приложения нажмите у расширения «Перезагрузить» на той же странице.
         </li>
       </ol>
+
+      <SafariSteps />
 
       <section className="flex flex-col gap-2 text-sm">
         <h4 className="font-semibold">Что расширение показывает на сайтах</h4>
@@ -168,6 +170,60 @@ function CaptureDetails({ onOpenItem }: { onOpenItem: (ref: ItemRef) => void }) 
         </ul>
       </section>
     </>
+  );
+}
+
+/** The Userscripts app in the App Store: an extension of Safari that runs the scripts it is given. */
+const USERSCRIPTS = "https://apps.apple.com/app/userscripts/id1463298887";
+
+/**
+ * The same on the iPad, where Safari takes no extension but from the App Store: the Userscripts
+ * app runs the application's userscript, made of the extension's own scripts. The script calls
+ * the application at the address it was taken from — so it is taken on the iPad, at the address
+ * the iPad reaches the application at: over https, which `tailscale serve` gives.
+ */
+function SafariSteps() {
+  const origin = window.location.origin;
+  const script = `${origin}/userscript/recommend4me.user.js`;
+  const secure = window.location.protocol === "https:";
+  return (
+    <section className="flex flex-col gap-2 text-sm">
+      <h4 className="font-semibold">Safari на iPad</h4>
+      <p className="text-muted-foreground">
+        Расширение без App Store в Safari не поставить, поэтому на iPad то же самое делает скрипт для бесплатного приложения
+        Userscripts: присылает страницы и показывает на них прогноз, оценку и теги.
+      </p>
+      <ol className="flex list-decimal flex-col gap-2 pl-5">
+        <li>
+          На этом компьютере один раз отдайте приложение по https через Tailscale: в настройках сети Tailscale (DNS) включите
+          «HTTPS Certificates», затем выполните <Code>tailscale serve --bg 8095</Code>. Приложение откроется по адресу вида{" "}
+          <Code>https://имя-компьютера.ваша-сеть.ts.net</Code> — без порта.
+        </li>
+        <li>
+          На iPad поставьте{" "}
+          <a href={USERSCRIPTS} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+            Userscripts
+          </a>{" "}
+          из App Store, откройте его один раз и выберите папку для скриптов. Затем в «Настройки → Приложения → Safari →
+          Расширения → Userscripts» включите его и разрешите на всех сайтах.
+        </li>
+        <li>
+          В Safari на iPad откройте это окно по https-адресу из шага 1 и нажмите ссылку на скрипт ниже, затем значок Userscripts
+          в адресной строке → «Install». Скрипт запомнит адрес, с которого его взяли, и будет обновляться оттуда же.
+          <div className="mt-1 flex flex-col gap-1">
+            <a href={script} className="font-mono text-xs break-all underline underline-offset-2">
+              {script}
+            </a>
+            {!secure && (
+              <span className="text-xs text-maybe">
+                Это окно открыто не по https: взятый отсюда скрипт будет обращаться к {origin}, а iPad туда, скорее всего, не
+                дотянется. Откройте приложение на iPad по адресу из шага 1.
+              </span>
+            )}
+          </div>
+        </li>
+      </ol>
+    </section>
   );
 }
 

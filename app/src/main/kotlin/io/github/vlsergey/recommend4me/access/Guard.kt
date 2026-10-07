@@ -29,7 +29,7 @@ private val log = LoggerFactory.getLogger(Guard::class.java)
  *
  * WHETHER A WRITE COMES FROM OUR PAGE — a browser sends Origin with every POST, PUT and DELETE, and
  * a foreign tab can send one without a preflight. A write whose Origin is not one of our names is
- * refused — unless it is a browser extension's (`moz-extension:`), which no page can pretend to be:
+ * refused — unless it is a browser extension's (`moz-extension:`, `safari-web-extension:` of the userscripts of Safari), which no page can pretend to be:
  * the browser writes the header, and a page carries http(s). A request without Origin is not a
  * browser's, and passes.
  */
@@ -77,7 +77,7 @@ class Guard(settings: AccessSettings) : OncePerRequestFilter() {
     companion object {
         private val LOCAL_NAMES = setOf("localhost", "127.0.0.1", "::1", "[::1]")
         private val SAFE = setOf("GET", "HEAD", "OPTIONS")
-        private val EXTENSION_SCHEMES = listOf("moz-extension", "chrome-extension")
+        private val EXTENSION_SCHEMES = listOf("moz-extension", "chrome-extension", "safari-web-extension")
 
         /** The host without the port, lower case; an address of the sixth family keeps its brackets. */
         fun hostname(value: String?): String {
