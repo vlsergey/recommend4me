@@ -153,18 +153,7 @@ export function ScoreBadge({ type, summary, className }: { type: ContentTypeInfo
         {p ? shownScore(p.score) : "—"}
       </TooltipTrigger>
       <TooltipContent>
-        {p ? (
-          <>
-            Место на вашей шкале: {score(Math.max(0, p.score))}
-            {ALL_GRADES.filter((g) => ladder[g] !== undefined).map((g) => (
-              <div key={g} className="tabular-nums">
-                {g} · {gradeLabel(type, g)}: {score(ladder[g]!)}
-              </div>
-            ))}
-          </>
-        ) : (
-          "Прогноза ещё нет: модели нужны ваши оценки"
-        )}
+        {p ? `Место на вашей шкале: ${score(Math.max(0, p.score))}` : "Прогноза ещё нет: модели нужны ваши оценки"}
       </TooltipContent>
     </Tooltip>
   );
