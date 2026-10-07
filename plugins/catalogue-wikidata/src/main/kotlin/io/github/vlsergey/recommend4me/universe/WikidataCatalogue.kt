@@ -8,6 +8,9 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.time.Instant
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * WIKIDATA as the catalogue of fictional universes: a universe is any item fan fiction is written
@@ -140,10 +143,30 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         val request = HttpRequest.newBuilder(URI.create(SPARQL)).timeout(TIMEOUT).header("User-Agent", USER_AGENT)
             .header("Accept", "application/sparql-results+json").header("Content-Type", "application/x-www-form-urlencoded")
             .POST(HttpRequest.BodyPublishers.ofString("query=${enc(query)}")).build()
-        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
-        check(response.statusCode() == 200) { "Wikidata answered ${response.statusCode()}" }
-        return json.readTree(response.body()).path("results").path("bindings").toList()
+        return json.readTree(send(request)).path("results").path("bindings").toList()
     }
+
+    /**
+     * The body of the answer to [request]. Asked too often, Wikidata answers 429 with how long to
+     * wait (Retry-After): the request is sent again after that, for as long as the waits add up to
+     * no more than [TIMEOUT]; an answer of 429 without the header, or past it, fails as any other.
+     */
+    private fun send(request: HttpRequest): String {
+        var waited = Duration.ZERO
+        while (true) {
+            val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+            if (response.statusCode() == 200) return response.body()
+            val wait = response.takeIf { it.statusCode() == TOO_MANY_REQUESTS }?.headers()?.firstValue("Retry-After")?.orElse(null)?.let(::retryAfter)
+            check(wait != null && waited + wait <= TIMEOUT) { "Wikidata answered ${response.statusCode()}" }
+            Thread.sleep(wait.toMillis())
+            waited += wait
+        }
+    }
+
+    /** Retry-After as seconds, or as the date to retry at; null when it is neither. */
+    private fun retryAfter(value: String): Duration? =
+        value.trim().toLongOrNull()?.let { Duration.ofSeconds(it.coerceAtLeast(0)) }
+            ?: runCatching { Duration.between(Instant.now(), ZonedDateTime.parse(value.trim(), DateTimeFormatter.RFC_1123_DATE_TIME)).coerceAtLeast(Duration.ZERO) }.getOrNull()
 
     /** The items [ids] with their names and descriptions in the first of [languages] that has one, in the order given. */
     private fun entries(ids: List<String>, languages: List<String>): List<UniverseEntry> {
@@ -162,9 +185,7 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
 
     private fun get(url: String): JsonNode {
         val request = HttpRequest.newBuilder(URI.create(url)).timeout(TIMEOUT).header("User-Agent", USER_AGENT).header("Accept", "application/json").GET().build()
-        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
-        check(response.statusCode() == 200) { "Wikidata answered ${response.statusCode()}" }
-        return json.readTree(response.body())
+        return json.readTree(send(request))
     }
 
     companion object {
@@ -191,6 +212,7 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         private const val USER_AGENT = "recommend4me (https://github.com/vlsergey/recommend4me)"
 
         private val TIMEOUT: Duration = Duration.ofSeconds(60)
+        private const val TOO_MANY_REQUESTS = 429
         private val ITEM = Regex("Q\\d+")
 
         private fun enc(s: String) = URLEncoder.encode(s, Charsets.UTF_8)
