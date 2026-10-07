@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.api.ItemsApi
 import io.github.vlsergey.recommend4me.api.model.FacetFilter
+import io.github.vlsergey.recommend4me.api.model.ContributionGroup as ApiContributionGroup
 import io.github.vlsergey.recommend4me.api.model.FacetValueUse
 import io.github.vlsergey.recommend4me.api.model.LinkedItem
 import io.github.vlsergey.recommend4me.correction.Corrected
@@ -106,6 +107,12 @@ class ItemsController(
 
     override fun getItem(source: String, item: String): ResponseEntity<ItemDetails> =
         details.read(ItemKey(source, item))?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+
+    override fun getExplanation(source: String, item: String): ResponseEntity<List<ApiContributionGroup>> {
+        val store = stores.source(source) ?: return ResponseEntity.notFound().build()
+        if (store.items.find(item) == null) return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(recommendations.explanation(ItemKey(source, item)).map { it.toApi(withFeatures = false) })
+    }
 
     override fun refreshItem(source: String, item: String): ResponseEntity<ItemDetails> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()

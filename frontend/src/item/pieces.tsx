@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { StarIcon } from "lucide-react";
 import {
+  api,
   pictureSrc,
+  unwrap,
   type ContentTypeInfo,
   type FacetValueInfo,
   type Grade,
@@ -153,9 +156,44 @@ export function ScoreBadge({ type, summary, className }: { type: ContentTypeInfo
         {p ? shownScore(p.score) : "—"}
       </TooltipTrigger>
       <TooltipContent>
-        {p ? `Место на вашей шкале: ${score(Math.max(0, p.score))}` : "Прогноза ещё нет: модели нужны ваши оценки"}
+        {p ? (
+          <div className="flex w-56 flex-col">
+            <div className="font-semibold">Место на вашей шкале: {score(Math.max(0, p.score))}</div>
+            <ScoreWhy summary={summary} />
+          </div>
+        ) : (
+          "Прогноза ещё нет: модели нужны ваши оценки"
+        )}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+/** How many parts of the explanation a score's tooltip names. */
+const WHY_PARTS = 3;
+
+/** Why in short, in a score's tooltip: the parts that move the work most; asked when the tooltip opens. */
+function ScoreWhy({ summary }: { summary: ItemSummary }) {
+  const why = useQuery({
+    queryKey: ["explanation", summary.source, summary.item],
+    queryFn: async () =>
+      unwrap(await api.GET("/api/items/{source}/{item}/explanation", { params: { path: { source: summary.source, item: summary.item } } })),
+  });
+  if (why.isLoading) return <div className="opacity-70">почему — считаю…</div>;
+  const parts = (why.data ?? []).slice(0, WHY_PARTS);
+  if (parts.length === 0) return null;
+  return (
+    <ul className="mt-1">
+      {parts.map((g) => (
+        <li key={g.part} className="flex justify-between gap-3">
+          <span className="min-w-0 truncate">{g.label}</span>
+          <span className="tabular-nums">
+            {g.contribution > 0 ? "+" : ""}
+            {g.contribution.toFixed(1)}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

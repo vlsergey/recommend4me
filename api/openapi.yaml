@@ -201,6 +201,26 @@ paths:
         '404':
           description: No such item
 
+  /api/items/{source}/{item}/explanation:
+    get:
+      tags: [items]
+      operationId: getExplanation
+      summary: What moves the work's prediction, part by part, strongest first - the parts alone, without their features
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      responses:
+        '200':
+          description: The parts; none without a model
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContributionGroup'
+        '404':
+          description: No such item
+
   /api/items/{source}/{item}/suggestions:
     get:
       tags: [suggestions]
