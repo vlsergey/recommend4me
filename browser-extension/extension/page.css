@@ -20,18 +20,6 @@ r4m-panel {
   text-align: left;
 }
 
-r4m-panel.r4m-floating {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 2147483000;
-  width: min(420px, calc(100vw - 32px));
-  max-height: 70vh;
-  overflow: auto;
-  margin: 0;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
-}
-
 r4m-head {
   display: flex;
   align-items: center;
@@ -41,14 +29,6 @@ r4m-head {
 
 r4m-head .r4m-spacer {
   flex: 1;
-}
-
-r4m-panel.r4m-folded > :not(r4m-head) {
-  display: none;
-}
-
-r4m-panel.r4m-folded r4m-head {
-  margin-bottom: 0;
 }
 
 r4m-panel a.r4m-link {

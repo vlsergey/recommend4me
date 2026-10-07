@@ -26,8 +26,9 @@ class Database(
 ) : AutoCloseable {
 
     private val pool = HikariDataSource(HikariConfig().apply {
-        // A writer waits for a row another transaction holds up to 10 s (2 s by default)
-        jdbcUrl = "jdbc:h2:file:${file.toAbsolutePath().toString().replace('\\', '/')};DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000"
+        // A writer waits for a row another transaction holds up to 10 s (2 s by default). The file
+        // is compressed: the texts of chapters, the pages kept, the reviews take a fraction of the space
+        jdbcUrl = "jdbc:h2:file:${file.toAbsolutePath().toString().replace('\\', '/')};DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;COMPRESS=TRUE"
         username = "sa"
         password = ""
         poolName = name

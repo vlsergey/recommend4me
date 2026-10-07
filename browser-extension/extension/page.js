@@ -40,8 +40,6 @@
   let cardsTimer = null;
   let busy = false;
   let loadedAt = 0;
-  /** The floating panel — a page without a place for it, the reader — starts folded, and stays as the user leaves it. */
-  let folded = true;
 
   // --- Elements ---
 
@@ -201,27 +199,14 @@
     return out;
   }
 
-  /** Puts the panel after the element the source names, or folded in a corner. */
+  /**
+   * Puts the panel after the element the source names. A page without such a place — the reader
+   * of a chapter — gets no panel: a box floating over the text distracts from reading, and the
+   * page is sent all the same.
+   */
   function place(root) {
     const anchor = view.decor.panelAfter && document.querySelector(view.decor.panelAfter);
-    if (anchor) {
-      anchor.insertAdjacentElement("afterend", root);
-      return;
-    }
-    root.classList.add("r4m-floating");
-    if (folded) root.classList.add("r4m-folded");
-    const head = root.querySelector("r4m-head");
-    const toggle = el("button", "r4m-button", folded ? "▸" : "▾");
-    toggle.type = "button";
-    toggle.title = "Свернуть или развернуть";
-    toggle.addEventListener("click", (e) => {
-      e.preventDefault();
-      folded = !folded;
-      root.classList.toggle("r4m-folded", folded);
-      toggle.textContent = folded ? "▸" : "▾";
-    });
-    head.insertBefore(toggle, head.firstChild);
-    document.body.appendChild(root);
+    if (anchor) anchor.insertAdjacentElement("afterend", root);
   }
 
   function grades(item) {
