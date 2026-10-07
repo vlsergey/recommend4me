@@ -304,10 +304,11 @@ function Characters({
   const characters = useQueries({ queries: linked.map((u) => charactersQuery(type.id, u)) });
 
   const taken = (key: string) => values.some((v) => v.key === key && has(v));
-  // A character of several of the work's universes is offered once, with every universe it is of
+  // A character of several of the work's universes is offered once, with every universe it is of;
+  // the entries the user left out of a universe (its places, its spells) are not offered
   const byKey = new Map<string, Option & { universes: string[] }>();
   linked.forEach((u, i) => {
-    for (const c of characters[i].data ?? []) {
+    for (const c of (characters[i].data ?? []).filter((c) => c.included)) {
       const key = `${u.catalogue}:${c.character}`;
       const known = byKey.get(key);
       if (known) known.universes.push(u.name);

@@ -28,8 +28,18 @@ class WikidataCatalogueTest {
         val characters = catalogue.characters("Q8337", languages)
         val neville = characters.firstOrNull { it.id == "Q190366" }
         assertTrue(neville != null && "Невилл Лонгботтом" in neville.names, neville?.names.toString())
-        // A place the story is about is one of its characters too
+        // A place the story is about is said to be in it too
         assertTrue(characters.any { it.id == "Q174097" }, "Hogwarts")
         assertTrue(characters.size > 100, "${characters.size} characters")
+    }
+
+    @Test
+    fun `the classes tell the characters from the places and the spells`() {
+        val characters = catalogue.characters("Q8337", languages)
+        val neville = characters.first { it.id == "Q190366" }
+        val hogwarts = characters.first { it.id == "Q174097" }
+        val classes = catalogue.classes((neville.classes + hogwarts.classes).toSet(), languages).associateBy { it.id }
+        assertTrue(neville.classes.any { classes[it]?.character == true }, "Neville: ${neville.classes.map { classes[it]?.name }}")
+        assertTrue(hogwarts.classes.none { classes[it]?.character == true }, "Hogwarts: ${hogwarts.classes.map { classes[it]?.name }}")
     }
 }

@@ -714,11 +714,118 @@ paths:
         '204':
           description: Removed
 
+  /api/types/{type}/universes/{catalogue}/{universe}/classes:
+    get:
+      tags: [universes]
+      operationId: listUniverseClasses
+      summary: The classes the entries of a universe are of, the most entries first
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/Catalogue'
+        - $ref: '#/components/parameters/Universe'
+      responses:
+        '200':
+          description: The classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UniverseClassInfo'
+
+  /api/types/{type}/universes/{catalogue}/{universe}/classes/{class}:
+    put:
+      tags: [universes]
+      operationId: chooseUniverseClass
+      summary: The user's word on a class within the universe - its entries kept as characters, or left out
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/Catalogue'
+        - $ref: '#/components/parameters/Universe'
+        - name: class
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Inclusion'
+      responses:
+        '204':
+          description: Saved
+        '404':
+          description: No such universe
+    delete:
+      tags: [universes]
+      operationId: resetUniverseClass
+      summary: Takes the user's word on the class back - the catalogue decides again
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/Catalogue'
+        - $ref: '#/components/parameters/Universe'
+        - name: class
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Taken back
+        '404':
+          description: No such universe
+
+  /api/types/{type}/universes/{catalogue}/{universe}/characters/{character}:
+    put:
+      tags: [universes]
+      operationId: chooseUniverseEntry
+      summary: The user's word on one entry of the universe, over its classes - kept as a character, or left out
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/Catalogue'
+        - $ref: '#/components/parameters/Universe'
+        - name: character
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Inclusion'
+      responses:
+        '204':
+          description: Saved
+        '404':
+          description: No such universe
+    delete:
+      tags: [universes]
+      operationId: resetUniverseEntry
+      summary: Takes the user's word on the entry back - its classes decide again
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/Catalogue'
+        - $ref: '#/components/parameters/Universe'
+        - name: character
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Taken back
+        '404':
+          description: No such universe
+
   /api/types/{type}/universes/{catalogue}/{universe}/characters:
     get:
       tags: [universes]
       operationId: listCharacters
-      summary: The characters of a universe of the dictionary, as the catalogue gave them
+      summary: Every entry of a universe of the dictionary as the catalogue gave it, with whether it is kept as a character
       parameters:
         - $ref: '#/components/parameters/Type'
         - name: catalogue
@@ -985,6 +1092,20 @@ components:
       name: item
       in: path
       required: true
+      schema:
+        type: string
+    Catalogue:
+      name: catalogue
+      in: path
+      required: true
+      description: The catalogue of universes ("wikidata")
+      schema:
+        type: string
+    Universe:
+      name: universe
+      in: path
+      required: true
+      description: The universe's id within the catalogue ("Q8337")
       schema:
         type: string
     Position:
@@ -2222,7 +2343,7 @@ components:
 
     UniverseInfo:
       type: object
-      required: [catalogue, universe, value, name, url, characters, works, addedAt, refreshedAt]
+      required: [catalogue, universe, value, name, url, characters, total, works, addedAt, refreshedAt]
       properties:
         catalogue:
           type: string
@@ -2240,6 +2361,10 @@ components:
           description: The universe's page in the catalogue
         characters:
           type: integer
+          description: Its entries kept as characters
+        total:
+          type: integer
+          description: Every entry the catalogue said is in it - characters, places, groups, things
         works:
           type: integer
           description: The works the user linked to it
@@ -2269,10 +2394,53 @@ components:
           type: boolean
           description: The dictionary has it already
 
+    UniverseClassInfo:
+      type: object
+      required: [class, name, character, count, included]
+      properties:
+        class:
+          type: string
+          description: The class's id within the catalogue
+        name:
+          type: string
+        character:
+          type: boolean
+          description: Its entries are characters, as the catalogue says
+        count:
+          type: integer
+          description: The universe's entries of it
+        included:
+          type: boolean
+          description: Its entries are kept as characters - by the user's word, else when they are characters
+        choice:
+          type: boolean
+          nullable: true
+          description: The user's word on it within the universe; none when the catalogue decides
+
+    Inclusion:
+      type: object
+      required: [included]
+      properties:
+        included:
+          type: boolean
+          description: Kept as characters, or left out
+
     CharacterInfo:
       type: object
-      required: [character, value, names, url]
+      required: [character, value, names, url, classes, included]
       properties:
+        classes:
+          type: array
+          description: The ids of the classes it is of
+          items:
+            type: string
+        included:
+          type: boolean
+          description: Kept as a character - by the user's word on it, else by its classes
+        choice:
+          type: boolean
+          nullable: true
+          description: The user's word on it alone; none when its classes decide
         character:
           type: string
           description: The character's id within the catalogue

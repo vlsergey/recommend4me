@@ -16,14 +16,24 @@ class UniverseEntry(
 
 /**
  * A character of a universe: every name it goes by in the languages the catalogue was asked for,
- * the main one first — authors write the one they like.
+ * the main one first — authors write the one they like. What the catalogue says it is in [classes]
+ * (a human, a wizard, a shop, a spell): a universe holds more than its characters.
  */
 class UniverseCharacter(
     val id: String,
     val names: List<String>,
     val description: String?,
     val url: String,
+    /** The ids of the catalogue's classes the entry is of; none when the catalogue does not say. */
+    val classes: List<String> = emptyList(),
 )
+
+/**
+ * A class of the catalogue's entries, named in the languages asked for. [character]: its entries
+ * are characters — people, creatures, beings a story is about — rather than places, groups,
+ * things, spells or events.
+ */
+class UniverseClass(val id: String, val name: String, val character: Boolean)
 
 /**
  * A catalogue of fictional universes and their characters — Wikidata, kept by people and kept up
@@ -46,6 +56,12 @@ interface UniverseCatalogue {
 
     fun universe(id: String, languages: List<String>): UniverseEntry?
 
-    /** Every character of the universe [id] and of the works, series and franchises within it. */
+    /**
+     * Every entry said to be in the universe [id] and in the works, series and franchises within
+     * it, with its classes: the characters and whatever else the catalogue puts there.
+     */
     fun characters(id: String, languages: List<String>): List<UniverseCharacter>
+
+    /** The classes [ids], named, each with whether its entries are characters; none of a catalogue without classes. */
+    fun classes(ids: Collection<String>, languages: List<String>): List<UniverseClass> = emptyList()
 }

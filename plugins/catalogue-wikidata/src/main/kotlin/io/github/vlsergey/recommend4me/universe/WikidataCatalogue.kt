@@ -14,8 +14,10 @@ import java.time.Duration
  * about — a franchise, a series, a work, a fictional universe — and its characters are whatever is
  * said to be in it (P1441 "present in work", P1080 "from narrative universe", P8345 "media
  * franchise", or listed by it with P674 "characters"), of it or of any part of it down the parts
- * (P179 "part of the series", P361 "part of", P8345). Not only people: creatures and places a
- * story is about are its characters too.
+ * (P179 "part of the series", P361 "part of", P8345). Not only people are said to be in a universe:
+ * its places, groups, spells and things are too. Every entry comes with its classes (P31
+ * "instance of"), and a class tells whether its entries are characters, for the user to keep the
+ * characters and whatever else they want.
  *
  * Every name is asked for in the user's languages: the label and every alias, so that "Невилл
  * Лонгботтом" of the fans is found as an alias of "Невилл Долгопупс" of the translation.
@@ -46,13 +48,16 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
     override fun characters(id: String, languages: List<String>): List<UniverseCharacter> {
         require(ITEM.matches(id)) { "Not an item of Wikidata: $id" }
         val langs = languages.joinToString(",") { "\"$it\"" }
+        // Two subqueries, each evaluated by itself: within one, the union of the two ways makes
+        // the service walk the parts for every character there is
+        val entries = """
+            { SELECT DISTINCT ?c WHERE { ?part (wdt:P179|wdt:P361|wdt:P8345)* wd:$id . ?c (wdt:P1441|wdt:P1080|wdt:P8345) ?part . } }
+            UNION
+            { SELECT DISTINCT ?c WHERE { ?part (wdt:P179|wdt:P361|wdt:P8345)* wd:$id . ?part wdt:P674 ?c . } }
+        """.trimIndent()
         val query = """
             SELECT ?c ?kind ?text WHERE {
-              # Two subqueries, each evaluated by itself: within one, the union of the two ways
-              # makes the service walk the parts for every character there is
-              { SELECT DISTINCT ?c WHERE { ?part (wdt:P179|wdt:P361|wdt:P8345)* wd:$id . ?c (wdt:P1441|wdt:P1080|wdt:P8345) ?part . } }
-              UNION
-              { SELECT DISTINCT ?c WHERE { ?part (wdt:P179|wdt:P361|wdt:P8345)* wd:$id . ?part wdt:P674 ?c . } }
+              $entries
               { ?c rdfs:label ?text . BIND("label" AS ?kind) }
               UNION { ?c skos:altLabel ?text . BIND("alias" AS ?kind) }
               UNION { ?c schema:description ?text . BIND("description" AS ?kind) }
@@ -61,7 +66,15 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         """.trimIndent()
         class Names(val labels: MutableMap<String, String> = HashMap(), val aliases: MutableList<Pair<String, String>> = ArrayList(), val descriptions: MutableMap<String, String> = HashMap())
         val byCharacter = LinkedHashMap<String, Names>()
-        get("$SPARQL?format=json&query=${enc(query)}").path("results").path("bindings").forEach { row ->
+        // What each entry is (P31 "instance of"), asked by itself: joined to the names, it multiplies
+        // them. OPTIONAL keeps the order — the entries first, then their classes: a plain join lets
+        // the service start from every P31 statement there is and run out of time
+        val classes = HashMap<String, MutableList<String>>()
+        sparql("SELECT ?c ?class WHERE { { SELECT DISTINCT ?c WHERE { $entries } } OPTIONAL { ?c wdt:P31 ?class . } }").forEach { row ->
+            val cls = row.path("class").path("value").asString("").substringAfterLast('/')
+            if (ITEM.matches(cls)) classes.getOrPut(row.path("c").path("value").asString().substringAfterLast('/')) { ArrayList() } += cls
+        }
+        sparql(query).forEach { row ->
             val character = row.path("c").path("value").asString().substringAfterLast('/')
             val text = row.path("text")
             val lang = text.path("xml:lang").asString("")
@@ -75,8 +88,46 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         }
         return byCharacter.map { (character, n) ->
             val ordered = languages.mapNotNull { n.labels[it] } + languages.flatMap { lang -> n.aliases.filter { it.first == lang }.map { it.second } }
-            UniverseCharacter(character, ordered.distinct(), languages.firstNotNullOfOrNull { n.descriptions[it] }, "$PAGE$character")
+            UniverseCharacter(character, ordered.distinct(), languages.firstNotNullOfOrNull { n.descriptions[it] }, "$PAGE$character", classes[character].orEmpty())
         }.filter { it.names.isNotEmpty() }
+    }
+
+    /**
+     * A class is of characters when "character" (Q95074) is among its superclasses (P279, any
+     * steps up). Every superclass of every class is asked for in one query and the answer is
+     * found here: up from the classes the paths are short, while a path to a given class from
+     * hundreds of them makes the service search every way down and run out of time.
+     */
+    override fun classes(ids: Collection<String>, languages: List<String>): List<UniverseClass> {
+        val items = ids.filter { ITEM.matches(it) }.distinct()
+        if (items.isEmpty()) return emptyList()
+        val langs = languages.joinToString(",") { "\"$it\"" }
+        val characters = HashSet<String>()
+        val names = HashMap<String, MutableMap<String, String>>()
+        items.chunked(CLASSES_ASKED).forEach { chunk ->
+            val values = chunk.joinToString(" ") { "wd:$it" }
+            sparql("SELECT ?class ?super WHERE { VALUES ?class { $values } ?class wdt:P279* ?super . }").forEach { row ->
+                if (row.path("super").path("value").asString().substringAfterLast('/') == CHARACTER) {
+                    characters += row.path("class").path("value").asString().substringAfterLast('/')
+                }
+            }
+            sparql("SELECT ?class ?name WHERE { VALUES ?class { $values } ?class rdfs:label ?name . FILTER(LANG(?name) IN ($langs)) }").forEach { row ->
+                val name = row.path("name")
+                names.getOrPut(row.path("class").path("value").asString().substringAfterLast('/')) { HashMap() }[name.path("xml:lang").asString("")] =
+                    name.path("value").asString()
+            }
+        }
+        return items.map { id -> UniverseClass(id, languages.firstNotNullOfOrNull { names[id]?.get(it) } ?: id, id in characters) }
+    }
+
+    /** The rows a query of the query service answers; sent in the body, as a list of hundreds of items does not fit an address. */
+    private fun sparql(query: String): List<JsonNode> {
+        val request = HttpRequest.newBuilder(URI.create(SPARQL)).timeout(TIMEOUT).header("User-Agent", USER_AGENT)
+            .header("Accept", "application/sparql-results+json").header("Content-Type", "application/x-www-form-urlencoded")
+            .POST(HttpRequest.BodyPublishers.ofString("query=${enc(query)}")).build()
+        val response = http.send(request, HttpResponse.BodyHandlers.ofString())
+        check(response.statusCode() == 200) { "Wikidata answered ${response.statusCode()}" }
+        return json.readTree(response.body()).path("results").path("bindings").toList()
     }
 
     /** The items [ids] with their names and descriptions in the first of [languages] that has one, in the order given. */
@@ -105,6 +156,12 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         private const val API = "https://www.wikidata.org/w/api.php"
         private const val SPARQL = "https://query.wikidata.org/sparql"
         private const val PAGE = "https://www.wikidata.org/wiki/"
+
+        /** "character": the class every class of characters is a subclass of. */
+        private const val CHARACTER = "Q95074"
+
+        /** Classes asked for in one query: the length of a request, not meaning. */
+        private const val CLASSES_ASKED = 500
 
         /** Entries a search answers with: a page of them for the user to pick from. */
         private const val SEARCHED = 10

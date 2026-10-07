@@ -49,6 +49,7 @@ export type UniverseRef = Schemas["UniverseRef"];
 export type UniverseInfo = Schemas["UniverseInfo"];
 export type FoundUniverse = Schemas["FoundUniverse"];
 export type CharacterInfo = Schemas["CharacterInfo"];
+export type UniverseClassInfo = Schemas["UniverseClassInfo"];
 
 /**
  * The failure of a call as the user should read it: the backend answers an error as

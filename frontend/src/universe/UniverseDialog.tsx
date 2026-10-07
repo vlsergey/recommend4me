@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRightIcon, ExternalLinkIcon, LinkIcon, Loader2Icon, OrbitIcon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon } from "lucide-react";
-import { api, ensureOk, unwrap, type CharacterInfo, type ContentTypeInfo, type FoundUniverse, type UniverseInfo } from "@/api/client";
+import { CheckIcon, ChevronRightIcon, ExternalLinkIcon, LinkIcon, Loader2Icon, OrbitIcon, PlusIcon, RefreshCwIcon, SearchIcon, Trash2Icon, XIcon } from "lucide-react";
+import { api, ensureOk, unwrap, type CharacterInfo, type ContentTypeInfo, type FoundUniverse, type UniverseClassInfo, type UniverseInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -155,7 +155,10 @@ function UniverseRow({ type, universe: u }: { type: ContentTypeInfo; universe: U
           </a>
           {u.description && <div className="text-muted-foreground">{u.description}</div>}
           <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-            <span>{plural(u.characters, "персонаж", "персонажа", "персонажей")}</span>
+            <span title="Оставлено персонажами из всего, что Викиданные относят ко вселенной">
+              {plural(u.characters, "персонаж", "персонажа", "персонажей")}
+              {u.total !== u.characters && ` из ${u.total}`}
+            </span>
             <span>· {plural(u.works, "работа", "работы", "работ")}</span>
             <span title={`Персонажи спрошены ${formatDate(u.refreshedAt)}`}>· обновлено {ago(u.refreshedAt)}</span>
             <span title={formatDate(u.addedAt)}>· добавлено {ago(u.addedAt)}</span>
@@ -196,42 +199,178 @@ function UniverseRow({ type, universe: u }: { type: ContentTypeInfo; universe: U
   );
 }
 
-/** Every character of a universe as the dictionary keeps it, with a line to find one by any of its names. */
+/** The query of the classes the entries of a universe are of, the most entries first. */
+function classesQuery(typeId: string, u: { catalogue: string; universe: string }) {
+  return {
+    queryKey: [UNIVERSES, typeId, u.catalogue, u.universe, "classes"],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/types/{type}/universes/{catalogue}/{universe}/classes", {
+          params: { path: { type: typeId, catalogue: u.catalogue, universe: u.universe } },
+        }),
+      ),
+  };
+}
+
+/**
+ * The user's words on what of a universe is kept as characters: a class of its entries, or one
+ * entry over its classes. A word that says what would be anyway is taken back instead of kept, so
+ * a refresh of the catalogue still decides for everything the user did not set apart.
+ */
+function useInclusion(typeId: string, u: { catalogue: string; universe: string }) {
+  const changed = useDictionaryChanged(typeId);
+  const path = { type: typeId, catalogue: u.catalogue, universe: u.universe };
+  return {
+    setClass: async (cls: UniverseClassInfo) => {
+      const included = !cls.included;
+      const params = { path: { ...path, class: cls.class } };
+      ensureOk(
+        included === cls.character
+          ? await api.DELETE("/api/types/{type}/universes/{catalogue}/{universe}/classes/{class}", { params })
+          : await api.PUT("/api/types/{type}/universes/{catalogue}/{universe}/classes/{class}", { params, body: { included } }),
+      );
+      await changed(false);
+    },
+    /** [byClasses]: whether the entry's classes keep it. */
+    setEntry: async (c: CharacterInfo, byClasses: boolean) => {
+      const included = !c.included;
+      const params = { path: { ...path, character: c.character } };
+      ensureOk(
+        included === byClasses
+          ? await api.DELETE("/api/types/{type}/universes/{catalogue}/{universe}/characters/{character}", { params })
+          : await api.PUT("/api/types/{type}/universes/{catalogue}/{universe}/characters/{character}", { params, body: { included } }),
+      );
+      await changed(false);
+    },
+  };
+}
+
+/** Which entries the list shows. */
+type EntriesShown = "kept" | "left" | "all";
+
+/**
+ * What a universe holds, as the dictionary keeps it: the classes of its entries — those of
+ * characters kept, the rest (places, groups, spells, things) left out unless the user keeps them
+ * — and every entry, each kept or left out by its classes or by the user's word on it alone.
+ */
 function Characters({ type, universe: u }: { type: ContentTypeInfo; universe: UniverseInfo }) {
   const [filter, setFilter] = useState("");
+  const [shownKind, setShownKind] = useState<EntriesShown>("kept");
   const characters = useQuery(charactersQuery(type.id, u));
+  const classes = useQuery(classesQuery(type.id, u));
+  const inclusion = useInclusion(type.id, u);
 
-  if (characters.isLoading) return <Loader2Icon className="ml-9 size-4 animate-spin text-muted-foreground" />;
+  if (characters.isLoading || classes.isLoading) return <Loader2Icon className="ml-9 size-4 animate-spin text-muted-foreground" />;
   if (characters.isError) return <p className="ml-9 text-destructive">Не удалось загрузить персонажей: {characters.error.message}</p>;
+  if (classes.isError) return <p className="ml-9 text-destructive">Не удалось загрузить классы: {classes.error.message}</p>;
   const all = characters.data ?? [];
   if (all.length === 0) return <p className="ml-9 text-muted-foreground">Викиданные не дали этой вселенной ни одного персонажа.</p>;
 
+  const byId = new Map((classes.data ?? []).map((c) => [c.class, c]));
+  // What the entry's classes say of it: kept when any of them is, or when it has none
+  const byClasses = (c: CharacterInfo) => c.classes.length === 0 || c.classes.some((id) => byId.get(id)?.included === true);
   const needle = filter.trim().toLocaleLowerCase("ru-RU");
-  const shown = needle === "" ? all : all.filter((c) => c.names.some((n) => n.toLocaleLowerCase("ru-RU").includes(needle)));
+  const shown = all
+    .filter((c) => shownKind === "all" || c.included === (shownKind === "kept"))
+    .filter((c) => needle === "" || c.names.some((n) => n.toLocaleLowerCase("ru-RU").includes(needle)));
+  const kept = all.filter((c) => c.included).length;
 
   return (
-    <div className="ml-9 flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Найти персонажа по любому имени" className="max-w-xs" type="search" />
-        <span className="text-xs text-muted-foreground tabular-nums">{needle === "" ? all.length : `${shown.length} из ${all.length}`}</span>
+    <div className="ml-9 flex flex-col gap-3">
+      <Classes classes={classes.data ?? []} onToggle={inclusion.setClass} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Найти по любому имени" className="max-w-xs" type="search" />
+        <div className="flex gap-1" role="group" aria-label="Что показывать">
+          {(
+            [
+              ["kept", `Персонажи ${kept}`],
+              ["left", `Убранные ${all.length - kept}`],
+              ["all", `Всё ${all.length}`],
+            ] as const
+          ).map(([kind, label]) => (
+            <Button key={kind} size="sm" variant={shownKind === kind ? "secondary" : "ghost"} aria-pressed={shownKind === kind} onClick={() => setShownKind(kind)}>
+              {label}
+            </Button>
+          ))}
+        </div>
+        {needle !== "" && <span className="text-xs text-muted-foreground tabular-nums">найдено {shown.length}</span>}
       </div>
       <ul className="flex max-h-96 flex-col divide-y overflow-y-auto rounded-lg border">
         {shown.map((c) => (
-          <CharacterRow key={c.character} character={c} />
+          <CharacterRow
+            key={c.character}
+            character={c}
+            classNames={c.classes.map((id) => byId.get(id)?.name ?? id)}
+            onToggle={() => inclusion.setEntry(c, byClasses(c))}
+          />
         ))}
       </ul>
     </div>
   );
 }
 
-function CharacterRow({ character: c }: { character: CharacterInfo }) {
+/**
+ * The classes of a universe's entries as chips, those of characters first: a kept class pressed,
+ * one the user set apart from what the catalogue says marked. Pressing a chip keeps or leaves out
+ * every entry of the class.
+ */
+function Classes({ classes, onToggle }: { classes: UniverseClassInfo[]; onToggle: (cls: UniverseClassInfo) => Promise<unknown> }) {
+  if (classes.length === 0) return null;
+  const group = (character: boolean, label: string, hint: string) => {
+    const list = classes.filter((c) => c.character === character);
+    if (list.length === 0) return null;
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-muted-foreground" title={hint}>
+          {label}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {list.map((c) => (
+            <AsyncButton
+              key={c.class}
+              size="xs"
+              variant={c.included ? "secondary" : "outline"}
+              aria-pressed={c.included}
+              onClick={() => onToggle(c)}
+              title={`${c.included ? "Оставлены как персонажи" : "Убраны"}${c.choice != null ? " — ваш выбор" : ""}. Нажмите, чтобы ${c.included ? "убрать" : "оставить"} все ${c.count}`}
+              className={cn("h-auto min-h-6 whitespace-normal", !c.included && "text-muted-foreground line-through decoration-muted-foreground/60")}
+            >
+              {c.choice != null && <span className="text-primary">•</span>}
+              {c.name} <span className="tabular-nums">{c.count}</span>
+            </AsyncButton>
+          ))}
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-2">
+      {group(true, "Классы персонажей — оставлены, если вы не убрали", "Викиданные считают эти классы персонажами")}
+      {group(false, "Прочее — места, группы, предметы, события; убрано, если вы не оставили", "Эти классы в Викиданных не персонажи")}
+    </div>
+  );
+}
+
+function CharacterRow({ character: c, classNames, onToggle }: { character: CharacterInfo; classNames: string[]; onToggle: () => Promise<unknown> }) {
   const [main, ...others] = c.names;
   return (
-    <li className="flex items-start gap-2 px-3 py-1.5">
+    <li className={cn("flex items-start gap-2 px-3 py-1.5", !c.included && "text-muted-foreground")}>
+      <AsyncButton
+        size="icon-xs"
+        variant={c.included ? "secondary" : "outline"}
+        aria-pressed={c.included}
+        onClick={onToggle}
+        title={`${c.included ? "Персонаж" : "Убрано"}${c.choice != null ? " — ваш выбор" : " — по классу"}. Нажмите, чтобы ${c.included ? "убрать" : "оставить как персонажа"}`}
+        icon={c.included ? <CheckIcon /> : <XIcon />}
+        className="mt-0.5"
+      />
       <div className="min-w-0 flex-1">
-        <span className="font-medium">{main ?? c.character}</span>
+        <span className={cn("font-medium", !c.included && "line-through decoration-muted-foreground/60")}>{main ?? c.character}</span>
         {others.length > 0 && <span className="text-muted-foreground"> · {others.join(", ")}</span>}
-        {c.description && <div className="text-xs text-muted-foreground">{c.description}</div>}
+        {c.choice != null && <span className="ml-1 text-xs text-primary">ваш выбор</span>}
+        {(classNames.length > 0 || c.description) && (
+          <div className="text-xs text-muted-foreground">{[classNames.join(", "), c.description].filter(Boolean).join(" — ")}</div>
+        )}
       </div>
       <a href={c.url} target="_blank" rel="noreferrer" className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground" title="Страница в Викиданных">
         <ExternalLinkIcon className="size-3.5" />

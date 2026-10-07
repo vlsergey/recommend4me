@@ -2,6 +2,8 @@ package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.UniversesApi
 import io.github.vlsergey.recommend4me.api.model.CharacterInfo
+import io.github.vlsergey.recommend4me.api.model.Inclusion
+import io.github.vlsergey.recommend4me.api.model.UniverseClassInfo
 import io.github.vlsergey.recommend4me.api.model.UniverseInfo
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
 import io.github.vlsergey.recommend4me.source.Stores
@@ -55,9 +57,39 @@ class UniversesController(private val stores: Stores, private val universes: Uni
     }
 
     override fun listCharacters(type: String, catalogue: String, universe: String): ResponseEntity<List<CharacterInfo>> =
-        ResponseEntity.ok(typeOf(type).universes.characters(catalogue, universe).map {
-            CharacterInfo(character = it.id, value = UniverseFacet.valueOf(catalogue, it.id), names = it.names, url = it.url, description = it.description)
+        ResponseEntity.ok(typeOf(type).universes.entries(catalogue, universe).map { e ->
+            val c = e.character
+            CharacterInfo(
+                character = c.id, value = UniverseFacet.valueOf(catalogue, c.id), names = c.names, url = c.url,
+                classes = c.classes, included = e.included, description = c.description, choice = e.choice,
+            )
         })
+
+    override fun listUniverseClasses(type: String, catalogue: String, universe: String): ResponseEntity<List<UniverseClassInfo>> =
+        ResponseEntity.ok(typeOf(type).universes.classes(catalogue, universe).map {
+            UniverseClassInfo(propertyClass = it.id, name = it.name, character = it.character, count = it.entries, included = it.included, choice = it.choice)
+        })
+
+    override fun chooseUniverseClass(type: String, catalogue: String, universe: String, propertyClass: String, inclusion: Inclusion): ResponseEntity<Unit> =
+        chosen { universes.chooseClass(type, catalogue, universe, propertyClass, inclusion.included) }
+
+    override fun resetUniverseClass(type: String, catalogue: String, universe: String, propertyClass: String): ResponseEntity<Unit> =
+        chosen { universes.chooseClass(type, catalogue, universe, propertyClass, null) }
+
+    override fun chooseUniverseEntry(type: String, catalogue: String, universe: String, character: String, inclusion: Inclusion): ResponseEntity<Unit> =
+        chosen { universes.chooseEntry(type, catalogue, universe, character, inclusion.included) }
+
+    override fun resetUniverseEntry(type: String, catalogue: String, universe: String, character: String): ResponseEntity<Unit> =
+        chosen { universes.chooseEntry(type, catalogue, universe, character, null) }
+
+    private fun chosen(choose: () -> Unit): ResponseEntity<Unit> {
+        try {
+            choose()
+        } catch (e: NoSuchElementException) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "Нет такой вселенной в словаре")
+        }
+        return ResponseEntity.noContent().build()
+    }
 
     private fun StoredUniverse.toApi(works: Int) = UniverseInfo(
         catalogue = catalogue,
@@ -66,6 +98,7 @@ class UniversesController(private val stores: Stores, private val universes: Uni
         name = name,
         url = url,
         characters = characters,
+        total = entries,
         works = works,
         addedAt = addedAt.atOffset(ZoneOffset.UTC),
         refreshedAt = refreshedAt.atOffset(ZoneOffset.UTC),

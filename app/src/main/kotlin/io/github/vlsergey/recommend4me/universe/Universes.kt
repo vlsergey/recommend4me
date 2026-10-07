@@ -17,8 +17,10 @@ class FoundUniverse(val catalogue: String, val entry: UniverseEntry, val added: 
 
 /**
  * THE DICTIONARY OF UNIVERSES of a content type: the universes the user agreed on, with their
- * characters as the catalogue gave them. The catalogue is asked only when the user asks — a search
- * by the button, a universe added, its characters refreshed — and what it answered is kept.
+ * entries as the catalogue gave them — the characters and whatever else it says is in them, each
+ * with its classes, the characters kept unless the user says otherwise. The catalogue is asked
+ * only when the user asks — a search by the button, a universe added, its characters refreshed —
+ * and what it answered is kept.
  *
  * The names of the universe and of its characters are written as the names of the values of the
  * facets "universe" and "characters" in every source of the type, so the works name them as any
@@ -50,16 +52,34 @@ class Universes(
         val catalogue = catalogue(catalogueId)
         val entry = catalogue.universe(id, languages) ?: throw NoSuchElementException("$catalogueId has no $id")
         val characters = catalogue.characters(id, languages)
-        type.universes.save(catalogueId, entry, characters, Instant.now())
+        val classes = catalogue.classes(characters.flatMap { it.classes }.toSet(), languages)
+        type.universes.save(catalogueId, entry, characters, classes, Instant.now())
         val value = UniverseFacet.valueOf(catalogueId, id)
         val names = characters.associate { UniverseFacet.valueOf(catalogueId, it.id) to it.names.first() }
         type.sources.forEach {
             it.items.nameFacetValues(UniverseFacet.KEY, mapOf(value to entry.name))
             it.items.nameFacetValues(UniverseFacets.CHARACTERS, names)
         }
-        log.info("{}: the universe {} ({}) has {} characters", typeId, entry.name, value, characters.size)
+        val stored = type.universes.find(catalogueId, id)!!
+        log.info("{}: the universe {} ({}) has {} entries of {} classes, {} of them kept as characters", typeId, entry.name, value, characters.size, classes.size, stored.characters)
         dictionaryChanged(type)
-        return type.universes.find(catalogueId, id)!!
+        return stored
+    }
+
+    /** The user's word on a class of the universe's entries — kept, left out, or null: as the catalogue says. */
+    fun chooseClass(typeId: String, catalogueId: String, id: String, cls: String, included: Boolean?) {
+        val type = type(typeId)
+        type.universes.find(catalogueId, id) ?: throw NoSuchElementException("No universe $catalogueId:$id")
+        type.universes.chooseClass(catalogueId, id, cls, included)
+        dictionaryChanged(type)
+    }
+
+    /** The user's word on one entry of the universe — kept, left out, or null: as its classes say. */
+    fun chooseEntry(typeId: String, catalogueId: String, id: String, character: String, included: Boolean?) {
+        val type = type(typeId)
+        type.universes.find(catalogueId, id) ?: throw NoSuchElementException("No universe $catalogueId:$id")
+        type.universes.chooseEntry(catalogueId, id, character, included)
+        dictionaryChanged(type)
     }
 
     /** Takes the universe out of the dictionary, and with it every work's link to it. */

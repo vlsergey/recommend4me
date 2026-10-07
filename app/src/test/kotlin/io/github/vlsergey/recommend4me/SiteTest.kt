@@ -27,9 +27,11 @@ import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
 import io.github.vlsergey.recommend4me.textvector.TextVectors
+import io.github.vlsergey.recommend4me.api.model.Inclusion
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
 import io.github.vlsergey.recommend4me.universe.UniverseCatalogue
 import io.github.vlsergey.recommend4me.universe.UniverseCharacter
+import io.github.vlsergey.recommend4me.universe.UniverseClass
 import io.github.vlsergey.recommend4me.universe.UniverseEntry
 import io.github.vlsergey.recommend4me.universe.UniversesController
 import org.junit.jupiter.api.BeforeAll
@@ -75,7 +77,7 @@ class SiteTest {
         fun fakeCatalogue(): UniverseCatalogue = FakeCatalogue()
     }
 
-    /** A catalogue of two universes of space opera, each with the same two characters. */
+    /** A catalogue of two universes of space opera, each with the same two characters and a station, a place. */
     class FakeCatalogue : UniverseCatalogue {
         override val id = "fake"
         override val title = "Fake"
@@ -85,9 +87,13 @@ class SiteTest {
         override fun findUniverses(name: String, languages: List<String>) = if ("space" in name.lowercase()) listOf(space) else emptyList()
         override fun universe(id: String, languages: List<String>) = listOf(space, fleet).firstOrNull { it.id == id }
         override fun characters(id: String, languages: List<String>) = listOf(
-            UniverseCharacter("C1", listOf("Pilot", "The Pilot"), null, "https://fake.example/C1"),
-            UniverseCharacter("C2", listOf("Captain"), "Of the fleet", "https://fake.example/C2"),
+            UniverseCharacter("C1", listOf("Pilot", "The Pilot"), null, "https://fake.example/C1", listOf("K1")),
+            UniverseCharacter("C2", listOf("Captain"), "Of the fleet", "https://fake.example/C2", listOf("K1")),
+            UniverseCharacter("S1", listOf("Station"), "Where ships dock", "https://fake.example/S1", listOf("K2")),
         )
+
+        override fun classes(ids: Collection<String>, languages: List<String>) =
+            listOf(UniverseClass("K1", "person", true), UniverseClass("K2", "place", false)).filter { it.id in ids }
     }
 
     /**
@@ -264,6 +270,27 @@ class SiteTest {
         assertEquals(2, added.characters)
         assertEquals(true, universes.searchUniverses("books", "space").body!!.single().added)
         assertEquals(listOf("Pilot", "The Pilot"), universes.listCharacters("books", "fake", "U1").body!!.single { it.character == "C1" }.names)
+
+        // The station is said to be in the universe, but a place: shown, not kept as a character
+        assertEquals(3, added.total)
+        val station = universes.listCharacters("books", "fake", "U1").body!!.single { it.character == "S1" }
+        assertEquals(false, station.included)
+        assertEquals(listOf("K2"), station.classes)
+        val place = universes.listUniverseClasses("books", "fake", "U1").body!!.single { it.propertyClass == "K2" }
+        assertEquals(Triple("place", false, 1), Triple(place.name, place.included, place.count))
+        // The user keeps the places of the universe, then leaves this one out by itself, then takes both words back
+        universes.chooseUniverseClass("books", "fake", "U1", "K2", Inclusion(true))
+        assertEquals(3, universes.listUniverses("books").body!!.single { it.universe == "U1" }.characters)
+        universes.chooseUniverseEntry("books", "fake", "U1", "S1", Inclusion(false))
+        assertEquals(false, universes.listCharacters("books", "fake", "U1").body!!.single { it.character == "S1" }.choice)
+        assertEquals(2, universes.listUniverses("books").body!!.single { it.universe == "U1" }.characters)
+        universes.resetUniverseEntry("books", "fake", "U1", "S1")
+        universes.resetUniverseClass("books", "fake", "U1", "K2")
+        // The words stay over a refresh of the universe
+        universes.chooseUniverseEntry("books", "fake", "U1", "S1", Inclusion(true))
+        universes.addUniverse("books", UniverseRef("fake", "U1"))
+        assertEquals(true, universes.listCharacters("books", "fake", "U1").body!!.single { it.character == "S1" }.included)
+        universes.resetUniverseEntry("books", "fake", "U1", "S1")
 
         // The universe is a value to pick for any work, linked to none yet; linked, it names itself
         assertTrue(items.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
