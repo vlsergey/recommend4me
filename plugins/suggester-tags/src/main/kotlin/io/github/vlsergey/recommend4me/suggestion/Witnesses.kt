@@ -25,7 +25,10 @@ import kotlin.math.sqrt
  *     · context, · its max       the same with those: its fandom, its tags, its author
  *     counted                    the item's own texts were counted for names of the values
  *     · mentions                 log(1 + how many times they name the value)
- *     rarity                     the log share of the items having the value
+ *     for every grouping of the values (the sexes of a pairing's characters):
+ *       has context              the value is of a group and the item has values of other facets
+ *       · context, · its max     the same as of the values, of the value's group with the context
+ *     rarity                    the log share of the items having the value
  *
  * EVERY COUNT LEAVES THE ITEM OUT: what the item says of its own values does not vouch for them,
  * so a value the site gave it that nothing else supports comes out unlikely.
@@ -86,17 +89,22 @@ internal class Witnesses(private val task: SuggestionTask) {
     private val counts = IntArray(m).also { c -> assigned.forEach { a -> a.forEach { c[it]++ } } }
 
     /**
-     * Pairs of a value of [sources] (of [width] values) and a value of the facet on one item, as
-     * sorted codes `u · m + v`, with their counts; and the items having each source value.
+     * Pairs of a value of [sources] (of [width] values) and a target on one item — a value of the
+     * facet, or a group of them ([targets], of [targetWidth]) — as sorted codes `u · targetWidth + v`,
+     * with their counts; and the items having each source value and each target.
      */
-    private inner class Pairs(val sources: List<IntArray>, width: Int, val sameFacet: Boolean) {
+    private inner class Pairs(
+        val sources: List<IntArray>, width: Int, val sameFacet: Boolean,
+        val targets: List<IntArray> = assigned, val targetWidth: Int = m,
+    ) {
         val sourceCounts = IntArray(width).also { c -> sources.forEach { a -> a.forEach { c[it]++ } } }
+        val targetCounts = IntArray(targetWidth).also { c -> targets.forEach { a -> a.forEach { c[it]++ } } }
         val codes: LongArray
         val pairCounts: IntArray
 
         init {
             val all = ArrayList<Long>()
-            for (i in 0 until n) for (u in sources[i]) for (v in assigned[i]) if (!(sameFacet && u == v)) all += u.toLong() * m + v
+            for (i in 0 until n) for (u in sources[i]) for (v in targets[i]) if (!(sameFacet && u == v)) all += u.toLong() * targetWidth + v
             val sorted = all.toLongArray().also { it.sort() }
             val unique = ArrayList<Long>()
             val times = ArrayList<Int>()
@@ -123,59 +131,80 @@ internal class Witnesses(private val task: SuggestionTask) {
         }
 
         /**
-         * The mean and the largest mutual information of every value with the source values of
-         * item [i], written at [at] and on in [out] — with the flag of having any first, when
-         * [flagged]; the item left out of every count.
+         * The mean and the largest mutual information of every target with the source values of
+         * item [i], handed to [emit]; the item left out of every count. Nothing for a target
+         * the item's sources say nothing of.
          */
-        fun write(i: Int, out: Array<FloatArray>, at: Int, flagged: Boolean) {
+        fun forEachTarget(i: Int, emit: (target: Int, mean: Double, best: Double) -> Unit) {
             val own = sources[i]
             // Of the facet's own values, an item needs two for every value to have another beside
             // it: with one, its own value would have none and every other value one — the witness
             // would tell the answer. So with fewer than two it says nothing of any value
             if (own.size < if (sameFacet) 2 else 1) return
-            val has = assigned[i].toHashSet()
+            val has = targets[i].toHashSet()
             val items = (n - 1).coerceAtLeast(1).toDouble()
+            val w = targetWidth.toLong()
             fun pmi(u: Int, v: Int, together: Int): Double {
                 val both = (together - if (v in has) 1 else 0).coerceAtLeast(0)
-                val expected = (sourceCounts[u] - 1).coerceAtLeast(0).toDouble() * (counts[v] - if (v in has) 1 else 0) / items
+                val expected = (sourceCounts[u] - 1).coerceAtLeast(0).toDouble() * (targetCounts[v] - if (v in has) 1 else 0) / items
                 return ln((both + JEFFREYS) / (expected + JEFFREYS))
             }
-            val sum = DoubleArray(m)
-            val best = DoubleArray(m) { Double.NEGATIVE_INFINITY }
-            val seen = IntArray(m)
+            val sum = DoubleArray(targetWidth)
+            val best = DoubleArray(targetWidth) { Double.NEGATIVE_INFINITY }
+            val seen = IntArray(targetWidth)
             for (u in own) {
                 // As if never together, then corrected for the pairs seen
-                for (v in 0 until m) {
+                for (v in 0 until targetWidth) {
                     if (sameFacet && v == u) continue
                     val p = pmi(u, v, 0)
                     sum[v] += p
                     if (p > best[v]) best[v] = p
                     seen[v]++
                 }
-                var k = lowerBound(u.toLong() * m)
-                while (k < codes.size && codes[k] / m == u.toLong()) {
-                    val v = (codes[k] % m).toInt()
+                var k = lowerBound(u.toLong() * w)
+                while (k < codes.size && codes[k] / w == u.toLong()) {
+                    val v = (codes[k] % w).toInt()
                     val real = pmi(u, v, pairCounts[k])
                     sum[v] += real - pmi(u, v, 0)
                     if (real > best[v]) best[v] = real
                     k++
                 }
             }
-            val first = if (flagged) at + 1 else at
-            for (v in 0 until m) {
-                if (seen[v] == 0) continue
-                if (flagged) out[v][at] = 1f
-                out[v][first] = (sum[v] / seen[v]).toFloat()
-                out[v][first + 1] = best[v].toFloat()
-            }
+            for (v in 0 until targetWidth) if (seen[v] > 0) emit(v, sum[v] / seen[v], best[v])
         }
+
+        /** [forEachTarget] of the values themselves, written at [at] of [out]: the flag of having any, the mean, the largest. */
+        fun write(i: Int, out: Array<FloatArray>, at: Int) = forEachTarget(i) { v, mean, best -> put(out[v], at, mean, best) }
+    }
+
+    private fun put(x: FloatArray, at: Int, mean: Double, best: Double) {
+        x[at] = 1f
+        x[at + 1] = mean.toFloat()
+        x[at + 2] = best.toFloat()
     }
 
     /** The values together with the item's others, and with its context. */
     private val together = Pairs(assigned, m, sameFacet = true)
     private val withContext = Pairs(context, task.contextCount, sameFacet = false)
 
-    val features: Int = featuresOf(views.size)
+    /**
+     * The groups of the values with the item's context, one witness a grouping: what goes with a
+     * pairing of two men — the tag "slash" — goes with every one of them, a pairing never seen too.
+     */
+    private inner class Grouped(val grouping: ValueGrouping) {
+        val members: List<IntArray> = (0 until grouping.groupCount).map { g -> (0 until m).filter { grouping.groupOf[it] == g }.toIntArray() }
+        val pairs = Pairs(
+            context, task.contextCount, sameFacet = false,
+            targets = assigned.map { a -> a.map { grouping.groupOf[it] }.filter { it >= 0 }.distinct().toIntArray() },
+            targetWidth = grouping.groupCount,
+        )
+
+        fun write(i: Int, out: Array<FloatArray>, at: Int) = pairs.forEachTarget(i) { g, mean, best -> members[g].forEach { v -> put(out[v], at, mean, best) } }
+    }
+
+    private val grouped = task.groupings.map { Grouped(it) }
+
+    val features: Int = featuresOf(views.size, grouped.size)
 
     /**
      * [rows] in blocks of as many as fit [BLOCK_FLOATS] floats of cosines to every item: the
@@ -297,8 +326,8 @@ internal class Witnesses(private val task: SuggestionTask) {
                 }
             }
             val own = 1 + 3 * views.size
-            together.write(i, out, own, flagged = true)
-            withContext.write(i, out, own + 3, flagged = true)
+            together.write(i, out, own)
+            withContext.write(i, out, own + 3)
             // How often the item's own texts name the value
             task.mentions[i]?.let { named ->
                 val at = own + 6
@@ -307,6 +336,7 @@ internal class Witnesses(private val task: SuggestionTask) {
                     out[v][at + 1] = ln(1.0 + (named[v] ?: 0)).toFloat()
                 }
             }
+            grouped.forEachIndexed { g, it -> it.write(i, out, own + 8 + 3 * g) }
             out
         }
     }
@@ -373,8 +403,8 @@ internal class Witnesses(private val task: SuggestionTask) {
     }
 
     companion object {
-        /** The bias, three of every view, three of the facet's own values, three of the context, two of the mentions, the rarity. */
-        fun featuresOf(views: Int) = 1 + 3 * views + 3 + 3 + 2 + 1
+        /** The bias, three of every view, three of the facet's own values, three of the context, two of the mentions, three of every grouping, the rarity. */
+        fun featuresOf(views: Int, groupings: Int) = 1 + 3 * views + 3 + 3 + 2 + 3 * groupings + 1
 
         /** Half an item drawn to every count each way: the Jeffreys prior of a share. */
         private const val JEFFREYS = 0.5

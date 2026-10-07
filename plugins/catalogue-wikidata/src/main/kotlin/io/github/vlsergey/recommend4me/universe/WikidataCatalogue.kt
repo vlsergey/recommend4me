@@ -17,7 +17,7 @@ import java.time.Duration
  * (P179 "part of the series", P361 "part of", P8345). Not only people are said to be in a universe:
  * its places, groups, spells and things are too. Every entry comes with its classes (P31
  * "instance of"), and a class tells whether its entries are characters, for the user to keep the
- * characters and whatever else they want.
+ * characters and whatever else they want. Its sex or gender (P21) comes with it too.
  *
  * Every name is asked for in the user's languages: the label and every alias, so that "Невилл
  * Лонгботтом" of the fans is found as an alias of "Невилл Долгопупс" of the translation.
@@ -74,6 +74,12 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
             val cls = row.path("class").path("value").asString("").substringAfterLast('/')
             if (ITEM.matches(cls)) classes.getOrPut(row.path("c").path("value").asString().substringAfterLast('/')) { ArrayList() } += cls
         }
+        // The sex or gender of each entry (P21), asked by itself the same way
+        val sexes = HashMap<String, MutableSet<String>>()
+        sparql("SELECT ?c ?sex WHERE { { SELECT DISTINCT ?c WHERE { $entries } } OPTIONAL { ?c wdt:P21 ?sex . } }").forEach { row ->
+            val sex = row.path("sex").path("value").asString("").substringAfterLast('/')
+            if (ITEM.matches(sex)) sexes.getOrPut(row.path("c").path("value").asString().substringAfterLast('/')) { HashSet() } += sex
+        }
         sparql(query).forEach { row ->
             val character = row.path("c").path("value").asString().substringAfterLast('/')
             val text = row.path("text")
@@ -88,8 +94,17 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
         }
         return byCharacter.map { (character, n) ->
             val ordered = languages.mapNotNull { n.labels[it] } + languages.flatMap { lang -> n.aliases.filter { it.first == lang }.map { it.second } }
-            UniverseCharacter(character, ordered.distinct(), languages.firstNotNullOfOrNull { n.descriptions[it] }, "$PAGE$character", classes[character].orEmpty())
+            UniverseCharacter(
+                character, ordered.distinct(), languages.firstNotNullOfOrNull { n.descriptions[it] }, "$PAGE$character", classes[character].orEmpty(),
+                sexes[character]?.let(::sexOf),
+            )
         }.filter { it.names.isNotEmpty() }
+    }
+
+    /** One sex of the values of P21: male or female when that is all they say, anything else otherwise. */
+    private fun sexOf(values: Set<String>): CharacterSex {
+        val read = values.map { SEXES[it] ?: CharacterSex.OTHER }.toSet()
+        return read.singleOrNull() ?: CharacterSex.OTHER
     }
 
     /**
@@ -159,6 +174,12 @@ class WikidataCatalogue(private val json: JsonMapper) : UniverseCatalogue {
 
         /** "character": the class every class of characters is a subclass of. */
         private const val CHARACTER = "Q95074"
+
+        /** The values of P21 that say male or female: of a person, and of an organism. */
+        private val SEXES = mapOf(
+            "Q6581097" to CharacterSex.MALE, "Q44148" to CharacterSex.MALE,
+            "Q6581072" to CharacterSex.FEMALE, "Q43445" to CharacterSex.FEMALE,
+        )
 
         /** Classes asked for in one query: the length of a request, not meaning. */
         private const val CLASSES_ASKED = 500

@@ -135,4 +135,34 @@ class TagSuggesterTest {
         val scores = TagSuggester().fit(task)!!.on(task).of(intArrayOf(c.tags.size - 1))[0]
         assertTrue(scores[3] > 0.5f && scores[3] > 10 * scores[0], "the named value: ${scores.toList()}")
     }
+
+    @Test
+    fun `a value never seen with a tag takes what goes with its group`() {
+        // Pairings 0–19 of two men, 20–39 of a man and a woman, each of a few works: those tagged
+        // "slash" (context 0) have one of 0–17, those tagged "het" (context 1) one of 20–37; 18–19
+        // and 38–39 only works of no tag have
+        val tags = ArrayList<IntArray>()
+        val context = ArrayList<IntArray>()
+        repeat(360) { k ->
+            val slash = k % 2 == 0
+            tags += intArrayOf((if (slash) 0 else 20) + k / 2 % 18)
+            context += intArrayOf(if (slash) 0 else 1)
+        }
+        repeat(40) { k ->
+            tags += intArrayOf(listOf(18, 19, 38, 39)[k % 4])
+            context += IntArray(0)
+        }
+        tags += IntArray(0); context += intArrayOf(0)
+        val blank = List(tags.size) { text(9) }
+        val grouping = ValueGrouping("sexes", IntArray(40) { if (it < 20) 0 else 1 }, 2)
+        fun task(groupings: List<ValueGrouping>) = SuggestionTask(
+            views = listOf(TextView("view", matrix(blank))), values = Matrix(40, d), assigned = tags,
+            confirmed = List(tags.size) { IntArray(0) }, rejected = List(tags.size) { IntArray(0) },
+            context = context, contextCount = 2, groupings = groupings,
+        )
+        val plain = task(emptyList()).let { t -> TagSuggester().fit(t)!!.on(t).of(intArrayOf(tags.size - 1))[0] }
+        val grouped = task(listOf(grouping)).let { t -> TagSuggester().fit(t)!!.on(t).of(intArrayOf(tags.size - 1))[0] }
+        // Without groups only the noise of the texts tells them apart
+        assertTrue(grouped[18] / grouped[38] > 2 * plain[18] / plain[38], "a slash work, a pairing of two men: ${grouped.toList()} against ${plain.toList()}")
+    }
 }

@@ -13,6 +13,14 @@ import io.github.vlsergey.recommend4me.matrix.Matrix
 class TextView(val name: String, val vectors: Matrix, val ofValues: Boolean = false)
 
 /**
+ * A way the values of a facet fall into groups alike in what goes with them — the pairings of two
+ * men, of two women, of a man and a woman; the characters of either sex. What is learnt of a group
+ * holds for every value in it, a value never seen with a work's tags too. [groupOf]: the group of
+ * every value of the task, -1 for a value of no known group.
+ */
+class ValueGrouping(val name: String, val groupOf: IntArray, val groupCount: Int)
+
+/**
  * Everything a suggester knows of one facet of one source ([FacetDef.suggest][io.github.vlsergey.recommend4me.source.FacetDef.suggest],
  * [FacetDef.infer][io.github.vlsergey.recommend4me.source.FacetDef.infer]): every item — its texts
  * in several views, the facet's values it has, the values of its other facets — and every value
@@ -47,6 +55,8 @@ class SuggestionTask(
      * one it cannot have; its chance is still worked out.
      */
     val allowed: List<IntArray?> = List(assigned.size) { null },
+    /** The groupings of the values, none for a facet whose values are not known to fall into groups. */
+    val groupings: List<ValueGrouping> = emptyList(),
 ) {
     val itemCount: Int get() = assigned.size
     val valueCount: Int get() = values.rows
@@ -61,6 +71,7 @@ class SuggestionTask(
         ) {
             "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${mentions.size} mentions, ${allowed.size} allowed"
         }
+        require(groupings.all { g -> g.groupOf.size == valueCount && g.groupOf.all { it in -1 until g.groupCount } }) { "A grouping not of the $valueCount values" }
     }
 }
 

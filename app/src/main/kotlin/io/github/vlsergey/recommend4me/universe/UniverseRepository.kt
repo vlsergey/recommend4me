@@ -75,6 +75,7 @@ class UniverseRepository(private val db: DSLContext) {
                         .set(UNIVERSE_CHARACTER.CATALOGUE, catalogue).set(UNIVERSE_CHARACTER.UNIVERSE_ID, entry.id)
                         .set(UNIVERSE_CHARACTER.CHARACTER_ID, c.id).set(UNIVERSE_CHARACTER.NAMES, c.names.joinToString("\n"))
                         .set(UNIVERSE_CHARACTER.DESCRIPTION, c.description?.take(2000)).set(UNIVERSE_CHARACTER.URL, c.url.take(2000))
+                        .set(UNIVERSE_CHARACTER.SEX, c.sex?.name)
                 }).execute()
             }
             characters.flatMap { c -> c.classes.distinct().map { c.id to it } }.chunked(BATCH).forEach { chunk ->
@@ -117,7 +118,7 @@ class UniverseRepository(private val db: DSLContext) {
         return db.selectFrom(UNIVERSE_CHARACTER).where(UNIVERSE_CHARACTER.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER.UNIVERSE_ID.eq(id))
             .fetch { r ->
                 val own = ofEntry[r.characterId!!].orEmpty()
-                val character = UniverseCharacter(r.characterId!!, r.names!!.split('\n'), r.description, r.url!!, own)
+                val character = UniverseCharacter(r.characterId!!, r.names!!.split('\n'), r.description, r.url!!, own, r.sex?.let(CharacterSex::valueOf))
                 val choice = choices[r.characterId!!]
                 KeptEntry(character, choice ?: (own.isEmpty() || own.any { kept[it] == true }), choice)
             }

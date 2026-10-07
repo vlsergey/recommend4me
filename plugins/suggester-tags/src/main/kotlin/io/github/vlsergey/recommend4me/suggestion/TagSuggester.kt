@@ -31,7 +31,7 @@ import kotlin.math.ln1p
  */
 class TagSuggester : FacetSuggester {
     /** With the version of the witnesses: weights fitted on other witnesses are fitted again. */
-    override val id = "tag-witnesses-3"
+    override val id = "tag-witnesses-4"
 
     override fun fit(task: SuggestionTask): FittedSuggester? {
         val positives = task.assigned.sumOf { it.distinct().size }.toLong()
@@ -53,8 +53,8 @@ class TagSuggester : FacetSuggester {
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? {
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         val features = buffer.int
-        // Weights of another number of views are of another regression
-        if (features != Witnesses.featuresOf(task.views.size)) return null
+        // Weights of another number of views or groupings are of another regression
+        if (features != Witnesses.featuresOf(task.views.size, task.groupings.size)) return null
         val sets = buffer.int
         return Fitted((0 until sets).associate { buffer.int to DoubleArray(features) { buffer.double } })
     }

@@ -56,6 +56,34 @@ object UniverseFacet {
         "oc:male" to "ОМП (оригинальный мужской персонаж)",
     )
 
+    /** The sexes of the original characters. */
+    val ORIGINAL_SEXES = mapOf("oc:female" to CharacterSex.FEMALE, "oc:male" to CharacterSex.MALE)
+
+    /** The sex of every character of the dictionary of a type, and of the original characters: value to sex. */
+    fun sexes(universes: UniverseRepository): Map<String, CharacterSex> {
+        val out = HashMap<String, CharacterSex>(ORIGINAL_SEXES)
+        universes.all().forEach { u ->
+            universes.characters(u.catalogue, u.id).forEach { c -> c.sex?.let { out[valueOf(u.catalogue, c.id)] = it } }
+        }
+        return out
+    }
+
+    /** The sexes of a pairing's two characters, in the order of [CharacterSex]; null when the value is no pairing or a sex is not known. */
+    fun sexesOf(pairing: String, sexes: Map<String, CharacterSex>): Pair<CharacterSex, CharacterSex>? {
+        val (a, b) = members(pairing) ?: return null
+        val x = sexes[a] ?: return null
+        val y = sexes[b] ?: return null
+        return if (x <= y) x to y else y to x
+    }
+
+    /** The sign of a pairing by its characters' sexes: ⚣ two men, ⚢ two women, ⚤ a man and a woman, ⚧ anyone else. */
+    fun sign(sexes: Pair<CharacterSex, CharacterSex>): String = when (sexes) {
+        CharacterSex.MALE to CharacterSex.MALE -> "⚣"
+        CharacterSex.FEMALE to CharacterSex.FEMALE -> "⚢"
+        CharacterSex.MALE to CharacterSex.FEMALE -> "⚤"
+        else -> "⚧"
+    }
+
     /** A pairing of two characters: one whatever their order. */
     fun pairing(a: String, b: String): String = listOf(a, b).sorted().let { (x, y) -> "pair:$x|$y" }
 

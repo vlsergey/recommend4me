@@ -26,7 +26,15 @@ class UniverseCharacter(
     val url: String,
     /** The ids of the catalogue's classes the entry is of; none when the catalogue does not say. */
     val classes: List<String> = emptyList(),
+    /** The character's sex or gender as the catalogue gives it; null when it does not say. */
+    val sex: CharacterSex? = null,
 )
+
+/**
+ * A character's sex or gender: male, female, or anything else the catalogue says — agender,
+ * transgender, non-binary, genderless.
+ */
+enum class CharacterSex { MALE, FEMALE, OTHER }
 
 /**
  * A class of the catalogue's entries, named in the languages asked for. [character]: its entries

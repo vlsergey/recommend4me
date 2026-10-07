@@ -12,6 +12,7 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
+import io.github.vlsergey.recommend4me.universe.CharacterSex
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.universe.Mentions
@@ -154,7 +155,10 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     private fun refreshFacet(store: SourceStore, facet: FacetDef, suggester: FacetSuggester, encoder: TextEncoder, only: String?) {
         val started = System.currentTimeMillis()
         val vocabulary = universeVocabulary(store, facet)
-        val data = FacetData.load(store, facet, encoder, vocabulary?.values.orEmpty(), ofValues = vocabulary == null, mentions = vocabulary?.mentions, allowed = vocabulary?.allowed)
+        val data = FacetData.load(
+            store, facet, encoder, vocabulary?.values.orEmpty(), ofValues = vocabulary == null, mentions = vocabulary?.mentions, allowed = vocabulary?.allowed,
+            groupings = vocabulary?.groupings,
+        )
         val read = System.currentTimeMillis() - started
         if (data.values.isEmpty()) return
         val now = Instant.now()
@@ -230,6 +234,8 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
         val allowed: ((String) -> Set<String>)?,
         /** How often the item's own texts name each value; null for an item not counted. */
         val mentions: ((String) -> Map<String, Int>?)? = null,
+        /** The groupings of the values the task is made of, in its order; none when they fall into no known groups. */
+        val groupings: (List<String>) -> List<ValueGrouping> = { emptyList() },
     )
 
     private fun universeVocabulary(store: SourceStore, facet: FacetDef): Vocabulary? {
@@ -295,11 +301,14 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
                 store.items.nameFacetValues(UniverseFacets.CHARACTERS, UniverseFacet.ORIGINAL_CHARACTERS)
                 val universes = linked(store, UniverseFacets.UNIVERSE)
                 fun of(id: String) = universes[id].orEmpty().flatMap { ofUniverse[it].orEmpty() }.toSet()
+                val sexes = UniverseFacet.sexes(type.universes)
                 Vocabulary(
                     values,
                     allowed = { id -> of(id) + UniverseFacet.ORIGINAL_CHARACTERS.keys },
                     // The characters of a work's universes, counted in its texts: a work of none is not counted
                     mentions = { id -> of(id).takeIf { it.isNotEmpty() }?.let { own -> Mentions(own.associateWith { names[it].orEmpty() }).count(store.workTexts(id)) } },
+                    // A work's tags tell the sex of its main characters
+                    groupings = { list -> listOf(ValueGrouping("sex", IntArray(list.size) { sexes[list[it]]?.ordinal ?: -1 }, CharacterSex.entries.size)) },
                 )
             }
             UniverseFacets.PAIRINGS -> {
@@ -321,10 +330,16 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
                 val values = pairs.values.flatten().toSet().associateWith { p ->
                     UniverseFacet.members(p)!!.let { (a, b) -> "${names[a] ?: a} / ${names[b] ?: b}" }
                 }
-                store.items.nameFacetValues(UniverseFacets.PAIRINGS, values)
+                // Shown with the sign of its characters' sexes; their names alone are what the model reads
+                val sexes = UniverseFacet.sexes(type.universes)
+                store.items.nameFacetValues(UniverseFacets.PAIRINGS, values.mapValues { (p, name) ->
+                    UniverseFacet.sexesOf(p, sexes)?.let { "${UniverseFacet.sign(it)} $name" } ?: name
+                })
                 // Every name of a character of the dictionary, for counting two of them named together
                 val known = HashMap<String, List<String>>()
                 type.universes.all().forEach { u -> type.universes.characters(u.catalogue, u.id).forEach { known[UniverseFacet.valueOf(u.catalogue, it.id)] = it.names } }
+                // The sexes of a pairing's two characters, and whether they are one sex: two groupings
+                val kinds = CharacterSex.entries.flatMap { x -> CharacterSex.entries.filter { it >= x }.map { x to it } }
                 Vocabulary(
                     values,
                     allowed = { id -> pairs[id].orEmpty() },
@@ -335,6 +350,15 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
                             val counted = Mentions(own.associateWith { known[it] ?: listOfNotNull(names[it]) }).together(store.workTexts(id))
                             counted.mapKeys { (pair, _) -> UniverseFacet.pairing(pair.first, pair.second) }
                         }
+                    },
+                    groupings = { list ->
+                        val of = list.map { UniverseFacet.sexesOf(it, sexes) }
+                        listOf(
+                            ValueGrouping("sexes", IntArray(list.size) { of[it]?.let(kinds::indexOf) ?: -1 }, kinds.size),
+                            ValueGrouping("one sex", IntArray(list.size) { i ->
+                                of[i]?.takeIf { (x, y) -> x != CharacterSex.OTHER && y != CharacterSex.OTHER }?.let { (x, y) -> if (x == y) 0 else 1 } ?: -1
+                            }, 2),
+                        )
                     },
                 )
             }
@@ -463,6 +487,7 @@ internal class FacetData(
             store: SourceStore, facet: FacetDef, encoder: TextEncoder, known: Map<String, String> = emptyMap(), ofValues: Boolean = true,
             mentions: ((String) -> Map<String, Int>?)? = null,
             allowed: ((String) -> Set<String>)? = null,
+            groupings: ((List<String>) -> List<ValueGrouping>)? = null,
         ): FacetData {
             val schema = store.schema
             val ids = store.items.keys().map { it.id }
@@ -503,6 +528,7 @@ internal class FacetData(
             }
 
             fun indices(list: Collection<String>) = list.mapNotNull { index[it] }.distinct().toIntArray()
+            val grouped = groupings?.invoke(values).orEmpty()
             val task = SuggestionTask(
                 views = views,
                 values = names,
@@ -513,6 +539,7 @@ internal class FacetData(
                 contextCount = contextIndex.size,
                 mentions = ids.map { id -> mentions?.invoke(id)?.mapNotNull { (key, n) -> index[key]?.let { it to n } }?.toMap() },
                 allowed = ids.map { id -> allowed?.invoke(id)?.let(::indices) },
+                groupings = grouped,
             )
             val hashes = HashMap<String, MutableList<String>>()
             store.textVectors.hashes(encoder.id).forEach { (k, hash) -> hashes.getOrPut(k.first) { ArrayList() } += hash }
@@ -521,8 +548,12 @@ internal class FacetData(
                 val id = ids[i]
                 fingerprint(site[id].orEmpty(), corrections[id].orEmpty(), hashes[id].orEmpty(), windowCounts[id] ?: 0)
             }
-            // The values chosen from are part of what is learnt: a universe added or removed fits again
-            val basis = Vectors.keyOf(ids.indices.sortedBy { ids[it] }.joinToString(",") { "${ids[it]}:${fingerprints[it]}" } + "\u0002" + values.joinToString("\u0001"))
+            // The values chosen from and their groups are part of what is learnt: a universe added or
+            // removed, a sex learnt of a character, fits again
+            val basis = Vectors.keyOf(
+                ids.indices.sortedBy { ids[it] }.joinToString(",") { "${ids[it]}:${fingerprints[it]}" } + "\u0002" + values.joinToString("\u0001") +
+                    "\u0002" + grouped.joinToString("\u0001") { g -> g.name + "=" + g.groupOf.joinToString(",") },
+            )
             return FacetData(ids, values, task, fingerprints, basis)
         }
 
