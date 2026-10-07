@@ -3,11 +3,14 @@ package io.github.vlsergey.recommend4me.source
 import io.github.vlsergey.recommend4me.part.PartsSaved
 import io.github.vlsergey.recommend4me.picture.PicturesListed
 import io.github.vlsergey.recommend4me.settings.Settings
+import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.jooq.DSLContext
 import org.springframework.stereotype.Component
 import java.nio.file.Path
 import java.time.Instant
+
+private val log = LoggerFactory.getLogger(SourceContexts::class.java)
 
 /** The [SourceContext] the application hands each source: its stores behind the plugin API. */
 @Component
@@ -51,8 +54,26 @@ class SourceContexts(private val stores: Stores, private val settings: Settings,
         override fun find(itemId: String): StoredItem? = store.items.find(itemId)
         override fun count(): Int = store.items.count()
         override fun latestUpdate(): Instant? = store.items.latestUpdate()
-        override fun setFacet(itemId: String, facet: String, values: List<FacetValue>) = store.items.setFacet(itemId, facet, values)
-        override fun nameFacetValues(facet: String, names: Map<String, String>) = store.items.nameFacetValues(facet, names)
+        override fun setFacet(itemId: String, facet: String, values: List<FacetValue>) = store.items.setFacet(itemId, facet, standardised(itemId, facet, values))
+
+        override fun nameFacetValues(facet: String, names: Map<String, String>) {
+            val standard = store.schema.facet(facet)?.standard
+            store.items.nameFacetValues(facet, if (standard?.values == null) names else names.mapValues { (key, name) -> standard.value(key)?.label ?: name })
+        }
+
+        /**
+         * The values of a standard facet with a closed list of them ([StandardFacet][io.github.vlsergey.recommend4me.contenttype.StandardFacet])
+         * named as the standard names them; a value outside the list — one the source could not
+         * map — is left out and told of in the log. Of any other facet the values as they are.
+         */
+        private fun standardised(itemId: String, facet: String, values: List<FacetValue>): List<FacetValue> {
+            val standard = store.schema.facet(facet)?.standard?.takeIf { it.values != null } ?: return values
+            return values.mapNotNull { v ->
+                val known = standard.value(v.key)
+                if (known == null) log.warn("{}: «{}» of item {} is no value of the standard facet {}: left out", store.id, v.name ?: v.key, itemId, standard.key)
+                known?.let { FacetValue(it.key, it.label) }
+            }
+        }
         override fun facets(itemId: String): Map<String, List<String>> = store.items.facets(itemId)
         override fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) = store.items.forEachFacet(facet, action)
         override fun setNumbers(itemId: String, numbers: Map<String, Double?>) = store.items.setNumbers(itemId, numbers)

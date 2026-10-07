@@ -28,11 +28,11 @@ object UniverseFacet {
     )
 
     /** The values of the kind of a work, with their names. */
-    val KINDS = mapOf(UniverseFacets.FANFICTION to "Фанфик", UniverseFacets.ORIGINAL to "Оригинальное произведение")
+    val KINDS = UniverseFacets.KIND_FACET.values!!.associate { it.key to it.label }
 
     /** The facets of a source of a type with universes: its line of characters and pairings shown above the worked out ones. */
     fun defs(schema: SourceSchema): List<FacetDef> = listOf(
-        FacetDef(UniverseFacets.KIND, "Фанфик или оригинал", filter = true, shared = UniverseFacets.KIND, onCard = true, suggest = true),
+        UniverseFacets.KIND_FACET.asFacet(),
         DEF,
         FacetDef(
             UniverseFacets.CHARACTERS, "Главные персонажи",

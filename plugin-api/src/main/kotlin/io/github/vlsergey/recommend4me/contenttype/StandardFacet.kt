@@ -1,0 +1,38 @@
+package io.github.vlsergey.recommend4me.contenttype
+
+import io.github.vlsergey.recommend4me.source.FacetDef
+import io.github.vlsergey.recommend4me.source.FacetRole
+
+/**
+ * A FACET EVERY SOURCE OF A CONTENT TYPE FILLS ALIKE — the author, the status, the tags: one facet
+ * for the model, the filters and the card, whichever site a work is from. A source declares its
+ * facet as the standard one ([asFacet]) and maps the site's values onto it first of all: of a facet
+ * with [values] — the status of a book — only those, by their keys, the application leaving out any
+ * other; of a facet without, any value as the site writes it (an author, a tag), the same value of
+ * two sites under one key.
+ */
+class StandardFacet(
+    val key: String,
+    val label: String,
+    /** The only values the facet may have, in their order; null — any. */
+    val values: List<StandardValue>? = null,
+    val role: FacetRole? = null,
+    val filter: Boolean = false,
+    val onCard: Boolean = false,
+    val names: Boolean = false,
+    val searchWeight: Float = 0f,
+    val suggest: Boolean = false,
+) {
+    /** The value of the key; null when the facet has no such value, or takes any. */
+    fun value(key: String): StandardValue? = values?.firstOrNull { it.key == key }
+
+    /** The source's facet [key] as this one: its label, its role and use are the standard's. */
+    fun asFacet(key: String = this.key) = FacetDef(
+        key, label,
+        filter = filter, shared = this.key, searchWeight = searchWeight, onCard = onCard, names = names, suggest = suggest, role = role,
+        standard = this,
+    )
+}
+
+/** A value of a [StandardFacet] with a closed list of them: its stable key and its name. */
+class StandardValue(val key: String, val label: String)

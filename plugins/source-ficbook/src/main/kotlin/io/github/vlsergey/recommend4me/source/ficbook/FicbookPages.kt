@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ficbook
 
+import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
@@ -94,7 +95,10 @@ class FicbookPages(private val context: SourceContext) {
         }
         badges.select("[class*=ds-label-status-]").firstOrNull()?.let { s ->
             val key = s.classNames().first { it.startsWith("ds-label-status-") }.removePrefix("ds-label-status-")
-            items.setFacet(id, STATUS, listOf(FacetValue(key, s.text().trim().ifEmpty { key })))
+            val text = s.text().trim()
+            // The standard status by the label's class or its text; another as the site writes it, for the application to tell of
+            val status = STATUSES[key] ?: STATUSES[text.lowercase()]
+            items.setFacet(id, STATUS, listOf(status?.let { FacetValue(it.key, it.label) } ?: FacetValue(key, text.ifEmpty { key })))
         }
     }
 
@@ -234,6 +238,13 @@ class FicbookPages(private val context: SourceContext) {
 
         /** The fandom of the original works. */
         private const val ORIGINALS = "no_fandom/originals"
+
+        /** The statuses of the site, by the class of their label and by its text, to the standard ones. */
+        private val STATUSES = mapOf(
+            "in-progress" to Books.Status.IN_PROGRESS, "в процессе" to Books.Status.IN_PROGRESS,
+            "finished" to Books.Status.FINISHED, "завершён" to Books.Status.FINISHED, "завершен" to Books.Status.FINISHED,
+            "frozen" to Books.Status.FROZEN, "заморожен" to Books.Status.FROZEN,
+        )
 
         /**
          * What the site puts into the text of a part that is not the text: the promotion of another

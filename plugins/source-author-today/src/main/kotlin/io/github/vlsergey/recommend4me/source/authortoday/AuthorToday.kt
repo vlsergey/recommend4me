@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.authortoday
 
+import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.CardDecor
 import io.github.vlsergey.recommend4me.source.FacetDecor
@@ -34,11 +35,11 @@ class AuthorToday : Source {
 
     override val schema = SourceSchema(
         facets = listOf(
-            FacetDef(AUTHOR, "Автор", feature = true, shared = "author", searchWeight = 1.0f, onCard = true, names = true, role = FacetRole.AUTHOR),
+            Books.AUTHOR.asFacet(AUTHOR),
             FacetDef(GENRE, "Жанр", filter = true, onCard = true, searchWeight = 0.8f, role = FacetRole.CONTENT),
             FacetDef(FORM, "Форма", filter = true, role = FacetRole.FORM),
-            FacetDef(TAG, "Тег", shared = "tag", searchWeight = 0.9f, suggest = true, role = FacetRole.CONTENT),
-            FacetDef(STATUS, "Статус", filter = true, onCard = true, role = FacetRole.STATUS),
+            Books.TAG.asFacet(TAG),
+            Books.STATUS.asFacet(STATUS),
             FacetDef(SERIES, "Цикл", searchWeight = 0.7f, role = FacetRole.SERIES),
         ),
         numbers = listOf(

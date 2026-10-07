@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.contenttype.StandardFacet
+
 /**
  * What a source knows of its items beyond the title, and how the application uses each thing.
  * The labels are shown to the user as they are.
@@ -73,6 +75,8 @@ class FacetDef(
     val original: String? = null,
     /** What the facet tells of the work, for the card to put it where it decides; null — one among the rest. */
     val role: FacetRole? = null,
+    /** The standard facet of the content type this one is ([StandardFacet.asFacet]); null — the source's own. */
+    val standard: StandardFacet? = null,
 )
 
 /**

@@ -1,5 +1,8 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.contenttype.StandardFacet
+import io.github.vlsergey.recommend4me.contenttype.StandardValue
+
 /**
  * The facets the application gives every work of a content type with universes
  * ([ContentType.universes][io.github.vlsergey.recommend4me.contenttype.ContentType.universes]),
@@ -20,6 +23,13 @@ object UniverseFacets {
     const val KIND = "kind"
     const val FANFICTION = "fanfiction"
     const val ORIGINAL = "original"
+
+    /** [KIND] as the standard facet of every type with universes: fan fiction or an original work, nothing else. */
+    val KIND_FACET = StandardFacet(
+        KIND, "Фанфик или оригинал",
+        values = listOf(StandardValue(FANFICTION, "Фанфик"), StandardValue(ORIGINAL, "Оригинальное произведение")),
+        filter = true, onCard = true, suggest = true,
+    )
 
     const val UNIVERSE = "universe"
     const val CHARACTERS = "characters"

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.authortoday
 
+import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
@@ -117,7 +118,8 @@ class AuthorTodayPages(private val context: SourceContext) {
     private fun status(e: Element): FacetValue? {
         val icon = e.selectFirst(".book-status-icon") ?: return null
         val text = icon.parent()?.text()?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
-        return FacetValue(STATUSES[text] ?: text, text.replaceFirstChar { it.uppercase() })
+        // The standard status; another as the site writes it, for the application to tell of
+        return STATUSES[text]?.let { FacetValue(it.key, it.label) } ?: FacetValue(text, text.replaceFirstChar { it.uppercase() })
     }
 
     private fun series(e: Element): FacetValue? =
@@ -284,8 +286,8 @@ class AuthorTodayPages(private val context: SourceContext) {
         private val MARKS = Regex("\"workMarks\":(\\[[^\\]]*]|null)")
         private val HIDDEN = Regex("\"isDisliked\":(true|false)")
 
-        /** The statuses of the site by their text, to stable keys. */
-        private val STATUSES = mapOf("в процессе" to "in-progress", "весь текст" to "finished", "заморожен" to "frozen")
+        /** The statuses of the site by their text, to the standard ones. */
+        private val STATUSES = mapOf("в процессе" to Books.Status.IN_PROGRESS, "весь текст" to Books.Status.FINISHED, "заморожен" to Books.Status.FROZEN)
 
         private fun instant(value: String): Instant? = runCatching { Instant.parse(value.let { if (it.endsWith("Z")) it else "${it}Z" }) }.getOrNull()
     }

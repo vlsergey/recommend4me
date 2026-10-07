@@ -16,11 +16,5 @@ class BuiltInTypes {
     )
 
     @Bean
-    fun books() = ContentType(
-        id = "books",
-        title = "Книги",
-        grades = listOf("Не нравится", "Можно почитать", "В целом понравилась", "Очень хорошая", "Хочу ещё"),
-        verb = "читать",
-        universes = true,
-    )
+    fun books() = Books.TYPE
 }

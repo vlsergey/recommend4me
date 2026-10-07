@@ -19,6 +19,8 @@ class ContentType(
      * dictionary of universes and their characters, and every work of it the facet "universe".
      */
     val universes: Boolean = false,
+    /** The facets every source of the type maps its own onto ([StandardFacet]). */
+    val facets: List<StandardFacet> = emptyList(),
 ) {
     init {
         require(grades.size == 5) { "A content type labels five grades, $id labels ${grades.size}" }
