@@ -93,6 +93,13 @@ export function RatingButtons({
             <span className="font-semibold tabular-nums">{g}</span>
             {/* A phone has room for the digits only: a cut word says nothing */}
             {labels && <span className="hidden truncate text-xs font-normal sm:inline">{gradeLabel(type, g)}</span>}
+            {/* Where the grade stands on the scale the predictions are shown on */}
+            {labels && ladder[g] !== undefined && (
+              <span className="inline-flex shrink-0 items-center gap-0.5 text-xs font-normal tabular-nums opacity-70">
+                <StarIcon className="size-3 fill-current" />
+                {score(ladder[g])}
+              </span>
+            )}
           </TooltipTrigger>
           <TooltipContent>
             {value === g ? "Снять оценку" : gradeLabel(type, g)}
@@ -146,9 +153,18 @@ export function ScoreBadge({ type, summary, className }: { type: ContentTypeInfo
         {p ? shownScore(p.score) : "—"}
       </TooltipTrigger>
       <TooltipContent>
-        {p
-          ? `Место на вашей шкале: ${score(Math.max(0, p.score))} (0 — середина «${gradeLabel(type, 1)}», 10 — середина «${gradeLabel(type, 5)}»)`
-          : "Прогноза ещё нет: модели нужны ваши оценки"}
+        {p ? (
+          <>
+            Место на вашей шкале: {score(Math.max(0, p.score))}
+            {ALL_GRADES.filter((g) => ladder[g] !== undefined).map((g) => (
+              <div key={g} className="tabular-nums">
+                {g} · {gradeLabel(type, g)}: {score(ladder[g]!)}
+              </div>
+            ))}
+          </>
+        ) : (
+          "Прогноза ещё нет: модели нужны ваши оценки"
+        )}
       </TooltipContent>
     </Tooltip>
   );

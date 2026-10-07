@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { BrainCircuitIcon, Loader2Icon, RefreshCwIcon, ScaleIcon, TriangleAlertIcon } from "lucide-react";
+import { BrainCircuitIcon, Loader2Icon, RefreshCwIcon, ScaleIcon, StarIcon, TriangleAlertIcon } from "lucide-react";
 import {
   api,
   unwrap,
@@ -57,12 +57,38 @@ const GRADE_DOT: Record<number, string> = {
   5: "bg-grade-5",
 };
 
-function Stat({ label, value, hint, className }: { label: string; value: string; hint?: string; className?: string }) {
+function Stat({ label, value, hint, className, aside }: { label: string; value: string; hint?: string; className?: string; aside?: ReactNode }) {
   return (
     <div className={cn("rounded-lg border bg-card p-3", className)} title={hint}>
       <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <span className="text-xl font-semibold tabular-nums">{value}</span>
+        {aside}
+      </div>
     </div>
+  );
+}
+
+const GRADE_TONE: Record<number, string> = {
+  1: "bg-grade-1 text-white",
+  2: "bg-grade-2 text-black",
+  3: "bg-grade-3 text-black",
+  4: "bg-grade-4 text-black",
+  5: "bg-grade-5 text-white",
+};
+
+/** Where a grade stands on the user's scale, as the score badges of the works show it. */
+function GradePlace({ grade, ladder }: { grade: Grade; ladder: GradeOnScale[] }) {
+  const place = ladder.find((l) => l.grade === grade);
+  if (!place) return null;
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-sm font-semibold whitespace-nowrap tabular-nums", GRADE_TONE[grade])}
+      title="Место оценки на вашей шкале: прогноз работы сравнивается с этим числом"
+    >
+      <StarIcon className="size-3.5 fill-current" />
+      {score(place.score)}
+    </span>
   );
 }
 
@@ -230,6 +256,7 @@ function ModelDetails({ type, m }: { type: ContentTypeInfo; m: ModelInfo }) {
             value={String(m.ratingCounts[g - 1] ?? 0)}
             hint={gradeLabel(type, g)}
             className={GRADE_BORDER[g]}
+            aside={m.trained && <GradePlace grade={g} ladder={m.ladder} />}
           />
         ))}
       </div>
