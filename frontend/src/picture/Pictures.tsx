@@ -8,14 +8,15 @@ import { cn } from "@/lib/utils";
 /**
  * The cover and the screenshots, each with its influence on the prediction. [large]: the pictures
  * tell what the work is (a game's screenshots) and are shown big; else small, beside the texts (a
- * book's cover). In the marking ([marking]) each takes the user's mark.
+ * book's cover). Each takes the user's 👍 or 👎 — a part of grading; what the points and the marks
+ * mean is told above them in the marking ([explained]).
  */
-export function Pictures({ item, pictures, large = true, marking = true }: { item: ItemRef; pictures: PictureInfo[]; large?: boolean; marking?: boolean }) {
+export function Pictures({ item, pictures, large = true, explained = true }: { item: ItemRef; pictures: PictureInfo[]; large?: boolean; explained?: boolean }) {
   if (pictures.length === 0) return null;
   return (
     <section>
       <h4 className="mb-1 text-sm font-semibold">{large ? "Картинки" : "Обложка и картинки"}</h4>
-      {marking && pictures.some((p) => p.influence != null) && (
+      {explained && pictures.some((p) => p.influence != null) && (
         <p className="mb-2 text-xs text-muted-foreground">
           Число на картинке — на сколько баллов вашей шкалы она сдвигает работу: прогноз как есть минус прогноз без неё.
           Картинку, из-за которой вы выбрали бы работу или отбросили её, отметьте 👍 или 👎 — модель будет искать похожие.
@@ -62,7 +63,7 @@ export function Pictures({ item, pictures, large = true, marking = true }: { ite
                 />
               )}
             </a>
-            {marking && <PictureMark item={item} position={p.position} mark={p.mark} />}
+            <PictureMark item={item} position={p.position} mark={p.mark} />
           </div>
         ))}
       </div>

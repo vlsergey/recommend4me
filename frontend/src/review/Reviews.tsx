@@ -19,14 +19,14 @@ export function Reviews({
   label,
   reviews,
   total,
-  marking = true,
+  explained = true,
 }: {
   item: ItemRef;
   label: string;
   reviews: ReviewInfo[];
   total?: number;
-  /** The marking: each review takes the user's mark, and the marks are explained. */
-  marking?: boolean;
+  /** What the points and the 👍 and 👎 mean is told above the reviews (the marking); the 👍 and 👎 are there always, a part of grading. */
+  explained?: boolean;
 }) {
   const [all, setAll] = useState(false);
   if (reviews.length === 0) return null;
@@ -39,7 +39,7 @@ export function Reviews({
         {total !== undefined && <span className="ml-1 font-normal text-muted-foreground">{total}</span>}
         <span className="ml-1 text-xs font-normal text-muted-foreground">· {moving ? "сильнее всего сдвигающие прогноз" : "самые новые"}</span>
       </h4>
-      {marking && (
+      {explained && (
         <p className="mb-2 text-xs text-muted-foreground">
           {moving && "Число — на сколько баллов вашей шкалы, прогноз как есть минус прогноз без этого отзыва. "}
           Отзыв, который говорит, почему вы выбрали бы работу или отбросили её, отметьте 👍 или 👎 — модель будет искать похожие
@@ -48,7 +48,7 @@ export function Reviews({
       )}
       <div className="flex flex-col gap-2">
         {shown.map((r) => (
-          <ReviewCard key={r.reviewId} item={item} review={r} marking={marking} />
+          <ReviewCard key={r.reviewId} item={item} review={r} />
         ))}
       </div>
       {reviews.length > shown.length && (
@@ -60,7 +60,7 @@ export function Reviews({
   );
 }
 
-function ReviewCard({ item, review, marking }: { item: ItemRef; review: ReviewInfo; marking: boolean }) {
+function ReviewCard({ item, review }: { item: ItemRef; review: ReviewInfo }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const mark = async (value: number | null) => {
@@ -97,16 +97,14 @@ function ReviewCard({ item, review, marking }: { item: ItemRef; review: ReviewIn
             title="Прогноз как есть минус прогноз без этого отзыва, в баллах вашей шкалы"
           />
         )}
-        {marking && (
-          <MarkButtons
-            mark={review.mark}
-            onMark={mark}
-            className={cn(
-              "[&_button]:bg-muted [&_button]:text-foreground [&_button:hover]:bg-muted-foreground/20",
-              influence == null && "ml-auto",
-            )}
-          />
-        )}
+        <MarkButtons
+          mark={review.mark}
+          onMark={mark}
+          className={cn(
+            "[&_button]:bg-muted [&_button]:text-foreground [&_button:hover]:bg-muted-foreground/20",
+            influence == null && "ml-auto",
+          )}
+        />
       </div>
       <p
         className={cn("leading-relaxed whitespace-pre-line text-foreground/90", long && !open && "line-clamp-4 cursor-pointer")}

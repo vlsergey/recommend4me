@@ -46,9 +46,10 @@ type Props = {
  * forth without answering, o opens the site, e switches the marking on and off, Esc closes.
  *
  * TWO WAYS TO LOOK AT A WORK. To decide — the facts it is chosen by, why the prediction is what
- * it is, the volumes before it — nothing to answer on the way. To mark — every value with the
- * model's chance and the user's yes and no, the texts and numbers to correct, the pictures and
- * reviews to mark, the work to link. The way chosen stays from work to work.
+ * it is, the volumes before it, and the grade with its reasons: the 👍 and 👎 of the pictures and
+ * reviews that would make the user pick the work or drop it. To mark — every value with the
+ * model's chance and the user's yes and no, the texts and numbers to correct, what the marks are
+ * like elsewhere, the work to link. The way chosen stays from work to work.
  */
 export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }: Props) {
   const summary = index !== null ? items[index] : undefined;
@@ -239,7 +240,7 @@ function Shell({
           size="sm"
           aria-pressed={marking}
           onClick={() => onMarking(!marking)}
-          title={marking ? "Закончить разметку (e)" : "Разметить: подтвердить или отклонить значения, исправить тексты, отметить картинки и отзывы (e)"}
+          title={marking ? "Закончить разметку (e)" : "Разметить: подтвердить или отклонить значения, исправить тексты и числа, связать с той же работой (e)"}
         >
           {marking ? <CheckIcon /> : <PencilIcon />}
           {marking ? "Готово" : "Разметить"}
@@ -332,7 +333,7 @@ function Details({
         {nothing && d.canRefresh && <NotFetched item={ref} />}
         {source.picturesTell && (
           <Part title="Картинки">
-            <Pictures item={ref} pictures={d.pictures} marking={marking} />
+            <Pictures item={ref} pictures={d.pictures} explained={marking} />
           </Part>
         )}
         <Part title="Тексты">
@@ -340,7 +341,7 @@ function Details({
         </Part>
         {!source.picturesTell && (
           <Part title="Картинки">
-            <Pictures item={ref} pictures={d.pictures} large={false} marking={marking} />
+            <Pictures item={ref} pictures={d.pictures} large={false} explained={marking} />
           </Part>
         )}
         {marking && (
@@ -349,7 +350,7 @@ function Details({
           </Part>
         )}
         <Part title={source.reviewsLabel ?? "Отзывы"}>
-          <Reviews item={ref} label={source.reviewsLabel ?? "Отзывы"} reviews={d.reviews} total={d.reviewCount} marking={marking} />
+          <Reviews item={ref} label={source.reviewsLabel ?? "Отзывы"} reviews={d.reviews} total={d.reviewCount} explained={marking} />
         </Part>
         {marking && (
           <Part title="Похожие отзывы">
