@@ -5,6 +5,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { XIcon } from "lucide-react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -66,7 +67,8 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        {/* A dialog that fails to draw says so, and can still be closed */}
+        <ErrorBoundary title="Окно не смогло отрисоваться">{children}</ErrorBoundary>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"

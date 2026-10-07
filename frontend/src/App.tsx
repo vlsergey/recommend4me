@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { ContentTypeInfo, ItemView } from "@/api/client";
 import { CaptureButton } from "@/capture/CaptureDialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -172,12 +173,22 @@ function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: Con
           )}
           {/* On a phone the progress takes what the icons leave; on a wide screen it sits in the middle */}
           <div className="mx-1 min-w-0 flex-1 sm:mx-auto sm:flex-none">
-            <JobControl type={type} onNeedSettings={() => setSettingsOpen(true)} />
+            <ErrorBoundary compact resetKey={type.id} title="Задания не показываются">
+              <JobControl type={type} onNeedSettings={() => setSettingsOpen(true)} />
+            </ErrorBoundary>
           </div>
-          <WorkProgress />
-          <ModelButton type={type} />
-          <UniverseButton type={type} />
-          <CaptureButton />
+          <ErrorBoundary compact title="Ход работы не показывается">
+            <WorkProgress />
+          </ErrorBoundary>
+          <ErrorBoundary compact resetKey={type.id} title="Модель">
+            <ModelButton type={type} />
+          </ErrorBoundary>
+          <ErrorBoundary compact resetKey={type.id} title="Вселенные">
+            <UniverseButton type={type} />
+          </ErrorBoundary>
+          <ErrorBoundary compact title="Расширение">
+            <CaptureButton />
+          </ErrorBoundary>
           <ThemeToggle />
           <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} aria-label="Настройки" title="Настройки" className="relative">
             <SettingsIcon />
@@ -284,8 +295,10 @@ function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: Con
             )}
           </div>
 
-          <SourceFilter type={type} hidden={hiddenSources} onChange={setHiddenSources} />
-          <FacetFilters type={type.id} value={facets} onChange={setFacets} />
+          <ErrorBoundary compact resetKey={type.id} title="Фильтры не показываются">
+            <SourceFilter type={type} hidden={hiddenSources} onChange={setHiddenSources} />
+            <FacetFilters type={type.id} value={facets} onChange={setFacets} />
+          </ErrorBoundary>
 
           {fresh && (
             <Button variant="secondary" size="sm" onClick={resort}>
@@ -326,7 +339,10 @@ function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: Con
         </div>
 
         <main className="pb-10">
-          <ItemBoard type={type} view={view} sort={sort} search={search} facets={facets} sources={sources} layout={layout} onTotal={onTotal} />
+          {/* Drawn anew when what it lists changes: another type, view, sorting, search or filter */}
+          <ErrorBoundary resetKey={JSON.stringify([type.id, view, sort, search, facets, sources, layout])} title="Список работ не отрисовался">
+            <ItemBoard type={type} view={view} sort={sort} search={search} facets={facets} sources={sources} layout={layout} onTotal={onTotal} />
+          </ErrorBoundary>
         </main>
       </div>
 

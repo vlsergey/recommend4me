@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemSummary, type RatingRecord, type SourceInfo } from "@/api/client";
@@ -286,42 +286,90 @@ function Details({
   return (
     <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
       <aside className="flex min-w-0 flex-col gap-5 lg:order-2">
-        {type.universes &&
-          (marking ? (
-            <FanficSection type={type} source={source} details={d} corrections={corrections} />
-          ) : (
-            <FanficSummary source={source} details={d} onMark={() => onMarking(true)} />
-          ))}
+        {type.universes && (
+          <Part title="Фанфик">
+            {marking ? (
+              <FanficSection type={type} source={source} details={d} corrections={corrections} />
+            ) : (
+              <FanficSummary source={source} details={d} onMark={() => onMarking(true)} />
+            )}
+          </Part>
+        )}
         {marking ? (
           <>
             <Separator />
-            <FacetCorrections item={ref} source={source} facets={d.allFacets} corrections={corrections} except={except} />
-            <ItemNumbers numbers={d.allNumbers} source={source} corrections={corrections} />
+            <Part title="Признаки">
+              <FacetCorrections item={ref} source={source} facets={d.allFacets} corrections={corrections} except={except} />
+            </Part>
+            <Part title="Числа">
+              <ItemNumbers numbers={d.allNumbers} source={source} corrections={corrections} />
+            </Part>
             <Separator />
-            <Links type={type} summary={d.summary} corrections={corrections} />
+            <Part title="Та же работа">
+              <Links type={type} summary={d.summary} corrections={corrections} />
+            </Part>
           </>
         ) : (
-          <>
+          <Part title="Признаки">
             <ContentFacts source={source} facets={d.allFacets} except={except} />
             <OpenSuggestions source={source} details={d} except={except ?? []} onMark={() => onMarking(true)} />
-          </>
+          </Part>
         )}
-        <RelatedWorks type={type} related={d.related} />
-        <Explanation groups={d.explanation} />
-        {d.ratings.length > 0 && <Ratings type={type} details={d} />}
+        <Part title="Цикл и автор">
+          <RelatedWorks type={type} related={d.related} />
+        </Part>
+        <Part title="Почему такой прогноз">
+          <Explanation groups={d.explanation} />
+        </Part>
+        {d.ratings.length > 0 && (
+          <Part title="Мои оценки">
+            <Ratings type={type} details={d} />
+          </Part>
+        )}
       </aside>
 
       <div className="flex min-w-0 flex-col gap-5 lg:order-1">
         {nothing && d.canRefresh && <NotFetched item={ref} />}
-        {source.picturesTell && <Pictures item={ref} pictures={d.pictures} marking={marking} />}
-        <ItemTexts texts={d.texts} source={source} corrections={corrections} editing={marking} />
-        {!source.picturesTell && <Pictures item={ref} pictures={d.pictures} large={false} marking={marking} />}
-        {marking && <PictureMatches item={ref} matches={d.pictureMatches} />}
-        <Reviews item={ref} label={source.reviewsLabel ?? "Отзывы"} reviews={d.reviews} total={d.reviewCount} marking={marking} />
-        {marking && <ReviewMatches item={ref} matches={d.reviewMatches} />}
-        <Parts item={ref} label={source.partsLabel ?? "Части"} parts={d.parts} />
+        {source.picturesTell && (
+          <Part title="Картинки">
+            <Pictures item={ref} pictures={d.pictures} marking={marking} />
+          </Part>
+        )}
+        <Part title="Тексты">
+          <ItemTexts texts={d.texts} source={source} corrections={corrections} editing={marking} />
+        </Part>
+        {!source.picturesTell && (
+          <Part title="Картинки">
+            <Pictures item={ref} pictures={d.pictures} large={false} marking={marking} />
+          </Part>
+        )}
+        {marking && (
+          <Part title="Похожие картинки">
+            <PictureMatches item={ref} matches={d.pictureMatches} />
+          </Part>
+        )}
+        <Part title={source.reviewsLabel ?? "Отзывы"}>
+          <Reviews item={ref} label={source.reviewsLabel ?? "Отзывы"} reviews={d.reviews} total={d.reviewCount} marking={marking} />
+        </Part>
+        {marking && (
+          <Part title="Похожие отзывы">
+            <ReviewMatches item={ref} matches={d.reviewMatches} />
+          </Part>
+        )}
+        <Part title={source.partsLabel ?? "Части"}>
+          <Parts item={ref} label={source.partsLabel ?? "Части"} parts={d.parts} />
+        </Part>
       </div>
     </div>
+  );
+}
+
+/** A section of the card that fails to draw says so in its place; the grade and the rest of the card stay. */
+function Part({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <ErrorBoundary title={`Не удалось показать: ${title.toLowerCase()}`} className="m-0 p-3">
+      {children}
+    </ErrorBoundary>
   );
 }
 
