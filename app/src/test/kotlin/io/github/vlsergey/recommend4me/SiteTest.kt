@@ -254,6 +254,9 @@ class SiteTest {
             items.rateItem("site", "d$k", RatingRequest(1))
         }
         recommendations.retrainAndScore("books")
+        // What every part is worth: the ranking cross-validated without it, every part measured
+        val worth = recommendations.worth("books")!!
+        assertTrue(worth.full != null && worth.parts.any { it.label == "Метка" && it.metrics != null }, "parts ${worth.parts.map { it.label }}")
         val explained = items.getItem("site", "x1").body!!.explanation
         assertTrue(explained.any { it.label == "Метка" && it.features.isNotEmpty() }, "parts ${explained.map { it.label }}")
         assertTrue(explained.zipWithNext().all { (a, b) -> abs(a.contribution) >= abs(b.contribution) }, "strongest first")

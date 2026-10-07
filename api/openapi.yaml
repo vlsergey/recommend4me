@@ -899,6 +899,27 @@ paths:
         '400':
           description: No such scorer
 
+  /api/types/{type}/model/worth:
+    post:
+      tags: [model]
+      operationId: measurePartWorth
+      summary: Cross-validates the ranking without every part of the input in turn; nothing is kept
+      description: |
+        What every part of a work's input - the annotation, the cover, a facet with all its values,
+        a number - is worth to the ranking: the out-of-fold quality of the type's scorer trained
+        without it against trained on everything. Takes a training per part.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The quality on everything and without every part, the most needed part first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelWorth'
+        '404':
+          description: No such type, or too few grades to cross-validate
+
   /api/types/{type}/model/compare:
     post:
       tags: [model]
@@ -2005,6 +2026,38 @@ components:
         parameter:
           type: number
           format: double
+        metrics:
+          $ref: '#/components/schemas/ModelMetrics'
+
+    ModelWorth:
+      type: object
+      required: [scorer, grades, parts]
+      properties:
+        scorer:
+          type: string
+        grades:
+          type: integer
+          description: The grades the ranking is cross-validated on
+        full:
+          $ref: '#/components/schemas/ModelMetrics'
+        parts:
+          type: array
+          description: Every part of the input, the one whose removal costs most first
+          items:
+            $ref: '#/components/schemas/PartWorth'
+
+    PartWorth:
+      type: object
+      required: [part, label, features]
+      properties:
+        part:
+          type: string
+          description: The part as the explanation names it - "facet:<id>", a block, "part:pictures"
+        label:
+          type: string
+        features:
+          type: integer
+          description: Its columns in the model's input
         metrics:
           $ref: '#/components/schemas/ModelMetrics'
 

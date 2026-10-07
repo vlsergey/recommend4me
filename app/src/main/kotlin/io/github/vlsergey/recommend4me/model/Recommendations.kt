@@ -575,6 +575,42 @@ class Recommendations(
         }
     }
 
+    /**
+     * WHAT EVERY PART OF THE INPUT IS WORTH TO THE RANKING — the annotation, the cover, a facet with
+     * all its values, a number: the out-of-fold quality of the type's scorer trained without that
+     * part (its columns zero — the average, nothing to tell the works apart by) against trained on
+     * everything, by the same cross-validation and the same choice of the parameter. A part whose
+     * removal costs nothing, or improves the quality, adds nothing the grades confirm. Nothing is kept.
+     */
+    fun worth(typeId: String): ModelWorth? = lock(typeId).withLock {
+        val type = type(typeId)
+        val scorer = plugins.scorer(typeId) ?: return@withLock null
+        val p = prepare(reader.read(type)) ?: return@withLock null
+        if (p.perItem.size < CrossValidation.MIN_WORKS) return@withLock null
+        val full = CrossValidation.choose(CrossValidation.measureAll(p.task, scorer, p.xFor))?.metrics
+        val layout = p.layout
+        val columns = LinkedHashMap<String, MutableList<Int>>()
+        layout.blocks.forEach { block ->
+            val at = layout.offsetOf(block)!!
+            columns.getOrPut(partOf(block)) { ArrayList() } += (at until at + layout.dimOf(block))
+        }
+        layout.categorical.forEachIndexed { i, name -> columns.getOrPut(partOf(name)) { ArrayList() } += layout.categoricalOffset + i }
+        layout.numeric.forEachIndexed { i, name -> columns.getOrPut(partOf(name)) { ArrayList() } += layout.numericOffset + i }
+        val labels = FeatureNames.partLabels(columns.keys, type.sources)
+        fun without(m: Matrix, cols: List<Int>): Matrix {
+            val out = Matrix(m.rows, m.cols)
+            out.held.copy(m.held, 0, 0, m.rows * m.cols)
+            for (r in 0 until m.rows) cols.forEach { out.held[out.row(r) + it] = 0f }
+            return out
+        }
+        val parts = columns.map { (part, cols) ->
+            val task = RankingTask(without(p.x, cols), p.grades, p.works)
+            val xFor = p.xFor?.let { f -> { underTest: Set<Long> -> without(f(underTest), cols) } }
+            PartWorth(part, labels.getValue(part), cols.size, CrossValidation.choose(CrossValidation.measureAll(task, scorer, xFor))?.metrics)
+        }
+        ModelWorth(scorer.id, full, p.grades.size, parts.sortedBy { it.metrics?.concordance ?: Double.MAX_VALUE })
+    }
+
     /** Makes [scorerId] the scorer of the type and trains it. */
     fun chooseScorer(typeId: String, scorerId: String): ModelSummary? {
         if (plugins.scorers.none { it.id == scorerId }) return null

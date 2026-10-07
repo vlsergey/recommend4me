@@ -8,6 +8,8 @@ import io.github.vlsergey.recommend4me.api.model.ModelInfo
 import io.github.vlsergey.recommend4me.api.model.ModelMetrics
 import io.github.vlsergey.recommend4me.api.model.ScorerChoice
 import io.github.vlsergey.recommend4me.api.model.ScorerInfo
+import io.github.vlsergey.recommend4me.api.model.ModelWorth as ApiModelWorth
+import io.github.vlsergey.recommend4me.api.model.PartWorth as ApiPartWorth
 import io.github.vlsergey.recommend4me.api.model.ScorerQuality as ApiScorerQuality
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Grades
@@ -47,6 +49,19 @@ class ModelController(
         return ResponseEntity.ok(recommendations.compare(type).map { q ->
             ApiScorerQuality(q.scorer, q.title, q.candidates.map { it.toApi() }, q.chosen?.toApi())
         })
+    }
+
+    override fun measurePartWorth(type: String): ResponseEntity<ApiModelWorth> {
+        if (stores.type(type) == null) return ResponseEntity.notFound().build()
+        val worth = recommendations.worth(type) ?: return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(
+            ApiModelWorth(
+                scorer = worth.scorer,
+                grades = worth.grades,
+                parts = worth.parts.map { ApiPartWorth(it.part, it.label, it.features, it.metrics?.toApi()) },
+                full = worth.full?.toApi(),
+            ),
+        )
     }
 
     private fun RankingResult.toApi() = ModelCandidate(parameter, metrics.toApi())
