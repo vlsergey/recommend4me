@@ -5,19 +5,23 @@ import { itemKey } from "@/item/lists";
 import { InfluenceBadge, MarkButtons, MatchVerdict, StrengthBadge } from "@/mark/MarkButtons";
 import { cn } from "@/lib/utils";
 
-/** The cover and the screenshots, each with its influence on the prediction and the user's mark. */
-export function Pictures({ item, pictures }: { item: ItemRef; pictures: PictureInfo[] }) {
+/**
+ * The cover and the screenshots, each with its influence on the prediction. [large]: the pictures
+ * tell what the work is (a game's screenshots) and are shown big; else small, beside the texts (a
+ * book's cover). In the marking ([marking]) each takes the user's mark.
+ */
+export function Pictures({ item, pictures, large = true, marking = true }: { item: ItemRef; pictures: PictureInfo[]; large?: boolean; marking?: boolean }) {
   if (pictures.length === 0) return null;
   return (
     <section>
-      <h4 className="mb-1 text-sm font-semibold">Обложка и картинки</h4>
-      {pictures.some((p) => p.influence !== undefined) && (
+      <h4 className="mb-1 text-sm font-semibold">{large ? "Картинки" : "Обложка и картинки"}</h4>
+      {marking && pictures.some((p) => p.influence !== undefined) && (
         <p className="mb-2 text-xs text-muted-foreground">
           Число на картинке — на сколько баллов вашей шкалы она сдвигает работу: прогноз как есть минус прогноз без неё.
           Картинку, из-за которой вы выбрали бы работу или отбросили её, отметьте 👍 или 👎 — модель будет искать похожие.
         </p>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className={cn("grid gap-2", large ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-3 sm:grid-cols-5")}>
         {pictures.map((p) => (
           <div
             key={p.position}
@@ -58,7 +62,7 @@ export function Pictures({ item, pictures }: { item: ItemRef; pictures: PictureI
                 />
               )}
             </a>
-            <PictureMark item={item} position={p.position} mark={p.mark} />
+            {marking && <PictureMark item={item} position={p.position} mark={p.mark} />}
           </div>
         ))}
       </div>

@@ -10,11 +10,13 @@ import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.encoder.TextKind
 import io.github.vlsergey.recommend4me.item.ItemsController
+import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.page.PagesController
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.CardDecor
 import io.github.vlsergey.recommend4me.source.FacetDecor
 import io.github.vlsergey.recommend4me.source.FacetDef
+import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PageDecor
@@ -28,6 +30,7 @@ import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.api.model.Inclusion
+import io.github.vlsergey.recommend4me.api.model.FacetRole as ApiFacetRole
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
 import io.github.vlsergey.recommend4me.universe.UniverseCatalogue
 import io.github.vlsergey.recommend4me.universe.UniverseCharacter
@@ -44,6 +47,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.web.server.ResponseStatusException
 import java.io.File
 import java.time.Instant
+import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -109,6 +113,7 @@ class SiteTest {
             facets = listOf(
                 FacetDef("tag", "Метка", suggest = true),
                 FacetDef("pairing", "Пэйринг", infer = true, original = "pairings"),
+                FacetDef("series", "Серия", role = FacetRole.SERIES),
             ),
             texts = listOf(
                 TextDef("annotation", "Аннотация", block = "text:annotation"),
@@ -161,6 +166,7 @@ class SiteTest {
     @Autowired lateinit var textVectors: TextVectors
     @Autowired lateinit var suggestions: FacetSuggestions
     @Autowired lateinit var universes: UniversesController
+    @Autowired lateinit var recommendations: Recommendations
 
     private fun capture(body: String) = captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
 
@@ -241,6 +247,25 @@ class SiteTest {
         assertEquals(setOf("space", "magic", "космос"), values.filter { it.corrected == FacetValueInfo.Corrected.ADDED }.map { it.key }.toSet())
         assertEquals("Космос", values.single { it.key == "космос" }.name)
         assertEquals(listOf("magic"), items.listFacetValues("site", "tag", "mag", 10).body!!.map { it.key })
+
+        // The prediction is told part by part, each part with its features; a page of the site gets the parts alone
+        (3..8).forEach { k ->
+            items.rateItem("site", "s$k", RatingRequest(5))
+            items.rateItem("site", "d$k", RatingRequest(1))
+        }
+        recommendations.retrainAndScore("books")
+        val explained = items.getItem("site", "x1").body!!.explanation
+        assertTrue(explained.any { it.label == "Метка" && it.features.isNotEmpty() }, "parts ${explained.map { it.label }}")
+        assertTrue(explained.zipWithNext().all { (a, b) -> abs(a.contribution) >= abs(b.contribution) }, "strongest first")
+        val onPage = pages.getPage("https://site.example/work/x1").body!!.item!!.explanation
+        assertTrue(onPage.isNotEmpty() && onPage.all { it.features.isEmpty() }, "on a page $onPage")
+
+        // The other works of the series, with the user's grades
+        listOf("s1", "s2").forEach { corrections.correctFacet("site", it, FacetCorrection(facet = "series", added = true, name = "Галактика")) }
+        items.rateItem("site", "s2", RatingRequest(5))
+        val series = items.getItem("site", "s1").body!!.related.single()
+        assertEquals(Triple("Галактика", ApiFacetRole.SERIES, listOf("s2")), Triple(series.name, series.role, series.items.map { it.item }))
+        assertEquals(5, series.items.single().grade)
 
         // The cards of a list get the works' grades
         items.rateItem("site", "s1", RatingRequest(4))

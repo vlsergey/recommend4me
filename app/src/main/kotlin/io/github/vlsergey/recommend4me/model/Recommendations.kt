@@ -307,15 +307,15 @@ class Recommendations(
 
     /** Everything the dialog of a work shows of the model. */
     class Details(
-        val explanation: List<Contribution>,
+        val explanation: List<ContributionGroup>,
         val reviews: List<Pair<StoredReview, Double?>>,
         val pictures: Map<Int, Double>,
         val pictureMatches: List<MarkLikeness.Match>,
         val reviewMatches: List<MarkLikeness.Match>,
     )
 
-    /** What pushed the prediction of the work most, strongest first — no more than the dialog's first lines, for a page of the site. */
-    fun explanation(key: ItemKey): List<Contribution> {
+    /** What moves the prediction of the work, part by part, strongest first — for a page of the site. */
+    fun explanation(key: ItemKey): List<ContributionGroup> {
         val type = stores.typeOf(key.source)
         val model = load(type) ?: return emptyList()
         val input = inputOf(type, key, likenesses.stored(type)) ?: return emptyList()
@@ -343,32 +343,64 @@ class Recommendations(
     }
 
     /**
-     * The features that move the work's score most, strongest first, in points. The vectors and
-     * numbers are switched off one by one (switched off is the average); a categorical feature is
-     * put at how often the catalogue has it — so a liked tag the work lacks counts too, by what
-     * lacking it costs against the average work.
+     * What moves the work's score, in points, PART BY PART — a facet with all its values, the
+     * pictures, a text, a number, the user's own marks on the site — each with every feature in
+     * it; the strongest first, nothing left out. A part is switched off as a whole: what it adds
+     * together is not the sum of what its features add one by one.
+     *
+     * Switched off, a vector or a number is the average; a categorical feature is put at how often
+     * the catalogue has it — so a liked tag the work lacks counts too, by what lacking it costs
+     * against the average work.
      */
-    private fun explain(model: TrainedModel, input: ItemInput, type: TypeStore, limit: Int = 16): List<Contribution> {
+    private fun explain(model: TrainedModel, input: ItemInput, type: TypeStore): List<ContributionGroup> {
         val layout = model.layout
         val dense = layout.groups(input).filter { it !is FeatureGroup.Categorical }
         val categorical = layout.categorical.filter { it in input.categorical || !it.startsWith("prev:") }
-        val m = Matrix(1 + dense.size + categorical.size, layout.width)
+        val parts = (dense.map { it.feature } + categorical).groupBy(::partOf)
+        val denseOf = dense.associateBy { it.feature }
+        val share = model.meta.categoricalShare
+        val m = Matrix(1 + dense.size + categorical.size + parts.size, layout.width)
+        fun average(row: Int, names: Collection<String>) = names.forEach { name ->
+            val i = layout.categorical.indexOf(name)
+            if (i >= 0) m.held[m.row(row) + layout.categoricalOffset + i] = share.getOrElse(i) { 0f }
+        }
         layout.write(input, m, 0)
         dense.forEachIndexed { g, group -> layout.write(input, m, g + 1, group) }
-        val share = model.meta.categoricalShare
         categorical.forEachIndexed { c, name ->
             val row = 1 + dense.size + c
             layout.write(input, m, row)
-            val i = layout.categorical.indexOf(name)
-            m.held[m.row(row) + layout.categoricalOffset + i] = share.getOrElse(i) { 0f }
+            average(row, listOf(name))
+        }
+        val partList = parts.entries.toList()
+        partList.forEachIndexed { p, (_, members) ->
+            val row = 1 + dense.size + categorical.size + p
+            layout.write(input, m, row, members.mapNotNull { denseOf[it] })
+            average(row, members.filter { it !in denseOf })
         }
         val raw = model.scores(m)
         val full = model.scale.score(raw[0].toDouble())
-        val contributions = dense.mapIndexed { g, group -> group.feature to (full - model.scale.score(raw[g + 1].toDouble())) to true } +
-            categorical.mapIndexed { c, name -> name to (full - model.scale.score(raw[1 + dense.size + c].toDouble())) to (name in input.categorical) }
-        val top = contributions.sortedByDescending { abs(it.first.second) }.take(limit)
-        val labels = FeatureNames.labels(top.map { it.first.first }, type.sources)
-        return top.map { (fc, present) -> Contribution(fc.first, labels.getValue(fc.first), fc.second, present) }
+        fun moved(row: Int) = full - model.scale.score(raw[row].toDouble())
+        val features = dense.mapIndexed { g, group -> group.feature to moved(g + 1) }.toMap() +
+            categorical.mapIndexed { c, name -> name to moved(1 + dense.size + c) }
+        val labels = FeatureNames.labels(features.keys, type.sources)
+        val partLabels = FeatureNames.partLabels(parts.keys, type.sources)
+        return partList.mapIndexed { p, (part, members) ->
+            ContributionGroup(
+                part, partLabels.getValue(part), moved(1 + dense.size + categorical.size + p),
+                members.map { Contribution(it, labels.getValue(it), features.getValue(it), it in input.categorical || it in denseOf) }
+                    .sortedByDescending { abs(it.contribution) },
+            )
+        }.sortedByDescending { abs(it.contribution) }
+    }
+
+    /** The part of the input a feature is switched off with: its facet, the pictures, the reviews, the text, the site marks; else itself. */
+    private fun partOf(feature: String): String = FeatureNames.parseFacet(feature)?.let { "facet:${it.first}" } ?: when {
+        feature.startsWith("signal:") -> FeatureNames.SIGNALS
+        feature.startsWith("prev:") -> FeatureNames.PREVIOUS
+        feature.startsWith("source:") -> FeatureNames.SOURCE
+        feature in PICTURE_BLOCKS -> FeatureNames.PICTURES
+        feature in REVIEW_BLOCKS -> FeatureNames.REVIEWS
+        else -> feature
     }
 
     /** What a group of features adds to a work's score: the score with it minus the score with it switched off, in points. */
@@ -534,6 +566,12 @@ class Recommendations(
         private const val RETRAIN_DELAY_SECONDS = 3L
         private const val MIN_RATINGS = 3
         private const val REVIEWS_SHOWN = 30
+
+        /** The blocks of the pictures: an explanation tells of them together. */
+        private val PICTURE_BLOCKS = setOf(PictureRepository.COVER, PictureRepository.SCREENS, SetKind.SCREENS.key, MarkLikeness.PICTURES)
+
+        /** The blocks of the opinions of other people. */
+        private val REVIEW_BLOCKS = setOf(SetKind.REVIEWS.key, MarkLikeness.REVIEWS)
         private const val MATCHES_SHOWN = 3
         private const val TOP_FEATURES = 25
         private const val SCORE_CHUNK = 1024

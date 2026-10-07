@@ -14,7 +14,20 @@ const FIRST_SHOWN = 8;
  * Other readers' or players' reviews that move the work most, either way, each with its points:
  * the score as it is minus the score without that review. Long ones are cut, a click shows them whole.
  */
-export function Reviews({ item, label, reviews, total }: { item: ItemRef; label: string; reviews: ReviewInfo[]; total?: number }) {
+export function Reviews({
+  item,
+  label,
+  reviews,
+  total,
+  marking = true,
+}: {
+  item: ItemRef;
+  label: string;
+  reviews: ReviewInfo[];
+  total?: number;
+  /** The marking: each review takes the user's mark, and the marks are explained. */
+  marking?: boolean;
+}) {
   const [all, setAll] = useState(false);
   if (reviews.length === 0) return null;
   const shown = all ? reviews : reviews.slice(0, FIRST_SHOWN);
@@ -24,17 +37,18 @@ export function Reviews({ item, label, reviews, total }: { item: ItemRef; label:
       <h4 className="mb-1 text-sm font-semibold">
         {label}
         {total !== undefined && <span className="ml-1 font-normal text-muted-foreground">{total}</span>}
+        <span className="ml-1 text-xs font-normal text-muted-foreground">· {moving ? "сильнее всего сдвигающие прогноз" : "самые новые"}</span>
       </h4>
-      <p className="mb-2 text-xs text-muted-foreground">
-        {moving
-          ? "Сильнее всего сдвигающие работу: число — на сколько баллов вашей шкалы, прогноз как есть минус прогноз без этого отзыва. "
-          : "Самые новые. "}
-        Отзыв, который говорит, почему вы выбрали бы работу или отбросили её, отметьте 👍 или 👎 — модель будет искать похожие
-        в других работах.
-      </p>
+      {marking && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {moving && "Число — на сколько баллов вашей шкалы, прогноз как есть минус прогноз без этого отзыва. "}
+          Отзыв, который говорит, почему вы выбрали бы работу или отбросили её, отметьте 👍 или 👎 — модель будет искать похожие
+          в других работах.
+        </p>
+      )}
       <div className="flex flex-col gap-2">
         {shown.map((r) => (
-          <ReviewCard key={r.reviewId} item={item} review={r} />
+          <ReviewCard key={r.reviewId} item={item} review={r} marking={marking} />
         ))}
       </div>
       {reviews.length > shown.length && (
@@ -46,7 +60,7 @@ export function Reviews({ item, label, reviews, total }: { item: ItemRef; label:
   );
 }
 
-function ReviewCard({ item, review }: { item: ItemRef; review: ReviewInfo }) {
+function ReviewCard({ item, review, marking }: { item: ItemRef; review: ReviewInfo; marking: boolean }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const mark = async (value: number | null) => {
@@ -83,14 +97,16 @@ function ReviewCard({ item, review }: { item: ItemRef; review: ReviewInfo }) {
             title="Прогноз как есть минус прогноз без этого отзыва, в баллах вашей шкалы"
           />
         )}
-        <MarkButtons
-          mark={review.mark}
-          onMark={mark}
-          className={cn(
-            "[&_button]:bg-muted [&_button]:text-foreground [&_button:hover]:bg-muted-foreground/20",
-            influence === undefined && "ml-auto",
-          )}
-        />
+        {marking && (
+          <MarkButtons
+            mark={review.mark}
+            onMark={mark}
+            className={cn(
+              "[&_button]:bg-muted [&_button]:text-foreground [&_button:hover]:bg-muted-foreground/20",
+              influence === undefined && "ml-auto",
+            )}
+          />
+        )}
       </div>
       <p
         className={cn("leading-relaxed whitespace-pre-line text-foreground/90", long && !open && "line-clamp-4 cursor-pointer")}

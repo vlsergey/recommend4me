@@ -25,7 +25,12 @@ export function readItemHash(): ItemRef | null {
  * replaced, not added, and no `hashchange` comes of it: the address only follows the dialog.
  */
 export function writeItemHash(ref: ItemRef | null) {
-  const hash = ref ? `${PREFIX}${encodeURIComponent(ref.source)}/${ref.item.split("/").map(encodeURIComponent).join("/")}` : "";
+  const hash = ref ? itemHref(ref) : "";
   if (hash === window.location.hash || (!ref && !window.location.hash.startsWith(PREFIX))) return;
   window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}${hash}`);
+}
+
+/** The address that opens an item over whatever is open: a link to another work from a work's dialog. */
+export function itemHref(ref: ItemRef): string {
+  return `${PREFIX}${encodeURIComponent(ref.source)}/${ref.item.split("/").map(encodeURIComponent).join("/")}`;
 }

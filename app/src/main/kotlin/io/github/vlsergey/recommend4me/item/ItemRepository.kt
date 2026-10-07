@@ -159,6 +159,14 @@ class ItemRepository(
         return out
     }
 
+    /** The items the site gives each of the [keys] of the facet: key to items. */
+    fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<String>> {
+        if (keys.isEmpty()) return emptyMap()
+        return db.select(ITEM_FACET.VALUE_KEY, ITEM_FACET.ITEM_ID).from(ITEM_FACET)
+            .where(ITEM_FACET.FACET.eq(facet), ITEM_FACET.VALUE_KEY.`in`(keys.distinct()))
+            .fetch().groupBy({ it.value1()!! }, { it.value2()!! })
+    }
+
     /** Every item's keys of one facet, streamed item by item. */
     fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) {
         var current: String? = null

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, RefreshCwIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemSummary, type RatingRecord, type SourceInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
@@ -12,20 +12,23 @@ import { FacetCorrections } from "@/correction/FacetCorrections";
 import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor";
 import { Links } from "@/correction/Links";
 import { titleField, useCorrections, type Corrections } from "@/correction/useCorrections";
-import { ago, compact, formatDate } from "@/i18n";
+import { formatDate } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { FeatureBars } from "@/model/FeatureBars";
+import { Explanation } from "@/model/Explanation";
 import { Parts } from "@/part/Parts";
 import { PictureMatches, Pictures } from "@/picture/Pictures";
 import { ReviewMatches, Reviews } from "@/review/Reviews";
-import { FANFIC_FACETS, FanficSection } from "@/universe/FanficSection";
+import { useSuggestions } from "@/suggestion/useSuggestions";
+import { FANFIC_FACETS, FanficSection, FanficSummary } from "@/universe/FanficSection";
 import { writeItemHash } from "./itemHash";
 import { ItemNumbers } from "./ItemNumbers";
 import { ItemTexts } from "./ItemTexts";
 import { itemKey } from "./lists";
-import { Cover, GRADE_TEXT, KEY_GRADES, PreviousRating, RatingButtons, ScoreBadge, SignalBadges } from "./pieces";
+import { Cover, GRADE_TEXT, KEY_GRADES, LinkedBadges, PreviousRating, RatingButtons, ScoreBadge, SignalBadges } from "./pieces";
+import { RelatedWorks } from "./RelatedWorks";
 import { useTakeBackGrade } from "./useRateItem";
 import { useRefreshItem } from "./useRefreshItem";
+import { Byline, ContentFacts, FactLine } from "./WorkFacts";
 
 type Props = {
   items: ItemSummary[];
@@ -39,11 +42,17 @@ type Props = {
 
 /**
  * One work at a time, for going through the list: 1..5 grade and move on, ←/→ step back and
- * forth without answering, o opens the site, Esc closes.
+ * forth without answering, o opens the site, e switches the marking on and off, Esc closes.
+ *
+ * TWO WAYS TO LOOK AT A WORK. To decide — the facts it is chosen by, why the prediction is what
+ * it is, the volumes before it — nothing to answer on the way. To mark — every value with the
+ * model's chance and the user's yes and no, the texts and numbers to correct, the pictures and
+ * reviews to mark, the work to link. The way chosen stays from work to work.
  */
 export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }: Props) {
   const summary = index !== null ? items[index] : undefined;
   const of = useSource(summary?.source);
+  const [marking, setMarking] = useState(false);
 
   useEffect(() => {
     if (index !== null && index >= items.length) onIndex(items.length > 0 ? items.length - 1 : null);
@@ -80,6 +89,9 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }
         e.preventDefault();
       } else if (e.key === "o") {
         window.open(summary.url, "_blank", "noreferrer");
+      } else if (e.key === "e") {
+        setMarking((m) => !m);
+        e.preventDefault();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -101,6 +113,8 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }
             total={total}
             onIndex={onIndex}
             onRate={rate}
+            marking={marking}
+            onMarking={setMarking}
           />
         )}
       </DialogContent>
@@ -117,6 +131,8 @@ function Shell({
   total,
   onIndex,
   onRate,
+  marking,
+  onMarking,
 }: {
   type: ContentTypeInfo;
   source: SourceInfo;
@@ -126,6 +142,8 @@ function Shell({
   total: number;
   onIndex: (index: number | null) => void;
   onRate: (grade: Grade | null) => void;
+  marking: boolean;
+  onMarking: (marking: boolean) => void;
 }) {
   const ref = { source: summary.source, item: summary.item };
   const details = useQuery({
@@ -135,56 +153,46 @@ function Shell({
   const corrections = useCorrections(ref, type.id);
   const [editingTitle, setEditingTitle] = useState(false);
   const d = details.data;
+  // The facets of the card until the work's own are in
+  const facets = d?.allFacets ?? summary.facets;
 
   return (
     <>
-      <div className="relative h-56 shrink-0 overflow-hidden sm:h-72">
-        <Cover typeId={type.id} summary={summary} full className="size-full" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
-        {type.sources.length > 1 && (
-          <span className="absolute top-3 left-4 rounded-md bg-background/85 px-2 py-0.5 text-xs font-medium text-foreground shadow-sm">
-            {source.title}
-          </span>
-        )}
-        <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 p-4 text-white">
-          <div className="min-w-0 flex-1">
-            {editingTitle ? (
-              <FieldEditor
-                value={summary.title}
-                corrected={d?.titleCorrected ?? false}
-                onSave={(content) => corrections.setField(titleField, content)}
-                onReset={() => corrections.resetField(titleField)}
-                onClose={() => setEditingTitle(false)}
-                className="max-w-2xl [&_button]:text-foreground"
-              />
-            ) : (
-              <div className="group/title flex items-center gap-1">
-                <DialogTitle className="text-2xl leading-tight font-semibold text-white drop-shadow">{summary.title}</DialogTitle>
-                {d?.titleCorrected && <CorrectedMark className="border-white/50 text-white/80" />}
-                <EditButton
-                  onClick={() => setEditingTitle(true)}
-                  title="Исправить название"
-                  className="text-white/70 opacity-0 transition-opacity group-hover/title:opacity-100 hover:text-white focus-visible:opacity-100 pointer-coarse:opacity-100"
+      <div className="flex shrink-0 gap-4 border-b p-4 pr-12">
+        <div className={cn("shrink-0 overflow-hidden rounded-md bg-muted", source.picturesTell ? "h-24 w-40 sm:h-28 sm:w-48" : "h-28 w-20 sm:h-32 sm:w-24")}>
+          <Cover typeId={type.id} summary={summary} className="size-full" />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              {editingTitle ? (
+                <FieldEditor
+                  value={summary.title}
+                  corrected={d?.titleCorrected ?? false}
+                  onSave={(content) => corrections.setField(titleField, content)}
+                  onReset={() => corrections.resetField(titleField)}
+                  onClose={() => setEditingTitle(false)}
+                  className="max-w-2xl"
                 />
-              </div>
-            )}
-            <DialogDescription className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-white/85">
-              {summary.version && <span className="font-medium text-white">{summary.version}</span>}
-              <span title={formatDate(summary.updatedAt)}>{ago(summary.updatedAt)}</span>
-              {d?.allNumbers.slice(0, 4).map((n) => (
-                <span key={n.key}>
-                  <span className="text-white/65">{n.label}</span> {compact(n.value)}
-                </span>
-              ))}
-              {d?.reviewCount !== undefined && (
-                <span>
-                  <span className="text-white/65">{source.reviewsLabel ?? "Отзывы"}</span> {compact(d.reviewCount)}
-                </span>
+              ) : (
+                <div className="group/title flex items-center gap-1">
+                  <DialogTitle className="text-xl leading-tight font-semibold sm:text-2xl">{summary.title}</DialogTitle>
+                  {d?.titleCorrected && <CorrectedMark />}
+                  {marking && <EditButton onClick={() => setEditingTitle(true)} title="Исправить название" />}
+                </div>
               )}
-              <SignalBadges source={source} signals={summary.signals} className="[&>*]:border-white/40 [&>*]:text-white" />
-            </DialogDescription>
+              <Byline source={source} facets={facets} className="text-sm text-muted-foreground" />
+            </div>
+            <ScoreBadge type={type} summary={summary} className="h-10 min-w-16 shrink-0 text-lg" />
           </div>
-          <ScoreBadge type={type} summary={summary} className="h-10 min-w-16 text-lg" />
+          <DialogDescription render={<div />} className="flex flex-col gap-1 text-sm text-muted-foreground">
+            <FactLine source={source} summary={summary} facets={facets} />
+            <span className="flex flex-wrap items-center gap-2">
+              {type.sources.length > 1 && <span className="text-xs">{source.title}</span>}
+              <SignalBadges source={source} signals={summary.signals} />
+              <LinkedBadges type={type} linked={summary.linked} className="text-xs" />
+            </span>
+          </DialogDescription>
         </div>
       </div>
 
@@ -196,7 +204,7 @@ function Shell({
             <Skeleton className="h-24 w-full" />
           </div>
         ) : d ? (
-          <Details type={type} source={source} details={d} corrections={corrections} />
+          <Details type={type} source={source} details={d} corrections={corrections} marking={marking} onMarking={onMarking} />
         ) : (
           <div className="p-5 text-destructive">Не удалось загрузить подробности</div>
         )}
@@ -222,6 +230,16 @@ function Shell({
           <ExternalLinkIcon /> {source.title}
         </Button>
         {d?.canRefresh && <RefreshButton item={ref} />}
+        <Button
+          variant={marking ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={marking}
+          onClick={() => onMarking(!marking)}
+          title={marking ? "Закончить разметку (e)" : "Разметить: подтвердить или отклонить значения, исправить тексты, отметить картинки и отзывы (e)"}
+        >
+          {marking ? <CheckIcon /> : <PencilIcon />}
+          {marking ? "Готово" : "Разметить"}
+        </Button>
         <PreviousRating type={type} summary={summary} />
         <RatingButtons
           type={type}
@@ -236,63 +254,100 @@ function Shell({
   );
 }
 
+/**
+ * The work below its header: the column to decide by — what the work is, the volumes before it,
+ * why the prediction, the user's grades — beside (on a narrow screen, above) the column of
+ * the work itself: its pictures when they tell what it is, what it is about, the reviews, the
+ * chapters. In the marking the first column holds every facet to answer on.
+ */
 function Details({
   type,
   source,
   details: d,
   corrections,
+  marking,
+  onMarking,
 }: {
   type: ContentTypeInfo;
   source: SourceInfo;
   details: ItemDetails;
   corrections: Corrections;
+  marking: boolean;
+  onMarking: (marking: boolean) => void;
 }) {
   const ref = { source: d.summary.source, item: d.summary.item };
-  const positive = d.explanation.filter((e) => e.contribution > 0);
-  const negative = d.explanation.filter((e) => e.contribution < 0);
   const nothing = d.texts.length === 0 && d.pictures.length === 0 && d.reviews.length === 0 && d.parts.length === 0;
+  const except = type.universes ? FANFIC_FACETS : undefined;
 
   return (
-    <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="flex min-w-0 flex-col gap-5">
-        {nothing && d.canRefresh && <NotFetched item={ref} />}
-        <ItemTexts texts={d.texts} source={source} corrections={corrections} />
-        <Pictures item={ref} pictures={d.pictures} />
-        <PictureMatches item={ref} matches={d.pictureMatches} />
-        <Reviews item={ref} label={source.reviewsLabel ?? "Отзывы"} reviews={d.reviews} total={d.reviewCount} />
-        <ReviewMatches item={ref} matches={d.reviewMatches} />
-        <Parts item={ref} label={source.partsLabel ?? "Части"} parts={d.parts} />
-      </div>
-
-      <aside className="flex flex-col gap-5">
-        {type.universes && (
-          <>
+    <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <aside className="flex min-w-0 flex-col gap-5 lg:order-2">
+        {type.universes &&
+          (marking ? (
             <FanficSection type={type} source={source} details={d} corrections={corrections} />
+          ) : (
+            <FanficSummary source={source} details={d} onMark={() => onMarking(true)} />
+          ))}
+        {marking ? (
+          <>
             <Separator />
+            <FacetCorrections item={ref} source={source} facets={d.allFacets} corrections={corrections} except={except} />
+            <ItemNumbers numbers={d.allNumbers} source={source} corrections={corrections} />
+            <Separator />
+            <Links type={type} summary={d.summary} corrections={corrections} />
+          </>
+        ) : (
+          <>
+            <ContentFacts source={source} facets={d.allFacets} except={except} />
+            <OpenSuggestions source={source} details={d} except={except ?? []} onMark={() => onMarking(true)} />
           </>
         )}
-        {d.explanation.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <h4 className="text-sm font-semibold">Почему такой прогноз</h4>
-            {positive.length > 0 && <FeatureBars items={positive} />}
-            {negative.length > 0 && <FeatureBars items={negative} />}
-          </section>
-        )}
-        <Separator />
-        <FacetCorrections
-          item={ref}
-          source={source}
-          facets={d.allFacets}
-          corrections={corrections}
-          // The fan fiction's facets are answered in their own section above
-          except={type.universes ? FANFIC_FACETS : undefined}
-        />
-        <ItemNumbers numbers={d.allNumbers} source={source} corrections={corrections} />
-        <Separator />
-        <Links type={type} summary={d.summary} corrections={corrections} />
+        <RelatedWorks type={type} related={d.related} />
+        <Explanation groups={d.explanation} />
         {d.ratings.length > 0 && <Ratings type={type} details={d} />}
       </aside>
+
+      <div className="flex min-w-0 flex-col gap-5 lg:order-1">
+        {nothing && d.canRefresh && <NotFetched item={ref} />}
+        {source.picturesTell && <Pictures item={ref} pictures={d.pictures} marking={marking} />}
+        <ItemTexts texts={d.texts} source={source} corrections={corrections} editing={marking} />
+        {!source.picturesTell && <Pictures item={ref} pictures={d.pictures} large={false} marking={marking} />}
+        {marking && <PictureMatches item={ref} matches={d.pictureMatches} />}
+        <Reviews item={ref} label={source.reviewsLabel ?? "Отзывы"} reviews={d.reviews} total={d.reviewCount} marking={marking} />
+        {marking && <ReviewMatches item={ref} matches={d.reviewMatches} />}
+        <Parts item={ref} label={source.partsLabel ?? "Части"} parts={d.parts} />
+      </div>
     </div>
+  );
+}
+
+/**
+ * What the model says of the work and the user has not answered on, outside the fan fiction's
+ * section: values it suggests adding, values it gave by itself — counted in a line that opens
+ * the marking.
+ */
+function OpenSuggestions({
+  source,
+  details: d,
+  except,
+  onMark,
+}: {
+  source: SourceInfo;
+  details: ItemDetails;
+  except: readonly string[];
+  onMark: () => void;
+}) {
+  const suggestions = useSuggestions({ source: d.summary.source, item: d.summary.item }, source);
+  const suggested = (suggestions.data ?? []).filter((s) => !except.includes(s.facet)).reduce((n, s) => n + s.suggested.length, 0);
+  const inferred = d.allFacets
+    .filter((f) => !except.includes(f.facet))
+    .flatMap((f) => f.values)
+    .filter((v) => v.inferred && !v.corrected).length;
+  if (suggested + inferred === 0) return null;
+  return (
+    <Button variant="link" size="sm" className="h-auto self-start p-0 text-xs" onClick={onMark}>
+      Модель предлагает {suggested + inferred} без вашего ответа — разобрать
+    </Button>
   );
 }
 

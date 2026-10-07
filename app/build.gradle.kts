@@ -33,6 +33,8 @@ dependencies {
     testImplementation(libs.h2)
     // The suggestions of tags, worked out by the plugin of this build
     testImplementation(project(":plugins:suggester-tags"))
+    // A model to explain: the pairwise scorer of this build
+    testImplementation(project(":plugins:scorer-pairwise"))
 }
 
 // --- jOOQ: the classes of the tables of every kind of database file, generated from its migrations ---

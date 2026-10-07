@@ -4,7 +4,9 @@ import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.CardDecor
 import io.github.vlsergey.recommend4me.source.FacetDecor
 import io.github.vlsergey.recommend4me.source.FacetDef
+import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberDef
+import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.PictureDecor
@@ -14,6 +16,7 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
+import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 
 /**
@@ -31,29 +34,29 @@ class Ficbook : Source {
 
     override val schema = SourceSchema(
         facets = listOf(
-            FacetDef(AUTHOR, "Автор", shared = "author", searchWeight = 1.0f, onCard = true, names = true),
-            FacetDef(FANDOM, "Фэндом", filter = true, onCard = true, searchWeight = 0.9f),
-            FacetDef(DIRECTION, "Направленность", filter = true, onCard = true),
-            FacetDef(RATING, "Рейтинг", filter = true, onCard = true),
-            FacetDef(STATUS, "Статус", filter = true),
-            FacetDef(TAG, "Метка", shared = "tag", searchWeight = 0.9f, suggest = true),
+            FacetDef(AUTHOR, "Автор", shared = "author", searchWeight = 1.0f, onCard = true, names = true, role = FacetRole.AUTHOR),
+            FacetDef(FANDOM, "Фэндом", filter = true, onCard = true, searchWeight = 0.9f, role = FacetRole.CONTENT),
+            FacetDef(DIRECTION, "Направленность", filter = true, onCard = true, role = FacetRole.CONTENT),
+            FacetDef(RATING, "Рейтинг", filter = true, onCard = true, role = FacetRole.CONTENT),
+            FacetDef(STATUS, "Статус", filter = true, role = FacetRole.STATUS),
+            FacetDef(TAG, "Метка", shared = "tag", searchWeight = 0.9f, suggest = true, role = FacetRole.CONTENT),
             // The pairings and characters as the authors write them: the site's strings, kept as they
             // are; the application works the characters and pairings of the universes out of them
             FacetDef(PAIRING, "Пэйринг на сайте", searchWeight = 0.7f),
             FacetDef(CHARACTER, "Персонаж на сайте", searchWeight = 0.8f),
-            FacetDef(SERIES, "Серия", searchWeight = 0.7f),
+            FacetDef(SERIES, "Серия", searchWeight = 0.7f, role = FacetRole.SERIES),
         ),
         numbers = listOf(
-            NumberDef(WORDS, "Слов", NumberScale.LOG, sortable = true),
+            NumberDef(WORDS, "Слов", NumberScale.LOG, sortable = true, role = NumberRole.SIZE),
             NumberDef(PAGES, "Страниц", NumberScale.LOG),
             NumberDef(PARTS, "Частей", NumberScale.LOG),
-            NumberDef(LIKES, "Нравится", NumberScale.LOG, sortable = true),
+            NumberDef(LIKES, "Нравится", NumberScale.LOG, sortable = true, role = NumberRole.APPROVAL),
             NumberDef(COMMENTS, "Отзывы", NumberScale.LOG),
         ),
         texts = listOf(
-            TextDef(ANNOTATION, "Описание", block = "text:annotation", searchWeight = 0.6f),
-            TextDef(NOTES, "Примечания", block = "text:notes", searchWeight = 0.5f),
-            TextDef(DEDICATION, "Посвящение", searchWeight = 0.3f),
+            TextDef(ANNOTATION, "Описание", block = "text:annotation", searchWeight = 0.6f, role = TextRole.DESCRIPTION),
+            TextDef(NOTES, "Примечания", block = "text:notes", searchWeight = 0.5f, role = TextRole.NOTES),
+            TextDef(DEDICATION, "Посвящение", searchWeight = 0.3f, role = TextRole.NOTES),
             TextDef(PAIRINGS_LINE, "Пэйринг и персонажи на сайте", searchWeight = 0.7f, searchByMeaning = true),
         ),
         reviewsLabel = "Отзывы",

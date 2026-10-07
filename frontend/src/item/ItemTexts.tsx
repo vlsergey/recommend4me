@@ -6,22 +6,47 @@ import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor
 import { textField, type Corrections } from "@/correction/useCorrections";
 import { cn } from "@/lib/utils";
 
+/** A text longer than this is cut to a few lines until opened: the length of a screen's paragraph, not meaning. */
+const LONG = 600;
+
 /**
- * The texts of the item — overview, annotation, changelog… — spoilers collapsed. Each can be
- * corrected; a text the source declares but the item lacks can be written.
+ * The texts of the item: what the work is about first (its source's DESCRIPTION), open, a long one
+ * cut until clicked; everything else — notes, changelogs, details — folded under its label, a
+ * spoiler marked so. In the marking ([editing]) each can be corrected, and a text the source
+ * declares but the item lacks can be written.
  */
-export function ItemTexts({ texts, source, corrections }: { texts: TextValue[]; source?: SourceInfo; corrections: Corrections }) {
+export function ItemTexts({
+  texts,
+  source,
+  corrections,
+  editing = false,
+}: {
+  texts: TextValue[];
+  source?: SourceInfo;
+  corrections: Corrections;
+  editing?: boolean;
+}) {
   const [adding, setAdding] = useState<string | null>(null);
   // A facet's line as the site writes it is shown with the facet, not among the texts
   const facetLines = new Set((source?.facets ?? []).map((f) => f.original));
   const missing = (source?.texts ?? []).filter((t) => !texts.some((v) => v.key === t.key) && !facetLines.has(t.key));
   const added = missing.find((t) => t.key === adding);
+  const roleOf = (key: string) => source?.texts.find((t) => t.key === key)?.role;
+  const describing = texts.filter((t) => roleOf(t.key) === "DESCRIPTION");
+  const rest = texts.filter((t) => roleOf(t.key) !== "DESCRIPTION");
   return (
     <>
-      {texts.map((t, i) => (
-        <ItemText key={t.key} text={t} accent={i === 0 && texts.length > 2} corrections={corrections} />
+      {describing.map((t) => (
+        <ItemText key={t.key} text={t} folded={false} corrections={corrections} editing={editing} />
       ))}
-      {added && (
+      {rest.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {rest.map((t) => (
+            <ItemText key={t.key} text={t} folded corrections={corrections} editing={editing} />
+          ))}
+        </div>
+      )}
+      {editing && added && (
         <section>
           <h4 className="mb-1 text-sm font-semibold">{added.label}</h4>
           <FieldEditor
@@ -34,7 +59,7 @@ export function ItemTexts({ texts, source, corrections }: { texts: TextValue[]; 
           />
         </section>
       )}
-      {missing.length > 0 && !added && (
+      {editing && missing.length > 0 && !added && (
         <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
           {missing.map((t) => (
             <Button key={t.key} variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setAdding(t.key)}>
@@ -47,42 +72,53 @@ export function ItemTexts({ texts, source, corrections }: { texts: TextValue[]; 
   );
 }
 
-function ItemText({ text, accent, corrections }: { text: TextValue; accent: boolean; corrections: Corrections }) {
-  const [open, setOpen] = useState(!text.spoiler);
-  const [editing, setEditing] = useState(false);
+function ItemText({ text, folded, corrections, editing }: { text: TextValue; folded: boolean; corrections: Corrections; editing: boolean }) {
+  const [open, setOpen] = useState(!folded && !text.spoiler);
+  const [whole, setWhole] = useState(false);
+  const [editingText, setEditingText] = useState(false);
   const field = textField(text.key);
+  const foldable = folded || text.spoiler;
+  const long = text.content.length > LONG;
   return (
-    <section className={cn("group/text", accent && "rounded-lg border-l-4 border-primary/60 bg-muted/40 p-3")}>
-      <div className={cn("flex items-center gap-1", (open || editing) && "mb-1")}>
-        {text.spoiler ? (
-          <button className="inline-flex items-center gap-1 text-sm font-semibold hover:underline" onClick={() => setOpen(!open)}>
+    <section className="group/text">
+      <div className={cn("flex items-center gap-1", (open || editingText) && "mb-1")}>
+        {foldable ? (
+          <button className="inline-flex items-center gap-1 text-sm font-semibold hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
             <ChevronDownIcon className={open ? "size-4" : "size-4 -rotate-90"} />
             {text.label}
-            <span className="font-normal text-muted-foreground">· спойлер</span>
+            {text.spoiler && <span className="font-normal text-muted-foreground">· спойлер</span>}
           </button>
         ) : (
           <h4 className="text-sm font-semibold">{text.label}</h4>
         )}
         {text.corrected && <CorrectedMark />}
-        {!editing && (
+        {editing && !editingText && (
           <EditButton
-            onClick={() => setEditing(true)}
+            onClick={() => setEditingText(true)}
             title="Исправить текст"
             className="opacity-0 transition-opacity group-hover/text:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
           />
         )}
       </div>
-      {editing ? (
+      {editingText ? (
         <FieldEditor
           value={text.content}
           multiline
           corrected={text.corrected}
           onSave={(content) => corrections.setField(field, content)}
           onReset={() => corrections.resetField(field)}
-          onClose={() => setEditing(false)}
+          onClose={() => setEditingText(false)}
         />
       ) : (
-        open && <p className="text-sm leading-relaxed whitespace-pre-line text-foreground/90">{text.content}</p>
+        open && (
+          <p
+            className={cn("text-sm leading-relaxed whitespace-pre-line text-foreground/90", long && !whole && "line-clamp-6 cursor-pointer")}
+            onClick={() => long && setWhole(!whole)}
+            title={long && !whole ? "Показать целиком" : undefined}
+          >
+            {text.content}
+          </p>
+        )
       )}
     </section>
   );

@@ -1180,7 +1180,7 @@ components:
 
     SourceInfo:
       type: object
-      required: [id, title, homepage, modes, texts, facets, numbers, versioned, signals]
+      required: [id, title, homepage, modes, texts, facets, numbers, versioned, picturesTell, signals]
       properties:
         id:
           type: string
@@ -1210,11 +1210,32 @@ components:
           type: string
         versioned:
           type: boolean
+        picturesTell:
+          type: boolean
+          description: The pictures of a work tell what it is (a game's screenshots) and come before its texts
         signals:
           type: array
           description: The kinds of the user's own actions on the site, with the names to show
           items:
             $ref: '#/components/schemas/SignalInfo'
+
+    FacetRole:
+      type: string
+      description: |
+        What a facet tells of a work, for the card to put it where it decides: AUTHOR - who made it
+        (their other works are shown); SERIES - the series it is a part of (its other parts are
+        shown); STATUS - finished or not; FORM - a novel, an engine; CONTENT - genres, tags, fandom
+      enum: [AUTHOR, SERIES, STATUS, FORM, CONTENT]
+
+    NumberRole:
+      type: string
+      description: What a number tells of a work - SIZE how long it is, REACH how many saw it, APPROVAL how many liked it or how well they rate it
+      enum: [SIZE, REACH, APPROVAL]
+
+    TextRole:
+      type: string
+      description: What a text is - DESCRIPTION what the work is about, shown first; NOTES what the author adds, shown folded
+      enum: [DESCRIPTION, NOTES]
 
     SignalInfo:
       type: object
@@ -1261,6 +1282,8 @@ components:
         original:
           type: string
           description: The key of the text holding the facet's values as the site writes them
+        role:
+          $ref: '#/components/schemas/FacetRole'
 
     NumberInfo:
       type: object
@@ -1273,6 +1296,12 @@ components:
           type: string
         label:
           type: string
+        scale:
+          type: string
+          description: LOG - a count spread over orders of magnitude (views, likes); LINEAR - a number of a fixed range (a rating)
+          enum: [LOG, LINEAR]
+        role:
+          $ref: '#/components/schemas/NumberRole'
 
     TextInfo:
       type: object
@@ -1284,6 +1313,8 @@ components:
           type: string
         spoiler:
           type: boolean
+        role:
+          $ref: '#/components/schemas/TextRole'
 
     ItemView:
       type: string
@@ -1557,7 +1588,7 @@ components:
 
     ItemDetails:
       type: object
-      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh]
+      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh, related]
       properties:
         summary:
           $ref: '#/components/schemas/ItemSummary'
@@ -1578,9 +1609,9 @@ components:
             $ref: '#/components/schemas/NumberValue'
         explanation:
           type: array
-          description: Features that pushed the prediction most, strongest first
+          description: What moves the prediction, part by part - a facet, the pictures, a text - strongest first, each with every feature in it
           items:
-            $ref: '#/components/schemas/FeatureContribution'
+            $ref: '#/components/schemas/ContributionGroup'
         ratings:
           type: array
           description: The grades of every item of the work, newest first
@@ -1612,6 +1643,33 @@ components:
         canRefresh:
           type: boolean
           description: The source can download the item's page again
+        related:
+          type: array
+          description: The other works of its series, then of the people who made it (but those of the series), with the user's grades
+          items:
+            $ref: '#/components/schemas/RelatedWorks'
+
+    RelatedWorks:
+      type: object
+      required: [facet, label, role, value, name, items]
+      properties:
+        facet:
+          type: string
+          description: The facet's key within the source
+        label:
+          type: string
+        role:
+          $ref: '#/components/schemas/FacetRole'
+        value:
+          type: string
+        name:
+          type: string
+          description: The series or the author
+        items:
+          type: array
+          description: Its other works in the same source, by title
+          items:
+            $ref: '#/components/schemas/ItemSummary'
 
     MatchFeedbackRequest:
       type: object
@@ -1761,6 +1819,25 @@ components:
         ratedAt:
           type: string
           format: date-time
+
+    ContributionGroup:
+      type: object
+      required: [part, label, contribution, features]
+      properties:
+        part:
+          type: string
+          description: The part of the input switched off as a whole - "facet:<id>", a block, "part:pictures"
+        label:
+          type: string
+        contribution:
+          type: number
+          format: double
+          description: Points of the 0..10 scale the part moves the work, as a whole
+        features:
+          type: array
+          description: Every feature of the part, strongest first
+          items:
+            $ref: '#/components/schemas/FeatureContribution'
 
     FeatureContribution:
       type: object
@@ -2240,9 +2317,9 @@ components:
             $ref: '#/components/schemas/FacetSuggestions'
         explanation:
           type: array
-          description: What pushed the prediction most, strongest first
+          description: What moves the prediction, part by part, strongest first - the parts alone, without their features
           items:
-            $ref: '#/components/schemas/FeatureContribution'
+            $ref: '#/components/schemas/ContributionGroup'
         grades:
           type: array
           description: The labels of the grades 1..5 of the work's content type

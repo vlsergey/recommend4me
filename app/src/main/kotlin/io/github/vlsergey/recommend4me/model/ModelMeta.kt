@@ -7,6 +7,9 @@ package io.github.vlsergey.recommend4me.model
  */
 data class Contribution(val feature: String, val label: String, val contribution: Double, val present: Boolean = true)
 
+/** What a part of a work's input moves its score by as a whole — a facet, the pictures, a text — and every feature in it. */
+data class ContributionGroup(val part: String, val label: String, val contribution: Double, val features: List<Contribution>)
+
 /** Everything about a trained model but its scorer's state; kept as JSON beside it. */
 data class ModelMeta(
     val scorer: String,

@@ -7,12 +7,17 @@ import io.github.vlsergey.recommend4me.api.model.PartInfo
 import io.github.vlsergey.recommend4me.api.model.PictureInfo
 import io.github.vlsergey.recommend4me.api.model.PictureMatch
 import io.github.vlsergey.recommend4me.api.model.RatingRecord
+import io.github.vlsergey.recommend4me.api.model.RelatedWorks
+import io.github.vlsergey.recommend4me.api.model.FacetRole as ApiFacetRole
+import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.api.model.ReviewInfo
 import io.github.vlsergey.recommend4me.api.model.ReviewMatch
 import io.github.vlsergey.recommend4me.api.model.TextValue
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.mark.MarkKind
 import io.github.vlsergey.recommend4me.model.Contribution
+import io.github.vlsergey.recommend4me.model.ContributionGroup
+import io.github.vlsergey.recommend4me.api.model.ContributionGroup as ApiContributionGroup
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceMode
@@ -22,6 +27,9 @@ import org.springframework.stereotype.Component
 import java.time.ZoneOffset
 
 fun Contribution.toApi() = FeatureContribution(feature = feature, label = label, contribution = contribution, present = present)
+
+fun ContributionGroup.toApi(withFeatures: Boolean = true) =
+    ApiContributionGroup(part = part, label = label, contribution = contribution, features = if (withFeatures) features.map { it.toApi() } else emptyList())
 
 /** Everything the dialog of a work shows. */
 @Component
@@ -114,7 +122,45 @@ class ItemDetailsReader(
                 }
             },
             canRefresh = store.source.modes.any { it != SourceMode.BROWSER },
+            related = related(type, store, key, Corrected.facets(site, corrections), names),
         )
+    }
+
+    /**
+     * The other works of the series the work is a part of and of the people who made it — the
+     * facets of the roles SERIES and AUTHOR — in the same source, with the user's grades: how the
+     * user liked the volumes before tells most of a volume after. The series first; a work shown
+     * there is not shown again under its author.
+     */
+    private fun related(
+        type: io.github.vlsergey.recommend4me.source.TypeStore,
+        store: io.github.vlsergey.recommend4me.source.SourceStore,
+        key: ItemKey,
+        values: Map<String, List<String>>,
+        names: Map<String, Map<String, String>>,
+    ): List<RelatedWorks> {
+        // The series first: an author's works already shown as volumes are not shown again under the author
+        val roles = mapOf(FacetRole.SERIES to ApiFacetRole.SERIES, FacetRole.AUTHOR to ApiFacetRole.AUTHOR)
+        val defs = store.schema.facets.filter { it.role in roles }.sortedBy { if (it.role == FacetRole.SERIES) 0 else 1 }
+        if (defs.isEmpty()) return emptyList()
+        val corrections = store.corrections.allFacets()
+        val shown = HashSet<String>()
+        return defs.flatMap { def ->
+            val keys = values[def.key].orEmpty()
+            val bySite = store.items.itemsWith(def.key, keys)
+            val own = corrections.filter { it.facet == def.key && it.key in keys }
+            keys.mapNotNull { value ->
+                val removed = own.filter { it.key == value && !it.added }.map { it.itemId }.toSet()
+                val ids = (bySite[value].orEmpty() + own.filter { it.key == value && it.added }.map { it.itemId }).distinct()
+                    .filter { it != key.id && it !in removed && it !in shown }
+                if (ids.isEmpty()) return@mapNotNull null
+                shown += ids
+                val items = cards.cards(type, ids.map { ItemKey(store.id, it) }).sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                // A value the user added is named as they wrote it
+                val name = names[def.key]?.get(value) ?: own.firstNotNullOfOrNull { c -> c.name.takeIf { c.key == value && c.added } } ?: value
+                RelatedWorks(facet = def.key, label = def.label, role = roles.getValue(def.role!!), value = value, name = name, items = items)
+            }
+        }
     }
 
     /** The grades of every item of the work [key] is of, newest first. */

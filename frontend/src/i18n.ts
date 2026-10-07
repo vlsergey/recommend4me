@@ -71,6 +71,12 @@ export function formatDate(iso: string | undefined): string {
   });
 }
 
+/** "25.06.2019" — the day alone. */
+export function formatDay(iso: string | undefined): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 const RELATIVE = new Intl.RelativeTimeFormat("ru", { numeric: "auto" });
 
 /** "3 часа назад", "вчера" — how long ago something happened. */

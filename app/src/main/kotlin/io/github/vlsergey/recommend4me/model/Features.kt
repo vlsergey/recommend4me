@@ -107,11 +107,17 @@ class FeatureLayout(
     fun offsetOf(block: String): Int? = blockIndex[block]?.let { blockOffsets[it] }
 
     /** Writes the input into row [row] of [into]; the group [without] is left out (the average). */
-    fun write(input: ItemInput, into: Matrix, row: Int, without: FeatureGroup? = null) {
+    fun write(input: ItemInput, into: Matrix, row: Int, without: FeatureGroup? = null) = write(input, into, row, listOfNotNull(without))
+
+    /** Writes the input into row [row] of [into]; the groups [without] are left out (the average). */
+    fun write(input: ItemInput, into: Matrix, row: Int, without: Collection<FeatureGroup>) {
         val base = into.row(row)
         into.held.clear(base, width)
+        val vectorsOut = without.filterIsInstance<FeatureGroup.Vector>().map { it.block }.toSet()
+        val categoricalOut = without.filterIsInstance<FeatureGroup.Categorical>().map { it.feature }.toSet()
+        val numericOut = without.filterIsInstance<FeatureGroup.Numeric>().map { it.feature }.toSet()
         blocks.forEachIndexed { b, block ->
-            if (without is FeatureGroup.Vector && without.block == block) return@forEachIndexed
+            if (block in vectorsOut) return@forEachIndexed
             val v = input.vectors[block] ?: return@forEachIndexed
             val spread = spreads.getValue(block)
             if (v.size != spread.center.size) return@forEachIndexed
@@ -120,11 +126,11 @@ class FeatureLayout(
             for (k in 0 until dims[b]) into.held[at + k] = (v[k] - spread.center[k]) * scale
         }
         input.categorical.forEach { name ->
-            if (without is FeatureGroup.Categorical && without.feature == name) return@forEach
+            if (name in categoricalOut) return@forEach
             categoricalIndex[name]?.let { into.held[base + categoricalOffset + it] = 1f }
         }
         input.numeric.forEach { (name, v) ->
-            if (without is FeatureGroup.Numeric && without.feature == name) return@forEach
+            if (name in numericOut) return@forEach
             val i = numericIndex[name] ?: return@forEach
             val s = numbers.getValue(name)
             into.held[base + numericOffset + i] = (v - s.mean) / s.sd

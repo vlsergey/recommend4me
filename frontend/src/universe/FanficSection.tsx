@@ -114,6 +114,61 @@ export function FanficSection({
   );
 }
 
+/**
+ * The section to read: whether the work is fan fiction, of which universes, with which main
+ * characters and pairings — the names alone, a value the model gave marked "≈", nothing the user
+ * took away. What the model gave or suggests and the user has not answered on is counted in a
+ * line that opens the marking ([onMark]).
+ */
+export function FanficSummary({ source, details: d, onMark }: { source: SourceInfo; details: ItemDetails; onMark: () => void }) {
+  const ref = { source: d.summary.source, item: d.summary.item };
+  const suggestions = useSuggestions(ref, source);
+  const valuesOf = (key: string) => (d.allFacets.find((f) => f.facet === key)?.values ?? []).filter(has);
+  const kinds = valuesOf(KIND);
+  const original = kinds.length === 1 && kinds[0].key === ORIGINAL;
+  const suggestedUniverses = suggestions.data?.find((s) => s.facet === UNIVERSE)?.suggested ?? [];
+  // The model's word the user has not answered on: values it gave, values it suggests
+  const open =
+    FANFIC_FACETS.flatMap((f) => valuesOf(f)).filter((v) => v.inferred && !v.corrected).length +
+    (suggestions.data ?? []).filter((s) => FANFIC_FACETS.includes(s.facet)).reduce((n, s) => n + s.suggested.length, 0);
+
+  const line = (label: string, values: FacetValueInfo[]) =>
+    values.length > 0 && (
+      <div className="flex flex-col gap-1">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="flex flex-wrap gap-1">
+          {values.map((v) => (
+            <Badge key={v.key} variant="secondary" className="font-normal" title={v.inferred && !v.corrected ? "Вычислено моделью, вы не отвечали" : undefined}>
+              {v.inferred && !v.corrected && <span className="text-muted-foreground">≈</span>}
+              {v.name}
+            </Badge>
+          ))}
+        </div>
+      </div>
+    );
+
+  if (original) return <section className="text-sm text-muted-foreground">Оригинальное произведение</section>;
+  if (kinds.length === 0 && valuesOf(UNIVERSE).length === 0) return null;
+  return (
+    <section className="flex flex-col gap-2">
+      <h4 className="text-sm font-semibold">Фанфик</h4>
+      {line("Вселенная", valuesOf(UNIVERSE))}
+      {valuesOf(UNIVERSE).length === 0 && suggestedUniverses.length > 0 && (
+        <div className="text-sm text-muted-foreground">
+          Вселенная не выбрана; возможно: {suggestedUniverses.map((s) => `${s.name} (${percent(s.chance)})`).join(", ")}
+        </div>
+      )}
+      {line("Главные персонажи", valuesOf(CHARACTERS))}
+      {line("Пэйринги", valuesOf(PAIRINGS))}
+      {open > 0 && (
+        <Button variant="link" size="sm" className="h-auto self-start p-0 text-xs" onClick={onMark}>
+          Без вашего ответа: {open} — разобрать
+        </Button>
+      )}
+    </section>
+  );
+}
+
 /** A part of the section: its label, the site's line when there is one, then the rest. */
 function Block({ label, original, children }: { label: string; original?: string; children: ReactNode }) {
   return (

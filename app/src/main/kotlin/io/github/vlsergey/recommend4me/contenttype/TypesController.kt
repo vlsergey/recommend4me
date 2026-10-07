@@ -11,7 +11,10 @@ import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+import io.github.vlsergey.recommend4me.api.model.FacetRole as ApiFacetRole
+import io.github.vlsergey.recommend4me.api.model.NumberRole as ApiNumberRole
 import io.github.vlsergey.recommend4me.api.model.SourceMode as ApiSourceMode
+import io.github.vlsergey.recommend4me.api.model.TextRole as ApiTextRole
 
 /** The content types and what their sources know of their items: the interface is built of it. */
 @RestController
@@ -33,10 +36,21 @@ class TypesController(private val stores: Stores) : TypesApi {
                     title = s.title,
                     homepage = s.homepage,
                     modes = s.modes.map { ApiSourceMode.valueOf(it.name) },
-                    texts = schema.texts.map { TextInfo(it.key, it.label, it.spoiler) },
-                    facets = schema.facets.map { FacetInfo(FeatureNames.facetId(s, it), it.key, it.label, it.filter, it.onCard, it.suggest, it.infer, it.original) },
-                    numbers = schema.numbers.map { NumberInfo(FeatureNames.numberId(s, it), it.key, it.label) },
+                    texts = schema.texts.map { TextInfo(it.key, it.label, it.spoiler, it.role?.let { r -> ApiTextRole.valueOf(r.name) }) },
+                    facets = schema.facets.map {
+                        FacetInfo(
+                            FeatureNames.facetId(s, it), it.key, it.label, it.filter, it.onCard, it.suggest, it.infer, it.original,
+                            it.role?.let { r -> ApiFacetRole.valueOf(r.name) },
+                        )
+                    },
+                    numbers = schema.numbers.map {
+                        NumberInfo(
+                            FeatureNames.numberId(s, it), it.key, it.label, NumberInfo.Scale.valueOf(it.scale.name),
+                            it.role?.let { r -> ApiNumberRole.valueOf(r.name) },
+                        )
+                    },
                     versioned = schema.versioned,
+                    picturesTell = schema.picturesTell,
                     reviewsLabel = schema.reviewsLabel,
                     partsLabel = schema.partsLabel,
                     signals = s.signals.map { SignalInfo(it.key, it.label, it.values) },

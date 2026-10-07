@@ -77,6 +77,33 @@ object FeatureNames {
         }
     }
 
+    /** The parts an explanation switches off as a whole besides the facets and single blocks. */
+    const val SIGNALS = "part:signals"
+    const val PREVIOUS = "part:previous"
+    const val SOURCE = "part:source"
+    const val PICTURES = "part:pictures"
+    const val REVIEWS = "part:reviews"
+
+    /**
+     * What the user is shown of a part of an explanation: the facet's label for "facet:<id>",
+     * a name for the joined parts, the feature's own label for a single block.
+     */
+    fun partLabels(parts: Collection<String>, sources: List<SourceStore>): Map<String, String> {
+        val facetLabels = HashMap<String, String>()
+        sources.forEach { s -> s.schema.facets.forEach { facetLabels.putIfAbsent("facet:" + facetId(s.source, it), it.label) } }
+        val single = labels(parts.filter { !it.startsWith("facet:") && !it.startsWith("part:") }, sources)
+        return parts.associateWith { part ->
+            facetLabels[part] ?: when (part) {
+                SIGNALS -> "Моё на сайте"
+                PREVIOUS -> "Оценка прошлой версии"
+                SOURCE -> "Источник"
+                PICTURES -> "Обложка и картинки"
+                REVIEWS -> "Отзывы"
+                else -> single[part] ?: part
+            }
+        }
+    }
+
     private val BLOCKS = mapOf(
         PictureRepository.COVER to "Обложка",
         PictureRepository.SCREENS to "Скриншоты в среднем",

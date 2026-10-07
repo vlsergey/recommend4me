@@ -84,7 +84,8 @@ class PagesController(
             summary = summary,
             facets = cards.facets(store, site, chances, corrections, names, texts, empty = true) { it in wanted },
             suggestions = suggested,
-            explanation = recommendations.explanation(key).take(EXPLAINED).map { it.toApi() },
+            // The parts alone: a page shows what moves the work, the dialog every feature
+            explanation = recommendations.explanation(key).map { it.toApi(withFeatures = false) },
             grades = type.type.grades,
             pictures = store.pictures.ofItem(itemId, plugins.imageEncoder()?.id).map { p ->
                 PagePicture(p.position, p.url, pictureMarks.firstOrNull { it.position == p.position && it.url == p.url }?.mark)
@@ -110,9 +111,6 @@ class PagesController(
     }
 
     companion object {
-        /** The lines of the explanation a page shows. */
-        private const val EXPLAINED = 8
-
         private fun hostOf(url: String): String? = runCatching { URI(url).host?.removePrefix("www.") }.getOrNull()
 
         private fun PageDecor.toApi() = PageDecorInfo(

@@ -20,6 +20,11 @@ class SourceSchema(
      * application works out of it ([UniverseFacets][io.github.vlsergey.recommend4me.universe.UniverseFacets]).
      */
     val universeLine: String? = null,
+    /**
+     * The pictures of a work tell what it is — a game's screenshots — and are shown before its
+     * texts; otherwise its cover is a picture beside them (a book's).
+     */
+    val picturesTell: Boolean = false,
 ) {
     fun facet(key: String): FacetDef? = facets.firstOrNull { it.key == key }
     fun number(key: String): NumberDef? = numbers.firstOrNull { it.key == key }
@@ -66,7 +71,51 @@ class FacetDef(
     val infer: Boolean = false,
     /** The key of a text ([TextDef]) holding the facet's values as the site writes them: shown above the worked out values, and read by the suggester. */
     val original: String? = null,
+    /** What the facet tells of the work, for the card to put it where it decides; null — one among the rest. */
+    val role: FacetRole? = null,
 )
+
+/**
+ * What a facet tells of a work. The card of a work is the same for every source: the facts that
+ * decide whether to read or play it first, the rest on demand — and a role says which are which.
+ */
+enum class FacetRole {
+    /** Who made the work: the author, the developer — their other works are shown with the user's grades. */
+    AUTHOR,
+
+    /** The series the work is a part of — its other parts are shown with the user's grades. */
+    SERIES,
+
+    /** Whether the work is finished, still written, abandoned. */
+    STATUS,
+
+    /** What the work is made as or in: a novel, a story; an engine. */
+    FORM,
+
+    /** What is in the work: the genres, the tags, the fandom — the facts the user decides by. */
+    CONTENT,
+}
+
+/** What a number tells of a work, for the card to put it where it decides. */
+enum class NumberRole {
+    /** How long the work is: its characters, its words. */
+    SIZE,
+
+    /** How many people saw it: the views. */
+    REACH,
+
+    /** How many people liked it, or how well they rate it. */
+    APPROVAL,
+}
+
+/** What a text of a work is, for the card to put it where it decides. */
+enum class TextRole {
+    /** What the work is about: the annotation, the overview — shown first. */
+    DESCRIPTION,
+
+    /** What the author adds: the notes, the dedication — shown folded. */
+    NOTES,
+}
 
 /** How the model reads a number. */
 enum class NumberScale {
@@ -85,6 +134,8 @@ class NumberDef(
     /** The list can be sorted by it. */
     val sortable: Boolean = false,
     val shared: String? = null,
+    /** What the number tells of the work, for the card to put it where it decides; null — one among the rest. */
+    val role: NumberRole? = null,
 )
 
 /**
@@ -103,6 +154,8 @@ class TextDef(
     val searchByMeaning: Boolean = block != null,
     /** Hidden under a spoiler in the interface until opened. */
     val spoiler: Boolean = false,
+    /** What the text is, for the card to put it where it decides; null — a detail, shown folded. */
+    val role: TextRole? = null,
 )
 
 /**

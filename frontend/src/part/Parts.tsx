@@ -3,24 +3,37 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpenTextIcon, ChevronDownIcon, Loader2Icon } from "lucide-react";
 import { api, unwrap, type ItemRef, type PartInfo } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/i18n";
+import { formatDate, formatDay } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 const FIRST_SHOWN = 20;
 
-/** The parts of the work — chapters — in order; one whose text is kept opens it in place. */
+/**
+ * The parts of the work — chapters — as one line: how many, from when to when, how many of them
+ * read (their text kept); opened, the list in order, and a part whose text is kept opens it in place.
+ */
 export function Parts({ item, label, parts }: { item: ItemRef; label: string; parts: PartInfo[] }) {
+  const [listed, setListed] = useState(false);
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   if (parts.length === 0) return null;
   const sorted = [...parts].sort((a, b) => a.position - b.position);
   const shown = all ? sorted : sorted.slice(0, FIRST_SHOWN);
+  const dates = sorted.map((p) => p.publishedAt).filter((d): d is string => d !== undefined).sort();
+  const read = parts.filter((p) => p.hasText).length;
   return (
     <section>
-      <h4 className="mb-1 text-sm font-semibold">
-        {label} <span className="font-normal text-muted-foreground">{parts.length}</span>
-      </h4>
-      <ol className="flex flex-col divide-y rounded-lg border">
+      <button className="inline-flex flex-wrap items-center gap-x-1 text-left text-sm hover:underline" onClick={() => setListed(!listed)} aria-expanded={listed}>
+        <ChevronDownIcon className={cn("size-4 shrink-0", !listed && "-rotate-90")} />
+        <span className="font-semibold">{label}</span>
+        <span className="text-muted-foreground">
+          {parts.length}
+          {dates.length > 0 && ` · ${formatDay(dates[0])} — ${formatDay(dates[dates.length - 1])}`}
+          {` · текст сохранён у ${read}`}
+        </span>
+      </button>
+      {listed && (
+      <ol className="mt-1 flex flex-col divide-y rounded-lg border">
         {shown.map((p) => (
           <li key={p.partId} className="text-sm">
             <button
@@ -38,7 +51,8 @@ export function Parts({ item, label, parts }: { item: ItemRef; label: string; pa
           </li>
         ))}
       </ol>
-      {sorted.length > shown.length && (
+      )}
+      {listed && sorted.length > shown.length && (
         <Button variant="ghost" size="sm" className="mt-1" onClick={() => setAll(true)}>
           Ещё {sorted.length - shown.length}
         </Button>
