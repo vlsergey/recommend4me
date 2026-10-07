@@ -371,6 +371,7 @@ function Characters({
         byKey.set(key, {
           key,
           name: c.names[0] ?? c.character,
+          description: c.description ?? undefined,
           names: c.names.length > 0 ? c.names : [c.character],
           universes: [u.name],
           taken: taken(key),
@@ -494,10 +495,10 @@ function Pairings({
 }
 
 /**
- * A value to pick: its key, its name, a mark after it (the model's chance, the mentions), a note
- * under it, every name it is found by, and whether the work has it already.
+ * A value to pick: its key, its name, a mark after it (the model's chance, the mentions), what the
+ * catalogue says it is and a note under it, every name it is found by, and whether the work has it already.
  */
-type Option = { key: string; name: string; mark?: string; note?: string; names: string[]; taken: boolean };
+type Option = { key: string; name: string; mark?: string; description?: string; note?: string; names: string[]; taken: boolean };
 
 /** "упоминается 3 раза" — how often the work's texts name a candidate; nothing when they were not counted. */
 function mentionsText(c: Candidate): string | undefined {
@@ -637,6 +638,7 @@ function Picker({
                   {o.mark && <span className="ml-1 text-xs font-normal text-muted-foreground tabular-nums">{o.mark}</span>}
                   {o.taken &&<span className="ml-1 text-xs font-normal text-muted-foreground">· уже у работы</span>}
                 </span>
+                {o.description && <span className="text-xs font-normal">{o.description}</span>}
                 {o.note && <span className="text-xs font-normal text-muted-foreground">{o.note}</span>}
               </AsyncButton>
             </li>
