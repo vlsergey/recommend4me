@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemSummary, type RatingRecord, type SourceInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
@@ -102,20 +103,23 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }
     <Dialog open={summary !== undefined} onOpenChange={(open) => !open && onIndex(null)}>
       <DialogContent className="flex h-[92vh] max-w-6xl flex-col gap-0 overflow-hidden p-0">
         {summary && index !== null && of && (
-          <Shell
-            // A new work is a new dialog: the editors of the last one do not stay open
-            key={`${summary.source}/${summary.item}`}
-            type={of.type}
-            source={of.source}
-            summary={summary}
-            index={index}
-            count={items.length}
-            total={total}
-            onIndex={onIndex}
-            onRate={rate}
-            marking={marking}
-            onMarking={setMarking}
-          />
+          // A work that fails to draw says so in the dialog, and the next one is drawn anew
+          <ErrorBoundary resetKey={`${summary.source}/${summary.item}`} title="Карточка работы не открылась">
+            <Shell
+              // A new work is a new dialog: the editors of the last one do not stay open
+              key={`${summary.source}/${summary.item}`}
+              type={of.type}
+              source={of.source}
+              summary={summary}
+              index={index}
+              count={items.length}
+              total={total}
+              onIndex={onIndex}
+              onRate={rate}
+              marking={marking}
+              onMarking={setMarking}
+            />
+          </ErrorBoundary>
         )}
       </DialogContent>
     </Dialog>

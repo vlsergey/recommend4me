@@ -31,7 +31,7 @@ export function Reviews({
   const [all, setAll] = useState(false);
   if (reviews.length === 0) return null;
   const shown = all ? reviews : reviews.slice(0, FIRST_SHOWN);
-  const moving = reviews.some((r) => r.influence !== undefined);
+  const moving = reviews.some((r) => r.influence != null);
   return (
     <section>
       <h4 className="mb-1 text-sm font-semibold">
@@ -83,14 +83,14 @@ function ReviewCard({ item, review, marking }: { item: ItemRef; review: ReviewIn
       )}
     >
       <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-        {review.stars !== undefined && (
+        {review.stars != null && (
           <span className="inline-flex items-center gap-0.5 text-foreground">
             <StarIcon className="size-3 fill-current" /> {review.stars.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}
           </span>
         )}
         {review.author && <span className="truncate">{review.author}</span>}
         {review.postedAt && <span>{formatDate(review.postedAt)}</span>}
-        {influence !== undefined && (
+        {influence != null && (
           <InfluenceBadge
             influence={influence}
             className="ml-auto shadow-none"
@@ -103,7 +103,7 @@ function ReviewCard({ item, review, marking }: { item: ItemRef; review: ReviewIn
             onMark={mark}
             className={cn(
               "[&_button]:bg-muted [&_button]:text-foreground [&_button:hover]:bg-muted-foreground/20",
-              influence === undefined && "ml-auto",
+              influence == null && "ml-auto",
             )}
           />
         )}
