@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.setvector
 
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -95,7 +96,8 @@ class SetEmbedding(val center: FloatArray, val directions: List<FloatArray>, val
 
         /**
          * The first [count] principal components of [sample] by orthogonal iteration on its
-         * covariance — a d × d product by OpenBLAS, then [ITERATIONS] products by the components.
+         * covariance — a d × d product by OpenBLAS, then products by the components for as long as
+         * they come nearer to where they settle: until a step moves them no less than the one before.
          */
         fun fit(sample: List<FloatArray>, count: Int): SetEmbedding {
             val d = sample.first().size
@@ -114,11 +116,25 @@ class SetEmbedding(val center: FloatArray, val directions: List<FloatArray>, val
             orthonormalise(q)
             val qs = Floats(d * count)
             val cq = Floats(d * count)
-            repeat(ITERATIONS) {
+            // A step's move: the largest change of a component, its sign as the previous one's (a
+            // component and its negation are the same direction). The iteration stops once a step
+            // moves the components no less than the step before: they are where the floats can take them
+            var moved = Double.MAX_VALUE
+            while (true) {
                 for (s in 0 until count) for (k in 0 until d) qs[k * count + s] = q[s][k].toFloat()
                 Blas.product(covariance, d, d, d, qs, count, cq)
-                q = Array(count) { s -> DoubleArray(d) { k -> cq[k * count + s].toDouble() } }
-                orthonormalise(q)
+                val next = Array(count) { s -> DoubleArray(d) { k -> cq[k * count + s].toDouble() } }
+                orthonormalise(next)
+                var move = 0.0
+                for (s in 0 until count) {
+                    var dot = 0.0
+                    for (k in 0 until d) dot += next[s][k] * q[s][k]
+                    val sign = if (dot < 0) -1.0 else 1.0
+                    for (k in 0 until d) move = max(move, abs(next[s][k] - sign * q[s][k]))
+                }
+                q = next
+                if (move >= moved) break
+                moved = move
             }
             // The spread along each: √(qᵀCq / n)
             for (s in 0 until count) for (k in 0 until d) qs[k * count + s] = q[s][k].toFloat()
@@ -146,6 +162,5 @@ class SetEmbedding(val center: FloatArray, val directions: List<FloatArray>, val
             }
         }
 
-        private const val ITERATIONS = 40
     }
 }

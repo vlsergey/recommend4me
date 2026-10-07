@@ -152,15 +152,29 @@ class SetVectors(
     }
 
     /** The directions of a kind in use, fitted now when there are none of [encoder] and enough of a catalogue to fit them on. */
+    /**
+     * The directions of the kind of sets, fitted on what the catalogue has: on every member while
+     * it has no more than [SAMPLE], else on that many drawn at random. Fitted again whenever that
+     * number changes — the catalogue grew — and then every item's set is made again by them. None
+     * while the catalogue has fewer than two members: one has no spread to find a direction in.
+     */
     private fun embeddingOf(type: TypeStore, kind: SetKind, encoder: String): StoredEmbedding? {
-        type.embeddings.find(kind)?.takeIf { it.encoder == encoder }?.let { return it }
-        val sample = type.sources.flatMap { sample(it, kind, encoder, SAMPLE / type.sources.size) }
-        if (sample.size < MIN_SAMPLE) return null
-        val embedding = SetEmbedding.fit(sample, SetEmbedding.DIRECTIONS)
+        val have = type.sources.associateWith { s -> sizes(s, kind, encoder).values.sum() }
+        val total = have.values.sum()
+        val members = minOf(total, SAMPLE)
+        val stored = type.embeddings.find(kind)?.takeIf { it.encoder == encoder }
+        // Directions fitted before the number was kept were fitted on a full sample: still so while the catalogue fills one
+        val fittedOn = stored?.members ?: if (stored != null && total >= SAMPLE) SAMPLE else null
+        if (stored != null && fittedOn == members) return stored
+        if (members < 2) return stored
+        // Every source gives its share of the sample, all it has while the catalogue is within it
+        val sample = have.filterValues { it > 0 }.flatMap { (s, n) -> sample(s, kind, encoder, if (total <= SAMPLE) n else (SAMPLE.toLong() * n / total).toInt()) }
+        if (sample.size < 2) return stored
+        val embedding = SetEmbedding.fit(sample, minOf(SetEmbedding.DIRECTIONS, sample.size - 1))
         val id = Vectors.keyOf("${type.id}:${kind.name}:$encoder:${System.nanoTime()}")
-        type.embeddings.save(kind, id, encoder, embedding, Instant.now())
-        log.info("{}: directions of {} fitted on {} members", type.id, kind.key, sample.size)
-        return StoredEmbedding(id, encoder, embedding)
+        type.embeddings.save(kind, id, encoder, embedding, members, Instant.now())
+        log.info("{}: {} directions of {} fitted on {} members", type.id, embedding.directions.size, kind.key, sample.size)
+        return StoredEmbedding(id, encoder, embedding, members)
     }
 
     @PreDestroy
@@ -170,8 +184,8 @@ class SetVectors(
     }
 
     companion object {
+        /** The members of the catalogue held at once to fit directions on: memory, not meaning. */
         private const val SAMPLE = 20_000
-        private const val MIN_SAMPLE = 2_000
         private const val CHUNK = 200
         private const val ANNOUNCE_EVERY = 2_000
         private val ANNOUNCE_AFTER: Duration = Duration.ofMinutes(5)
