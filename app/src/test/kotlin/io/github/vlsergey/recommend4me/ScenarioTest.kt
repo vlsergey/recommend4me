@@ -12,7 +12,6 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
-import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemSort
 import io.github.vlsergey.recommend4me.api.model.ItemView
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
@@ -22,10 +21,12 @@ import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.item.ItemsController
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.springframework.web.server.ResponseStatusException
 import java.io.File
 import java.time.Instant
 import kotlin.test.assertEquals
@@ -110,10 +111,9 @@ class ScenarioTest {
         assertEquals(1, list(view = ItemView.RATED).total)
         assertEquals(2, list(view = ItemView.UNRATED).total)
 
-        // A tag the user adds is filtered by like the site's
-        val corrected = corrections.correctFacet("test", "w2", FacetCorrection(facet = "tag", added = true, key = "fantasy")).body!!
-        assertEquals(FacetValueInfo.Corrected.ADDED, corrected.allFacets.single().propertyValues.single { it.key == "fantasy" }.corrected)
-        assertEquals(3, list(hidden = listOf("test.tag=romance")).total)
+        // The site's tags are its word, not corrected; the list is filtered by them
+        assertThrows<ResponseStatusException> { corrections.correctFacet("test", "w2", FacetCorrection(facet = "tag", added = true, key = "fantasy")) }
+        assertEquals(2, list(hidden = listOf("test.tag=romance")).total)
         val notFantasy = list(hidden = listOf("test.tag=fantasy", "test.tag=dragons"))
         assertEquals(listOf("w2"), notFantasy.items.map { it.item })
 

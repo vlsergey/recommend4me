@@ -77,6 +77,19 @@ class FacetDef(
     val role: FacetRole? = null,
     /** The standard facet of the content type this one is ([StandardFacet.asFacet]); null — the source's own. */
     val standard: StandardFacet? = null,
+    /**
+     * The facet is of the application's layer over the sources — the standard values worked out for
+     * every work, the universe, the characters — and its values are corrected: the user's answers
+     * are a patch of the source, whoever reads it. A facet of the site is the site's word as it is:
+     * shown, read by the model, never corrected.
+     */
+    val editable: Boolean = false,
+    /**
+     * The key of a facet of the site whose values are this one's examples, matched by their names —
+     * the site's tags of the standard tags: the model learns from them, a value the site has raises
+     * the chance of the work's, one it lacks says little ([SuggestionTask.lackWeight][io.github.vlsergey.recommend4me.suggestion.SuggestionTask.lackWeight]).
+     */
+    val examplesFrom: String? = null,
 )
 
 /**

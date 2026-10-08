@@ -65,9 +65,10 @@ class AuthorToday : Source {
     /**
      * 2: whether a work is fan fiction, by its genres. 3: the standard statuses; the shelf of the
      * finished as the standard "read". 4: the shelf as the standard one. 5: the pages that failed
-     * when several pages of one work were read at once read again.
+     * when several pages of one work were read at once read again. 6: the alternative history as a
+     * kind of its own, the erotic fan fiction as fan fiction.
      */
-    override val parserVersion = 5
+    override val parserVersion = 6
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 
@@ -92,10 +93,8 @@ class AuthorToday : Source {
     override val pageDecor = PageDecor(
         // After the whole card of the book: within it the columns are laid out by hand
         panelAfter = ".book-panel",
-        facets = listOf(
-            FacetDecor(TAG, ".book-meta-panel .tags a"),
-            FacetDecor(GENRE, ".book-meta-panel .book-genres a[href^='/work/genre/']"),
-        ),
+        // The site's tags and genres are its word, never answered on: the work's tags after them
+        facets = listOf(FacetDecor(Books.TAGS.key, after = ".book-meta-panel .tags")),
         reviews = ReviewDecor("article.post[id^='post_']", idPrefix = "post_"),
         pictures = PictureDecor(".book-cover img.cover-image"),
         cards = CardDecor(".book-row", ".book-title a[href^='/work/']"),

@@ -27,13 +27,21 @@ const PAIRINGS = "pairings";
 export const FANFIC_FACETS: readonly string[] = [KIND, UNIVERSE, CHARACTERS, PAIRINGS];
 
 const FANFICTION = "fanfiction";
+const ALTERNATIVE_HISTORY = "alternative-history";
 const ORIGINAL = "original";
 
-/** The two kinds of a work, as the control names them. */
+/** The kinds of a work, as the control names them. */
 const KINDS = [
   { key: FANFICTION, name: "Фанфик" },
+  { key: ALTERNATIVE_HISTORY, name: "Альтернативная история" },
   { key: ORIGINAL, name: "Оригинал" },
 ];
+
+/** The kinds of a work of no universe of another's: our world, or a world of its own. */
+const UNIVERSELESS: readonly string[] = [ALTERNATIVE_HISTORY, ORIGINAL];
+
+/** Known to have no universe: every kind the work has, the user's answers counted, is of no universe. */
+const universeless = (kinds: FacetValueInfo[]) => kinds.length > 0 && kinds.every((k) => UNIVERSELESS.includes(k.key));
 
 /** The original characters, of no universe: every work may have them besides its universes' characters. */
 const ORIGINAL_CHARACTERS = [
@@ -76,14 +84,17 @@ export function FanficSection({
   const suggestedOf = (key: string) => suggestions.data?.find((s) => s.facet === key)?.suggested ?? [];
   const labelOf = (key: string, fallback: string) => facetOf(key)?.label ?? source.facets.find((f) => f.key === key)?.label ?? fallback;
 
-  const kinds = valuesOf(KIND).filter(has);
-  // Known to be original: of the kinds exactly "original" stays, the user's answers counted
-  const original = kinds.length === 1 && kinds[0].key === ORIGINAL;
+  const original = universeless(valuesOf(KIND).filter(has));
 
   return (
     <section className="flex flex-col gap-4">
       <h4 className="text-sm font-semibold">Фанфик</h4>
-      <KindChoice label={labelOf(KIND, "Фанфик или оригинал")} values={valuesOf(KIND)} suggested={suggestedOf(KIND)} corrections={corrections} />
+      <KindChoice
+        label={labelOf(KIND, "Фанфик, альтернативная история или оригинал")}
+        values={valuesOf(KIND)}
+        suggested={suggestedOf(KIND)}
+        corrections={corrections}
+      />
       {!original && (
         <Universes
           type={type}
@@ -125,8 +136,7 @@ export function FanficSummary({ source, details: d, onMark }: { source: SourceIn
   const suggestions = useSuggestions(ref, source);
   const valuesOf = (key: string) => (d.allFacets.find((f) => f.facet === key)?.values ?? []).filter(has);
   const kinds = valuesOf(KIND);
-  const original = kinds.length === 1 && kinds[0].key === ORIGINAL;
-  const suggestedUniverses = suggestions.data?.find((s) => s.facet === UNIVERSE)?.suggested ?? [];
+  const original = universeless(kinds);
   // The model's word the user has not answered on: values it gave, values it suggests
   const open =
     FANFIC_FACETS.flatMap((f) => valuesOf(f)).filter((v) => v.inferred && !v.corrected).length +
@@ -147,17 +157,14 @@ export function FanficSummary({ source, details: d, onMark }: { source: SourceIn
       </div>
     );
 
-  if (original) return <section className="text-sm text-muted-foreground">Оригинальное произведение</section>;
+  if (original) {
+    return <section className="text-sm text-muted-foreground">{kinds.map((k) => KINDS.find((x) => x.key === k.key)?.name ?? k.name).join(", ")}</section>;
+  }
   if (kinds.length === 0 && valuesOf(UNIVERSE).length === 0) return null;
   return (
     <section className="flex flex-col gap-2">
       <h4 className="text-sm font-semibold">Фанфик</h4>
       {line("Вселенная", valuesOf(UNIVERSE))}
-      {valuesOf(UNIVERSE).length === 0 && suggestedUniverses.length > 0 && (
-        <div className="text-sm text-muted-foreground">
-          Вселенная не выбрана; возможно: {suggestedUniverses.map((s) => `${s.name} (${percent(s.chance)})`).join(", ")}
-        </div>
-      )}
       {line("Главные персонажи", valuesOf(CHARACTERS))}
       {line("Пэйринги", valuesOf(PAIRINGS))}
       {open > 0 && (
@@ -196,10 +203,10 @@ function Chips({ facet, values, suggested = [], corrections }: { facet: string; 
 }
 
 /**
- * Fan fiction or an original work: two buttons, the one the user chose pressed. Each shows what
- * the site or the model says of it — "≈" when the model gave it, its chance — and a suggested
- * kind its chance dashed. Choosing a kind confirms it and says no to the other when the work has
- * it; pressing the chosen one again takes the answers back.
+ * Fan fiction, an alternative history or an original work: a button each, the one the user chose
+ * pressed. Each shows what the site or the model says of it — "≈" when the model gave it, its
+ * chance — and a suggested kind its chance dashed. Choosing a kind confirms it and says no to the
+ * others the work has; pressing the chosen one again takes the answers back.
  */
 function KindChoice({
   label,
@@ -215,17 +222,19 @@ function KindChoice({
   const valueOf = (key: string) => values.find((v) => v.key === key);
 
   const choose = async (key: string) => {
-    const other = KINDS.find((k) => k.key !== key)!.key;
-    const theirs = valueOf(other);
+    const others = KINDS.filter((k) => k.key !== key).map((k) => k.key);
     if (answeredYes(valueOf(key))) {
       await corrections.resetFacet(KIND, key);
-      if (theirs?.corrected === "REMOVED") await corrections.resetFacet(KIND, other);
+      for (const other of others) if (valueOf(other)?.corrected === "REMOVED") await corrections.resetFacet(KIND, other);
       return;
     }
     await corrections.setFacet(KIND, { key }, true);
     // A kind only the user gave is taken back; one the site or the model gave is answered no
-    if (theirs?.corrected === "ADDED") await corrections.resetFacet(KIND, other);
-    else if (theirs && has(theirs)) await corrections.setFacet(KIND, { key: other }, false);
+    for (const other of others) {
+      const theirs = valueOf(other);
+      if (theirs?.corrected === "ADDED") await corrections.resetFacet(KIND, other);
+      else if (theirs && has(theirs)) await corrections.setFacet(KIND, { key: other }, false);
+    }
   };
 
   // What the site and the model say, the user's answers aside: every value but one the user added
@@ -234,7 +243,7 @@ function KindChoice({
 
   return (
     <Block label={label}>
-      <div className="grid grid-cols-2 gap-1" role="group" aria-label={label}>
+      <div className="grid grid-cols-3 gap-1" role="group" aria-label={label}>
         {KINDS.map((k) => {
           const v = valueOf(k.key);
           const s = suggested.find((x) => x.key === k.key);

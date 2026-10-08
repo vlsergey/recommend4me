@@ -24,14 +24,15 @@ import kotlin.math.ln1p
  * witnesses are asked anew of the catalogue at every scoring.
  *
  * A WORK IS JUDGED BY THE VIEWS IT HAS. Works differ in the views of their texts — one has its
- * chapters read, another has no line of the values on the site — and weights learnt where a view
- * is always there say nothing of a work without it. So the weights are learnt for every set of
+ * chapters read, another has no line of the values on the site — and in the values of their other
+ * facets — one the site tagged, another not — and weights learnt where a view is always there say
+ * nothing of a work without it. So the weights are learnt for every set of
  * views the works have, each from every work as if it had only that set (and for none, the values
  * alone); a work is judged by the weights of its own set.
  */
 class TagSuggester : FacetSuggester {
     /** With the version of the witnesses: weights fitted on other witnesses are fitted again. */
-    override val id = "tag-witnesses-4"
+    override val id = "tag-witnesses-6"
 
     override fun fit(task: SuggestionTask): FittedSuggester? {
         val positives = task.assigned.sumOf { it.distinct().size }.toLong()
@@ -104,7 +105,8 @@ internal object Logistic {
     }
 
     /**
-     * [examples] calls its argument with every example: its features and whether it is positive.
+     * [examples] calls its argument with every example: its features, whether it is positive and
+     * how much it weighs — its share in the likelihood, as if it were that many examples.
      *
      * THE WEIGHTS OF FIRTH'S PENALISED LIKELIHOOD — the likelihood times the Jeffreys prior,
      * det(I)^½ of the Fisher information: they stay finite when a feature tells the examples
@@ -112,7 +114,7 @@ internal object Logistic {
      * A feature that is zero in every example, or repeats others, has no information of its own
      * and keeps its weight of zero.
      */
-    fun fit(features: Int, examples: ((FloatArray, Boolean) -> Unit) -> Unit): DoubleArray {
+    fun fit(features: Int, examples: ((FloatArray, Boolean, Double) -> Unit) -> Unit): DoubleArray {
         var w = DoubleArray(features)
         var at = information(features, w, examples)
         var step = DoubleArray(features)
@@ -145,17 +147,17 @@ internal object Logistic {
     /** The penalised loss at the weights [w], and the inverse of the Fisher information there. */
     private class Information(val loss: Double, val inverse: Array<DoubleArray>)
 
-    private fun information(features: Int, w: DoubleArray, examples: ((FloatArray, Boolean) -> Unit) -> Unit): Information {
+    private fun information(features: Int, w: DoubleArray, examples: ((FloatArray, Boolean, Double) -> Unit) -> Unit): Information {
         val h = Array(features) { DoubleArray(features) }
         var loss = 0.0
-        examples { x, positive ->
+        examples { x, positive, weight ->
             var z = 0.0
             for (k in 0 until features) z += w[k] * x[k]
             val p = 1.0 / (1.0 + exp(-z))
             // -log of the chance of what the example is, without overflow either way
             val margin = if (positive) z else -z
-            loss += if (margin > 0) ln1p(exp(-margin)) else -margin + ln1p(exp(margin))
-            val c = p * (1 - p)
+            loss += weight * (if (margin > 0) ln1p(exp(-margin)) else -margin + ln1p(exp(margin)))
+            val c = weight * p * (1 - p)
             for (a in 0 until features) {
                 if (x[a] == 0f) continue
                 for (b in 0..a) h[a][b] += c * x[a] * x[b]
@@ -167,9 +169,9 @@ internal object Logistic {
     }
 
     /** Firth's step from [w]: the information's inverse times the score with every example's leverage h given half to each side. */
-    private fun firthStep(features: Int, w: DoubleArray, inverse: Array<DoubleArray>, examples: ((FloatArray, Boolean) -> Unit) -> Unit): DoubleArray {
+    private fun firthStep(features: Int, w: DoubleArray, inverse: Array<DoubleArray>, examples: ((FloatArray, Boolean, Double) -> Unit) -> Unit): DoubleArray {
         val score = DoubleArray(features)
-        examples { x, positive ->
+        examples { x, positive, weight ->
             var z = 0.0
             for (k in 0 until features) z += w[k] * x[k]
             val p = 1.0 / (1.0 + exp(-z))
@@ -180,8 +182,8 @@ internal object Logistic {
                 for (b in 0 until features) row += inverse[a][b] * x[b]
                 quadratic += x[a] * row
             }
-            val leverage = p * (1 - p) * quadratic
-            val e = (if (positive) 1.0 else 0.0) - p + leverage * (0.5 - p)
+            val leverage = weight * p * (1 - p) * quadratic
+            val e = weight * ((if (positive) 1.0 else 0.0) - p) + leverage * (0.5 - p)
             for (a in 0 until features) score[a] += e * x[a]
         }
         return DoubleArray(features) { a -> (0 until features).sumOf { b -> inverse[a][b] * score[b] } }

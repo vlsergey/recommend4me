@@ -102,9 +102,14 @@ class AuthorTodayPages(private val context: SourceContext) {
         form?.let { items.setFacet(id, FORM, listOf(it)) }
         if (genres.isNotEmpty()) {
             items.setFacet(id, GENRE, genres)
-            // The site's genre "Фанфик" is what fan fiction is filed under; a work shown without it is an original one
-            val fanfiction = genres.any { it.key == FANFICTION_GENRE }
-            items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(if (fanfiction) UniverseFacets.FANFICTION else UniverseFacets.ORIGINAL)))
+            // The site's genres "Фанфик", "Эротический фанфик" are what fan fiction is filed under, its
+            // "Альтернативная история" our world with its history changed; a work shown with neither is an original one
+            val kind = when {
+                genres.any { it.key.startsWith(FANFICTION_GENRE) } -> UniverseFacets.FANFICTION
+                genres.any { it.key == ALTERNATIVE_HISTORY_GENRE } -> UniverseFacets.ALTERNATIVE_HISTORY
+                else -> UniverseFacets.ORIGINAL
+            }
+            items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(kind)))
         }
     }
 
@@ -289,6 +294,7 @@ class AuthorTodayPages(private val context: SourceContext) {
 
         /** The genre fan fiction is filed under. */
         private const val FANFICTION_GENRE = "fanfiction"
+        private const val ALTERNATIVE_HISTORY_GENRE = "sf-history"
         private val LIBRARY_STATE = Regex("state:\\s*'([A-Za-z]+)'")
         private val LOGGED_IN = Regex("isAuthenticated:\\s*(true|false)")
         private val LIKE_BUTTON = Regex("name: 'like-button', params: \\{targetId: \\d+, likeCount: (\\d+), type: 'Work', disabled: \\w+, voteId: ([^}\\s]+)\\s*}")

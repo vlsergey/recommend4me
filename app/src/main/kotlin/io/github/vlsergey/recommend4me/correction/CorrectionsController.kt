@@ -42,7 +42,9 @@ class CorrectionsController(
     override fun correctFacet(source: String, item: String, facetCorrection: ApiFacetCorrection): ResponseEntity<ItemDetails> {
         val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
         val c = facetCorrection
-        if (store.schema.facet(c.facet) == null) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "У источника нет поля «${c.facet}»")
+        val def = store.schema.facet(c.facet) ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "У источника нет поля «${c.facet}»")
+        // The site's word is shown and read as it is: only the application's layer over it is corrected
+        if (!def.editable) throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Поле «${def.label}» — слово сайта, оно не исправляется")
         val name = c.name?.trim()?.takeIf { it.isNotEmpty() }
         val key = c.key?.trim()?.takeIf { it.isNotEmpty() }
             ?: name?.let { FacetValues.keyOf(store, c.facet, it) }

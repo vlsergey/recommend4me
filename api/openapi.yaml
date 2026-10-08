@@ -1298,7 +1298,7 @@ components:
 
     FacetInfo:
       type: object
-      required: [id, key, label, filter, onCard, suggest, infer]
+      required: [id, key, label, filter, onCard, suggest, infer, editable]
       properties:
         id:
           type: string
@@ -1320,6 +1320,12 @@ components:
           description: |
             The application works the values out and gives them to the work as its own; the site's
             line of them (ItemFacet.original) is only what it learns from
+        editable:
+          type: boolean
+          description: |
+            Of the application's layer over the source - the standard tags, the kind, the universe,
+            the characters, the pairings: the user corrects it. A facet of the site is shown and read
+            as the site gives it, never corrected
         original:
           type: string
           description: The key of the text holding the facet's values as the site writes them
@@ -1395,13 +1401,16 @@ components:
 
     ItemFacet:
       type: object
-      required: [facet, label, values]
+      required: [facet, label, values, editable]
       properties:
         facet:
           type: string
           description: The facet's key within its source
         label:
           type: string
+        editable:
+          type: boolean
+          description: Of the application's layer, corrected by the user (FacetInfo.editable); the site's otherwise
         values:
           type: array
           items:

@@ -91,7 +91,8 @@ class Ficbook : Source {
     override val pageDecor = PageDecor(
         panelAfter = "section.fanfic-hat",
         facets = listOf(
-            FacetDecor(TAG, "section.fanfic-hat a.tag"),
+            // The site's tags are its word, never answered on: the work's tags after them
+            FacetDecor(Books.TAGS.key, after = "section.fanfic-hat .tags"),
             // The universes, characters and pairings worked out go in lines of their own under the site's block of them
             FacetDecor(UniverseFacets.UNIVERSE, after = PAIRINGS_BLOCK),
             FacetDecor(UniverseFacets.CHARACTERS, after = PAIRINGS_BLOCK),

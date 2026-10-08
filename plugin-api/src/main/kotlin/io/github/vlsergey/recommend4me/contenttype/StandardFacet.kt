@@ -23,6 +23,10 @@ class StandardFacet(
     val names: Boolean = false,
     val searchWeight: Float = 0f,
     val suggest: Boolean = false,
+    /** Of the layer ([ContentType.layer]): the values are worked out for every work and given to it ([FacetDef.infer]). */
+    val infer: Boolean = false,
+    /** Of the layer: the standard facet of the sites whose values are this one's examples, by their names ([FacetDef.examplesFrom]). */
+    val examples: StandardFacet? = null,
 ) {
     /** The value of the key; null when the facet has no such value, or takes any. */
     fun value(key: String): StandardValue? = values?.firstOrNull { it.key == key }
@@ -32,6 +36,16 @@ class StandardFacet(
         key, label,
         filter = filter, shared = this.key, searchWeight = searchWeight, onCard = onCard, names = names, suggest = suggest, role = role,
         standard = this,
+    )
+
+    /**
+     * This one as a facet of the application's layer over a source: corrected by the user, worked out
+     * from [examplesFrom] — the key of the source's own facet of [examples] — and the rest.
+     */
+    fun asLayerFacet(examplesFrom: String?) = FacetDef(
+        key, label,
+        filter = filter, shared = key, searchWeight = searchWeight, onCard = onCard, names = names, suggest = suggest, infer = infer, role = role,
+        standard = this, editable = true, examplesFrom = examplesFrom,
     )
 }
 

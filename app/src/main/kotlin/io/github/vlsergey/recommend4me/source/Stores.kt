@@ -36,19 +36,25 @@ class SourceStore(val source: Source, contentType: ContentType, val folder: Path
     val type: String get() = source.contentType
 
     /**
-     * What the application knows of the source's items: the source's own schema, and the facets
-     * the application gives every item of the content type — the universe of fan fiction.
+     * What the application knows of the source's items: the source's own schema — the site's word,
+     * never corrected — and the application's layer over it, which the user corrects: the universe
+     * of fan fiction, the standard facets of the content type worked out for every work.
      */
-    val schema: SourceSchema =
-        if (contentType.universes) SourceSchema(
-            facets = source.schema.facets + UniverseFacet.defs(source.schema),
+    val schema: SourceSchema = run {
+        val layer = (if (contentType.universes) UniverseFacet.defs(source.schema) else emptyList()) +
+            contentType.layer.map { standard ->
+                standard.asLayerFacet(examplesFrom = standard.examples?.let { e -> source.schema.facets.firstOrNull { it.standard === e }?.key })
+            }
+        if (layer.isEmpty()) source.schema else SourceSchema(
+            facets = source.schema.facets + layer,
             numbers = source.schema.numbers,
             texts = source.schema.texts,
             reviewsLabel = source.schema.reviewsLabel,
             partsLabel = source.schema.partsLabel,
             versioned = source.schema.versioned,
             universeLine = source.schema.universeLine,
-        ) else source.schema
+        )
+    }
 
     private val dbs = databases.of(source.id)
 

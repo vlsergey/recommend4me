@@ -165,4 +165,51 @@ class TagSuggesterTest {
         // Without groups only the noise of the texts tells them apart
         assertTrue(grouped[18] / grouped[38] > 2 * plain[18] / plain[38], "a slash work, a pairing of two men: ${grouped.toList()} against ${plain.toList()}")
     }
+
+    @Test
+    fun `a tag the site left out counts less against the work the less a lacking tag weighs`() {
+        val c = catalogue()
+        // A space work the site gave one tag of its two
+        c.texts += text(0); c.tags += intArrayOf(0); c.context += intArrayOf(0)
+        val row = intArrayOf(c.texts.size - 1)
+        fun chanceOfShips(lackWeight: Double): Float {
+            val task = SuggestionTask(
+                views = listOf(TextView("view0", matrix(c.texts))), values = names, assigned = c.tags,
+                confirmed = List(c.tags.size) { IntArray(0) }, rejected = List(c.tags.size) { IntArray(0) },
+                context = c.context, contextCount = 2, lackWeight = lackWeight,
+            )
+            return TagSuggester().fit(task)!!.on(task).of(row)[0][1]
+        }
+        val firm = chanceOfShips(1.0)
+        val soft = chanceOfShips(0.2)
+        assertTrue(soft > firm, "the missing «корабли» of a space work: $soft at a soft absence, $firm at a firm one")
+    }
+
+    @Test
+    fun `a rare value the site gives the work as an example is likely the work's`() {
+        val c = catalogue()
+        // The noise value 4 given by the site as examples: once alone it would be nothing; as the site's word it counts
+        val examples = c.tags.map { own -> own.filter { it == 4 }.toIntArray() }.toMutableList()
+        c.texts += text(0); c.tags += intArrayOf(0, 4); c.context += intArrayOf(0); examples += intArrayOf(4)
+        val row = intArrayOf(c.texts.size - 1)
+        fun task(withExamples: Boolean) = SuggestionTask(
+            views = listOf(TextView("view0", matrix(c.texts))), values = names, assigned = c.tags,
+            confirmed = List(c.tags.size) { IntArray(0) }, rejected = List(c.tags.size) { IntArray(0) },
+            context = c.context, contextCount = 2,
+            examples = if (withExamples) examples else List(c.tags.size) { IntArray(0) },
+        )
+        val plain = task(false).let { t -> TagSuggester().fit(t)!!.on(t).of(row)[0][4] }
+        val given = task(true).let { t -> TagSuggester().fit(t)!!.on(t).of(row)[0][4] }
+        assertTrue(given > 0.5f && given > plain, "the site's own rare value: $given as its word, $plain without")
+    }
+
+    @Test
+    fun `a work the site gave no values of other facets is judged by its texts`() {
+        val c = catalogue()
+        // A space work with no fandom, no tag: only its text tells
+        c.texts += text(0); c.tags += IntArray(0); c.context += IntArray(0)
+        val task = task(c)
+        val scores = TagSuggester().fit(task)!!.on(task).of(intArrayOf(c.texts.size - 1))[0]
+        assertTrue(scores[0] > 0.5f && scores[0] > 5 * scores[2], "space for a space text without a fandom: ${scores.toList()}")
+    }
 }

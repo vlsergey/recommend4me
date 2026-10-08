@@ -39,8 +39,9 @@ class TypesController(private val stores: Stores) : TypesApi {
                     texts = schema.texts.map { TextInfo(it.key, it.label, it.spoiler, it.role?.let { r -> ApiTextRole.valueOf(r.name) }) },
                     facets = schema.facets.map {
                         FacetInfo(
-                            FeatureNames.facetId(s, it), it.key, it.label, it.filter, it.onCard, it.suggest, it.infer, it.original,
-                            it.role?.let { r -> ApiFacetRole.valueOf(r.name) },
+                            id = FeatureNames.facetId(s, it), key = it.key, label = it.label, filter = it.filter, onCard = it.onCard,
+                            suggest = it.suggest, infer = it.infer, editable = it.editable, original = it.original,
+                            role = it.role?.let { r -> ApiFacetRole.valueOf(r.name) },
                         )
                     },
                     numbers = schema.numbers.map {

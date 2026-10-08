@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.authortoday
 
+import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import org.jsoup.Jsoup
@@ -36,15 +37,13 @@ class AuthorTodayDecorTest {
         val doc = Jsoup.parse(html, "https://author.today/work/216859")
         assertTrue(doc.select(decor.panelAfter!!).isNotEmpty())
 
-        val tags = decor.facets.first { it.facet == AuthorToday.TAG }
-        val shown = doc.select(tags.values!!).map { (it.attr("title").ifBlank { it.text() }).trim().lowercase() }
+        // The site's tags are its word, left alone; the work's tags go in one line right after them
+        assertTrue(decor.facets.none { it.facet == AuthorToday.TAG || it.facet == AuthorToday.GENRE })
+        val tags = decor.facets.single { it.facet == Books.TAGS.key }
+        val block = doc.select(tags.after!!)
+        assertEquals(1, block.size)
+        val shown = block.select("a").map { (it.attr("title").ifBlank { it.text() }).trim().lowercase() }
         assertEquals(context.facets.getValue("216859").getValue(AuthorToday.TAG).sorted(), shown.sorted())
-
-        val genres = decor.facets.first { it.facet == AuthorToday.GENRE }
-        val names = context.facetNames.getValue(AuthorToday.GENRE)
-        val genreNames = context.facets.getValue("216859").getValue(AuthorToday.GENRE).map { names.getValue(it).lowercase() }
-        val genreElements = doc.select(genres.values!!).map { it.text().trim().lowercase() }
-        assertTrue(genreElements.containsAll(genreNames), "$genreElements hold $genreNames")
 
         val cover = doc.select(decor.pictures!!.selector).map { it.attr("src").substringBefore('?') }
         assertEquals(context.pictures.getValue("216859").filterNotNull(), cover)

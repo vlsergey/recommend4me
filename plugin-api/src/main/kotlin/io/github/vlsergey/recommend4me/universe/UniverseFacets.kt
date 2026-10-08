@@ -8,9 +8,11 @@ import io.github.vlsergey.recommend4me.contenttype.StandardValue
  * ([ContentType.universes][io.github.vlsergey.recommend4me.contenttype.ContentType.universes]),
  * whichever site it is from: what a source names in its page decor or reads of the user's links.
  *
- * - [KIND]: whether the work is fan fiction ([FANFICTION]) or an original work ([ORIGINAL]) — the
- *   one a source may say itself: a site's fandom "originals", its genre "fan fiction";
- * - [UNIVERSE]: the universes of the dictionary the work is fan fiction of — one or several;
+ * - [KIND]: whether the work is fan fiction ([FANFICTION]), an alternative history of our world
+ *   ([ALTERNATIVE_HISTORY]) or a world of its own ([ORIGINAL]) — the one a source may say itself: a
+ *   site's fandom "originals", its genre "fan fiction";
+ * - [UNIVERSE]: the universes of the dictionary the work is fan fiction of — one or several; an
+ *   alternative history and an original work have none;
  * - [CHARACTERS]: its main characters, of those universes;
  * - [PAIRINGS]: its pairings, each two of its characters ("pair:<character>|<character>", the two
  *   in the order of their keys).
@@ -22,12 +24,20 @@ import io.github.vlsergey.recommend4me.contenttype.StandardValue
 object UniverseFacets {
     const val KIND = "kind"
     const val FANFICTION = "fanfiction"
+    const val ALTERNATIVE_HISTORY = "alternative-history"
     const val ORIGINAL = "original"
 
-    /** [KIND] as the standard facet of every type with universes: fan fiction or an original work, nothing else. */
+    /** The kinds of a work that has no universe of another's: its world is ours, or its own. */
+    val UNIVERSELESS = setOf(ALTERNATIVE_HISTORY, ORIGINAL)
+
+    /** [KIND] as the standard facet of every type with universes: fan fiction, an alternative history or an original work, nothing else. */
     val KIND_FACET = StandardFacet(
-        KIND, "Фанфик или оригинал",
-        values = listOf(StandardValue(FANFICTION, "Фанфик"), StandardValue(ORIGINAL, "Оригинальное произведение")),
+        KIND, "Фанфик, альтернативная история или оригинал",
+        values = listOf(
+            StandardValue(FANFICTION, "Фанфик"),
+            StandardValue(ALTERNATIVE_HISTORY, "Альтернативная история"),
+            StandardValue(ORIGINAL, "Оригинальная вселенная"),
+        ),
         filter = true, onCard = true, suggest = true,
     )
 

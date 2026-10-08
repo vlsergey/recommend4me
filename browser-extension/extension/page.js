@@ -281,11 +281,11 @@
   }
 
   /** A value as a chip: its name and [answers]; a universe the work is linked to, ↻ to ask the catalogue for its characters again. */
-  function valueChip(item, facet, v) {
+  function valueChip(item, facet, v, editable = true) {
     const chip = el("r4m-chip", { ADDED: "r4m-added", CONFIRMED: "r4m-confirmed", REMOVED: "r4m-removed-chip" }[v.corrected] || null);
     if (v.inferred) chip.classList.add("r4m-inferred-chip");
     chip.appendChild(el("span", null, v.name));
-    answers(item, facet, v).forEach((e) => chip.appendChild(e));
+    if (editable) answers(item, facet, v).forEach((e) => chip.appendChild(e));
     const at = v.key.indexOf(":");
     if (facet === UNIVERSE && v.corrected !== "REMOVED" && at > 0) {
       chip.appendChild(button("↻", "Обновить персонажей вселенной из справочника", () =>
@@ -394,9 +394,13 @@
     block.appendChild(el("r4m-label", null, facet.label));
     if (inPanel && facet.original) block.appendChild(el("r4m-original", null, `На сайте: ${facet.original}`));
     const line = el("r4m-chips");
-    (facet.values || []).forEach((v) => line.appendChild(valueChip(item, facet.facet, v)));
-    ((suggestions && suggestions.suggested) || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
-    line.appendChild(addField(item, facet.facet, facet.label));
+    // A facet of the site is its word: shown, never answered on
+    const editable = facet.editable !== false;
+    (facet.values || []).forEach((v) => line.appendChild(valueChip(item, facet.facet, v, editable)));
+    if (editable) {
+      ((suggestions && suggestions.suggested) || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
+      line.appendChild(addField(item, facet.facet, facet.label));
+    }
     block.appendChild(line);
     return block;
   }

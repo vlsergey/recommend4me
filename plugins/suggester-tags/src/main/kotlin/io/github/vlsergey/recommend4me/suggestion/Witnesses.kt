@@ -28,10 +28,14 @@ import kotlin.math.sqrt
  *     for every grouping of the values (the sexes of a pairing's characters):
  *       has context              the value is of a group and the item has values of other facets
  *       · context, · its max     the same as of the values, of the value's group with the context
+ *     example                    the site gives the item the value as an example of the facet
+ *                                ([SuggestionTask.examples]: its own tag of the work's tags)
  *     rarity                    the log share of the items having the value
  *
  * EVERY COUNT LEAVES THE ITEM OUT: what the item says of its own values does not vouch for them,
- * so a value the site gave it that nothing else supports comes out unlikely.
+ * so a value the site gave it that nothing else supports comes out unlikely — but for a value the
+ * site gives it as an example from a facet of its own, which is a witness by itself: how much one
+ * is worth is learnt as any other.
  *
  * No number of the witnesses is chosen by hand. A neighbour weighs exp(z) by its likeness z in
  * standard deviations of the item's likeness to all the others — the item's own scale; counts are
@@ -215,8 +219,23 @@ internal class Witnesses(private val task: SuggestionTask) {
         return rows.toList().chunked(size).map { it.toIntArray() }
     }
 
-    /** The views item [i] has, a bit per view. */
-    fun viewsOf(i: Int): Int = views.indices.fold(0) { set, c -> if (views[c].present[i]) set or (1 shl c) else set }
+    /**
+     * The bit of the values of the other facets among the views: a work the site gave none of — no
+     * tag, no fandom — is judged by weights learnt as if no work had them, not by weights that
+     * lean on them.
+     */
+    private val contextBit = 1 shl views.size
+
+    /** The bit of the examples among the views: a work the site gave no example of the facet is judged as if no work had any. */
+    private val examplesBit = 1 shl (views.size + 1)
+
+    /** The views item [i] has, a bit per view of the texts, one for the values of its other facets, one for its examples. */
+    fun viewsOf(i: Int): Int {
+        var set = views.indices.fold(0) { s, c -> if (views[c].present[i]) s or (1 shl c) else s }
+        if (context[i].isNotEmpty()) set = set or contextBit
+        if (task.examples[i].isNotEmpty()) set = set or examplesBit
+        return set
+    }
 
     /** Every set of views some item has. */
     fun viewSets(): Set<Int> = (0 until n).map(::viewsOf).toSet()
@@ -224,31 +243,44 @@ internal class Witnesses(private val task: SuggestionTask) {
     /** Forgets in [values] (one item's features) what the views outside [set] say. */
     fun keepViews(values: Array<FloatArray>, set: Int) {
         views.indices.filter { set and (1 shl it) == 0 }.forEach { c -> values.forEach { f -> f.fill(0f, 1 + 3 * c, 1 + 3 * c + 3) } }
+        if (set and contextBit == 0) {
+            val own = 1 + 3 * views.size
+            values.forEach { f ->
+                f.fill(0f, own + 3, own + 6)
+                grouped.indices.forEach { g -> f.fill(0f, own + 8 + 3 * g, own + 8 + 3 * g + 3) }
+            }
+        }
+        if (set and examplesBit == 0) values.forEach { f -> f[features - 2] = 0f }
     }
 
     /**
-     * Every pair of an item and a value, as an example of the views [set]: its features and
-     * whether the item has the value. AN ITEM WITH NO VALUE AT ALL SAYS NOTHING of any: the site
-     * left it untagged, it did not deny it every value — unless the user said no to one of them.
+     * Every pair of an item and a value, as an example of the views [set]: its features, whether
+     * the item has the value, and how much the example weighs. AN ITEM WITH NO VALUE AT ALL SAYS
+     * NOTHING of any: the site left it untagged, it did not deny it every value — unless the user
+     * said no to one of them.
      */
-    fun forEachExample(set: Int, visit: (FloatArray, Boolean) -> Unit) {
-        forEachExample { x, positive ->
+    fun forEachExample(set: Int, visit: (FloatArray, Boolean, Double) -> Unit) {
+        forEachExample { x, positive, weight ->
             keepViews(arrayOf(x), set)
-            visit(x, positive)
+            visit(x, positive, weight)
         }
     }
 
     /**
      * Every example with every view: of the items with a value or a word of the user, every value
-     * the item may have ([SuggestionTask.allowed]) and every one it has.
+     * the item may have ([SuggestionTask.allowed]) and every one it has. A value it has and one the
+     * user rejected weigh 1; one it merely lacks [SuggestionTask.lackWeight].
      */
-    private fun forEachExample(visit: (FloatArray, Boolean) -> Unit) {
+    private fun forEachExample(visit: (FloatArray, Boolean, Double) -> Unit) {
         blocks(labelled()).forEach { block ->
             features(block).forEachIndexed { b, values ->
                 val i = block[b]
                 val has = assigned[i].toHashSet()
+                val denied = task.rejected[i].toHashSet()
                 val may = task.allowed[i]?.toHashSet()
-                values.forEachIndexed { v, x -> if (may == null || v in may || v in has) visit(x, v in has) }
+                values.forEachIndexed { v, x ->
+                    if (may == null || v in may || v in has) visit(x, v in has, if (v in has || v in denied) 1.0 else task.lackWeight)
+                }
             }
         }
     }
@@ -269,23 +301,28 @@ internal class Witnesses(private val task: SuggestionTask) {
         val count = exampleCount().toInt()
         val xs = FloatArray(count * features)
         val positive = BooleanArray(count)
+        val weights = DoubleArray(count)
         var k = 0
-        forEachExample { x, has ->
+        forEachExample { x, has, weight ->
             x.copyInto(xs, k * features)
             positive[k] = has
+            weights[k] = weight
             k++
         }
-        return HeldExamples(xs, positive, features) { x, set -> keepViews(arrayOf(x), set) }
+        return HeldExamples(xs, positive, weights, features) { x, set -> keepViews(arrayOf(x), set) }
     }
 
     /** Examples held in memory: each one handed over as the views of a set see it. */
-    class HeldExamples(private val xs: FloatArray, private val positive: BooleanArray, private val features: Int, private val keep: (FloatArray, Int) -> Unit) {
-        fun forEach(set: Int, visit: (FloatArray, Boolean) -> Unit) {
+    class HeldExamples(
+        private val xs: FloatArray, private val positive: BooleanArray, private val weights: DoubleArray, private val features: Int,
+        private val keep: (FloatArray, Int) -> Unit,
+    ) {
+        fun forEach(set: Int, visit: (FloatArray, Boolean, Double) -> Unit) {
             val x = FloatArray(features)
             for (k in positive.indices) {
                 xs.copyInto(x, 0, k * features, (k + 1) * features)
                 keep(x, set)
-                visit(x, positive[k])
+                visit(x, positive[k], weights[k])
             }
         }
     }
@@ -337,6 +374,7 @@ internal class Witnesses(private val task: SuggestionTask) {
                 }
             }
             grouped.forEachIndexed { g, it -> it.write(i, out, own + 8 + 3 * g) }
+            task.examples[i].forEach { v -> out[v][features - 2] = 1f }
             out
         }
     }
@@ -403,8 +441,8 @@ internal class Witnesses(private val task: SuggestionTask) {
     }
 
     companion object {
-        /** The bias, three of every view, three of the facet's own values, three of the context, two of the mentions, three of every grouping, the rarity. */
-        fun featuresOf(views: Int, groupings: Int) = 1 + 3 * views + 3 + 3 + 2 + 3 * groupings + 1
+        /** The bias, three of every view, three of the facet's own values, three of the context, two of the mentions, three of every grouping, the example, the rarity. */
+        fun featuresOf(views: Int, groupings: Int) = 1 + 3 * views + 3 + 3 + 2 + 3 * groupings + 1 + 1
 
         /** Half an item drawn to every count each way: the Jeffreys prior of a share. */
         private const val JEFFREYS = 0.5

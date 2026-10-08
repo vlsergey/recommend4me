@@ -41,29 +41,49 @@ export function FacetCorrections({
   const [editing, setEditing] = useState(false);
   const suggestions = useSuggestions(item, source);
   const facets = allFacets.filter((f) => !except.includes(f.facet));
+  // The application's layer is corrected; the site's facets are its word, shown as they are
+  const layer = facets.filter((f) => f.editable);
+  const site = facets.filter((f) => !f.editable);
   const suggested = suggestions.data?.filter((s) => !except.includes(s.facet));
-  const addable = source && { ...source, facets: source.facets.filter((f) => !except.includes(f.key)) };
+  const addable = source && { ...source, facets: source.facets.filter((f) => f.editable && !except.includes(f.key)) };
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center gap-1">
         <h4 className="text-sm font-semibold">Признаки</h4>
-        <EditButton onClick={() => setEditing(!editing)} title={editing ? "Закончить добавление" : "Добавить значение признака"} />
+        {addable && addable.facets.length > 0 && (
+          <EditButton onClick={() => setEditing(!editing)} title={editing ? "Закончить добавление" : "Добавить значение признака"} />
+        )}
       </div>
-      {facets.length === 0 && !editing && <div className="text-sm text-muted-foreground">—</div>}
-      {facets.map((f) => (
-        <div key={f.facet}>
-          <div className="mb-1 text-xs text-muted-foreground">{f.label}</div>
-          {f.original && <div className="mb-1 text-xs break-words text-muted-foreground/80">На сайте: {f.original}</div>}
-          <div className="flex flex-wrap gap-1">
-            {f.values.map((v) => (
-              <FacetValue key={v.key} facet={f.facet} value={v} corrections={corrections} />
-            ))}
-          </div>
-        </div>
+      {layer.length === 0 && !editing && <div className="text-sm text-muted-foreground">—</div>}
+      {layer.map((f) => (
+        <FacetLine key={f.facet} facet={f} corrections={corrections} />
       ))}
       {editing && addable && <AddFacetValue source={addable} corrections={corrections} />}
       {suggested && <SuggestedValues suggestions={suggested} corrections={corrections} />}
+      {site.length > 0 && (
+        <div className="flex flex-col gap-3 border-t pt-3">
+          <h4 className="text-sm font-semibold">С сайта</h4>
+          {site.map((f) => (
+            <FacetLine key={f.facet} facet={f} />
+          ))}
+        </div>
+      )}
     </section>
+  );
+}
+
+/** A facet of the work with its values: answered on when [corrections] are given, shown as it is when not. */
+function FacetLine({ facet: f, corrections }: { facet: ItemFacet; corrections?: Corrections }) {
+  return (
+    <div>
+      <div className="mb-1 text-xs text-muted-foreground">{f.label}</div>
+      {f.original && <div className="mb-1 text-xs break-words text-muted-foreground/80">На сайте: {f.original}</div>}
+      <div className="flex flex-wrap gap-1">
+        {f.values.map((v) => (
+          <FacetValue key={v.key} facet={f.facet} value={v} corrections={corrections} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -73,8 +93,8 @@ const CORRECTED_TITLE: Record<NonNullable<FacetValueInfo["corrected"]>, string> 
   REMOVED: "Убрано вами",
 };
 
-/** A value of the work's facet: its marks, its chance and the user's ✓ or ✕ on it. */
-export function FacetValue({ facet, value, corrections }: { facet: string; value: FacetValueInfo; corrections: Corrections }) {
+/** A value of the work's facet: its marks, its chance and — of a facet the user corrects, [corrections] given — the user's ✓ or ✕ on it. */
+export function FacetValue({ facet, value, corrections }: { facet: string; value: FacetValueInfo; corrections?: Corrections }) {
   return (
     <Badge
       variant={value.corrected === "ADDED" ? "outline" : "secondary"}
@@ -90,7 +110,7 @@ export function FacetValue({ facet, value, corrections }: { facet: string; value
       {value.inferred && <InferredMark />}
       <span className={cn(value.corrected === "REMOVED" && "line-through")}>{value.name}</span>
       <ChanceMark value={value} />
-      <FacetAnswers facet={facet} value={value} corrections={corrections} />
+      {corrections && <FacetAnswers facet={facet} value={value} corrections={corrections} />}
     </Badge>
   );
 }

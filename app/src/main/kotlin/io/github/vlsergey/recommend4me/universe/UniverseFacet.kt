@@ -8,11 +8,14 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
  * Their values are kept as the user's corrections of the work's source — the site has none — and
  * worked out by the model, as any facet's:
  *
- * - the kind — fan fiction or an original work — is the site's when it says, suggested otherwise;
- * - the universes are suggested, to be confirmed, to a work not known to be original: the work's
- *   characters are chosen within them;
+ * - the kind — fan fiction, an alternative history, an original work — is the site's when it
+ *   says, suggested otherwise;
+ * - the universes are worked out of every universe of the dictionary for a work that is not known
+ *   to have none, and given to it: the work's characters are chosen within them;
  * - the main characters are worked out of the characters of the work's universes and the original
  *   characters, the pairings of pairs of the work's characters — given to the work at once.
+ *
+ * All four are of the application's layer over the source: the user corrects them.
  */
 object UniverseFacet {
     const val KEY = UniverseFacets.UNIVERSE
@@ -24,7 +27,8 @@ object UniverseFacet {
         shared = KEY,
         searchWeight = 0.9f,
         onCard = true,
-        suggest = true,
+        infer = true,
+        editable = true,
     )
 
     /** The values of the kind of a work, with their names. */
@@ -32,15 +36,16 @@ object UniverseFacet {
 
     /** The facets of a source of a type with universes: its line of characters and pairings shown above the worked out ones. */
     fun defs(schema: SourceSchema): List<FacetDef> = listOf(
-        UniverseFacets.KIND_FACET.asFacet(),
+        // The site may say it, but it is the layer's: the user's answer is the work's kind
+        UniverseFacets.KIND_FACET.asLayerFacet(examplesFrom = null),
         DEF,
         FacetDef(
             UniverseFacets.CHARACTERS, "Главные персонажи",
-            shared = UniverseFacets.CHARACTERS, searchWeight = 0.8f, infer = true, original = schema.universeLine,
+            shared = UniverseFacets.CHARACTERS, searchWeight = 0.8f, infer = true, original = schema.universeLine, editable = true,
         ),
         FacetDef(
             UniverseFacets.PAIRINGS, "Пэйринги",
-            shared = UniverseFacets.PAIRINGS, searchWeight = 0.7f, infer = true, original = schema.universeLine,
+            shared = UniverseFacets.PAIRINGS, searchWeight = 0.7f, infer = true, original = schema.universeLine, editable = true,
         ),
     )
 

@@ -21,6 +21,12 @@ class ContentType(
     val universes: Boolean = false,
     /** The facets every source of the type maps its own onto ([StandardFacet]). */
     val facets: List<StandardFacet> = emptyList(),
+    /**
+     * THE APPLICATION'S LAYER OVER THE SOURCES: the facets every work of the type is given whichever
+     * site it is from, worked out by the model from everything the site says and corrected by the
+     * user — the standard tags. No site sets them.
+     */
+    val layer: List<StandardFacet> = emptyList(),
     /** The user's actions on a site every source of the type tells alike ([StandardSignal]). */
     val signals: List<StandardSignal> = emptyList(),
 ) {

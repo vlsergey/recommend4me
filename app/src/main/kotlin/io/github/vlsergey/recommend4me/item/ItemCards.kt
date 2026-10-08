@@ -76,6 +76,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             ItemFacet(
                 facet = def.key,
                 label = def.label,
+                editable = def.editable,
                 propertyValues = keys.map { k ->
                     info(k, if (k in added) (if (k in had) FacetValueInfo.Corrected.CONFIRMED else FacetValueInfo.Corrected.ADDED) else null)
                 } + removed.map { info(it, FacetValueInfo.Corrected.REMOVED) },

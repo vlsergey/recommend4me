@@ -26,7 +26,14 @@ object Books {
         role = FacetRole.STATUS, filter = true, onCard = true,
     )
 
-    val TAG = StandardFacet("tag", "Тег", role = FacetRole.CONTENT, searchWeight = 0.9f, suggest = true)
+    /** The tags as the site writes them: the site's word, read by the model, the examples of [TAGS]. */
+    val TAG = StandardFacet("tag", "Тег на сайте", role = FacetRole.CONTENT, searchWeight = 0.9f)
+
+    /**
+     * The work's tags: of every tag of every site, one by its name — worked out from everything the
+     * site says of the work, its own tags first of all, and corrected by the user.
+     */
+    val TAGS = StandardFacet("tags", "Теги", role = FacetRole.CONTENT, searchWeight = 0.9f, infer = true, examples = TAG)
 
     /** The value of a signal that is either set or not. */
     val YES = StandardValue("yes", "да")
@@ -56,6 +63,7 @@ object Books {
         verb = "читать",
         universes = true,
         facets = listOf(AUTHOR, STATUS, UniverseFacets.KIND_FACET, TAG),
+        layer = listOf(TAGS),
         signals = listOf(READ, LIKED, SHELF),
     )
 }

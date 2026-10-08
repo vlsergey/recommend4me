@@ -57,6 +57,20 @@ class SuggestionTask(
     val allowed: List<IntArray?> = List(assigned.size) { null },
     /** The groupings of the values, none for a facet whose values are not known to fall into groups. */
     val groupings: List<ValueGrouping> = emptyList(),
+    /**
+     * How much a value an item lacks counts as one it does not have, against 1 for one it has and
+     * one the user rejected: 1 when an item's values are all it has; less when they are what a site
+     * happened to write — a tag the site has raises the chance of the work's tag, its absence says
+     * little of the work.
+     */
+    val lackWeight: Double = 1.0,
+    /**
+     * The values the site gives each item as the facet's examples, from a facet of its own
+     * ([FacetDef.examplesFrom][io.github.vlsergey.recommend4me.source.FacetDef.examplesFrom]) —
+     * among the [assigned] too. Of the item's own word this alone is a witness of its values: a
+     * value the site gives the work is likelier the work's, however rare; empty for a facet without.
+     */
+    val examples: List<IntArray> = List(assigned.size) { IntArray(0) },
 ) {
     val itemCount: Int get() = assigned.size
     val valueCount: Int get() = values.rows
@@ -72,6 +86,8 @@ class SuggestionTask(
             "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${mentions.size} mentions, ${allowed.size} allowed"
         }
         require(groupings.all { g -> g.groupOf.size == valueCount && g.groupOf.all { it in -1 until g.groupCount } }) { "A grouping not of the $valueCount values" }
+        require(lackWeight > 0 && lackWeight <= 1) { "A lacking value weighs $lackWeight" }
+        require(examples.size == itemCount) { "$itemCount items, ${examples.size} lists of examples" }
     }
 }
 

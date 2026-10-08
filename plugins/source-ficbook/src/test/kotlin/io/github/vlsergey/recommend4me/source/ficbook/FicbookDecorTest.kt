@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ficbook
 
+import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import org.jsoup.Jsoup
@@ -35,10 +36,12 @@ class FicbookDecorTest {
         source.capture(CapturedPage("https://ficbook.net/readfic/$work", html, now), context)
         val doc = Jsoup.parse(html, "https://ficbook.net/readfic/$work")
         assertTrue(doc.select(decor.panelAfter!!).isNotEmpty())
-        val tags = decor.facets.single { it.facet == Ficbook.TAG }
-        val shown = doc.select(tags.values!!).map { it.text().trim().lowercase() }
+        // The site's tags are its word, left alone; the work's tags go in one line right after them
+        assertTrue(decor.facets.none { it.facet == Ficbook.TAG })
+        val tags = decor.facets.single { it.facet == Books.TAGS.key }
+        val shown = doc.select(tags.after!!).select("a.tag").map { it.text().trim().lowercase() }
         assertEquals(context.facets.getValue(work).getValue(Ficbook.TAG).sorted(), shown.sorted())
-        // The worked out pairings and characters go under the site's block of them
+        // The worked out tags, pairings and characters go under the site's blocks of them
         decor.facets.filter { it.after != null }.forEach { assertEquals(1, doc.select(it.after!!).size, it.after) }
         val cover = doc.select(decor.pictures!!.selector).map { it.attr("src") }
         assertEquals(context.pictures[work]?.filterNotNull() ?: cover, cover)
