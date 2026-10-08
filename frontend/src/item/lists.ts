@@ -24,26 +24,14 @@ export function replaceInLists(queryClient: QueryClient, updated: ItemSummary) {
   }));
 }
 
-/** The card leaves every loaded list: it became a part of another card. */
-export function removeFromLists(queryClient: QueryClient, ref: ItemRef) {
-  eachList(queryClient, (data) => ({
-    ...data,
-    pages: data.pages.map((page) => {
-      const had = page.items.some((s) => sameItem(s, ref));
-      return { total: had ? page.total - 1 : page.total, items: page.items.filter((s) => !sameItem(s, ref)) };
-    }),
-  }));
-}
-
-/** The card of the work the item is of: a list shows a work once, under the item that stands for it. */
+/** A card of the work the item is of: its own, or that of another item linked to it. */
 function ofWork(card: ItemSummary, item: ItemSummary): boolean {
   return sameItem(card, item) || card.work === item.work;
 }
 
 /**
  * The card after a grade of an item of its work: the item's own card is replaced; the card of
- * the work under another of its items takes the grade over (a grade from a page the browser
- * extension sent, of an item linked to the card's).
+ * another item of the work takes the grade over — the work is graded, on whichever site.
  */
 function graded(card: ItemSummary, updated: ItemSummary): ItemSummary {
   if (sameItem(card, updated)) return updated;

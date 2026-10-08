@@ -1450,8 +1450,9 @@ components:
         work:
           type: string
           description: |
-            The work the item is of, as "<source>/<item>" of the item that stands for it in the
-            list; the item's own key when it is linked to no other
+            The work the item is of, as "<source>/<item>" of the first of its items by key — the
+            same for every item of the work; the item's own key when it is linked to no other.
+            Every item has its own card all the same
         source:
           type: string
         item:

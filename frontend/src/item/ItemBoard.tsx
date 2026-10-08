@@ -67,12 +67,13 @@ export function ItemBoard({ type, view, sort, search, facets, sources, layout, o
     },
   });
 
-  // A work may come twice: pages are asked for by offset, and between two pages the order can
-  // change under them — a job adds works and re-scores them as it goes
+  // An item may come twice: pages are asked for by offset, and between two pages the order can
+  // change under them — a job adds works and re-scores them as it goes. Two items of one work
+  // are two cards: a link hides neither
   const items: ItemSummary[] = useMemo(() => {
     const seen = new Set<string>();
     return (list.data?.pages.flatMap((p) => p.items) ?? []).filter((s) => {
-      const key = s.work;
+      const key = refKey(s);
       return !seen.has(key) && !!seen.add(key);
     });
   }, [list.data]);

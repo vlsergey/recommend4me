@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { api, unwrap, type ItemDetails, type ItemRef } from "@/api/client";
-import { applyDetails, ITEMS, removeFromLists } from "@/item/lists";
+import { applyDetails, ITEMS } from "@/item/lists";
 import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
 
 /** The fields a correction overrides: the title, a text, a number. */
@@ -43,16 +43,16 @@ export function useCorrections(item: ItemRef, typeId: string) {
     resetFacet: async (facet: string, key: string) =>
       done(unwrap(await api.DELETE("/api/items/{source}/{item}/corrections/facets", { params: { path, query: { facet, key } } }))),
 
-    /** The other item becomes a part of this card: it leaves the lists at once. */
+    /** The other item is the same work: both keep their cards, which now name each other — the lists are asked for anew. */
     link: async (other: ItemRef) => {
       const details = done(
         unwrap(await api.POST("/api/items/{source}/{item}/links", { params: { path }, body: { source: other.source, item: other.item } })),
       );
-      removeFromLists(queryClient, other);
+      queryClient.invalidateQueries({ queryKey: [ITEMS] });
       return details;
     },
 
-    /** The other item gets a card of its own again: the lists are asked for anew. */
+    /** The other item is another work again: the lists are asked for anew. */
     unlink: async (other: ItemRef) => {
       const details = done(
         unwrap(

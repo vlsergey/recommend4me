@@ -48,9 +48,8 @@ class ItemList(private val stores: Stores, private val works: Works, private val
     ): ItemPage {
         val type = stores.type(typeId) ?: return ItemPage(0, emptyList())
         val clusters = works.of(type)
-        val hiddenMembers = clusters.hidden()
         val found = line?.takeIf { it.isNotBlank() }?.let { search.search(typeId, it) }
-        val relevance = found?.keys?.map { clusters.representative(it) }?.distinct()?.withIndex()?.associate { (i, k) -> k to i }
+        val relevance = found?.keys?.withIndex()?.associate { (i, k) -> k to i }
         val hiddenValues = hidden.mapNotNull { it.split('=', limit = 2).takeIf { p -> p.size == 2 }?.let { p -> p[0] to p[1] } }
             .groupBy({ it.first }, { it.second }).mapValues { it.value.toSet() }
 
@@ -64,7 +63,6 @@ class ItemList(private val stores: Stores, private val works: Works, private val
             val passes = facetFilter(s, hiddenValues, hiddenWithout)
             keys.forEach { k ->
                 val key = ItemKey(s.id, k.id)
-                if (key in hiddenMembers) return@forEach
                 if (relevance != null && key !in relevance) return@forEach
                 if (passes != null && !passes(k.id)) return@forEach
                 rows += Row(key, k.updatedAt, k.id in graded, predictions[k.id], numbers[k.id])

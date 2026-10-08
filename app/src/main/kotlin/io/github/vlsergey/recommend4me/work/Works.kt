@@ -18,13 +18,10 @@ class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
     /** The work an item is of: the same number for every item of a work. */
     fun work(key: ItemKey): Long = Vectors.keyOf(representative(key).toString())
 
-    /** The item shown for the work: the first of its members by key. */
+    /** The item that names the work: the first of its members by key. Every member keeps its own card. */
     fun representative(key: ItemKey): ItemKey = clusters[key]?.first() ?: key
 
     fun linked(key: ItemKey): Boolean = key in clusters
-
-    /** Every item that is a member of a cluster but not its representative: the list does not show it. */
-    fun hidden(): Set<ItemKey> = clusters.filter { (key, members) -> members.first() != key }.keys
 
     companion object {
         fun of(links: List<Pair<ItemKey, ItemKey>>): WorkClusters {
