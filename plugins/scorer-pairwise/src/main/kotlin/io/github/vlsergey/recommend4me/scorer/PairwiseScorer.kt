@@ -25,7 +25,7 @@ class PairwiseScorer : Scorer {
     override val defaultParameter = 0.1
 
     override fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer =
-        fit(task.x, pairs(task.grades, task.works, rows), parameter)
+        fit(task.x, pairs(task.grades, task.works, task.items, rows), parameter)
 
     override fun unpack(bytes: ByteArray): FittedScorer = LinearModel.unpack(bytes)
 
@@ -34,25 +34,38 @@ class PairwiseScorer : Scorer {
      * weighs the same. Not every pair of grades: the works graded "do not like it" are most of the
      * rated, and telling them from the rest is most of what the model is for — weighed as one pair
      * of grades of ten, a pair of grades of four works weighed as much.
+     *
+     * And the rows of two items of one work, [first] and [second]: the work on two sites, EQUAL —
+     * their loss is least when their scores are the same, and weighs as one pair of grades.
      */
-    class Pairs(val better: IntArray, val worse: IntArray) {
-        val size: Int get() = better.size
+    class Pairs(val better: IntArray, val worse: IntArray, val first: IntArray, val second: IntArray) {
+        val size: Int get() = better.size + first.size
     }
 
     companion object {
-        fun pairs(grades: IntArray, works: LongArray, subset: IntArray): Pairs {
+        fun pairs(grades: IntArray, works: LongArray, items: LongArray, subset: IntArray): Pairs {
             val better = ArrayList<Int>()
             val worse = ArrayList<Int>()
+            val first = ArrayList<Int>()
+            val second = ArrayList<Int>()
             for (a in subset) for (b in subset) {
-                if (grades[a] > grades[b] && works[a] != works[b]) {
-                    better += a
-                    worse += b
+                if (works[a] != works[b]) {
+                    if (grades[a] > grades[b]) {
+                        better += a
+                        worse += b
+                    }
+                } else if (items[a] < items[b]) {
+                    first += a
+                    second += b
                 }
             }
-            return Pairs(better.toIntArray(), worse.toIntArray())
+            return Pairs(better.toIntArray(), worse.toIntArray(), first.toIntArray(), second.toIntArray())
         }
 
-        /** Fits the line on [pairs] of the rows of [x]: the logistic loss of score(better) − score(worse), L2 with [c]. */
+        /**
+         * Fits the line on [pairs] of the rows of [x]: the logistic loss of score(better) − score(worse),
+         * of an equal pair the loss of a pair either way round with the chance of a half, L2 with [c].
+         */
         fun fit(x: Matrix, pairs: Pairs, c: Double, maxIter: Int = 300, tol: Double = 1e-4): LinearModel {
             val objective = PairObjective(x, pairs, c)
             val solver = Lbfgs(x.cols, maxIter, tol)
@@ -82,13 +95,20 @@ class PairwiseScorer : Scorer {
             Blas.times(x.held, d, n, d, w, z, parts = 1)
             q.clear()
             var loss = 0.0
-            for (p in 0 until pairs.size) {
+            for (p in pairs.better.indices) {
                 val s = (z[pairs.better[p]] - z[pairs.worse[p]]).toDouble()
-                // log(1 + exp(−s)) without overflow
-                loss += if (s < 0) -s + ln(1.0 + exp(s)) else ln(1.0 + exp(-s))
+                loss += softplus(-s)
                 val r = 1.0 / (1.0 + exp(-s)) - 1.0
                 q[pairs.better[p]] = q[pairs.better[p]] + r.toFloat()
                 q[pairs.worse[p]] = q[pairs.worse[p]] - r.toFloat()
+            }
+            for (p in pairs.first.indices) {
+                val s = (z[pairs.first[p]] - z[pairs.second[p]]).toDouble()
+                // −½ log σ(s) − ½ log σ(−s): least at s = 0
+                loss += 0.5 * (softplus(-s) + softplus(s))
+                val r = 1.0 / (1.0 + exp(-s)) - 0.5
+                q[pairs.first[p]] = q[pairs.first[p]] + r.toFloat()
+                q[pairs.second[p]] = q[pairs.second[p]] - r.toFloat()
             }
             Blas.transposedTimes(x.held, d, n, d, q, gw)
             var pen = 0.0
@@ -99,6 +119,9 @@ class PairwiseScorer : Scorer {
             g[d] = 0.0
             return (loss + 0.5 * pen / c) / count
         }
+
+        /** log(1 + exp(s)) without overflow. */
+        private fun softplus(s: Double): Double = if (s > 0) s + ln(1.0 + exp(-s)) else ln(1.0 + exp(s))
     }
 }
 

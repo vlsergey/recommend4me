@@ -22,6 +22,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.FacetChancesChanged
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
+import io.github.vlsergey.recommend4me.vector.Vectors
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -166,6 +167,8 @@ class Recommendations(
         val used: List<TypedRating>,
         val grades: IntArray,
         val works: LongArray,
+        /** The item of every row: two items of one work are compared as equal. */
+        val items: LongArray,
         val perItem: List<ItemInput>,
         val layout: FeatureLayout,
         val x: Matrix,
@@ -176,7 +179,7 @@ class Recommendations(
         val xFor: ((Set<Long>) -> Matrix)?,
     ) {
         val everyRow = IntArray(used.size) { it }
-        val task = RankingTask(x, grades, works)
+        val task = RankingTask(x, grades, works, items)
     }
 
     private fun prepare(catalogue: Catalogue): Prepared? {
@@ -205,6 +208,7 @@ class Recommendations(
         val layout = FeatureLayout.of(perItem, spreads, numbers)
         val x = layout.matrix(inputs)
         val works = LongArray(used.size) { catalogue.works.work(used[it].key) }
+        val items = LongArray(used.size) { Vectors.keyOf(used[it].key.toString()) }
         val keysOfWork = used.indices.groupBy({ works[it] }, { used[it].key })
         // The likeness of a graded item to the marks of the works under test would tell the fold what it is tested on
         val ofFold = HashMap<Set<Long>, Matrix>()
@@ -218,7 +222,7 @@ class Recommendations(
                 }
             }
         }
-        return Prepared(used, grades, works, perItem, layout, x, inputs, spreads, numbers, xFor)
+        return Prepared(used, grades, works, items, perItem, layout, x, inputs, spreads, numbers, xFor)
     }
 
     /** The scorer fitted on all grades with [parameter], and its scale: the ladder from [measured]'s out-of-fold scores. */
@@ -599,7 +603,7 @@ class Recommendations(
             return out
         }
         val parts = columns.map { (part, cols) ->
-            val task = RankingTask(without(p.x, cols), p.grades, p.works)
+            val task = RankingTask(without(p.x, cols), p.grades, p.works, p.items)
             val xFor = p.xFor?.let { f -> { underTest: Set<Long> -> without(f(underTest), cols) } }
             PartWorth(part, labels.getValue(part), cols.size, CrossValidation.choose(CrossValidation.measureAll(task, scorer, xFor))?.metrics)
         }

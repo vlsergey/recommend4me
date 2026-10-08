@@ -4,12 +4,16 @@ import io.github.vlsergey.recommend4me.matrix.Matrix
 
 /**
  * The rated rows a scorer learns from: the features of every rating ([x], a row each), its grade,
- * and the work it is of — two ratings of one work (two versions of a game, two merged copies of a
- * book) are never compared with each other and never fall into different folds.
+ * the work it is of and the item it is of. Two ratings of one work never fall into different
+ * folds and are never put in order by their grades. Two items of one work — one book on two
+ * sites, linked by the user — are the same work seen twice: compared, they are EQUAL, whatever
+ * their grades. Two versions of one item are not compared at all: an update may make a game better.
  */
-class RankingTask(val x: Matrix, val grades: IntArray, val works: LongArray) {
+class RankingTask(val x: Matrix, val grades: IntArray, val works: LongArray, val items: LongArray) {
     init {
-        require(grades.size == x.rows && works.size == x.rows) { "${x.rows} rows, ${grades.size} grades, ${works.size} works" }
+        require(grades.size == x.rows && works.size == x.rows && items.size == x.rows) {
+            "${x.rows} rows, ${grades.size} grades, ${works.size} works, ${items.size} items"
+        }
     }
 }
 

@@ -19,7 +19,7 @@ class KnnScorerTest {
             floatArrayOf(1f, 0f, 0f), floatArrayOf(0.9f, 0.1f, 0f),
             floatArrayOf(0f, 1f, 0f), floatArrayOf(0f, 0.9f, 0.1f),
         )
-        val task = RankingTask(rated, intArrayOf(5, 5, 1, 1), longArrayOf(1, 2, 3, 4))
+        val task = RankingTask(rated, intArrayOf(5, 5, 1, 1), longArrayOf(1, 2, 3, 4), longArrayOf(1, 2, 3, 4))
         val model = KnnScorer().fit(task, intArrayOf(0, 1, 2, 3), 2.0)
         val scores = model.scores(matrix(floatArrayOf(1f, 0.05f, 0f), floatArrayOf(0.05f, 1f, 0f)))
         assertTrue(scores[0] > 4f && scores[1] < 2f, scores.toList().toString())

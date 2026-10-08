@@ -25,7 +25,7 @@ class PairwiseScorerTest {
                 else -> 1
             }
         }
-        val task = RankingTask(x, grades, LongArray(n) { it.toLong() })
+        val task = RankingTask(x, grades, LongArray(n) { it.toLong() }, LongArray(n) { it.toLong() })
         val model = PairwiseScorer().fit(task, IntArray(n) { it }, 1.0) as LinearModel
         assertTrue(model.w[0] > 0 && model.w[1] > 0 && model.w[0] > model.w[1])
 
@@ -37,9 +37,63 @@ class PairwiseScorerTest {
     fun `pairs are of different grades and different works`() {
         val grades = intArrayOf(1, 1, 1, 1, 2, 3)
         val works = longArrayOf(1, 2, 3, 4, 5, 5)
-        val pairs = PairwiseScorer.pairs(grades, works, IntArray(grades.size) { it })
+        // The last two are two versions of one item
+        val items = longArrayOf(1, 2, 3, 4, 5, 5)
+        val pairs = PairwiseScorer.pairs(grades, works, items, IntArray(grades.size) { it })
         // 3 over 1 (four), 2 over 1 (four); 3 and 2 are one work
         assertEquals(8, pairs.size)
-        assertTrue((0 until pairs.size).all { grades[pairs.better[it]] > grades[pairs.worse[it]] })
+        assertEquals(0, pairs.first.size)
+        assertTrue(pairs.better.indices.all { grades[pairs.better[it]] > grades[pairs.worse[it]] })
+    }
+
+    @Test
+    fun `two items of one work are a pair of equals, whatever their grades`() {
+        val grades = intArrayOf(1, 4, 3)
+        val works = longArrayOf(1, 2, 2)
+        val items = longArrayOf(1, 2, 3)
+        val pairs = PairwiseScorer.pairs(grades, works, items, IntArray(grades.size) { it })
+        // 4 over 1, 3 over 1; 4 and 3 are one book on two sites: equal, once
+        assertEquals(2, pairs.better.size)
+        assertEquals(listOf(1 to 2), pairs.first.indices.map { pairs.first[it] to pairs.second[it] })
+    }
+
+    @Test
+    fun `books on both sites bring the sites' scales together`() {
+        // Feature 0: how good the book is; feature 1: the site, +1 for one, −1 for the other. The
+        // books of the first site happen to be graded higher, so alone the line takes the site for
+        // quality; the same books on both sites, graded alike, say the site tells nothing.
+        val random = Random(11)
+        val single = 60
+        val both = 20
+        val n = single + 2 * both
+        val x = Matrix(n, 2)
+        val grades = IntArray(n)
+        val works = LongArray(n) { it.toLong() }
+        for (i in 0 until single) {
+            val site = if (i % 2 == 0) 1f else -1f
+            val quality = random.nextFloat() * 2 - 1
+            x.held[i * 2] = quality
+            x.held[i * 2 + 1] = site
+            grades[i] = ((quality + 1) * 1.5f + (if (site > 0) 2f else 0f)).toInt().coerceIn(1, 5)
+        }
+        for (j in 0 until both) {
+            val quality = random.nextFloat() * 2 - 1
+            val grade = ((quality + 1) * 2).toInt().coerceIn(1, 5)
+            for ((k, site) in listOf(1f, -1f).withIndex()) {
+                val row = single + 2 * j + k
+                x.held[row * 2] = quality
+                x.held[row * 2 + 1] = site
+                grades[row] = grade
+                works[row] = (single + j).toLong()
+            }
+        }
+        val items = LongArray(n) { it.toLong() }
+        val all = IntArray(n) { it }
+        val apart = PairwiseScorer().fit(RankingTask(x, grades, items, items), all, 1.0) as LinearModel
+        val linked = PairwiseScorer().fit(RankingTask(x, grades, works, items), all, 1.0) as LinearModel
+        // The weight of the site, relative to that of quality
+        val siteApart = apart.w[1] / apart.w[0]
+        val siteLinked = linked.w[1] / linked.w[0]
+        assertTrue(siteLinked < siteApart, "$siteApart → $siteLinked")
     }
 }

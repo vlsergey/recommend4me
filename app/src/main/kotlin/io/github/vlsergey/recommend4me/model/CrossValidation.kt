@@ -95,7 +95,7 @@ object CrossValidation {
             val train = grades.indices.filter { folds[it] != fold }.toIntArray()
             val test = grades.indices.filter { folds[it] == fold }.toIntArray()
             val rows = xFor?.invoke(test.map { works[it] }.toSet()) ?: task.x
-            val all = scorer.fit(RankingTask(rows, grades, works), train, parameter).scores(rows)
+            val all = scorer.fit(RankingTask(rows, grades, works, task.items), train, parameter).scores(rows)
             val (mean, sd) = standardisation(train.map { all[it].toDouble() })
             test.forEach { scores[it] = (all[it] - mean) / sd }
             concordance(grades, works, test, scores)
