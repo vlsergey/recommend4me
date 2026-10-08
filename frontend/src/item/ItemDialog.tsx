@@ -13,7 +13,7 @@ import { FacetCorrections } from "@/correction/FacetCorrections";
 import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor";
 import { Links } from "@/correction/Links";
 import { titleField, useCorrections, type Corrections } from "@/correction/useCorrections";
-import { formatDate } from "@/i18n";
+import { formatDate, score } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { Explanation } from "@/model/Explanation";
 import { Parts } from "@/part/Parts";
@@ -319,9 +319,27 @@ function Details({
         <Part title="Цикл и автор">
           <RelatedWorks type={type} related={d.related} />
         </Part>
-        <Part title="Почему такой прогноз">
-          <Explanation groups={d.explanation} />
-        </Part>
+        {d.heldOut ? (
+          // A graded work: the model of every grade has seen it and partly learnt it by heart — this one has not
+          <Part title="Без вашей оценки">
+            <div className="flex flex-col gap-1">
+              <div className="text-sm">
+                Модель, не видевшая эту работу: <span className="font-semibold tabular-nums">{score(Math.max(0, d.heldOut.score))}</span>
+                {d.heldOut.gradePlace != null && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · ваша оценка на шкале: <span className="tabular-nums">{score(d.heldOut.gradePlace)}</span>
+                  </span>
+                )}
+              </div>
+              <Explanation groups={d.heldOut.explanation} title="За счёт чего" />
+            </div>
+          </Part>
+        ) : (
+          <Part title="Почему такой прогноз">
+            <Explanation groups={d.explanation} />
+          </Part>
+        )}
         {d.ratings.length > 0 && (
           <Part title="Мои оценки">
             <Ratings type={type} details={d} />

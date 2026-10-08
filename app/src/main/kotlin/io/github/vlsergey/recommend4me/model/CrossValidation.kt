@@ -214,7 +214,10 @@ class Scale(val mean: Double, val sd: Double, val ladder: Map<Int, Double>) {
     private val high = ladder.values.maxOrNull() ?: 1.0
     private val span = if (high > low) high - low else 1.0
 
-    fun score(raw: Double): Double = Grades.MAX_SCORE * ((raw - mean) / sd - low) / span
+    fun score(raw: Double): Double = ofStandard((raw - mean) / sd)
+
+    /** A score already standardised — as the cross-validation gives a fold's works — on 0..10. */
+    fun ofStandard(z: Double): Double = Grades.MAX_SCORE * (z - low) / span
 
     /** Where every grade stands on 0..10. */
     fun grades(): Map<Int, Double> = ladder.mapValues { Grades.MAX_SCORE * (it.value - low) / span }

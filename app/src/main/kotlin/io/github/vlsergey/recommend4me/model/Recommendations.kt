@@ -175,6 +175,10 @@ class Recommendations(
         val perItem: List<ItemInput>,
         val layout: FeatureLayout,
         val x: Matrix,
+        /** The input of every row, as [x] holds it. */
+        val rows: List<ItemInput>,
+        /** The items of every work among the rows. */
+        val keysOfWork: Map<Long, List<ItemKey>>,
         val spreads: Map<String, VectorSpread>,
         val numbers: Map<String, NumberSpread>,
         /** The rows as a fold sees them: the marks of the works under test not counted; null when nothing depends on them. */
@@ -229,7 +233,7 @@ class Recommendations(
                 }
             }
         }
-        return Prepared(used, grades, works, items, perItem, layout, x, spreads, numbers, xFor)
+        return Prepared(used, grades, works, items, perItem, layout, x, rows, keysOfWork, spreads, numbers, xFor)
     }
 
     /** The scorer fitted on all grades with [parameter], and its scale: the ladder from [measured]'s out-of-fold scores. */
@@ -280,8 +284,66 @@ class Recommendations(
             topNegative = importance.filter { it.contribution < 0 }.reversed().take(TOP_FEATURES),
         )
         type.models.save(scorer.id, Instant.ofEpochMilli(meta.trainedAtMillis), json.writeValueAsString(meta), fitted.pack())
+        type.models.replaceHeldOut(heldOutScores(p, chosen, scale))
         return TrainedModel(meta, fitted)
     }
+
+    /**
+     * The prediction of every graded item by a model that had not seen its work: the score the
+     * cross-validation of the chosen parameter gave its latest grade's row from the fold the work
+     * was left out of, on the model's scale. None when there were too few works for folds.
+     */
+    private fun heldOutScores(p: Prepared, chosen: RankingCandidate?, scale: Scale): Map<ItemKey, Double> {
+        val scores = chosen?.scores ?: return emptyMap()
+        return p.used.indices.groupBy { p.used[it].key }
+            .mapValues { (_, rows) -> scale.ofStandard(scores[rows.maxBy { p.used[it].ratedAt }]) }
+    }
+
+    /** What a model that had not seen a graded work says of it: its score, where the user's grade stands, and why. */
+    class HeldOut(val score: Double, val gradePlace: Double?, val explanation: List<ContributionGroup>)
+
+    /**
+     * HOW THE MODEL WOULD GRADE A GRADED WORK NOT KNOWING THE USER'S GRADE: the model of the fold the
+     * work was left out of in the cross-validation — fitted again on every other fold with the
+     * model's parameter, the likeness to the marks of the fold's works not counted — scores it and
+     * tells why. The model of every grade has seen the work and partly learnt it by heart (its
+     * annotation, its cover); this one has not. The score is the one the list sorts the surprises
+     * by. Null for a work the user has not graded, or when there are too few works for folds.
+     */
+    fun heldOut(key: ItemKey): HeldOut? {
+        val type = stores.typeOf(key.source)
+        if (type.source(key.source)?.ratings?.ofItem(key.id).isNullOrEmpty()) return null
+        val model = load(type) ?: return null
+        val scorer = plugins.scorers.firstOrNull { it.id == model.meta.scorer } ?: return null
+        val catalogue = reader.read(type)
+        val p = prepare(catalogue) ?: return null
+        val own = p.used.indices.filter { p.used[it].key == key }.maxByOrNull { p.used[it].ratedAt } ?: return null
+        val folds = CrossValidation.folds(p.grades, p.works)
+        if (folds.all { it == 0 }) return null
+        val fold = folds[own]
+        val underTest = p.grades.indices.filter { folds[it] == fold }.map { p.works[it] }.toSet()
+        val train = p.grades.indices.filter { folds[it] != fold }.toIntArray()
+        val x = p.xFor?.invoke(underTest) ?: p.x
+        val fitted = scorer.fit(RankingTask(x, p.grades, p.works, p.items), train, model.meta.parameter)
+        val all = fitted.scores(x).map { it.toDouble() }
+        val (mean, sd) = CrossValidation.standardisation(train.map { all[it] })
+        val foldModel = TrainedModel(model.meta.copy(scoreMean = mean, scoreSd = sd), fitted)
+        // The work as the fold saw it: its current input, its likeness to the marks of the fold's works left out
+        val excluded = underTest.flatMap { p.keysOfWork[it].orEmpty() }.toSet()
+        val current = CatalogueReader.previousGradesOfCurrentVersions(catalogue.ratings, catalogue::versionOf)[key]
+        val input = CatalogueReader.inputOf(catalogue.byKey.getValue(key), catalogue.vectorsOf(key), current).let { i ->
+            if (catalogue.likeness.empty) i else i.withVectors(i.vectors - MARK_KEYS + catalogue.likeness.vectors(key, excluded))
+        }
+        val grade = p.used[own].grade
+        return HeldOut(
+            score = foldModel.scale.ofStandard((all[own] - mean) / sd),
+            gradePlace = model.scale.grades()[grade],
+            explanation = explain(foldModel, input, type),
+        )
+    }
+
+    /** Where every grade stands on 0..10 by the current model of the type; null without one. */
+    fun gradePlaces(typeId: String): Map<Int, Double>? = load(type(typeId))?.scale?.grades()
 
     private fun scoreAll(catalogue: Catalogue, model: TrainedModel) {
         val previousForCurrent = CatalogueReader.previousGradesOfCurrentVersions(catalogue.ratings, catalogue::versionOf)
@@ -324,8 +386,13 @@ class Recommendations(
         val parts: Map<String, Double> = emptyMap(),
     )
 
-    /** What moves the prediction of the work, part by part, strongest first — for a page of the site. */
+    /**
+     * What moves the prediction of the work, part by part, strongest first — for a page of the site.
+     * Of a graded work, the model's that had not seen it ([heldOut]): the model of every grade
+     * explains it by what it learnt of the work itself.
+     */
     fun explanation(key: ItemKey): List<ContributionGroup> {
+        heldOut(key)?.let { return it.explanation }
         val type = stores.typeOf(key.source)
         val model = load(type) ?: return emptyList()
         val input = inputOf(type, key, likenesses.stored(type)) ?: return emptyList()

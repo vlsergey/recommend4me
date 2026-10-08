@@ -121,6 +121,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             val versions = ids.mapNotNull { id -> heads[ItemKey(source, id)]?.first?.let { id to it.version } }.toMap()
             val graded = graded(ratings, versions)
             val predictions = type.models.predictions(source)
+            val heldOut = type.models.heldOut(source)
             val signals = store.signals.all()
             ids.forEach { id ->
                 val key = ItemKey(source, id)
@@ -145,6 +146,7 @@ class ItemCards(private val stores: Stores, private val works: Works) {
                     previousGrade = g?.previousGrade,
                     previousGradeVersion = g?.previousVersion,
                     prediction = predictions[id]?.let { Prediction(it) },
+                    heldOut = heldOut[id]?.let { Prediction(it) },
                     searchMatch = matches[key]?.let { m ->
                         SearchMatch(m.field, m.byMeaning, m.text, m.highlights.map { (s, e) -> TextRange(s, e) })
                     },

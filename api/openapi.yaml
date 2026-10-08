@@ -1379,8 +1379,12 @@ components:
 
     ItemSort:
       type: string
-      description: SCORE - by prediction; UPDATED - newest update first; NUMBER - by a number, the largest first
-      enum: [SCORE, UPDATED, NUMBER]
+      description: |
+        SCORE - by prediction; UPDATED - newest update first; NUMBER - by a number, the largest
+        first; SURPRISE - the graded works the model that had not seen them (ItemSummary.heldOut)
+        puts furthest from where the user's grade stands, first - below the lowest grade's place a
+        work of it is no surprise, nor above the highest's; works without one last
+      enum: [SCORE, UPDATED, NUMBER, SURPRISE]
       default: SCORE
 
     FacetValueInfo:
@@ -1437,6 +1441,28 @@ components:
           description: |
             The work's place on the user's own scale: the centre of the lowest grade is 0, of the
             highest 10; works beyond the extreme grades go beyond 0..10
+
+    HeldOut:
+      type: object
+      description: |
+        How the model would grade a graded work not knowing the user's grade: the model of the fold
+        the work was left out of in the cross-validation scores it and tells why. The model of every
+        grade has seen the work and partly learnt it by heart; this one has not
+      required: [score, explanation]
+      properties:
+        score:
+          type: number
+          format: double
+          description: The work's place on the scale by that model
+        gradePlace:
+          type: number
+          format: double
+          description: Where the user's grade of the work stands on the scale
+        explanation:
+          type: array
+          description: What moves that model's score, part by part, strongest first
+          items:
+            $ref: '#/components/schemas/ContributionGroup'
 
     ItemRef:
       type: object
@@ -1508,6 +1534,11 @@ components:
           type: string
         prediction:
           $ref: '#/components/schemas/Prediction'
+        heldOut:
+          $ref: '#/components/schemas/Prediction'
+          description: |
+            Of a graded work: the prediction of a model that had not seen it (the cross-validation's,
+            from the fold it was left out of) - how the model would grade it not knowing the user's grade
         searchMatch:
           $ref: '#/components/schemas/SearchMatch'
         signals:
@@ -1676,6 +1707,8 @@ components:
           description: What moves the prediction, part by part - a facet, the pictures, a text - strongest first, each with every feature in it
           items:
             $ref: '#/components/schemas/ContributionGroup'
+        heldOut:
+          $ref: '#/components/schemas/HeldOut'
         ratings:
           type: array
           description: The grades of every item of the work, newest first

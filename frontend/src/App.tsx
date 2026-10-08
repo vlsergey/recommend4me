@@ -13,6 +13,7 @@ import {
   SettingsIcon,
   SparklesIcon,
   TelescopeIcon,
+  ZapIcon,
 } from "lucide-react";
 import type { ContentTypeInfo, ItemView } from "@/api/client";
 import { CaptureButton } from "@/capture/CaptureDialog";
@@ -250,6 +251,15 @@ function TypeScreen({ type, types, onType }: { type: ContentTypeInfo; types: Con
                 <TabsTrigger value="UPDATED" className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")} disabled={!!search}>
                   <ArrowDownWideNarrowIcon /> <span className="sm:hidden">Дата</span>
                   <span className="hidden sm:inline">По дате</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="SURPRISE"
+                  className={cn("px-2 sm:px-3", search && "hidden sm:inline-flex")}
+                  disabled={!!search}
+                  title="Сначала оценённые работы, которые модель, не видевшая их, ставит дальше всего от вашей оценки"
+                >
+                  <ZapIcon /> <span className="sm:hidden">Сюрпризы</span>
+                  <span className="hidden sm:inline">Неожиданные</span>
                 </TabsTrigger>
                 {numberTabs.map((n) => (
                   <TabsTrigger

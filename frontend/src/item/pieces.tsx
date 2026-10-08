@@ -156,7 +156,13 @@ export function ScoreBadge({ type, summary, className }: { type: ContentTypeInfo
         {p ? shownScore(p.score) : "—"}
       </TooltipTrigger>
       <TooltipContent>
-        {p ? (
+        {summary.heldOut ? (
+          // A graded work: what the model that had not seen it says, and why — the model of every grade learnt it
+          <div className="flex w-56 flex-col">
+            <div className="font-semibold">Без вашей оценки модель: {score(Math.max(0, summary.heldOut.score))}</div>
+            <ScoreWhy summary={summary} />
+          </div>
+        ) : p ? (
           <div className="flex w-56 flex-col">
             <div className="font-semibold">Место на вашей шкале: {score(Math.max(0, p.score))}</div>
             <ScoreWhy summary={summary} />

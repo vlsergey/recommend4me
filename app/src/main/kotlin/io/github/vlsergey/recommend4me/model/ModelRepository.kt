@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.database.model.tables.references.HELD_OUT
 import io.github.vlsergey.recommend4me.database.model.tables.references.MODEL
 import io.github.vlsergey.recommend4me.database.model.tables.references.PREDICTION
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -29,8 +30,29 @@ class ModelRepository(private val db: DSLContext) {
         db.transaction { c ->
             DSL.using(c).deleteFrom(MODEL).execute()
             DSL.using(c).deleteFrom(PREDICTION).execute()
+            DSL.using(c).deleteFrom(HELD_OUT).execute()
         }
     }
+
+    /** Replaces the predictions of the graded items by the models that had not seen them, in one transaction. */
+    fun replaceHeldOut(scores: Map<ItemKey, Double>) {
+        db.transaction { configuration ->
+            val tx = DSL.using(configuration)
+            tx.deleteFrom(HELD_OUT).execute()
+            scores.entries.chunked(BATCH).forEach { chunk ->
+                val batch = tx.batch(
+                    tx.insertInto(HELD_OUT, HELD_OUT.SOURCE, HELD_OUT.ITEM_ID, HELD_OUT.SCORE).values(null as String?, null as String?, null as Double?),
+                )
+                chunk.forEach { (key, score) -> batch.bind(key.source, key.id, score) }
+                batch.execute()
+            }
+        }
+    }
+
+    /** Every prediction of a source's graded items by the model that had not seen them: item to score. */
+    fun heldOut(source: String): Map<String, Double> =
+        db.select(HELD_OUT.ITEM_ID, HELD_OUT.SCORE).from(HELD_OUT).where(HELD_OUT.SOURCE.eq(source))
+            .fetch().associate { it.value1()!! to it.value2()!! }
 
     /**
      * Replaces every item's prediction in one transaction: readers see the old ones until the new

@@ -10,7 +10,16 @@ import { FeatureBars } from "./FeatureBars";
  * the strongest first. Folded to one line naming the strongest part: the card is for grading.
  * A part of several features opens to every one of them.
  */
-export function Explanation({ groups, className }: { groups: ContributionGroup[]; className?: string }) {
+export function Explanation({
+  groups,
+  className,
+  title = "Почему такой прогноз",
+}: {
+  groups: ContributionGroup[];
+  className?: string;
+  /** What the folded line says the parts explain. */
+  title?: string;
+}) {
   const [shown, setShown] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   if (groups.length === 0) return null;
@@ -27,7 +36,7 @@ export function Explanation({ groups, className }: { groups: ContributionGroup[]
         title="Сколько баллов вашей шкалы даёт работе каждая часть: прогноз как есть минус прогноз без неё"
       >
         <ChevronRightIcon className={cn("size-4 shrink-0 transition-transform", shown && "rotate-90")} />
-        <span className="font-semibold">Почему такой прогноз</span>
+        <span className="font-semibold">{title}</span>
         {!shown && (
           <span className="min-w-0 truncate text-muted-foreground">
             · больше всего: {strongest.label.toLowerCase()} {strongest.contribution > 0 ? "+" : ""}
