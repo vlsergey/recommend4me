@@ -64,9 +64,10 @@ class AuthorToday : Source {
 
     /**
      * 2: whether a work is fan fiction, by its genres. 3: the standard statuses; the shelf of the
-     * finished as the standard "read". 4: the shelf as the standard one.
+     * finished as the standard "read". 4: the shelf as the standard one. 5: the pages that failed
+     * when several pages of one work were read at once read again.
      */
-    override val parserVersion = 4
+    override val parserVersion = 5
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 

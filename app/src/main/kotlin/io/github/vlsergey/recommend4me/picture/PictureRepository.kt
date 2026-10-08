@@ -42,7 +42,9 @@ class PictureRepository(private val db: DSLContext) {
             wanted.forEach { (position, url) ->
                 val old = known[position]
                 if (old == null) {
-                    tx.insertInto(PICTURE).set(PICTURE.ITEM_ID, itemId).set(PICTURE.POSITION, position).set(PICTURE.URL, url.take(2000)).execute()
+                    // Another page of the item read at the same moment may have added it already
+                    tx.insertInto(PICTURE).set(PICTURE.ITEM_ID, itemId).set(PICTURE.POSITION, position).set(PICTURE.URL, url.take(2000))
+                        .onDuplicateKeyIgnore().execute()
                 } else if (old.url != url.take(2000)) {
                     orphans += listOfNotNull(old.previewFile, old.fullFile)
                     tx.update(PICTURE)
@@ -218,8 +220,11 @@ class PictureRepository(private val db: DSLContext) {
                 tx.deleteFrom(ITEM_PICTURE_VECTOR).where(ITEM_PICTURE_VECTOR.ITEM_ID.`in`(ids)).execute()
                 val rows = perItem.flatMap { (id, list) -> combine(list).map { (block, v) -> Triple(id, block, v) } }
                 if (rows.isNotEmpty()) {
+                    // Merged, not inserted: two pages of one item read at once both make its vectors,
+                    // and the second must replace the first's rows, not fail on them
                     val batch = tx.batch(
-                        tx.insertInto(ITEM_PICTURE_VECTOR, ITEM_PICTURE_VECTOR.ITEM_ID, ITEM_PICTURE_VECTOR.BLOCK, ITEM_PICTURE_VECTOR.ENCODER, ITEM_PICTURE_VECTOR.VEC)
+                        tx.mergeInto(ITEM_PICTURE_VECTOR, ITEM_PICTURE_VECTOR.ITEM_ID, ITEM_PICTURE_VECTOR.BLOCK, ITEM_PICTURE_VECTOR.ENCODER, ITEM_PICTURE_VECTOR.VEC)
+                            .key(ITEM_PICTURE_VECTOR.ITEM_ID, ITEM_PICTURE_VECTOR.BLOCK)
                             .values(null as String?, null as String?, null as String?, null as ByteArray?),
                     )
                     rows.forEach { (id, block, v) -> batch.bind(id, block, encoder, Vectors.half(v)) }
