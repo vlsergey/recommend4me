@@ -122,7 +122,7 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
         s.items.forEachNumber { id, key, value -> if (key in numberDefs) numbers.getOrPut(id) { HashMap() }[key] = value }
         val fields = s.corrections.allFields()
         val signals = s.signals.all()
-        val notFeatures = notFeatures(s)
+        val featureSignals = featureSignals(s)
         return s.items.keys().map { k ->
             val categorical = LinkedHashSet<String>()
             val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
@@ -130,7 +130,7 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
                 val facetId = facetIds[facet] ?: return@forEach
                 keys.forEach { categorical += FeatureNames.facet(facetId, it) }
             }
-            signals[k.id]?.forEach { (name, value) -> if (name !in notFeatures) categorical += FeatureNames.signal(name, value) }
+            signals[k.id]?.forEach { (name, value) -> if (name in featureSignals) categorical += FeatureNames.signal(name, value) }
             if (severalSources) categorical += "source:${s.id}"
             val numeric = Corrected.numbers(numbers[k.id].orEmpty(), fields[k.id].orEmpty()).mapNotNull { (key, value) ->
                 val def = numberDefs[key] ?: return@mapNotNull null
@@ -151,8 +151,8 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
             val facetId = facetIds[facet] ?: return@forEach
             keys.forEach { categorical += FeatureNames.facet(facetId, it) }
         }
-        val notFeatures = notFeatures(s)
-        s.signals.ofItem(key.id).forEach { (name, value) -> if (name !in notFeatures) categorical += FeatureNames.signal(name, value) }
+        val featureSignals = featureSignals(s)
+        s.signals.ofItem(key.id).forEach { (name, value) -> if (name in featureSignals) categorical += FeatureNames.signal(name, value) }
         if (type.sources.size > 1) categorical += "source:${s.id}"
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numeric = Corrected.numbers(s.items.numbers(key.id), s.corrections.fieldsOf(key.id)).mapNotNull { (k, value) ->
@@ -162,8 +162,11 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
         return CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)
     }
 
-    /** The signals of the source the model does not read ([SignalDef.feature][io.github.vlsergey.recommend4me.source.SignalDef.feature]). */
-    private fun notFeatures(s: SourceStore): Set<String> = s.source.signals.filterNot { it.feature }.map { it.key }.toSet()
+    /**
+     * The signals of the source the model reads: those it declares to be
+     * ([SignalDef.feature][io.github.vlsergey.recommend4me.source.SignalDef.feature]); one it does not declare is not read.
+     */
+    private fun featureSignals(s: SourceStore): Set<String> = s.source.signals.filter { it.feature }.map { it.key }.toSet()
 
     /** The vectors of one item — texts, pictures, sets — without its likeness to the marks. */
     fun vectors(type: TypeStore, key: ItemKey): Map<String, FloatArray> {

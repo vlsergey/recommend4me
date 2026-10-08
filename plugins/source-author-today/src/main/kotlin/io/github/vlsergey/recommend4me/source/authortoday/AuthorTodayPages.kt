@@ -87,10 +87,15 @@ class AuthorTodayPages(private val context: SourceContext) {
         id
     }
 
-    /** The shelf of the user's library the work is on — "None" when on none — and, of the shelf of the finished, the standard "read". */
+    /**
+     * The shelf of the user's library the work is on — "None" when on none — as the standard one
+     * (a shelf the standard does not know as the site names it), and of the shelf of the finished
+     * the standard "read".
+     */
     private fun shelf(id: String, shelf: String) {
-        context.signals.set(id, AuthorToday.SIGNAL_LIBRARY, shelf.takeIf { it != "None" })
-        context.signals.set(id, Books.READ.key, Books.YES.key.takeIf { shelf == SHELF_FINISHED })
+        val standard = SHELVES[shelf]
+        context.signals.set(id, Books.SHELF.key, standard?.key ?: shelf.takeIf { it != "None" })
+        context.signals.set(id, Books.READ.key, Books.YES.key.takeIf { standard == Books.Shelf.FINISHED })
     }
 
     private fun writeGenres(id: String, form: FacetValue?, genres: List<FacetValue>) {
@@ -290,8 +295,11 @@ class AuthorTodayPages(private val context: SourceContext) {
         private val MARKS = Regex("\"workMarks\":(\\[[^\\]]*]|null)")
         private val HIDDEN = Regex("\"isDisliked\":(true|false)")
 
-        /** The shelf of the works the user has read through. */
-        private const val SHELF_FINISHED = "Finished"
+        /** The shelves of the user's library as the site names them, to the standard ones. */
+        private val SHELVES = mapOf(
+            "Reading" to Books.Shelf.READING, "Saved" to Books.Shelf.SAVED, "Finished" to Books.Shelf.FINISHED,
+            "Disliked" to Books.Shelf.DISLIKED, "Purchased" to Books.Shelf.PURCHASED,
+        )
 
         /** The statuses of the site by their text, to the standard ones. */
         private val STATUSES = mapOf("в процессе" to Books.Status.IN_PROGRESS, "весь текст" to Books.Status.FINISHED, "заморожен" to Books.Status.FROZEN)

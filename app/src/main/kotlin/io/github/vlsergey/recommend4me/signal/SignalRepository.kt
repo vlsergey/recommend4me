@@ -35,6 +35,17 @@ class SignalRepository(private val db: DSLContext, private val changed: () -> Un
         db.select(SITE_SIGNAL.ITEM_ID, SITE_SIGNAL.SIGNAL, SITE_SIGNAL.CONTENT).from(SITE_SIGNAL).fetch()
             .groupBy({ it.value1()!! }, { it.value2()!! to it.value3()!! }).mapValues { it.value.toMap() }
 
+    /** Removes every value of a signal not among [signals]; how many were removed of each. */
+    fun keepOnly(signals: Collection<String>): Map<String, Int> {
+        val gone = db.select(SITE_SIGNAL.SIGNAL).from(SITE_SIGNAL).where(SITE_SIGNAL.SIGNAL.notIn(signals)).fetch(SITE_SIGNAL.SIGNAL)
+            .groupingBy { it!! }.eachCount()
+        if (gone.isNotEmpty()) {
+            db.deleteFrom(SITE_SIGNAL).where(SITE_SIGNAL.SIGNAL.notIn(signals)).execute()
+            changed()
+        }
+        return gone
+    }
+
     fun ofItem(itemId: String): Map<String, String> =
         db.select(SITE_SIGNAL.SIGNAL, SITE_SIGNAL.CONTENT).from(SITE_SIGNAL).where(SITE_SIGNAL.ITEM_ID.eq(itemId))
             .fetch().associate { it.value1()!! to it.value2()!! }

@@ -112,8 +112,13 @@ class AuthorTodayPagesTest {
             .replace("state: 'None'", "state: 'Reading'")
             .replace("voteId: null", "voteId: 123")
         capture(context, "https://author.today/work/661269", html)
-        assertEquals("Reading", context.signalValues["661269" to "library"])
+        assertEquals("reading", context.signalValues["661269" to "shelf"])
+        assertEquals(null, context.signalValues["661269" to "read"])
         assertEquals("yes", context.signalValues["661269" to "liked"])
         assertNotNull(context.heads["661269"])
+        // The shelf of the finished is the standard "read" too
+        capture(context, "https://author.today/work/661269", html.replace("state: 'Reading'", "state: 'Finished'"))
+        assertEquals("finished", context.signalValues["661269" to "shelf"])
+        assertEquals("yes", context.signalValues["661269" to "read"])
     }
 }

@@ -40,6 +40,26 @@ object Books {
     /** The user liked the work on the site. Shown, not read by the model: it is the user's verdict, not something of the work. */
     val LIKED = StandardSignal("liked", "Понравилось", listOf(YES), feature = false)
 
+    /** The shelves of a user's library on a site. */
+    object Shelf {
+        val READING = StandardValue("reading", "читаю")
+        val SAVED = StandardValue("saved", "отложено")
+        val FINISHED = StandardValue("finished", "прочитано")
+        val DISLIKED = StandardValue("disliked", "не понравилось")
+        val PURCHASED = StandardValue("purchased", "куплено")
+    }
+
+    /**
+     * The shelf of the user's library on the site the work is on. Shown, not read by the model: the
+     * user puts there the works they have met, by their verdict on them. The shelf of the finished
+     * also sets [READ].
+     */
+    val SHELF = StandardSignal(
+        "shelf", "Полка",
+        listOf(Shelf.READING, Shelf.SAVED, Shelf.FINISHED, Shelf.DISLIKED, Shelf.PURCHASED),
+        feature = false,
+    )
+
     val TYPE = ContentType(
         id = ID,
         title = "Книги",
@@ -47,6 +67,6 @@ object Books {
         verb = "читать",
         universes = true,
         facets = listOf(AUTHOR, STATUS, UniverseFacets.KIND_FACET, TAG),
-        signals = listOf(READ, LIKED),
+        signals = listOf(READ, LIKED, SHELF),
     )
 }
