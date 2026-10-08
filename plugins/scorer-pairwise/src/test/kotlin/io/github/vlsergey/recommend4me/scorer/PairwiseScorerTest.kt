@@ -41,8 +41,10 @@ class PairwiseScorerTest {
         val items = longArrayOf(1, 2, 3, 4, 5, 5)
         val pairs = PairwiseScorer.pairs(grades, works, items, IntArray(grades.size) { it })
         // 3 over 1 (four), 2 over 1 (four); 3 and 2 are one work
-        assertEquals(8, pairs.size)
+        assertEquals(8, pairs.better.size)
         assertEquals(0, pairs.first.size)
+        // Six graded rows in eight pairs: a pair of equals would weigh 2 · 8 / 6
+        assertEquals(16.0 / 6, pairs.equalWeight, 1e-9)
         assertTrue(pairs.better.indices.all { grades[pairs.better[it]] > grades[pairs.worse[it]] })
     }
 
@@ -55,6 +57,40 @@ class PairwiseScorerTest {
         // 4 over 1, 3 over 1; 4 and 3 are one book on two sites: equal, once
         assertEquals(2, pairs.better.size)
         assertEquals(listOf(1 to 2), pairs.first.indices.map { pairs.first[it] to pairs.second[it] })
+    }
+
+    @Test
+    fun `an ungraded item of a work is an equal of its other items, and of nothing else`() {
+        val grades = intArrayOf(1, 4)
+        // Rows 2 and 3: ungraded; 2 is one work with the graded row 1, 3 with nothing graded
+        val works = longArrayOf(1, 2, 2, 3)
+        val items = longArrayOf(1, 2, 3, 4)
+        val pairs = PairwiseScorer.pairs(grades, works, items, intArrayOf(0, 1), 2 until 4)
+        assertEquals(listOf(1 to 0), pairs.better.indices.map { pairs.better[it] to pairs.worse[it] })
+        assertEquals(listOf(1 to 2), pairs.first.indices.map { pairs.first[it] to pairs.second[it] })
+    }
+
+    @Test
+    fun `an ungraded item takes the place of the work it is linked into`() {
+        // Feature 0 orders the graded rows; the ungraded item has feature 1 only, which no grade
+        // tells anything of — but it is the same work as the best graded one
+        val n = 41
+        val x = Matrix(n, 2)
+        val graded = n - 1
+        val grades = IntArray(graded) { i ->
+            x.held[i * 2] = i / graded.toFloat()
+            1 + i * 5 / graded
+        }
+        x.held[graded * 2 + 1] = 1f
+        val items = LongArray(n) { it.toLong() }
+        val apart = PairwiseScorer().fit(RankingTask(x, grades, items, items), IntArray(graded) { it }, 1.0).scores(x)
+        val works = LongArray(n) { if (it == graded) (graded - 1).toLong() else it.toLong() }
+        val linked = PairwiseScorer().fit(RankingTask(x, grades, works, items), IntArray(graded) { it }, 1.0).scores(x)
+        // Alone it scores as no work at all; linked, about as the best, which it is
+        assertEquals(0f, apart[graded])
+        val spread = linked[graded - 1] - linked[0]
+        val gap = kotlin.math.abs(linked[graded] - linked[graded - 1])
+        assertTrue(gap < 0.2f * spread,"${linked[graded]} vs the best ${linked[graded - 1]}, the worst ${linked[0]}")
     }
 
     @Test

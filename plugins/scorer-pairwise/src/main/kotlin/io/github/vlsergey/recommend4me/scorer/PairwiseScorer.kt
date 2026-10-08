@@ -25,7 +25,7 @@ class PairwiseScorer : Scorer {
     override val defaultParameter = 0.1
 
     override fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer =
-        fit(task.x, pairs(task.grades, task.works, task.items, rows), parameter)
+        fit(task.x, pairs(task.grades, task.works, task.items, rows, task.ungraded), parameter)
 
     override fun unpack(bytes: ByteArray): FittedScorer = LinearModel.unpack(bytes)
 
@@ -36,30 +36,40 @@ class PairwiseScorer : Scorer {
      * of grades of ten, a pair of grades of four works weighed as much.
      *
      * And the rows of two items of one work, [first] and [second]: the work on two sites, EQUAL —
-     * their loss is least when their scores are the same, and weighs as one pair of grades.
+     * graded or not, their loss is least when their scores are the same. A pair of equals weighs
+     * [equalWeight]: as much as all the pairs of grades of an average graded row together, so that
+     * the two items of a work are held together as firmly as a graded work is held in its place —
+     * whether the work has a grade or not.
      */
-    class Pairs(val better: IntArray, val worse: IntArray, val first: IntArray, val second: IntArray) {
-        val size: Int get() = better.size + first.size
+    class Pairs(val better: IntArray, val worse: IntArray, val first: IntArray, val second: IntArray, val equalWeight: Double) {
+        /** The weight of all the pairs together. */
+        val weight: Double get() = better.size + equalWeight * first.size
     }
 
     companion object {
-        fun pairs(grades: IntArray, works: LongArray, items: LongArray, subset: IntArray): Pairs {
+        /** The pairs of the graded rows [subset] and of the rows without a grade, [ungraded], which only have equals. */
+        fun pairs(grades: IntArray, works: LongArray, items: LongArray, subset: IntArray, ungraded: IntRange = IntRange.EMPTY): Pairs {
             val better = ArrayList<Int>()
             val worse = ArrayList<Int>()
-            val first = ArrayList<Int>()
-            val second = ArrayList<Int>()
             for (a in subset) for (b in subset) {
-                if (works[a] != works[b]) {
-                    if (grades[a] > grades[b]) {
-                        better += a
-                        worse += b
-                    }
-                } else if (items[a] < items[b]) {
-                    first += a
-                    second += b
+                if (works[a] != works[b] && grades[a] > grades[b]) {
+                    better += a
+                    worse += b
                 }
             }
-            return Pairs(better.toIntArray(), worse.toIntArray(), first.toIntArray(), second.toIntArray())
+            val first = ArrayList<Int>()
+            val second = ArrayList<Int>()
+            (subset.asSequence() + ungraded.asSequence()).groupBy { works[it] }.values.forEach { rows ->
+                for (a in rows) for (b in rows) {
+                    if (items[a] < items[b]) {
+                        first += a
+                        second += b
+                    }
+                }
+            }
+            // Every pair of grades is a pair of two graded rows
+            val equalWeight = if (subset.isEmpty()) 0.0 else 2.0 * better.size / subset.size
+            return Pairs(better.toIntArray(), worse.toIntArray(), first.toIntArray(), second.toIntArray(), equalWeight)
         }
 
         /**
@@ -83,7 +93,8 @@ class PairwiseScorer : Scorer {
     private class PairObjective(val x: Matrix, val pairs: Pairs, val c: Double) {
         private val n = x.rows
         private val d = x.cols
-        private val count = max(pairs.size, 1).toDouble()
+        private val count = max(pairs.weight, 1.0)
+        private val equal = pairs.equalWeight
         private val w = Floats(d)
         private val z = Floats(n)
         private val q = Floats(n)
@@ -105,8 +116,8 @@ class PairwiseScorer : Scorer {
             for (p in pairs.first.indices) {
                 val s = (z[pairs.first[p]] - z[pairs.second[p]]).toDouble()
                 // −½ log σ(s) − ½ log σ(−s): least at s = 0
-                loss += 0.5 * (softplus(-s) + softplus(s))
-                val r = 1.0 / (1.0 + exp(-s)) - 0.5
+                loss += equal * 0.5 * (softplus(-s) + softplus(s))
+                val r = equal * (1.0 / (1.0 + exp(-s)) - 0.5)
                 q[pairs.first[p]] = q[pairs.first[p]] + r.toFloat()
                 q[pairs.second[p]] = q[pairs.second[p]] - r.toFloat()
             }

@@ -46,21 +46,25 @@ object CrossValidation {
     const val MIN_WORKS = 6
     private const val MAX_FOLDS = 5
 
-    /** Fold of every rating: works dealt round-robin by their last grade, so every fold sees every grade. */
+    /**
+     * Fold of every rating: works dealt round-robin by their last grade, so every fold sees every
+     * grade. Only the graded rows have a fold: [works] may go on with rows without a grade.
+     */
     fun folds(grades: IntArray, works: LongArray): IntArray {
-        val distinct = works.distinct()
+        val graded = works.copyOf(grades.size)
+        val distinct = graded.distinct()
         val k = minOf(MAX_FOLDS, distinct.size / 2)
         val folds = IntArray(grades.size)
         if (distinct.size < MIN_WORKS || k < 2) return folds
         val lastGrade = HashMap<Long, Int>()
-        works.forEachIndexed { i, id -> lastGrade[id] = grades[i] }
+        graded.forEachIndexed { i, id -> lastGrade[id] = grades[i] }
         val foldOf = HashMap<Long, Int>()
         var next = 0
         val random = Random(0)
         Grades.RANGE.forEach { g ->
             distinct.filter { lastGrade[it] == g }.shuffled(random).forEach { foldOf[it] = next++ % k }
         }
-        works.forEachIndexed { i, id -> folds[i] = foldOf.getValue(id) }
+        graded.forEachIndexed { i, id -> folds[i] = foldOf.getValue(id) }
         return folds
     }
 

@@ -162,7 +162,10 @@ class Recommendations(
 
     // --- Training ---
 
-    /** The graded items as the model sees them; null when there are too few grades to train on. */
+    /**
+     * The graded items as the model sees them, a row a grade — then the ungraded items of linked
+     * works, rows without a grade; null when there are too few grades to train on.
+     */
     private class Prepared(
         val used: List<TypedRating>,
         val grades: IntArray,
@@ -172,7 +175,6 @@ class Recommendations(
         val perItem: List<ItemInput>,
         val layout: FeatureLayout,
         val x: Matrix,
-        val inputs: List<ItemInput>,
         val spreads: Map<String, VectorSpread>,
         val numbers: Map<String, NumberSpread>,
         /** The rows as a fold sees them: the marks of the works under test not counted; null when nothing depends on them. */
@@ -186,15 +188,20 @@ class Recommendations(
         val likeness = catalogue.likeness
         val previousForRating = CatalogueReader.previousGradesOfRatings(catalogue.ratings)
         val previousForCurrent = CatalogueReader.previousGradesOfCurrentVersions(catalogue.ratings, catalogue::versionOf)
+        val clusters = catalogue.works
         val used = catalogue.ratings.filter { it.key in catalogue.byKey }
         val grades = IntArray(used.size) { used[it].grade }
         if (used.size < MIN_RATINGS || grades.distinct().size < 2) {
             log.info("{}: not enough grades to train: {} of {} values", catalogue.type.id, used.size, grades.distinct().size)
             return null
         }
-        val inputs = used.map { r ->
+        // An item of a linked work the user did not grade has no grade, but it is the same work as
+        // the others: a row without a grade, compared to them as an equal — and so put in order with them
+        val gradedKeys = used.map { it.key }.toSet()
+        val ungraded = catalogue.items.filter { clusters.linked(it.key) && it.key !in gradedKeys }
+        val rows = used.map { r ->
             CatalogueReader.inputOf(catalogue.byKey.getValue(r.key), catalogue.vectorsOf(r.key), previousForRating[r])
-        }
+        } + ungraded.map { CatalogueReader.inputOf(it, catalogue.vectorsOf(it.key), previousForCurrent[it.key]) }
         // The current input of every graded item: what the vocabulary and the importances are counted on
         val perItem = used.map { it.key }.distinct().map { key ->
             CatalogueReader.inputOf(catalogue.byKey.getValue(key), catalogue.vectorsOf(key), previousForCurrent[key])
@@ -206,29 +213,29 @@ class Recommendations(
         }
         val numbers = FeatureLayout.numberSpreads(catalogue.items.map { ItemInput(it.key, emptyMap(), emptySet(), it.numeric) })
         val layout = FeatureLayout.of(perItem, spreads, numbers)
-        val x = layout.matrix(inputs)
-        val works = LongArray(used.size) { catalogue.works.work(used[it].key) }
-        val items = LongArray(used.size) { Vectors.keyOf(used[it].key.toString()) }
-        val keysOfWork = used.indices.groupBy({ works[it] }, { used[it].key })
+        val x = layout.matrix(rows)
+        val works = LongArray(rows.size) { clusters.work(rows[it].key) }
+        val items = LongArray(rows.size) { Vectors.keyOf(rows[it].key.toString()) }
+        val keysOfWork = rows.indices.groupBy({ works[it] }, { rows[it].key })
         // The likeness of a graded item to the marks of the works under test would tell the fold what it is tested on
         val ofFold = HashMap<Set<Long>, Matrix>()
         val xFor = if (likeness.empty) null else { underTest: Set<Long> ->
             synchronized(ofFold) {
                 ofFold.getOrPut(underTest) {
                     val excluded = underTest.flatMap { keysOfWork[it].orEmpty() }.toSet()
-                    layout.matrix(inputs.map { input ->
+                    layout.matrix(rows.map { input ->
                         input.withVectors(input.vectors - MARK_KEYS + likeness.vectors(input.key, excluded))
                     })
                 }
             }
         }
-        return Prepared(used, grades, works, items, perItem, layout, x, inputs, spreads, numbers, xFor)
+        return Prepared(used, grades, works, items, perItem, layout, x, spreads, numbers, xFor)
     }
 
     /** The scorer fitted on all grades with [parameter], and its scale: the ladder from [measured]'s out-of-fold scores. */
     private fun scaled(scorer: Scorer, p: Prepared, parameter: Double, measured: RankingCandidate?): Pair<FittedScorer, Scale> {
         val fitted = scorer.fit(p.task, p.everyRow, parameter)
-        val own = fitted.scores(p.x).map { it.toDouble() }
+        val own = fitted.scores(p.x, p.grades.size).map { it.toDouble() }
         val (mean, sd) = CrossValidation.standardisation(own)
         // Too few works for folds: the ladder of the training scores, too wide but the only one there is
         val scores = measured?.scores ?: DoubleArray(own.size) { (own[it] - mean) / sd }
@@ -251,8 +258,9 @@ class Recommendations(
         val chosen = CrossValidation.choose(candidates)
         val parameter = chosen?.parameter ?: scorer.defaultParameter
         log.info(
-            "{}: {} values of the {} parameter measured on {} grades × {} features in {} ms, chosen {}",
-            type.id, candidates.size, scorer.id, p.used.size, p.layout.width, System.currentTimeMillis() - started, parameter,
+            "{}: {} values of the {} parameter measured on {} grades and {} ungraded linked items × {} features in {} ms, chosen {}",
+            type.id, candidates.size, scorer.id, p.used.size, p.task.ungraded.count(), p.layout.width,
+            System.currentTimeMillis() - started, parameter,
         )
         val (fitted, scale) = scaled(scorer, p, parameter, chosen)
         val share = categoricalShare(p.layout, catalogue)
