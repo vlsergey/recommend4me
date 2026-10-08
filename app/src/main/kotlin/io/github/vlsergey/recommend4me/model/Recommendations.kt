@@ -18,7 +18,6 @@ import io.github.vlsergey.recommend4me.scorer.Scorer
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.setvector.SetVectorsChanged
-import io.github.vlsergey.recommend4me.signal.SignalsChanged
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.FacetChancesChanged
@@ -103,9 +102,6 @@ class Recommendations(
 
     @EventListener
     fun marksChanged(event: MarksChanged) = scheduleRetrain(event.type)
-
-    @EventListener
-    fun signalsChanged(event: SignalsChanged) = scheduleRetrain(event.type)
 
     /** The model gave works other pairings, characters: features of the works. */
     @EventListener
@@ -396,9 +392,8 @@ class Recommendations(
         }.sortedByDescending { abs(it.contribution) }
     }
 
-    /** The part of the input a feature is switched off with: its facet, the pictures, the reviews, the text, the site marks; else itself. */
+    /** The part of the input a feature is switched off with: its facet, the pictures, the reviews, the text; else itself. */
     private fun partOf(feature: String): String = FeatureNames.parseFacet(feature)?.let { "facet:${it.first}" } ?: when {
-        feature.startsWith("signal:") -> FeatureNames.SIGNALS
         feature.startsWith("prev:") -> FeatureNames.PREVIOUS
         feature.startsWith("source:") -> FeatureNames.SOURCE
         feature in PICTURE_BLOCKS -> FeatureNames.PICTURES

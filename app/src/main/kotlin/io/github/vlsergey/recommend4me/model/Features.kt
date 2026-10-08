@@ -8,7 +8,7 @@ import kotlin.math.sqrt
 /**
  * What the model reads about an item: dense vectors by block key (its texts, its pictures, its sets,
  * its likeness to the marks), categorical features — "<facet>:<value>", "prev:<grade>",
- * "signal:<name>:<value>", "source:<id>" — and numbers by name, as the source declared them
+ * "source:<id>" — and numbers by name, as the source declared them
  * transformed ([NumberScale][io.github.vlsergey.recommend4me.source.NumberScale]).
  */
 class ItemInput(

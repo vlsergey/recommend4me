@@ -46,8 +46,8 @@ interface SourceSettings {
 
 /**
  * The user's own actions on the site, as its pages show them — liked, in the library on a shelf,
- * read to some chapter, bookmarked. Kept with the user's grades, never with the scrape; the model
- * reads them as features of the item (`signal:<name>:<value>`).
+ * read to some chapter, bookmarked. Kept with the user's grades, never with the scrape; shown, and
+ * never read by the model: they are the user's verdict on the work ([SignalDef]).
  */
 interface SiteSignals {
     /** Sets the [signal] of the item to [value]; null takes it away. */

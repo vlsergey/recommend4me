@@ -1,8 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
-import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.picture.PictureRepository
-import io.github.vlsergey.recommend4me.source.SignalDef
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.likeness.MarkLikeness
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -16,8 +14,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
  *     facet:<facet id>:<value key>   a value of a facet; the facet id is the facet's shared key, or
  *                                    "<source>.<facet>" — facets of one shared key are one facet
  *     num:<number id>                a number, the same way
- *     signal:<name>:<value>          the user's own action on the site
- *     prev:<grade>                   the grade of an earlier version of the same item
+ *     prev:<grade>                  the grade of an earlier version of the same item
  *     source:<id>                    where the work comes from, when a type has several sources
  *     text:…, img:…, set:…, marks:…  vector blocks
  */
@@ -31,8 +28,6 @@ object FeatureNames {
 
     fun number(numberId: String) = "num:$numberId"
 
-    fun signal(name: String, value: String) = "signal:$name:$value"
-
     /** Splits "facet:<id>:<key>" into the facet id and the key; null for another feature. */
     fun parseFacet(feature: String): Pair<String, String>? {
         if (!feature.startsWith("facet:")) return null
@@ -41,7 +36,7 @@ object FeatureNames {
         return if (at < 0) null else rest.substring(0, at) to rest.substring(at + 1)
     }
 
-    fun isCategorical(feature: String) = feature.substringBefore(':') in setOf("facet", "signal", "prev", "source")
+    fun isCategorical(feature: String) = feature.substringBefore(':') in setOf("facet", "prev", "source")
 
     /**
      * What the user is shown of a feature: "Тег: стелс", "Обложка". [sources] give the labels of
@@ -51,9 +46,7 @@ object FeatureNames {
         val facetLabels = HashMap<String, String>()
         val numberLabels = HashMap<String, String>()
         val blockLabels = HashMap<String, String>()
-        val signals = HashMap<String, SignalDef>()
         sources.forEach { s ->
-            s.source.signals.forEach { signals.putIfAbsent(it.key, it) }
             s.schema.facets.forEach { facetLabels.putIfAbsent(facetId(s.source, it), it.label) }
             s.schema.numbers.forEach { numberLabels.putIfAbsent(numberId(s.source, it), it.label) }
             s.schema.texts.forEach { t -> t.block?.let { blockLabels.putIfAbsent(it, t.label) } }
@@ -73,7 +66,6 @@ object FeatureNames {
             parseFacet(feature)?.let { (facetId, key) -> "${facetLabels[facetId] ?: facetId}: ${names[facetId to key] ?: key}" }
                 ?: when (val group = feature.substringBefore(':')) {
                     "num" -> numberLabels[feature.removePrefix("num:")] ?: feature
-                    "signal" -> "Моё на сайте: " + signalLabel(feature.removePrefix("signal:"), signals)
                     "prev" -> "Оценка прошлой версии: " + feature.removePrefix("prev:")
                     "source" -> "Источник: " + (sources.firstOrNull { it.id == feature.removePrefix("source:") }?.source?.title ?: feature)
                     else -> BLOCKS[feature] ?: blockLabels[feature] ?: group
@@ -81,16 +73,7 @@ object FeatureNames {
         }
     }
 
-    /** "<name>:<value>" of a signal as its source names it: "Понравилось" of a mark set or not, "Полка: прочитано" of any other. */
-    private fun signalLabel(nameAndValue: String, signals: Map<String, SignalDef>): String {
-        val name = nameAndValue.substringBefore(':')
-        val value = nameAndValue.substringAfter(':')
-        val def = signals[name] ?: return "$name = $value"
-        return if (value == Books.YES.key) def.label else "${def.label}: ${def.values[value] ?: value}"
-    }
-
     /** The parts an explanation switches off as a whole besides the facets and single blocks. */
-    const val SIGNALS = "part:signals"
     const val PREVIOUS = "part:previous"
     const val SOURCE = "part:source"
     const val PICTURES = "part:pictures"
@@ -106,7 +89,6 @@ object FeatureNames {
         val single = labels(parts.filter { !it.startsWith("facet:") && !it.startsWith("part:") }, sources)
         return parts.associateWith { part ->
             facetLabels[part] ?: when (part) {
-                SIGNALS -> "Моё на сайте"
                 PREVIOUS -> "Оценка прошлой версии"
                 SOURCE -> "Источник"
                 PICTURES -> "Обложка и картинки"

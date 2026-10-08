@@ -20,7 +20,6 @@ import io.github.vlsergey.recommend4me.review.ReviewRepository
 import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
 import io.github.vlsergey.recommend4me.setvector.SetVectorRepository
 import io.github.vlsergey.recommend4me.signal.SignalRepository
-import io.github.vlsergey.recommend4me.signal.SignalsChanged
 import io.github.vlsergey.recommend4me.suggestion.SuggestionRepository
 import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
@@ -67,7 +66,7 @@ class SourceStore(val source: Source, contentType: ContentType, val folder: Path
 
     val ratings = RatingRepository(dbs.ratings.dsl)
     val marks = MarkRepository(source.id, dbs.ratings.dsl)
-    val signals = SignalRepository(dbs.ratings.dsl) { events.publishEvent(SignalsChanged(source.contentType)) }
+    val signals = SignalRepository(dbs.ratings.dsl)
 
     /** What is worked out of the source's facets, in the model database of its content type. */
     val suggestions = SuggestionRepository(databases.model(source.contentType), source.id)

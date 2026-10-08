@@ -36,8 +36,9 @@ class TypedRating(val key: ItemKey, val version: String, val grade: Int, val rat
 /**
  * EVERYTHING THE MODEL READS OF EVERY ITEM OF A CONTENT TYPE, loaded in batch for one operation —
  * one pass over each source of each file: the items with their corrected facets and numbers, the
- * user's signals, the texts', pictures' and sets' vectors, the grades, the works — and handed to
- * every step that needs it. Nothing of it outlives the operation.
+ * texts', pictures' and sets' vectors, the grades, the works — and handed to every step that needs
+ * it. Nothing of it outlives the operation. Not the user's signals on the sites: they are the
+ * user's verdict, the very thing the grades teach.
  */
 class Catalogue(
     val type: TypeStore,
@@ -106,7 +107,7 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
 
     /**
      * The items of one source as the model reads them: their facets and numbers with the user's
-     * corrections, the user's signals, the source when the type has several.
+     * corrections, the source when the type has several.
      */
     private fun readItems(s: SourceStore, severalSources: Boolean): List<CatalogueItem> {
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
@@ -121,8 +122,6 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
         val numbers = HashMap<String, HashMap<String, Double>>()
         s.items.forEachNumber { id, key, value -> if (key in numberDefs) numbers.getOrPut(id) { HashMap() }[key] = value }
         val fields = s.corrections.allFields()
-        val signals = s.signals.all()
-        val featureSignals = featureSignals(s)
         return s.items.keys().map { k ->
             val categorical = LinkedHashSet<String>()
             val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
@@ -130,7 +129,6 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
                 val facetId = facetIds[facet] ?: return@forEach
                 keys.forEach { categorical += FeatureNames.facet(facetId, it) }
             }
-            signals[k.id]?.forEach { (name, value) -> if (name in featureSignals) categorical += FeatureNames.signal(name, value) }
             if (severalSources) categorical += "source:${s.id}"
             val numeric = Corrected.numbers(numbers[k.id].orEmpty(), fields[k.id].orEmpty()).mapNotNull { (key, value) ->
                 val def = numberDefs[key] ?: return@mapNotNull null
@@ -151,8 +149,6 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
             val facetId = facetIds[facet] ?: return@forEach
             keys.forEach { categorical += FeatureNames.facet(facetId, it) }
         }
-        val featureSignals = featureSignals(s)
-        s.signals.ofItem(key.id).forEach { (name, value) -> if (name in featureSignals) categorical += FeatureNames.signal(name, value) }
         if (type.sources.size > 1) categorical += "source:${s.id}"
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numeric = Corrected.numbers(s.items.numbers(key.id), s.corrections.fieldsOf(key.id)).mapNotNull { (k, value) ->
@@ -161,12 +157,6 @@ class CatalogueReader(private val plugins: Plugins, private val works: Works, pr
         }.toMap()
         return CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)
     }
-
-    /**
-     * The signals of the source the model reads: those it declares to be
-     * ([SignalDef.feature][io.github.vlsergey.recommend4me.source.SignalDef.feature]); one it does not declare is not read.
-     */
-    private fun featureSignals(s: SourceStore): Set<String> = s.source.signals.filter { it.feature }.map { it.key }.toSet()
 
     /** The vectors of one item — texts, pictures, sets — without its likeness to the marks. */
     fun vectors(type: TypeStore, key: ItemKey): Map<String, FloatArray> {

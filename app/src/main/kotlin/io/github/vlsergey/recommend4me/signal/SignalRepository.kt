@@ -5,11 +5,8 @@ import io.github.vlsergey.recommend4me.source.SiteSignals
 import org.jooq.DSLContext
 import java.time.Instant
 
-/**
- * The user's own actions on a site as its pages show them, kept with the user's grades. [changed]
- * is told when one changes: the model reads them.
- */
-class SignalRepository(private val db: DSLContext, private val changed: () -> Unit) : SiteSignals {
+/** The user's own actions on a site as its pages show them, kept with the user's grades; shown, never read by the model. */
+class SignalRepository(private val db: DSLContext) : SiteSignals {
 
     override fun set(itemId: String, signal: String, value: String?) {
         val known = db.select(SITE_SIGNAL.CONTENT).from(SITE_SIGNAL).where(SITE_SIGNAL.ITEM_ID.eq(itemId), SITE_SIGNAL.SIGNAL.eq(signal)).fetchOne(SITE_SIGNAL.CONTENT)
@@ -23,7 +20,6 @@ class SignalRepository(private val db: DSLContext, private val changed: () -> Un
                 .onDuplicateKeyUpdate().set(SITE_SIGNAL.CONTENT, value.take(500)).set(SITE_SIGNAL.SEEN_AT, Instant.now())
                 .execute()
         }
-        changed()
     }
 
     override fun withSignal(signal: String): Map<String, String> =
@@ -39,10 +35,7 @@ class SignalRepository(private val db: DSLContext, private val changed: () -> Un
     fun keepOnly(signals: Collection<String>): Map<String, Int> {
         val gone = db.select(SITE_SIGNAL.SIGNAL).from(SITE_SIGNAL).where(SITE_SIGNAL.SIGNAL.notIn(signals)).fetch(SITE_SIGNAL.SIGNAL)
             .groupingBy { it!! }.eachCount()
-        if (gone.isNotEmpty()) {
-            db.deleteFrom(SITE_SIGNAL).where(SITE_SIGNAL.SIGNAL.notIn(signals)).execute()
-            changed()
-        }
+        if (gone.isNotEmpty()) db.deleteFrom(SITE_SIGNAL).where(SITE_SIGNAL.SIGNAL.notIn(signals)).execute()
         return gone
     }
 

@@ -31,14 +31,11 @@ object Books {
     /** The value of a signal that is either set or not. */
     val YES = StandardValue("yes", "да")
 
-    /**
-     * The user marked the work read on the site: on its shelf of the finished, with its box "read"
-     * ticked. Shown, not read by the model: it is known only of the works the user has read.
-     */
-    val READ = StandardSignal("read", "Прочитано", listOf(YES), feature = false)
+    /** The user marked the work read on the site: on its shelf of the finished, with its box "read" ticked. */
+    val READ = StandardSignal("read", "Прочитано", listOf(YES))
 
-    /** The user liked the work on the site. Shown, not read by the model: it is the user's verdict, not something of the work. */
-    val LIKED = StandardSignal("liked", "Понравилось", listOf(YES), feature = false)
+    /** The user liked the work on the site. */
+    val LIKED = StandardSignal("liked", "Понравилось", listOf(YES))
 
     /** The shelves of a user's library on a site. */
     object Shelf {
@@ -49,16 +46,8 @@ object Books {
         val PURCHASED = StandardValue("purchased", "куплено")
     }
 
-    /**
-     * The shelf of the user's library on the site the work is on. Shown, not read by the model: the
-     * user puts there the works they have met, by their verdict on them. The shelf of the finished
-     * also sets [READ].
-     */
-    val SHELF = StandardSignal(
-        "shelf", "Полка",
-        listOf(Shelf.READING, Shelf.SAVED, Shelf.FINISHED, Shelf.DISLIKED, Shelf.PURCHASED),
-        feature = false,
-    )
+    /** The shelf of the user's library on the site the work is on; the shelf of the finished also sets [READ]. */
+    val SHELF = StandardSignal("shelf", "Полка", listOf(Shelf.READING, Shelf.SAVED, Shelf.FINISHED, Shelf.DISLIKED, Shelf.PURCHASED))
 
     val TYPE = ContentType(
         id = ID,
