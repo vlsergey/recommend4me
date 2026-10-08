@@ -1,11 +1,12 @@
 import { useEffect, useId, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { PlusIcon } from "lucide-react";
+import { CheckIcon, PlusIcon } from "lucide-react";
 import { api, unwrap, type FacetValueInfo, type ItemFacet, type ItemRef, type SourceInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ChanceMark, INFERRED_BORDER, InferredMark, unlikely } from "@/facet/FacetValueMarks";
+import { ChanceMark, unlikely } from "@/facet/FacetValueMarks";
+import { decided, useStableOrder } from "@/facet/valueOrder";
 import { cn } from "@/lib/utils";
 import { SuggestedValues } from "@/suggestion/Suggestions";
 import { useSuggestions } from "@/suggestion/useSuggestions";
@@ -72,14 +73,30 @@ export function FacetCorrections({
   );
 }
 
-/** A facet of the work with its values: answered on when [corrections] are given, shown as it is when not. */
+/**
+ * A facet of the work with its values, in the order first shown: answered on when [corrections]
+ * are given — with "✓ все" for every value shown the user has not answered on — shown as it is
+ * when not.
+ */
 function FacetLine({ facet: f, corrections }: { facet: ItemFacet; corrections?: Corrections }) {
+  const values = useStableOrder(f.values);
+  const open = f.values.filter((v) => !decided(v));
+  const confirmAll = async () => {
+    for (const v of open) await corrections!.setFacet(f.facet, { key: v.key }, true);
+  };
   return (
     <div>
-      <div className="mb-1 text-xs text-muted-foreground">{f.label}</div>
+      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+        {f.label}
+        {corrections && open.length > 1 && (
+          <AsyncButton variant="outline" size="xs" className="h-5 px-1.5 text-[11px]" onClick={confirmAll} title="Подтвердить все значения без вашего ответа">
+            ✓ все ({open.length})
+          </AsyncButton>
+        )}
+      </div>
       {f.original && <div className="mb-1 text-xs break-words text-muted-foreground/80">На сайте: {f.original}</div>}
       <div className="flex flex-wrap gap-1">
-        {f.values.map((v) => (
+        {values.map((v) => (
           <FacetValue key={v.key} facet={f.facet} value={v} corrections={corrections} />
         ))}
       </div>
@@ -93,22 +110,35 @@ const CORRECTED_TITLE: Record<NonNullable<FacetValueInfo["corrected"]>, string> 
   REMOVED: "Убрано вами",
 };
 
-/** A value of the work's facet: its marks, its chance and — of a facet the user corrects, [corrections] given — the user's ✓ or ✕ on it. */
+/**
+ * A value of the work's facet, its state told by its look and an icon, never by colour alone:
+ *
+ * - the user's — confirmed or added: filled, a ✓ before the name, no chance; the word taken back
+ *   by the button shown when pointed at;
+ * - not answered on: outlined on white, the model's chance in small print, ✓ ✕;
+ * - taken away by the user: faded, crossed out, ↺.
+ *
+ * A value of a facet of the site ([corrections] not given) has no answers.
+ */
 export function FacetValue({ facet, value, corrections }: { facet: string; value: FacetValueInfo; corrections?: Corrections }) {
+  const mine = value.corrected === "CONFIRMED" || value.corrected === "ADDED";
+  const removed = value.corrected === "REMOVED";
+  const open = corrections && !value.corrected;
   return (
     <Badge
-      variant={value.corrected === "ADDED" ? "outline" : "secondary"}
+      variant="outline"
       className={cn(
-        "pr-0.5 font-normal",
-        value.inferred && INFERRED_BORDER,
-        value.corrected === "REMOVED" && "text-muted-foreground",
-        value.corrected === "ADDED" && "border-dashed border-primary/50",
-        unlikely(value) && "border-maybe/60",
+        "group pr-0.5 font-normal",
+        mine && "border-yes/50 bg-yes/15 text-foreground",
+        removed && "border-dashed text-muted-foreground opacity-70",
+        open && "bg-background",
+        open && unlikely(value) && "border-maybe/60",
+        !corrections && "bg-muted/40",
       )}
       title={value.corrected ? CORRECTED_TITLE[value.corrected] : undefined}
     >
-      {value.inferred && <InferredMark />}
-      <span className={cn(value.corrected === "REMOVED" && "line-through")}>{value.name}</span>
+      {mine && <CheckIcon className="size-3 text-yes" aria-label="ваш ответ: есть" />}
+      <span className={cn(removed && "line-through")}>{value.name}</span>
       <ChanceMark value={value} />
       {corrections && <FacetAnswers facet={facet} value={value} corrections={corrections} />}
     </Badge>

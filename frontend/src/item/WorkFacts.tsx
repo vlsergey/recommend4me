@@ -73,7 +73,7 @@ export function FactLine({ source, summary, facets, className }: { source: Sourc
 
 /**
  * What is in the work — its genres, tags, fandom, the facets of the role CONTENT — as plain chips:
- * a value the model gave marked "≈", one it doubts amber-edged, one the user took away left out.
+ * one the user confirmed filled with a ✓, one the model doubts amber-edged, one the user took away left out.
  * The chances and the answers are the marking's, not the reading's.
  */
 export function ContentFacts({ source, facets, except = [] }: { source: SourceInfo; facets: ItemFacet[]; except?: readonly string[] }) {

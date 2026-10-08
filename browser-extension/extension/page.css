@@ -105,6 +105,33 @@ r4m-panel .r4m-down {
   color: #b42318;
 }
 
+/* Taking the user's word back: small, borderless, by the chip */
+[data-r4m].r4m-undo {
+  display: inline-block;
+  margin: 0 0 0 2px;
+  padding: 0 4px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #6a737d;
+  font: 600 11px/20px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+[data-r4m].r4m-undo:hover {
+  background: #eaeef2;
+}
+
+/* "✓ все (N)" by the facet's name */
+[data-r4m].r4m-button.r4m-all {
+  margin-left: 8px;
+  height: 18px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
 /* --- Scores, red to green --- */
 
 r4m-score {
@@ -175,40 +202,53 @@ r4m-chip.r4m-suggested {
   background: #eef5ff;
 }
 
-r4m-chip.r4m-added {
+/* The user's: confirmed or added — filled, a ✓ before the name */
+r4m-chip.r4m-mine {
   border-color: #1a7f37;
-  background: #effaf2;
+  background: #dcf5e3;
+  padding-left: 6px;
+}
+
+r4m-check {
+  color: #1a7f37;
+  font: 700 12px/20px system-ui, sans-serif;
+}
+
+/* Not answered on: outlined on white */
+r4m-chip.r4m-open {
+  border-color: #d0d7de;
+  background: #ffffff;
+}
+
+/* Taken away by the user: faded and crossed out */
+r4m-chip.r4m-removed-chip {
+  border-style: dashed;
+  opacity: 0.6;
 }
 
 r4m-chip.r4m-removed-chip > span {
   text-decoration: line-through;
-  opacity: 0.55;
 }
 
-r4m-chip.r4m-confirmed {
-  border-color: #1a7f37;
+/* The one button of a value the user answered on, shown when the chip is pointed at */
+r4m-chip .r4m-undo {
+  visibility: hidden;
 }
 
-r4m-chip.r4m-inferred-chip {
-  border-style: dotted;
+r4m-chip:hover .r4m-undo, r4m-chip .r4m-undo:focus-visible {
+  visibility: visible;
 }
 
-/* The model's chance, while the user has not answered; in amber when the work more likely has it not */
+/* The model's chance in small print, while the user has not answered; in amber when the work more likely has it not */
 r4m-chance {
   color: #8b949e;
-  font: 11px/20px system-ui, sans-serif;
+  font: 10px/20px system-ui, sans-serif;
   cursor: help;
 }
 
 r4m-chance.r4m-unlikely {
   color: #c98a12;
   font-weight: 700;
-}
-
-r4m-inferred {
-  color: #0b62c4;
-  font: 700 12px/20px system-ui, sans-serif;
-  cursor: help;
 }
 
 r4m-original {

@@ -250,40 +250,64 @@
   }
 
   /**
-   * What goes beside a value: the model's chance in brackets while the user has not answered —
-   * a "?" when the work more likely has it not — and the user's ✓ (it has it) and ✕ (it has it
-   * not); a value answered shows the answer, pressed again it is taken back.
+   * What goes beside a value the user has not answered on: the model's chance in small print —
+   * amber when the work more likely has it not — and the user's ✓ (it has it) and ✕ (it has it
+   * not). A value the user confirmed or added keeps one button that takes the word back, shown
+   * when the chip is pointed at; one the user took away has ↺.
    */
   function answers(item, facet, v) {
     const out = [];
-    if (v.inferred) out.push(Object.assign(el("r4m-inferred", null, "≈"), { title: "Вычислено по описанию, главам и другим тегам" }));
     if (v.corrected === "REMOVED") {
       out.push(button("↺", "Вернуть: вы сказали, что этого у работы нет", () => uncorrect(item, facet, v.key), "r4m-yes"));
       return out;
     }
-    if (v.corrected === "ADDED") {
-      out.push(button("✕", "Убрать: добавлено вами", () => uncorrect(item, facet, v.key), "r4m-no"));
+    if (v.corrected === "ADDED" || v.corrected === "CONFIRMED") {
+      out.push(button("✕", v.corrected === "ADDED" ? "Убрать добавленное вами" : "Снять ваш ответ", () => uncorrect(item, facet, v.key), "r4m-undo"));
       return out;
     }
-    if (v.corrected === "CONFIRMED") {
-      out.push(button("✓", "Вы подтвердили; нажмите, чтобы снять подтверждение", () => uncorrect(item, facet, v.key), "r4m-yes r4m-current"));
-    } else {
-      if (v.chance !== undefined && v.chance !== null) {
-        const unlikely = v.chance < 0.5;
-        out.push(Object.assign(el("r4m-chance", unlikely ? "r4m-unlikely" : null, `(${percent(v.chance)})`), {
-          title: unlikely ? "Модель считает, что скорее этого у работы нет" : "Уверенность модели",
-        }));
-      }
-      out.push(button("✓", "Да, это у работы есть", () => correct(item, facet, { key: v.key }, true), "r4m-yes"));
+    if (v.chance !== undefined && v.chance !== null) {
+      const unlikely = v.chance < 0.5;
+      out.push(Object.assign(el("r4m-chance", unlikely ? "r4m-unlikely" : null, percent(v.chance)), {
+        title: unlikely ? "Модель считает, что скорее этого у работы нет" : "Уверенность модели",
+      }));
     }
+    out.push(button("✓", "Да, это у работы есть", () => correct(item, facet, { key: v.key }, true), "r4m-yes"));
     out.push(button("✕", "Нет, этого у работы нет", () => correct(item, facet, { key: v.key }, false), "r4m-no"));
     return out;
   }
 
-  /** A value as a chip: its name and [answers]; a universe the work is linked to, ↻ to ask the catalogue for its characters again. */
+  /** The order a facet's values of an item were first shown in, by their keys: kept while the page is open. */
+  const orders = new Map();
+
+  /**
+   * The values in the order first shown — what the user decided first, then the rest the likeliest
+   * first: an answer changes how a value looks, never where it is. A value that comes later goes
+   * after them.
+   */
+  function stableOrder(item, facet, values) {
+    const id = `${item.summary.source}/${item.summary.item}/${facet}`;
+    const order = orders.get(id) || [];
+    const known = new Set(order);
+    const fresh = values
+      .filter((v) => !known.has(v.key))
+      .sort((a, b) => Number(!!b.corrected) - Number(!!a.corrected) || (b.chance ?? 0) - (a.chance ?? 0))
+      .map((v) => v.key);
+    const all = order.concat(fresh);
+    orders.set(id, all);
+    const at = new Map(all.map((k, i) => [k, i]));
+    return [...values].sort((a, b) => at.get(a.key) - at.get(b.key));
+  }
+
+  /**
+   * A value as a chip, its state told by its look and a sign, not by colour alone: the user's —
+   * filled, a ✓ before the name; not answered on — outlined on white, with [answers]; taken away
+   * — faded and crossed out. A universe the work is linked to has ↻ to ask the catalogue for its
+   * characters again.
+   */
   function valueChip(item, facet, v, editable = true) {
-    const chip = el("r4m-chip", { ADDED: "r4m-added", CONFIRMED: "r4m-confirmed", REMOVED: "r4m-removed-chip" }[v.corrected] || null);
-    if (v.inferred) chip.classList.add("r4m-inferred-chip");
+    const mine = v.corrected === "ADDED" || v.corrected === "CONFIRMED";
+    const chip = el("r4m-chip", mine ? "r4m-mine" : v.corrected === "REMOVED" ? "r4m-removed-chip" : editable ? "r4m-open" : null);
+    if (mine) chip.appendChild(Object.assign(el("r4m-check", null, "✓"), { title: "Ваш ответ: это у работы есть" }));
     chip.appendChild(el("span", null, v.name));
     if (editable) answers(item, facet, v).forEach((e) => chip.appendChild(e));
     const at = v.key.indexOf(":");
@@ -299,7 +323,7 @@
     const chip = el("r4m-chip", "r4m-suggested");
     chip.title = "Подсказка";
     chip.appendChild(el("span", null, v.name));
-    chip.appendChild(el("r4m-chance", null, `(${percent(v.chance)})`));
+    chip.appendChild(el("r4m-chance", null, percent(v.chance)));
     chip.appendChild(button("✓", "Да, это у работы есть", () => correct(item, facet, { key: v.key }, true), "r4m-yes"));
     chip.appendChild(button("✕", "Нет, этого у работы нет", () => correct(item, facet, { key: v.key }, false), "r4m-no"));
     return chip;
@@ -391,12 +415,20 @@
    */
   function facetBlock(item, facet, suggestions, inPanel) {
     const block = el("r4m-facet");
-    block.appendChild(el("r4m-label", null, facet.label));
+    const label = el("r4m-label", null, facet.label);
+    block.appendChild(label);
     if (inPanel && facet.original) block.appendChild(el("r4m-original", null, `На сайте: ${facet.original}`));
     const line = el("r4m-chips");
     // A facet of the site is its word: shown, never answered on
     const editable = facet.editable !== false;
-    (facet.values || []).forEach((v) => line.appendChild(valueChip(item, facet.facet, v, editable)));
+    const values = facet.values || [];
+    const open = values.filter((v) => !v.corrected);
+    if (editable && open.length > 1) {
+      label.appendChild(button(`✓ все (${open.length})`, "Подтвердить все значения без вашего ответа", async () => {
+        for (const v of open) await correct(item, facet.facet, { key: v.key }, true);
+      }, "r4m-button r4m-all"));
+    }
+    stableOrder(item, facet.facet, values).forEach((v) => line.appendChild(valueChip(item, facet.facet, v, editable)));
     if (editable) {
       ((suggestions && suggestions.suggested) || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
       line.appendChild(addField(item, facet.facet, facet.label));

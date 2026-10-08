@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { FacetAnswers } from "@/correction/FacetAnswers";
 import { FacetValue } from "@/correction/FacetCorrections";
 import type { Corrections } from "@/correction/useCorrections";
-import { ChanceMark, InferredMark } from "@/facet/FacetValueMarks";
+import { ChanceMark } from "@/facet/FacetValueMarks";
+import { useStableOrder } from "@/facet/valueOrder";
 import { percent, plural } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { SuggestedChip } from "@/suggestion/Suggestions";
@@ -127,9 +128,9 @@ export function FanficSection({
 
 /**
  * The section to read: whether the work is fan fiction, of which universes, with which main
- * characters and pairings — the names alone, a value the model gave marked "≈", nothing the user
- * took away. What the model gave or suggests and the user has not answered on is counted in a
- * line that opens the marking ([onMark]).
+ * characters and pairings — the names alone, the user's filled with a ✓, nothing the user took
+ * away. What the model gave or suggests and the user has not answered on is counted in a line that
+ * opens the marking ([onMark]).
  */
 export function FanficSummary({ source, details: d, onMark }: { source: SourceInfo; details: ItemDetails; onMark: () => void }) {
   const ref = { source: d.summary.source, item: d.summary.item };
@@ -148,8 +149,8 @@ export function FanficSummary({ source, details: d, onMark }: { source: SourceIn
         <div className="text-xs text-muted-foreground">{label}</div>
         <div className="flex flex-wrap gap-1">
           {values.map((v) => (
-            <Badge key={v.key} variant="secondary" className="font-normal" title={v.inferred && !v.corrected ? "Вычислено моделью, вы не отвечали" : undefined}>
-              {v.inferred && !v.corrected && <span className="text-muted-foreground">≈</span>}
+            <Badge key={v.key} variant="secondary" className={cn("font-normal", v.corrected && "border-yes/50 bg-yes/15")} title={v.corrected ? undefined : "Вы не отвечали"}>
+              {v.corrected && <CheckIcon className="size-3 text-yes" />}
               {v.name}
             </Badge>
           ))}
@@ -189,10 +190,11 @@ function Block({ label, original, children }: { label: string; original?: string
 
 /** The work's values of a facet as chips, and the suggested ones dashed after them; a dash when there are none. */
 function Chips({ facet, values, suggested = [], corrections }: { facet: string; values: FacetValueInfo[]; suggested?: SuggestedValue[]; corrections: Corrections }) {
+  const ordered = useStableOrder(values);
   if (values.length === 0 && suggested.length === 0) return <div className="text-sm text-muted-foreground">—</div>;
   return (
     <div className="flex flex-wrap gap-1">
-      {values.map((v) => (
+      {ordered.map((v) => (
         <FacetValue key={v.key} facet={facet} value={v} corrections={corrections} />
       ))}
       {suggested.map((v) => (
@@ -204,9 +206,9 @@ function Chips({ facet, values, suggested = [], corrections }: { facet: string; 
 
 /**
  * Fan fiction, an alternative history or an original work: a button each, the one the user chose
- * pressed. Each shows what the site or the model says of it — "≈" when the model gave it, its
- * chance — and a suggested kind its chance dashed. Choosing a kind confirms it and says no to the
- * others the work has; pressing the chosen one again takes the answers back.
+ * pressed. Each shows the model's chance of it while the user has not answered. Choosing a kind
+ * confirms it and says no to the others the work has; pressing the chosen one again takes the
+ * answers back.
  */
 function KindChoice({
   label,
@@ -237,10 +239,6 @@ function KindChoice({
     }
   };
 
-  // What the site and the model say, the user's answers aside: every value but one the user added
-  const said = values.filter((v) => v.corrected !== "ADDED");
-  const nameOf = (key: string) => KINDS.find((k) => k.key === key)?.name ?? key;
-
   return (
     <Block label={label}>
       <div className="grid grid-cols-3 gap-1" role="group" aria-label={label}>
@@ -258,19 +256,12 @@ function KindChoice({
               icon={pressed ? <CheckIcon /> : undefined}
               className="h-auto min-h-8 flex-wrap whitespace-normal"
             >
-              {v?.inferred && !v.corrected && <InferredMark />}
               <span className={cn(v?.corrected === "REMOVED" && "line-through")}>{k.name}</span>
               {v && <ChanceMark value={v} />}
-              {!v && s && s.chance != null && <span className="text-muted-foreground tabular-nums">({percent(s.chance)})</span>}
+              {!v && s && s.chance != null && <span className="text-[10px] text-muted-foreground tabular-nums">{percent(s.chance)}</span>}
             </AsyncButton>
           );
         })}
-      </div>
-      <div className="text-xs text-muted-foreground">
-        {said.length > 0 && said.map((v) => `${v.inferred ? "Модель" : "Сайт"}: ${nameOf(v.key).toLowerCase()}`).join(" · ")}
-        {said.length > 0 && suggested.length > 0 && " · "}
-        {suggested.length > 0 && `Подсказка: ${suggested.map((s) => nameOf(s.key).toLowerCase()).join(", ")}`}
-        {said.length === 0 && suggested.length === 0 && "Ни сайт, ни модель не говорят"}
       </div>
     </Block>
   );

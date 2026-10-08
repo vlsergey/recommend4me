@@ -35,7 +35,7 @@ export function SuggestedChip({ facet, value, corrections }: { facet: string; va
   return (
     <Badge variant="outline" className="border-dashed pr-0.5 font-normal" title={chance !== undefined ? `Вероятность ${percent(chance)}` : undefined}>
       {value.name}
-      {chance !== undefined && <span className="text-muted-foreground tabular-nums">({percent(chance)})</span>}
+      {chance !== undefined && <span className="text-[10px] text-muted-foreground tabular-nums">{percent(chance)}</span>}
       <FacetAnswers facet={facet} value={{ key: value.key }} corrections={corrections} />
     </Badge>
   );

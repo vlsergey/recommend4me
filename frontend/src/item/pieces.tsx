@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { StarIcon } from "lucide-react";
+import { CheckIcon, StarIcon } from "lucide-react";
 import {
   api,
   pictureSrc,
@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ALL_GRADES, gradeLabel, sourceTitle, typeIcon } from "@/contenttype/types";
-import { INFERRED_BORDER, shownChance, unlikely } from "@/facet/FacetValueMarks";
+import { shownChance, unlikely } from "@/facet/FacetValueMarks";
 import { compact, percent, score } from "@/i18n";
 import { useLadder } from "@/model/useModel";
 import { cn } from "@/lib/utils";
@@ -217,9 +217,8 @@ function facetValueTitle(facet: ItemFacet, value: FacetValueInfo): string {
 
 /**
  * The facets shown on a card, value by value; a value the user took away is crossed out, one the
- * user added is outlined, one the model worked out is dotted and marked "≈", one the model more
- * likely says no to is amber-edged. [limit] cuts the list, the rest go into "+N" with their names
- * in its title.
+ * user confirmed or added is filled with a ✓, one the model more likely says no to is
+ * amber-edged. [limit] cuts the list, the rest go into "+N" with their names in its title.
  */
 export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[]; limit?: number; className?: string }) {
   const values = facets.flatMap((f) => f.values.map((v) => ({ facet: f, value: v })));
@@ -231,17 +230,16 @@ export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[];
       {shown.map(({ facet, value }) => (
         <Badge
           key={`${facet.facet}=${value.key}`}
-          variant={value.corrected === "ADDED" ? "outline" : "secondary"}
+          variant="secondary"
           className={cn(
             "font-normal",
-            value.inferred && INFERRED_BORDER,
             value.corrected === "REMOVED" && "text-muted-foreground line-through",
-            value.corrected === "ADDED" && "border-dashed border-primary/50",
+            (value.corrected === "ADDED" || value.corrected === "CONFIRMED") && "border-yes/50 bg-yes/15",
             unlikely(value) && "border-maybe/60",
           )}
           title={facetValueTitle(facet, value)}
         >
-          {value.inferred && <span className="text-muted-foreground">≈</span>}
+          {(value.corrected === "ADDED" || value.corrected === "CONFIRMED") && <CheckIcon className="size-3 text-yes" />}
           {value.name}
         </Badge>
       ))}
