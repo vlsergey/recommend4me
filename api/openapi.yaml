@@ -1410,6 +1410,11 @@ components:
         inferred:
           type: boolean
           description: The model gave the value, the site did not
+        offered:
+          type: boolean
+          description: |
+            Not the work's: one of the likeliest other values of a facet of the layer, offered for the
+            user to answer on so that a work is offered at least three the site does not give
 
     ItemFacet:
       type: object

@@ -215,12 +215,22 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
         val rejected = data.task.rejected[i].toHashSet()
         val named = data.task.mentions[i]
         fun chance(v: Int, had: Boolean) = Chance(id, facet, data.values[v], had, chances[v].toDouble(), named?.let { it[v] ?: 0 })
+        // The likeliest of the rest too, likely or not, to offer the work at least so many the site does not give
+        val offered = if (allowed != null) emptySet() else {
+            val unanswered = chances.indices.filter { it !in has && it !in rejected }
+            ModelValues.offered(
+                unanswered.associate { data.values[it] to chances[it].toDouble() },
+                shown = unanswered.filter { chances[it] > ModelValues.LIKELY }.map { data.values[it] }.toSet(),
+                answered = emptySet(),
+                fromSite = data.task.examples[i].map { data.values[it] }.toSet(),
+            ).toSet()
+        }
         return chances.indices.mapNotNull { v ->
             when {
                 v in has -> chance(v, true)
                 v in rejected -> null
                 allowed != null -> if (data.values[v] in allowed) chance(v, false) else null
-                chances[v] > ModelValues.LIKELY -> chance(v, false)
+                chances[v] > ModelValues.LIKELY || data.values[v] in offered -> chance(v, false)
                 else -> null
             }
         }
@@ -453,6 +463,17 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     }
 
     /**
+     * The item's chances of the facets the model gives values of made current now, by the weights
+     * fitted last: after the user answered on a value the next likeliest are offered at once, not
+     * after the refresh of the whole source in the background.
+     */
+    fun currentFor(store: SourceStore, itemId: String) {
+        val facets = facetsOf(store).filter { it.infer }
+        if (facets.isEmpty() || store.items.find(itemId) == null) return
+        ensure(store, itemId, facets, store.items.facets(itemId), store.corrections.facetsOf(itemId), now = true)
+    }
+
+    /**
      * The item's chances made now when it has none — or when what they were made of changed and
      * the caller waits for them ([now]: the user just answered and chooses next); otherwise
      * refreshed in the background.
@@ -505,6 +526,9 @@ internal class FacetData(
     val basis: Long,
 ) {
     companion object {
+        /** The rule of what is kept of an item's chances: 2 — the likeliest others offered besides the likely ones. */
+        private const val KEPT = 2
+
         /** What an item's chances are made of: every value of it, the user's answers, its texts' hashes, its chapters. */
         fun fingerprint(site: Map<String, List<String>>, corrections: List<FacetCorrection>, textHashes: Collection<String>, windows: Int): Long =
             Vectors.keyOf(
@@ -598,9 +622,10 @@ internal class FacetData(
             }
             // The values chosen from and their groups are part of what is learnt: a universe added or
             // removed, a sex learnt of a character, fits again
+            // What is kept of the chances is part of it too: a new rule of what to keep makes them again
             val basis = Vectors.keyOf(
                 ids.indices.sortedBy { ids[it] }.joinToString(",") { "${ids[it]}:${fingerprints[it]}" } + "\u0002" + values.joinToString("\u0001") +
-                    "\u0002" + grouped.joinToString("\u0001") { g -> g.name + "=" + g.groupOf.joinToString(",") },
+                    "\u0002" + grouped.joinToString("\u0001") { g -> g.name + "=" + g.groupOf.joinToString(",") } + "\u0002" + KEPT,
             )
             val held = if (examples == null) task.assigned else ids.map { id ->
                 indices(Corrected.facets(site[id].orEmpty(), corrections[id].orEmpty())[facet.key].orEmpty())

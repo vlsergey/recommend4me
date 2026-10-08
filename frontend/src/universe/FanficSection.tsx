@@ -54,8 +54,8 @@ const ORIGINAL_CHARACTERS = [
 /** The key of the pairing of two characters: one whatever their order. */
 const pairingKey = (a: string, b: string) => "pair:" + [a, b].sort().join("|");
 
-/** The work has the value: the site or the model gave it, or the user added it, and the user did not take it away. */
-const has = (v: FacetValueInfo) => v.corrected !== "REMOVED";
+/** The work has the value: the site or the model gave it, or the user added it, and the user did not take it away — not one only offered. */
+const has = (v: FacetValueInfo) => v.corrected !== "REMOVED" && !v.offered;
 
 /** The user said the work has the value. */
 const answeredYes = (v: FacetValueInfo | undefined) => v?.corrected === "ADDED" || v?.corrected === "CONFIRMED";

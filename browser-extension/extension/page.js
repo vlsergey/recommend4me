@@ -306,7 +306,7 @@
    */
   function valueChip(item, facet, v, editable = true) {
     const mine = v.corrected === "ADDED" || v.corrected === "CONFIRMED";
-    const chip = el("r4m-chip", mine ? "r4m-mine" : v.corrected === "REMOVED" ? "r4m-removed-chip" : editable ? "r4m-open" : null);
+    const chip = el("r4m-chip", mine ? "r4m-mine" : v.corrected === "REMOVED" ? "r4m-removed-chip" : editable ? (v.offered ? "r4m-open r4m-offered" : "r4m-open") : null);
     if (mine) chip.appendChild(Object.assign(el("r4m-check", null, "✓"), { title: "Ваш ответ: это у работы есть" }));
     chip.appendChild(el("span", null, v.name));
     if (editable) answers(item, facet, v).forEach((e) => chip.appendChild(e));
@@ -422,7 +422,8 @@
     // A facet of the site is its word: shown, never answered on
     const editable = facet.editable !== false;
     const values = facet.values || [];
-    const open = values.filter((v) => !v.corrected);
+    // The work's values the user has not answered on — not those only offered
+    const open = values.filter((v) => !v.corrected && !v.offered);
     if (editable && open.length > 1) {
       label.appendChild(button(`✓ все (${open.length})`, "Подтвердить все значения без вашего ответа", async () => {
         for (const v of open) await correct(item, facet.facet, { key: v.key }, true);

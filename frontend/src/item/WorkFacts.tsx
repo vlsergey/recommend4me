@@ -12,7 +12,7 @@ export function facetsOfRole(source: SourceInfo, facets: ItemFacet[], role: Face
 
 /** The names of the values the work has of the facets: a value the user took away is not the work's. */
 function namesOf(facets: ItemFacet[]): string[] {
-  return facets.flatMap((f) => f.values.filter((v) => v.corrected !== "REMOVED").map((v) => v.name));
+  return facets.flatMap((f) => f.values.filter((v) => v.corrected !== "REMOVED" && !v.offered).map((v) => v.name));
 }
 
 /** The numbers of the work the source gives a role, with their labels and scales. */
@@ -96,7 +96,7 @@ export function OriginalOf({ source, facets, facet }: { source: SourceInfo; face
 export function ContentFacts({ source, facets, except = [] }: { source: SourceInfo; facets: ItemFacet[]; except?: readonly string[] }) {
   const content = facetsOfRole(source, facets, "CONTENT")
     .filter((f) => !except.includes(f.facet))
-    .map((f) => ({ ...f, values: f.values.filter((v) => v.corrected !== "REMOVED") }))
+    .map((f) => ({ ...f, values: f.values.filter((v) => v.corrected !== "REMOVED" && !v.offered) }))
     .filter((f) => f.values.length > 0);
   if (content.length === 0) return null;
   return (

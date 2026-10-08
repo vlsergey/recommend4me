@@ -86,7 +86,8 @@ export function FacetCorrections({
  */
 function FacetLine({ facet: f, corrections }: { facet: ItemFacet; corrections?: Corrections }) {
   const values = useStableOrder(f.values);
-  const open = f.values.filter((v) => !decided(v));
+  // The work's values the user has not answered on — not those only offered
+  const open = f.values.filter((v) => !decided(v) && !v.offered);
   const confirmAll = async () => {
     for (const v of open) await corrections!.setFacet(f.facet, { key: v.key }, true);
   };
@@ -120,7 +121,8 @@ const CORRECTED_TITLE: Record<NonNullable<FacetValueInfo["corrected"]>, string> 
  *
  * - the user's — confirmed or added: filled, a ✓ before the name, no chance; the word taken back
  *   by the button shown when pointed at;
- * - not answered on: outlined on white, the model's chance in small print, ✓ ✕;
+ * - not answered on: outlined on white, the model's chance in small print, ✓ ✕; dashed when only
+ *   offered, not the work's yet;
  * - taken away by the user: faded, crossed out, ↺.
  *
  * A value of a facet of the site ([corrections] not given) has no answers.
@@ -138,6 +140,8 @@ export function FacetValue({ facet, value, corrections }: { facet: string; value
         removed && "border-dashed text-muted-foreground opacity-70",
         open && "bg-background",
         open && unlikely(value) && "border-maybe/60",
+        // Only offered, not the work's yet: dashed, as a suggestion
+        open && value.offered && "border-dashed",
         !corrections && "bg-muted/40",
       )}
       title={value.corrected ? CORRECTED_TITLE[value.corrected] : undefined}

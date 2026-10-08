@@ -13,6 +13,25 @@ object ModelValues {
     /** More likely than not: the one boundary a chance is read by. */
     const val LIKELY = 0.5
 
+    /**
+     * How many values of a facet of the layer a work is offered at least that the user has not
+     * answered on and the site does not give: besides every value more likely than not, the
+     * likeliest others up to this many, likely or not — the user's choice.
+     */
+    const val OFFERED = 3
+
+    /**
+     * The values to offer beside those a work is shown with: of [chances] (value to chance), the
+     * likeliest the work is not shown with, the user has not answered on and the site does not
+     * give ([fromSite]) — as many as lack to make [OFFERED] with the [shown] values of that kind.
+     */
+    fun offered(chances: Map<String, Double>, shown: Set<String>, answered: Set<String>, fromSite: Set<String>): List<String> {
+        val open = shown.count { it !in answered && it !in fromSite }
+        return chances.entries.asSequence()
+            .filter { (key, _) -> key !in shown && key !in answered && key !in fromSite }
+            .sortedByDescending { it.value }.take((OFFERED - open).coerceAtLeast(0)).map { it.key }.toList()
+    }
+
     fun of(schema: SourceSchema, site: Map<String, List<String>>, chances: Map<String, Map<String, Chance>>?): Map<String, List<String>> {
         if (chances.isNullOrEmpty()) return site
         val worked = schema.facets.filter { it.infer && it.key in chances }

@@ -220,6 +220,11 @@ r4m-chip.r4m-open {
   background: #ffffff;
 }
 
+/* Only offered, not the work's yet: dashed, as a suggestion */
+r4m-chip.r4m-offered {
+  border-style: dashed;
+}
+
 /* Taken away by the user: faded and crossed out */
 r4m-chip.r4m-removed-chip {
   border-style: dashed;

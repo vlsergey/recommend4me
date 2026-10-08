@@ -227,7 +227,8 @@ function facetValueTitle(facet: ItemFacet, value: FacetValueInfo): string {
  * amber-edged. [limit] cuts the list, the rest go into "+N" with their names in its title.
  */
 export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[]; limit?: number; className?: string }) {
-  const values = facets.flatMap((f) => f.values.map((v) => ({ facet: f, value: v })));
+  // A value only offered to answer on is not the work's: the cards leave it out
+  const values = facets.flatMap((f) => f.values.filter((v) => !v.offered).map((v) => ({ facet: f, value: v })));
   const shown = limit === undefined ? values : values.slice(0, limit);
   const rest = values.slice(shown.length);
   if (values.length === 0) return null;

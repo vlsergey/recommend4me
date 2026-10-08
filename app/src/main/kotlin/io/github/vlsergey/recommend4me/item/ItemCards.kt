@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.api.model.SearchMatch
 import io.github.vlsergey.recommend4me.api.model.TextRange
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
+import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -61,25 +62,41 @@ class ItemCards(private val stores: Stores, private val works: Works) {
             val removed = corrections.filter { it.facet == def.key && !it.added && it.key in had }.map { it.key }
             val added = corrections.filter { it.facet == def.key && it.added }.associate { it.key to it.name }
             val original = def.original?.let { texts[it] }
-            if (!empty && keys.isEmpty() && removed.isEmpty() && original == null) return@mapNotNull null
             // The chances of a facet the model works on now: none of one it no longer does
             val own = if (def.suggest || def.infer) chances?.get(def.key).orEmpty() else emptyMap()
             val siteKeys = site[def.key].orEmpty().toSet()
+            // Of a facet of the layer the model works out, the likeliest values the work is not shown
+            // with, the user has not answered on and the site does not give — to make at least so many
+            val offered = if (!(def.infer && def.editable)) emptyList() else {
+                val fromSite = siteKeys + def.examplesFrom?.let { from ->
+                    val keys = site[from].orEmpty()
+                    store.items.facetNames(from, keys).let { n -> keys.map { LayerValues.keyOf(n[it] ?: it) } }
+                }.orEmpty()
+                ModelValues.offered(
+                    own.filterValues { !it.had }.mapValues { it.value.chance },
+                    shown = keys.toSet(), answered = corrections.filter { it.facet == def.key }.map { it.key }.toSet(), fromSite = fromSite,
+                )
+            }
+            if (!empty && keys.isEmpty() && removed.isEmpty() && offered.isEmpty() && original == null) return@mapNotNull null
             fun name(key: String) = added[key] ?: names[def.key]?.get(key) ?: key
-            fun info(key: String, corrected: FacetValueInfo.Corrected?) = FacetValueInfo(
+            fun info(key: String, corrected: FacetValueInfo.Corrected?, offer: Boolean = false) = FacetValueInfo(
                 key = key,
                 name = name(key),
                 corrected = corrected,
                 chance = own[key]?.chance,
                 inferred = (key in had && key !in siteKeys).takeIf { it },
+                offered = offer.takeIf { it },
             )
             ItemFacet(
                 facet = def.key,
                 label = def.label,
                 editable = def.editable,
                 propertyValues = keys.map { k ->
-                    info(k, if (k in added) (if (k in had) FacetValueInfo.Corrected.CONFIRMED else FacetValueInfo.Corrected.ADDED) else null)
-                } + removed.map { info(it, FacetValueInfo.Corrected.REMOVED) },
+                    // Confirmed: the site or the model gave it — the model even when the user's answer
+                    // has since made it the work's own, no longer the model's to give
+                    val given = k in had || (own[k]?.chance ?: 0.0) > ModelValues.LIKELY
+                    info(k, if (k in added) (if (given) FacetValueInfo.Corrected.CONFIRMED else FacetValueInfo.Corrected.ADDED) else null)
+                } + offered.map { info(it, null, offer = true) } + removed.map { info(it, FacetValueInfo.Corrected.REMOVED) },
                 original = original,
             )
         }

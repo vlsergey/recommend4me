@@ -23,6 +23,7 @@ import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
 import java.time.ZoneOffset
@@ -40,6 +41,7 @@ class ItemDetailsReader(
     private val cards: ItemCards,
     private val recommendations: Recommendations,
     private val works: Works,
+    private val suggestions: FacetSuggestions,
 ) {
     fun read(key: ItemKey): ItemDetails? {
         val store = stores.source(key.source) ?: return null
@@ -49,6 +51,8 @@ class ItemDetailsReader(
         val site = store.items.facets(key.id)
         val corrections = store.corrections.facetsOf(key.id)
         val fields = store.corrections.fieldsOf(key.id)
+        // After an answer the next likeliest values are offered at once
+        suggestions.currentFor(store, key.id)
         val chances = store.suggestions.ofItems(listOf(key.id))[key.id]
         val names = schema.facets.associate { def ->
             def.key to store.items.facetNames(

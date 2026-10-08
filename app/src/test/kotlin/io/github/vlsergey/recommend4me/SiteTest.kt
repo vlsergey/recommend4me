@@ -221,7 +221,9 @@ class SiteTest {
         // The work's tags are worked out from the site's: the untagged work is given those of its kind
         val given = item.facets.single { it.facet == "tags" }.propertyValues
         assertTrue(given.any { it.key == "space" && it.inferred == true }, "given $given")
-        assertTrue(given.none { it.key == "dragons" }, "given $given")
+        assertTrue(given.none { it.key == "dragons" && it.offered != true }, "given $given")
+        // Beside what it is given, the likeliest others are offered: three the site does not give, at least
+        assertEquals(3, given.count { it.corrected == null }, "given $given")
 
         // The pairing of its kind is given to it at once, marked as the model's
         val pairing = item.facets.single { it.facet == "pairing" }.propertyValues.single()
@@ -335,13 +337,14 @@ class SiteTest {
         // The universe is a value to pick for any work, linked to none yet; linked, it names itself
         assertTrue(items.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
         corrections.correctFacet("site", "u1", FacetCorrection(facet = "universe", added = true, key = "fake:U1"))
-        assertEquals("Space opera", items.getItem("site", "u1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.single().name)
+        assertEquals("Space opera", items.getItem("site", "u1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.single { it.key == "fake:U1" }.name)
         assertEquals(1, universes.listUniverses("books").body!!.single { it.universe == "U1" }.works)
 
         // Removed, it takes its links with it
         universes.removeUniverse("books", "fake", "U1")
         assertTrue(universes.listUniverses("books").body!!.none { it.universe == "U1" })
-        assertTrue(items.getItem("site", "u1").body!!.allFacets.none { it.facet == "universe" })
+        val left = items.getItem("site", "u1").body!!.allFacets.filter { it.facet == "universe" }
+        assertTrue(left.none { f -> f.propertyValues.any { it.key == "fake:U1" } }, "left $left")
     }
 
     @Test
@@ -368,12 +371,16 @@ class SiteTest {
         val characters = facets.single { it.facet == "characters" }.propertyValues
         assertEquals(setOf("fake:C1", "fake:C2"), characters.filter { it.inferred == true }.map { it.key }.toSet(), "characters $characters")
         assertEquals("Pilot", characters.single { it.key == "fake:C1" }.name)
-        val pairing = facets.single { it.facet == "pairings" }.propertyValues.single()
+        val pairing = facets.single { it.facet == "pairings" }.propertyValues.single { it.offered != true }
         assertEquals("pair:fake:C1|fake:C2", pairing.key)
         assertEquals("Pilot / Captain", pairing.name)
-        // A work of no universe has no characters of it: only its site's line
+        // Beside the two it gives, the likeliest other character is offered: three to answer on at least
+        val unanswered = characters.filter { it.corrected == null }
+        assertEquals(1, unanswered.count { it.offered == true }, "characters $characters")
+        assertTrue(unanswered.size >= 3, "characters $characters")
+        // A work of no universe has no characters of it: only its site's line, and the original characters offered
         val outside = items.getItem("site", "q9").body!!.allFacets.filter { it.facet == "characters" || it.facet == "pairings" }
-        assertTrue(outside.all { it.propertyValues.isEmpty() && it.original == "Knight/Princess" }, "outside $outside")
+        assertTrue(outside.all { f -> f.propertyValues.all { it.offered == true } && f.original == "Knight/Princess" }, "outside $outside")
         // Its site's line is shown above
         assertEquals("Pilot/Captain", facets.single { it.facet == "characters" }.original)
 
@@ -381,7 +388,7 @@ class SiteTest {
         capture("n1|The captain|space|The captain commands. The captain waits. The captain sleeps|")
         corrections.correctFacet("site", "n1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
         textVectors.refresh(store)
-        val given = items.getItem("site", "n1").body!!.allFacets.find { it.facet == "characters" }?.propertyValues.orEmpty().map { it.key }
+        val given = items.getItem("site", "n1").body!!.allFacets.find { it.facet == "characters" }?.propertyValues.orEmpty().filter { it.offered != true }.map { it.key }
         val offered = suggestionsApi.getCandidates("site", "n1", "characters").body!!
         assertEquals(setOf("fake:C1", "fake:C2", "oc:female", "oc:male"), (offered.map { it.key } + given).toSet(), "offered $offered, given $given")
         assertTrue(offered.none { it.key in given }, "offered $offered, given $given")
