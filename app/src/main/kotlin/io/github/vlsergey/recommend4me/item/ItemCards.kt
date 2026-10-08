@@ -59,7 +59,8 @@ class ItemCards(private val stores: Stores, private val works: Works) {
         return schema.facets.filter { only(it.key) }.mapNotNull { def ->
             val keys = corrected[def.key].orEmpty()
             val had = base[def.key].orEmpty().toSet()
-            val removed = corrections.filter { it.facet == def.key && !it.added && it.key in had }.map { it.key }
+            // Every value the user rejected is shown crossed out — offered or given, it stays in its place
+            val removed = corrections.filter { it.facet == def.key && !it.added }.map { it.key }
             val added = corrections.filter { it.facet == def.key && it.added }.associate { it.key to it.name }
             val original = def.original?.let { texts[it] }
             // The chances of a facet the model works on now: none of one it no longer does

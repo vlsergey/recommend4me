@@ -251,7 +251,10 @@ class SiteTest {
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tags", added = false, key = "ships"))
         val facets = pages.getPage("https://site.example/work/x1").body!!.item!!.facets.single { it.facet == "tags" }.propertyValues
         assertEquals(FacetValueInfo.Corrected.CONFIRMED, facets.single { it.key == "space" }.corrected)
-        assertTrue(facets.none { it.key == "ships" && it.corrected != FacetValueInfo.Corrected.REMOVED }, "ships taken away: $facets")
+        // A value taken away is still shown, crossed out, with the model's chance to keep its place by
+        val ships = facets.single { it.key == "ships" }
+        assertEquals(FacetValueInfo.Corrected.REMOVED, ships.corrected, "ships taken away: $facets")
+        assertTrue(ships.chance != null, "ships keeps its chance: $ships")
 
         // A value added by its name finds the key of the sites' value, any case; a new one gets its name in lower case
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tags", added = true, name = "MAGIC"))

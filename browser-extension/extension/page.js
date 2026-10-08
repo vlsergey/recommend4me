@@ -280,9 +280,9 @@
   const orders = new Map();
 
   /**
-   * The values in the order first shown — what the user decided first, then the rest the likeliest
-   * first: an answer changes how a value looks, never where it is. A value that comes later goes
-   * after them.
+   * The values in the order first shown — by the model's chance, the likeliest first, the user's
+   * answers aside, a rejected value too: an answer changes how a value looks, never where it is,
+   * until the page is opened again. A value that comes later goes after them.
    */
   function stableOrder(item, facet, values) {
     const id = `${item.summary.source}/${item.summary.item}/${facet}`;
@@ -290,7 +290,7 @@
     const known = new Set(order);
     const fresh = values
       .filter((v) => !known.has(v.key))
-      .sort((a, b) => Number(!!b.corrected) - Number(!!a.corrected) || (b.chance ?? 0) - (a.chance ?? 0))
+      .sort((a, b) => (b.chance ?? -1) - (a.chance ?? -1))
       .map((v) => v.key);
     const all = order.concat(fresh);
     orders.set(id, all);

@@ -205,10 +205,11 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
     }
 
     /**
-     * What is kept of item [i]'s chances: of every value it has, and of the values it lacks and
-     * has not been denied — of a facet that says which values a work may have ([allowed]: a work's
-     * characters are of its universes, its pairings of its characters) every one of those, for
-     * the user to choose among; of any other facet those it more likely has than not.
+     * What is kept of item [i]'s chances: of every value it has, of every value the user rejected
+     * (shown crossed out, in its place by its chance), and of the values it lacks — of a facet that
+     * says which values a work may have ([allowed]: a work's characters are of its universes, its
+     * pairings of its characters) every one of those, for the user to choose among; of any other
+     * facet those it more likely has than not, and the likeliest others offered besides.
      */
     private fun chancesOf(id: String, facet: String, chances: FloatArray, data: FacetData, i: Int, allowed: Set<String>?): List<Chance> {
         val has = data.held[i].toHashSet()
@@ -228,7 +229,8 @@ class FacetSuggestions(private val stores: Stores, private val plugins: Plugins,
         return chances.indices.mapNotNull { v ->
             when {
                 v in has -> chance(v, true)
-                v in rejected -> null
+                // A value the user rejected keeps its chance: it is shown crossed out, in its place by it
+                v in rejected -> chance(v, false)
                 allowed != null -> if (data.values[v] in allowed) chance(v, false) else null
                 chances[v] > ModelValues.LIKELY || data.values[v] in offered -> chance(v, false)
                 else -> null
@@ -526,8 +528,8 @@ internal class FacetData(
     val basis: Long,
 ) {
     companion object {
-        /** The rule of what is kept of an item's chances: 2 — the likeliest others offered besides the likely ones. */
-        private const val KEPT = 2
+        /** The rule of what is kept of an item's chances: 2 — the likeliest others offered besides the likely ones; 3 — the rejected ones too. */
+        private const val KEPT = 3
 
         /** What an item's chances are made of: every value of it, the user's answers, its texts' hashes, its chapters. */
         fun fingerprint(site: Map<String, List<String>>, corrections: List<FacetCorrection>, textHashes: Collection<String>, windows: Int): Long =
