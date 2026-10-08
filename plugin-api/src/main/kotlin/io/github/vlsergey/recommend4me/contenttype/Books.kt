@@ -31,11 +31,14 @@ object Books {
     /** The value of a signal that is either set or not. */
     val YES = StandardValue("yes", "да")
 
-    /** The user marked the work read on the site: on its shelf of the finished, with its box "read" ticked. */
-    val READ = StandardSignal("read", "Прочитано", listOf(YES))
+    /**
+     * The user marked the work read on the site: on its shelf of the finished, with its box "read"
+     * ticked. Shown, not read by the model: it is known only of the works the user has read.
+     */
+    val READ = StandardSignal("read", "Прочитано", listOf(YES), feature = false)
 
-    /** The user liked the work on the site. */
-    val LIKED = StandardSignal("liked", "Понравилось", listOf(YES))
+    /** The user liked the work on the site. Shown, not read by the model: it is the user's verdict, not something of the work. */
+    val LIKED = StandardSignal("liked", "Понравилось", listOf(YES), feature = false)
 
     val TYPE = ContentType(
         id = ID,

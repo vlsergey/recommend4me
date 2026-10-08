@@ -44,6 +44,6 @@ class StandardValue(val key: String, val label: String)
  * [key] to one of [values], mapping its own marks onto it (a shelf "finished" — read), besides any
  * signal of its own.
  */
-class StandardSignal(val key: String, val label: String, val values: List<StandardValue>) {
-    fun asSignal() = SignalDef(key, label, values.associate { it.key to it.label })
+class StandardSignal(val key: String, val label: String, val values: List<StandardValue>, val feature: Boolean = true) {
+    fun asSignal() = SignalDef(key, label, values.associate { it.key to it.label }, feature)
 }

@@ -165,8 +165,10 @@ class TextDef(
 /**
  * A kind of the user's own actions on the site ([SiteSignals]): its [label], and the names of its
  * values ([values], by the value as the source writes it); a value not named is shown as it is.
+ * [feature]: the model reads it — not a signal that only repeats the user's verdict, the work read
+ * or liked, which says nothing of a work the user has not met yet.
  */
-class SignalDef(val key: String, val label: String, val values: Map<String, String> = emptyMap())
+class SignalDef(val key: String, val label: String, val values: Map<String, String> = emptyMap(), val feature: Boolean = true)
 
 /** A setting of a source the user can change in the interface: a cookie, a delay between requests. */
 class SettingDef(
