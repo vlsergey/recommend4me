@@ -1265,8 +1265,10 @@ components:
       description: |
         What a facet tells of a work, for the card to put it where it decides: AUTHOR - who made it
         (their other works are shown); SERIES - the series it is a part of (its other parts are
-        shown); STATUS - finished or not; FORM - a novel, an engine; CONTENT - genres, tags, fandom
-      enum: [AUTHOR, SERIES, STATUS, FORM, CONTENT]
+        shown); STATUS - finished or not; FORM - a novel, an engine; CONTENT - genres, tags, fandom;
+        ORIGINAL - the site's own word on what the application works out (its tags, fandoms,
+        pairings and characters), shown first, above the values the user answers on
+      enum: [AUTHOR, SERIES, STATUS, FORM, CONTENT, ORIGINAL]
 
     NumberRole:
       type: string
@@ -1326,6 +1328,12 @@ components:
             Of the application's layer over the source - the standard tags, the kind, the universe,
             the characters, the pairings: the user corrects it. A facet of the site is shown and read
             as the site gives it, never corrected
+        originalFacet:
+          type: string
+          description: |
+            Of a facet of the layer: the key of the facet of the site that is the site's own word on
+            it (its tags of the work's tags, its fandoms of the universes, its line of pairings and
+            characters of the characters), shown right above it to answer by
         original:
           type: string
           description: The key of the text holding the facet's values as the site writes them

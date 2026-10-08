@@ -37,15 +37,14 @@ class Ficbook : Source {
     override val schema = SourceSchema(
         facets = listOf(
             Books.AUTHOR.asFacet(AUTHOR),
-            FacetDef(FANDOM, "Фэндом", filter = true, onCard = true, searchWeight = 0.9f, role = FacetRole.CONTENT),
+            Books.FANDOM.asFacet(FANDOM),
             FacetDef(DIRECTION, "Направленность", filter = true, onCard = true, role = FacetRole.CONTENT),
             FacetDef(RATING, "Рейтинг", filter = true, onCard = true, role = FacetRole.CONTENT),
             Books.STATUS.asFacet(STATUS),
             Books.TAG.asFacet(TAG),
             // The pairings and characters as the authors write them: the site's strings, kept as they
             // are; the application works the characters and pairings of the universes out of them
-            FacetDef(PAIRING, "Пэйринг на сайте", searchWeight = 0.7f),
-            FacetDef(CHARACTER, "Персонаж на сайте", searchWeight = 0.8f),
+            Books.PAIRINGS.asFacet(PAIRING),
             FacetDef(SERIES, "Серия", searchWeight = 0.7f, role = FacetRole.SERIES),
         ),
         numbers = listOf(
@@ -74,9 +73,10 @@ class Ficbook : Source {
      * 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever
      * the order of its names. 3: whether a work is fan fiction, by its fandom. 4: the promotion of
      * another work the site puts among the paragraphs of a part is not its text. 5: the standard
-     * statuses; the user's marks of a work — liked, read, followed.
+     * statuses; the user's marks of a work — liked, read, followed. 6: the pairings and the
+     * characters alone in one field, every entry of the line as written; the fandom a standard one.
      */
-    override val parserVersion = 5
+    override val parserVersion = 6
 
     override val signals = listOf(
         Books.READ.asSignal(),
@@ -119,7 +119,6 @@ class Ficbook : Source {
         const val STATUS = "status"
         const val SIGNAL_FOLLOWED = "followed"
         const val TAG = "tag"
-        const val CHARACTER = "character"
         const val PAIRING = "pairing"
         const val SERIES = "series"
 

@@ -72,6 +72,23 @@ export function FactLine({ source, summary, facets, className }: { source: Sourc
 }
 
 /**
+ * The site's own word on a facet of the layer ([facet] — its key): its tags above the work's tags,
+ * its fandoms above the universes, its line of pairings and characters above the characters — as
+ * the site gives them, never answered on, right above the values the user answers on.
+ */
+export function OriginalOf({ source, facets, facet }: { source: SourceInfo; facets: ItemFacet[]; facet: string }) {
+  const key = source.facets.find((f) => f.key === facet)?.originalFacet;
+  const original = key && facets.find((f) => f.facet === key);
+  if (!original || original.values.length === 0) return null;
+  return (
+    <div className="mb-1 flex flex-col gap-0.5">
+      <div className="text-xs text-muted-foreground">{original.label}</div>
+      <div className="text-sm break-words">{original.values.map((v) => v.name).join(", ")}</div>
+    </div>
+  );
+}
+
+/**
  * What is in the work — its genres, tags, fandom, the facets of the role CONTENT — as plain chips:
  * one the user confirmed filled with a ✓, one the model doubts amber-edged, one the user took away left out.
  * The chances and the answers are the marking's, not the reading's.
@@ -86,6 +103,7 @@ export function ContentFacts({ source, facets, except = [] }: { source: SourceIn
     <div className="flex flex-col gap-2">
       {content.map((f) => (
         <div key={f.facet} className="flex flex-col gap-1">
+          <OriginalOf source={source} facets={facets} facet={f.facet} />
           <div className="text-xs text-muted-foreground">{f.label}</div>
           <FacetBadges facets={[f]} />
         </div>

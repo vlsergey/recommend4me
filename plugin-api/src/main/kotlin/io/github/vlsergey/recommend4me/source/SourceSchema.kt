@@ -90,6 +90,12 @@ class FacetDef(
      * the chance of the work's, one it lacks says little ([SuggestionTask.lackWeight][io.github.vlsergey.recommend4me.suggestion.SuggestionTask.lackWeight]).
      */
     val examplesFrom: String? = null,
+    /**
+     * Of a facet of the layer: the key of the facet of the site that is the site's own word on it —
+     * its tags of the work's tags, its fandoms of the universes, its line of pairings and characters
+     * of the characters — shown right above it, to answer by; null when the site has none.
+     */
+    val originalFacet: String? = null,
 )
 
 /**
@@ -111,6 +117,13 @@ enum class FacetRole {
 
     /** What is in the work: the genres, the tags, the fandom — the facts the user decides by. */
     CONTENT,
+
+    /**
+     * The site's own word on what the application works out for every work — its tags, its
+     * fandoms, its pairings and characters as the site writes them: shown first, above the values
+     * the user answers on, to answer by.
+     */
+    ORIGINAL,
 }
 
 /** What a number tells of a work, for the card to put it where it decides. */

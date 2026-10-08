@@ -23,7 +23,7 @@ class StandardFacets(private val stores: Stores) {
             t.sources.forEach { s ->
                 s.schema.facets.forEach { def ->
                     val standard = def.standard ?: return@forEach
-                    if (t.type.facets.none { it.key == standard.key }) {
+                    if ((t.type.facets + t.type.layer).none { it.key == standard.key }) {
                         log.warn("{}: the facet {} is declared standard {}, which the type {} has not", s.id, def.key, standard.key, t.id)
                     }
                     standard.values?.let { values -> s.items.nameFacetValues(def.key, values.associate { it.key to it.label }) }

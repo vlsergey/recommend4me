@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ChanceMark, unlikely } from "@/facet/FacetValueMarks";
 import { decided, useStableOrder } from "@/facet/valueOrder";
+import { OriginalOf } from "@/item/WorkFacts";
 import { cn } from "@/lib/utils";
 import { SuggestedValues } from "@/suggestion/Suggestions";
 import { useSuggestions } from "@/suggestion/useSuggestions";
@@ -42,9 +43,11 @@ export function FacetCorrections({
   const [editing, setEditing] = useState(false);
   const suggestions = useSuggestions(item, source);
   const facets = allFacets.filter((f) => !except.includes(f.facet));
-  // The application's layer is corrected; the site's facets are its word, shown as they are
+  // The application's layer is corrected; the site's facets are its word, shown as they are — its
+  // word on what the layer works out (the role ORIGINAL) above all of them, not here
+  const originals = new Set(source?.facets.filter((f) => f.role === "ORIGINAL").map((f) => f.key));
   const layer = facets.filter((f) => f.editable);
-  const site = facets.filter((f) => !f.editable);
+  const site = facets.filter((f) => !f.editable && !originals.has(f.facet));
   const suggested = suggestions.data?.filter((s) => !except.includes(s.facet));
   const addable = source && { ...source, facets: source.facets.filter((f) => f.editable && !except.includes(f.key)) };
   return (
@@ -57,7 +60,10 @@ export function FacetCorrections({
       </div>
       {layer.length === 0 && !editing && <div className="text-sm text-muted-foreground">—</div>}
       {layer.map((f) => (
-        <FacetLine key={f.facet} facet={f} corrections={corrections} />
+        <div key={f.facet}>
+          {source && <OriginalOf source={source} facets={allFacets} facet={f.facet} />}
+          <FacetLine facet={f} corrections={corrections} />
+        </div>
       ))}
       {editing && addable && <AddFacetValue source={addable} corrections={corrections} />}
       {suggested && <SuggestedValues suggestions={suggested} corrections={corrections} />}
@@ -94,7 +100,6 @@ function FacetLine({ facet: f, corrections }: { facet: ItemFacet; corrections?: 
           </AsyncButton>
         )}
       </div>
-      {f.original && <div className="mb-1 text-xs break-words text-muted-foreground/80">На сайте: {f.original}</div>}
       <div className="flex flex-wrap gap-1">
         {values.map((v) => (
           <FacetValue key={v.key} facet={f.facet} value={v} corrections={corrections} />

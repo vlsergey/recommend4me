@@ -20,34 +20,37 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
 object UniverseFacet {
     const val KEY = UniverseFacets.UNIVERSE
 
-    val DEF = FacetDef(
-        KEY, "Вселенная",
-        filter = true,
-        // One facet across the sources of the type: a universe is one whichever site a work is from
-        shared = KEY,
-        searchWeight = 0.9f,
-        onCard = true,
-        infer = true,
-        editable = true,
-    )
-
     /** The values of the kind of a work, with their names. */
     val KINDS = UniverseFacets.KIND_FACET.values!!.associate { it.key to it.label }
 
-    /** The facets of a source of a type with universes: its line of characters and pairings shown above the worked out ones. */
-    fun defs(schema: SourceSchema): List<FacetDef> = listOf(
-        // The site may say it, but it is the layer's: the user's answer is the work's kind
-        UniverseFacets.KIND_FACET.asLayerFacet(examplesFrom = null),
-        DEF,
-        FacetDef(
-            UniverseFacets.CHARACTERS, "Главные персонажи",
-            shared = UniverseFacets.CHARACTERS, searchWeight = 0.8f, infer = true, original = schema.universeLine, editable = true,
-        ),
-        FacetDef(
-            UniverseFacets.PAIRINGS, "Пэйринги",
-            shared = UniverseFacets.PAIRINGS, searchWeight = 0.7f, infer = true, original = schema.universeLine, editable = true,
-        ),
-    )
+    /**
+     * The facets of a source of a type with universes, each with the site's own word on it shown
+     * right above it: the site's fandoms above the universes, its line of pairings and characters
+     * above the characters (the pairings come right after them).
+     */
+    fun defs(schema: SourceSchema): List<FacetDef> {
+        fun keyOf(standard: Any) = schema.facets.firstOrNull { it.standard === standard }?.key
+        return listOf(
+            // The site may say it, but it is the layer's: the user's answer is the work's kind
+            UniverseFacets.KIND_FACET.asLayerFacet(examplesFrom = null),
+            FacetDef(
+                KEY, "Вселенная",
+                filter = true,
+                // One facet across the sources of the type: a universe is one whichever site a work is from
+                shared = KEY, searchWeight = 0.9f, onCard = true, infer = true, editable = true,
+                originalFacet = keyOf(UniverseFacets.FANDOM_FACET),
+            ),
+            FacetDef(
+                UniverseFacets.CHARACTERS, "Главные персонажи",
+                shared = UniverseFacets.CHARACTERS, searchWeight = 0.8f, infer = true, original = schema.universeLine, editable = true,
+                originalFacet = keyOf(UniverseFacets.PAIRINGS_FACET),
+            ),
+            FacetDef(
+                UniverseFacets.PAIRINGS, "Пэйринги",
+                shared = UniverseFacets.PAIRINGS, searchWeight = 0.7f, infer = true, original = schema.universeLine, editable = true,
+            ),
+        )
+    }
 
     /** The value of a universe or a character of a catalogue: "wikidata:Q8337". */
     fun valueOf(catalogue: String, id: String) = "$catalogue:$id"

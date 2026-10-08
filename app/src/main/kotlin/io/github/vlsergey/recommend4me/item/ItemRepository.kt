@@ -102,6 +102,15 @@ class ItemRepository(
         if (named.isNotEmpty()) nameFacetValues(facet, named)
     }
 
+    /** Removes the values and the names of every facet not among [facets]; how many values were removed of each. */
+    fun keepOnlyFacets(facets: Collection<String>): Map<String, Int> {
+        val gone = db.select(ITEM_FACET.FACET).from(ITEM_FACET).where(ITEM_FACET.FACET.notIn(facets)).fetch(ITEM_FACET.FACET)
+            .groupingBy { it!! }.eachCount()
+        if (gone.isNotEmpty()) db.deleteFrom(ITEM_FACET).where(ITEM_FACET.FACET.notIn(facets)).execute()
+        db.deleteFrom(FACET_VALUE).where(FACET_VALUE.FACET.notIn(facets)).execute()
+        return gone
+    }
+
     fun nameFacetValues(facet: String, names: Map<String, String>) {
         if (names.isEmpty()) return
         val known = facetNames(facet, names.keys)

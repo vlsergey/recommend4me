@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.contenttype.StandardValue
+import io.github.vlsergey.recommend4me.source.FacetRole
 
 /**
  * The facets the application gives every work of a content type with universes
@@ -44,4 +45,16 @@ object UniverseFacets {
     const val UNIVERSE = "universe"
     const val CHARACTERS = "characters"
     const val PAIRINGS = "pairings"
+
+    /** The fandoms as a site writes them: the site's word of what the universes of the work are, shown above them. */
+    val FANDOM_FACET = StandardFacet(
+        "fandom", "Фэндомы на сайте", role = FacetRole.ORIGINAL, filter = true, onCard = true, searchWeight = 0.9f,
+    )
+
+    /**
+     * The pairings and characters as a site writes them, one field: every entry of the site's line
+     * as it is — "Брайан/Авелин", "Фрида" — a pairing one whatever the order of its names. The
+     * site's word of what the work's characters and pairings are, shown above them.
+     */
+    val PAIRINGS_FACET = StandardFacet("pairing", "Пэйринги и персонажи на сайте", role = FacetRole.ORIGINAL, searchWeight = 0.8f)
 }

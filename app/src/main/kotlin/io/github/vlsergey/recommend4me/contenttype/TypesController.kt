@@ -40,7 +40,7 @@ class TypesController(private val stores: Stores) : TypesApi {
                     facets = schema.facets.map {
                         FacetInfo(
                             id = FeatureNames.facetId(s, it), key = it.key, label = it.label, filter = it.filter, onCard = it.onCard,
-                            suggest = it.suggest, infer = it.infer, editable = it.editable, original = it.original,
+                            suggest = it.suggest, infer = it.infer, editable = it.editable, original = it.original, originalFacet = it.originalFacet,
                             role = it.role?.let { r -> ApiFacetRole.valueOf(r.name) },
                         )
                     },

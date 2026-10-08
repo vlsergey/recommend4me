@@ -12,6 +12,7 @@ import { FacetValue } from "@/correction/FacetCorrections";
 import type { Corrections } from "@/correction/useCorrections";
 import { ChanceMark } from "@/facet/FacetValueMarks";
 import { useStableOrder } from "@/facet/valueOrder";
+import { OriginalOf } from "@/item/WorkFacts";
 import { percent, plural } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { SuggestedChip } from "@/suggestion/Suggestions";
@@ -96,20 +97,23 @@ export function FanficSection({
         suggested={suggestedOf(KIND)}
         corrections={corrections}
       />
-      {!original && (
-        <Universes
-          type={type}
-          label={labelOf(UNIVERSE, "Вселенная")}
-          values={valuesOf(UNIVERSE)}
-          suggested={suggestedOf(UNIVERSE)}
-          corrections={corrections}
-        />
-      )}
+      <div>
+        <OriginalOf source={source} facets={d.allFacets} facet={UNIVERSE} />
+        {!original && (
+          <Universes
+            type={type}
+            label={labelOf(UNIVERSE, "Вселенная")}
+            values={valuesOf(UNIVERSE)}
+            suggested={suggestedOf(UNIVERSE)}
+            corrections={corrections}
+          />
+        )}
+      </div>
+      <OriginalOf source={source} facets={d.allFacets} facet={CHARACTERS} />
       <Characters
         type={type}
         item={ref}
         label={labelOf(CHARACTERS, "Главные персонажи")}
-        original={facetOf(CHARACTERS)?.original}
         values={valuesOf(CHARACTERS)}
         universes={valuesOf(UNIVERSE).filter(has)}
         corrections={corrections}
@@ -117,7 +121,6 @@ export function FanficSection({
       <Pairings
         item={ref}
         label={labelOf(PAIRINGS, "Пэйринги")}
-        original={facetOf(PAIRINGS)?.original}
         values={valuesOf(PAIRINGS)}
         characters={valuesOf(CHARACTERS).filter(has)}
         corrections={corrections}
@@ -165,7 +168,9 @@ export function FanficSummary({ source, details: d, onMark }: { source: SourceIn
   return (
     <section className="flex flex-col gap-2">
       <h4 className="text-sm font-semibold">Фанфик</h4>
+      <OriginalOf source={source} facets={d.allFacets} facet={UNIVERSE} />
       {line("Вселенная", valuesOf(UNIVERSE))}
+      <OriginalOf source={source} facets={d.allFacets} facet={CHARACTERS} />
       {line("Главные персонажи", valuesOf(CHARACTERS))}
       {line("Пэйринги", valuesOf(PAIRINGS))}
       {open > 0 && (
@@ -177,12 +182,11 @@ export function FanficSummary({ source, details: d, onMark }: { source: SourceIn
   );
 }
 
-/** A part of the section: its label, the site's line when there is one, then the rest. */
-function Block({ label, original, children }: { label: string; original?: string; children: ReactNode }) {
+/** A part of the section: its label, then the rest — the site's own word on it is shown above the section. */
+function Block({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="text-xs text-muted-foreground">{label}</div>
-      {original && <div className="text-xs break-words text-muted-foreground/80">На сайте: {original}</div>}
       {children}
     </div>
   );
@@ -330,15 +334,13 @@ function Universes({
 }
 
 /**
- * The work's main characters, the site's line above them. The picker offers the characters of
- * every universe the work is linked to, by any of their names, the original characters, and a
- * name of the user's own.
+ * The work's main characters. The picker offers the characters of every universe the work is
+ * linked to, by any of their names, the original characters, and a name of the user's own.
  */
 function Characters({
   type,
   item,
   label,
-  original,
   values,
   universes,
   corrections,
@@ -346,7 +348,6 @@ function Characters({
   type: ContentTypeInfo;
   item: ItemRef;
   label: string;
-  original?: string;
   values: FacetValueInfo[];
   /** The universes the work has. */
   universes: FacetValueInfo[];
@@ -389,7 +390,7 @@ function Characters({
   const failed = characters.find((q) => q.isError)?.error?.message ?? dictionary.error?.message ?? candidates.error?.message;
 
   return (
-    <Block label={label} original={original}>
+    <Block label={label}>
       <Chips facet={CHARACTERS} values={values} corrections={corrections} />
       <Named facet={CHARACTERS} candidates={candidates.data} corrections={corrections} />
       <Picker
@@ -406,18 +407,16 @@ function Characters({
   );
 }
 
-/** The work's pairings, the site's line above them; a new one is two of the work's characters. */
+/** The work's pairings; a new one is two of the work's characters. */
 function Pairings({
   item,
   label,
-  original,
   values,
   characters,
   corrections,
 }: {
   item: ItemRef;
   label: string;
-  original?: string;
   values: FacetValueInfo[];
   /** The characters the work has. */
   characters: FacetValueInfo[];
@@ -456,7 +455,7 @@ function Pairings({
   );
 
   return (
-    <Block label={label} original={original}>
+    <Block label={label}>
       <Chips facet={PAIRINGS} values={values} corrections={corrections} />
       <Named facet={PAIRINGS} candidates={candidates.data} corrections={corrections} />
       {characters.length > 0 && (

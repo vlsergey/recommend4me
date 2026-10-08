@@ -27,7 +27,13 @@ object Books {
     )
 
     /** The tags as the site writes them: the site's word, read by the model, the examples of [TAGS]. */
-    val TAG = StandardFacet("tag", "Тег на сайте", role = FacetRole.CONTENT, searchWeight = 0.9f)
+    val TAG = StandardFacet("tag", "Теги на сайте", role = FacetRole.ORIGINAL, searchWeight = 0.9f)
+
+    /** The fandoms as the site writes them: the site's word of what the universes of the work are. */
+    val FANDOM = UniverseFacets.FANDOM_FACET
+
+    /** The pairings and characters as the site writes them, one field ([UniverseFacets.PAIRINGS_FACET]). */
+    val PAIRINGS = UniverseFacets.PAIRINGS_FACET
 
     /**
      * The work's tags: of every tag of every site, one by its name — worked out from everything the
@@ -62,7 +68,7 @@ object Books {
         grades = listOf("Не нравится", "Можно почитать", "В целом понравилась", "Очень хорошая", "Хочу ещё"),
         verb = "читать",
         universes = true,
-        facets = listOf(AUTHOR, STATUS, UniverseFacets.KIND_FACET, TAG),
+        facets = listOf(AUTHOR, STATUS, UniverseFacets.KIND_FACET, TAG, FANDOM, PAIRINGS),
         layer = listOf(TAGS),
         signals = listOf(READ, LIKED, SHELF),
     )

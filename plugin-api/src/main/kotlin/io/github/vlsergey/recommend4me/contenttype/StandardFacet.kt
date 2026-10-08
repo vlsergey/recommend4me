@@ -42,10 +42,10 @@ class StandardFacet(
      * This one as a facet of the application's layer over a source: corrected by the user, worked out
      * from [examplesFrom] — the key of the source's own facet of [examples] — and the rest.
      */
-    fun asLayerFacet(examplesFrom: String?) = FacetDef(
+    fun asLayerFacet(examplesFrom: String?, originalFacet: String? = examplesFrom) = FacetDef(
         key, label,
         filter = filter, shared = key, searchWeight = searchWeight, onCard = onCard, names = names, suggest = suggest, infer = infer, role = role,
-        standard = this, editable = true, examplesFrom = examplesFrom,
+        standard = this, editable = true, examplesFrom = examplesFrom, originalFacet = originalFacet,
     )
 }
 

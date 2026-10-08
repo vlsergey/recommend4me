@@ -11,7 +11,6 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.ANNOTATION
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.AUTHOR
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.BASE
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.CHARACTER
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.COMMENTS
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.DEDICATION
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.DIRECTION
@@ -127,9 +126,9 @@ class FicbookPages(private val context: SourceContext) {
         info["Пэйринг и персонажи"]?.let { dd ->
             // The line as the site shows it: what the application works the pairings and characters out from
             items.setTexts(id, mapOf(PAIRINGS_LINE to PageText.of(dd)))
-            val groups = dd.select("a").map { it.text().trim() }.flatMap { it.split(", ") }.map { it.trim() }.filter { it.isNotEmpty() }
-            items.setFacet(id, PAIRING, groups.filter { '/' in it }.map(::pairing).distinctBy { it.key })
-            items.setFacet(id, CHARACTER, groups.flatMap { it.split('/') }.map { it.trim() }.filter { it.isNotEmpty() }.distinct().map { FacetValue(it.lowercase(), it) })
+            // Every entry of the line as written, one field: a pairing "A/B" and a character alone
+            val entries = dd.select("a").map { it.text().trim() }.flatMap { it.split(", ") }.map { it.trim() }.filter { it.isNotEmpty() }
+            items.setFacet(id, PAIRING, entries.map(::entry).distinctBy { it.key })
         }
         info["Размер"]?.text()?.let { size ->
             items.setNumbers(
@@ -272,8 +271,11 @@ class FicbookPages(private val context: SourceContext) {
          */
         private const val NOT_THE_TEXT = ".js-fanfic-text-promo-placeholder, [class*=promo], script, style"
 
-        /** A pairing as written, "A/B": one pairing whatever the order of its names — the key has them sorted. */
-        private fun pairing(written: String): FacetValue =
+        /**
+         * An entry of the line as written — a pairing "A/B", or a character alone: a pairing is one
+         * whatever the order of its names — the key has them sorted.
+         */
+        private fun entry(written: String): FacetValue =
             FacetValue(written.split('/').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.sorted().joinToString("/"), written)
 
         private fun workId(href: String): String? = READFIC.matchEntire(href.substringBefore('?').substringBefore('#'))?.groupValues?.get(1)

@@ -36,10 +36,12 @@ class FicbookPagesTest {
         assertEquals(listOf("finished"), facets["status"])
         assertEquals(listOf("28510"), facets["series"])
         assertTrue("слоуберн" in facets.getValue("tag"))
-        // A pairing is one whatever the order of its names; its name stays as written
-        assertEquals(listOf("авелин/брайан", "альфред/итан"), facets["pairing"])
+        // Every entry of the line in one field: a pairing one whatever the order of its names, a
+        // character alone as itself; the names stay as written
+        assertEquals(listOf("авелин/брайан", "альфред/итан", "фрида", "сия", "терен", "бабушка рико"), facets["pairing"])
         assertEquals("Брайан/Авелин", context.facetNames.getValue("pairing")["авелин/брайан"])
-        assertEquals(listOf("брайан", "авелин", "альфред", "итан", "фрида", "сия", "терен", "бабушка рико"), facets["character"])
+        assertEquals("Бабушка Рико", context.facetNames.getValue("pairing")["бабушка рико"])
+        assertNull(facets["character"])
         assertTrue(context.texts.getValue(work).getValue(Ficbook.PAIRINGS_LINE).startsWith("Брайан/Авелин"))
         val numbers = context.numbers.getValue(work)
         assertEquals(mapOf("likes" to 2.0, "pages" to 180.0, "words" to 68967.0, "parts" to 20.0), numbers)

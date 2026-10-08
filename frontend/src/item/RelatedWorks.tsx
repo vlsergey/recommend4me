@@ -1,3 +1,4 @@
+import { ChevronRightIcon } from "lucide-react";
 import type { ContentTypeInfo, Grade, RelatedWorks as Related } from "@/api/client";
 import { gradeLabel } from "@/contenttype/types";
 import { cn } from "@/lib/utils";
@@ -7,18 +8,20 @@ import { GRADE_TEXT, shownScore } from "./pieces";
 /**
  * The other works of the series the work is a part of and of the people who made it, each with
  * the user's grade — how the volumes before went tells most of the one after — or, ungraded, the
- * model's prediction. A work opens over this one.
+ * model's prediction: folded, their heading and count alone, opened on demand. A work opens over
+ * this one.
  */
 export function RelatedWorks({ type, related }: { type: ContentTypeInfo; related: Related[] }) {
   if (related.length === 0) return null;
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       {related.map((r) => (
-        <section key={`${r.facet}=${r.value}`} className="flex flex-col gap-1">
-          <h4 className="text-sm font-semibold">
+        <details key={`${r.facet}=${r.value}`} className="group flex flex-col gap-1">
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-semibold select-none [&::-webkit-details-marker]:hidden">
+            <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
             {r.label}: {r.name} <span className="font-normal text-muted-foreground tabular-nums">{r.items.length}</span>
-          </h4>
-          <ul className="flex max-h-60 flex-col divide-y overflow-y-auto rounded-lg border">
+          </summary>
+          <ul className="mt-1 flex max-h-60 flex-col divide-y overflow-y-auto rounded-lg border">
             {r.items.map((s) => (
               <li key={`${s.source}/${s.item}`}>
                 <a
@@ -38,7 +41,7 @@ export function RelatedWorks({ type, related }: { type: ContentTypeInfo; related
               </li>
             ))}
           </ul>
-        </section>
+        </details>
       ))}
     </div>
   );
