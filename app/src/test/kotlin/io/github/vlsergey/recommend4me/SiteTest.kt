@@ -358,8 +358,19 @@ class SiteTest {
         assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(ships.key, ships.part, ships.paragraph, TagByTextAnswer.Verdict.YES)).statusCode.value())
         assertTrue(store.corrections.facetsOf("tt3").any { it.facet == "tags" && it.key == ships.key && it.added })
         assertTrue(list().tags.none { it.key == ships.key })
-        // Wrong: of answers of both kinds the model is fitted, and every tag offered has its chance
+        // Of the tags' hierarchy: a tag above one the work has, it has — not asked
         val space = list().tags.single { it.name == "Space" }
+        tagsApi.relateTags(TagRelationRequest(ships.key, space.key, TagRelation.PARENT))
+        assertTrue(list().tags.none { it.key == space.key }, "list ${list()}")
+        tagsApi.relateTags(TagRelationRequest(ships.key, space.key, TagRelation.NONE))
+        // And a tag under one the work has not, it has not either
+        assertTrue(list().tags.any { it.key == dragons.key }, "list ${list()}")
+        tagsApi.relateTags(TagRelationRequest(dragons.key, space.key, TagRelation.PARENT))
+        corrections.correctFacet("site", "tt3", FacetCorrection(facet = "tags", added = false, key = space.key))
+        assertTrue(list().tags.none { it.key == dragons.key }, "list ${list()}")
+        corrections.uncorrectFacet("site", "tt3", "tags", space.key)
+        tagsApi.relateTags(TagRelationRequest(dragons.key, space.key, TagRelation.NONE))
+        // Wrong: of answers of both kinds the model is fitted, and every tag offered has its chance
         assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(space.key, space.part, space.paragraph, TagByTextAnswer.Verdict.WRONG)).statusCode.value())
         inBackground { textTags.fit() }
         val fitted = list()

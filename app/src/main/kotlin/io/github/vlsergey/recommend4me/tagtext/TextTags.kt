@@ -158,13 +158,23 @@ class TextTags(
         return "${store.source.partUrl(itemId, partId)}#:~:text=$fragment"
     }
 
-    /** The tags not offered for the item: the site's, those answered on, those ignored. */
+    /**
+     * The tags not offered for the item: the site's, those answered on, those ignored — and of the
+     * tags' hierarchy, those its answers tell already: above a tag it has, under a tag it has not.
+     */
     private fun leftOut(store: SourceStore, facet: String, itemId: String): Set<String> {
         val from = store.schema.facet(facet)?.examplesFrom
         val bound = store.tags.bindingsOf(store.id)
         val site = from?.let { f -> store.items.facetsOf(listOf(itemId))[itemId]?.get(f).orEmpty().mapNotNull { bound[it]?.let(TagRepository::key) } }.orEmpty()
-        val answered = store.corrections.facetsOf(itemId).filter { it.facet == facet }.map { it.key }
-        return (site + answered + store.ignoredTags()[facet].orEmpty()).toSet()
+        val answers = store.corrections.facetsOf(itemId).filter { it.facet == facet }
+        val rejected = answers.filter { !it.added }.map { it.key }.toSet()
+        // Of the tags' hierarchy: a tag above one the work has — the site's or the user's yes — it has
+        // too; a tag under one the user said it has not, it has not either. Neither is asked again
+        val hierarchy = store.hierarchies()[facet]
+        val has = (site.filter { it !in rejected } + answers.filter { it.added }.map { it.key }).toSet()
+        val implied = hierarchy?.let { h -> has.flatMap(h::ancestors) }.orEmpty()
+        val denied = hierarchy?.let { h -> rejected.flatMap(h::descendants) }.orEmpty()
+        return (site + answers.map { it.key } + store.ignoredTags()[facet].orEmpty() + implied + denied).toSet()
     }
 
     /**

@@ -392,8 +392,9 @@ paths:
         passage of its own): of a tag, its closeness is the mean of its three closest paragraphs, by the
         closest of its names; the closest paragraph quoted beside it. Made at the asking, of the
         vectors kept: the paragraphs' (encoded in the background) and the tags'. Not offered: a tag
-        the site gives the work, one the user answered on, one ignored, and a paragraph the user
-        answered on for that tag (getTagsByText answer). Once the user has answered enough, the
+        the site gives the work, one the user answered on, one ignored, one the hierarchy of the
+        tags tells already (above a tag the work has, under one the user said it has not), and a
+        paragraph the user answered on for that tag (getTagsByText answer). Once the user has answered enough, the
         model of the closeness gives every tag its chance, and the tags are ordered by it; till
         then by the closeness alone. A work without chapters read has none; pending while its
         paragraphs are still to be encoded.
