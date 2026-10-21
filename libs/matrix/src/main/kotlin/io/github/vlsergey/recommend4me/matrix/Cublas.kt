@@ -32,7 +32,11 @@ class Cublas private constructor(
     private val cublasSdot: MethodHandle,
     private val cublasSaxpy: MethodHandle,
     private val cublasSscal: MethodHandle,
+    private val cudaMemset: MethodHandle,
     private val handle: MemorySegment,
+    /** The folder of the libraries, and the runtime's own: what the kernels of [kernels] are compiled and loaded by. */
+    private val dir: Path,
+    private val runtime: SymbolLookup,
 ) {
     /** The scalars a call hands over and takes back — α, β, a dot's result: one place for them, made once; one thread at a time. */
     private val scalars: MemorySegment = Arena.global().allocate(ValueLayout.JAVA_FLOAT, 4)
@@ -59,6 +63,56 @@ class Cublas private constructor(
 
         fun at(k: Long): MemorySegment = MemorySegment.ofAddress(address.address() + k * Float.SIZE_BYTES)
 
+        /** [n] numbers at [at] made nought, on the card. */
+        fun zero(at: Long, n: Long) = memset(at(at), n * Float.SIZE_BYTES)
+
+        override fun close() {
+            if (closed) return
+            closed = true
+            cudaFree.invokeExact(address) as Int
+        }
+    }
+
+    /**
+     * Bytes in the card's memory, of numbers other than the floats of [DeviceFloats]: the ints a
+     * kernel indexes by, the doubles it sums into. Freed by [close].
+     */
+    inner class DeviceBytes(val bytes: Long) : AutoCloseable {
+        val address: MemorySegment = Arena.ofConfined().use { a ->
+            val out = a.allocate(ValueLayout.ADDRESS)
+            check((cudaMalloc.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) { "the card has no room for $bytes bytes" }
+            out.get(ValueLayout.ADDRESS, 0)
+        }
+        private var closed = false
+
+        /** The ints of [from] written from the start. */
+        fun upload(from: IntArray) = Arena.ofConfined().use { a ->
+            if (from.isNotEmpty()) copyBytes(address, a.allocateFrom(ValueLayout.JAVA_INT, *from), from.size.toLong() * Int.SIZE_BYTES, HOST_TO_DEVICE)
+        }
+
+        /** The floats of [from] written from the start. */
+        fun upload(from: FloatArray) = Arena.ofConfined().use { a ->
+            if (from.isNotEmpty()) copyBytes(address, a.allocateFrom(ValueLayout.JAVA_FLOAT, *from), from.size.toLong() * Float.SIZE_BYTES, HOST_TO_DEVICE)
+        }
+
+        /** The longs of [from] written from the start. */
+        fun upload(from: LongArray) = Arena.ofConfined().use { a ->
+            if (from.isNotEmpty()) copyBytes(address, a.allocateFrom(ValueLayout.JAVA_LONG, *from), from.size.toLong() * Long.SIZE_BYTES, HOST_TO_DEVICE)
+        }
+
+        /** The first [n] doubles. */
+        fun doubles(n: Int): DoubleArray = Arena.ofConfined().use { a ->
+            val into = a.allocate(ValueLayout.JAVA_DOUBLE, n.toLong())
+            copyBytes(into, address, n.toLong() * Double.SIZE_BYTES, DEVICE_TO_HOST)
+            into.toArray(ValueLayout.JAVA_DOUBLE)
+        }
+
+        /** Every byte made nought. */
+        fun zero() = memset(address, bytes)
+
+        /** The address [offset] bytes on. */
+        fun at(offset: Long): MemorySegment = MemorySegment.ofAddress(address.address() + offset)
+
         override fun close() {
             if (closed) return
             closed = true
@@ -69,8 +123,31 @@ class Cublas private constructor(
     /** Room for [count] floats on the card; null when it has none left. */
     fun allocate(count: Long): DeviceFloats? = runCatching { DeviceFloats(count) }.getOrNull()
 
-    private fun copy(dst: MemorySegment, src: MemorySegment, n: Long, kind: Int) {
-        val status = cudaMemcpy.invokeExact(dst, src, n * Float.SIZE_BYTES, kind) as Int
+    /** Room for [bytes] bytes on the card; null when it has none left. */
+    fun allocateBytes(bytes: Long): DeviceBytes? = runCatching { DeviceBytes(bytes) }.getOrNull()
+
+    private fun memset(at: MemorySegment, bytes: Long) {
+        val status = cudaMemset.invokeExact(at, 0, bytes) as Int
+        check(status == 0) { "a clearing on the card failed: CUDA error $status" }
+    }
+
+    /**
+     * Kernels of one's own, the CUDA C of [source] compiled for this card ([CudaKernels]): those
+     * named [names]. Null when they cannot be — no NVRTC beside the libraries, a source the
+     * compiler refuses — said in the log; the caller's work stays on the processor.
+     */
+    fun kernels(source: String, names: List<String>): CudaKernels? = try {
+        CudaKernels.compile(dir, runtime, source, names)
+    } catch (e: Throwable) {
+        log.warn("kernels of their own not made for the card ({}): that work stays on the processor", e.message ?: e.javaClass.simpleName)
+        null
+    }
+
+    /** [n] floats copied. */
+    private fun copy(dst: MemorySegment, src: MemorySegment, n: Long, kind: Int) = copyBytes(dst, src, n * Float.SIZE_BYTES, kind)
+
+    private fun copyBytes(dst: MemorySegment, src: MemorySegment, bytes: Long, kind: Int) {
+        val status = cudaMemcpy.invokeExact(dst, src, bytes, kind) as Int
         check(status == 0) { "a copy to or from the card failed: CUDA error $status" }
     }
 
@@ -160,7 +237,10 @@ class Cublas private constructor(
                     cublasSdot = handleOf(blas, "cublasSdot_v2", FunctionDescriptor.of(int, address, int, address, int, address, int, address)),
                     cublasSaxpy = handleOf(blas, "cublasSaxpy_v2", FunctionDescriptor.of(int, address, int, address, address, int, address, int)),
                     cublasSscal = handleOf(blas, "cublasSscal_v2", FunctionDescriptor.of(int, address, int, address, address, int)),
+                    cudaMemset = handleOf(runtime, "cudaMemset", FunctionDescriptor.of(int, address, int, ValueLayout.JAVA_LONG)),
                     handle = handle,
+                    dir = dir,
+                    runtime = runtime,
                 ).takeIf { it.checked() }.also { if (it == null) log.warn("cuBLAS in {} computes a product wrong: the products stay on the processor", dir) }
             } catch (e: Throwable) {
                 log.warn("no cuBLAS in {} ({}): the products stay on the processor", dir, e.message ?: e.javaClass.simpleName)

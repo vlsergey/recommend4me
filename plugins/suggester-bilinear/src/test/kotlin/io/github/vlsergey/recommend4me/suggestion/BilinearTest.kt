@@ -95,7 +95,7 @@ class BilinearTest {
         val lambdas = floatArrayOf(0.1f, 0.01f, 0.001f, 0.01f)
         val folds = intArrayOf(0, 1, 2, 4)
         val ensemble = Ensemble(problem, rank, lambdas, folds, card)
-        if (card != null) assertTrue(ensemble.featuresOnCard, "the features not on the card")
+        if (card != null) assertTrue(ensemble.featuresOnCard && ensemble.pairsOnCardUsed, "the features or the pairs not on the card")
         val alone = Bilinear(problem, rank)
         val random = Random(17)
         val thetas = List(lambdas.size) { FloatArray(alone.size) { (random.nextGaussian() * 0.3).toFloat() } }

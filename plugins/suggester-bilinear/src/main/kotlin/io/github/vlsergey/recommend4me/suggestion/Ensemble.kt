@@ -145,7 +145,17 @@ internal class Ensemble(
     /** Whether the items' features and their products are on the card. */
     val featuresOnCard: Boolean get() = onCard != null
 
+    /**
+     * The pairs and the names on the card too, beside the items' features there ([PairsOnCard]):
+     * null when the kernels cannot be made or the card has no room — the processor's then.
+     */
+    private val pairsOnCard: PairsOnCard? = onCard?.let { PairsOnCard.open(p, it.cublas, count, r) }
+
+    /** Whether the pairs and the names are worked out on the card. */
+    val pairsOnCardUsed: Boolean get() = pairsOnCard != null
+
     override fun close() {
+        pairsOnCard?.close()
         onCard?.close()
     }
 
@@ -153,7 +163,7 @@ internal class Ensemble(
      * Uᵀ = Aᵀ Xᵀ of the first [kr] rows of Aᵀ — every model still searching: on the card when the
      * features are there; Aᵀ sent there first unless the searches write it there ([aOnCard]).
      */
-    private fun itemsCoordinates(kr: Int, aOnCard: Boolean) {
+    private fun itemsCoordinates(kr: Int, aOnCard: Boolean, keep: Boolean = false) {
         val c = onCard
         if (c == null) {
             Blas.gemm(false, true, kr, n, dx, aT, 0, dx, p.x.held, 0, dx, uT, 0, n)
@@ -164,20 +174,22 @@ internal class Ensemble(
             if (h > 0) c.aT.download(aT, 0, 0, kr * dx)
         } else c.aT.upload(aT, 0, 0, kr * dx)
         c.cublas.gemm(false, true, kr, n, dx, c.aT, 0, dx, c.x, 0, dx, c.uT, 0, n)
-        c.uT.download(uT, 0, 0, kr * n)
+        // Left there when the pairs are worked out there ([keep]): nothing of the processor reads them then
+        if (!keep) c.uT.download(uT, 0, 0, kr * n)
     }
 
     /**
      * dAᵀ = dUᵀ X of the first [kr] rows: on the card when the features are there; taken back
      * unless the searches read it there ([aOnCard]) — then only for the names to add their part.
      */
-    private fun itemsGradient(kr: Int, aOnCard: Boolean) {
+    private fun itemsGradient(kr: Int, aOnCard: Boolean, duOnCard: Boolean = false) {
         val c = onCard
         if (c == null) {
             Blas.gemm(false, false, kr, dx, n, duT, 0, n, p.x.held, 0, dx, gA, 0, dx)
             return
         }
-        c.duT.upload(duT, 0, 0, kr * n)
+        // Written there by the pairs on the card ([duOnCard]), else sent
+        if (!duOnCard) c.duT.upload(duT, 0, 0, kr * n)
         c.cublas.gemm(false, false, kr, dx, n, c.duT, 0, n, c.x, 0, dx, c.gA, 0, dx)
         if (!aOnCard || h > 0) c.gA.download(gA, 0, 0, kr * dx)
     }
@@ -295,8 +307,9 @@ internal class Ensemble(
         val k = active
         val kr = k * r
         // Uᵀ = Aᵀ Xᵀ and Vᵀ = Bᵀ Zᵀ + Eᵀ of every model, one product each
+        val onPairs = pairsOnCard
         var at = System.nanoTime()
-        itemsCoordinates(kr, aOnCard)
+        itemsCoordinates(kr, aOnCard, keep = onPairs != null)
         featuresNanos += System.nanoTime() - at
         at = System.nanoTime()
         Blas.gemm(false, true, kr, m, dz, bT, 0, dz, p.z.held, 0, dz, vT, 0, m)
@@ -305,7 +318,11 @@ internal class Ensemble(
         restNanos += System.nanoTime() - at
         at = System.nanoTime()
         val named = ln(2.0).toFloat()
-        for (slot in 0 until k) {
+        if (onPairs != null) {
+            val c = onCard!!
+            onPairs.evaluate(k, slotModel, heldOut, totals, named, c.uT, c.duT, pair, vT, bias, uhT, gE, gBias, duhT, gPair, losses)
+            for (slot in 0 until k) losses[slot] = losses[slot] / totals[slotModel[slot]]
+        } else for (slot in 0 until k) {
             val model = slotModel[slot]
             val scale = 1 / totals[model]
             val common = pair[slot * Bilinear.PAIR + 2]
@@ -319,7 +336,7 @@ internal class Ensemble(
         Blas.gemm(false, false, kr, dz, m, gE, 0, m, p.z.held, 0, dz, gB, 0, dz)
         restNanos += System.nanoTime() - at
         at = System.nanoTime()
-        itemsGradient(kr, aOnCard)
+        itemsGradient(kr, aOnCard, duOnCard = onPairs != null)
         featuresNanos += System.nanoTime() - at
         at = System.nanoTime()
         if (h > 0) {
