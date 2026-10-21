@@ -6,7 +6,7 @@ import kotlin.test.assertTrue
 
 class TagTextModelTest {
 
-    private fun answer(tag: Long, closeness: Double, verdict: TagTextVerdict) = TagTextAnswer("w", tag, "c", 0, verdict, closeness.toFloat())
+    private fun answer(tag: Long, closeness: Double, verdict: TagTextVerdict) = TagTextAnswer("w", tag, "c", 0, null, verdict, closeness.toFloat())
 
     @Test
     fun `nothing is fitted of answers of one kind`() {

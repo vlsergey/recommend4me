@@ -57,6 +57,7 @@ import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.tagtext.TagsByTextController
 import io.github.vlsergey.recommend4me.tagtext.TextTags
 import io.github.vlsergey.recommend4me.part.Paragraphs
+import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.tag.TagsController
 import io.github.vlsergey.recommend4me.api.model.TagEntryRequest
@@ -332,7 +333,8 @@ class SiteTest {
         // Its paragraphs encoded, as the background encodes them: the line of stars is none
         val encoder = WordsEncoder()
         store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
-            store.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, encoder.encode(Paragraphs.of(part.content)))
+            val texts = Paragraphs.of(part.content)
+            store.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, encoder.encode(texts), texts.map(Vectors::hash))
         }
         fun list() = tagsByText.getTagsByText("site", "tt3").body!!
         val first = list()
@@ -344,6 +346,13 @@ class SiteTest {
         // Not enough: the paragraph is offered for the tag no more, nothing learnt
         assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(dragons.key, "c1", 1, TagByTextAnswer.Verdict.ENOUGH_NOT)).statusCode.value())
         assertTrue(list().tags.none { it.key == dragons.key && it.paragraph == 1 }, "list ${list()}")
+        // The answer is on the paragraph itself, by the hash of its text: a paragraph put before it, the same one stays hidden at its new number
+        store.parts.save("tt3", listOf(PartData("c1", 0, "One", listOf(road, "$road and again", "***", dragonsText, shipsText, "— Ships?", "— Ships.").joinToString("\n"), null)))
+        store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
+            val texts = Paragraphs.of(part.content)
+            store.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, encoder.encode(texts), texts.map(Vectors::hash))
+        }
+        assertTrue(list().tags.none { it.key == dragons.key && it.quote == dragonsText }, "list ${list()}")
         // Yes: the tag is the work's, answered on it, offered no more
         val ships = list().tags.single { it.name == "Ships" }
         assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(ships.key, ships.part, ships.paragraph, TagByTextAnswer.Verdict.YES)).statusCode.value())

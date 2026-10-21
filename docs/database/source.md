@@ -105,6 +105,7 @@ erDiagram
         VARCHAR part_id PK, FK
         INTEGER paragraph_no PK
         VARBINARY vec
+        VARCHAR text_hash "null"
     }
     part_vector {
         VARCHAR item_id PK, FK

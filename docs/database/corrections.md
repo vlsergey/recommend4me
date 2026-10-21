@@ -8,7 +8,7 @@
 | `facet_complete` | the user said a work's values of a facet are all named |
 | `field_correction` | a field of a work as the user wrote it: the title, a text, a number |
 | `item_link` | two works the user said are one: of the source, or of it and another source of the content type — kept by the source of the smaller key |
-| `tag_text_answer` | the user's word on a tag offered by a paragraph of a work's text: yes, the paragraph is of it but not enough, or wrong — with their closeness then |
+| `tag_text_answer` | the user's word on a tag offered by a paragraph of a work's text, bound to the paragraph by the hash of its text: yes, the paragraph is of it but not enough, or wrong — with their closeness then and the cutting it was given on |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
@@ -48,5 +48,6 @@ erDiagram
         REAL closeness
         TIMESTAMPTZ said_at
         INTEGER cutting
+        VARCHAR paragraph_hash "null"
     }
 ```

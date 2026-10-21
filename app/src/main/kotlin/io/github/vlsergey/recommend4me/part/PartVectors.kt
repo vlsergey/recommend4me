@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.part
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
+import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
@@ -90,8 +91,9 @@ class PartVectors(
             if (todo.isEmpty()) return@forEach
             busy = true
             todo.forEach { part ->
-                val vectors = Paragraphs.of(part.content).chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
-                s.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, vectors)
+                val texts = Paragraphs.of(part.content)
+                val vectors = texts.chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
+                s.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, vectors, texts.map(Vectors::hash))
             }
             done += todo.size
         }

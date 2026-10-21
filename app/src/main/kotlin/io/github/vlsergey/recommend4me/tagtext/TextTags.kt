@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.tag.TagRepository
+import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
@@ -72,7 +73,8 @@ class TextTags(
         val left = leftOut(store, facet, itemId)
         val vectors = store.tags.vectors(plugins.pluginOf(encoder), encoder.id).filterKeys { it !in left }
         if (vectors.isEmpty()) return TextTagList(waiting, model != null, emptyList())
-        val answered = store.tagTextAnswers.ofItem(itemId).map { Triple(it.tag, it.partId, it.paragraph) }.toSet()
+        // A paragraph answered on for a tag, of any cutting, by the hash of its text
+        val answered = store.tagTextAnswers.ofItem(itemId).mapNotNull { a -> a.hash?.let { a.tag to it } }.toSet()
         val tags = vectors.keys.toList()
         val tagIds = LongArray(tags.size) { tags[it].toLong() }
         // Every name of every tag a row, and the tag each is of
@@ -107,7 +109,7 @@ class TextTags(
                 for (t in tags.indices) {
                     val c = ofTag[t]
                     if (c <= best[t][TOP - 1]) continue
-                    if (Triple(tagIds[t], paragraph.partId, paragraph.number) in answered) continue
+                    if ((tagIds[t] to paragraph.hash) in answered) continue
                     var at = TOP - 1
                     while (at > 0 && best[t][at - 1] < c) {
                         best[t][at] = best[t][at - 1]
@@ -157,11 +159,12 @@ class TextTags(
         val facet = store.tagFacets.firstOrNull() ?: return false
         val tag = key.toLongOrNull() ?: return false
         val encoder = plugins.textEncoder() ?: return false
-        val vector = store.parts.paragraphVector(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id)) ?: return false
+        val found = store.parts.paragraph(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id)) ?: return false
+        val vector = found.vector
         val names = store.tags.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id).takeIf { it.isNotEmpty() } ?: return false
         val closeness = names.maxOf { name -> name.indices.sumOf { (name[it] * vector[it]).toDouble() } }
         val now = Instant.now()
-        store.tagTextAnswers.answer(TagTextAnswer(itemId, tag, partId, paragraph, verdict, closeness.toFloat()), now)
+        store.tagTextAnswers.answer(TagTextAnswer(itemId, tag, partId, paragraph, found.hash, verdict, closeness.toFloat()), now)
         if (verdict == TagTextVerdict.YES) {
             store.corrections.setFacet(itemId, facet, key, true, null, now)
             events.publishEvent(FacetAnswered(store.type, store.id, itemId, facet))
@@ -170,9 +173,27 @@ class TextTags(
         return true
     }
 
-    /** At the start the model fitted anew: of the answers of the cutting in use alone ([TagTextAnswerRepository]), one of another kept before. */
+    /**
+     * At the start the answers given before they were bound to their paragraphs' hashes bound —
+     * of the texts and the cutting they were given on — and the model fitted anew: of the answers
+     * of the cutting in use alone, one of another kept before.
+     */
     @EventListener(ApplicationReadyEvent::class)
-    fun started() = answered(TagTextAnswered("start"))
+    fun started() {
+        stores.sources.forEach { s ->
+            val unbound = s.tagTextAnswers.unbound()
+            if (unbound.isEmpty()) return@forEach
+            var bound = 0
+            unbound.groupBy { it.itemId to it.partId }.forEach { (where, answers) ->
+                val text = s.parts.text(where.first, where.second)?.second ?: return@forEach
+                answers.forEach { a ->
+                    Paragraphs.ofCutting(text, a.cutting).getOrNull(a.paragraph)?.let { s.tagTextAnswers.bind(a, Vectors.hash(it)); bound++ }
+                }
+            }
+            log.info("{}: {} of {} answers on the tags by the text bound to their paragraphs' hashes", s.id, bound, unbound.size)
+        }
+        answered(TagTextAnswered("start"))
+    }
 
     /** An answer kept: the model fitted anew once the answers pause. */
     @EventListener
