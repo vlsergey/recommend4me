@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, MinusIcon, XIcon } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, EyeOffIcon, MinusIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type ItemRef, type TagByText, type TagByTextVerdict } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import type { Corrections } from "@/correction/useCorrections";
 import { percent } from "@/i18n/format";
 import { cn } from "@/lib/utils";
+import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
+import { TagNameLink } from "@/tag/TagNameLink";
 
 export const tagsByTextKey = (item: ItemRef) => ["tagsByText", item.source, item.item];
 
@@ -17,12 +19,21 @@ const PENDING_POLL_MS = 3000;
 /**
  * THE TAGS BY THE WORK'S OWN TEXT: the tags the paragraphs of its chapters are closest to, a list
  * apart from the model's chances, each with its paragraph quoted and three answers on the pair — yes
- * (the tag marked on the work), not enough (offered no more, nothing learnt), wrong (learnt from).
+ * (the tag marked on the work), not enough (offered no more, nothing learnt), wrong (learnt from);
+ * and the tag ignored altogether — offered nowhere, read by no model — its name a link to its page.
  * Folded till opened: made at the asking, of every paragraph against every tag.
  */
 export function TagsByText({ item, facet, corrections }: { item: ItemRef; facet: string; corrections: Corrections }) {
   const { t } = useTranslation("tagtext");
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  /** The tag ignored altogether: once kept, gone from this list and from what the work is offered. */
+  const ignore = async (tag: TagByText) => {
+    unwrap(await api.PUT("/api/tags/ignored", { body: { tag: tag.key, ignored: true } }));
+    queryClient.invalidateQueries({ queryKey: tagsByTextKey(item) });
+    queryClient.invalidateQueries({ queryKey: suggestionsKey(item) });
+    queryClient.invalidateQueries({ queryKey: candidatesKey(item) });
+  };
   const list = useQuery({
     queryKey: tagsByTextKey(item),
     queryFn: async () =>
@@ -47,7 +58,12 @@ export function TagsByText({ item, facet, corrections }: { item: ItemRef; facet:
           {data && data.tags.length > 0 && (
             <ul className="flex flex-col gap-2">
               {data.tags.map((tag) => (
-                <TagRow key={`${tag.key}:${tag.part}:${tag.paragraph}`} tag={tag} answer={(verdict) => corrections.answerTagByText(facet, tag, verdict)} />
+                <TagRow
+                  key={`${tag.key}:${tag.part}:${tag.paragraph}`}
+                  tag={tag}
+                  answer={(verdict) => corrections.answerTagByText(facet, tag, verdict)}
+                  ignore={() => ignore(tag)}
+                />
               ))}
             </ul>
           )}
@@ -57,15 +73,17 @@ export function TagsByText({ item, facet, corrections }: { item: ItemRef; facet:
   );
 }
 
-/** A tag by the text: its name, its chance or closeness, its paragraph — folded to three lines till pressed — and the three answers. */
-function TagRow({ tag, answer }: { tag: TagByText; answer: (verdict: TagByTextVerdict) => Promise<void> }) {
+/** A tag by the text: its name — a link to its page — its chance or closeness, its paragraph folded to three lines till pressed, the three answers and the ignoring. */
+function TagRow({ tag, answer, ignore }: { tag: TagByText; answer: (verdict: TagByTextVerdict) => Promise<void>; ignore: () => Promise<void> }) {
   const { t } = useTranslation("tagtext");
   const [whole, setWhole] = useState(false);
   const where = tag.partTitle ? t("TagsByText.partParagraph", { part: tag.partTitle, n: tag.paragraph + 1 }) : t("TagsByText.paragraph", { n: tag.paragraph + 1 });
   return (
     <li className="flex flex-col gap-1 rounded-md border p-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">{tag.name}</span>
+        <TagNameLink tag={tag.key} className="text-sm font-medium">
+          {tag.name}
+        </TagNameLink>
         <span className="text-[10px] text-muted-foreground tabular-nums">
           {tag.chance != null ? percent(tag.chance) : t("TagsByText.closeness", { value: tag.closeness.toFixed(2) })}
         </span>
@@ -78,6 +96,9 @@ function TagRow({ tag, answer }: { tag: TagByText; answer: (verdict: TagByTextVe
           </AsyncButton>
           <AsyncButton size="xs" variant="outline" icon={<XIcon />} title={t("TagsByText.wrongHint")} onClick={() => answer("WRONG")}>
             {t("TagsByText.wrong")}
+          </AsyncButton>
+          <AsyncButton size="xs" variant="ghost" icon={<EyeOffIcon />} title={t("TagsByText.ignoreHint")} onClick={ignore}>
+            {t("TagsByText.ignore")}
           </AsyncButton>
         </div>
       </div>

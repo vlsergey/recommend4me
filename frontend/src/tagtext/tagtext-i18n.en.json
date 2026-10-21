@@ -3,6 +3,8 @@
   "TagsByText.enoughNot": "Not enough",
   "TagsByText.enoughNotHint": "The paragraph is about this tag, but that is not enough for the work to have it: this pair is offered no more, and the model learns nothing from it",
   "TagsByText.failed": "Not read: {{error}}",
+  "TagsByText.ignore": "Ignore the tag",
+  "TagsByText.ignoreHint": "The tag is ignored altogether: offered nowhere, read by no model; taken back on the tag's page",
   "TagsByText.none": "No chapters with text: nothing to compare with",
   "TagsByText.notFitted": "Ordered by closeness; chances appear once you have answered \"yes\" and \"wrong\"",
   "TagsByText.paragraph": "paragraph {{n}}",

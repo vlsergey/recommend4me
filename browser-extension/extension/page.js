@@ -1343,11 +1343,16 @@
     return block;
   }
 
-  /** A tag by the text: its name, its chance or closeness, its paragraph — three lines till pressed — and the three answers. */
+  /** A tag by the text: its name — a link to its page — its chance or closeness, its paragraph three lines till pressed, the three answers and the ignoring. */
   function byTextRow(item, facet, tag, state) {
     const row = el("r4m-bytext-row");
     const head = el("r4m-bytext-head");
-    head.appendChild(el("span", "r4m-bytext-name", tag.name));
+    // The name a link to the tag's page in the application
+    const name = el("a", "r4m-link r4m-bytext-name", tag.name);
+    name.href = `${server}/tags/${tag.key.split("/").map(enc).join("/")}`;
+    name.target = "_blank";
+    name.rel = "noopener";
+    head.appendChild(name);
     head.appendChild(el("r4m-chance", null, tag.chance !== undefined && tag.chance !== null ? percent(tag.chance) : t("byText.closeness", { value: tag.closeness.toFixed(2) })));
     const s = item.summary;
     const on = `bytext|${tag.key}|${tag.part}|${tag.paragraph}`;
@@ -1365,6 +1370,12 @@
       const change = () => api("PUT", `/api/items/${enc(s.source)}/${enc(s.item)}/tags/by-text/answer`, { key: tag.key, part: tag.part, paragraph: tag.paragraph, verdict });
       answers.appendChild(ownButton(mark + t(word), t(hint), change, "r4m-button", shown(verdict), on));
     });
+    // The tag ignored altogether: offered nowhere, read by no model — every pair of it gone once kept
+    answers.appendChild(
+      ownButton(`⊘ ${t("byText.ignore")}`, t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button", () => {
+        if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => x.key !== tag.key) };
+      }, on),
+    );
     head.appendChild(answers);
     row.appendChild(withFailure(head, on));
     const quote = el("button", "r4m-bytext-quote", tag.quote);

@@ -3,6 +3,8 @@
   "TagsByText.enoughNot": "Nedovoljno",
   "TagsByText.enoughNotHint": "Pasus je o ovoj oznaci, ali to nije dovoljno da je delo ima: ovaj par se više ne nudi, a model iz njega ne uči",
   "TagsByText.failed": "Nije pročitano: {{error}}",
+  "TagsByText.ignore": "Zanemari oznaku",
+  "TagsByText.ignoreHint": "Oznaka se zanemaruje potpuno: nigde se ne nudi i nijedan model je ne čita; vraća se na stranici oznake",
   "TagsByText.none": "Nema poglavlja sa tekstom: nema s čim da se poredi",
   "TagsByText.notFitted": "Poređano po bliskosti; verovatnoće se pojavljuju posle vaših odgovora „da” i „pogrešno”",
   "TagsByText.paragraph": "pasus {{n}}",

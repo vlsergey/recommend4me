@@ -29,7 +29,7 @@ and tell the user to update the extension.
 | An answer: only written; shown once kept, never before; read anew after 2 s of quiet, the work once its chances are made | `correction/useCorrections.ts`, `suggestion/useSuggestions.ts` `suggestionsLater` | `act`, `loadLater`, `settledLater` |
 | The suggestions of a facet | `suggestion/Suggestions.tsx` | `suggestedChip` |
 | Grades and interest | `item/useRateItem.ts`, `item/pieces.tsx` | `grades`, `interest` |
-| The tags by the work's own text: folded, a row a tag with its paragraph, ✓ / not enough / ✕ | `tagtext/TagsByText.tsx`, `correction/useCorrections.ts` `answerTagByText` | `byTextBlock`, `byTextRow` |
+| The tags by the work's own text: folded, a row a tag with its paragraph — its name a link to its page — ✓ / not enough / ✕ / ignore the tag | `tagtext/TagsByText.tsx`, `correction/useCorrections.ts` `answerTagByText` | `byTextBlock`, `byTextRow` |
 | Marks of reviews and pictures | `review/Reviews.tsx`, `picture/Pictures.tsx` | `marks`, `reviews`, `pictures` |
 | A list's cards: grade, prediction, interest | `item/ItemBoard.tsx`, `item/pieces.tsx` | `cards`, `fillBadge` |
 
