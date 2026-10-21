@@ -12,8 +12,8 @@ object Paragraphs {
     /** The letters a paragraph has at least, its lines joined till it has. */
     const val MIN_CHARS = 200
 
-    /** The version of the cutting: vectors made by another are made anew ([keyOf]). */
-    private const val VERSION = 2
+    /** The version of the cutting: vectors made by another are made anew ([keyOf]), answers given on another are of other paragraphs. */
+    const val VERSION = 2
 
     fun of(text: String): List<String> {
         val out = ArrayList<String>()

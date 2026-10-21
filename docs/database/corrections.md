@@ -47,5 +47,6 @@ erDiagram
         VARCHAR verdict
         REAL closeness
         TIMESTAMPTZ said_at
+        INTEGER cutting
     }
 ```

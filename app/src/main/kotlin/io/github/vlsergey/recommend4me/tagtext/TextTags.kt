@@ -13,6 +13,7 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
+import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -168,6 +169,10 @@ class TextTags(
         events.publishEvent(TagTextAnswered(store.id))
         return true
     }
+
+    /** At the start the model fitted anew: of the answers of the cutting in use alone ([TagTextAnswerRepository]), one of another kept before. */
+    @EventListener(ApplicationReadyEvent::class)
+    fun started() = answered(TagTextAnswered("start"))
 
     /** An answer kept: the model fitted anew once the answers pause. */
     @EventListener
