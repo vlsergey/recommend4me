@@ -8,6 +8,7 @@
 | `facet_complete` | the user said a work's values of a facet are all named |
 | `field_correction` | a field of a work as the user wrote it: the title, a text, a number |
 | `item_link` | two works the user said are one: of the source, or of it and another source of the content type — kept by the source of the smaller key |
+| `tag_text_answer` | the user's word on a tag offered by a paragraph of a work's text: yes, the paragraph is of it but not enough, or wrong — with their closeness then |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
@@ -37,5 +38,14 @@ erDiagram
         VARCHAR other_item_id PK
         TIMESTAMPTZ linked_at
         VARCHAR other_source PK
+    }
+    tag_text_answer {
+        VARCHAR item_id PK
+        BIGINT tag PK
+        VARCHAR part_id PK
+        INTEGER paragraph_no PK
+        VARCHAR verdict
+        REAL closeness
+        TIMESTAMPTZ said_at
     }
 ```

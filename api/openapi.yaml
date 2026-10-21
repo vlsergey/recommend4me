@@ -24,6 +24,7 @@ tags:
   - name: suggestions
   - name: universes
   - name: tags
+  - name: tagsByText
   - name: workload
   - name: launcher
 
@@ -379,6 +380,61 @@ paths:
                   $ref: '#/components/schemas/Candidate'
         '404':
           description: No such item
+
+  /api/items/{source}/{item}/tags/by-text:
+    get:
+      tags: [tagsByText]
+      operationId: getTagsByText
+      summary: The tags the paragraphs of the work's own text are closest to, each with its paragraph
+      description: |
+        Every tag held against every paragraph of the work's chapters read (a line of a text with a
+        letter in it): of a tag, its closeness is the mean of its three closest paragraphs, by the
+        closest of its names; the closest paragraph quoted beside it. Made at the asking, of the
+        vectors kept: the paragraphs' (encoded in the background) and the tags'. Not offered: a tag
+        the site gives the work, one the user answered on, one ignored, and a paragraph the user
+        answered on for that tag (getTagsByText answer). Once the user has answered enough, the
+        model of the closeness gives every tag its chance, and the tags are ordered by it; till
+        then by the closeness alone. A work without chapters read has none; pending while its
+        paragraphs are still to be encoded.
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      responses:
+        '200':
+          description: The tags by the text
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagsByText'
+        '404':
+          description: No such item, or its source has no tags
+
+  /api/items/{source}/{item}/tags/by-text/answer:
+    put:
+      tags: [tagsByText]
+      operationId: answerTagByText
+      summary: The user's word on a tag offered by a paragraph of the work's text
+      description: |
+        YES - the work has the tag by this paragraph: the tag is answered on the work as added
+        (as correctFacet does), and the pair teaches the model of the closeness that it holds.
+        ENOUGH_NOT - the paragraph is of the tag, but not enough for the work to have it: the pair
+        is offered no more, and nothing is learnt from it. WRONG - the text and the tag are of
+        different things: the pair is offered no more and teaches the model that it does not hold.
+        The model is fitted anew in the background once the answers pause.
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagByTextAnswer'
+      responses:
+        '204':
+          description: Kept
+        '404':
+          description: No such item, tag or paragraph
 
   /api/items/{source}/{item}/mentions:
     get:
@@ -3996,6 +4052,61 @@ components:
           format: double
           description: The chance of interest by the model (ItemSummary.interestChance)
 
+    TagsByText:
+      type: object
+      required: [pending, fitted, tags]
+      properties:
+        pending:
+          type: boolean
+          description: Some of the work's chapters are still to be encoded paragraph by paragraph
+        fitted:
+          type: boolean
+          description: The model of the closeness is fitted of the user's answers - the tags have chances
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagByText'
+    TagByText:
+      type: object
+      required: [key, name, closeness, part, paragraph, quote]
+      properties:
+        key:
+          type: string
+          description: The tag's key, a value of the work's facet of tags
+        name:
+          type: string
+        closeness:
+          type: number
+          format: double
+          description: The mean cosine of the tag's three closest paragraphs, by its closest name
+        chance:
+          type: number
+          format: double
+          description: The model's chance that the work has the tag by its text; none till it is fitted
+        part:
+          type: string
+          description: The part (chapter) of the paragraph quoted
+        partTitle:
+          type: string
+        paragraph:
+          type: integer
+          description: The paragraph's number in its part, from nought
+        quote:
+          type: string
+          description: The paragraph closest to the tag
+    TagByTextAnswer:
+      type: object
+      required: [key, part, paragraph, verdict]
+      properties:
+        key:
+          type: string
+        part:
+          type: string
+        paragraph:
+          type: integer
+        verdict:
+          type: string
+          enum: ['YES', 'ENOUGH_NOT', 'WRONG']
     Candidate:
       type: object
       required: [key, name]

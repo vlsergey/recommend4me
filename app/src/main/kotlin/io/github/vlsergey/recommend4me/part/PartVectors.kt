@@ -20,7 +20,9 @@ private val log = LoggerFactory.getLogger(PartVectors::class.java)
 /**
  * The text of every part of every work read, encoded window by window in the background: a vector
  * for every few hundred words, so a chapter is a set of vectors and one scene unlike the rest is
- * not averaged away. A part read again with another text is encoded again.
+ * not averaged away. And paragraph by paragraph ([Paragraphs]): what the tags are held against to be
+ * offered by the work's own text, a paragraph quoted beside its tag. A part read again with another
+ * text is encoded again.
  */
 @Service
 class PartVectors(
@@ -69,7 +71,7 @@ class PartVectors(
         }
     }
 
-    /** Encodes a batch of parts of every source; returns how many. */
+    /** Encodes a batch of parts of every source, their windows and then their paragraphs; returns how many. */
     private fun encodeSome(): Int {
         val encoder = plugins.textEncoder() ?: return 0
         var done = 0
@@ -83,10 +85,20 @@ class PartVectors(
             events.publishEvent(TextVectorsChanged(s.id, todo.map { it.itemId }.distinct()))
             done += todo.size
         }
+        stores.sources.forEach { s ->
+            val todo = s.parts.paragraphsToEncode(encoder.id, BATCH)
+            if (todo.isEmpty()) return@forEach
+            busy = true
+            todo.forEach { part ->
+                val vectors = Paragraphs.of(part.content).chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
+                s.parts.saveParagraphVectors(part.itemId, part.partId, encoder.id, part.hash, vectors)
+            }
+            done += todo.size
+        }
         return done
     }
 
-    fun pending(): Int = plugins.textEncoder()?.let { e -> stores.sources.sumOf { it.parts.countToEncode(e.id) } } ?: 0
+    fun pending(): Int = plugins.textEncoder()?.let { e -> stores.sources.sumOf { it.parts.countToEncode(e.id) + it.parts.countParagraphsToEncode(e.id) } } ?: 0
 
     fun total(): Int = stores.sources.sumOf { it.parts.countWithText() }
 
@@ -99,5 +111,8 @@ class PartVectors(
     companion object {
         /** Parts per encoder call: a chapter is tens of windows already. */
         private const val BATCH = 8
+
+        /** Paragraphs per encoder call: a chapter is hundreds of them. */
+        private const val PARAGRAPHS = 256
     }
 }

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { SuggestedValues } from "@/suggestion/Suggestions";
 import { useCandidates, useSuggestions } from "@/suggestion/useSuggestions";
 import { TagNameLink } from "@/tag/TagNameLink";
+import { TagsByText } from "@/tagtext/TagsByText";
 import { CHIP_TOUCH, FacetAnswers } from "./FacetAnswers";
 import { EditButton } from "./FieldEditor";
 import type { Corrections } from "./useCorrections";
@@ -71,6 +72,8 @@ export function FacetCorrections({
         <div key={f.facet}>
           {source && <OriginalOf source={source} facets={allFacets} facet={f.facet} />}
           <FacetLine facet={f} item={item} source={source} corrections={corrections} />
+          {/* The tags the work's own text is closest to, apart from the model's chances */}
+          {f.tags && <TagsByText item={item} facet={f.facet} corrections={corrections} />}
         </div>
       ))}
       {editing && addable && <AddFacetValue source={addable} corrections={corrections} />}

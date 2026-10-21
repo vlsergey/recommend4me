@@ -1,0 +1,17 @@
+{
+  "TagsByText.closeness": "близость {{value}}",
+  "TagsByText.enoughNot": "Недостаточно",
+  "TagsByText.enoughNotHint": "Абзац про этот тег, но для тега у работы этого мало: эта пара больше не предлагается, модель на ней не учится",
+  "TagsByText.failed": "Не удалось прочитать: {{error}}",
+  "TagsByText.none": "Нет глав с текстом — сравнивать не с чем",
+  "TagsByText.notFitted": "Порядок — по близости; вероятности появятся после ваших ответов «да» и «неверно»",
+  "TagsByText.paragraph": "абзац {{n}}",
+  "TagsByText.partParagraph": "{{part}}, абзац {{n}}",
+  "TagsByText.pending": "Абзацы глав ещё кодируются: список появится, когда они будут готовы",
+  "TagsByText.toggle": "По тексту",
+  "TagsByText.toggleHint": "Теги, к которым ближе всего абзацы глав этой работы, — у каждого его абзац",
+  "TagsByText.wrong": "Неверно",
+  "TagsByText.wrongHint": "Текст и тег про разное: модель учится на этом",
+  "TagsByText.yes": "Да",
+  "TagsByText.yesHint": "У работы есть этот тег по этому абзацу: тег отмечается у работы"
+}

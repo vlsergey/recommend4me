@@ -20,6 +20,7 @@
 | `review` | an opinion of another reader, its text kept by the key it is encoded under |
 | `part` | a part of a work's text — a chapter — kept whole |
 | `part_vector` | the vector of every window of a part |
+| `part_paragraph_vector` | the vector of every paragraph of a part — a line with a letter in it — what the tags are held against to be offered by the text |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
 | `captured_page` | a page kept, gzipped, to be read again when the parser changes |
 
@@ -96,6 +97,14 @@ erDiagram
         TIMESTAMPTZ published_at "null"
         VARCHAR encoded_hash "null"
         VARCHAR encoder "null"
+        VARCHAR paragraphs_hash "null"
+        VARCHAR paragraphs_encoder "null"
+    }
+    part_paragraph_vector {
+        VARCHAR item_id PK, FK
+        VARCHAR part_id PK, FK
+        INTEGER paragraph_no PK
+        VARBINARY vec
     }
     part_vector {
         VARCHAR item_id PK, FK
@@ -162,5 +171,6 @@ erDiagram
     item ||--o{ set_vector : "item_id"
     item ||--o{ text_vector : "item_id"
     item ||--o{ text_window : "item_id"
+    part ||--o{ part_paragraph_vector : "item_id, part_id"
     part ||--o{ part_vector : "item_id, part_id"
 ```

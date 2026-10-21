@@ -377,6 +377,13 @@ class TagRepository(private val db: DSLContext) {
             .toMap()
     }
 
+    /** The vectors of every name of the tag [tag] by the encoder [model] of [plugin]; none when it has none. */
+    fun vectorsOf(tag: Long, plugin: String, model: String): List<FloatArray> {
+        val v = TAG_VECTOR
+        return db.select(v.VECTORS).from(v).where(v.TAG.eq(tag), v.PLUGIN.eq(plugin), v.MODEL.eq(model)).fetchOne()
+            ?.value1()?.mapNotNull { it?.let(Vectors::fromHalf) }.orEmpty()
+    }
+
     /** What every entry read is a kind of: the entry to the ones right above it. */
     fun aboveLinks(): Map<TagEntryRef, List<TagEntryRef>> {
         val a = TAG_ENTRY_ABOVE

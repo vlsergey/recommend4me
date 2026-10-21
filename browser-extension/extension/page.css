@@ -555,3 +555,61 @@ r4m-marks.r4m-picture-marks {
 .r4m-marked {
   box-shadow: inset 3px 0 0 #0b62c4;
 }
+
+/* The tags by the work's own text: a fold under the facet of tags, a row a tag with its paragraph */
+r4m-bytext {
+  display: block;
+  margin: 4px 0;
+  font: 12px/18px system-ui, sans-serif;
+  color: var(--r4m-fg);
+}
+
+r4m-bytext-row {
+  display: block;
+  margin: 4px 0 4px 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--r4m-border);
+  border-radius: 6px;
+  background: var(--r4m-bg);
+}
+
+r4m-bytext-head, r4m-bytext-answers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+r4m-bytext-answers {
+  margin-left: auto;
+}
+
+r4m-bytext .r4m-bytext-name {
+  font-weight: 600;
+}
+
+r4m-bytext .r4m-bytext-quote {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 2px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--r4m-muted);
+  font: 12px/16px system-ui, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+r4m-bytext .r4m-bytext-quote.r4m-whole {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+r4m-bytext r4m-note {
+  display: block;
+  color: var(--r4m-muted);
+  font-size: 11px;
+}

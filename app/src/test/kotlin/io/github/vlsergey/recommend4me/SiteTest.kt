@@ -52,6 +52,11 @@ import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.TagVectors
+import io.github.vlsergey.recommend4me.api.model.TagByTextAnswer
+import io.github.vlsergey.recommend4me.source.PartData
+import io.github.vlsergey.recommend4me.tagtext.TagsByTextController
+import io.github.vlsergey.recommend4me.tagtext.TextTags
+import io.github.vlsergey.recommend4me.part.Paragraphs
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.tag.TagsController
 import io.github.vlsergey.recommend4me.api.model.TagEntryRequest
@@ -246,6 +251,8 @@ class SiteTest {
     @Autowired lateinit var catalogueReader: CatalogueReader
     @Autowired lateinit var tagService: Tags
     @Autowired lateinit var tagVectors: TagVectors
+    @Autowired lateinit var tagsByText: TagsByTextController
+    @Autowired lateinit var textTags: TextTags
 
     private fun capture(body: String) = captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
 
@@ -304,6 +311,48 @@ class SiteTest {
 
     /** The key of the normalized tag the site's tag [site] is bound to. */
     private fun tag(site: String) = TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef("site", site)))
+
+    @Test
+    fun `the tags a work's own text is closest to, each with its paragraph, and the user's three answers on them`() {
+        val store = stores.source("site")!!
+        // Works the site gives tags: the tags' names are what the text is held against
+        capture("tt1|Dragons|dragons,space||")
+        capture("tt2|Ships|ships||")
+        capture("tt3|A tale|||")
+        refresh(store)
+        store.parts.save(
+            "tt3",
+            listOf(PartData("c1", 0, "One", "The road was long.\n***\nDragons flew over the castle, dragons everywhere.\nShips sailed among the stars, ships of space.", null)),
+        )
+        // Its paragraphs encoded, as the background encodes them: the line of stars is none
+        val encoder = WordsEncoder()
+        store.parts.paragraphsToEncode(encoder.id, 10).forEach { part ->
+            store.parts.saveParagraphVectors(part.itemId, part.partId, encoder.id, part.hash, encoder.encode(Paragraphs.of(part.content)))
+        }
+        fun list() = tagsByText.getTagsByText("site", "tt3").body!!
+        val first = list()
+        assertTrue(!first.pending && !first.fitted && first.tags.isNotEmpty(), "list $first")
+        val dragons = first.tags.single { it.name == "Dragons" }
+        assertEquals("Dragons flew over the castle, dragons everywhere.", dragons.quote)
+        assertEquals("c1" to 1, dragons.part to dragons.paragraph)
+        assertEquals("One", dragons.partTitle)
+        // Not enough: the paragraph is offered for the tag no more, nothing learnt
+        assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(dragons.key, "c1", 1, TagByTextAnswer.Verdict.ENOUGH_NOT)).statusCode.value())
+        assertTrue(list().tags.none { it.key == dragons.key && it.paragraph == 1 }, "list ${list()}")
+        // Yes: the tag is the work's, answered on it, offered no more
+        val ships = list().tags.single { it.name == "Ships" }
+        assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(ships.key, ships.part, ships.paragraph, TagByTextAnswer.Verdict.YES)).statusCode.value())
+        assertTrue(store.corrections.facetsOf("tt3").any { it.facet == "tags" && it.key == ships.key && it.added })
+        assertTrue(list().tags.none { it.key == ships.key })
+        // Wrong: of answers of both kinds the model is fitted, and every tag offered has its chance
+        val space = list().tags.single { it.name == "Space" }
+        assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(space.key, space.part, space.paragraph, TagByTextAnswer.Verdict.WRONG)).statusCode.value())
+        inBackground { textTags.fit() }
+        val fitted = list()
+        assertTrue(fitted.fitted && fitted.tags.all { it.chance != null }, "list $fitted")
+        // No such paragraph: nothing kept
+        assertEquals(404, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(dragons.key, "c1", 9, TagByTextAnswer.Verdict.YES)).statusCode.value())
+    }
 
     @Test
     fun `a work's page and a list show what the application knows, and the work's tags are corrected on them`() {

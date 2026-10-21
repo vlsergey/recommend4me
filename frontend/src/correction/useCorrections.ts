@@ -1,8 +1,9 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { api, ensureOk, refKey, unwrap, type Candidate, type CatalogueEntryRef, type FacetSuggestions, type FacetValueInfo, type ItemDetails, type ItemRef } from "@/api/client";
+import { api, ensureOk, refKey, unwrap, type Candidate, type CatalogueEntryRef, type FacetSuggestions, type FacetValueInfo, type ItemDetails, type ItemRef, type TagByText, type TagByTextVerdict } from "@/api/client";
 import { applyDetails, ITEMS, itemKey } from "@/item/lists";
 import { heldOutLater } from "@/item/useHeldOut";
 import { candidatesKey, suggestionsKey, suggestionsLater } from "@/suggestion/useSuggestions";
+import { tagsByTextKey } from "@/tagtext/TagsByText";
 
 /** The fields a correction overrides: the title, a text, a number. */
 export const titleField = "title";
@@ -134,6 +135,22 @@ export function useCorrections(item: ItemRef, typeId: string) {
     resetFacet: async (facet: string, key: string) => {
       ensureOk(await api.DELETE("/api/items/{source}/{item}/corrections/facets", { params: { path, query: { facet, key } } }));
       shownAnswer(facet, key, null);
+    },
+
+    /**
+     * The user's word on a tag offered by a paragraph of the work's text ([verdict]): the pair is
+     * offered no more, the list read anew once it is kept; of a yes, the tag is answered on the work
+     * as added, shown as any answer is.
+     */
+    answerTagByText: async (facet: string, tag: TagByText, verdict: TagByTextVerdict) => {
+      ensureOk(
+        await api.PUT("/api/items/{source}/{item}/tags/by-text/answer", {
+          params: { path },
+          body: { key: tag.key, part: tag.part, paragraph: tag.paragraph, verdict },
+        }),
+      );
+      queryClient.invalidateQueries({ queryKey: tagsByTextKey(item) });
+      if (verdict === "YES") shownAnswer(facet, tag.key, true, { name: tag.name });
     },
 
     /** The work's values of the facet are all named ([complete]): every other is taken from it — or that is taken back. */

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.tagtext.TagTextAnswerRepository
 import io.github.vlsergey.recommend4me.capture.CapturedPageRepository
 import io.github.vlsergey.recommend4me.contenttype.ContentType
 import io.github.vlsergey.recommend4me.contenttype.StandardFacet
@@ -97,6 +98,9 @@ class SourceStore(
     val valueNames = ValueNameRepository(dbs.source.dsl)
 
     val corrections = CorrectionRepository(dbs.corrections.dsl, source.id)
+
+    /** The user's answers on the tags offered by the paragraphs of the works' texts, kept with the corrections. */
+    val tagTextAnswers = TagTextAnswerRepository(dbs.corrections.dsl)
 
     val ratings = RatingRepository(dbs.ratings.dsl)
     val interest = InterestRepository(dbs.ratings.dsl)

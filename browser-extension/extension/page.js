@@ -184,6 +184,15 @@
    */
   const more = new Map();
   const candidatesOf = new Map();
+
+  /**
+   * The tags by the work's own text, by facet, kept while the page is open: whether the block is
+   * open, the list read, its failure, and the timer of the next reading while the chapters'
+   * paragraphs are still being encoded.
+   */
+  const byText = new Map();
+  /** How often the list is asked for again while the paragraphs are being encoded: a wait for what was asked, not a refresh. */
+  const BY_TEXT_POLL_MS = 3000;
   /** How many more a press of "…" shows. */
   const MORE_STEP = 5;
 
@@ -1231,6 +1240,8 @@
       line.appendChild(addField(item, facet.facet, labelOf(facet), held(facet)));
     }
     block.appendChild(line);
+    const text = byTextBlock(item, facet);
+    if (text) block.appendChild(text);
     return block;
   }
 
@@ -1277,7 +1288,96 @@
     const last = elements[elements.length - 1];
     (last.nextElementSibling && last.nextElementSibling.tagName === "R4M-TOOLS" ? last.nextElementSibling : last)
       .insertAdjacentElement("afterend", after);
+    const text = byTextBlock(item, facet);
+    if (text) after.insertAdjacentElement("afterend", text);
     return true;
+  }
+
+  // --- The tags by the work's own text ---
+
+  /** The list of the tags by the text read anew; read again while the paragraphs are still being encoded and the block is open. */
+  async function readByText(item, facet) {
+    const s = item.summary;
+    const state = byText.get(facet);
+    clearTimeout(state.timer);
+    try {
+      state.list = await api("GET", `/api/items/${enc(s.source)}/${enc(s.item)}/tags/by-text`);
+      state.error = null;
+    } catch (e) {
+      state.error = e.message;
+    }
+    render();
+    if (state.open && state.list && state.list.pending) state.timer = setTimeout(() => readByText(item, facet), BY_TEXT_POLL_MS);
+  }
+
+  /**
+   * THE TAGS BY THE WORK'S OWN TEXT, as the web interface's TagsByText: of a facet of tags, folded
+   * till opened — read at the asking — the tags the paragraphs of the work's chapters are closest
+   * to, apart from the model's chances, each with its paragraph and three answers on the pair.
+   */
+  function byTextBlock(item, facet) {
+    if (!facet.tags || facet.editable === false) return null;
+    const state = byText.get(facet.facet) || { open: false, list: null, error: null, timer: null };
+    byText.set(facet.facet, state);
+    const block = el("r4m-bytext");
+    const count = state.list && state.list.tags.length ? ` (${state.list.tags.length})` : "";
+    const toggle = el("button", "r4m-button r4m-bytext-toggle", `${state.open ? "▾" : "▸"} ${t("byText.toggle")}${count}`);
+    toggle.type = "button";
+    toggle.title = t("byText.toggleHint");
+    toggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      state.open = !state.open;
+      if (state.open && !state.list) readByText(item, facet.facet);
+      render();
+    });
+    block.appendChild(toggle);
+    if (!state.open) return block;
+    if (state.error) block.appendChild(Object.assign(el("r4m-note", "r4m-failure", t("byText.failed", { error: state.error })), { role: "alert" }));
+    const list = state.list;
+    if (!list) return block;
+    if (list.pending) block.appendChild(el("r4m-note", null, t("byText.pending")));
+    if (!list.pending && !list.tags.length) block.appendChild(el("r4m-note", null, t("byText.none")));
+    if (list.tags.length && !list.fitted) block.appendChild(el("r4m-note", null, t("byText.notFitted")));
+    list.tags.forEach((tag) => block.appendChild(byTextRow(item, facet.facet, tag, state)));
+    return block;
+  }
+
+  /** A tag by the text: its name, its chance or closeness, its paragraph — three lines till pressed — and the three answers. */
+  function byTextRow(item, facet, tag, state) {
+    const row = el("r4m-bytext-row");
+    const head = el("r4m-bytext-head");
+    head.appendChild(el("span", "r4m-bytext-name", tag.name));
+    head.appendChild(el("r4m-chance", null, tag.chance !== undefined && tag.chance !== null ? percent(tag.chance) : t("byText.closeness", { value: tag.closeness.toFixed(2) })));
+    const s = item.summary;
+    const on = `bytext|${tag.key}|${tag.part}|${tag.paragraph}`;
+    // Kept, the pair is offered no more; of a yes the tag is the work's, shown as any answer is
+    const shown = (verdict) => (work) => {
+      if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => x !== tag) };
+      if (verdict === "YES") answeredShown(facet, { key: tag.key, name: tag.name, offered: true }, true)(work);
+    };
+    const answers = el("r4m-bytext-answers");
+    [
+      ["YES", "✓ ", "byText.yes", "byText.yesHint"],
+      ["ENOUGH_NOT", "− ", "byText.enoughNot", "byText.enoughNotHint"],
+      ["WRONG", "✕ ", "byText.wrong", "byText.wrongHint"],
+    ].forEach(([verdict, mark, word, hint]) => {
+      const change = () => api("PUT", `/api/items/${enc(s.source)}/${enc(s.item)}/tags/by-text/answer`, { key: tag.key, part: tag.part, paragraph: tag.paragraph, verdict });
+      answers.appendChild(ownButton(mark + t(word), t(hint), change, "r4m-button", shown(verdict), on));
+    });
+    head.appendChild(answers);
+    row.appendChild(withFailure(head, on));
+    const quote = el("button", "r4m-bytext-quote", tag.quote);
+    quote.type = "button";
+    quote.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      quote.classList.toggle("r4m-whole");
+    });
+    row.appendChild(quote);
+    const where = tag.partTitle ? t("byText.partParagraph", { part: tag.partTitle, n: tag.paragraph + 1 }) : t("byText.paragraph", { n: tag.paragraph + 1 });
+    row.appendChild(el("r4m-note", null, where));
+    return row;
   }
 
   // --- Reviews and pictures ---

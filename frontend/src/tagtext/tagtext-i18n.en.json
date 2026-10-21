@@ -1,0 +1,17 @@
+{
+  "TagsByText.closeness": "closeness {{value}}",
+  "TagsByText.enoughNot": "Not enough",
+  "TagsByText.enoughNotHint": "The paragraph is about this tag, but that is not enough for the work to have it: this pair is offered no more, and the model learns nothing from it",
+  "TagsByText.failed": "Not read: {{error}}",
+  "TagsByText.none": "No chapters with text: nothing to compare with",
+  "TagsByText.notFitted": "Ordered by closeness; chances appear once you have answered \"yes\" and \"wrong\"",
+  "TagsByText.paragraph": "paragraph {{n}}",
+  "TagsByText.partParagraph": "{{part}}, paragraph {{n}}",
+  "TagsByText.pending": "The chapters' paragraphs are still being encoded: the list comes once they are",
+  "TagsByText.toggle": "By the text",
+  "TagsByText.toggleHint": "The tags the paragraphs of this work's chapters are closest to, each with its paragraph",
+  "TagsByText.wrong": "Wrong",
+  "TagsByText.wrongHint": "The text and the tag are about different things: the model learns from it",
+  "TagsByText.yes": "Yes",
+  "TagsByText.yesHint": "The work has this tag by this paragraph: the tag is marked on the work"
+}

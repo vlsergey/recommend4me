@@ -1,0 +1,17 @@
+{
+  "TagsByText.closeness": "bliskost {{value}}",
+  "TagsByText.enoughNot": "Nedovoljno",
+  "TagsByText.enoughNotHint": "Pasus je o ovoj oznaci, ali to nije dovoljno da je delo ima: ovaj par se više ne nudi, a model iz njega ne uči",
+  "TagsByText.failed": "Nije pročitano: {{error}}",
+  "TagsByText.none": "Nema poglavlja sa tekstom: nema s čim da se poredi",
+  "TagsByText.notFitted": "Poređano po bliskosti; verovatnoće se pojavljuju posle vaših odgovora „da” i „pogrešno”",
+  "TagsByText.paragraph": "pasus {{n}}",
+  "TagsByText.partParagraph": "{{part}}, pasus {{n}}",
+  "TagsByText.pending": "Pasusi poglavlja se još kodiraju: spisak dolazi kad budu gotovi",
+  "TagsByText.toggle": "Po tekstu",
+  "TagsByText.toggleHint": "Oznake kojima su pasusi poglavlja ovog dela najbliži, svaka sa svojim pasusom",
+  "TagsByText.wrong": "Pogrešno",
+  "TagsByText.wrongHint": "Tekst i oznaka su o različitim stvarima: model uči iz toga",
+  "TagsByText.yes": "Da",
+  "TagsByText.yesHint": "Delo ima ovu oznaku po ovom pasusu: oznaka se označava na delu"
+}
