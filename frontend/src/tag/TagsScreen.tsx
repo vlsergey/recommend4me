@@ -105,7 +105,7 @@ export function TagsScreen({ selected }: { selected?: string }) {
  * but the model of the grades reads it no more; pressed again, read again. Shown as pressed once the
  * application has kept it.
  */
-function IgnoreButton({ tag }: { tag: TagInfo }) {
+function IgnoreButton({ tag, disabled }: { tag: TagInfo; /** Its list moving: shown disabled, the reason no press is taken. */ disabled?: boolean }) {
   const { t } = useTranslation("tag");
   const changed = useTagsChanged();
   return (
@@ -113,6 +113,7 @@ function IgnoreButton({ tag }: { tag: TagInfo }) {
       variant={tag.ignored ? "secondary" : "ghost"}
       size="icon-xs"
       className={cn("shrink-0", !tag.ignored && "text-muted-foreground")}
+      disabled={disabled}
       aria-pressed={tag.ignored}
       title={t(tag.ignored ? "Ignore.ignoredTitle" : "Ignore.title")}
       aria-label={t(tag.ignored ? "Ignore.ignoredTitle" : "Ignore.title")}
@@ -1100,7 +1101,7 @@ function Similar({ tag }: { tag: TagInfo }) {
                   <SiteNames tag={s} />
                 )}
               </div>
-              {!site && <IgnoreButton tag={s} />}
+              {!site && <IgnoreButton tag={s} disabled={locked} />}
               <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
                 <span title={t("Similar.works")}>{site ? site.works : s.works}</span>
                 {" · "}

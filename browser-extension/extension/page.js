@@ -1603,6 +1603,8 @@
     bin.setAttribute("aria-label", t("byText.ignore"));
     bin.appendChild(binIcon());
     answers.appendChild(bin);
+    // The window locked while its rows move: its buttons shown disabled, the reason no press is taken
+    if (state.locked) answers.querySelectorAll("button").forEach((b) => (b.disabled = true));
     head.appendChild(answers);
     row.appendChild(withFailure(head, on));
     // Text to select and copy: unfolded or folded by a press that selects nothing

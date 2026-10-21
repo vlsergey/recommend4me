@@ -135,6 +135,7 @@ function TagsByTextList({ item, facet, corrections, every }: { item: ItemRef; fa
             <TagRow
               key={rowOf(tag)}
               rowRef={calm.rowRef(rowOf(tag))}
+              locked={calm.locked}
               tag={tag}
               answer={(verdict) => answer(tag, verdict)}
               absent={() => absent(tag)}
@@ -151,12 +152,15 @@ function TagsByTextList({ item, facet, corrections, every }: { item: ItemRef; fa
 function TagRow({
   tag,
   rowRef,
+  locked,
   answer,
   absent,
   ignore,
 }: {
   tag: TagByText;
   rowRef: (e: HTMLElement | null) => void;
+  /** The list's rows moving: its buttons shown disabled, the reason no press is taken. */
+  locked: boolean;
   answer: (verdict: TagByTextVerdict) => Promise<void>;
   absent: () => Promise<void>;
   ignore: () => Promise<void>;
@@ -174,16 +178,16 @@ function TagRow({
           {tag.chance != null ? percent(tag.chance) : t("TagsByText.closeness", { value: tag.closeness.toFixed(2) })}
         </span>
         <div className="ml-auto flex flex-wrap gap-1.5">
-          <AsyncButton size="sm" variant="outline" icon={<CheckIcon />} title={t("TagsByText.yesHint")} onClick={() => answer("YES")}>
+          <AsyncButton size="sm" variant="outline" icon={<CheckIcon />} disabled={locked} title={t("TagsByText.yesHint")} onClick={() => answer("YES")}>
             {t("TagsByText.yes")}
           </AsyncButton>
-          <AsyncButton size="sm" variant="outline" icon={<MinusIcon />} title={t("TagsByText.enoughNotHint")} onClick={() => answer("ENOUGH_NOT")}>
+          <AsyncButton size="sm" variant="outline" icon={<MinusIcon />} disabled={locked} title={t("TagsByText.enoughNotHint")} onClick={() => answer("ENOUGH_NOT")}>
             {t("TagsByText.enoughNot")}
           </AsyncButton>
-          <AsyncButton size="sm" variant="outline" icon={<XIcon />} title={t("TagsByText.wrongHint")} onClick={() => answer("WRONG")}>
+          <AsyncButton size="sm" variant="outline" icon={<XIcon />} disabled={locked} title={t("TagsByText.wrongHint")} onClick={() => answer("WRONG")}>
             {t("TagsByText.wrong")}
           </AsyncButton>
-          <AsyncButton size="sm" variant="outline" icon={<BanIcon />} title={t("TagsByText.absentHint")} onClick={absent}>
+          <AsyncButton size="sm" variant="outline" icon={<BanIcon />} disabled={locked} title={t("TagsByText.absentHint")} onClick={absent}>
             {t("TagsByText.absent")}
           </AsyncButton>
           {/* As the bin of the screen of the tags: red, an icon alone */}
@@ -192,6 +196,7 @@ function TagRow({
             variant="ghost"
             className="text-destructive"
             icon={<Trash2Icon />}
+            disabled={locked}
             title={t("TagsByText.ignoreHint")}
             aria-label={t("TagsByText.ignore")}
             onClick={ignore}

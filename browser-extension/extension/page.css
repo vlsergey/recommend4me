@@ -605,9 +605,14 @@ r4m-dialog-body {
   padding: 10px 14px;
 }
 
-/* Locked while its rows move: no press lands on a row moved under the pointer */
+/* Locked while its rows move: no press lands on a row moved under the pointer, its buttons shown disabled */
 r4m-dialog-body.r4m-locked r4m-bytext-row {
   pointer-events: none;
+}
+
+r4m-dialog .r4m-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 r4m-dialog .r4m-refresh {
