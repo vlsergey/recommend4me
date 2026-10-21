@@ -72,10 +72,12 @@ class CudaKernels private constructor(
         internal fun compile(dir: Path, runtime: SymbolLookup, source: String, names: List<String>): CudaKernels {
             val linker = Linker.nativeLinker()
             // NVRTC opens its built-in headers' library by name alone, where Windows looks for it —
-            // not beside NVRTC: loaded first by its full path, it is the one found
+            // not beside NVRTC: loaded first by its full path, it is the one found. Loaded already by
+            // another class loader — ONNX Runtime's, which loads the whole folder — it is in the
+            // process, which is all NVRTC needs: the JDK refuses it to this one alone
             Files.list(dir).use { files ->
                 files.filter { it.fileName.toString().startsWith("nvrtc-builtins") && it.fileName.toString().endsWith(".dll") }
-                    .forEach { System.load(it.toAbsolutePath().toString()) }
+                    .forEach { runCatching { System.load(it.toAbsolutePath().toString()) } }
             }
             val nvrtc = SymbolLookup.libraryLookup(dir.resolve("nvrtc64_120_0.dll"), Arena.global())
             fun handleOf(lookup: SymbolLookup, name: String, descriptor: FunctionDescriptor) =
