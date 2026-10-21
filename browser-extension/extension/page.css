@@ -613,3 +613,10 @@ r4m-bytext r4m-note {
   color: var(--r4m-muted);
   font-size: 11px;
 }
+
+/* The bin of a tag by the text, as on the screen of the tags: red, an icon alone */
+r4m-bytext .r4m-bin {
+  display: inline-flex;
+  align-items: center;
+  color: var(--r4m-no);
+}

@@ -100,9 +100,16 @@ function TagRow({ tag, answer, ignore }: { tag: TagByText; answer: (verdict: Tag
           <AsyncButton size="xs" variant="outline" icon={<XIcon />} title={t("TagsByText.wrongHint")} onClick={() => answer("WRONG")}>
             {t("TagsByText.wrong")}
           </AsyncButton>
-          <AsyncButton size="xs" variant="ghost" icon={<Trash2Icon />} title={t("TagsByText.ignoreHint")} onClick={ignore}>
-            {t("TagsByText.ignore")}
-          </AsyncButton>
+          {/* As the bin of the screen of the tags: red, an icon alone */}
+          <AsyncButton
+            size="icon-xs"
+            variant="ghost"
+            className="text-destructive"
+            icon={<Trash2Icon />}
+            title={t("TagsByText.ignoreHint")}
+            aria-label={t("TagsByText.ignore")}
+            onClick={ignore}
+          />
         </div>
       </div>
       <button type="button" className={cn("text-left text-xs text-muted-foreground", !whole && "line-clamp-3")} onClick={() => setWhole(!whole)}>

@@ -1295,6 +1295,27 @@
 
   // --- The tags by the work's own text ---
 
+  /** The bin of the screen of the tags (lucide's trash-2), drawn in the colour of the text it is in: red on [r4m-bin]. */
+  function binIcon() {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("data-r4m", "");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "14");
+    svg.setAttribute("height", "14");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    ["M3 6h18", "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2", "M10 11v6", "M14 11v6"].forEach((d) => {
+      const path = document.createElementNS(ns, "path");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+    });
+    return svg;
+  }
+
   /** The list of the tags by the text read anew; read again while the paragraphs are still being encoded and the block is open. */
   async function readByText(item, facet) {
     const s = item.summary;
@@ -1371,11 +1392,12 @@
       answers.appendChild(ownButton(mark + t(word), t(hint), change, "r4m-button", shown(verdict), on));
     });
     // The tag ignored altogether, as the bin of the screen of the tags does: offered nowhere, read by no model — every pair of it gone once kept
-    answers.appendChild(
-      ownButton(`🗑 ${t("byText.ignore")}`, t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button", () => {
-        if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => x.key !== tag.key) };
-      }, on),
-    );
+    const bin = ownButton("", t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button r4m-bin", () => {
+      if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => x.key !== tag.key) };
+    }, on);
+    bin.setAttribute("aria-label", t("byText.ignore"));
+    bin.appendChild(binIcon());
+    answers.appendChild(bin);
     head.appendChild(answers);
     row.appendChild(withFailure(head, on));
     const quote = el("button", "r4m-bytext-quote", tag.quote);
