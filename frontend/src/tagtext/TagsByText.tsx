@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, EyeOffIcon, MinusIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, MinusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type ItemRef, type TagByText, type TagByTextVerdict } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -10,6 +10,7 @@ import { percent } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
 import { TagNameLink } from "@/tag/TagNameLink";
+import { useTagsChanged } from "@/tag/TagsScreen";
 
 export const tagsByTextKey = (item: ItemRef) => ["tagsByText", item.source, item.item];
 
@@ -26,10 +27,12 @@ const PENDING_POLL_MS = 3000;
 export function TagsByText({ item, facet, corrections }: { item: ItemRef; facet: string; corrections: Corrections }) {
   const { t } = useTranslation("tagtext");
   const queryClient = useQueryClient();
+  const tagsChanged = useTagsChanged();
   const [open, setOpen] = useState(false);
-  /** The tag ignored altogether: once kept, gone from this list and from what the work is offered. */
+  /** The tag ignored altogether, as the bin of the screen of the tags does: once kept, gone from this list and from what the work is offered. */
   const ignore = async (tag: TagByText) => {
     unwrap(await api.PUT("/api/tags/ignored", { body: { tag: tag.key, ignored: true } }));
+    await tagsChanged();
     queryClient.invalidateQueries({ queryKey: tagsByTextKey(item) });
     queryClient.invalidateQueries({ queryKey: suggestionsKey(item) });
     queryClient.invalidateQueries({ queryKey: candidatesKey(item) });
@@ -97,7 +100,7 @@ function TagRow({ tag, answer, ignore }: { tag: TagByText; answer: (verdict: Tag
           <AsyncButton size="xs" variant="outline" icon={<XIcon />} title={t("TagsByText.wrongHint")} onClick={() => answer("WRONG")}>
             {t("TagsByText.wrong")}
           </AsyncButton>
-          <AsyncButton size="xs" variant="ghost" icon={<EyeOffIcon />} title={t("TagsByText.ignoreHint")} onClick={ignore}>
+          <AsyncButton size="xs" variant="ghost" icon={<Trash2Icon />} title={t("TagsByText.ignoreHint")} onClick={ignore}>
             {t("TagsByText.ignore")}
           </AsyncButton>
         </div>

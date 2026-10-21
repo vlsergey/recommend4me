@@ -1370,9 +1370,9 @@
       const change = () => api("PUT", `/api/items/${enc(s.source)}/${enc(s.item)}/tags/by-text/answer`, { key: tag.key, part: tag.part, paragraph: tag.paragraph, verdict });
       answers.appendChild(ownButton(mark + t(word), t(hint), change, "r4m-button", shown(verdict), on));
     });
-    // The tag ignored altogether: offered nowhere, read by no model — every pair of it gone once kept
+    // The tag ignored altogether, as the bin of the screen of the tags does: offered nowhere, read by no model — every pair of it gone once kept
     answers.appendChild(
-      ownButton(`⊘ ${t("byText.ignore")}`, t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button", () => {
+      ownButton(`🗑 ${t("byText.ignore")}`, t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button", () => {
         if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => x.key !== tag.key) };
       }, on),
     );

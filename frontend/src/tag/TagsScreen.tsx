@@ -465,7 +465,8 @@ function HierarchyOffers() {
 }
 
 /** What to ask again after the tags changed: their list, the tag, the alike ones, the works shown with them. */
-function useTagsChanged() {
+/** What a change of the tags is read anew by: the tags, the works, the filters. */
+export function useTagsChanged() {
   const queryClient = useQueryClient();
   return () =>
     Promise.all([
