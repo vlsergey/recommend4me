@@ -198,9 +198,16 @@ function TagRow({
           />
         </div>
       </div>
-      <button type="button" className={cn("text-left text-sm whitespace-pre-line", !whole && "line-clamp-6")} onClick={() => setWhole(!whole)}>
+      {/* Text to select and copy: unfolded or folded by a press that selects nothing */}
+      <div
+        className={cn("cursor-pointer text-sm whitespace-pre-line select-text", !whole && "line-clamp-6")}
+        title={t(whole ? "TagsByText.fold" : "TagsByText.unfold")}
+        onClick={() => {
+          if (!window.getSelection()?.toString()) setWhole(!whole);
+        }}
+      >
         {tag.quote}
-      </button>
+      </div>
       {/* Where the paragraph is read on the site: its chapter, scrolled to it */}
       <a href={tag.url} target="_blank" rel="noopener noreferrer" className="w-fit text-xs text-muted-foreground underline-offset-2 hover:underline">
         {where}

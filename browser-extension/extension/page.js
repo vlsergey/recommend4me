@@ -1605,12 +1605,13 @@
     answers.appendChild(bin);
     head.appendChild(answers);
     row.appendChild(withFailure(head, on));
-    const quote = el("button", "r4m-bytext-quote", tag.quote);
-    quote.type = "button";
+    // Text to select and copy: unfolded or folded by a press that selects nothing
+    const quote = el("div", "r4m-bytext-quote", tag.quote);
+    quote.title = t("byText.unfold");
     quote.addEventListener("click", (e) => {
-      e.preventDefault();
       e.stopPropagation();
-      quote.classList.toggle("r4m-whole");
+      if (window.getSelection().toString()) return;
+      quote.title = t(quote.classList.toggle("r4m-whole") ? "byText.fold" : "byText.unfold");
     });
     row.appendChild(quote);
     // Where the paragraph is read on the site: its chapter, scrolled to it

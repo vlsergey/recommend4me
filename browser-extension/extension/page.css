@@ -676,6 +676,7 @@ r4m-dialog .r4m-bytext-quote {
   text-align: left;
   white-space: pre-line;
   cursor: pointer;
+  user-select: text;
 }
 
 r4m-dialog .r4m-bytext-quote.r4m-whole {
