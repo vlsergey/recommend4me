@@ -23,7 +23,7 @@ class TagsByTextController(private val stores: Stores, private val tags: TextTag
                 tags = list.tags.map {
                     TagByText(
                         key = it.key, name = names[it.key] ?: it.key, closeness = it.closeness, part = it.partId,
-                        paragraph = it.paragraph, quote = it.quote, chance = it.chance, partTitle = it.partTitle,
+                        paragraph = it.paragraph, quote = it.quote, url = it.url, chance = it.chance, partTitle = it.partTitle,
                     )
                 },
             ),

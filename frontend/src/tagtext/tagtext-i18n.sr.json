@@ -1,4 +1,6 @@
 {
+  "TagsByText.absent": "Nema u delu",
+  "TagsByText.absentHint": "Delo sigurno nema ovu oznaku: označava se na delu kao odsutna, njeni pasusi se više ne nude; model bliskosti iz toga ne uči",
   "TagsByText.closeness": "bliskost {{value}}",
   "TagsByText.enoughNot": "Nedovoljno",
   "TagsByText.enoughNotHint": "Pasus je o ovoj oznaci, ali to nije dovoljno da je delo ima: ovaj par se više ne nudi, a model iz njega ne uči",

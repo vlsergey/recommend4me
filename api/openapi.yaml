@@ -4069,7 +4069,7 @@ components:
             $ref: '#/components/schemas/TagByText'
     TagByText:
       type: object
-      required: [key, name, closeness, part, paragraph, quote]
+      required: [key, name, closeness, part, paragraph, quote, url]
       properties:
         key:
           type: string
@@ -4095,6 +4095,11 @@ components:
         quote:
           type: string
           description: The paragraph closest to the tag
+        url:
+          type: string
+          description: |
+            Where the paragraph is read on the site: the page of its part (chapter), with a text fragment
+            of its first words (#:~:text=) - the browser scrolls to them and marks them
     TagByTextAnswer:
       type: object
       required: [key, part, paragraph, verdict]

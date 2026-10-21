@@ -64,6 +64,13 @@ interface Source {
     fun itemUrl(itemId: String): String
 
     /**
+     * The page of a part of the item — a chapter — on the site, [partId] as the source keeps it
+     * ([PartData.id]): where a passage of its text is read in place. The item's own page of a
+     * source whose parts have none of their own.
+     */
+    fun partUrl(itemId: String, partId: String): String = itemUrl(itemId)
+
+    /**
      * The item a page of the site is about — a work's page, a chapter of it, its reviews — or null
      * when the address is not one item's. The extension shows the item's panel on such a page, and
      * a card linking to it gets the item's prediction.

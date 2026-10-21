@@ -18,6 +18,8 @@ import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
@@ -29,9 +31,13 @@ private val log = LoggerFactory.getLogger(TextTags::class.java)
 /** A user's answer on a tag offered by a paragraph was kept: the model of the closeness is fitted anew after the quiet. */
 data class TagTextAnswered(val source: String)
 
-/** A tag offered by the text: its key, closeness, chance when the model is fitted, and the paragraph quoted. */
+/**
+ * A tag offered by the text: its key, closeness, chance when the model is fitted, the paragraph
+ * quoted, and the address it is read at on the site ([url]).
+ */
 class TextTag(
     val key: String, val closeness: Double, val chance: Double?, val partId: String, val partTitle: String?, val paragraph: Int, val quote: String,
+    val url: String,
 )
 
 /** The tags offered by a work's text, and whether its paragraphs are still to be encoded, and whether the model is fitted. */
@@ -135,10 +141,21 @@ class TextTags(
                 store.parts.text(itemId, paragraph.partId)?.let { (part, text) -> part.title to Paragraphs.of(text) } ?: (null to emptyList())
             }
             val quote = own.getOrNull(paragraph.number) ?: return@mapNotNull null
-            TextTag(tags[t], closeness, chance, paragraph.partId, title, paragraph.number, quote)
+            TextTag(tags[t], closeness, chance, paragraph.partId, title, paragraph.number, quote, placeOf(store, itemId, paragraph.partId, quote))
         }
         log.info("{}: {} tags held against {} paragraphs of {} in {} ms", store.id, tags.size, paragraphs.size, itemId, System.currentTimeMillis() - started)
         return TextTagList(waiting, model != null, out)
+    }
+
+    /**
+     * Where the paragraph [quote] is read on the site: the page of its part, with a text fragment of
+     * its first words — the browser scrolls to them and marks them (`#:~:text=`).
+     */
+    private fun placeOf(store: SourceStore, itemId: String, partId: String, quote: String): String {
+        val words = quote.lineSequence().first().split(Regex("\\s+")).filter { it.isNotEmpty() }.take(FRAGMENT_WORDS).joinToString(" ")
+        // The dash, the comma and the ampersand are the fragment's own marks: escaped in the text
+        val fragment = URLEncoder.encode(words, StandardCharsets.UTF_8).replace("+", "%20").replace("-", "%2D")
+        return "${store.source.partUrl(itemId, partId)}#:~:text=$fragment"
     }
 
     /** The tags not offered for the item: the site's, those answered on, those ignored. */
@@ -231,6 +248,9 @@ class TextTags(
 
         /** The tags offered at most. */
         const val SHOWN = 30
+
+        /** The first words of a paragraph its address on the site scrolls to. */
+        const val FRAGMENT_WORDS = 8
 
         /** Paragraphs held against the tags at once: memory, not meaning. */
         const val BLOCK = 256

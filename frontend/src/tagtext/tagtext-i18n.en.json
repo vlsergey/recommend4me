@@ -1,4 +1,6 @@
 {
+  "TagsByText.absent": "Not in the work",
+  "TagsByText.absentHint": "The work has not this tag at all: answered on the work as absent, every paragraph of the tag offered no more; the model of the closeness learns nothing from it",
   "TagsByText.closeness": "closeness {{value}}",
   "TagsByText.enoughNot": "Not enough",
   "TagsByText.enoughNotHint": "The paragraph is about this tag, but that is not enough for the work to have it: this pair is offered no more, and the model learns nothing from it",

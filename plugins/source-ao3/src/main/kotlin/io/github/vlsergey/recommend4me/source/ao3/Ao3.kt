@@ -130,6 +130,9 @@ class Ao3 : Source {
 
     override fun itemUrl(itemId: String) = "$BASE/works/$itemId"
 
+    /** A chapter's own page, by its id; the text of a work of one chapter is on the work's page. */
+    override fun partUrl(itemId: String, partId: String) = if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/works/$itemId/chapters/$partId"
+
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val pageDecor = PageDecor(

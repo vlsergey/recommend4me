@@ -193,6 +193,16 @@
   const byText = new Map();
   /** How often the list is asked for again while the paragraphs are being encoded: a wait for what was asked, not a refresh. */
   const BY_TEXT_POLL_MS = 3000;
+  /** How often the list may be read again by itself, as the web interface's RefreshSelect offers; nought — only when asked. */
+  const BY_TEXT_REFRESH = [0, 1000, 2000, 5000, 10000, 30000, 60000];
+  /** How often it is read again till the user chooses, kept in the extension's storage as "byTextRefresh". */
+  const BY_TEXT_EVERY = 10000;
+  /** A list read anew: how long its rows move, and how long the window stays locked after; as the web interface's. */
+  const BY_TEXT_MOVE_MS = 1000;
+  const BY_TEXT_SETTLE_MS = 1000;
+  /** A row answered on: how long it fades, and how long the rows after it move up. */
+  const BY_TEXT_LEAVE_MS = 500;
+  const BY_TEXT_CLOSE_MS = 500;
   /** How many more a press of "…" shows. */
   const MORE_STEP = 5;
 
@@ -1316,19 +1326,118 @@
     return svg;
   }
 
-  /** The list of the tags by the text read anew; read again while the paragraphs are still being encoded and the block is open. */
+  /**
+   * The list of the tags by the text read anew, shown calmly ([takeByText]); read again while the
+   * window is open — every few seconds while the paragraphs are still being encoded, else as often
+   * as the user chose ([BY_TEXT_EVERY]).
+   */
   async function readByText(item, facet) {
     const s = item.summary;
     const state = byText.get(facet);
     clearTimeout(state.timer);
     try {
-      state.list = await api("GET", `/api/items/${enc(s.source)}/${enc(s.item)}/tags/by-text`);
+      const fresh = await api("GET", `/api/items/${enc(s.source)}/${enc(s.item)}/tags/by-text`);
       state.error = null;
+      takeByText(state, fresh);
     } catch (e) {
       state.error = e.message;
+      render();
     }
+    if (!state.open) return;
+    const next = state.list && state.list.pending ? BY_TEXT_POLL_MS : state.every;
+    if (next) state.timer = setTimeout(() => readByText(item, facet), next);
+  }
+
+  /** A row of the list: a tag and its paragraph. */
+  const byTextKey = (tag) => `${tag.key}:${tag.part}:${tag.paragraph}`;
+
+  /** The same list: the same rows in the same order, their chances and closeness to the shown digits, the same marks of the list. */
+  function sameByText(a, b) {
+    if (a.pending !== b.pending || a.fitted !== b.fitted || a.tags.length !== b.tags.length) return false;
+    const digits = (tag) => `${byTextKey(tag)}=${tag.chance == null ? "" : Math.round(tag.chance * 100)}/${tag.closeness.toFixed(2)}`;
+    return a.tags.every((tag, i) => digits(tag) === digits(b.tags[i]));
+  }
+
+  /** Where every row of the window stands, by its key: what a row moves from. */
+  function byTextTops() {
+    return new Map([...document.querySelectorAll("r4m-bytext-row[data-key]")].map((e) => [e.getAttribute("data-key"), e.getBoundingClientRect().top]));
+  }
+
+  /** The rows drawn anew moved from where they stood ([before]) to where they stand, for [ms]; a new one faded in. */
+  function moveByTextRows(before, ms) {
+    const rows = [...document.querySelectorAll("r4m-bytext-row[data-key]")];
+    rows.forEach((e) => {
+      const top = before.get(e.getAttribute("data-key"));
+      e.style.transition = "none";
+      if (top === undefined) e.style.opacity = "0";
+      else e.style.transform = `translateY(${top - e.getBoundingClientRect().top}px)`;
+    });
+    requestAnimationFrame(() =>
+      rows.forEach((e) => {
+        e.style.transition = `transform ${ms}ms ease, opacity ${ms}ms ease`;
+        e.style.transform = "";
+        e.style.opacity = "";
+      }),
+    );
+  }
+
+  /**
+   * A list read, shown calmly as the web interface's useCalmUpdates (the table of the similar tags
+   * alike): the same, nothing moves; another, the window locked — taking no press — its rows moved to
+   * the new list for [BY_TEXT_MOVE_MS] and free [BY_TEXT_SETTLE_MS] after; one read while locked
+   * waits till then.
+   */
+  function takeByText(state, fresh) {
+    if (state.locked) {
+      state.waiting = fresh;
+      return;
+    }
+    if (!state.list) {
+      state.list = fresh;
+      render();
+      return;
+    }
+    if (sameByText(state.list, fresh)) return;
+    state.locked = true;
+    const before = byTextTops();
+    state.list = fresh;
     render();
-    if (state.open && state.list && state.list.pending) state.timer = setTimeout(() => readByText(item, facet), BY_TEXT_POLL_MS);
+    moveByTextRows(before, BY_TEXT_MOVE_MS);
+    setTimeout(() => releaseByText(state), BY_TEXT_MOVE_MS + BY_TEXT_SETTLE_MS);
+  }
+
+  /** The rows standing: a list read meanwhile shown now, else the window free. */
+  function releaseByText(state) {
+    state.locked = false;
+    const next = state.waiting;
+    state.waiting = null;
+    render();
+    if (next) takeByText(state, next);
+  }
+
+  /**
+   * The rows [keys] answered on leave: faded where they stand for [BY_TEXT_LEAVE_MS], the rows after
+   * them moved up into their place for [BY_TEXT_CLOSE_MS], the window locked meanwhile. Begun once
+   * the page is drawn after the answer kept.
+   */
+  function removeByText(state, keys) {
+    const gone = new Set(keys);
+    setTimeout(() => {
+      state.locked = true;
+      render();
+      document.querySelectorAll("r4m-bytext-row[data-key]").forEach((e) => {
+        if (!gone.has(e.getAttribute("data-key"))) return;
+        e.style.transition = `opacity ${BY_TEXT_LEAVE_MS}ms ease`;
+        e.style.opacity = "0";
+      });
+      setTimeout(() => {
+        const before = byTextTops();
+        if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => !gone.has(byTextKey(x))) };
+        render();
+        moveByTextRows(before, BY_TEXT_CLOSE_MS);
+        setTimeout(() => releaseByText(state), BY_TEXT_CLOSE_MS);
+      }, BY_TEXT_LEAVE_MS);
+    }, 0);
   }
 
   /**
@@ -1339,19 +1448,22 @@
    */
   function byTextBlock(item, facet) {
     if (!facet.tags || facet.editable === false) return null;
-    const state = byText.get(facet.facet) || { open: false, list: null, error: null, timer: null, scroll: 0 };
+    const state = byText.get(facet.facet) || { open: false, list: null, error: null, timer: null, scroll: 0, locked: false, waiting: null, every: BY_TEXT_EVERY };
     byText.set(facet.facet, state);
     const block = el("r4m-bytext");
     const count = state.list && state.list.tags.length ? ` (${state.list.tags.length})` : "";
     const open = el("button", "r4m-button r4m-bytext-toggle", `${t("byText.toggle")}${count}`);
     open.type = "button";
     open.title = t("byText.toggleHint");
-    open.addEventListener("click", (e) => {
+    open.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
       state.open = true;
-      if (!state.list) readByText(item, facet.facet);
       render();
+      // How often, as the user chose it last
+      const kept = (await browser.storage.local.get({ byTextRefresh: BY_TEXT_EVERY })).byTextRefresh;
+      state.every = BY_TEXT_REFRESH.includes(kept) ? kept : BY_TEXT_EVERY;
+      readByText(item, facet.facet);
     });
     block.appendChild(open);
     if (state.open) document.body.appendChild(byTextDialog(item, facet.facet, state));
@@ -1377,6 +1489,23 @@
     });
     const head = el("r4m-dialog-head");
     head.appendChild(el("span", "r4m-dialog-title", t("byText.title")));
+    // How often the list is read again by itself, as the web interface's RefreshSelect
+    const refresh = el("label", "r4m-refresh", t("byText.refresh"));
+    const every = el("select");
+    BY_TEXT_REFRESH.forEach((ms) => {
+      const word = ms === 0 ? t("byText.refreshOff") : ms < 60000 ? t("byText.refreshSeconds", { value: ms / 1000 }) : t("byText.refreshMinutes", { value: ms / 60000 });
+      const option = el("option", null, word);
+      option.value = String(ms);
+      option.selected = ms === state.every;
+      every.appendChild(option);
+    });
+    every.addEventListener("change", () => {
+      state.every = Number(every.value);
+      browser.storage.local.set({ byTextRefresh: state.every });
+      readByText(item, facet);
+    });
+    refresh.appendChild(every);
+    head.appendChild(refresh);
     const x = el("button", "r4m-button", "✕");
     x.type = "button";
     x.title = t("byText.close");
@@ -1387,9 +1516,11 @@
     });
     head.appendChild(x);
     dialog.appendChild(head);
-    const body = el("r4m-dialog-body");
+    // Locked while its rows move: taking no press, shown busy
+    const body = el("r4m-dialog-body", state.locked ? "r4m-locked" : null);
+    body.setAttribute("aria-busy", String(state.locked));
     body.addEventListener("scroll", () => (state.scroll = body.scrollTop));
-    body.appendChild(el("r4m-note", null, t("byText.toggleHint")));
+    body.appendChild(el("r4m-note", null, state.locked ? `${t("byText.toggleHint")} ⟳` : t("byText.toggleHint")));
     if (state.error) body.appendChild(Object.assign(el("r4m-note", "r4m-failure", t("byText.failed", { error: state.error })), { role: "alert" }));
     const list = state.list;
     if (list) {
@@ -1405,9 +1536,14 @@
     return backdrop;
   }
 
-  /** A tag by the text: its name — a link to its page — its chance or closeness, its paragraph three lines till pressed, the three answers and the ignoring. */
+  /**
+   * A tag by the text: its name — a link to its page — its chance or closeness, its paragraph six
+   * lines till pressed, where it stands — a link to the site's page of it — and the answers: the
+   * three on the pair, the tag not in the work, the tag ignored. An answer kept, the row leaves ([removeByText]).
+   */
   function byTextRow(item, facet, tag, state) {
     const row = el("r4m-bytext-row");
+    row.setAttribute("data-key", byTextKey(tag));
     const head = el("r4m-bytext-head");
     // The name a link to the tag's page in the application
     const name = el("a", "r4m-link r4m-bytext-name", tag.name);
@@ -1418,11 +1554,13 @@
     head.appendChild(el("r4m-chance", null, tag.chance !== undefined && tag.chance !== null ? percent(tag.chance) : t("byText.closeness", { value: tag.closeness.toFixed(2) })));
     const s = item.summary;
     const on = `bytext|${tag.key}|${tag.part}|${tag.paragraph}`;
-    // Kept, the pair is offered no more; of a yes the tag is the work's, shown as any answer is
+    // Kept, the pair is offered no more and its row leaves; of a yes the tag is the work's, shown as any answer is
     const shown = (verdict) => (work) => {
-      if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => x !== tag) };
       if (verdict === "YES") answeredShown(facet, { key: tag.key, name: tag.name, offered: true }, true)(work);
+      removeByText(state, [byTextKey(tag)]);
     };
+    /** Every row of the tag: what leaves once the tag is said not the work's, or ignored. */
+    const ofTag = () => (state.list ? state.list.tags.filter((x) => x.key === tag.key).map(byTextKey) : []);
     const answers = el("r4m-bytext-answers");
     [
       ["YES", "✓ ", "byText.yes", "byText.yesHint"],
@@ -1432,10 +1570,15 @@
       const change = () => api("PUT", `/api/items/${enc(s.source)}/${enc(s.item)}/tags/by-text/answer`, { key: tag.key, part: tag.part, paragraph: tag.paragraph, verdict });
       answers.appendChild(ownButton(mark + t(word), t(hint), change, "r4m-button", shown(verdict), on));
     });
-    // The tag ignored altogether, as the bin of the screen of the tags does: offered nowhere, read by no model — every pair of it gone once kept
-    const bin = ownButton("", t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button r4m-bin", () => {
-      if (state.list) state.list = { ...state.list, tags: state.list.tags.filter((x) => x.key !== tag.key) };
-    }, on);
+    // The work has not the tag: the user's word on the facet, as ✕ of a value of it — every row of the tag leaves
+    answers.appendChild(
+      ownButton(`⊘ ${t("byText.absent")}`, t("byText.absentHint"), () => correct(item, facet, { key: tag.key }, false), "r4m-button", (work) => {
+        answeredShown(facet, { key: tag.key, name: tag.name, offered: true }, false)(work);
+        removeByText(state, ofTag());
+      }, on),
+    );
+    // The tag ignored altogether, as the bin of the screen of the tags does: offered nowhere, read by no model — every row of it leaves
+    const bin = ownButton("", t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button r4m-bin", () => removeByText(state, ofTag()), on);
     bin.setAttribute("aria-label", t("byText.ignore"));
     bin.appendChild(binIcon());
     answers.appendChild(bin);
@@ -1449,8 +1592,12 @@
       quote.classList.toggle("r4m-whole");
     });
     row.appendChild(quote);
-    const where = tag.partTitle ? t("byText.partParagraph", { part: tag.partTitle, n: tag.paragraph + 1 }) : t("byText.paragraph", { n: tag.paragraph + 1 });
-    row.appendChild(el("r4m-note", null, where));
+    // Where the paragraph is read on the site: its chapter, scrolled to it
+    const where = el("a", "r4m-link r4m-bytext-where", tag.partTitle ? t("byText.partParagraph", { part: tag.partTitle, n: tag.paragraph + 1 }) : t("byText.paragraph", { n: tag.paragraph + 1 }));
+    where.href = tag.url;
+    where.target = "_blank";
+    where.rel = "noopener";
+    row.appendChild(where);
     return row;
   }
 

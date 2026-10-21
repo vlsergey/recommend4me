@@ -605,6 +605,38 @@ r4m-dialog-body {
   padding: 10px 14px;
 }
 
+/* Locked while its rows move: no press lands on a row moved under the pointer */
+r4m-dialog-body.r4m-locked r4m-bytext-row {
+  pointer-events: none;
+}
+
+r4m-dialog .r4m-refresh {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 12px 0 auto;
+  color: var(--r4m-muted);
+  font-size: 12px;
+}
+
+/* A field of ours in our colours, whatever the site's rules for fields say (as form.r4m-add input) */
+r4m-dialog .r4m-refresh select {
+  border: 1px solid var(--r4m-border);
+  border-radius: 6px;
+  background: var(--r4m-bg) !important;
+  color: var(--r4m-fg) !important;
+  -webkit-text-fill-color: var(--r4m-fg) !important;
+  caret-color: var(--r4m-fg) !important;
+  font: 12px system-ui, sans-serif;
+}
+
+r4m-dialog .r4m-bytext-where {
+  display: block;
+  width: fit-content;
+  color: var(--r4m-muted);
+  font-size: 12px;
+}
+
 r4m-bytext-row {
   display: block;
   margin: 8px 0;

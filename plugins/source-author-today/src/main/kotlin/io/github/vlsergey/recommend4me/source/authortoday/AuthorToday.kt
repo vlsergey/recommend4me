@@ -75,6 +75,9 @@ class AuthorToday : Source {
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 
+    /** A chapter in the reader, by the id of its address. */
+    override fun partUrl(itemId: String, partId: String) = "$BASE/reader/$itemId/$partId"
+
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val signals = listOf(
