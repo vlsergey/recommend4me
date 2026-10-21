@@ -320,20 +320,25 @@ class SiteTest {
         capture("tt2|Ships|ships||")
         capture("tt3|A tale|||")
         refresh(store)
-        store.parts.save(
-            "tt3",
-            listOf(PartData("c1", 0, "One", "The road was long.\n***\nDragons flew over the castle, dragons everywhere.\nShips sailed among the stars, ships of space.", null)),
-        )
+        // Paragraphs long enough to stand alone, and two short lines of a dialogue, joined into one
+        val road = "The road was long, and the travellers walked it for days through the rain and the wind, past villages and farms and " +
+            "forests, their boots wet and their packs heavy, saying little to one another as the miles went by."
+        val dragonsText = "Dragons flew over the castle, dragons everywhere: the great dragons of the north circled the towers, breathing " +
+            "fire on the walls, and the little dragons of the hills followed them, screeching, while the guards hid."
+        val shipsText = "Ships sailed among the stars, ships of space with silver hulls, carrying their crews from one star to the next, and " +
+            "the ships of the fleet kept watch at the edge of the system, waiting for the ships of the enemy."
+        store.parts.save("tt3", listOf(PartData("c1", 0, "One", "$road\n***\n$dragonsText\n$shipsText\n— Ships?\n— Ships.", null)))
+        assertEquals(listOf(road, dragonsText, "$shipsText\n— Ships?\n— Ships."), Paragraphs.of("$road\n***\n$dragonsText\n$shipsText\n— Ships?\n— Ships."))
         // Its paragraphs encoded, as the background encodes them: the line of stars is none
         val encoder = WordsEncoder()
-        store.parts.paragraphsToEncode(encoder.id, 10).forEach { part ->
-            store.parts.saveParagraphVectors(part.itemId, part.partId, encoder.id, part.hash, encoder.encode(Paragraphs.of(part.content)))
+        store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
+            store.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, encoder.encode(Paragraphs.of(part.content)))
         }
         fun list() = tagsByText.getTagsByText("site", "tt3").body!!
         val first = list()
         assertTrue(!first.pending && !first.fitted && first.tags.isNotEmpty(), "list $first")
         val dragons = first.tags.single { it.name == "Dragons" }
-        assertEquals("Dragons flew over the castle, dragons everywhere.", dragons.quote)
+        assertEquals(dragonsText, dragons.quote)
         assertEquals("c1" to 1, dragons.part to dragons.paragraph)
         assertEquals("One", dragons.partTitle)
         // Not enough: the paragraph is offered for the tag no more, nothing learnt

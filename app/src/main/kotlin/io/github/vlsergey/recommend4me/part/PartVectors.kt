@@ -86,19 +86,19 @@ class PartVectors(
             done += todo.size
         }
         stores.sources.forEach { s ->
-            val todo = s.parts.paragraphsToEncode(encoder.id, BATCH)
+            val todo = s.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), BATCH)
             if (todo.isEmpty()) return@forEach
             busy = true
             todo.forEach { part ->
                 val vectors = Paragraphs.of(part.content).chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
-                s.parts.saveParagraphVectors(part.itemId, part.partId, encoder.id, part.hash, vectors)
+                s.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, vectors)
             }
             done += todo.size
         }
         return done
     }
 
-    fun pending(): Int = plugins.textEncoder()?.let { e -> stores.sources.sumOf { it.parts.countToEncode(e.id) + it.parts.countParagraphsToEncode(e.id) } } ?: 0
+    fun pending(): Int = plugins.textEncoder()?.let { e -> stores.sources.sumOf { it.parts.countToEncode(e.id) + it.parts.countParagraphsToEncode(Paragraphs.keyOf(e.id)) } } ?: 0
 
     fun total(): Int = stores.sources.sumOf { it.parts.countWithText() }
 

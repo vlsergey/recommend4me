@@ -64,8 +64,8 @@ class TextTags(
         val facet = store.tagFacets.firstOrNull() ?: return null
         val encoder = plugins.textEncoder() ?: return TextTagList(pending = false, fitted = false, tags = emptyList())
         val model = models.read()
-        val paragraphs = store.parts.paragraphVectors(itemId, encoder.id)
-        val waiting = store.parts.paragraphsPending(itemId, encoder.id)
+        val paragraphs = store.parts.paragraphVectors(itemId, Paragraphs.keyOf(encoder.id))
+        val waiting = store.parts.paragraphsPending(itemId, Paragraphs.keyOf(encoder.id))
         if (paragraphs.isEmpty()) return TextTagList(waiting, model != null, emptyList())
         val started = System.currentTimeMillis()
         val left = leftOut(store, facet, itemId)
@@ -156,7 +156,7 @@ class TextTags(
         val facet = store.tagFacets.firstOrNull() ?: return false
         val tag = key.toLongOrNull() ?: return false
         val encoder = plugins.textEncoder() ?: return false
-        val vector = store.parts.paragraphVector(itemId, partId, paragraph, encoder.id) ?: return false
+        val vector = store.parts.paragraphVector(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id)) ?: return false
         val names = store.tags.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id).takeIf { it.isNotEmpty() } ?: return false
         val closeness = names.maxOf { name -> name.indices.sumOf { (name[it] * vector[it]).toDouble() } }
         val now = Instant.now()

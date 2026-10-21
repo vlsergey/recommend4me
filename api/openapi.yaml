@@ -387,8 +387,9 @@ paths:
       operationId: getTagsByText
       summary: The tags the paragraphs of the work's own text are closest to, each with its paragraph
       description: |
-        Every tag held against every paragraph of the work's chapters read (a line of a text with a
-        letter in it): of a tag, its closeness is the mean of its three closest paragraphs, by the
+        Every tag held against every paragraph of the work's chapters read (its lines with a letter in
+        them, those in a row shorter than 200 characters joined - a line of a dialogue is no
+        passage of its own): of a tag, its closeness is the mean of its three closest paragraphs, by the
         closest of its names; the closest paragraph quoted beside it. Made at the asking, of the
         vectors kept: the paragraphs' (encoded in the background) and the tags'. Not offered: a tag
         the site gives the work, one the user answered on, one ignored, and a paragraph the user
