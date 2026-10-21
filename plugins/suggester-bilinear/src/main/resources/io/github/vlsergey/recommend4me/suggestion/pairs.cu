@@ -16,6 +16,9 @@ __device__ __forceinline__ void logistic(float z, float y, float w, float scale,
 
 #define BLOCK 256
 
+// The names of a group a block of names_tile takes
+#define TILE_ROWS 32
+
 // The block's four sums added into sums[0..3]
 __device__ void block_sums(double a, double b, double c, double d, double* sums) {
     __shared__ double s[4][BLOCK];
@@ -73,103 +76,112 @@ extern "C" __global__ void pairs(
     block_sums(l, dCommon, dExample, dMention, sums);
 }
 
-// The group of a pair of a name and a value: the last whose first pair is at k or before
-__device__ __forceinline__ int group_of(long long k, const long long* first, int groups) {
-    int lo = 0, hi = groups - 1;
-    while (lo < hi) {
-        int mid = (lo + hi + 1) / 2;
-        if (first[mid] <= k) lo = mid; else hi = mid - 1;
-    }
-    return lo;
-}
-
-// Every name of a group against every value of it, the label nought but of the name's own value,
-// which the text names: the score Uh·V with the bias and the common bias, the slope written into Sn
-// (the group's names × its values, row after row, one group after another), the loss and slopes summed
-extern "C" __global__ void names_loss(
-    long long pairs, int groups, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width,
-    const int* rows, const int* values, const int* positive,
-    const float* uh, int h, const float* v, int m, int r,
-    const float* bias, float common, float mention, float named, float scale, float* Sn, double* sums
-) {
+// The coordinates of every name and of every value of every group gathered where the groups read
+// them: gu the groups' names one after another, gv their values, a row of rank numbers each — read
+// by neighbouring threads side by side, not scattered over the rank's rows of every name and value
+extern "C" __global__ void gather(int count, const int* index, const float* from, int stride, int r, float* into) {
     long long k = (long long) blockIdx.x * blockDim.x + threadIdx.x;
-    double l = 0.0, dCommon = 0.0, dMention = 0.0;
-    if (k < pairs) {
-        int g = group_of(k, firstPair, groups);
-        long long local = k - firstPair[g];
-        int c = width[g];
-        int row = (int) (local / c);
-        int col = (int) (local % c);
-        int name = rows[firstRow[g] + row];
-        int val = values[firstValue[g] + col];
-        float z = bias[val] + common;
-        for (int q = 0; q < r; q++) z += uh[(size_t) q * h + name] * v[(size_t) q * m + val];
-        float loss, slope;
-        if (positive[firstRow[g] + row] == col) {
-            logistic(z + mention * named, 1.0f, 1.0f, scale, &loss, &slope);
-            dMention = slope * named;
-        } else {
-            logistic(z, 0.0f, 1.0f, scale, &loss, &slope);
-        }
-        Sn[k] = slope;
-        l = loss;
-        dCommon = slope;
-    }
-    block_sums(l, dCommon, 0.0, dMention, sums);
+    if (k >= (long long) count * r) return;
+    int at = (int) (k / r);
+    int q = (int) (k % r);
+    into[k] = from[(size_t) q * stride + index[at]];
 }
 
 #define MAX_RANK 64
 
-// Of every value of every group — one thread each — its slopes over the group's names carried to the
-// value's coordinates (dVᵀ += Uhᵀ Sn) and its bias (the column summed)
-extern "C" __global__ void names_values(
-    int columns, const int* groupOfValue, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width,
-    const int* height, const int* rows, const int* values, const float* Sn,
-    const float* uh, int h, int m, int r, float* gE, float* gBias
+// A tile of a group, a block each: up to TILE_ROWS of its names against up to BLOCK of its values,
+// a thread a value. Of every pair, the label nought but of the name's own value, which the text
+// names: the score Uh·V with the bias and the common bias, the slope written into Sn (the group's
+// names × its values, row after row, one group after another); the loss and slopes summed, and the
+// value's slopes over the tile's names carried at once to its coordinates (dVᵀ += Uhᵀ Sn) and its bias
+// R the rank when the compiler knows it, the numbers of a value and of its slopes held in registers;
+// nought when only r does, held in MAX_RANK of local memory
+template <int R>
+__device__ void names_tile_of(
+    const int* tiles, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width, const int* height,
+    const int* values, const int* positive, const float* gu, const float* gv, int m, int r,
+    const float* bias, float common, float mention, float named, float scale, float* Sn, float* gE, float* gBias, double* sums
 ) {
-    int k = blockIdx.x * blockDim.x + threadIdx.x;
-    if (k >= columns) return;
-    int g = groupOfValue[k];
-    int col = k - firstValue[g];
+    if (R > 0) r = R;
+    const int* tile = tiles + 3 * blockIdx.x;
+    int g = tile[0];
+    int rowFrom = tile[1];
+    int col = tile[2] + threadIdx.x;
     int c = width[g];
-    int kRows = height[g];
-    int val = values[k];
-    const float* s = Sn + firstPair[g] + col;
-    float acc[MAX_RANK];
-    for (int q = 0; q < r; q++) acc[q] = 0.0f;
-    float sum = 0.0f;
-    for (int row = 0; row < kRows; row++) {
-        float slope = s[(size_t) row * c];
-        if (slope == 0.0f) continue;
-        int name = rows[firstRow[g] + row];
-        for (int q = 0; q < r; q++) acc[q] += uh[(size_t) q * h + name] * slope;
-        sum += slope;
+    int rowTo = min(rowFrom + TILE_ROWS, height[g]);
+    double l = 0.0, dCommon = 0.0, dMention = 0.0;
+    if (col < c) {
+        int at = firstValue[g] + col;
+        int val = values[at];
+        float b[R > 0 ? R : MAX_RANK];
+        for (int q = 0; q < r; q++) b[q] = gv[(size_t) at * r + q];
+        float base = bias[val] + common;
+        float acc[R > 0 ? R : MAX_RANK];
+        for (int q = 0; q < r; q++) acc[q] = 0.0f;
+        float sum = 0.0f;
+        float* s = Sn + firstPair[g] + col;
+        for (int row = rowFrom; row < rowTo; row++) {
+            int name = firstRow[g] + row;
+            const float* a = gu + (size_t) name * r;
+            float z = base;
+            for (int q = 0; q < r; q++) z += a[q] * b[q];
+            float loss, slope;
+            if (positive[name] == col) {
+                logistic(z + mention * named, 1.0f, 1.0f, scale, &loss, &slope);
+                dMention += slope * named;
+            } else {
+                logistic(z, 0.0f, 1.0f, scale, &loss, &slope);
+            }
+            s[(size_t) row * c] = slope;
+            l += loss;
+            dCommon += slope;
+            for (int q = 0; q < r; q++) acc[q] += a[q] * slope;
+            sum += slope;
+        }
+        for (int q = 0; q < r; q++) atomicAdd(gE + (size_t) q * m + val, acc[q]);
+        atomicAdd(gBias + val, sum);
     }
-    for (int q = 0; q < r; q++) atomicAdd(gE + (size_t) q * m + val, acc[q]);
-    atomicAdd(gBias + val, sum);
+    block_sums(l, dCommon, 0.0, dMention, sums);
 }
 
-// Of every name of every group — one thread each — its slopes over the group's values carried to
-// the name's coordinates (dUhᵀ = Vᵀ Snᵀ): a name is of one group alone
-extern "C" __global__ void names_rows(
+#define NAMES_TILE_PARAMETERS     const int* tiles, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width, const int* height,     const int* values, const int* positive, const float* gu, const float* gv, int m, int r,     const float* bias, float common, float mention, float named, float scale, float* Sn, float* gE, float* gBias, double* sums
+#define NAMES_TILE_ARGUMENTS tiles, firstPair, firstRow, firstValue, width, height, values, positive, gu, gv, m, r,     bias, common, mention, named, scale, Sn, gE, gBias, sums
+
+extern "C" __global__ void names_tile(NAMES_TILE_PARAMETERS) { names_tile_of<0>(NAMES_TILE_ARGUMENTS); }
+extern "C" __global__ void names_tile_16(NAMES_TILE_PARAMETERS) { names_tile_of<16>(NAMES_TILE_ARGUMENTS); }
+
+// Of every name of every group — a warp each, its lanes taking the values in turn — its slopes over
+// the group's values carried to the name's coordinates (dUhᵀ = Vᵀ Snᵀ): a name is of one group alone
+template <int R>
+__device__ void names_rows_of(
     int names, const int* groupOfRow, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width,
-    const int* rows, const int* values, const float* Sn,
-    const float* v, int h, int m, int r, float* duh
+    const int* rows, const float* Sn, const float* gv, int h, int r, float* duh
 ) {
-    int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (R > 0) r = R;
+    long long thread = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    int k = (int) (thread / 32);
+    int lane = threadIdx.x % 32;
     if (k >= names) return;
     int g = groupOfRow[k];
-    int row = k - firstRow[g];
     int c = width[g];
-    int name = rows[k];
-    const float* s = Sn + firstPair[g] + (long long) row * c;
-    const int* own = values + firstValue[g];
-    float acc[MAX_RANK];
+    const float* s = Sn + firstPair[g] + (long long) (k - firstRow[g]) * c;
+    const float* b = gv + (size_t) firstValue[g] * r;
+    float acc[R > 0 ? R : MAX_RANK];
     for (int q = 0; q < r; q++) acc[q] = 0.0f;
-    for (int col = 0; col < c; col++) {
+    for (int col = lane; col < c; col += 32) {
         float slope = s[col];
-        int val = own[col];
-        for (int q = 0; q < r; q++) acc[q] += v[(size_t) q * m + val] * slope;
+        const float* bc = b + (size_t) col * r;
+        for (int q = 0; q < r; q++) acc[q] += bc[q] * slope;
     }
-    for (int q = 0; q < r; q++) duh[(size_t) q * h + name] += acc[q];
+    for (int q = 0; q < r; q++) {
+        float v = acc[q];
+        for (int offset = 16; offset > 0; offset >>= 1) v += __shfl_down_sync(0xffffffff, v, offset);
+        if (lane == 0) duh[(size_t) q * h + rows[k]] += v;
+    }
 }
+
+#define NAMES_ROWS_PARAMETERS     int names, const int* groupOfRow, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width,     const int* rows, const float* Sn, const float* gv, int h, int r, float* duh
+#define NAMES_ROWS_ARGUMENTS names, groupOfRow, firstPair, firstRow, firstValue, width, rows, Sn, gv, h, r, duh
+
+extern "C" __global__ void names_rows(NAMES_ROWS_PARAMETERS) { names_rows_of<0>(NAMES_ROWS_ARGUMENTS); }
+extern "C" __global__ void names_rows_16(NAMES_ROWS_PARAMETERS) { names_rows_of<16>(NAMES_ROWS_ARGUMENTS); }

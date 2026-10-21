@@ -87,11 +87,12 @@ class BilinearTest {
         val cublas = Cublas.open(dir!!)
         assumeTrue(cublas != null, "no cuBLAS to run on")
         compareTogether(task(), cublas)
+        // And of the rank the application fits by: its kernels compiled with the rank known
+        compareTogether(task(), cublas, rank = 16)
     }
 
-    private fun compareTogether(task: SuggestionTask, card: Cublas? = null) {
+    private fun compareTogether(task: SuggestionTask, card: Cublas? = null, rank: Int = 3) {
         val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
-        val rank = 3
         val lambdas = floatArrayOf(0.1f, 0.01f, 0.001f, 0.01f)
         val folds = intArrayOf(0, 1, 2, 4)
         val ensemble = Ensemble(problem, rank, lambdas, folds, card)
