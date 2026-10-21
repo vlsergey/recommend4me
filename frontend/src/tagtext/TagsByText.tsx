@@ -40,13 +40,26 @@ const sameRow = (a: TagByText, b: TagByText) =>
  * nowhere, read by no model — its name a link to its page. Read when opened: made at the asking,
  * of every paragraph against every tag.
  */
-export function TagsByText({ item, facet, corrections }: { item: ItemRef; facet: string; corrections: Corrections }) {
+export function TagsByText({
+  item,
+  facet,
+  corrections,
+  size = "xs",
+  className = "mt-1",
+}: {
+  item: ItemRef;
+  facet: string;
+  corrections: Corrections;
+  /** The button's size: small under the facet of tags, as its neighbours in the bar of the work's window. */
+  size?: "xs" | "sm";
+  className?: string;
+}) {
   const { t } = useTranslation("tagtext");
   const [open, setOpen] = useState(false);
   const [every, setEvery] = useRefresh("tagtext.refresh", EVERY_MS);
   return (
-    <div className="mt-1">
-      <Button variant="outline" size="xs" className="gap-1" onClick={() => setOpen(true)} title={t("TagsByText.toggleHint")}>
+    <div className={className}>
+      <Button variant="outline" size={size} className="gap-1" onClick={() => setOpen(true)} title={t("TagsByText.toggleHint")}>
         <FileTextIcon />
         {t("TagsByText.toggle")}
       </Button>

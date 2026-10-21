@@ -22,6 +22,7 @@ import { Parts } from "@/part/Parts";
 import { PictureMatches, Pictures } from "@/picture/Pictures";
 import { ReviewMatches, Reviews } from "@/review/Reviews";
 import { useSuggestions } from "@/suggestion/useSuggestions";
+import { TagsByText } from "@/tagtext/TagsByText";
 import { FANFIC_FACETS, FanficSection, FanficSummary } from "@/universe/FanficSection";
 import { useStackedDialog } from "./dialogStack";
 import { ItemNumbers } from "./ItemNumbers";
@@ -164,6 +165,8 @@ function Shell({
   const d = details.data;
   // The facets of the card until the work's own are in
   const facets = d?.allFacets ?? summary.facets;
+  /** The facet of tags the work is marked in: what its tags by the text are answered on. */
+  const tagFacet = d?.allFacets.find((f) => f.tags && f.editable)?.facet;
 
   return (
     <>
@@ -253,6 +256,8 @@ function Shell({
           {marking ? <CheckIcon /> : <PencilIcon />}
           {marking ? t("ItemDialog.done") : t("ItemDialog.mark")}
         </Button>
+        {/* The tags by the work's own text, beside the marking: of a source with tags alone */}
+        {tagFacet && <TagsByText item={ref} facet={tagFacet} corrections={corrections} size="sm" className="" />}
         <PreviousRating type={type} summary={summary} />
         {/* Keyed by the work: a press at work on one is not shown on the next the dialog moves to */}
         <InterestButtons key={`interest:${summary.source}/${summary.item}`} summary={summary} size="lg" labels className="ml-auto" />

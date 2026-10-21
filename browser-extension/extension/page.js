@@ -550,6 +550,8 @@
       message = message || String(e.message || e);
     }
     panel(item, placed);
+    // The window of the tags by the text, when open: over the page, wherever it was opened from
+    if (item) byText.forEach((state, facet) => state.open && document.body.appendChild(byTextDialog(item, facet, state)));
   }
 
   // --- What a change looks like before the application answers ---
@@ -611,6 +613,19 @@
     if (item && item.summary.grade) head.appendChild(el("r4m-grade-mark", null, `★${item.summary.grade}`));
     head.appendChild(el("span", "r4m-spacer"));
     if (pending) head.appendChild(el("r4m-saving-note", null, pending > 1 ? t("panel.savingCount", { count: pending }) : t("panel.saving")));
+    // The tags by the work's own text, beside the way to the application, as in its window of the work: of a source with tags alone
+    const tagFacet = item && (item.facets || []).find((f) => f.tags && f.editable !== false);
+    if (tagFacet) {
+      const byTextButton = el("button", "r4m-button", t("byText.toggle"));
+      byTextButton.type = "button";
+      byTextButton.title = t("byText.toggleHint");
+      byTextButton.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openByText(item, tagFacet.facet);
+      });
+      head.appendChild(byTextButton);
+    }
     if (item) {
       const open = el("a", "r4m-link", t("panel.open"));
       open.href = `${server}/#item=${enc(item.summary.source)}/${item.summary.item}`;
@@ -1455,19 +1470,25 @@
     const open = el("button", "r4m-button r4m-bytext-toggle", `${t("byText.toggle")}${count}`);
     open.type = "button";
     open.title = t("byText.toggleHint");
-    open.addEventListener("click", async (e) => {
+    open.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      state.open = true;
-      render();
-      // How often, as the user chose it last
-      const kept = (await browser.storage.local.get({ byTextRefresh: BY_TEXT_EVERY })).byTextRefresh;
-      state.every = BY_TEXT_REFRESH.includes(kept) ? kept : BY_TEXT_EVERY;
-      readByText(item, facet.facet);
+      openByText(item, facet.facet);
     });
     block.appendChild(open);
-    if (state.open) document.body.appendChild(byTextDialog(item, facet.facet, state));
     return block;
+  }
+
+  /** The window of the tags by the text opened — from the facet of tags or from the panel's head — and its list read. */
+  async function openByText(item, facet) {
+    const state = byText.get(facet) || { open: false, list: null, error: null, timer: null, scroll: 0, locked: false, waiting: null, every: BY_TEXT_EVERY };
+    byText.set(facet, state);
+    state.open = true;
+    render();
+    // How often, as the user chose it last
+    const kept = (await browser.storage.local.get({ byTextRefresh: BY_TEXT_EVERY })).byTextRefresh;
+    state.every = BY_TEXT_REFRESH.includes(kept) ? kept : BY_TEXT_EVERY;
+    readByText(item, facet);
   }
 
   /** The window of the tags by the text, over the page: closed by its ✕, by Escape or by a press beside it. */
