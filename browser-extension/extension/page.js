@@ -1332,36 +1332,77 @@
   }
 
   /**
-   * THE TAGS BY THE WORK'S OWN TEXT, as the web interface's TagsByText: of a facet of tags, folded
-   * till opened — read at the asking — the tags the paragraphs of the work's chapters are closest
-   * to, apart from the model's chances, each with its paragraph and three answers on the pair.
+   * THE TAGS BY THE WORK'S OWN TEXT, as the web interface's TagsByTextDialog: of a facet of tags, a
+   * button that opens a window over the page — read at the asking — of the tags the paragraphs of
+   * the work's chapters are closest to, apart from the model's chances, each with its paragraph and
+   * the answers on the pair. Drawn anew with the page, the window keeps where it was scrolled to.
    */
   function byTextBlock(item, facet) {
     if (!facet.tags || facet.editable === false) return null;
-    const state = byText.get(facet.facet) || { open: false, list: null, error: null, timer: null };
+    const state = byText.get(facet.facet) || { open: false, list: null, error: null, timer: null, scroll: 0 };
     byText.set(facet.facet, state);
     const block = el("r4m-bytext");
     const count = state.list && state.list.tags.length ? ` (${state.list.tags.length})` : "";
-    const toggle = el("button", "r4m-button r4m-bytext-toggle", `${state.open ? "▾" : "▸"} ${t("byText.toggle")}${count}`);
-    toggle.type = "button";
-    toggle.title = t("byText.toggleHint");
-    toggle.addEventListener("click", (e) => {
+    const open = el("button", "r4m-button r4m-bytext-toggle", `${t("byText.toggle")}${count}`);
+    open.type = "button";
+    open.title = t("byText.toggleHint");
+    open.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      state.open = !state.open;
-      if (state.open && !state.list) readByText(item, facet.facet);
+      state.open = true;
+      if (!state.list) readByText(item, facet.facet);
       render();
     });
-    block.appendChild(toggle);
-    if (!state.open) return block;
-    if (state.error) block.appendChild(Object.assign(el("r4m-note", "r4m-failure", t("byText.failed", { error: state.error })), { role: "alert" }));
-    const list = state.list;
-    if (!list) return block;
-    if (list.pending) block.appendChild(el("r4m-note", null, t("byText.pending")));
-    if (!list.pending && !list.tags.length) block.appendChild(el("r4m-note", null, t("byText.none")));
-    if (list.tags.length && !list.fitted) block.appendChild(el("r4m-note", null, t("byText.notFitted")));
-    list.tags.forEach((tag) => block.appendChild(byTextRow(item, facet.facet, tag, state)));
+    block.appendChild(open);
+    if (state.open) document.body.appendChild(byTextDialog(item, facet.facet, state));
     return block;
+  }
+
+  /** The window of the tags by the text, over the page: closed by its ✕, by Escape or by a press beside it. */
+  function byTextDialog(item, facet, state) {
+    const close = () => {
+      state.open = false;
+      clearTimeout(state.timer);
+      render();
+    };
+    const backdrop = el("r4m-dialog-backdrop");
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) close();
+    });
+    const dialog = Object.assign(el("r4m-dialog"), { role: "dialog" });
+    dialog.setAttribute("aria-label", t("byText.title"));
+    dialog.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") close();
+    });
+    const head = el("r4m-dialog-head");
+    head.appendChild(el("span", "r4m-dialog-title", t("byText.title")));
+    const x = el("button", "r4m-button", "✕");
+    x.type = "button";
+    x.title = t("byText.close");
+    x.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    });
+    head.appendChild(x);
+    dialog.appendChild(head);
+    const body = el("r4m-dialog-body");
+    body.addEventListener("scroll", () => (state.scroll = body.scrollTop));
+    body.appendChild(el("r4m-note", null, t("byText.toggleHint")));
+    if (state.error) body.appendChild(Object.assign(el("r4m-note", "r4m-failure", t("byText.failed", { error: state.error })), { role: "alert" }));
+    const list = state.list;
+    if (list) {
+      if (list.pending) body.appendChild(el("r4m-note", null, t("byText.pending")));
+      if (!list.pending && !list.tags.length) body.appendChild(el("r4m-note", null, t("byText.none")));
+      if (list.tags.length && !list.fitted) body.appendChild(el("r4m-note", null, t("byText.notFitted")));
+      list.tags.forEach((tag) => body.appendChild(byTextRow(item, facet, tag, state)));
+    }
+    dialog.appendChild(body);
+    backdrop.appendChild(dialog);
+    // Where it was scrolled to, once it is on the page
+    requestAnimationFrame(() => (body.scrollTop = state.scroll));
+    return backdrop;
   }
 
   /** A tag by the text: its name — a link to its page — its chance or closeness, its paragraph three lines till pressed, the three answers and the ignoring. */
