@@ -178,6 +178,9 @@ class SiteTest {
             const val DESCRIBE = "https://site.example/tags/"
 
             fun describe(tag: String) = "$DESCRIBE$tag"
+
+            /** A page of a tag's other names: "<name>,<name>", the tag in the address. */
+            const val SYNONYMS = "https://site.example/synonyms/"
         }
 
         override val id = "site"
@@ -200,7 +203,7 @@ class SiteTest {
             universeLine = "pairings",
         )
         override val modes = setOf(SourceMode.BROWSER)
-        override val capturePatterns = listOf(Regex("https://site\\.example/(work|tags)/.*"))
+        override val capturePatterns = listOf(Regex("https://site\\.example/(work|tags|synonyms)/.*"))
         override fun itemUrl(itemId: String) = "https://site.example/work/$itemId"
         override fun itemIdOf(url: String) = Regex("^https://site\\.example/work/([^/?#]+)").find(url)?.groupValues?.get(1)
         override val pageDecor = PageDecor(
@@ -214,6 +217,11 @@ class SiteTest {
             if (facet != "tag") emptyList() else tags.map { WantedPage(describe(it), mapOf("tag" to it)) }
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
+            if (page.url.startsWith(SiteSource.SYNONYMS)) {
+                val names = page.html.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                context.items.setFacetValueSynonyms("tag", mapOf(page.url.removePrefix(SiteSource.SYNONYMS) to names.associateBy { it.lowercase() }))
+                return emptyList()
+            }
             if (page.url.startsWith(SiteSource.DESCRIBE)) {
                 page.html.trim().takeIf { it.isNotEmpty() }?.let { context.items.describeFacetValues("tag", mapOf(page.url.removePrefix(SiteSource.DESCRIBE) to it)) }
                 return emptyList()
@@ -881,6 +889,9 @@ class SiteTest {
 
     @Test
     fun `every site's tag is bound to a normalized tag, the user merges them, names one, takes a site's tag out and links them`() {
+        // A synonym the site names of its tag before any work has it: kept, bound once the tag is
+        captures.capturePage(CaptureRequest("${SiteSource.SYNONYMS}cargo", "Freight"))
+        assertNull(stores.type("books")!!.tags.bindings()[SiteTagRef("site", "freight")])
         capture("t1|Hull one|hulls,cargo|Ships carry cargo between stations|")
         capture("t2|Hull two|starhulls|Freighters carry cargo between stations|")
         capture("t3|Hull three|hulls|A hull breach in deep space|")
@@ -893,10 +904,18 @@ class SiteTest {
         val starhulls = tagOf("starhulls")
         val cargo = tagOf("cargo")
         assertEquals(3, setOf(hulls, starhulls, cargo).size)
+        // The synonym a site's tag of its own, bound to the same tag; one named of a tag bound already, at once
+        assertEquals(cargo, tagOf("freight"))
+        captures.capturePage(CaptureRequest("${SiteSource.SYNONYMS}cargo", "Freight, Shipment"))
+        assertEquals(cargo, tagOf("shipment"))
         // The user's answer on a tag that will be merged into another
         corrections.correctFacet("site", "t3", FacetCorrection(facet = "tags", added = true, key = starhulls))
         items.rateItem("site", "t2", RatingRequest(5))
         refresh(stores.source("site")!!)
+        // The synonyms variants of the tag, of no work, with their names: the tag found by them
+        val ofCargo = tagsApi.getTag(cargo).body!!.variants.associate { it.tag to (it.name to it.works) }
+        assertEquals(mapOf("cargo" to ("Cargo" to 1), "freight" to ("Freight" to 0), "shipment" to ("Shipment" to 0)), ofCargo)
+        assertTrue(tagsApi.listTags("shipment", null, null, null, 0, 10).body!!.tags.any { it.key == cargo })
 
         // Offered alike: the other tags of the sites, with how alike their names are; the site's own tag of it, merged
         val similar = tagsApi.listSimilarTags(hulls, null, 0, 50, null, null).body!!.tags

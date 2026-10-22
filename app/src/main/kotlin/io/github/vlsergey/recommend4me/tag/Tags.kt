@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.refusal.Refusal
 import org.springframework.http.HttpStatus
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SynonymsSet
 import io.github.vlsergey.recommend4me.rating.Grades
 import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -260,6 +261,13 @@ class Tags(
                     fromSite.getOrPut(id) { HashSet() } += tag
                     count(id, tag, site, (names[k] ?: k).trim())
                 }
+            }
+            // A synonym the site names of one of its tags — of no work, most often — is a variant of the
+            // tag all the same: a name the tag is known by, found by it
+            s.items.facetSynonyms(siteFacet).keys.forEach { k ->
+                val site = SiteTagRef(s.id, k)
+                val tag = bindings[site]?.let(TagRepository::key) ?: return@forEach
+                out.getOrPut(tag) { TagStats(tag) }.variant(site, (names[k] ?: k).trim())
             }
             // A tag the user gave a work the site does not; a graded work the user said has it not
             s.corrections.allFacets().filter { it.facet == facet && TagRepository.idOf(it.key) != null }.forEach { c ->
@@ -1121,6 +1129,10 @@ class Tags(
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) = schedule("items")
+
+    /** A synonym is a site's tag of its own, bound to the tag of the value it is a synonym of ([TagNormalization]), shown as a variant of it. */
+    @EventListener
+    fun synonymsSet(event: SynonymsSet) = schedule("synonyms")
 
     /** After the tags are normalized on start ([TagNormalization.start]). */
     @Order(-5)

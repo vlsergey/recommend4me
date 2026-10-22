@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.tag
 
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SynonymsSet
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.workload.Work
@@ -50,6 +51,10 @@ class TagVectors(
     /** Works came or changed: their sites' tags bound to tags ([TagNormalization]), maybe new ones. */
     @EventListener
     fun itemsChanged(event: ItemsChanged) = schedule(QUIET_SECONDS, "items")
+
+    /** A site named the synonyms of its tags: bound to their tags at once ([TagNormalization]), each a name more of its tag. */
+    @EventListener
+    fun synonymsSet(event: SynonymsSet) = schedule(QUIET_SECONDS, "synonyms")
 
     /** The vectors made after the quiet; the [reason], a key the interface words, told in the queue of the works. */
     private fun schedule(delaySeconds: Long, reason: String) {

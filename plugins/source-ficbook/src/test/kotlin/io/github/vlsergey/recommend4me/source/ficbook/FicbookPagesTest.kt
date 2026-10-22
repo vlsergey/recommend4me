@@ -137,6 +137,10 @@ class FicbookPagesTest {
             "Работа сосредоточена на эмоциональных и/или физических страданиях одних персонажей и заботе о них со стороны других персонажей.",
             context.facetDescriptions.getValue("tag")["hurt/comfort"],
         )
+        // The other names the site files under it: each a tag of its own, named, a synonym of it
+        val synonyms = mapOf("хёрт/комфорт" to "Хёрт/комфорт", "х/к" to "Х/К", "h/c" to "H/C", "помощь нежностью" to "Помощь нежностью")
+        assertEquals(synonyms.keys.associateWith { "hurt/comfort" }, context.facetSynonyms.getValue("tag"))
+        synonyms.forEach { (key, name) -> assertEquals(name, context.facetNames.getValue("tag")[key]) }
     }
 
     @Test
@@ -150,6 +154,12 @@ class FicbookPagesTest {
             val context = MemorySourceContext()
             assertEquals(emptyList(), capture(context, wanted.url, "tags-search.json"))
             assertEquals(harassment, context.facetDescriptions.getValue("tag")[wanted.form!!.getValue("title")])
+            // The tag found and its synonyms, asked by either: each a tag of its own of the same thing
+            assertEquals("Харассмент", context.facetNames.getValue("tag")["харассмент"])
+            assertEquals(
+                setOf("домогательство", "склонение к сексу", "дискриминация", "домогательства", "сексуальное домогательство", "приставания").associateWith { "харассмент" },
+                context.facetSynonyms.getValue("tag"),
+            )
         }
         // A name the answer has no tag of: nothing said of it
         val other = MemorySourceContext()

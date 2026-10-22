@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.tag
 
 import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SynonymsSet
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -31,8 +32,10 @@ class TagScope(val sources: List<SourceStore>, val tags: TagRepository, val face
 /**
  * EVERY SITE'S TAG IS BOUND TO A NORMALIZED TAG ([TagRepository]). A site's tag seen first is bound
  * to the normalized tag the site's tags of its name are bound to — "Магия" of one site and "магия"
- * of another one tag — when there is exactly one such; else to a new normalized tag of its own.
- * From then on the user binds it: merges tags, takes one out.
+ * of another one tag — when there is exactly one such; else to a new normalized tag of its own. A
+ * synonym the site names of one of its tags ([ItemStore.setFacetValueSynonyms][io.github.vlsergey.recommend4me.source.ItemStore.setFacetValueSynonyms])
+ * is a site's tag of its own bound to the tag that one is bound to — once that one is bound, by a
+ * work that has it. From then on the user binds it: merges tags, takes one out.
  */
 @Component
 class TagNormalization(private val stores: Stores) {
@@ -70,37 +73,63 @@ class TagNormalization(private val stores: Stores) {
         if (keys.isNotEmpty()) bind(scope) { s, _ -> if (s.id == source.id) keys else emptySet() }
     }
 
+    /** The synonyms a site named bound at once: the tags' names and vectors made of them next. */
+    @Order(-100)
+    @EventListener
+    fun synonymsSet(event: SynonymsSet) {
+        val scope = scope() ?: return
+        bind(scope) { _, _ -> emptySet() }
+    }
+
     /**
      * The site's tags [keysOf] gives of every source bound, the ones not bound yet — of whichever
-     * type: a name of a site of games and of one of books one tag; how many. One at a time: two at
-     * once would make two tags of one name.
+     * type: a name of a site of games and of one of books one tag — and every synonym not bound yet
+     * of a site's tag bound; how many. One at a time: two at once would make two tags of one name.
      */
     @Synchronized
     private fun bind(scope: TagScope, keysOf: (SourceStore, String) -> Set<String>): Int {
         val bound = scope.tags.bindings()
         val sites = scope.sources.mapNotNull { s -> siteFacetOf(s, scope.facet)?.let { s to it } }
         val fresh = sites.associate { (s, f) -> s.id to keysOf(s, f).filter { SiteTagRef(s.id, it) !in bound } }.filterValues { it.isNotEmpty() }
-        if (fresh.isEmpty()) return 0
+        val synonyms = sites.associate { (s, f) -> s.id to s.items.facetSynonyms(f) }
+        if (fresh.isEmpty() && synonyms.values.all { of -> of.isEmpty() }) return 0
         val now = Instant.now()
         val namesOf = sites.associate { (s, f) -> s.id to s.names(f) }
         // The normalized tags every name is bound to, of every site
         val byName = HashMap<String, MutableSet<Long>>()
         bound.forEach { (ref, id) -> byName.getOrPut(LayerValues.keyOf(namesOf[ref.source]?.get(ref.tag) ?: ref.tag)) { HashSet() } += id }
         var made = 0
+        val boundNow = HashMap<SiteTagRef, Long>()
+        fun idOf(ref: SiteTagRef) = bound[ref] ?: boundNow[ref]
         fresh.forEach { (source, keys) ->
             val names = namesOf.getValue(source)
+            val of = synonyms[source].orEmpty()
             keys.forEach { key ->
                 val written = (names[key] ?: key).trim()
                 val name = LayerValues.keyOf(written)
-                val id = byName[name]?.singleOrNull() ?: scope.tags.create().also {
+                // A synonym of a tag bound already is that tag; else as any tag, by its name
+                val id = of[key]?.let { idOf(SiteTagRef(source, it)) } ?: byName[name]?.singleOrNull() ?: scope.tags.create().also {
                     byName.getOrPut(name) { HashSet() } += it
                     scope.tags.showAs(it, ShownName(written, NameRule.ALL))
                 }
                 scope.tags.bind(SiteTagRef(source, key), id, now)
+                boundNow[SiteTagRef(source, key)] = id
                 made++
             }
         }
-        log.info("{} tags of the sites bound to normalized tags", made)
+        // The synonyms of the site's tags bound — of no work, maybe — bound with them; of a site's tag
+        // not bound yet, none: bound once a work has it
+        synonyms.forEach { (source, of) ->
+            of.forEach { (synonym, key) ->
+                val ref = SiteTagRef(source, synonym)
+                if (idOf(ref) != null) return@forEach
+                val id = idOf(SiteTagRef(source, key)) ?: return@forEach
+                scope.tags.bind(ref, id, now)
+                boundNow[ref] = id
+                made++
+            }
+        }
+        if (made > 0) log.info("{} tags of the sites bound to normalized tags", made)
         return made
     }
 

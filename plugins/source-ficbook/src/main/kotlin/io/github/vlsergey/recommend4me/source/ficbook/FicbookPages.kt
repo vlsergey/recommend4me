@@ -173,15 +173,24 @@ class FicbookPages(private val context: SourceContext) {
         items.setFacet(id, TAG, links.map { a -> a.text().trim().let { FacetValue(it.lowercase(), it) } }.filter { it.key.isNotEmpty() })
 
     /**
-     * A tag's own page: its heading names it — «Метка «Hurt/Comfort» - фанфики и ориджиналы» — and
-     * the box under it says what it means. The tag is known by its name as the works write it.
+     * A tag's own page: its heading names it — «Метка «Hurt/Comfort» - фанфики и ориджиналы» — the
+     * box under it says what it means, and the line under that the other names the site files under
+     * it — «Синонимы: Хёрт/комфорт, Х/К, H/C» — each a tag of its own of the same thing. The tag is
+     * known by its name as the works write it.
      */
     private fun tagPage(doc: Document) {
         val name = doc.selectFirst("h1.heading")?.text()?.let { TAG_HEADING.find(it)?.groupValues?.get(1) }?.trim()?.ifEmpty { null } ?: return
         val description = doc.selectFirst(".primary-box p.text-t3")?.let { PageText.of(it) }?.trim()?.ifEmpty { null }
+        val synonyms = doc.select(".primary-box .text-muted").map { it.text().trim() }.firstOrNull { it.startsWith(SYNONYMS) }
+            ?.removePrefix(SYNONYMS)?.split(',').orEmpty()
         items.nameFacetValues(TAG, mapOf(name.lowercase() to name))
         description?.let { items.describeFacetValues(TAG, mapOf(name.lowercase() to it)) }
+        items.setFacetValueSynonyms(TAG, mapOf(name.lowercase() to synonymsOf(name, synonyms)))
     }
+
+    /** The synonyms of the tag [name] by their keys, as the works would write them: none empty, none the tag itself. */
+    private fun synonymsOf(name: String, synonyms: List<String>): Map<String, String> =
+        synonyms.map { it.trim() }.filter { it.isNotEmpty() }.associateBy { it.lowercase() } - name.lowercase()
 
     /**
      * The answer of the site's search of tags the browser made for the application ([Ficbook.describing]),
@@ -196,6 +205,12 @@ class FicbookPages(private val context: SourceContext) {
         val found = runCatching { JSON.readTree(page.html) }.getOrNull()?.path("data")?.path("tags") ?: return
         fun named(t: JsonNode) = t.path("title").asString("").trim().lowercase()
         val tag = found.firstOrNull { named(it) == asked } ?: found.firstOrNull { t -> t.path("synonyms").any { named(it) == asked } } ?: return
+        // The tag and the other names the site files under it, each a tag of its own of the same thing
+        val name = tag.path("title").asString("").trim()
+        if (name.isNotEmpty()) {
+            items.nameFacetValues(TAG, mapOf(name.lowercase() to name))
+            items.setFacetValueSynonyms(TAG, mapOf(name.lowercase() to synonymsOf(name, buildList { tag.path("synonyms").forEach { add(it.path("title").asString("")) } })))
+        }
         val description = tag.path("description").asString("").trim().ifEmpty { null } ?: return
         items.describeFacetValues(TAG, mapOf(asked to description))
     }
@@ -325,6 +340,9 @@ class FicbookPages(private val context: SourceContext) {
 
         /** The heading of a tag's page: the name between the outer quotes, whatever quotes it holds itself. */
         private val TAG_HEADING = Regex("^Метка «(.*)»\\s*-\\s*фанфики")
+
+        /** What the line of a tag's other names begins with, on its page. */
+        private const val SYNONYMS = "Синонимы:"
         private val AUTHOR_ID = Regex("^/authors/([^/?#]+)")
 
         /** The fandom of the original works. */

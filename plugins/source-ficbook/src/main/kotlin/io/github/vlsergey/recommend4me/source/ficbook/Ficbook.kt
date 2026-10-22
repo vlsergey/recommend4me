@@ -84,8 +84,10 @@ class Ficbook : Source {
      * characters alone in one field, every entry of the line as written; the fandom a standard one.
      * 7: what a tag's own page says the tag means. 8: the direction a standard one, with AO3's category.
      * 9: the covers as the site draws them now: of a work's own page, and of a card of a list as a picture.
+     * 10: the covers of the cards of a list, a picture of a source for every width. 11: a tag's
+     * synonyms, of its own page and of the search of tags — each a tag of its own of the same thing.
      */
-    override val parserVersion = 10
+    override val parserVersion = 11
 
     override val signals = listOf(
         Books.READ.asSignal(),

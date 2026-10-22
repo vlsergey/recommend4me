@@ -22,6 +22,7 @@
   "Reason.setVectors": "new vectors of sets",
   "Reason.setsGrew": "sets grew",
   "Reason.start": "the application started",
+  "Reason.synonyms": "a site named the synonyms of its tags",
   "Reason.tagByText": "an answer on a tag by the text",
   "Reason.tags": "tags changed",
   "Reason.texts": "texts encoded",

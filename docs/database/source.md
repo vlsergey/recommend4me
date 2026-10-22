@@ -9,6 +9,7 @@
 | `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order |
 | `facet_value` | the name of a value the site names by key (a tag's id) |
 | `facet_value_description` | what the site says a value means (a tag's own page) |
+| `facet_value_synonym` | another name the site gives a value (a tag's synonym): a value of its own, bound to the tag the value is bound to |
 | `facet_value_vector` | the vector of a value's name, held against texts to tell whether the value fits them |
 | `item_number` | a work's number: words, chapters, likes… |
 | `item_text` | a work's text by role: the description, the notes… |
@@ -45,6 +46,11 @@ erDiagram
         VARCHAR facet PK
         VARCHAR value_key PK
         VARCHAR description
+    }
+    facet_value_synonym {
+        VARCHAR facet PK
+        VARCHAR synonym_key PK
+        VARCHAR value_key
     }
     facet_value_vector {
         VARCHAR facet PK

@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.item
 import io.github.vlsergey.recommend4me.database.source.tables.references.CAPTURED_PAGE
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
+import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_SYNONYM
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_FACET
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_NUMBER
@@ -185,6 +186,34 @@ class ItemRepository(
             db.select(d.VALUE_KEY, d.DESCRIPTION).from(d).where(d.FACET.eq(facet), d.VALUE_KEY.`in`(chunk)).fetch { it.value1()!! to it.value2()!! }
         }.toMap()
     }
+
+    /**
+     * The synonyms of the facet's values [synonyms] gives — value key to synonym key to its name —
+     * written in place of those the values had; each synonym named. A synonym is of one value: given
+     * of another, it is of that one now. One writer at a time, as of the names.
+     */
+    @Synchronized
+    fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
+        if (synonyms.isEmpty()) return
+        val s = FACET_VALUE_SYNONYM
+        db.transaction { c ->
+            val tx = DSL.using(c)
+            tx.deleteFrom(s).where(s.FACET.eq(facet), s.VALUE_KEY.`in`(synonyms.keys.map { it.take(500) })).execute()
+            synonyms.forEach { (key, of) ->
+                of.keys.filter { it != key }.forEach { synonym ->
+                    tx.insertInto(s).set(s.FACET, facet).set(s.SYNONYM_KEY, synonym.take(500)).set(s.VALUE_KEY, key.take(500))
+                        .onDuplicateKeyUpdate().set(s.VALUE_KEY, key.take(500))
+                        .execute()
+                }
+            }
+        }
+        nameFacetValues(facet, synonyms.values.fold(emptyMap()) { all, names -> all + names })
+    }
+
+    /** Every synonym of the facet's values: the synonym's key to the value's key. */
+    fun facetSynonyms(facet: String): Map<String, String> =
+        db.select(FACET_VALUE_SYNONYM.SYNONYM_KEY, FACET_VALUE_SYNONYM.VALUE_KEY).from(FACET_VALUE_SYNONYM).where(FACET_VALUE_SYNONYM.FACET.eq(facet))
+            .fetchMap({ it.value1()!! }, { it.value2()!! })
 
     /** Every named value of one facet: key to name. */
     fun facetNames(facet: String): Map<String, String> =

@@ -85,6 +85,14 @@ interface ItemStore {
     /** What the site says the facet's values mean — a tag's own page describing it — by key; a description given before is replaced. */
     fun describeFacetValues(facet: String, descriptions: Map<String, String>)
 
+    /**
+     * The other names the site gives facet values — the synonyms of a tag of ficbook — by the
+     * value's key: each synonym (its key to its name) a value of its own, named, and the same thing
+     * as the value — a site's tag bound to the tag the value is. The synonyms given before of the
+     * values given are replaced.
+     */
+    fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>)
+
     /** The keys of the item's values of every facet. */
     fun facets(itemId: String): Map<String, List<String>>
 

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.item.SynonymsSet
 import io.github.vlsergey.recommend4me.part.PartsSaved
 import io.github.vlsergey.recommend4me.picture.PicturesListed
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -69,6 +70,12 @@ class SourceContexts(private val stores: Stores, private val settings: Settings,
         }
 
         override fun describeFacetValues(facet: String, descriptions: Map<String, String>) = write { store.items.describeFacetValues(facet, descriptions) }
+
+        override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
+            if (synonyms.isEmpty()) return
+            write { store.items.setFacetValueSynonyms(facet, synonyms) }
+            events.publishEvent(SynonymsSet(store.id, facet))
+        }
 
         /**
          * The values of a standard facet with a closed list of them ([StandardFacet][io.github.vlsergey.recommend4me.contenttype.StandardFacet])
