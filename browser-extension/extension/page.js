@@ -782,8 +782,8 @@
   }
 
   /**
-   * What goes beside a value the user has not answered on: the model's chance in small print —
-   * amber when the work more likely has it not — and the user's ✓ (it has it) and ✕ (it has it
+   * What goes beside a value the user has not answered on: "site" by one the site gives, the model's
+   * chance in small print — amber when the work more likely has it not — and the user's ✓ (it has it) and ✕ (it has it
    * not). A value the user confirmed or added keeps one button that takes the word back, shown
    * when the chip is pointed at; one the user took away has ↺.
    */
@@ -803,6 +803,8 @@
       out.push(Object.assign(el("r4m-chance", null, "↑"), { title: t("value.implied") }));
       return out;
     }
+    // The site gives it: told apart from the model's offers, the chance beside it the model's word
+    if (v.fromSite && !v.draftedFrom) out.push(Object.assign(el("r4m-chance", null, t("value.fromSite")), { title: t("value.fromSiteNote") }));
     if (v.draftedFrom) {
       // Drafted from the site's value through the dictionary: said so, not a chance of the model
       out.push(Object.assign(el("r4m-chance", null, t("value.drafted")), { title: t("value.draftedFrom", { from: v.draftedFrom }) }));

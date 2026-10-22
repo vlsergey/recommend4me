@@ -436,6 +436,11 @@ class SiteTest {
         // By its name — any case until the names are worked out again — with its chance
         assertEquals("magic", magic.name.lowercase())
         assertNotNull(magic.chance, "the chance of magic of w1: $magic")
+        // Marked as the site's, told apart from the model's offers; the model's own come after every one of the site's
+        assertTrue(listOf("space", "ships", "magic").all { k -> worked.propertyValues.single { it.key == tag(k) }.fromSite == true }, "${worked.propertyValues}")
+        assertTrue(worked.propertyValues.none { it.fromSite == true && it.key !in setOf(tag("space"), tag("ships"), tag("magic")) }, "${worked.propertyValues}")
+        val siteAt = worked.propertyValues.indexOfLast { it.fromSite == true }
+        assertTrue(worked.propertyValues.withIndex().none { (i, v) -> v.offered == true && v.fromSite != true && i < siteAt }, "${worked.propertyValues}")
 
         // The site's word is not corrected
         val refused = assertThrows<Refused> { corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = true, key = "space")) }

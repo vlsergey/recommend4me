@@ -2317,8 +2317,17 @@ components:
         offered:
           type: boolean
           description: |
-            Not the work's: one of the likeliest other values of a facet of the layer, offered for the
-            user to answer on so that a work is offered at least three the site does not give
+            Not the work's: a value of a facet of the layer the site gives the work but the model does
+            not (fromSite), or one of the likeliest other values, offered for the user to answer on so
+            that a work is offered at least three the site does not give
+        fromSite:
+          type: boolean
+          description: |
+            Of a facet of the layer: the site gives the work the value - a tag of the site bound to it.
+            Shown by a value the user has not answered on, beside the chance, and kept on the cards and
+            in the reading view even when only offered (the model doubting the site): the site's word
+            is never hidden. The site's values only offered come right after the work's values, before
+            the model's own offers
         implied:
           type: boolean
           description: The work's only as a tag above a tag of it (TagInfo.parents); not answered on by itself

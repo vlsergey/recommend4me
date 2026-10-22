@@ -113,8 +113,9 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
             // A facet said to have no other values is shown with none too: the answer is there to take back
             if (!empty && keys.isEmpty() && removed.isEmpty() && offered.isEmpty() && original == null && def.key !in complete) return@mapNotNull null
             // The value's own name — a tag's as the user and the sites name it — the name the answer was given with only of a value nothing else names
-            // The names of the values offered the caller did not read — a site's tags bound to tags of the layer — in one read
-            val unnamed = offered.filter { names[def.key]?.containsKey(it) != true }
+            // The names of the values the caller did not read — a site's tags bound to tags of the layer
+            // offered, a tag above one of the work's — in one read
+            val unnamed = (keys + offered).filter { names[def.key]?.containsKey(it) != true }
             val more = if (unnamed.isEmpty()) emptyMap() else store.names(def.key, unnamed)
             fun name(key: String) = names[def.key]?.get(key) ?: more[key] ?: added[key] ?: key
             // What the catalogue says of a universe or a character shown: one read of the facet's
@@ -131,6 +132,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                     inferred = (key in had && key !in siteKeys && draftedFrom == null).takeIf { it },
                     draftedFrom = draftedFrom,
                     offered = offer.takeIf { it },
+                    fromSite = (def.infer && key in fromSite).takeIf { it },
                     implied = (key in implied).takeIf { it },
                     description = described[key],
                 )
@@ -140,15 +142,16 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 labelKey = I18nKeys.facetLabel(store.id, def),
                 editable = def.editable,
                 tags = (def.key in store.tagFacets).takeIf { it },
-                // In the order shown: the likeliest first — a value with no chance after them — and a
-                // tag above another before it ([TagHierarchy.parentsFirst]); the pages keep it
+                // In the order shown: the work's values and those rejected, then the site's values only
+                // offered, then the model's offers; in each the likeliest first — a value with no chance
+                // after them — and a tag above another before it ([TagHierarchy.parentsFirst]); the pages keep it
                 propertyValues = (keys.map { k ->
                     // Confirmed: the site or the model gave it — the model even when the user's answer
                     // has since made it the work's own, no longer the model's to give
                     val given = k in had || (own[k]?.chance ?: 0.0) > ModelValues.LIKELY
                     info(k, if (k in added) (if (given) FacetValueInfo.Corrected.CONFIRMED else FacetValueInfo.Corrected.ADDED) else null)
                 } + offered.map { info(it, null, offer = true) } + removed.map { info(it, FacetValueInfo.Corrected.REMOVED) })
-                    .sortedByDescending { it.chance ?: -1.0 }
+                    .sortedWith(compareBy<FacetValueInfo> { if (it.offered != true) 0 else if (it.fromSite == true) 1 else 2 }.thenByDescending { it.chance ?: -1.0 })
                     .let { values -> hierarchy?.parentsFirst(values) { it.key } ?: values },
                 original = original,
                 complete = (def.key in complete).takeIf { it },

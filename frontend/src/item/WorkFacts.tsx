@@ -5,7 +5,7 @@ import { ago, compact, formatDate, number } from "@/i18n/format";
 import { intlTag } from "@/i18n/i18n";
 import { label, valueName } from "@/i18n/label";
 import { cn } from "@/lib/utils";
-import { FacetBadges } from "./pieces";
+import { FacetBadges, shownOnCard } from "./pieces";
 
 /** The facets of the work the source gives a role, in the source's order. */
 export function facetsOfRole(source: SourceInfo, facets: ItemFacet[], role: FacetRole): ItemFacet[] {
@@ -96,13 +96,14 @@ export function OriginalOf({ source, facets, facet }: { source: SourceInfo; face
 
 /**
  * What is in the work — its genres, tags, fandom, the facets of the role CONTENT — as plain chips:
- * one the user confirmed filled with a ✓, one the model doubts amber-edged, one the user took away left out.
- * The chances and the answers are the marking's, not the reading's.
+ * one the user confirmed filled with a ✓, one the model doubts amber-edged, one of the site's the
+ * model doubts dashed ([shownOnCard]), one the user took away left out. The chances and the answers
+ * are the marking's, not the reading's.
  */
 export function ContentFacts({ source, facets, except = [] }: { source: SourceInfo; facets: ItemFacet[]; except?: readonly string[] }) {
   const content = facetsOfRole(source, facets, "CONTENT")
     .filter((f) => !except.includes(f.facet))
-    .map((f) => ({ ...f, values: f.values.filter((v) => v.corrected !== "REMOVED" && !v.offered) }))
+    .map((f) => ({ ...f, values: f.values.filter((v) => v.corrected !== "REMOVED" && shownOnCard(v)) }))
     .filter((f) => f.values.length > 0);
   if (content.length === 0) return null;
   return (

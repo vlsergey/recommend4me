@@ -19,9 +19,9 @@ and tell the user to update the extension.
 | What | Web interface | Extension (`page.js`) |
 |---|---|---|
 | A value as a chip, its look by its state | `correction/FacetCorrections.tsx` `FacetValue` | `valueChip` |
-| The order of a facet's values and candidates: the server's (likeliest first, a tag above another before it), kept while the work is open | `facet/valueOrder.ts` | `stableOrder` |
+| The order of a facet's values and candidates: the server's (the work's values, then the site's only offered, then the model's offers; likeliest first, a tag above another before it), kept while the work is open | `facet/valueOrder.ts` | `stableOrder` |
 | ✓ ✕ ↺ of a value; none of a tag the work has by a tag under it (`implied`) | `correction/FacetAnswers.tsx` | `answers` |
-| The mark beside a value: chance, "by tag" (`draftedFrom`), ↑ (`implied`) | `facet/FacetValueMarks.tsx` | `answers` |
+| The mark beside a value: chance, "site" (`fromSite`), "by tag" (`draftedFrom`), ↑ (`implied`) | `facet/FacetValueMarks.tsx` | `answers` |
 | "✓ all" — the unanswered values, not offered, not implied | `FacetCorrections.tsx` `FacetLine` | `facetBlock` |
 | "…" — more candidates; busy only while its own press is | `FacetCorrections.tsx` `MoreCandidates` (`AsyncButton`) | `moreOf` |
 | A value found by its name and added | `FacetCorrections.tsx` `SearchButton` + `AddFacetValue`; characters `universe/FanficSection.tsx` `Picker` | `addField` |

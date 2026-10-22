@@ -27,6 +27,17 @@ function DraftedMark({ from }: { from: string }) {
   );
 }
 
+/** "site" in small print by a value the site gives the work, the user not having answered on it: told apart from the model's offers. */
+function SiteMark() {
+  const { t } = useTranslation("facet");
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="cursor-help text-[10px] text-muted-foreground" />}>{t("ChanceMark.fromSite")}</TooltipTrigger>
+      <TooltipContent>{t("ChanceMark.fromSiteNote")}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** The model more likely says no than yes to a value the user has not answered on. */
 export function unlikely(value: FacetValueInfo): boolean {
   const chance = shownChance(value);
@@ -35,12 +46,23 @@ export function unlikely(value: FacetValueInfo): boolean {
 
 /**
  * "87%" in small print — the model's chance by the value's name; amber, with a word why, when below
- * one half. A drafted value the user has not answered on says so instead.
+ * one half; "site" before it by a value the site gives. A drafted value the user has not answered on
+ * says so instead.
  */
 export function ChanceMark({ value }: { value: FacetValueInfo }) {
-  const { t } = useTranslation("facet");
   // Null in the JSON for a value not drafted, as the chance: not only absent
   if (value.draftedFrom != null && !value.corrected) return <DraftedMark from={value.draftedFrom} />;
+  const site = value.fromSite && !value.corrected && !value.implied;
+  return (
+    <>
+      {site && <SiteMark />}
+      <Chance value={value} />
+    </>
+  );
+}
+
+function Chance({ value }: { value: FacetValueInfo }) {
+  const { t } = useTranslation("facet");
   const chance = shownChance(value);
   if (chance === undefined) return null;
   const text = percent(chance);

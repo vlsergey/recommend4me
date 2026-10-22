@@ -314,19 +314,29 @@ function facetValueTitle(t: TFunction<"item">, facet: ItemFacet, value: FacetVal
     (unlikely(value) ? ` — ${t("FacetBadges.unlikely")}` : "") +
     (value.inferred ? ` · ${t("FacetBadges.inferred")}` : "") +
     (value.draftedFrom != null && !value.corrected ? ` · ${t("FacetBadges.drafted", { from: value.draftedFrom })}` : "") +
-    (value.implied ? ` · ${t("FacetBadges.implied")}` : "")
+    (value.implied ? ` · ${t("FacetBadges.implied")}` : "") +
+    (value.fromSite && !value.corrected ? ` · ${t("FacetBadges.fromSite")}` : "") +
+    (value.offered ? ` — ${t("FacetBadges.offered")}` : "")
   );
 }
 
 /**
- * The facets shown on a card, value by value; a value the user took away is crossed out, one the
- * user confirmed or added is filled with a ✓, one the model more likely says no to is
- * amber-edged. [limit] cuts the list, the rest go into "+N" with their names in its title.
+ * A value the work's chips show: not one only offered to answer on — not the work's — but the site's
+ * own the model doubts, which stays: the site's word is never hidden.
+ */
+export function shownOnCard(value: FacetValueInfo): boolean {
+  return !value.offered || value.fromSite === true;
+}
+
+/**
+ * The facets shown on a card, value by value ([shownOnCard]); a value the user took away is crossed
+ * out, one the user confirmed or added is filled with a ✓, one the model more likely says no to is
+ * amber-edged, and one of the site's the model doubts — not the work's until the user confirms it —
+ * dashed and faded. [limit] cuts the list, the rest go into "+N" with their names in its title.
  */
 export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[]; limit?: number; className?: string }) {
   const { t } = useTranslation("item");
-  // A value only offered to answer on is not the work's: the cards leave it out
-  const values = facets.flatMap((f) => f.values.filter((v) => !v.offered).map((v) => ({ facet: f, value: v })));
+  const values = facets.flatMap((f) => f.values.filter(shownOnCard).map((v) => ({ facet: f, value: v })));
   const shown = limit === undefined ? values : values.slice(0, limit);
   const rest = values.slice(shown.length);
   if (values.length === 0) return null;
@@ -341,6 +351,7 @@ export function FacetBadges({ facets, limit, className }: { facets: ItemFacet[];
             value.corrected === "REMOVED" && "text-muted-foreground line-through",
             (value.corrected === "ADDED" || value.corrected === "CONFIRMED") && "border-yes/50 bg-yes/15",
             unlikely(value) && "border-maybe/60",
+            value.offered && "border-dashed text-muted-foreground",
           )}
           title={facetValueTitle(t, facet, value)}
         >
