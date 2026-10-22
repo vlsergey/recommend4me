@@ -41,14 +41,16 @@ async function wanted(url) {
   return patterns.some((re) => re.test(url));
 }
 
-// watchPage — the script put into a wanted page — is in watch.js, shared with the userscript
+// watchPage and pageHtml — what is put into a wanted page — are in watch.js, shared with the
+// userscript: the file is put into the page first, the call after it
 
 async function inject(tabId, url) {
   const { enabled, decorate } = await loadSettings();
   if (!(enabled || decorate) || !(await wanted(url))) return;
   if (enabled) {
     try {
-      await browser.scripting.executeScript({ target: { tabId }, func: watchPage });
+      await browser.scripting.executeScript({ target: { tabId }, files: ["watch.js"] });
+      await browser.scripting.executeScript({ target: { tabId }, func: () => watchPage() });
     } catch (e) {
       console.warn("recommend4me: cannot watch", url, e);
     }
@@ -196,9 +198,10 @@ async function status() {
 
 /** The page of a tab sent now, by the popup's button, whatever the patterns say. */
 async function sendNow(tabId) {
+  await browser.scripting.executeScript({ target: { tabId }, files: ["watch.js"] });
   const [{ result }] = await browser.scripting.executeScript({
     target: { tabId },
-    func: () => ({ url: location.href, html: document.documentElement.outerHTML }),
+    func: () => ({ url: location.href, html: pageHtml() }),
   });
   return capture(result.url, result.html, tabId);
 }

@@ -38,8 +38,10 @@ class Captures(private val stores: Stores, private val contexts: SourceContexts)
     /** The addresses every source wants, by source. */
     fun patterns(): Map<String, List<String>> = tracking().associate { s -> s.id to s.source.capturePatterns.map { it.pattern } }
 
-    fun capture(url: String, html: String): Captured {
+    fun capture(url: String, sent: String): Captured {
         val store = tracking().firstOrNull { s -> s.source.capturePatterns.any { it.matches(url) } } ?: return Captured(null, emptyList())
+        // The extension and the userscript strip them themselves; an older version of them does not
+        val html = PageSecrets.stripped(sent)
         val now = Instant.now()
         val started = System.currentTimeMillis()
         // The parts whose text the page gave, as the source saves them: the user sees a chapter's text went

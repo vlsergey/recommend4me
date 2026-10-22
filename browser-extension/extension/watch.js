@@ -4,9 +4,27 @@
  */
 
 /**
- * Sends the page's DOM now and whenever it grows, for a minute: browser.runtime.sendMessage with
+ * The page as it is sent: without what page.js put into it (every element marked data-r4m, its
+ * classes on the page's own elements), and without the page's scripts and the tokens of the user's
+ * session on the site — a CSRF meta, the hidden token of a form. The parsers read none of these, and
+ * a sent page is kept for good, in every backup too.
+ */
+function pageHtml() {
+  const copy = document.documentElement.cloneNode(true);
+  copy.querySelectorAll("[data-r4m], [data-r4m-style]").forEach((e) => e.remove());
+  copy
+    .querySelectorAll(".r4m-removed, .r4m-doubted, .r4m-marked")
+    .forEach((e) => e.classList.remove("r4m-removed", "r4m-doubted", "r4m-marked"));
+  copy
+    .querySelectorAll('script, meta[name*="csrf" i], meta[name*="token" i], input[name*="csrf" i], input[name*="token" i]')
+    .forEach((e) => e.remove());
+  return copy.outerHTML;
+}
+
+/**
+ * Sends the page's DOM ([pageHtml]) now and whenever it grows, for a minute: browser.runtime.sendMessage with
  * {type: "capture"} — the background script of the extension, or the userscript's stand-in for it.
- * What page.js puts into the page (every element marked data-r4m) is neither sent nor counted as growth.
+ * What page.js puts into the page is not counted as growth either.
  */
 function watchPage() {
   if (window.__recommend4meWatching) return;
@@ -18,10 +36,7 @@ function watchPage() {
   let timer = null;
   const ours = (node) => node.nodeType === 1 && (node.hasAttribute("data-r4m") || node.closest("[data-r4m]"));
   const send = () => {
-    const copy = document.documentElement.cloneNode(true);
-    copy.querySelectorAll("[data-r4m], [data-r4m-style]").forEach((e) => e.remove());
-    copy.querySelectorAll(".r4m-removed, .r4m-doubted").forEach((e) => e.classList.remove("r4m-removed", "r4m-doubted"));
-    const html = copy.outerHTML;
+    const html = pageHtml();
     // Grown by less than a hundredth: a counter ticked, nothing new to read
     if (Math.abs(html.length - lastLength) < lastLength / 100) return;
     lastLength = html.length;

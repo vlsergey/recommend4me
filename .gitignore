@@ -16,6 +16,8 @@ browser-extension/dist/
 data/
 models/
 *.hprof
+# Pages saved from the sites at hand carry the tokens of the user's session: never committed from the root
+/*.html
 
 # IDE
 .idea/
