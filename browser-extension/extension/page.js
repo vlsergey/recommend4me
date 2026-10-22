@@ -1487,9 +1487,14 @@
     byText.set(facet, state);
     state.open = true;
     render();
-    // How often, as the user chose it last
-    const kept = (await browser.storage.local.get({ byTextRefresh: BY_TEXT_EVERY })).byTextRefresh;
-    state.every = BY_TEXT_REFRESH.includes(kept) ? kept : BY_TEXT_EVERY;
+    // How often, as the user chose it last; the list read all the same when that cannot be read
+    // (a page left from before the extension was updated has no storage any more)
+    try {
+      const kept = (await browser.storage.local.get({ byTextRefresh: BY_TEXT_EVERY })).byTextRefresh;
+      state.every = BY_TEXT_REFRESH.includes(kept) ? kept : BY_TEXT_EVERY;
+    } catch (e) {
+      console.warn("recommend4me: the choice of how often is not read", e);
+    }
     readByText(item, facet);
   }
 
@@ -1545,6 +1550,8 @@
     body.addEventListener("scroll", () => (state.scroll = body.scrollTop));
     body.appendChild(el("r4m-note", null, state.locked ? `${t("byText.toggleHint")} ⟳` : t("byText.toggleHint")));
     if (state.error) body.appendChild(Object.assign(el("r4m-note", "r4m-failure", t("byText.failed", { error: state.error })), { role: "alert" }));
+    // Not read yet: said so, never an empty window
+    else if (!state.list) body.appendChild(el("r4m-note", null, t("byText.loading")));
     const list = state.list;
     if (list) {
       if (list.pending) body.appendChild(el("r4m-note", null, t("byText.pending")));
