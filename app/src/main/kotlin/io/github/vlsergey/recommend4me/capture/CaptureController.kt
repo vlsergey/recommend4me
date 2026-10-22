@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.api.model.CapturedPart as ApiCapturedPart
 import io.github.vlsergey.recommend4me.api.model.CapturedPageInfo
 import io.github.vlsergey.recommend4me.api.model.ExtensionInfo
 import io.github.vlsergey.recommend4me.api.model.LinkedItem
+import io.github.vlsergey.recommend4me.api.model.WantedPageInfo
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.ResponseEntity
@@ -44,7 +45,7 @@ class CaptureController(
         val parts = captured.parts.map { p ->
             ApiCapturedPart(p.item.source, p.item.id, p.length, stores.source(p.item.source)?.items?.find(p.item.id)?.title, p.title)
         }
-        return ResponseEntity.ok(CaptureResult(items, captured.source, parts))
+        return ResponseEntity.ok(CaptureResult(items, captured.source, parts, captured.wanted.map { WantedPageInfo(it.url, it.form) }))
     }
 
     override fun recentCaptures(): ResponseEntity<List<CapturedPageInfo>> =

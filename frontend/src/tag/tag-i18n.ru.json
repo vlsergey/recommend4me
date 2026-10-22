@@ -117,6 +117,7 @@
   "Similar.title": "Похожие по смыслу названия",
   "Similar.works": "Работ с тегом",
   "TagDetails.allTags": "Все теги",
+  "TagDetails.awaitedDescription": "Описание метки запрошено у сайта ({{site}}): оно придёт, когда в браузере с расширением будет открыта любая страница сайта",
   "TagDetails.graded": "оценено {{graded, number}}",
   "TagDetails.liked": "понравилось {{liked, number}}",
   "TagDetails.loadError": "Тег не загрузился: {{error}}",

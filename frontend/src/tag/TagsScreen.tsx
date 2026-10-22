@@ -631,7 +631,9 @@ function TagName({ tag }: { tag: TagInfo }) {
  * each with who says it.
  */
 function TagDescriptions({ tag }: { tag: TagInfo }) {
-  if (tag.descriptions.length === 0) return null;
+  const { t } = useTranslation("tag");
+  const awaited = tag.awaitedDescriptions ?? [];
+  if (tag.descriptions.length === 0 && awaited.length === 0) return null;
   return (
     <ul className="flex flex-col gap-1 text-sm">
       {tag.descriptions.map((d, i) => (
@@ -641,6 +643,12 @@ function TagDescriptions({ tag }: { tag: TagInfo }) {
             — {sourceTitle(d.origin)}
             {d.name && d.name !== tag.name ? `, «${d.name}»` : ""}
           </span>
+        </li>
+      ))}
+      {/* A site asked for its word by the browser, from a page of it open there: not come yet */}
+      {awaited.map((site) => (
+        <li key={`awaited-${site}`} className="text-xs text-muted-foreground">
+          {t("TagDetails.awaitedDescription", { site: sourceTitle(site) })}
         </li>
       ))}
     </ul>

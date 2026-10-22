@@ -118,6 +118,15 @@ interface Source {
      */
     fun capture(page: CapturedPage, context: SourceContext): List<String> = emptyList()
 
+    /**
+     * The requests of the site that bring what it says [tags] — keys of its [facet] — mean, made for
+     * the application by the browser from a page of the site the user has open (a site that checks
+     * its visitors lets the user's browser in, not the application), and sent back as captured pages
+     * under their [WantedPage.url], read by [capture]. Empty: the site does not describe them, or the
+     * source reads it otherwise.
+     */
+    fun describing(facet: String, tags: List<String>): List<WantedPage> = emptyList()
+
     // --- Scraping ---
 
     /** Runs a job of [mode] (not [SourceMode.BROWSER]) to its end, cancelled or failed. */
@@ -168,6 +177,13 @@ interface Source {
  * updates are left.
  */
 class ScrapeProgress(val stage: String, val done: Int, val total: Int, val complete: Boolean)
+
+/**
+ * A request of the site the browser makes for a source ([Source.describing]): [url] asked, with
+ * [form] sent as the body of a POST, or as a GET without one; what it answers is sent back as a
+ * captured page under [url] — its address, a capture pattern of the source matches it.
+ */
+data class WantedPage(val url: String, val form: Map<String, String>? = null)
 
 /** A page the browser sent: its address, the DOM as the user saw it, and when. */
 class CapturedPage(

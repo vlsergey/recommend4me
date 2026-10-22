@@ -19,13 +19,16 @@ import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.source.TextRole
+import io.github.vlsergey.recommend4me.source.WantedPage
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
+import java.net.URLEncoder
 
 /**
  * ficbook.net — fanfics and originals, read in the browser and seen by the extension only: the
  * site checks its visitors, and the application requests no page of it. What a page shows is kept:
  * the cards of every list, a work's header with its table of contents, the text of every part read,
- * and the readers' comments ("Отзывы") as the opinions of other people about the work.
+ * and the readers' comments ("Отзывы") as the opinions of other people about the work. What a tag
+ * means the browser asks the site's search of tags for, from a page of the site open in it ([describing]).
  */
 class Ficbook : Source {
     override val id = ID
@@ -116,12 +119,23 @@ class Ficbook : Source {
 
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
 
+    /**
+     * A tag by the site's search of tags, the one its page of all the tags asks: by the name — the
+     * key is the name in lower case, which the search finds as well — it answers the tag's
+     * description, read by [FicbookPages]. The address carries the name: the answer is known by it.
+     */
+    override fun describing(facet: String, tags: List<String>): List<WantedPage> =
+        if (facet != TAG) emptyList() else tags.map { WantedPage(tagSearch(it), mapOf("title" to it)) }
+
     companion object {
         const val ID = "ficbook"
         const val BASE = "https://ficbook.net"
 
         /** A work's page, a part of it, its comments. */
         private val ITEM_ADDRESS = Regex("^https?://(?:www\\.)?ficbook\\.net/readfic/([0-9a-f-]+)(?:[/?#]|$)")
+
+        /** The site's search of tags by a tag's name, posted with the name as "title": the name in the address too. */
+        fun tagSearch(name: String) = "$BASE/tags/search?title=${URLEncoder.encode(name, Charsets.UTF_8)}"
 
         const val AUTHOR = "author"
         const val FANDOM = "fandom"

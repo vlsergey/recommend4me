@@ -3808,6 +3808,26 @@ components:
           description: The parts (chapters) whose text the page gave and the source saved
           items:
             $ref: '#/components/schemas/CapturedPart'
+        wanted:
+          type: array
+          description: |
+            The requests of the site the source wants the browser to make for it from the page's own tab -
+            what the site says its tags mean - each answer sent back as a page under the request's url
+          items:
+            $ref: '#/components/schemas/WantedPageInfo'
+
+    WantedPageInfo:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Asked of the site; its answer sent back as a captured page under this address
+        form:
+          type: object
+          description: The fields sent as the body of a POST, URL-encoded; none - a GET
+          additionalProperties:
+            type: string
 
     CapturedPart:
       type: object
@@ -4359,6 +4379,13 @@ components:
             entries do; of the one tag asked alone, none in a list
           items:
             $ref: '#/components/schemas/TagDescription'
+        awaitedDescriptions:
+          type: array
+          description: >
+            The sites whose own word on its tags is asked of the browser and not come yet - brought when a page of the
+            site is next open in it; of the one tag asked alone, none in a list
+          items:
+            type: string
         catalogueOffers:
           type: array
           description: >

@@ -7,6 +7,9 @@
  * the browser. A page is sent when it has loaded, and again when its content grows while the user
  * is on it, at most once every few seconds and not after a minute.
  *
+ * The answer to a sent page may name requests of the site the application wants made for it (what
+ * the site says its tags mean): they are made from the page's own tab and sent back (fetchWanted).
+ *
  * AND THE SITE AS THE APPLICATION'S INTERFACE: on the same pages page.js shows what the
  * application knows of the work and lets the user grade it, correct its tags, mark its reviews and
  * pictures (see page.js). Its calls to the application go through here: the page's own origin may
@@ -106,6 +109,7 @@ async function capture(url, html, tabId) {
       await browser.action.setBadgeText({ text: result.items.length ? String(result.items.length) : "✓", tabId });
       // The page shows the work as the application knows it now
       browser.tabs.sendMessage(tabId, { type: "captured", url }).catch(() => {});
+      if (result.wanted && result.wanted.length) fetchWanted(tabId, result.wanted);
     }
   } catch (e) {
     entry.error = String(e.message || e);
@@ -117,6 +121,48 @@ async function capture(url, html, tabId) {
   recent.unshift(entry);
   recent.length = Math.min(recent.length, RECENT);
   return entry;
+}
+
+/** The requests of a site being made now: not made twice when the pages of a tab are sent again meanwhile. */
+const fetching = new Set();
+
+/**
+ * The requests of the site the application wants made for it ({url, form} — what the site says its
+ * tags mean): made from the tab of a page of the site, as the page itself would make them — the
+ * site lets the user's browser in, not the application — one after another, and each answer sent
+ * back under its url, as a page of no tab. A request that failed is asked again with a later page.
+ */
+async function fetchWanted(tabId, wanted) {
+  const fresh = wanted.filter((w) => !fetching.has(w.url));
+  if (!fresh.length) return;
+  fresh.forEach((w) => fetching.add(w.url));
+  try {
+    const [{ result }] = await browser.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      args: [fresh],
+      func: async (asked) => {
+        const answers = [];
+        for (const w of asked) {
+          try {
+            const response = await fetch(w.url, w.form
+              ? { method: "POST", body: new URLSearchParams(w.form), headers: { "X-Requested-With": "XMLHttpRequest" } }
+              : {});
+            if (response.ok) answers.push({ url: w.url, text: await response.text() });
+          } catch (e) {
+            // Not answered: asked again with a later page
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        return answers;
+      },
+    });
+    for (const answer of result || []) await capture(answer.url, answer.text);
+  } catch (e) {
+    console.warn("recommend4me: cannot make the site's requests", e);
+  } finally {
+    fresh.forEach((w) => fetching.delete(w.url));
+  }
 }
 
 /**

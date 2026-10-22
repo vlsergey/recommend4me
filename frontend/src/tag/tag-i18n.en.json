@@ -109,6 +109,7 @@
   "Similar.title": "Names similar in meaning",
   "Similar.works": "Works with the tag",
   "TagDetails.allTags": "All tags",
+  "TagDetails.awaitedDescription": "The tag's description is asked of {{site}}: it comes when any page of the site is next open in the browser with the extension",
   "TagDetails.graded": "graded {{graded, number}}",
   "TagDetails.liked": "liked {{liked, number}}",
   "TagDetails.loadError": "Could not load the tag: {{error}}",

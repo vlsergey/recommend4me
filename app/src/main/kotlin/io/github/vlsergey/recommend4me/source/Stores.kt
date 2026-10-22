@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.source
 
 import io.github.vlsergey.recommend4me.tagtext.TagTextAnswerRepository
 import io.github.vlsergey.recommend4me.capture.CapturedPageRepository
+import io.github.vlsergey.recommend4me.capture.WantedPageRepository
 import io.github.vlsergey.recommend4me.contenttype.ContentType
 import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
@@ -95,6 +96,9 @@ class SourceStore(
     val textVectors = TextVectorRepository(dbs.source.dsl)
     val setVectors = SetVectorRepository(dbs.source.dsl)
     val pages = CapturedPageRepository(dbs.source.dsl)
+
+    /** The requests of the site the source wants the browser to make for it. */
+    val wanted = WantedPageRepository(dbs.source.dsl)
     val valueNames = ValueNameRepository(dbs.source.dsl)
 
     val corrections = CorrectionRepository(dbs.corrections.dsl, source.id)

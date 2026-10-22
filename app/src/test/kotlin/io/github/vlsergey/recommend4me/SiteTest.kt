@@ -36,6 +36,7 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TextDef
+import io.github.vlsergey.recommend4me.source.WantedPage
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
 import io.github.vlsergey.recommend4me.textvector.TextVectors
@@ -169,9 +170,16 @@ class SiteTest {
 
     /**
      * A site whose pages are "<id>|<title>|<tags>|<annotation>|<pairings>": tags to suggest, and
-     * pairings the application works out from the line the site writes them in.
+     * pairings the application works out from the line the site writes them in. What a tag means it
+     * answers at [describe] of the tag.
      */
     class SiteSource : Source {
+        companion object {
+            const val DESCRIBE = "https://site.example/tags/"
+
+            fun describe(tag: String) = "$DESCRIBE$tag"
+        }
+
         override val id = "site"
         override val contentType = "books"
         override val homepage = "https://site.example"
@@ -192,7 +200,7 @@ class SiteTest {
             universeLine = "pairings",
         )
         override val modes = setOf(SourceMode.BROWSER)
-        override val capturePatterns = listOf(Regex("https://site\\.example/work/.*"))
+        override val capturePatterns = listOf(Regex("https://site\\.example/(work|tags)/.*"))
         override fun itemUrl(itemId: String) = "https://site.example/work/$itemId"
         override fun itemIdOf(url: String) = Regex("^https://site\\.example/work/([^/?#]+)").find(url)?.groupValues?.get(1)
         override val pageDecor = PageDecor(
@@ -201,7 +209,15 @@ class SiteTest {
             cards = CardDecor(".card", "a.title"),
         )
 
+        /** What a tag means, asked of the site by its address of the tag: the answer is the description itself. */
+        override fun describing(facet: String, tags: List<String>): List<WantedPage> =
+            if (facet != "tag") emptyList() else tags.map { WantedPage(describe(it), mapOf("tag" to it)) }
+
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
+            if (page.url.startsWith(SiteSource.DESCRIBE)) {
+                page.html.trim().takeIf { it.isNotEmpty() }?.let { context.items.describeFacetValues("tag", mapOf(page.url.removePrefix(SiteSource.DESCRIBE) to it)) }
+                return emptyList()
+            }
             val parts = page.html.split('|')
             val (id, title, tags, annotation, pairings) = parts
             context.items.upsert(ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")), page.capturedAt)
@@ -835,6 +851,32 @@ class SiteTest {
         universes.removeUniverse("fake", "U2")
         assertNull(valueOf("g2", "universe", "fake:U2")?.draftedFrom)
         assertTrue(stores.source("site")!!.drafts.ofItems(listOf("g1", "g2")).values.all { it.isEmpty() })
+    }
+
+    @Test
+    fun `a site's tag not described yet is asked of the browser once, and what the site answers describes it`() {
+        capture("w1|Wreck one|wrecks,hulks|A wreck adrift|")
+        val type = stores.type("books")!!
+        fun tagOf(site: String) = TagRepository.key(type.tags.bindings().getValue(SiteTagRef("site", site)))
+        val wrecks = tagOf("wrecks")
+        val hulks = tagOf("hulks")
+        refresh(stores.source("site")!!)
+        // Asked when the tag is looked at: the request written, not waited for
+        assertEquals(listOf("site"), tagsApi.getTag(wrecks).body!!.awaitedDescriptions)
+        assertEquals(listOf("site"), tagsApi.getTag(hulks).body!!.awaitedDescriptions)
+        // Handed to the browser with the answer of the next page of the site, the oldest first
+        val asked = capture("w2|Wreck two|wrecks|Another wreck|").body!!.wanted!!
+        assertEquals(listOf(SiteSource.describe("wrecks"), SiteSource.describe("hulks")), asked.map { it.url })
+        assertEquals(mapOf("tag" to "wrecks"), asked.first().form)
+        // The site's answers sent back: the one it describes described; neither asked again, the one
+        // the site said nothing of either
+        captures.capturePage(CaptureRequest(SiteSource.describe("wrecks"), "Ships broken apart"))
+        captures.capturePage(CaptureRequest(SiteSource.describe("hulks"), ""))
+        val described = tagsApi.getTag(wrecks).body!!
+        assertEquals(listOf("Ships broken apart"), described.descriptions.filter { it.origin == "site" }.map { it.text })
+        assertEquals(emptyList(), described.awaitedDescriptions)
+        assertEquals(emptyList(), tagsApi.getTag(hulks).body!!.awaitedDescriptions)
+        assertEquals(emptyList(), capture("w3|Wreck three|wrecks,hulks|A third wreck|").body!!.wanted)
     }
 
     @Test

@@ -31,7 +31,10 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.json.JsonMapper
 import java.net.URI
+import java.net.URLDecoder
 import java.time.Instant
 
 /**
@@ -43,8 +46,12 @@ class FicbookPages(private val context: SourceContext) {
     private val items = context.items
 
     fun read(page: CapturedPage): List<String> {
-        val doc = Jsoup.parse(page.html, page.url)
         val path = runCatching { URI(page.url).path }.getOrDefault("")
+        if (path == TAG_SEARCH) {
+            tagSearch(page)
+            return emptyList()
+        }
+        val doc = Jsoup.parse(page.html, page.url)
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
         if (TAG_PAGE.matches(path)) tagPage(doc)
@@ -176,6 +183,23 @@ class FicbookPages(private val context: SourceContext) {
         description?.let { items.describeFacetValues(TAG, mapOf(name.lowercase() to it)) }
     }
 
+    /**
+     * The answer of the site's search of tags the browser made for the application ([Ficbook.describing]),
+     * JSON: the tags found, each with what it means and its synonyms. The tag asked — its name in
+     * the address — is described by the tag of its name, or by the one it is a synonym of: the site
+     * files a synonym under its tag. A tag the site does not describe is left without a description.
+     */
+    private fun tagSearch(page: CapturedPage) {
+        val asked = runCatching { URI(page.url).rawQuery }.getOrNull().orEmpty().split('&')
+            .firstNotNullOfOrNull { p -> p.split('=', limit = 2).takeIf { it.size == 2 && it[0] == "title" }?.let { URLDecoder.decode(it[1], Charsets.UTF_8) } }
+            ?.trim()?.lowercase()?.ifEmpty { null } ?: return
+        val found = runCatching { JSON.readTree(page.html) }.getOrNull()?.path("data")?.path("tags") ?: return
+        fun named(t: JsonNode) = t.path("title").asString("").trim().lowercase()
+        val tag = found.firstOrNull { named(it) == asked } ?: found.firstOrNull { t -> t.path("synonyms").any { named(it) == asked } } ?: return
+        val description = tag.path("description").asString("").trim().ifEmpty { null } ?: return
+        items.describeFacetValues(TAG, mapOf(asked to description))
+    }
+
     // --- A work's page ---
 
     /**
@@ -293,6 +317,11 @@ class FicbookPages(private val context: SourceContext) {
         /** A work's address: "/readfic/<id>", "/readfic/<id>/<part>", "/readfic/<id>/comments". */
         private val READFIC = Regex("/readfic/([0-9a-f-]+)/?([^/]*)/?")
         private val TAG_PAGE = Regex("/tags/\\d+/?")
+
+        /** The site's search of tags ([Ficbook.tagSearch]). */
+        private const val TAG_SEARCH = "/tags/search"
+
+        private val JSON = JsonMapper.builder().build()
 
         /** The heading of a tag's page: the name between the outer quotes, whatever quotes it holds itself. */
         private val TAG_HEADING = Regex("^Метка «(.*)»\\s*-\\s*фанфики")

@@ -9,7 +9,8 @@
  *   runPage()  — page.js.
  *
  * The calls to the application go through GM.xmlHttpRequest: the userscript's own requests, not
- * bound by the page's origin, as the extension's background script is not.
+ * bound by the page's origin, as the extension's background script is not. The requests of the
+ * site the application wants made for it go through the page's own fetch, as the site's.
  */
 
 /** The listeners of messages page.js registers: told when the page was sent and saved. */
@@ -51,6 +52,31 @@ function callable(method, path) {
   return path.startsWith("/api/") || ((method || "GET") === "GET" && /^\/i18n\/[\w.-]+\/[\w-]+\.json$/.test(path));
 }
 
+/** The requests of the site being made now: not made twice when the page is sent again meanwhile. */
+const fetching = new Set();
+
+/**
+ * The requests of the site the application wants made for it ({url, form} — what the site says its
+ * tags mean), as the extension's background script makes them: from this page, one after another,
+ * each answer sent back under its url. A request that failed is asked again with a later page.
+ */
+async function fetchWanted(wanted) {
+  const fresh = wanted.filter((w) => !fetching.has(w.url));
+  fresh.forEach((w) => fetching.add(w.url));
+  for (const w of fresh) {
+    try {
+      const response = await fetch(w.url, w.form
+        ? { method: "POST", body: new URLSearchParams(w.form), headers: { "X-Requested-With": "XMLHttpRequest" } }
+        : {});
+      if (response.ok) await request("POST", "/api/capture", { url: w.url, html: await response.text() });
+    } catch (e) {
+      // Not answered: asked again with a later page
+    }
+    fetching.delete(w.url);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
 /** The stand-in of the extension's API that watch.js and page.js call. */
 const browser = {
   runtime: {
@@ -66,6 +92,7 @@ const browser = {
         const sent = await request("POST", "/api/capture", { url: message.url, html: message.html });
         // The page shows the work as the application knows it now
         if (sent.ok) listeners.forEach((listener) => listener({ type: "captured", url: message.url }));
+        if (sent.ok && sent.data && sent.data.wanted && sent.data.wanted.length) fetchWanted(sent.data.wanted);
         return sent;
       }
       return undefined;

@@ -113,6 +113,7 @@
   "Similar.title": "Nazivi sličnog značenja",
   "Similar.works": "Dela sa tagom",
   "TagDetails.allTags": "Svi tagovi",
+  "TagDetails.awaitedDescription": "Opis taga je zatražen od sajta {{site}}: stići će kada se u pregledaču sa ekstenzijom sledeći put otvori bilo koja stranica sajta",
   "TagDetails.graded": "ocenjeno {{graded, number}}",
   "TagDetails.liked": "dopalo se {{liked, number}}",
   "TagDetails.loadError": "Tag se nije učitao: {{error}}",

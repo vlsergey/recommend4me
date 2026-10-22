@@ -194,6 +194,7 @@ class TagsController(
         // The sites' words first, then the entries'
         descriptions = descriptions.map { d -> TagDescription(d.site.source, d.text, stats.variants[d.site]?.name) } +
             entries.mapNotNull { b -> b.entry.descriptions.first()?.let { TagDescription(b.catalogue, it, b.entry.labels.first()) } },
+        awaitedDescriptions = awaitedDescriptions,
         ignored = ignored,
         catalogueOffers = offers.map { o -> CatalogueOffer(o.catalogue, TagRef(o.tag, o.name), ApiTagRelation.valueOf(o.relation.name), o.path) },
     )

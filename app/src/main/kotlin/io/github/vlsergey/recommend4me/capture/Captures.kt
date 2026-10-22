@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.WantedPage
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -22,8 +23,12 @@ private val log = LoggerFactory.getLogger(Captures::class.java)
 /** A part whose text a captured page gave: the item, the part's title, how long its text is. */
 class CapturedPart(val item: ItemKey, val title: String?, val length: Int)
 
-/** What a captured page gave: the source that took it, the items it touched, the parts whose text it gave. */
-class Captured(val source: String?, val items: List<ItemKey>, val parts: List<CapturedPart> = emptyList())
+/**
+ * What a captured page gave: the source that took it, the items it touched, the parts whose text it
+ * gave — and the requests of the site the source still wants the browser to make for it ([WantedPage]),
+ * made from the page's own tab.
+ */
+class Captured(val source: String?, val items: List<ItemKey>, val parts: List<CapturedPart> = emptyList(), val wanted: List<WantedPage> = emptyList())
 
 /**
  * THE BROWSER TRACKING MODE: the pages the user opens, sent by the extension. Every page a source
@@ -61,9 +66,13 @@ class Captures(private val stores: Stores, private val contexts: SourceContexts)
             log.warn("{}: the page {} was not read: {}", store.id, url, e.message)
             emptyList()
         }
-        store.writing.withLock { store.pages.keep(url, html, items.firstOrNull(), now, store.source.parserVersion) }
+        store.writing.withLock {
+            store.pages.keep(url, html, items.firstOrNull(), now, store.source.parserVersion)
+            // The answer of a request the source wanted: not asked again, whatever it said
+            store.wanted.fetched(url, now)
+        }
         log.info("{}: {} gave {} items, the text of {} parts, in {} ms", store.id, url, items.size, texts.size, System.currentTimeMillis() - started)
-        return Captured(store.id, items.map { ItemKey(store.id, it) }, texts)
+        return Captured(store.id, items.map { ItemKey(store.id, it) }, texts, store.wanted.awaited(WANTED_AT_ONCE))
     }
 
     /** The pages kept last of every source, newest first. */
@@ -90,5 +99,10 @@ class Captures(private val stores: Stores, private val contexts: SourceContexts)
                 s.pages.markRead(url, version)
             }
         }
+    }
+
+    companion object {
+        /** The requests a captured page's answer hands the browser at most: made one by one, a few seconds' work. */
+        const val WANTED_AT_ONCE = 10
     }
 }

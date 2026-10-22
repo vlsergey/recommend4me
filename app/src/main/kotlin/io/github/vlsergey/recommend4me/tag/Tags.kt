@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.withLock
 
 private val log = LoggerFactory.getLogger(Tags::class.java)
 
@@ -66,7 +67,8 @@ class TagStats(val key: String) {
 /**
  * A tag named, with the tags directly above and under it, named, the entries of the catalogues it is
  * bound to, the one bound first first, and what its sites' tags' own pages say it means ([descriptions],
- * read for one tag alone).
+ * read for one tag alone) — and the sites whose word on it is asked of the browser, not come yet
+ * ([awaitedDescriptions]).
  */
 class NamedTag(
     val stats: TagStats,
@@ -76,6 +78,7 @@ class NamedTag(
     val children: List<Pair<String, String>> = emptyList(),
     val entries: List<BoundEntry> = emptyList(),
     val descriptions: List<SiteDescription> = emptyList(),
+    val awaitedDescriptions: List<String> = emptyList(),
     val offers: List<CatalogueOffer> = emptyList(),
     /** The user ignores it: kept with its works, not read by the model of the grades. */
     val ignored: Boolean = false,
@@ -127,6 +130,9 @@ class BoundEntry(val catalogue: String, val entry: TagEntry) {
 
 /** What a site says one of its tags means: the site's tag and the text. */
 class SiteDescription(val site: SiteTagRef, val text: String)
+
+/** What the sites say a tag's sites' tags mean ([read]), and the sites asked for their word, not come yet ([awaited]). */
+class SiteDescriptions(val read: List<SiteDescription> = emptyList(), val awaited: List<String> = emptyList())
 
 /** An entry a catalogue found, and the tags bound to it already: their keys and names. */
 class FoundEntry(val catalogue: String, val entry: TagEntry, val tags: List<Pair<String, String>>)
@@ -312,12 +318,13 @@ class Tags(
         fun allNames(t: TagStats): List<String> =
             t.variants.values.map { it.name } + listOfNotNull(explicitOf(t.key)) + entriesOf(t.key).flatMap { it.names }
 
-        fun named(t: TagStats, descriptions: List<SiteDescription> = emptyList(), offers: List<CatalogueOffer> = emptyList()) = NamedTag(
+        fun named(t: TagStats, descriptions: SiteDescriptions = SiteDescriptions(), offers: List<CatalogueOffer> = emptyList()) = NamedTag(
             t, nameOf(t), explicitOf(t.key),
             parents = hierarchy.parentsOf(t.key).map { it to shown(it) }.sortedBy { it.second.lowercase() },
             children = hierarchy.childrenOf(t.key).map { it to shown(it) }.sortedBy { it.second.lowercase() },
             entries = entriesOf(t.key),
-            descriptions = descriptions,
+            descriptions = descriptions.read,
+            awaitedDescriptions = descriptions.awaited,
             offers = offers,
             ignored = t.key in ignored,
         )
@@ -333,14 +340,23 @@ class Tags(
         return refs.mapValues { (_, list) -> list.mapNotNull { ref -> kept[ref]?.let { BoundEntry(ref.catalogue, it) } } }
     }
 
-    /** What the sites' own pages say the sites' tags of [t] mean, in the order of its sites' tags. */
-    private fun descriptionsOf(scope: TagScope, facet: String, t: TagStats): List<SiteDescription> {
+    /**
+     * What the sites' own pages say the sites' tags of [t] mean, in the order of its sites' tags. A
+     * site's tag not described yet is asked of the browser, once ([Source.describing][io.github.vlsergey.recommend4me.source.Source.describing]):
+     * the request is written, not waited for — the sites whose word is awaited told.
+     */
+    private fun descriptionsOf(scope: TagScope, facet: String, t: TagStats): SiteDescriptions {
         val bySource = t.variants.keys.groupBy { it.source }
+        val awaited = ArrayList<String>()
         val read = scope.sources.filter { it.id in bySource }.flatMap { s ->
             val siteFacet = normalization.siteFacetOf(s, facet) ?: return@flatMap emptyList()
-            s.items.facetDescriptions(siteFacet, bySource.getValue(s.id).map { it.tag }).map { (tag, text) -> SiteTagRef(s.id, tag) to text }
+            val tags = bySource.getValue(s.id).map { it.tag }
+            val found = s.items.facetDescriptions(siteFacet, tags)
+            val wanted = s.source.describing(siteFacet, tags.filter { it !in found })
+            if (wanted.isNotEmpty() && s.writing.withLock { s.wanted.want(wanted, Instant.now()) }.isNotEmpty()) awaited += s.id
+            found.map { (tag, text) -> SiteTagRef(s.id, tag) to text }
         }.toMap()
-        return t.variants.keys.mapNotNull { site -> read[site]?.let { SiteDescription(site, it) } }
+        return SiteDescriptions(t.variants.keys.mapNotNull { site -> read[site]?.let { SiteDescription(site, it) } }, awaited)
     }
 
     /**

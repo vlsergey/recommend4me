@@ -23,6 +23,7 @@
 | `part_paragraph_vector` | the vector of every paragraph of a part — its lines with a letter in them, short ones in a row joined — what the tags are held against to be offered by the text |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
 | `captured_page` | a page kept, gzipped, to be read again when the parser changes |
+| `wanted_page` | a request of the site the source wants the browser to make for it — what a tag means — asked once, done when the answer came |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
@@ -160,6 +161,12 @@ erDiagram
         VARCHAR text_key PK
         INTEGER window_no PK
         VARBINARY vec
+    }
+    wanted_page {
+        VARCHAR url PK
+        VARCHAR form "null"
+        TIMESTAMPTZ wanted_at
+        TIMESTAMPTZ fetched_at "null"
     }
     item ||--o{ item_facet : "item_id"
     item ||--o{ item_number : "item_id"

@@ -140,6 +140,24 @@ class FicbookPagesTest {
     }
 
     @Test
+    fun `the site's search of tags, asked by the browser, says what the tag asked means — of its own name or a synonym`() {
+        val harassment = "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."
+        val asked = source.describing("tag", listOf("харассмент", "домогательства"))
+        assertEquals(listOf(Ficbook.tagSearch("харассмент"), Ficbook.tagSearch("домогательства")), asked.map { it.url })
+        assertEquals(mapOf("title" to "харассмент"), asked.first().form)
+        assertEquals(emptyList(), source.describing("fandom", listOf("x")))
+        asked.forEach { wanted ->
+            val context = MemorySourceContext()
+            assertEquals(emptyList(), capture(context, wanted.url, "tags-search.json"))
+            assertEquals(harassment, context.facetDescriptions.getValue("tag")[wanted.form!!.getValue("title")])
+        }
+        // A name the answer has no tag of: nothing said of it
+        val other = MemorySourceContext()
+        capture(other, Ficbook.tagSearch("романтика"), "tags-search.json")
+        assertNull(other.facetDescriptions["tag"])
+    }
+
+    @Test
     fun `a card's cover is the picture's source of a wide screen, the size of the header's`() {
         val covers = "https://assets.teinon.net/fanfic-covers"
         val doc = Jsoup.parse(page("fandom-originals.html"))
