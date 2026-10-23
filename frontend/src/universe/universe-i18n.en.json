@@ -83,6 +83,8 @@
   "Named.heading": "Mentioned in the work's texts",
   "Named.more": "and {{n, number}} more in the list below",
   "OpenCharacters.add": "Add a character",
+  "OpenCharacters.fromMain": "now a main character — will become a secondary one",
+  "OpenCharacters.fromSecondary": "now a secondary character — will become a main one",
   "OpenCharacters.noUniverse": "The work is not linked to any universe: only original characters are available",
   "OpenCharacters.placeholder": "Find a character by any name or by Q-number",
   "OpenPairings.add": "Add the pairing",

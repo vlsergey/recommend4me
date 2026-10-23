@@ -85,6 +85,8 @@
   "Named.heading": "Упоминаются в текстах работы",
   "Named.more": "и ещё {{n, number}} в списке ниже",
   "OpenCharacters.add": "Добавить персонажа",
+  "OpenCharacters.fromMain": "сейчас среди главных — перейдёт во второстепенные",
+  "OpenCharacters.fromSecondary": "сейчас среди второстепенных — перейдёт в главные",
   "OpenCharacters.noUniverse": "Работа не связана ни с одной вселенной: есть только оригинальные персонажи",
   "OpenCharacters.placeholder": "Найти персонажа по любому имени или по Q-номеру",
   "OpenPairings.add": "Добавить пэйринг",

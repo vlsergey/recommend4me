@@ -84,6 +84,8 @@
   "Named.heading": "Pominju se u tekstovima dela",
   "Named.more": "i još {{n, number}} na listi ispod",
   "OpenCharacters.add": "Dodaj lik",
+  "OpenCharacters.fromMain": "sada među glavnim likovima — prelazi u sporedne",
+  "OpenCharacters.fromSecondary": "sada među sporednim likovima — prelazi u glavne",
   "OpenCharacters.noUniverse": "Delo nije povezano ni sa jednim univerzumom: postoje samo originalni likovi",
   "OpenCharacters.placeholder": "Pronađi lik po bilo kom imenu ili po Q-broju",
   "OpenPairings.add": "Dodaj par",

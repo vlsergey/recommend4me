@@ -115,6 +115,8 @@ var R4M_WORDS = {
     "facet.works": "works: {{count}}",
     "facet.newTag": "new tag, of the catalogue",
     "facet.change": "change: {{what}}",
+    "add.fromMain": "now a main character — will become a secondary one",
+    "add.fromSecondary": "now a secondary character — will become a main one",
     "facet.chooseHint": "Choose one of the list: only what the dictionary knows can be added here",
 
     "mark.plus": "{{what}}: a reason to choose the work",
@@ -258,6 +260,8 @@ var R4M_WORDS = {
     "facet.works": "работ: {{count}}",
     "facet.newTag": "новый тег, из каталога",
     "facet.change": "сменить: {{what}}",
+    "add.fromMain": "сейчас среди главных — перейдёт во второстепенные",
+    "add.fromSecondary": "сейчас среди второстепенных — перейдёт в главные",
     "facet.chooseHint": "Выберите из списка: сюда можно добавить только то, что есть в словаре",
 
     "mark.plus": "{{what}}: повод выбрать работу",
@@ -401,6 +405,8 @@ var R4M_WORDS = {
     "facet.works": "dela: {{count}}",
     "facet.newTag": "novi tag, iz kataloga",
     "facet.change": "promeni: {{what}}",
+    "add.fromMain": "sada među glavnim likovima — prelazi u sporedne",
+    "add.fromSecondary": "sada među sporednim likovima — prelazi u glavne",
     "facet.chooseHint": "Izaberite sa liste: ovde se može dodati samo ono što rečnik poznaje",
 
     "mark.plus": "{{what}}: razlog da se delo izabere",

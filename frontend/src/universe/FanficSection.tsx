@@ -553,8 +553,9 @@ function Characters({
 
 /**
  * The work's characters of the [facet] while others may be. The picker offers the characters of
- * every universe the work is linked to, by any of their names — not those of its other facet of
- * characters — the original characters, and a name of the user's own.
+ * every universe the work is linked to, by any of their names — those of its other facet of
+ * characters too, said so: picked, one moves here — the original characters, and a name of the
+ * user's own.
  */
 function OpenCharacters({
   type,
@@ -586,15 +587,16 @@ function OpenCharacters({
   const characters = useQueries({ queries: linked.map((u) => charactersQuery(type.id, u)) });
 
   const taken = (key: string) => values.some((v) => v.key === key && has(v));
-  // A character of the work's other facet of characters is not offered: it is moved by taking it from there
+  // A character of the work's other facet of characters — the user's or the model's — is offered all
+  // the same, said so: picked, it moves here from there
   const other = new Set(elsewhere.map((v) => v.key));
+  const moving = t(facet === CHARACTERS ? "OpenCharacters.fromSecondary" : "OpenCharacters.fromMain");
   // A character of several of the work's universes is offered once, with every universe it is of;
   // the entries the user left out of a universe (its places, its spells) are not offered
   const byKey = new Map<string, Option & { universes: string[] }>();
   linked.forEach((u, i) => {
     for (const c of (characters[i].data ?? []).filter((c) => c.included)) {
       const key = `${u.catalogue}:${c.character}`;
-      if (other.has(key)) continue;
       const known = byKey.get(key);
       if (known) known.universes.push(u.name);
       else
@@ -608,11 +610,14 @@ function OpenCharacters({
         });
     }
   });
+  // One of the other facet no linked universe has — named by the user, of a universe since unlinked — offered too
+  const unlinked = elsewhere.filter((v) => !byKey.has(v.key) && !ORIGINAL_CHARACTERS.some((c) => c.key === v.key));
   const options: Option[] = [
     ...[...byKey.values()].map((o) => ({
       ...o,
-      note: [o.names.slice(1).join(", "), o.universes.join(", ")].filter((x) => x !== "").join(" — "),
+      note: [o.names.slice(1).join(", "), o.universes.join(", "), other.has(o.key) ? moving : ""].filter((x) => x !== "").join(" — "),
     })),
+    ...unlinked.map((v) => ({ key: v.key, name: valueName(v), names: [valueName(v)], note: moving, taken: false })),
     ...ORIGINAL_CHARACTERS.map((c) => ({ key: c.key, name: t(c.label), names: [t(c.label)], taken: taken(c.key) })),
   ];
   const candidates = useCandidates(item, facet, true);

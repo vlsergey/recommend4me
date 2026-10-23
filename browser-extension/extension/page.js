@@ -148,6 +148,12 @@
   /** The facets that say which values a work may have — its universes, their characters, the pairs of them — hinted by its candidates. */
   const CHOSEN = ["universe", "characters", "secondary-characters", "pairings"];
 
+  /** The other facet of a work's characters: a character is in one of them, never in both. */
+  const OTHER_CHARACTERS = { characters: "secondary-characters", "secondary-characters": "characters" };
+
+  /** The original characters: many persons, of either facet of characters at once. */
+  const ORIGINAL_CHARACTERS = ["oc:female", "oc:male"];
+
   /**
    * The facets whose values are entries of the dictionary alone — a universe of the catalogue, a
    * pair of its characters: one is chosen among the hints, never made of a name typed, which would
@@ -1144,6 +1150,22 @@
                 description: c.description,
                 note: [c.chance !== undefined && c.chance !== null ? percent(c.chance) : "", mentionsText(c.mentions)].filter(Boolean).join(" · "),
               }));
+              // A character of the work's other facet of characters — the user's or the model's — is found
+              // here too, said so: chosen, it moves here from there
+              const other = OTHER_CHARACTERS[facet];
+              const work = (view && view.item) || item;
+              const elsewhere = other && (work.facets || []).find((f) => f.facet === other);
+              if (elsewhere) {
+                const known = new Map(hints.map((h) => [h.key, h]));
+                const moving = t(facet === "characters" ? "add.fromSecondary" : "add.fromMain");
+                (elsewhere.values || [])
+                  .filter((v) => v.corrected !== "REMOVED" && !v.offered && !ORIGINAL_CHARACTERS.includes(v.key))
+                  .forEach((v) => {
+                    const hint = known.get(v.key);
+                    if (hint) hint.note = [hint.note, moving].filter(Boolean).join(" · ");
+                    else hints.push({ name: nameOf(v), names: [nameOf(v)], key: v.key, nameKey: v.nameKey, description: v.description, note: moving });
+                  });
+              }
             },
             () => {
               // No hints: the value is added by its name all the same; asked again on the next typing
