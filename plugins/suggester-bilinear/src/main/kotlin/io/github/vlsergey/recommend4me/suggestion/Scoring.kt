@@ -42,14 +42,20 @@ internal class Scoring(
 
     /**
      * The scoring with every value's share of the items of [task] — the task it was fitted on: the
-     * mean of their chances, scored a thousand items at a time, none kept.
+     * sum of their chances of it over their number, scored a thousand items at a time, none kept. An
+     * item that may not have the value at all ([SuggestionTask.allowed]: a pairing of characters it
+     * has not) adds nothing: the model never learns of such a pair, its score there tells nothing.
      */
     fun withShares(task: SuggestionTask): Scoring {
         val m = valueKeys.size
         val sums = DoubleArray(m)
         val scores = on(task)
         (0 until task.itemCount).chunked(SHARE_CHUNK).forEach { chunk ->
-            scores.of(chunk.toIntArray()).forEach { row -> for (j in 0 until m) sums[j] += row[j] }
+            scores.of(chunk.toIntArray()).forEachIndexed { r, row ->
+                val allowed = task.allowed[chunk[r]]
+                if (allowed == null) for (j in 0 until m) sums[j] += row[j]
+                else allowed.forEach { j -> if (j in 0 until m) sums[j] += row[j] }
+            }
         }
         val n = task.itemCount.coerceAtLeast(1)
         return Scoring(design, rank, valueKeys, a, pair, vt, bias, FloatArray(m) { (sums[it] / n).toFloat() })
@@ -107,8 +113,11 @@ internal class Scoring(
     }
 
     companion object {
-        /** The version of what [pack] writes: 2 with the values' shares ([shares]). */
-        private const val FORMAT = 2
+        /**
+         * The version of what [pack] writes: 2 with the values' shares ([shares]), 3 with the shares
+         * of the items that may have each alone — those of 2 read as none, kept anew at the next refresh.
+         */
+        private const val FORMAT = 3
 
         private const val BUFFER = 1 shl 16
 
@@ -119,12 +128,12 @@ internal class Scoring(
         fun read(bytes: ByteArray): Scoring? = runCatching {
             DataInputStream(ByteArrayInputStream(bytes).buffered(BUFFER)).use { input ->
                 val format = input.readInt()
-                if (format !in FORMAT - 1..FORMAT) return null
+                if (format !in 1..FORMAT) return null
                 val design = Design.read(input)
                 val rank = input.readInt()
                 val keys = Design.readStrings(input)
                 val parts = List(BilinearSuggester.FOLDS) { List(4) { Design.readFloats(input) } }
-                val shares = if (format < 2) null else Design.readFloats(input).takeIf { it.size == keys.size }
+                val shares = if (format < 2) null else Design.readFloats(input).takeIf { format >= 3 && it.size == keys.size }
                 Scoring(design, rank, keys, parts.map { it[0] }, parts.map { it[1] }, parts.map { it[2] }, parts.map { it[3] }, shares)
             }
         }.getOrNull()

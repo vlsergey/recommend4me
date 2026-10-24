@@ -71,24 +71,28 @@ class BilinearSuggesterTest {
         val n = 300
         val texts = Matrix(n, d)
         repeat(n) { i -> texts.held.put(FloatArray(d) { random.nextGaussian().toFloat() }.normalized(), 0, texts.row(i), d) }
-        // Of the texts' say nothing: v0 of most works, v1 of a few, v2 of some
+        // Of the texts' say nothing: v0 of most works, v1 of a few, v2 of some; v3 of none that may
+        // have it — no work may: of a pair the model never learns of, its score tells nothing
         val shares = doubleArrayOf(0.8, 0.05, 0.3)
+        val values = shares.size + 1
         val task = SuggestionTask(
             itemIds = List(n) { "item$it" },
             inputs = listOf(InputBlock("text:annotation", texts, BooleanArray(n) { true })),
-            values = Matrix(shares.size, d).also { names -> shares.indices.forEach { k -> names.held.put(FloatArray(d) { random.nextGaussian().toFloat() }.normalized(), 0, names.row(k), d) } },
-            valueKeys = shares.indices.map { "v$it" },
+            values = Matrix(values, d).also { names -> (0 until values).forEach { k -> names.held.put(FloatArray(d) { random.nextGaussian().toFloat() }.normalized(), 0, names.row(k), d) } },
+            valueKeys = (0 until values).map { "v$it" },
             assigned = List(n) { shares.indices.filter { random.nextDouble() < shares[it] }.toIntArray() },
             confirmed = List(n) { IntArray(0) },
             rejected = List(n) { IntArray(0) },
             context = List(n) { IntArray(0) },
             contextKeys = emptyList(),
+            allowed = List(n) { IntArray(shares.size) { it } },
         )
         val suggester = BilinearSuggester()
         val weights = assertNotNull(suggester.weights(assertNotNull(assertNotNull(suggester.fit(task)).scoring(task))))
-        assertEquals(shares.size, weights.size)
-        assertTrue(weights.all { it > 0 && it < 1 }, weights.toList().toString())
+        assertEquals(values, weights.size)
+        assertTrue(weights.take(shares.size).all { it > 0 && it < 1 }, weights.toList().toString())
         assertTrue(weights[0] > weights[2] && weights[2] > weights[1], weights.toList().toString())
+        assertEquals(0.0, weights[3], weights.toList().toString())
         // Bytes not of its making: none
         assertEquals(null, suggester.weights(byteArrayOf(1, 2, 3)))
     }
