@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, HelpCircleIcon, Undo2Icon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, unwrap, type MarkedWork, type MarkVerdict } from "@/api/client";
+import { api, ensureOk, unwrap, type MarkedWork, type MarkVerdict } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
@@ -79,14 +79,14 @@ export function MarkingTable({
   };
   /** The user's word on a work: once kept, the row leaves — of the answered ones, it shows the new word. */
   const answer = async (w: MarkedWork, verdict: MarkVerdict) => {
-    unwrap(await api.PUT("/api/marking/answer", { body: { source: w.source, item: w.item, facet, value, verdict } }));
+    ensureOk(await api.PUT("/api/marking/answer", { body: { source: w.source, item: w.item, facet, value, verdict } }));
     if (answered) queryClient.invalidateQueries({ queryKey: markingKey(facet, value) });
     else calm.remove([rowOf(w)]);
     changed(w);
   };
   /** The user's word taken back: once kept, the row leaves the answered ones. */
   const unanswer = async (w: MarkedWork) => {
-    unwrap(await api.DELETE("/api/marking/answer", { params: { query: { source: w.source, item: w.item, facet, value } } }));
+    ensureOk(await api.DELETE("/api/marking/answer", { params: { query: { source: w.source, item: w.item, facet, value } } }));
     calm.remove([rowOf(w)]);
     changed(w);
   };
