@@ -66,6 +66,34 @@ class BilinearSuggesterTest {
     }
 
     @Test
+    fun `the scoring kept tells every value's weight over the works as a whole, no work read - the common value above the rare`() {
+        val random = Random(11)
+        val n = 300
+        val texts = Matrix(n, d)
+        repeat(n) { i -> texts.held.put(FloatArray(d) { random.nextGaussian().toFloat() }.normalized(), 0, texts.row(i), d) }
+        // Of the texts' say nothing: v0 of most works, v1 of a few, v2 of some
+        val shares = doubleArrayOf(0.8, 0.05, 0.3)
+        val task = SuggestionTask(
+            itemIds = List(n) { "item$it" },
+            inputs = listOf(InputBlock("text:annotation", texts, BooleanArray(n) { true })),
+            values = Matrix(shares.size, d).also { names -> shares.indices.forEach { k -> names.held.put(FloatArray(d) { random.nextGaussian().toFloat() }.normalized(), 0, names.row(k), d) } },
+            valueKeys = shares.indices.map { "v$it" },
+            assigned = List(n) { shares.indices.filter { random.nextDouble() < shares[it] }.toIntArray() },
+            confirmed = List(n) { IntArray(0) },
+            rejected = List(n) { IntArray(0) },
+            context = List(n) { IntArray(0) },
+            contextKeys = emptyList(),
+        )
+        val suggester = BilinearSuggester()
+        val weights = assertNotNull(suggester.weights(assertNotNull(assertNotNull(suggester.fit(task)).scoring(task))))
+        assertEquals(shares.size, weights.size)
+        assertTrue(weights.all { it > 0 && it < 1 }, weights.toList().toString())
+        assertTrue(weights[0] > weights[2] && weights[2] > weights[1], weights.toList().toString())
+        // Bytes not of its making: none
+        assertEquals(null, suggester.weights(byteArrayOf(1, 2, 3)))
+    }
+
+    @Test
     fun `the scoring kept apart gives the items read later the chances of the whole task, without the values' names`() {
         val task = task(120, wrong = 5)
         val suggester = BilinearSuggester()

@@ -25,12 +25,34 @@ import kotlin.math.ln1p
 internal class Scoring(
     val design: Design, val rank: Int, val valueKeys: List<String>,
     val a: List<FloatArray>, val pair: List<FloatArray>, val vt: List<FloatArray>, val bias: List<FloatArray>,
+    /**
+     * Every value's share of the works the model was fitted on: the mean of their chances of it, as
+     * the model scores them ([withShares]) — what it tells of the value over the works as a whole,
+     * no work read ([weights]). None of a scoring kept before it was.
+     */
+    val shares: FloatArray? = null,
 ) {
     init {
         val m = valueKeys.size
         require(listOf(a, pair, vt, bias).all { it.size == BilinearSuggester.FOLDS }) { "Not a fold each" }
         require(vt.all { it.size == rank * m } && bias.all { it.size == m }) { "Not of the $m values" }
         require(a.all { it.size == design.itemWidth * rank }) { "Not of ${design.itemWidth} features" }
+        require(shares == null || shares.size == m) { "${shares?.size} shares of $m values" }
+    }
+
+    /**
+     * The scoring with every value's share of the items of [task] — the task it was fitted on: the
+     * mean of their chances, scored a thousand items at a time, none kept.
+     */
+    fun withShares(task: SuggestionTask): Scoring {
+        val m = valueKeys.size
+        val sums = DoubleArray(m)
+        val scores = on(task)
+        (0 until task.itemCount).chunked(SHARE_CHUNK).forEach { chunk ->
+            scores.of(chunk.toIntArray()).forEach { row -> for (j in 0 until m) sums[j] += row[j] }
+        }
+        val n = task.itemCount.coerceAtLeast(1)
+        return Scoring(design, rank, valueKeys, a, pair, vt, bias, FloatArray(m) { (sums[it] / n).toFloat() })
     }
 
     /**
@@ -67,6 +89,9 @@ internal class Scoring(
         }
     }
 
+    /** Every value's weight over the works as a whole: its share of the works fitted on ([shares]); none of a scoring kept before they were. */
+    fun weights(): DoubleArray? = shares?.let { s -> DoubleArray(s.size) { s[it].toDouble() } }
+
     /** Not compressed: numbers compress little, and a page waits for their reading. */
     fun pack(): ByteArray {
         val bytes = ByteArrayOutputStream()
@@ -76,25 +101,31 @@ internal class Scoring(
             out.writeInt(rank)
             Design.writeStrings(out, valueKeys)
             for (f in a.indices) listOf(a[f], pair[f], vt[f], bias[f]).forEach { Design.writeFloats(out, it) }
+            Design.writeFloats(out, shares ?: FloatArray(0))
         }
         return bytes.toByteArray()
     }
 
     companion object {
-        /** The version of what [pack] writes. */
-        private const val FORMAT = 1
+        /** The version of what [pack] writes: 2 with the values' shares ([shares]). */
+        private const val FORMAT = 2
 
         private const val BUFFER = 1 shl 16
 
-        /** A scoring kept by [pack]; null of another version or of other bytes. */
+        /** The items scored at once for the shares. */
+        private const val SHARE_CHUNK = 1000
+
+        /** A scoring kept by [pack] — of the version before it, without the shares; null of another version or of other bytes. */
         fun read(bytes: ByteArray): Scoring? = runCatching {
             DataInputStream(ByteArrayInputStream(bytes).buffered(BUFFER)).use { input ->
-                if (input.readInt() != FORMAT) return null
+                val format = input.readInt()
+                if (format !in FORMAT - 1..FORMAT) return null
                 val design = Design.read(input)
                 val rank = input.readInt()
                 val keys = Design.readStrings(input)
                 val parts = List(BilinearSuggester.FOLDS) { List(4) { Design.readFloats(input) } }
-                Scoring(design, rank, keys, parts.map { it[0] }, parts.map { it[1] }, parts.map { it[2] }, parts.map { it[3] })
+                val shares = if (format < 2) null else Design.readFloats(input).takeIf { it.size == keys.size }
+                Scoring(design, rank, keys, parts.map { it[0] }, parts.map { it[1] }, parts.map { it[2] }, parts.map { it[3] }, shares)
             }
         }.getOrNull()
     }

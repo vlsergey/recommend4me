@@ -2,15 +2,20 @@
   "NewPairing.again": "Выбрать другого",
   "NewPairing.close": "Закрыть",
   "NewPairing.first": "Первый персонаж",
-  "NewPairing.make": "Завести пейринг",
+  "NewPairing.make": "Размечать по этому пейрингу",
   "NewPairing.open": "Новый пейринг",
   "NewPairing.second": "Второй персонаж",
   "NewPairing.title": "Новый пейринг",
+  "PairingsScreen.byName": "По названию",
+  "PairingsScreen.byWeight": "По весу в модели",
+  "PairingsScreen.byWeightHint": "Вес пейринга в обученной модели: доля работ, на которых она училась, которой модель даёт этот пейринг. У пейрингов, которых модель не знает, веса нет",
   "PairingsScreen.choose": "Выберите пейринг слева, чтобы разметить работы по нему",
   "PairingsScreen.counts": "да {{yes}} · нет {{no}} · неизвестно {{unknown}}",
   "PairingsScreen.failed": "Не удалось прочитать пейринги: {{error}}",
   "PairingsScreen.filter": "Найти по названию, персонажу или вселенной",
   "PairingsScreen.loading": "Пейринги читаются…",
+  "PairingsScreen.more": "Показать ещё (показано {{shown}} из {{total}})",
   "PairingsScreen.none": "Пейрингов нет",
-  "PairingsScreen.title": "Пейринги"
+  "PairingsScreen.title": "Пейринги",
+  "PairingsScreen.weight": "вес {{share}}"
 }

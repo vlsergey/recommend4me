@@ -444,13 +444,14 @@ paths:
     get:
       tags: [pairings]
       operationId: listPairings
-      summary: Every pairing known, with how many works the user answered on by it
+      summary: Every pairing known, with the model's weight of it and the user's words on the works by it
       description: |
-        The pairings the user made (makePairing), and every pairing any work of any source of a type
-        with universes was answered on - yes, no or not clear - or drafted from the site's tags
-        (a pairing of Archive of Our Own), by the name of the dictionary; of each, its two characters
-        and the universes they are of, and how many works the user said have it, have it not, and
-        are not clear of.
+        None kept of their own: every pairing the models of the sources of the types with universes
+        know - with the weight the model gives it over the works as a whole, read of the model alone
+        (the largest of the sources') - and every pairing a work was answered on (yes, no or not clear)
+        or drafted from the site's tags; by the name of the dictionary. Of each, its two characters,
+        the universes they are of, and how many works the user said have it, have it not, and are not
+        clear of. A new pairing is its key alone: marked on, it is known.
       responses:
         '200':
           description: The pairings, by name
@@ -460,25 +461,28 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Pairing'
-    post:
+
+  /api/pairings/one:
+    get:
       tags: [pairings]
-      operationId: makePairing
-      summary: A pairing of two characters of the dictionary made, before any work has it
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NewPairing'
+      operationId: getPairing
+      summary: One pairing as listed, known or not - a new one by its key alone
+      parameters:
+        - name: pairing
+          in: query
+          required: true
+          description: '"pair:<character>|<character>"'
+          schema:
+            type: string
       responses:
         '200':
-          description: The pairing, made now or before
+          description: The pairing
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Pairing'
         '400':
-          description: Not two different characters of the dictionary (an original character counts as one)
+          description: No pairing of two characters
 
   /api/marking/works:
     get:
@@ -4309,7 +4313,7 @@ components:
           description: Of an original character, the key of its name, shown instead of name
     Pairing:
       type: object
-      required: [key, name, characters, universes, made, 'yes', 'no', unknown]
+      required: [key, name, characters, universes, 'yes', 'no', unknown]
       properties:
         key:
           type: string
@@ -4326,9 +4330,6 @@ components:
           description: The names of the universes its characters are of
           items:
             type: string
-        made:
-          type: boolean
-          description: The user made it on the screen of the pairings
         'yes':
           type: integer
           description: The works the user said have it
@@ -4338,15 +4339,14 @@ components:
         unknown:
           type: integer
           description: The works the user said are not clear of it
-    NewPairing:
-      type: object
-      required: [first, second]
-      properties:
-        first:
-          type: string
-          description: A character's value
-        second:
-          type: string
+        weight:
+          type: number
+          format: double
+          description: |
+            The model's weight of it over the works as a whole, read of the fitted model alone: the
+            likelier a work is to have it, the larger - of the bilinear model, its chance in a work that
+            tells nothing of itself. The largest of the sources' models; none when no model knows it,
+            or its suggester tells no weights
     MarkVerdict:
       type: string
       enum: ['YES', 'UNKNOWN', 'NO']

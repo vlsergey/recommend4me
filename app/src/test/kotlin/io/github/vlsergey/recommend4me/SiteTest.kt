@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.api.model.CatalogueEntryRef
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.MarkAnswer
 import io.github.vlsergey.recommend4me.api.model.MarkVerdict
-import io.github.vlsergey.recommend4me.api.model.NewPairing
 import io.github.vlsergey.recommend4me.marking.MarkingController
 import io.github.vlsergey.recommend4me.pairing.PairingsController
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
@@ -842,17 +841,16 @@ class SiteTest {
             stores.source("site")!!.drafts.ofItems(listOf("g1")).getValue("g1").map { it.facet to it.key }.toSet(),
         )
 
-        // A pairing of the dictionary's characters made before any work has it; the works of its
+        // A pairing of the dictionary's characters, by its key alone — none kept; the works of its
         // universe offered to mark by it, the user's three words on them
-        val made = pairingsApi.makePairing(NewPairing("fake:C2", "fake:C1")).body!!
+        val made = pairingsApi.getPairing(UniverseFacets.pairing("fake:C2", "fake:C1")).body!!
         assertEquals(UniverseFacets.pairing("fake:C1", "fake:C2"), made.key)
         assertEquals(setOf("Pilot", "Captain"), made.characters.map { it.name }.toSet())
-        assertEquals(true, made.made)
         fun toMark(answered: Boolean = false) = marking.getMarkingWorks(UniverseFacets.PAIRINGS, made.key, answered, 0, 50).body!!.works
         assertTrue(toMark().map { it.item }.containsAll(listOf("g1", "g2")), "to mark: ${toMark().map { it.item }}")
         assertEquals("Space Pilot & Captain", toMark().first { it.item == "g1" }.line)
         // Yes: the pairing the work's, its two characters its main ones; not clear: nothing written, asked no more
-        fun counted() = pairingsApi.listPairings().body!!.single { it.key == made.key }.let { Triple(it.yes, it.no, it.unknown) }
+        fun counted() = pairingsApi.getPairing(made.key).body!!.let { Triple(it.yes, it.no, it.unknown) }
         val before = counted()
         marking.answerMarking(MarkAnswer("site", "g1", UniverseFacets.PAIRINGS, made.key, MarkVerdict.YES))
         marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, made.key, MarkVerdict.UNKNOWN))

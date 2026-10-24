@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.CorrectionRepository
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.correction.UnknownRepository
-import io.github.vlsergey.recommend4me.pairing.PairingRepository
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.draft.DraftRepository
 import io.github.vlsergey.recommend4me.folder.DataFolder
@@ -197,9 +196,6 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
 
     val links = TypeLinkRepository(sources.associate { it.id to databases.corrections(it.id) })
     val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
-
-    /** The pairings the user made of two characters of the dictionary — every type's, as the dictionary is. */
-    val pairings = PairingRepository(databases.dictionaries.dsl)
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
     val models = ModelRepository(databases.model(type.id))

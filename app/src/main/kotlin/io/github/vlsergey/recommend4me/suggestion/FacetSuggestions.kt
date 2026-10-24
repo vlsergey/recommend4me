@@ -320,6 +320,18 @@ class FacetSuggestions(
         return out
     }
 
+    /**
+     * The model's weight of every value of the [facet] over the works as a whole ([FacetSuggester.weights]):
+     * of the scoring kept alone, no work read — the values the model knows, the likelier the larger.
+     * Null when the facet was never fitted, or its suggester tells none.
+     */
+    fun weights(store: SourceStore, facet: String): Map<String, Double>? {
+        val kept = store.suggestions.scoring(facet) ?: return null
+        val suggester = plugins.suggester(store.id, facet)?.takeIf { it.id == kept.suggester } ?: return null
+        val weights = suggester.weights(kept.bytes)?.takeIf { it.size == kept.values.size } ?: return null
+        return kept.values.indices.associate { kept.values[it] to weights[it] }
+    }
+
     /** [chances] of the [wanted] facets alone — those on a card, those the model of the grades reads: the chain down to the last of them. */
     fun chancesOf(store: SourceStore, ids: Collection<String>?, wanted: Collection<String>): WorkChances =
         facetsOf(store).lastOrNull { it.key in wanted }?.let { chances(store, ids, it.key) } ?: seeded(store, ids)
@@ -463,8 +475,11 @@ class FacetSuggestions(
         checkpoint()
         val current = !anew && kept != null && stored.basis == data.basis
         val fitted = if (current) {
-            // Fitted before the values it chooses from, or its scoring, were kept: kept now, not fitted again
-            if (stored.values != data.values || !store.suggestions.hasScoring(facet.key)) store.suggestions.keepValues(facet.key, data.values, kept.scoring(data.task))
+            // Fitted before the values it chooses from, or its scoring, or the values' weights in it, were kept: kept now, not fitted again
+            val scoring = store.suggestions.scoring(facet.key)
+            if (stored.values != data.values || scoring == null || suggester.weights(scoring.bytes) == null) {
+                store.suggestions.keepValues(facet.key, data.values, kept.scoring(data.task))
+            }
             kept
         } else {
             // From the state fitted last when there is one: the data moved a little since

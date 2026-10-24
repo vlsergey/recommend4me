@@ -175,6 +175,15 @@ interface FacetSuggester {
      * Null when the bytes are not of this suggester's making, or not of the task's values.
      */
     fun scoring(bytes: ByteArray, task: SuggestionTask): SuggestionScores? = null
+
+    /**
+     * WHAT THE MODEL TELLS OF EVERY VALUE OVER THE WORKS AS A WHOLE, of the scoring kept by
+     * [FittedSuggester.scoring] alone — no work read: a weight of each value, the larger the likelier
+     * a work is to have it, as the suggester's mathematics tells it (a bias, a prior, a share) — the
+     * pairings ordered by it. In the order of the scoring's values; null when the bytes are not of
+     * this suggester's making, or it tells none.
+     */
+    fun weights(bytes: ByteArray): DoubleArray? = null
 }
 
 interface FittedSuggester {

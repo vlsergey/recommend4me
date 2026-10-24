@@ -222,6 +222,9 @@ class BilinearSuggester internal constructor(
     override fun scoring(bytes: ByteArray, task: SuggestionTask): SuggestionScores? =
         Scoring.read(bytes)?.takeIf { it.valueKeys == task.valueKeys && it.design.readsItems(task) }?.on(task)
 
+    /** Every value's share of the works the model was fitted on, kept with the scoring; none of a scoring kept before it was — till the next fitting. */
+    override fun weights(bytes: ByteArray): DoubleArray? = Scoring.read(bytes)?.weights()
+
     /**
      * The model of every fold, fitted with the [rank] and the [lambda] chosen, on the [design] of the
      * task fitted on; and the folds' weights at the penalties beside it ([nearby]), for a refit to go on from.
@@ -240,7 +243,8 @@ class BilinearSuggester internal constructor(
 
         override fun on(task: SuggestionTask): SuggestionScores = scoringOf(task).on(task)
 
-        override fun scoring(task: SuggestionTask): ByteArray = scoringOf(task).pack()
+        /** Kept with every value's share of the items of [task] — the task fitted on: what the model tells of the values over the works as a whole. */
+        override fun scoring(task: SuggestionTask): ByteArray = scoringOf(task).withShares(task).pack()
 
         /** The scoring of the items against the values of [task]: every fold's coordinates of its values — their names and groups carried by B, their own coordinates added — and their biases. */
         private fun scoringOf(task: SuggestionTask): Scoring {

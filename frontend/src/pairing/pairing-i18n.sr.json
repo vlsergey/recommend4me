@@ -2,15 +2,20 @@
   "NewPairing.again": "Izaberi drugog",
   "NewPairing.close": "Zatvori",
   "NewPairing.first": "Prvi lik",
-  "NewPairing.make": "Napravi par",
+  "NewPairing.make": "Označavaj dela po ovom paru",
   "NewPairing.open": "Novi par",
   "NewPairing.second": "Drugi lik",
   "NewPairing.title": "Novi par",
+  "PairingsScreen.byName": "Po nazivu",
+  "PairingsScreen.byWeight": "Po težini u modelu",
+  "PairingsScreen.byWeightHint": "Težina para u obučenom modelu: udeo dela na kojima je učio kojima model daje ovaj par. Par koji model ne zna nema težinu",
   "PairingsScreen.choose": "Izaberite par levo da biste označili dela po njemu",
   "PairingsScreen.counts": "da {{yes}} · ne {{no}} · nejasno {{unknown}}",
   "PairingsScreen.failed": "Parovi ne mogu da se pročitaju: {{error}}",
   "PairingsScreen.filter": "Nađi po nazivu, liku ili univerzumu",
   "PairingsScreen.loading": "Parovi se čitaju…",
+  "PairingsScreen.more": "Prikaži još (prikazano {{shown}} od {{total}})",
   "PairingsScreen.none": "Nema parova",
-  "PairingsScreen.title": "Parovi"
+  "PairingsScreen.title": "Parovi",
+  "PairingsScreen.weight": "težina {{share}}"
 }

@@ -2,15 +2,20 @@
   "NewPairing.again": "Choose another",
   "NewPairing.close": "Close",
   "NewPairing.first": "The first character",
-  "NewPairing.make": "Make the pairing",
+  "NewPairing.make": "Mark works by this pairing",
   "NewPairing.open": "New pairing",
   "NewPairing.second": "The second character",
   "NewPairing.title": "A new pairing",
+  "PairingsScreen.byName": "By name",
+  "PairingsScreen.byWeight": "By weight in the model",
+  "PairingsScreen.byWeightHint": "The pairing's weight in the fitted model: the share of the works it learnt from that the model gives the pairing. A pairing the model does not know has none",
   "PairingsScreen.choose": "Choose a pairing on the left to mark the works by it",
   "PairingsScreen.counts": "yes {{yes}} · no {{no}} · unclear {{unknown}}",
   "PairingsScreen.failed": "The pairings cannot be read: {{error}}",
   "PairingsScreen.filter": "Find by a name, a character or a universe",
   "PairingsScreen.loading": "The pairings are being read…",
+  "PairingsScreen.more": "Show more ({{shown}} of {{total}} shown)",
   "PairingsScreen.none": "No pairings",
-  "PairingsScreen.title": "Pairings"
+  "PairingsScreen.title": "Pairings",
+  "PairingsScreen.weight": "weight {{share}}"
 }

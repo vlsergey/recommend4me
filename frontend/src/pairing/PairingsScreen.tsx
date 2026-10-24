@@ -3,10 +3,12 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type ContentTypeInfo, type Pairing } from "@/api/client";
-import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { intlTag } from "@/i18n/i18n";
 import { label as labelOfKey } from "@/i18n/label";
+import { usePref } from "@/lib/usePref";
 import { cn } from "@/lib/utils";
 import { MarkingTable } from "@/marking/MarkingTable";
 import { followLink, navigate, screenHref } from "@/screen/screens";
@@ -19,13 +21,26 @@ const PAIRINGS = "pairings";
 /** The facet of the layer the pairings are values of. */
 const FACET = "pairings";
 
+/** The order of the pairings: by the model's weight of them over the works as a whole, or by name. */
+type Order = "weight" | "name";
+
+/** How many pairings the list shows, and how many more each "more" adds: the models know thousands. */
+const SHOWN = 200;
+
+/** The key of the pairing of two characters: one whatever their order. */
+const pairingKey = (a: string, b: string) => "pair:" + [a, b].sort().join("|");
+
 /** A character's name: an original character's by its key, in the user's language. */
 const characterName = (c: Pairing["characters"][number]) => (c.nameKey ? labelOfKey(c.nameKey) : c.name);
 
+/** A weight as a share of the works: "4.2%", small ones with their first two digits. */
+const share = (w: number) => (w * 100).toLocaleString(intlTag(), { maximumSignificantDigits: 2 }) + "%";
+
 /**
- * THE PAIRINGS: every pairing known — made here, or answered on, or drafted on some work — with its
- * universes and how many works the user said have it, have it not, are not clear of; a new one made
- * of two characters of the dictionary; and, of the one chosen, its works to mark by it, the likeliest
+ * THE PAIRINGS: every pairing the models know or the user answered on, none kept of its own — with
+ * the model's weight of it over the works as a whole, its universes and how many works the user said
+ * have it, have it not, are not clear of; a new one chosen of two characters of the dictionary (its
+ * key alone: marked on, it is known); and, of the one chosen, its works to mark by it, the likeliest
  * first ([MarkingTable]): its yes makes its two characters the work's main ones too.
  */
 export function PairingsScreen({ type, selected }: { type: ContentTypeInfo; selected?: string }) {
@@ -33,17 +48,35 @@ export function PairingsScreen({ type, selected }: { type: ContentTypeInfo; sele
   const queryClient = useQueryClient();
   const pairings = useQuery({ queryKey: [PAIRINGS], queryFn: async () => unwrap(await api.GET("/api/pairings", {})) });
   const [filter, setFilter] = useState("");
+  const [order, setOrder] = usePref<Order>("pairings.order", "weight");
+  const [limit, setLimit] = useState(SHOWN);
   const needle = filter.trim().toLocaleLowerCase();
-  const shown = (pairings.data ?? []).filter(
-    (p) => needle === "" || [p.name, ...p.characters.map(characterName), ...p.universes].some((n) => n.toLocaleLowerCase().includes(needle)),
-  );
-  const chosen = pairings.data?.find((p) => p.key === selected);
+  const found = (pairings.data ?? [])
+    .filter((p) => needle === "" || [p.name, ...p.characters.map(characterName), ...p.universes].some((n) => n.toLocaleLowerCase().includes(needle)))
+    // By the model's weight, the heaviest first — one no model knows last; by name as the server gives them
+    .sort(order === "weight" ? (a, b) => (b.weight ?? -1) - (a.weight ?? -1) : () => 0);
+  const shown = found.slice(0, limit);
+  // The one chosen, known or not: a new one is its key alone
+  const one = useQuery({
+    queryKey: [PAIRINGS, "one", selected],
+    enabled: selected !== undefined,
+    queryFn: async () => unwrap(await api.GET("/api/pairings/one", { params: { query: { pairing: selected! } } })),
+  });
+  const chosen = one.data;
   return (
     <div className="mx-auto grid max-w-[1800px] gap-4 px-4 py-4 md:grid-cols-[minmax(16rem,22rem)_1fr]">
       <aside className="flex min-w-0 flex-col gap-2">
         <h2 className="text-lg font-semibold">{t("PairingsScreen.title")}</h2>
-        <NewPairing type={type} onMade={(p) => (queryClient.invalidateQueries({ queryKey: [PAIRINGS] }), navigate({ kind: "pairings", pairing: p.key }))} />
-        <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t("PairingsScreen.filter")} className="h-8" />
+        <NewPairing type={type} onChosen={(key) => navigate({ kind: "pairings", pairing: key })} />
+        <Input type="search" value={filter} onChange={(e) => (setFilter(e.target.value), setLimit(SHOWN))} placeholder={t("PairingsScreen.filter")} className="h-8" />
+        <Tabs value={order} onValueChange={(v) => setOrder(v as Order)}>
+          <TabsList>
+            <TabsTrigger value="weight" title={t("PairingsScreen.byWeightHint")}>
+              {t("PairingsScreen.byWeight")}
+            </TabsTrigger>
+            <TabsTrigger value="name">{t("PairingsScreen.byName")}</TabsTrigger>
+          </TabsList>
+        </Tabs>
         {pairings.isLoading && <p className="text-sm text-muted-foreground">{t("PairingsScreen.loading")}</p>}
         {pairings.isError && <p className="text-sm text-destructive">{t("PairingsScreen.failed", { error: pairings.error.message })}</p>}
         {pairings.data && shown.length === 0 && <p className="text-sm text-muted-foreground">{t("PairingsScreen.none")}</p>}
@@ -57,11 +90,19 @@ export function PairingsScreen({ type, selected }: { type: ContentTypeInfo; sele
               >
                 <span className="font-medium">{p.name}</span>
                 <span className="text-xs text-muted-foreground">{p.universes.join(", ")}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">{t("PairingsScreen.counts", { yes: p.yes, no: p.no, unknown: p.unknown })}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {p.weight != null && <span title={t("PairingsScreen.byWeightHint")}>{t("PairingsScreen.weight", { share: share(p.weight) })} · </span>}
+                  {t("PairingsScreen.counts", { yes: p.yes, no: p.no, unknown: p.unknown })}
+                </span>
               </a>
             </li>
           ))}
         </ul>
+        {found.length > shown.length && (
+          <Button variant="outline" size="sm" className="self-start" onClick={() => setLimit(limit + SHOWN)}>
+            {t("PairingsScreen.more", { shown: shown.length, total: found.length })}
+          </Button>
+        )}
       </aside>
       <main className="min-w-0">
         {!selected && <p className="text-sm text-muted-foreground">{t("PairingsScreen.choose")}</p>}
@@ -81,9 +122,10 @@ export function PairingsScreen({ type, selected }: { type: ContentTypeInfo; sele
 
 /**
  * A new pairing: two characters chosen, each of the characters of every universe of the dictionary
- * or an original one, found by any of their names; made, it is chosen.
+ * or an original one, found by any of their names; the pairing of them chosen to mark the works by —
+ * nothing kept of it: marked on, it is known.
  */
-function NewPairing({ type, onMade }: { type: ContentTypeInfo; onMade: (p: Pairing) => void }) {
+function NewPairing({ type, onChosen }: { type: ContentTypeInfo; onChosen: (key: string) => void }) {
   const { t } = useTranslation("pairing");
   const { t: tu } = useTranslation("universe");
   const [open, setOpen] = useState(false);
@@ -156,18 +198,18 @@ function NewPairing({ type, onMade }: { type: ContentTypeInfo; onMade: (p: Pairi
       </div>
       {slot(first, setFirst, t("NewPairing.first"))}
       {slot(second, setSecond, t("NewPairing.second"))}
-      <AsyncButton
+      <Button
         size="sm"
         className="self-start"
         disabled={!first || !second}
-        onClick={async () => {
-          const made = unwrap(await api.POST("/api/pairings", { body: { first: first!.key, second: second!.key } }));
+        onClick={() => {
+          const key = pairingKey(first!.key, second!.key);
           close();
-          onMade(made);
+          onChosen(key);
         }}
       >
         {t("NewPairing.make")}
-      </AsyncButton>
+      </Button>
     </div>
   );
 }
