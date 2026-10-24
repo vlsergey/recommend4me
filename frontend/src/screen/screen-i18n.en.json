@@ -15,6 +15,8 @@
   "Menu.stop.title": "Stop the application: its databases closed as they should be",
   "Menu.tags": "Tags",
   "Menu.tags.title": "Tags of every site, games and books: merge the same ones, name them, build parent and child tags",
+  "Menu.pairings": "Pairings",
+  "Menu.pairings.title": "Pairings of the universes' characters, and the works marked by them",
   "Menu.title": "Menu",
   "Menu.universes": "Universes",
   "Menu.universes.title": "The dictionary of fan fiction universes and their characters",

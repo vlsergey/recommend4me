@@ -1,0 +1,16 @@
+{
+  "NewPairing.again": "Выбрать другого",
+  "NewPairing.close": "Закрыть",
+  "NewPairing.first": "Первый персонаж",
+  "NewPairing.make": "Завести пейринг",
+  "NewPairing.open": "Новый пейринг",
+  "NewPairing.second": "Второй персонаж",
+  "NewPairing.title": "Новый пейринг",
+  "PairingsScreen.choose": "Выберите пейринг слева, чтобы разметить работы по нему",
+  "PairingsScreen.counts": "да {{yes}} · нет {{no}} · неизвестно {{unknown}}",
+  "PairingsScreen.failed": "Не удалось прочитать пейринги: {{error}}",
+  "PairingsScreen.filter": "Найти по названию, персонажу или вселенной",
+  "PairingsScreen.loading": "Пейринги читаются…",
+  "PairingsScreen.none": "Пейрингов нет",
+  "PairingsScreen.title": "Пейринги"
+}

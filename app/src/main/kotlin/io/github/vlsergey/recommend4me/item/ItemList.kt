@@ -213,7 +213,7 @@ class ItemList(
      * works out, the user's corrections on top. The model's made now of every work of the source, at
      * every asking (user, 2026-10-15: slow for now, made faster later), none kept.
      */
-    private fun valuesOf(s: SourceStore, def: FacetDef, corrections: Map<String, List<FacetCorrection>>): Map<String, List<String>> {
+    fun valuesOf(s: SourceStore, def: FacetDef, corrections: Map<String, List<FacetCorrection>>): Map<String, List<String>> {
         val byItem = HashMap<String, List<String>>()
         s.items.forEachFacet(def.key) { id, keys -> byItem[id] = keys }
         if (def.infer) suggestions.chances(s, null, through = def.key).forEach { (id, chances) ->

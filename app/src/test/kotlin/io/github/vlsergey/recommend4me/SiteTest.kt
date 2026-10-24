@@ -5,6 +5,11 @@ import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.CardsRequest
 import io.github.vlsergey.recommend4me.api.model.CatalogueEntryRef
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
+import io.github.vlsergey.recommend4me.api.model.MarkAnswer
+import io.github.vlsergey.recommend4me.api.model.MarkVerdict
+import io.github.vlsergey.recommend4me.api.model.NewPairing
+import io.github.vlsergey.recommend4me.marking.MarkingController
+import io.github.vlsergey.recommend4me.pairing.PairingsController
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.capture.CaptureController
@@ -278,6 +283,8 @@ class SiteTest {
     @Autowired lateinit var tagVectors: TagVectors
     @Autowired lateinit var tagsByText: TagsByTextController
     @Autowired lateinit var textTags: TextTags
+    @Autowired lateinit var pairingsApi: PairingsController
+    @Autowired lateinit var marking: MarkingController
 
     private fun capture(body: String) = captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
 
@@ -834,6 +841,35 @@ class SiteTest {
             setOf(UniverseFacets.CHARACTERS to "fake:C1", UniverseFacets.UNIVERSE to "fake:U2"),
             stores.source("site")!!.drafts.ofItems(listOf("g1")).getValue("g1").map { it.facet to it.key }.toSet(),
         )
+
+        // A pairing of the dictionary's characters made before any work has it; the works of its
+        // universe offered to mark by it, the user's three words on them
+        val made = pairingsApi.makePairing(NewPairing("fake:C2", "fake:C1")).body!!
+        assertEquals(UniverseFacets.pairing("fake:C1", "fake:C2"), made.key)
+        assertEquals(setOf("Pilot", "Captain"), made.characters.map { it.name }.toSet())
+        assertEquals(true, made.made)
+        fun toMark(answered: Boolean = false) = marking.getMarkingWorks(UniverseFacets.PAIRINGS, made.key, answered, 0, 50).body!!.works
+        assertTrue(toMark().map { it.item }.containsAll(listOf("g1", "g2")), "to mark: ${toMark().map { it.item }}")
+        assertEquals("Space Pilot & Captain", toMark().first { it.item == "g1" }.line)
+        // Yes: the pairing the work's, its two characters its main ones; not clear: nothing written, asked no more
+        fun counted() = pairingsApi.listPairings().body!!.single { it.key == made.key }.let { Triple(it.yes, it.no, it.unknown) }
+        val before = counted()
+        marking.answerMarking(MarkAnswer("site", "g1", UniverseFacets.PAIRINGS, made.key, MarkVerdict.YES))
+        marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, made.key, MarkVerdict.UNKNOWN))
+        val g1 = stores.source("site")!!.corrections.facetsOf("g1").filter { it.added }.map { it.facet to it.key }.toSet()
+        assertTrue(g1.containsAll(setOf(UniverseFacets.PAIRINGS to made.key, UniverseFacets.CHARACTERS to "fake:C1", UniverseFacets.CHARACTERS to "fake:C2")), "g1: $g1")
+        assertTrue(stores.source("site")!!.corrections.facetsOf("g2").none { it.facet == UniverseFacets.PAIRINGS })
+        assertTrue(toMark().none { it.item in setOf("g1", "g2") })
+        assertEquals(mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.UNKNOWN), toMark(answered = true).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer })
+        assertEquals(Triple(before.first + 1, before.second, before.third + 1), counted())
+        // No: answered so, the characters as they were
+        marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, made.key, MarkVerdict.NO))
+        assertEquals(listOf(false), stores.source("site")!!.corrections.facetsOf("g2").filter { it.facet == UniverseFacets.PAIRINGS }.map { it.added })
+        assertTrue(stores.source("site")!!.corrections.facetsOf("g2").none { it.facet == UniverseFacets.CHARACTERS })
+        // Taken back: the works to mark again, as they were before
+        listOf("g1", "g2").forEach { marking.unanswerMarking("site", it, UniverseFacets.PAIRINGS, made.key) }
+        listOf("fake:C1", "fake:C2").forEach { corrections.uncorrectFacet("site", "g1", UniverseFacets.CHARACTERS, it) }
+        assertTrue(toMark().map { it.item }.containsAll(listOf("g1", "g2")))
 
         // The site's page changes: the drafts follow it — the pilot no more on the line, no more drafted
         capture("g3|Wingmen third|space|They fly a third time|Space Pilot & Captain")

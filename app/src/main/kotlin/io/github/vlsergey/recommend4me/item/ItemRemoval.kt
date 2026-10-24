@@ -33,6 +33,7 @@ class ItemRemoval(private val stores: Stores, private val recommendations: Recom
         store.files.delete(store.pictures.sync(key.id, emptyList()))
         store.items.remove(key.id)
         store.corrections.forget(key.id)
+        store.unknowns.forgetItem(key.id)
         store.ratings.forget(key.id)
         store.interest.forget(key.id)
         store.signals.forget(key.id)

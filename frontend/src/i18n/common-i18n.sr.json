@@ -8,6 +8,7 @@
   "App.failed.progress": "Napredak ne može da se prikaže",
   "App.failed.tags": "Tagovi ne mogu da se prikažu",
   "App.failed.universes": "Univerzumi ne mogu da se prikažu",
+  "App.failed.pairings": "Parovi ne mogu da se prikažu",
   "App.hotkey.choose": "izbor dela",
   "App.hotkey.choose.keys": "← → ↑ ↓ / h j k l",
   "App.hotkey.close": "zatvori prozor",

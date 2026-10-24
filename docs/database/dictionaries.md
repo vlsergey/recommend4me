@@ -19,6 +19,7 @@
 | `tag_offers` | the offers of the tags' graph as last worked out with the names of the tags, in the queue of the computations: a request reads them, never waits for them |
 | `tag_text_model` | the model of how close a tag and a paragraph are when the work has the tag, learnt from the user's answers: the slope and the intercept, and every answered tag's own bias |
 | `universe` | a universe of the dictionary: an entry of a catalogue the user added |
+| `pairing` | a pairing the user made of two characters of the dictionary, known before any work has it |
 | `universe_property` | what else the catalogue says of a universe |
 | `universe_character` | a character of a universe |
 | `universe_character_property` | what else the catalogue says of a character |
@@ -61,6 +62,10 @@ erDiagram
         BIGINT child PK, FK
         BIGINT parent PK, FK
         TIMESTAMPTZ linked_at
+    }
+    pairing {
+        VARCHAR pairing_key PK
+        TIMESTAMPTZ made_at
     }
     site_tag {
         VARCHAR source PK

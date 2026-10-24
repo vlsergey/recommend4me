@@ -1,0 +1,16 @@
+{
+  "NewPairing.again": "Izaberi drugog",
+  "NewPairing.close": "Zatvori",
+  "NewPairing.first": "Prvi lik",
+  "NewPairing.make": "Napravi par",
+  "NewPairing.open": "Novi par",
+  "NewPairing.second": "Drugi lik",
+  "NewPairing.title": "Novi par",
+  "PairingsScreen.choose": "Izaberite par levo da biste označili dela po njemu",
+  "PairingsScreen.counts": "da {{yes}} · ne {{no}} · nejasno {{unknown}}",
+  "PairingsScreen.failed": "Parovi ne mogu da se pročitaju: {{error}}",
+  "PairingsScreen.filter": "Nađi po nazivu, liku ili univerzumu",
+  "PairingsScreen.loading": "Parovi se čitaju…",
+  "PairingsScreen.none": "Nema parova",
+  "PairingsScreen.title": "Parovi"
+}

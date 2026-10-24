@@ -17,8 +17,6 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
-import io.github.vlsergey.recommend4me.universe.UniverseFacet
-import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import io.github.vlsergey.recommend4me.tag.Tags
 import org.springframework.http.HttpStatus
@@ -26,8 +24,6 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection as ApiFacetCorrection
-
-private val log = LoggerFactory.getLogger(CorrectionsController::class.java)
 
 private fun noField(store: SourceStore, field: String) =
     Refusal.NO_FIELD.refuse(HttpStatus.BAD_REQUEST, "The source ${store.id} has no field '$field'", "field" to field)
@@ -51,6 +47,7 @@ class CorrectionsController(
     private val linkedGrades: LinkedGrades,
     private val linkedInterest: LinkedInterest,
     private val tags: Tags,
+    private val answering: Answering,
 ) : CorrectionsApi {
 
     private fun corrected(store: SourceStore, item: String): ResponseEntity<ItemDetails> {
@@ -66,14 +63,7 @@ class CorrectionsController(
      * is kept and reads the work anew once the answers have settled; its chances are made of the
      * answer when it is read ([FacetSuggestions.chances]).
      */
-    private fun answered(store: SourceStore, item: String, facet: String, change: () -> Unit) {
-        val started = System.currentTimeMillis()
-        change()
-        // The models of the facets, the search and the model of the grades read the user's answers:
-        // fitted, indexed and learnt anew in the background
-        events.publishEvent(FacetAnswered(store.type, store.id, item, facet))
-        log.info("{}: an answer on {} of {} written in {} ms", store.id, facet, item, System.currentTimeMillis() - started)
-    }
+    private fun answered(store: SourceStore, item: String, facet: String, change: () -> Unit) = answering.answered(store, item, listOf(facet), change)
 
     private fun itemOf(source: String, item: String): SourceStore? =
         stores.source(source)?.takeIf { it.items.find(item) != null }
@@ -97,28 +87,11 @@ class CorrectionsController(
         val key = ofEntry ?: c.key?.trim()?.takeIf { it.isNotEmpty() }
             ?: name?.let { FacetValues.keyOf(store, c.facet, it) }
             ?: throw Refusal.NO_VALUE.refuse(HttpStatus.BAD_REQUEST, "Neither a key nor a name of a value of '${c.facet}' given")
-        // A tag the work has by a tag under it the user confirmed is not said to be not the work's: the answer on that one is
-        if (!c.added) store.hierarchies()[c.facet]?.let { hierarchy ->
-            val under = hierarchy.descendants(key)
-            store.corrections.facetsOf(item).firstOrNull { it.facet == c.facet && it.added && it.key in under }?.let { held ->
-                throw Refusal.TAG_IMPLIED.refuse(
-                    HttpStatus.CONFLICT, "$key is above ${held.key}, which the user confirmed of $item",
-                    "tag" to (store.tags.shown(listOf(held.key))[held.key] ?: held.key),
-                )
-            }
-        }
+        if (!c.added) answering.refuseImplied(store, item, c.facet, key)
         answered(store, item, c.facet) {
             // A name is kept for a value the site does not name: one the user made up
             val known = store.names(c.facet, listOf(key)).isNotEmpty()
-            store.corrections.setFacet(item, c.facet, key, c.added, name.takeIf { !known }, Instant.now())
-            // Of a facet of one value — the language of a book — a value added takes the place of the user's others
-            if (c.added && def.single) {
-                store.corrections.facetsOf(item).filter { it.facet == c.facet && it.added && it.key != key }.forEach { store.corrections.unsetFacet(item, c.facet, it.key) }
-            }
-            // A character is the work's main one or its secondary one: said to be one, it is the other no more
-            UniverseFacet.otherCharacters(c.facet)?.takeIf { c.added && key !in UniverseFacet.ORIGINAL_CHARACTERS }?.let { other ->
-                if (store.corrections.facetsOf(item).any { it.facet == other && it.key == key && it.added }) store.corrections.unsetFacet(item, other, key)
-            }
+            answering.write(store, item, c.facet, key, c.added, name.takeIf { !known })
         }
         return ResponseEntity.ok(FacetAnswer(c.facet, key, name ?: ofEntry?.let { store.names(c.facet, listOf(it))[it] }))
     }

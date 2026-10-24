@@ -52,7 +52,7 @@ const UNIVERSELESS: readonly string[] = [REALISM, ALTERNATIVE_HISTORY, ORIGINAL]
 const universeless = (kinds: FacetValueInfo[]) => kinds.length > 0 && kinds.every((k) => UNIVERSELESS.includes(k.key));
 
 /** The original characters, of no universe: every work may have them besides its universes' characters. */
-const ORIGINAL_CHARACTERS = [
+export const ORIGINAL_CHARACTERS = [
   { key: "oc:female", label: "OriginalCharacter.female" },
   { key: "oc:male", label: "OriginalCharacter.male" },
 ] as const;
@@ -788,7 +788,7 @@ function OpenPairings({
  * A value to pick: its key, its name, a mark after it (the model's chance, the mentions), what the
  * catalogue says it is and a note under it, every name it is found by, and whether the work has it already.
  */
-type Option = { key: string; name: string; mark?: string; description?: string; note?: string; names: string[]; taken: boolean };
+export type Option = { key: string; name: string; mark?: string; description?: string; note?: string; names: string[]; taken: boolean };
 
 /** "mentioned 3 times" — how often the work's texts name a candidate; nothing when they were not counted. */
 function mentionsText(c: Candidate): string | undefined {
@@ -873,7 +873,7 @@ function Named({
  * offered. With [onName], a typed name is added as a value of the user's own. With [onClose], it
  * is opened by another button (a 🔍 after the values) — open from the start, and closing tells it.
  */
-function Picker({
+export function Picker({
   label,
   placeholder,
   options,

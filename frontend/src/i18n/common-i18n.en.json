@@ -8,6 +8,7 @@
   "App.failed.progress": "The progress cannot be shown",
   "App.failed.tags": "The tags cannot be shown",
   "App.failed.universes": "The universes cannot be shown",
+  "App.failed.pairings": "The pairings cannot be shown",
   "App.hotkey.choose": "choose a work",
   "App.hotkey.choose.keys": "← → ↑ ↓ / h j k l",
   "App.hotkey.close": "close the window",

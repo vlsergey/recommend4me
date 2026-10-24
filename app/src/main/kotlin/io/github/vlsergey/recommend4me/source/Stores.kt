@@ -8,6 +8,8 @@ import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.CorrectionRepository
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
+import io.github.vlsergey.recommend4me.correction.UnknownRepository
+import io.github.vlsergey.recommend4me.pairing.PairingRepository
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.draft.DraftRepository
 import io.github.vlsergey.recommend4me.folder.DataFolder
@@ -106,6 +108,9 @@ class SourceStore(
     /** The user's answers on the tags offered by the paragraphs of the works' texts, kept with the corrections. */
     val tagTextAnswers = TagTextAnswerRepository(dbs.corrections.dsl)
 
+    /** The user's word that whether a work has a value is not clear of it — a pairing — kept with the corrections. */
+    val unknowns = UnknownRepository(dbs.corrections.dsl)
+
     val ratings = RatingRepository(dbs.ratings.dsl)
     val interest = InterestRepository(dbs.ratings.dsl)
     val marks = MarkRepository(source.id, dbs.ratings.dsl)
@@ -192,6 +197,9 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
 
     val links = TypeLinkRepository(sources.associate { it.id to databases.corrections(it.id) })
     val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
+
+    /** The pairings the user made of two characters of the dictionary — every type's, as the dictionary is. */
+    val pairings = PairingRepository(databases.dictionaries.dsl)
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
     val models = ModelRepository(databases.model(type.id))

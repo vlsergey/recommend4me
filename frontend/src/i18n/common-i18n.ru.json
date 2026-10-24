@@ -8,6 +8,7 @@
   "App.failed.progress": "Ход работы не показывается",
   "App.failed.tags": "Теги не показываются",
   "App.failed.universes": "Вселенные не показываются",
+  "App.failed.pairings": "Пейринги не показываются",
   "App.hotkey.choose": "выбор работы",
   "App.hotkey.choose.keys": "← → ↑ ↓ / h j k l",
   "App.hotkey.close": "закрыть окно",

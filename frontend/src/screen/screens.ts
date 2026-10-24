@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 /**
  * THE SCREENS OF THE INTERFACE, each an address of its own: the works of a content type at
  * "/<type>" ("/books", "/games"), the dictionary of universes at "/universes" (one of them at
- * "/universes/<catalogue>/<id>"), the tags of every site at "/tags" (one at "/tags/<key>") — the
- * universes and the tags are every type's; the user's grades and marks, the newest first, at
+ * "/universes/<catalogue>/<id>"), the pairings of their characters at "/pairings" (the works marked
+ * by one at "/pairings/<key>"), the tags of every site at "/tags" (one at "/tags/<key>") — the
+ * universes, the pairings and the tags are every type's; the user's grades and marks, the newest first, at
  * "/history". What a page shows is all in its address: opened in
  * another tab, it shows the same. A work's dialog is the "#item=…" over any of them. The server
  * answers every such address with the same page.
@@ -16,6 +17,8 @@ export type Screen =
       type?: string;
     }
   | { kind: "universes"; catalogue?: string; universe?: string }
+  /** The pairings known ("/pairings"), the works marked by one at "/pairings/<key>". */
+  | { kind: "pairings"; pairing?: string }
   | { kind: "tags"; tag?: string }
   | { kind: "history" }
   /** The models of a content type ("/models/<type>"); of the one shown last at "/models". */
@@ -30,6 +33,7 @@ export function parseScreen(path: string): Screen {
     }
   });
   if (parts[0] === "universes") return { kind: "universes", catalogue: parts[1], universe: parts[2] };
+  if (parts[0] === "pairings") return { kind: "pairings", pairing: parts[1] };
   if (parts[0] === "tags") return { kind: "tags", tag: parts.length > 1 ? parts.slice(1).join("/") : undefined };
   if (parts[0] === "history") return { kind: "history" };
   if (parts[0] === "models") return { kind: "models", type: parts[1] };
@@ -42,6 +46,9 @@ export function screenHref(screen: Screen): string {
       return screen.type ? `/${encodeURIComponent(screen.type)}` : "/";
     case "universes":
       return screen.catalogue && screen.universe ? `/universes/${encodeURIComponent(screen.catalogue)}/${encodeURIComponent(screen.universe)}` : "/universes";
+    case "pairings":
+      // A pairing's key "pair:<a>|<b>" escaped whole: one piece of the address
+      return screen.pairing ? `/pairings/${encodeURIComponent(screen.pairing)}` : "/pairings";
     case "tags":
       // A tag's key may hold slashes ("m/m"): each piece escaped, the slashes kept
       return screen.tag ? `/tags/${screen.tag.split("/").map(encodeURIComponent).join("/")}` : "/tags";

@@ -9,13 +9,14 @@ import org.springframework.web.server.ResponseStatusException
 
 /**
  * THE SCREENS OF THE INTERFACE ARE ADDRESSES of their own — the works of a content type at
- * "/books", the universes at "/universes", the tags of every site at "/tags", one of them below —
+ * "/books", the universes at "/universes", the pairings at "/pairings", the tags of every site at
+ * "/tags", one of them below —
  * so a screen is a link, opened in a tab of its own and kept in the history. Each is the same page;
  * the interface shows the screen its address names.
  */
 @Controller
 class Screens(private val stores: Stores) {
-    @GetMapping("/universes", "/universes/**", "/tags", "/tags/**", "/history", "/models", "/models/**")
+    @GetMapping("/universes", "/universes/**", "/pairings", "/pairings/**", "/tags", "/tags/**", "/history", "/models", "/models/**")
     fun screen(): String = PAGE
 
     /** The works of a type: of a known one only — "/favicon.ico" and the like are files. */

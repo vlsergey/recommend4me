@@ -297,6 +297,29 @@ class FacetSuggestions(
         return chain(store, ids, upTo)
     }
 
+    /**
+     * The model's chance of ONE value [key] of the [facet] for every work of [ids], whatever else it
+     * gives them and whether or not the work may have it ([Vocabulary.allowed]) — the works of a
+     * pairing's universes ranked by it. Made now as [chances] are, none kept, nothing waited for; a
+     * work the facet's model does not score, or a value it does not know, has none.
+     */
+    fun chancesOfValue(store: SourceStore, ids: Collection<String>, facet: String, key: String): Map<String, Double> {
+        if (ids.isEmpty()) return emptyMap()
+        val facets = facetsOf(store)
+        val k = facets.indexOfFirst { it.key == facet }.takeIf { it >= 0 } ?: return emptyMap()
+        val suggester = plugins.suggester(store.id, facet) ?: return emptyMap()
+        val encoder = plugins.textEncoder() ?: return emptyMap()
+        val made = chain(store, ids, k)
+        val scored = scored(store, facets[k], suggester, encoder, ids, made) ?: return emptyMap()
+        val v = scored.data.values.indexOf(key).takeIf { it >= 0 } ?: return emptyMap()
+        val out = HashMap<String, Double>()
+        scored.data.ids.indices.chunked(CHUNK).forEach { chunk ->
+            val rows = scored.scores.of(chunk.toIntArray())
+            chunk.forEachIndexed { j, i -> out[scored.data.ids[i]] = rows[j][v].toDouble() }
+        }
+        return out
+    }
+
     /** [chances] of the [wanted] facets alone — those on a card, those the model of the grades reads: the chain down to the last of them. */
     fun chancesOf(store: SourceStore, ids: Collection<String>?, wanted: Collection<String>): WorkChances =
         facetsOf(store).lastOrNull { it.key in wanted }?.let { chances(store, ids, it.key) } ?: seeded(store, ids)

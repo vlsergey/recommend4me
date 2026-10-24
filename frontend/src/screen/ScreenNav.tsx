@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
-import { HistoryIcon, MenuIcon, OrbitIcon, PowerIcon, RadarIcon, TagsIcon } from "lucide-react";
+import { HeartHandshakeIcon, HistoryIcon, MenuIcon, OrbitIcon, PowerIcon, RadarIcon, TagsIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ContentTypeInfo } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,17 @@ function entries({ types, type, screen, onCapture, onStop }: MenuProps, t: TFunc
             ),
             title: t("Menu.universes.title"),
             active: screen.kind === "universes",
+          } satisfies Entry,
+          {
+            key: "pairings",
+            screen: { kind: "pairings" },
+            label: (
+              <>
+                <HeartHandshakeIcon /> {t("Menu.pairings")}
+              </>
+            ),
+            title: t("Menu.pairings.title"),
+            active: screen.kind === "pairings",
           } satisfies Entry,
         ]
       : []),

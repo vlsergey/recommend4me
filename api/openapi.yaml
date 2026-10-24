@@ -25,6 +25,8 @@ tags:
   - name: universes
   - name: tags
   - name: tagsByText
+  - name: pairings
+  - name: marking
   - name: workload
   - name: launcher
 
@@ -437,6 +439,156 @@ paths:
           description: Kept
         '404':
           description: No such item, tag or paragraph
+
+  /api/pairings:
+    get:
+      tags: [pairings]
+      operationId: listPairings
+      summary: Every pairing known, with how many works the user answered on by it
+      description: |
+        The pairings the user made (makePairing), and every pairing any work of any source of a type
+        with universes was answered on - yes, no or not clear - or drafted from the site's tags
+        (a pairing of Archive of Our Own), by the name of the dictionary; of each, its two characters
+        and the universes they are of, and how many works the user said have it, have it not, and
+        are not clear of.
+      responses:
+        '200':
+          description: The pairings, by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pairing'
+    post:
+      tags: [pairings]
+      operationId: makePairing
+      summary: A pairing of two characters of the dictionary made, before any work has it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewPairing'
+      responses:
+        '200':
+          description: The pairing, made now or before
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pairing'
+        '400':
+          description: Not two different characters of the dictionary (an original character counts as one)
+
+  /api/marking/works:
+    get:
+      tags: [marking]
+      operationId: getMarkingWorks
+      summary: The works to confirm a value of the layer on - a tag, a character, a pairing - the likeliest first
+      description: |
+        THE CONFIRMING OF THE APPLICATION'S MARKING, value by value: the works that may have the
+        value of the facet of the layer (one key across the sources: "tags", "characters",
+        "secondary-characters", "pairings"). Of a character or a pairing, every work that has a
+        universe of each of its characters (as the work is shown: the site's, the model's, the
+        user's word on top) - an original character is of every universe; of any other value, every
+        work of every source with the facet. Without [answered], those the user has not answered on
+        by the value; with it, those answered, with the answer. Ordered by the model's chance that
+        the work has the value, made now (none kept; a work the model does not score for it yet,
+        last). Of each, its title, its description, the site's line of its pairings and characters,
+        and the site's tags.
+      parameters:
+        - name: facet
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: value
+          in: query
+          required: true
+          description: The value's key - of a pairing "pair:<character>|<character>"
+          schema:
+            type: string
+        - name: answered
+          in: query
+          description: The works answered on by it, not those to answer on
+          schema:
+            type: boolean
+            default: false
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: A page of the works
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkedWorks'
+        '400':
+          description: No such facet of the layer, or no pairing of that key
+
+  /api/marking/answer:
+    put:
+      tags: [marking]
+      operationId: answerMarking
+      summary: The user's word on whether a work has a value of the layer
+      description: |
+        YES - the work has the value: answered on the work as added, as correctFacet does; of a
+        pairing, its two characters (an original one aside) too, as the work's main characters (a
+        secondary one moves). UNKNOWN - the work does not say it outright: asked of it no more,
+        nothing learnt, the work's answer on the value taken back. NO - the work has it not:
+        answered so; of a pairing, its characters stay as they are. The models learn anew in the
+        background; nothing is waited for.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkAnswer'
+      responses:
+        '204':
+          description: Kept
+        '400':
+          description: No such facet of the layer, or no pairing of that key
+        '404':
+          description: No such item
+    delete:
+      tags: [marking]
+      operationId: unanswerMarking
+      summary: The user's word on whether a work has a value of the layer taken back, whatever it was
+      parameters:
+        - name: source
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: item
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: facet
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: value
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Taken back
+        '404':
+          description: No such item
 
   /api/items/{source}/{item}/mentions:
     get:
@@ -4143,6 +4295,115 @@ components:
         verdict:
           type: string
           enum: ['YES', 'ENOUGH_NOT', 'WRONG']
+    PairingCharacter:
+      type: object
+      required: [value, name]
+      properties:
+        value:
+          type: string
+          description: The character's value - "wikidata:Q…", or an original character ("oc:female")
+        name:
+          type: string
+        nameKey:
+          type: string
+          description: Of an original character, the key of its name, shown instead of name
+    Pairing:
+      type: object
+      required: [key, name, characters, universes, made, 'yes', 'no', unknown]
+      properties:
+        key:
+          type: string
+          description: '"pair:<character>|<character>"'
+        name:
+          type: string
+          description: As the dictionary names it ("A / B", the sexes' sign beside)
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/PairingCharacter'
+        universes:
+          type: array
+          description: The names of the universes its characters are of
+          items:
+            type: string
+        made:
+          type: boolean
+          description: The user made it on the screen of the pairings
+        'yes':
+          type: integer
+          description: The works the user said have it
+        'no':
+          type: integer
+          description: The works the user said have it not
+        unknown:
+          type: integer
+          description: The works the user said are not clear of it
+    NewPairing:
+      type: object
+      required: [first, second]
+      properties:
+        first:
+          type: string
+          description: A character's value
+        second:
+          type: string
+    MarkVerdict:
+      type: string
+      enum: ['YES', 'UNKNOWN', 'NO']
+    MarkedWork:
+      type: object
+      required: [source, item, title, url, tags]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+        description:
+          type: string
+          description: The work's description, as the user corrected it
+        line:
+          type: string
+          description: The site's line of the work's pairings and characters, as the site writes it
+        tags:
+          type: array
+          description: The site's tags of the work, by their names
+          items:
+            type: string
+        chance:
+          type: number
+          format: double
+          description: The model's chance that the work has the value; none when it does not score it yet
+        answer:
+          $ref: '#/components/schemas/MarkVerdict'
+    MarkedWorks:
+      type: object
+      required: [total, works]
+      properties:
+        total:
+          type: integer
+          description: How many works there are of the kind asked, all pages
+        works:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarkedWork'
+    MarkAnswer:
+      type: object
+      required: [source, item, facet, value, verdict]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        facet:
+          type: string
+        value:
+          type: string
+        verdict:
+          $ref: '#/components/schemas/MarkVerdict'
     Candidate:
       type: object
       required: [key, name]

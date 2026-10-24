@@ -14,6 +14,12 @@ import itemSr from "../item/item-i18n.sr.json";
 import jobEn from "../job/job-i18n.en.json";
 import jobRu from "../job/job-i18n.ru.json";
 import jobSr from "../job/job-i18n.sr.json";
+import markingEn from "../marking/marking-i18n.en.json";
+import markingRu from "../marking/marking-i18n.ru.json";
+import markingSr from "../marking/marking-i18n.sr.json";
+import pairingEn from "../pairing/pairing-i18n.en.json";
+import pairingRu from "../pairing/pairing-i18n.ru.json";
+import pairingSr from "../pairing/pairing-i18n.sr.json";
 import markEn from "../mark/mark-i18n.en.json";
 import markRu from "../mark/mark-i18n.ru.json";
 import markSr from "../mark/mark-i18n.sr.json";
@@ -108,8 +114,10 @@ const NAMESPACES = {
   item: namespace(itemEn, itemRu, itemSr),
   job: namespace(jobEn, jobRu, jobSr),
   mark: namespace(markEn, markRu, markSr),
+  marking: namespace(markingEn, markingRu, markingSr),
   model: namespace(modelEn, modelRu, modelSr),
   number: namespace(numberEn, numberRu, numberSr),
+  pairing: namespace(pairingEn, pairingRu, pairingSr),
   part: namespace(partEn, partRu, partSr),
   picture: namespace(pictureEn, pictureRu, pictureSr),
   review: namespace(reviewEn, reviewRu, reviewSr),
@@ -143,8 +151,10 @@ export type Resources = {
   item: typeof itemEn;
   job: typeof jobEn;
   mark: typeof markEn;
+  marking: typeof markingEn;
   model: typeof modelEn;
   number: typeof numberEn;
+  pairing: typeof pairingEn;
   part: typeof partEn;
   picture: typeof pictureEn;
   review: typeof reviewEn;
