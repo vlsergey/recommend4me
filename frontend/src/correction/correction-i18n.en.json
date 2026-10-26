@@ -48,5 +48,12 @@
   "Links.link": "link…",
   "Links.unlink": "Unlink: these are different works",
   "MoreCandidates.showMore_one": "Show {{count, number}} more candidate",
-  "MoreCandidates.showMore_other": "Show {{count, number}} more candidates"
+  "MoreCandidates.showMore_other": "Show {{count, number}} more candidates",
+  "ScaleChoice.choose": "The work's rating is {{name}}",
+  "ScaleChoice.chooseAgainstSite": "The work's rating is {{name}} (the site does not allow it)",
+  "ScaleChoice.mine": "your answer",
+  "ScaleChoice.model": "by the tags, {{chance}}",
+  "ScaleChoice.none": "unknown",
+  "ScaleChoice.site": "by the site",
+  "ScaleChoice.takeBack": "Take your answer back"
 }

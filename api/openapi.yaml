@@ -2525,6 +2525,33 @@ components:
         completable:
           type: boolean
           description: The user may say the work's values of it are all named (complete) - the languages of a game
+        steps:
+          type: array
+          description: |
+            Of a facet whose values are a scale - the age rating - every value of it in its order, the
+            work's one among them (values): shown as the scale, one step chosen; none of any other facet
+          items:
+            $ref: '#/components/schemas/ScaleStep'
+
+    ScaleStep:
+      type: object
+      required: [key, name, allowed]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        nameKey:
+          type: string
+          description: The key of its name, shown instead of name
+        chance:
+          type: number
+          format: double
+          nullable: true
+          description: The model's chance the work is of it; none of a step the site lets not, or before the model is fitted
+        allowed:
+          type: boolean
+          description: The site lets the work be of it (its word on the facet - the age-rating-site - names it, or names none)
 
     Prediction:
       type: object

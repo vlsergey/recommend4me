@@ -180,7 +180,7 @@ class Search(
         val texts = s.items.textsOf(ids)
         val site = s.items.facetsOf(ids)
         // The values of every item as the user says, the user's own among them: what is indexed — and named
-        val corrected = ids.associateWith { id -> TagHierarchy.corrected(facets[id].orEmpty(), facetCorrections[id].orEmpty(), hierarchies) }
+        val corrected = ids.associateWith { id -> TagHierarchy.corrected(facets[id].orEmpty(), facetCorrections[id].orEmpty(), hierarchies, s.singleFacets) }
         val names = schema.facets.associate { def ->
             def.key to s.names(def.key, ids.flatMap { corrected[it]?.get(def.key).orEmpty() + site[it]?.get(def.key).orEmpty() }.distinct()) +
                 facetCorrections.values.flatten().filter { it.facet == def.key && it.name != null }.associate { it.key to it.name!! }

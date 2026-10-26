@@ -95,10 +95,12 @@ class TagHierarchy(private val parents: Map<String, Set<String>>) {
          */
         fun corrected(
             values: Map<String, List<String>>, corrections: List<FacetCorrection>, hierarchies: Map<String, TagHierarchy>,
+            /** The facets of one value: a value the user added takes the place of every other ([Corrected.facets]). */
+            single: Set<String> = emptySet(),
         ): Map<String, List<String>> {
-            if (hierarchies.isEmpty()) return Corrected.facets(values, corrections)
+            if (hierarchies.isEmpty()) return Corrected.facets(values, corrections, single)
             val expanded = hierarchies.entries.fold(corrections) { cs, (facet, h) -> h.expand(facet, cs) }
-            val out = LinkedHashMap(Corrected.facets(values, expanded))
+            val out = LinkedHashMap(Corrected.facets(values, expanded, single))
             hierarchies.forEach { (facet, h) ->
                 val keys = out[facet] ?: return@forEach
                 out[facet] = h.close(keys, expanded.filter { it.facet == facet && !it.added }.map { it.key }.toSet())

@@ -1166,7 +1166,7 @@ internal class FacetData(
                     if (own.isNotEmpty()) all[id] = HashMap(site[id].orEmpty()).apply { this[facet.key] = (this[facet.key].orEmpty() + own).distinct().toMutableList() }
                 }
             }
-            val corrected = every.associateWith { id -> TagHierarchy.corrected(learnt[id].orEmpty(), corrections[id].orEmpty(), within) }
+            val corrected = every.associateWith { id -> TagHierarchy.corrected(learnt[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets) }
 
             // Every value of the facet the site or the user gave any work read, the values the model kept
             // chooses from, and every value known besides
@@ -1195,7 +1195,7 @@ internal class FacetData(
             val hierarchies = store.hierarchies()
             val facets = schema.facets.map { it.key }.toSet()
             val contextOf = ids.map { id ->
-                TagHierarchy.corrected(ModelValues.of(schema, learnt[id].orEmpty(), modelled[id]), corrections[id].orEmpty(), hierarchies)
+                TagHierarchy.corrected(ModelValues.of(schema, learnt[id].orEmpty(), modelled[id]), corrections[id].orEmpty(), hierarchies, store.singleFacets)
                     .filterKeys { it != facet.key && it in facets }
                     .flatMap { (f, keys) -> keys.map { "$f\u0001$it" } }.distinct()
             }
@@ -1269,7 +1269,7 @@ internal class FacetData(
             )
             // The item's own values: neither the site's examples nor the drafts
             val held = if (examples == null && drafted.isEmpty()) task.assigned else ids.map { id ->
-                indices(TagHierarchy.corrected(site[id].orEmpty(), corrections[id].orEmpty(), within)[facet.key].orEmpty())
+                indices(TagHierarchy.corrected(site[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets)[facet.key].orEmpty())
             }
             // The task of some works, or of the scoring kept, tells nothing of what the weights were fitted on
             if (only != null || kept != null) return FacetData(ids, values, task, held, allNamed, NO_BASIS)
@@ -1297,7 +1297,7 @@ internal class FacetData(
                     "\u0002" + Vectors.keyOf(
                         ids.indices.sortedBy { ids[it] }.joinToString(",") { i ->
                             val id = ids[i]
-                            id + ":" + TagHierarchy.corrected(ModelValues.of(schema, learnt[id].orEmpty(), null), corrections[id].orEmpty(), hierarchies)
+                            id + ":" + TagHierarchy.corrected(ModelValues.of(schema, learnt[id].orEmpty(), null), corrections[id].orEmpty(), hierarchies, store.singleFacets)
                                 .filterKeys { it != facet.key && it in facets }.entries.sortedBy { it.key }
                                 .joinToString(";") { (f, keys) -> f + "=" + keys.sorted().joinToString("+") }
                         },

@@ -49,5 +49,12 @@
   "Links.unlink": "Razdvoji: ovo su različita dela",
   "MoreCandidates.showMore_few": "Prikaži još {{count, number}} kandidata",
   "MoreCandidates.showMore_one": "Prikaži još {{count, number}} kandidata",
-  "MoreCandidates.showMore_other": "Prikaži još {{count, number}} kandidata"
+  "MoreCandidates.showMore_other": "Prikaži još {{count, number}} kandidata",
+  "ScaleChoice.choose": "Rejting dela je {{name}}",
+  "ScaleChoice.chooseAgainstSite": "Rejting dela je {{name}} (sajt to ne dozvoljava)",
+  "ScaleChoice.mine": "vaš odgovor",
+  "ScaleChoice.model": "po oznakama, {{chance}}",
+  "ScaleChoice.none": "nepoznat",
+  "ScaleChoice.site": "po sajtu",
+  "ScaleChoice.takeBack": "Povuci vaš odgovor"
 }

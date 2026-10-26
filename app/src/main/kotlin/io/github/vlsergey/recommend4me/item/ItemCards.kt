@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.api.model.ItemFacet
 import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.api.model.LinkedItem
 import io.github.vlsergey.recommend4me.api.model.Prediction
+import io.github.vlsergey.recommend4me.api.model.ScaleStep
 import io.github.vlsergey.recommend4me.api.model.SearchMatch
 import io.github.vlsergey.recommend4me.api.model.TextRange
 import io.github.vlsergey.recommend4me.correction.Corrected
@@ -70,7 +71,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         val ignoredTags = if (!ofTags) emptyMap() else store.ignoredTags()
         val single = schema.facets.filter { it.single }.map { it.key }.toSet()
         val plain = Corrected.facets(base, corrections, single)
-        val corrected = TagHierarchy.corrected(base, corrections, hierarchies)
+        val corrected = TagHierarchy.corrected(base, corrections, hierarchies, single)
         val said = corrections.filter { it.added }.groupBy({ it.facet }, { it.key })
         return schema.facets.filter { only(it.key) }.mapNotNull { def ->
             val hierarchy = hierarchies[def.key]
@@ -157,6 +158,13 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 complete = (def.key in complete).takeIf { it },
                 single = def.single.takeIf { it },
                 completable = def.completable.takeIf { it },
+                // Of a scale every step, with the model's chance of it and whether the site lets it
+                steps = def.standard?.takeIf { it.ordered }?.let { scale ->
+                    val allowed = def.originalFacet?.let { site[it] }.orEmpty()
+                    scale.values.orEmpty().map { v ->
+                        ScaleStep(v.key, v.modelName, allowed.isEmpty() || v.key in allowed, I18nKeys.standardValueOf(scale, v.key), own[v.key]?.chance)
+                    }
+                },
             )
         }
     }

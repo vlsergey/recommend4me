@@ -50,5 +50,12 @@
   "MoreCandidates.showMore_few": "Показать ещё {{count, number}} кандидата",
   "MoreCandidates.showMore_many": "Показать ещё {{count, number}} кандидатов",
   "MoreCandidates.showMore_one": "Показать ещё {{count, number}} кандидата",
-  "MoreCandidates.showMore_other": "Показать ещё {{count, number}} кандидата"
+  "MoreCandidates.showMore_other": "Показать ещё {{count, number}} кандидата",
+  "ScaleChoice.choose": "Рейтинг работы — {{name}}",
+  "ScaleChoice.chooseAgainstSite": "Рейтинг работы — {{name}} (сайт такого не допускает)",
+  "ScaleChoice.mine": "ваш ответ",
+  "ScaleChoice.model": "по тегам, {{chance}}",
+  "ScaleChoice.none": "не определён",
+  "ScaleChoice.site": "по сайту",
+  "ScaleChoice.takeBack": "Снять ваш ответ"
 }

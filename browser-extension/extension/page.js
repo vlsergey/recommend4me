@@ -1279,6 +1279,11 @@
         for (const v of open) await correct(item, facet.facet, { key: v.key }, true);
       }, "r4m-button r4m-all", (shown) => open.forEach((v) => answeredShown(facet.facet, v, true)(shown)), all), all));
     }
+    // A scale — the age rating — answered on as one
+    if (editable && facet.steps && facet.steps.length) {
+      block.appendChild(scaleBlock(item, facet));
+      return block;
+    }
     const allNamed = completeButton(item, facet);
     if (allNamed) label.appendChild(allNamed);
     stableOrder(item, facet.facet, values).forEach((v) => line.appendChild(valueChip(item, facet.facet, v, editable)));
@@ -1292,6 +1297,54 @@
     const text = byTextBlock(item, facet);
     if (text) block.appendChild(text);
     return block;
+  }
+
+  /**
+   * A FACET WHOSE VALUES ARE A SCALE — the age rating — as the scale: every step in its order, the
+   * work's one chosen, and where it is from — the user's answer, the site's word, the model's chance
+   * by the tags; under every other step the model's chance of it; a step the site lets not faded, to
+   * choose all the same where the site is wrong. A step pressed is the work's — the user's answer —
+   * the user's own pressed again taken back.
+   */
+  function scaleBlock(item, facet) {
+    const values = (facet.values || []).filter((v) => v.corrected !== "REMOVED" && !v.offered);
+    const current = values.find((v) => v.corrected === "ADDED" || v.corrected === "CONFIRMED") || values[0];
+    const mine = !!current && (current.corrected === "ADDED" || current.corrected === "CONFIRMED");
+    const box = el("r4m-scale");
+    const steps = el("r4m-steps");
+    const abouts = [];
+    facet.steps.forEach((s) => {
+      const chosen = !!current && s.key === current.key;
+      const name = nameOf(s);
+      const on = about(facet.facet, s.key);
+      abouts.push(on);
+      const step = el("r4m-step");
+      const b = chosen && mine
+        ? ownButton(name, t("scale.takeBack"), () => uncorrect(item, facet.facet, s.key), "r4m-button r4m-chosen", unansweredShown(facet.facet, s.key), on)
+        : ownButton(name, t(s.allowed ? "scale.choose" : "scale.chooseAgainstSite", { name }), () => correct(item, facet.facet, { key: s.key }, true),
+          `r4m-button${chosen ? " r4m-chosen" : s.allowed ? "" : " r4m-disallowed"}`, chosenShown(facet.facet, s), on);
+      b.setAttribute("aria-pressed", String(chosen));
+      step.appendChild(b);
+      step.appendChild(el("r4m-chance", null, s.chance !== undefined && s.chance !== null ? percent(s.chance) : " "));
+      steps.appendChild(step);
+    });
+    box.appendChild(steps);
+    const origin = !current ? t("scale.none")
+      : mine ? t("scale.mine")
+      : current.fromSite ? t("scale.site")
+      : t("scale.model", { chance: current.chance !== undefined && current.chance !== null ? percent(current.chance) : "—" });
+    box.appendChild(el("r4m-origin", null, origin));
+    return withFailures(box, abouts);
+  }
+
+  /** A step of a scale chosen, as shown: the user's other answer on it goes, the step is the user's. */
+  function chosenShown(facet, step) {
+    return (item) => {
+      const f = (item.facets || []).find((x) => x.facet === facet);
+      if (f) f.values = (f.values || []).filter((v) => !(v.corrected === "ADDED" && v.key !== step.key)).map((v) => (v.key !== step.key && v.corrected === "CONFIRMED" ? { ...v, corrected: null } : v));
+      answeredShown(facet, step, true)(item);
+      shownValue(item, facet, step.key, step.name, step.nameKey).offered = false;
+    };
   }
 
   /**

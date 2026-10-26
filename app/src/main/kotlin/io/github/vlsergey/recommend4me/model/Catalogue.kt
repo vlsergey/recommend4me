@@ -180,7 +180,7 @@ class CatalogueReader(
         return s.items.keys().map { k ->
             val categorical = LinkedHashSet<String>()
             val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
-            TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies).forEach { (facet, keys) ->
+            TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets).forEach { (facet, keys) ->
                 val facetId = facetIds[facet] ?: return@forEach
                 val unread = ignored[facet]
                 keys.forEach { if (unread == null || it !in unread) categorical += FeatureNames.facet(facetId, it) }
@@ -203,7 +203,7 @@ class CatalogueReader(
         val wanted = s.schema.facets.filter { it.infer && it.feature }.map { it.key }
         val base = ModelValues.of(s.schema, s.items.facets(key.id), suggestions.chancesOf(s, listOf(key.id), wanted)[key.id])
         val ignored = s.ignoredTags()
-        TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies()).forEach { (facet, keys) ->
+        TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies(), s.singleFacets).forEach { (facet, keys) ->
             val facetId = facetIds[facet] ?: return@forEach
             val unread = ignored[facet]
             keys.forEach { if (unread == null || it !in unread) categorical += FeatureNames.facet(facetId, it) }

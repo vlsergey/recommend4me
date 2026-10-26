@@ -18,6 +18,7 @@ import { TagNameLink } from "@/tag/TagNameLink";
 import { TagsByText } from "@/tagtext/TagsByText";
 import { CHIP_TOUCH, FacetAnswers } from "./FacetAnswers";
 import { EditButton } from "./FieldEditor";
+import { ScaleChoice } from "./ScaleChoice";
 import type { Corrections } from "./useCorrections";
 
 /** How many values of a facet the line of a new value offers. */
@@ -109,6 +110,14 @@ function FacetLine({ facet: f, item, source, corrections }: { facet: ItemFacet; 
   const confirmAll = async () => {
     for (const v of open) await corrections!.setFacet(f.facet, { key: v.key }, true);
   };
+  // A scale — the age rating — answered on as one
+  if (corrections && f.steps && f.steps.length > 0)
+    return (
+      <div>
+        <div className="mb-1 text-xs text-muted-foreground">{label(f.labelKey)}</div>
+        <ScaleChoice facet={f} corrections={corrections} />
+      </div>
+    );
   return (
     <div>
       <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">

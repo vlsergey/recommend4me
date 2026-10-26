@@ -701,3 +701,42 @@ r4m-dialog .r4m-bin {
   align-items: center;
   color: var(--r4m-no);
 }
+
+/* A scale — the age rating: its steps in their order, the model's chance under each, where the chosen one is from */
+r4m-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+r4m-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+r4m-step {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+r4m-step .r4m-button {
+  min-width: 48px;
+}
+
+r4m-step .r4m-chosen {
+  border-color: var(--r4m-yes);
+  background: var(--r4m-mine-bg);
+  font-weight: 700;
+}
+
+/* A step the site lets not: faded, chosen all the same where the site is wrong */
+r4m-step .r4m-disallowed {
+  opacity: 0.5;
+}
+
+r4m-origin {
+  color: var(--r4m-muted);
+  font: 11px/16px system-ui, sans-serif;
+}

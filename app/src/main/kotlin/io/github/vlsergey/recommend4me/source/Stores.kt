@@ -177,6 +177,9 @@ class SourceStore(
     /** The user's word on the sites' free tags of the content type: merged, named, told apart — every source's alike. */
     val tags = TagRepository(databases.dictionaries.dsl)
 
+    /** The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the user added takes the place of every other. */
+    val singleFacets: Set<String> = schema.facets.filter { it.single }.map { it.key }.toSet()
+
     /** The facets of the layer learnt from the sites' tags by their names: the tags the user merges and names. */
     val tagFacets = schema.facets.filter { it.editable && it.examplesFrom != null }.map { it.key }.toSet()
 
