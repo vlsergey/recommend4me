@@ -22,8 +22,8 @@ class BuiltInTypes {
          */
         val GAMES = ContentType(
             id = "games",
-            facets = listOf(StandardTags.TAG, StandardLanguages.LANGUAGE),
-            layer = listOf(StandardTags.TAGS, StandardLanguages.languages(single = false), StandardLanguages.DESCRIPTION),
+            facets = listOf(StandardTags.TAG, StandardLanguages.LANGUAGE, AgeRating.SITE),
+            layer = listOf(StandardTags.TAGS, StandardLanguages.languages(single = false), StandardLanguages.DESCRIPTION, AgeRating.RATING),
             numbers = listOf(StandardNumbers.LIKES),
         )
     }

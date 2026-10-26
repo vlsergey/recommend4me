@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ao3
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
@@ -49,7 +50,7 @@ class Ao3 : Source {
         facets = listOf(
             Books.AUTHOR.asFacet(AUTHOR),
             Books.FANDOM.asFacet(FANDOM),
-            FacetDef(RATING, filter = true, onCard = true, role = FacetRole.CONTENT),
+            AgeRating.SITE.asFacet(),
             Books.DIRECTION.asFacet(CATEGORY),
             Books.STATUS.asFacet(STATUS),
             StandardLanguages.LANGUAGE.asFacet(LANGUAGE),
@@ -216,7 +217,6 @@ class Ao3 : Source {
 
         const val AUTHOR = "author"
         const val FANDOM = "fandom"
-        const val RATING = "rating"
         const val CATEGORY = "category"
         const val STATUS = "status"
         const val LANGUAGE = "language"

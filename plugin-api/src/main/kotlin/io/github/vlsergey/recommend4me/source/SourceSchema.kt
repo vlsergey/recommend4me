@@ -114,6 +114,11 @@ class FacetDef(
      * are then not offered and count as rejected for the model; the button "No other values".
      */
     val completable: Boolean = false,
+    /**
+     * Of a facet of one value the model works out ([single], [infer]): every work has one — the age
+     * rating — the likeliest given however likely, not only one more likely than not.
+     */
+    val required: Boolean = false,
 )
 
 /**

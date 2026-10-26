@@ -8,5 +8,11 @@
   "FacetDropdown.findPlaceholder": "Найти…",
   "FacetDropdown.none": "Ничего",
   "FacetDropdown.summaryCount": "{{shown, number}} из {{total, number}}",
-  "FacetDropdown.summaryNone": "ничего"
+  "FacetDropdown.summaryNone": "ничего",
+  "ScaleDropdown.from": "от",
+  "ScaleDropdown.to": "до",
+  "ScaleDropdown.works_one": "{{count}} работа",
+  "ScaleDropdown.works_few": "{{count}} работы",
+  "ScaleDropdown.works_many": "{{count}} работ",
+  "ScaleDropdown.works_other": "{{count}} работы"
 }

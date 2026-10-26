@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.authortoday
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import org.jsoup.Jsoup
@@ -41,6 +42,10 @@ class AuthorTodayPagesTest {
         assertTrue(context.facets.values.any { it["genre"].orEmpty().contains("fanfiction") && it["kind"] == listOf("fanfiction") })
         assertEquals(listOf("in-progress"), facets["status"])
         assertEquals(listOf("54335"), facets["series"])
+        // The age ratings a card lets the work have: no "18+" — G to R; "18+" — NC-17 to NC-21; the model chooses within
+        assertEquals(listOf("g", "pg-13", "r"), facets[AgeRating.SITE_KEY])
+        assertEquals(listOf("nc-17", "nc-21"), context.facets.getValue("657555")[AgeRating.SITE_KEY])
+        assertEquals(emptyList(), context.facets.getValue("657555")[AgeRating.KEY])
         val numbers = context.numbers.getValue("661269")
         assertEquals(95898.0, numbers["chars"])
         assertEquals(14811.0, numbers["views"])

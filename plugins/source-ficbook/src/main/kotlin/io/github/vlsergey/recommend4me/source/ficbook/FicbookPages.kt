@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ficbook
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
@@ -22,7 +23,6 @@ import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAGES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRING
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRINGS_LINE
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PARTS
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.RATING
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.SERIES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.STATUS
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.TAG
@@ -115,9 +115,10 @@ class FicbookPages(private val context: SourceContext) {
             val key = d.classNames().firstOrNull { it.startsWith("direction-") }?.removePrefix("direction-")
             if (key != null) items.setFacet(id, DIRECTION, listOfNotNull(Books.DIRECTION.value(key)?.let { FacetValue(it.key, it.modelName) }))
         }
+        // The rating the site states: the age rating's own scale, one of it ("NC-17")
         badges.select("[class*=ds-label-rating-]").firstOrNull()?.let { r ->
             val key = r.classNames().first { it.startsWith("ds-label-rating-") }.removePrefix("ds-label-rating-")
-            items.setFacet(id, RATING, listOf(FacetValue(key, r.text().trim().ifEmpty { key })))
+            AgeRating.write(items, id, listOfNotNull(AgeRating.VALUES.firstOrNull { it.key == key.lowercase() }))
         }
         badges.select("[class*=ds-label-status-]").firstOrNull()?.let { s ->
             val key = s.classNames().first { it.startsWith("ds-label-status-") }.removePrefix("ds-label-status-")

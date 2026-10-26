@@ -99,7 +99,11 @@ class ItemsController(
         val ranges = q.ranges.orEmpty().map {
             NumberRange.parse(it) ?: throw Refusal.BAD_RANGE.refuse(HttpStatus.BAD_REQUEST, "The range '$it' is not 'number=from..to'", "range" to it)
         }
-        val facets = q.facets.orEmpty().map { c -> FacetChoice(c.facet, c.hidden.orEmpty().toSet(), c.shown?.toSet(), c.withoutHidden == true) }
+        val facets = q.facets.orEmpty().map { c ->
+            // Of a scale, the values from one to the other alone
+            val range = if (c.from == null && c.to == null) null else list.rangeOf(type, c.facet, c.from, c.to)
+            FacetChoice(c.facet, c.hidden.orEmpty().toSet(), c.shown?.toSet(), c.withoutHidden == true, range)
+        }
         return ResponseEntity.ok(
             list.page(
                 type, ItemView.valueOf((q.view ?: d.view!!).name), ItemOrder.valueOf((q.sort ?: d.sort!!).name), q.sortNumber, q.search,

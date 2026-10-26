@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ficbook
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import org.jsoup.Jsoup
@@ -41,7 +42,9 @@ class FicbookPagesTest {
         assertEquals(listOf("no_fandom/originals"), facets["fandom"])
         assertEquals(listOf("original"), facets["kind"])
         assertEquals(listOf("mixed"), facets["direction"])
-        assertEquals(listOf("NC-17"), facets["rating"])
+        // The rating the site states: the age rating's, the one the site lets the work have and the work's own
+        assertEquals(listOf("nc-17"), facets[AgeRating.SITE_KEY])
+        assertEquals(listOf("nc-17"), facets[AgeRating.KEY])
         assertEquals(listOf("finished"), facets["status"])
         assertEquals(listOf("28510"), facets["series"])
         assertTrue("слоуберн" in facets.getValue("tag"))

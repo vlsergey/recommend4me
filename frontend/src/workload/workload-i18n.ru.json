@@ -28,6 +28,7 @@
   "Reason.texts": "закодированы тексты",
   "Span.minutesSeconds": "{{minutes}} мин {{seconds}} с",
   "Span.seconds": "{{value}} с",
+  "What.ageRatingModel": "Модель возрастного рейтинга по тегам",
   "What.heldOut": "Модель без оценки работы",
   "What.interestScorersCompared": "Сравнение способов интереса",
   "What.methodsCompared": "Сравнение способов поля",

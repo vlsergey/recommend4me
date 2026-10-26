@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ao3
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
@@ -23,7 +24,6 @@ import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.ONLY_PART
 import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.PAIRING
 import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.PAIRINGS_LINE
 import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.PARTS
-import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.RATING
 import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.SERIES
 import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.SIGNAL_BOOKMARKED
 import io.github.vlsergey.recommend4me.source.ao3.Ao3.Companion.SIGNAL_LATER
@@ -237,9 +237,9 @@ class Ao3Pages(private val context: SourceContext) {
         items.setFacet(id, CATEGORY, written.mapNotNull { CATEGORIES[it] }.distinct().map { FacetValue(it.key, it.modelName) })
     }
 
+    /** The rating the archive states, on the age rating's scale; "Not Rated", or one unknown, tells nothing. */
     private fun rating(id: String, written: String) {
-        val key = RATINGS[written] ?: written.lowercase()
-        items.setFacet(id, RATING, listOf(FacetValue(key, written)))
+        AgeRating.write(items, id, listOfNotNull(RATINGS[written]))
     }
 
     /**
@@ -310,7 +310,6 @@ class Ao3Pages(private val context: SourceContext) {
         /** The fandom of the original works. */
         private const val ORIGINAL_WORK = "Original Work"
 
-        /** The ratings by their names, to the keys the cards' symbols have (rating-<key>). */
         /** The keys of the site's warnings among its tags: the archive's own few, in every name they had. */
         private val WARNINGS = setOf(
             "no archive warnings apply", "creator chose not to use archive warnings", "graphic depictions of violence",
@@ -322,9 +321,9 @@ class Ao3Pages(private val context: SourceContext) {
             "F/F" to Books.Direction.FEMSLASH, "Multi" to Books.Direction.MIXED, "Other" to Books.Direction.OTHER,
         )
 
+        /** The archive's ratings by their names, on the age rating's scale; "Not Rated" none. */
         private val RATINGS = mapOf(
-            "General Audiences" to "general-audience", "Teen And Up Audiences" to "teen", "Mature" to "mature",
-            "Explicit" to "explicit", "Not Rated" to "notrated",
+            "General Audiences" to AgeRating.G, "Teen And Up Audiences" to AgeRating.PG13, "Mature" to AgeRating.R, "Explicit" to AgeRating.NC17,
         )
 
         /** What the text of a chapter holds that is not the text: the heading "Chapter Text", scripts. */

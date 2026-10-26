@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.i18n
 
+import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.SignalDef
@@ -79,8 +80,11 @@ object I18nKeys {
     fun facetNoneLabel(source: String, def: FacetDef): String = qualified(source, facetNone(def.key))
 
     /** The name of a standard value of a standard facet with a closed list of them; null of any other. */
-    fun standardValue(def: FacetDef, value: String): String? =
-        def.standard?.takeIf { s -> s.value(value) != null }?.let { qualified(STANDARD, facetValue(it.key, value)) }
+    fun standardValue(def: FacetDef, value: String): String? = def.standard?.let { standardValueOf(it, value) }
+
+    /** The name of a value of a [standard] facet with a closed list of them; null of a value not of it. */
+    fun standardValueOf(standard: StandardFacet, value: String): String? =
+        standard.takeIf { s -> s.value(value) != null }?.let { qualified(STANDARD, facetValue(it.key, value)) }
 
     fun numberLabel(source: String, def: NumberDef): String =
         def.standard?.let { qualified(STANDARD, number(it.key)) } ?: qualified(source, number(def.key))

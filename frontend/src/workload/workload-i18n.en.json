@@ -28,6 +28,7 @@
   "Reason.texts": "texts encoded",
   "Span.minutesSeconds": "{{minutes}} min {{seconds}} s",
   "Span.seconds": "{{value}} s",
+  "What.ageRatingModel": "The model of the age rating by the tags",
   "What.heldOut": "The model that has not seen a graded work",
   "What.interestScorersCompared": "Methods of interest compared",
   "What.methodsCompared": "Methods of a field compared",

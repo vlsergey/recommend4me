@@ -18,6 +18,7 @@
 | `tag_entry_too_general` | an entry the user said is too general to be a tag above others: offered so no more |
 | `tag_offers` | the offers of the tags' graph as last worked out with the names of the tags, in the queue of the computations: a request reads them, never waits for them |
 | `tag_text_model` | the model of how close a tag and a paragraph are when the work has the tag, learnt from the user's answers: the slope and the intercept, and every answered tag's own bias |
+| `age_rating_weight` | the model of a work's age rating by its tags and its site, learnt from every site's works whose rating is known to lie between two steps: every feature's weight ("tag:<id>", "source:<id>"), and the thresholds between the ratings ("threshold:<k>") |
 | `universe` | a universe of the dictionary: an entry of a catalogue the user added |
 | `universe_property` | what else the catalogue says of a universe |
 | `universe_character` | a character of a universe |
@@ -32,6 +33,12 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
 ```mermaid
 erDiagram
+    age_rating_weight {
+        VARCHAR feature PK
+        DOUBLE weight
+        INTEGER works
+        TIMESTAMPTZ fitted_at
+    }
     dictionary_moved {
         VARCHAR owner PK
         TIMESTAMPTZ moved_at

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ao3
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
@@ -36,7 +37,7 @@ class Ao3PagesTest {
         assertEquals(Instant.parse("2026-10-13T00:00:00Z"), context.heads.getValue(ishvalan).updatedAt)
         val facets = context.facets.getValue(ishvalan)
         assertEquals(listOf("Wolfgang555"), facets["author"])
-        assertEquals(listOf("explicit"), facets["rating"])
+        assertEquals(listOf("nc-17"), facets[AgeRating.SITE_KEY])
         assertEquals(listOf(Books.Status.FINISHED.key), facets["status"])
         assertEquals(listOf("en"), facets["language"])
         assertEquals(listOf(UniverseFacets.FANFICTION), facets[UniverseFacets.KIND])
@@ -57,7 +58,7 @@ class Ao3PagesTest {
         val facets = context.facets.getValue(saints)
         // Anonymous: no author named
         assertNull(facets["author"])
-        assertEquals(listOf("teen"), facets["rating"])
+        assertEquals(listOf("pg-13"), facets[AgeRating.KEY])
         assertEquals(listOf("gen"), facets["category"])
         // The warnings are tags of the site, before the others
         assertNull(facets["warning"])

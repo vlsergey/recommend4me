@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.authortoday
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.source.CapturedPage
@@ -41,6 +42,7 @@ class AuthorToday : Source {
             Books.TAG.asFacet(TAG),
             Books.STATUS.asFacet(STATUS),
             FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
+            AgeRating.SITE.asFacet(),
         ),
         numbers = listOf(
             // Characters, not words: a number of its own
@@ -69,9 +71,10 @@ class AuthorToday : Source {
      * 2: whether a work is fan fiction, by its genres. 3: the standard statuses; the shelf of the
      * finished as the standard "read". 4: the shelf as the standard one. 5: the pages that failed
      * when several pages of one work were read at once read again. 6: the alternative history as a
-     * kind of its own, the erotic fan fiction as fan fiction.
+     * kind of its own, the erotic fan fiction as fan fiction. 7: the age ratings a card lets the work
+     * have, by its "18+". 8: of a work without it, G to R.
      */
-    override val parserVersion = 6
+    override val parserVersion = 8
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 

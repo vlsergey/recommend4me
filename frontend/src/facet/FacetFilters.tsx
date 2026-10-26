@@ -21,7 +21,14 @@ import { cn } from "@/lib/utils";
  * later too; and whether the works without any value of it are hidden. The one meant is the
  * shorter at the choice: two fandoms of 361 checked are those two, not 359 others unchecked.
  */
-export type FacetChoice = { hidden?: string[]; shown?: string[]; withoutHidden?: boolean };
+export type FacetChoice = {
+  hidden?: string[];
+  shown?: string[];
+  withoutHidden?: boolean;
+  /** Of a scale (FacetFilter.ordered): the mildest value shown and the strongest, by key; an end left out open. */
+  from?: string;
+  to?: string;
+};
 
 /** The facets that hide anything, by facet id. */
 export type FacetSelection = Record<string, FacetChoice>;
@@ -53,6 +60,8 @@ export function compact(all: string[], shown: Set<string>, withoutHidden: boolea
 /** The choices as the list asks for them: each of the values the facets have now, the shorter list. */
 export function facetQuery(selection: FacetSelection, facets: FacetFilter[] | undefined) {
   return Object.entries(selection).flatMap(([facet, choice]) => {
+    // Of a scale, its ends alone
+    if (choice.from !== undefined || choice.to !== undefined) return [{ facet, from: choice.from, to: choice.to }];
     const values = facets?.find((f) => f.id === facet)?.values.map((v) => v.key);
     // The values not known yet: the choice as it is kept
     const asked = values ? compact(values, new Set(values.filter((k) => isShown(choice, k))), choice.withoutHidden === true) : choice;
@@ -101,10 +110,63 @@ export function FacetFilters({ type, value, onChange }: { type: string; value: F
   return (
     // No box of its own: every facet is an item of the toolbar, wrapped to the next line alone
     <div className="contents">
-      {(facets.data ?? []).map((f) => (
-        <FacetDropdown key={f.id} facet={f} value={value} onChange={onChange} />
+      {(facets.data ?? []).map((f) =>
+        f.ordered ? <ScaleDropdown key={f.id} facet={f} value={value} onChange={onChange} /> : <FacetDropdown key={f.id} facet={f} value={value} onChange={onChange} />,
+      )}
+    </div>
+  );
+}
+
+/**
+ * A facet whose values are a scale — the age rating: the works from one value of it to another, both
+ * in — two rows of its values, from the mildest, the ends chosen; every one at first.
+ */
+function ScaleDropdown({ facet, value, onChange }: { facet: FacetFilter; value: FacetSelection; onChange: (v: FacetSelection) => void }) {
+  const { t } = useTranslation("facet");
+  const keys = facet.values.map((v) => v.key);
+  const choice = value[facet.id];
+  const from = Math.max(0, choice?.from ? keys.indexOf(choice.from) : 0);
+  const toAt = choice?.to ? keys.indexOf(choice.to) : -1;
+  const to = toAt >= 0 ? toAt : keys.length - 1;
+  const whole = from === 0 && to === keys.length - 1;
+  const name = (i: number) => valueName(facet.values[i]);
+  const summary = whole ? null : from === to ? name(from) : `${name(from)} – ${name(to)}`;
+  /** The ends chosen anew: the whole scale is no choice; the other facets' kept. */
+  const choose = (lo: number, hi: number) => {
+    const rest = { ...value };
+    delete rest[facet.id];
+    const [a, b] = lo <= hi ? [lo, hi] : [hi, lo];
+    onChange(a === 0 && b === keys.length - 1 ? rest : { ...rest, [facet.id]: { from: a > 0 ? keys[a] : undefined, to: b < keys.length - 1 ? keys[b] : undefined } });
+  };
+  const row = (word: string, at: number, pick: (i: number) => void) => (
+    <div className="flex items-center gap-1 px-1 py-1">
+      <span className="w-8 text-xs text-muted-foreground">{word}</span>
+      {facet.values.map((v, i) => (
+        <Button key={v.key} size="xs" variant={i === at ? "default" : "outline"} onClick={() => pick(i)} title={t("ScaleDropdown.works", { count: v.items })}>
+          {valueName(v)}
+        </Button>
       ))}
     </div>
+  );
+  if (keys.length === 0) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant="outline" size="sm" className={cn(summary && "border-primary/60")} />}>
+        <span className="max-w-44 truncate">
+          {label(facet.labelKey)}
+          {summary && <span className="font-semibold">: {summary}</span>}
+        </span>
+        <ChevronDownIcon className="opacity-60" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-auto">
+        {row(t("ScaleDropdown.from"), from, (i) => choose(i, Math.max(i, to)))}
+        {row(t("ScaleDropdown.to"), to, (i) => choose(Math.min(from, i), i))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="justify-center" onClick={() => choose(0, keys.length - 1)} closeOnClick={false} disabled={whole}>
+          {t("FacetDropdown.all")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

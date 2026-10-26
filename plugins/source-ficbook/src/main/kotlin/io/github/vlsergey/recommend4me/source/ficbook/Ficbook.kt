@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ficbook
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.source.CapturedPage
@@ -41,7 +42,7 @@ class Ficbook : Source {
             Books.AUTHOR.asFacet(AUTHOR),
             Books.FANDOM.asFacet(FANDOM),
             Books.DIRECTION.asFacet(DIRECTION),
-            FacetDef(RATING, filter = true, onCard = true, role = FacetRole.CONTENT),
+            AgeRating.SITE.asFacet(),
             Books.STATUS.asFacet(STATUS),
             Books.TAG.asFacet(TAG),
             // The pairings and characters as the authors write them: the site's strings, kept as they
@@ -142,7 +143,6 @@ class Ficbook : Source {
         const val AUTHOR = "author"
         const val FANDOM = "fandom"
         const val DIRECTION = "direction"
-        const val RATING = "rating"
         const val STATUS = "status"
         const val SIGNAL_FOLLOWED = "followed"
         const val TAG = "tag"

@@ -38,7 +38,18 @@ class StandardFacet(
     val completable: Boolean = false,
     /** Of the layer: the standard facet of the sites that is their own word on it, shown right above it and not learnt as examples ([FacetDef.originalFacet]). */
     val original: StandardFacet? = null,
+    /** Its [values] are a scale, in their order — the age rating, from G up: filtered from one to another, not one by one. */
+    val ordered: Boolean = false,
+    /** A work always has one value of it ([FacetDef.required]). */
+    val required: Boolean = false,
 ) {
+    /** The keys of the values of the scale from [from] to [to], both in; every one of a missing end. Of an [ordered] facet. */
+    fun between(from: String?, to: String?): List<String> {
+        val keys = values.orEmpty().map { it.key }
+        val lo = from?.let(keys::indexOf)?.takeIf { it >= 0 } ?: 0
+        val hi = to?.let(keys::indexOf)?.takeIf { it >= 0 } ?: keys.lastIndex
+        return if (lo > hi) emptyList() else keys.subList(lo, hi + 1)
+    }
     /** The value of the key; null when the facet has no such value, or takes any. */
     fun value(key: String): StandardValue? = values?.firstOrNull { it.key == key }
 
@@ -57,6 +68,7 @@ class StandardFacet(
         key,
         filter = filter, shared = key, searchWeight = searchWeight, onCard = onCard, names = names, suggest = suggest, infer = infer, role = role,
         standard = this, editable = true, examplesFrom = examplesFrom, originalFacet = originalFacet, single = single, completable = completable,
+        required = required,
     )
 }
 

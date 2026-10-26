@@ -8,5 +8,9 @@
   "FacetDropdown.findPlaceholder": "Find…",
   "FacetDropdown.none": "None",
   "FacetDropdown.summaryCount": "{{shown, number}} of {{total, number}}",
-  "FacetDropdown.summaryNone": "none"
+  "FacetDropdown.summaryNone": "none",
+  "ScaleDropdown.from": "from",
+  "ScaleDropdown.to": "to",
+  "ScaleDropdown.works_one": "{{count}} work",
+  "ScaleDropdown.works_other": "{{count}} works"
 }

@@ -32,6 +32,7 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
@@ -98,7 +99,10 @@ class FacetSuggestions(
     private val events: ApplicationEventPublisher,
     private val settings: Settings,
     private val workload: Workload,
+    models: ObjectProvider<FacetModel>,
 ) {
+    /** The facets worked out by models of their own ([FacetModel]): no suggester of them fitted, their chances theirs. */
+    private val ownModels: List<FacetModel> by lazy { models.orderedStream().toList() }
 
     private val waiting: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "suggestions").apply { isDaemon = true } }
@@ -113,7 +117,8 @@ class FacetSuggestions(
      * gives values of first — their values are the context of the others, the characters are of the
      * universes given before them, the pairings of the characters — in the order of the schema.
      */
-    fun facetsOf(store: SourceStore): List<FacetDef> = store.schema.facets.filter { it.suggest || it.infer }.sortedBy { !it.infer }
+    fun facetsOf(store: SourceStore): List<FacetDef> =
+        store.schema.facets.filter { (it.suggest || it.infer) && ownModels.none { m -> m.facet == it.key } }.sortedBy { !it.infer }
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) = changed(event.source, "items")
@@ -390,6 +395,10 @@ class FacetSuggestions(
             list.groupBy { it.facet }.forEach { (facet, drafts) ->
                 made.getOrPut(id) { HashMap() }[facet] = drafts.associate { d -> d.key to Chance(id, facet, d.key, had = false, chance = 1.0, draftedFrom = d.from) }
             }
+        }
+        // The facets worked out by models of their own: their chances as theirs, before the chain
+        ownModels.filter { store.schema.facet(it.facet) != null }.forEach { model ->
+            model.chances(store, ids).forEach { (id, chances) -> made.getOrPut(id) { HashMap() }[model.facet] = chances }
         }
         return made
     }

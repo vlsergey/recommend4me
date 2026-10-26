@@ -39,12 +39,20 @@ object ModelValues {
         val out = LinkedHashMap(site)
         worked.forEach { def ->
             val own = site[def.key].orEmpty()
-            // Of a facet of one value, the likeliest alone — and none beside the site's own
-            val given = given(chances[def.key].orEmpty()).filter { it !in own }.let { if (def.single) (if (own.isEmpty()) it.take(1) else emptyList()) else it }
+            // Of a facet of one value, the likeliest alone — and none beside the site's own; of one every
+            // work has ([FacetDef.required]), the likeliest however likely
+            val given = given(chances[def.key].orEmpty()).filter { it !in own }.let {
+                if (!def.single) it
+                else if (own.isNotEmpty()) emptyList()
+                else it.take(1).ifEmpty { if (def.required) listOfNotNull(likeliest(chances[def.key].orEmpty())) else emptyList() }
+            }
             if (given.isNotEmpty()) out[def.key] = own + given
         }
         return out
     }
+
+    /** The likeliest value the item has not already of the [chances]; none of none. */
+    fun likeliest(chances: Map<String, Chance>): String? = chances.values.filter { !it.had }.maxByOrNull { it.chance }?.key
 
     /** The values the model gives an item of a facet it works out — and every draft of the layer ([Chance.drafted]) — the likeliest first. */
     fun given(chances: Map<String, Chance>): List<String> =

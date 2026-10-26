@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.authortoday
 
+import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
@@ -71,6 +72,7 @@ class AuthorTodayPages(private val context: SourceContext) {
         genresIn(card.select(".book-genres a[href^=/work/genre/]")).let { (form, genres) -> writeGenres(id, form, genres) }
         status(card)?.let { items.setFacet(id, STATUS, listOf(it)) }
         series(card)?.let { items.setFacet(id, SERIES, listOf(it)) }
+        ageRating(id, adult = card.selectFirst(".label-adult-only") != null)
         items.setNumbers(
             id,
             listOfNotNull(
@@ -96,6 +98,14 @@ class AuthorTodayPages(private val context: SourceContext) {
         val standard = SHELVES[shelf]
         context.signals.set(id, Books.SHELF.key, standard?.key ?: shelf.takeIf { it != "None" })
         context.signals.set(id, Books.READ.key, Books.YES.key.takeIf { standard == Books.Shelf.FINISHED })
+    }
+
+    /**
+     * The age ratings the site lets the work have: its "18+" is NC-17 to NC-21, its lack G to R; which
+     * one, the model works out of the tags (user, 2026-10-26).
+     */
+    private fun ageRating(id: String, adult: Boolean) {
+        AgeRating.write(items, id, if (adult) AgeRating.between(AgeRating.NC17, AgeRating.NC21) else AgeRating.between(AgeRating.G, AgeRating.R))
     }
 
     private fun writeGenres(id: String, form: FacetValue?, genres: List<FacetValue>) {
@@ -173,6 +183,8 @@ class AuthorTodayPages(private val context: SourceContext) {
         writeGenres(id, form, genres)
         status(panel)?.let { items.setFacet(id, STATUS, listOf(it)) }
         series(panel)?.let { items.setFacet(id, SERIES, listOf(it)) }
+        // The work's "18+" told by its panel; a panel without it says nothing — the card says so
+        if (panel.selectFirst(".label-adult-only") != null) ageRating(id, adult = true)
         // The tags of the block of them; no block — a changed markup — is no word that the work has none
         panel.selectFirst(".tags")?.let { block ->
             items.setFacet(id, TAG, block.select("a").map { a ->

@@ -2882,6 +2882,15 @@ components:
         withoutHidden:
           type: boolean
           description: The works without any value of the facet are not shown
+        from:
+          type: string
+          description: |
+            Of a facet whose values are a scale (FacetFilter.ordered): the mildest value shown, by key;
+            none - from the first. With [to], the values from one to the other alone are shown, and
+            hidden and shown are not read
+        to:
+          type: string
+          description: Of a scale, the strongest value shown, by key; none - to the last
 
     FacetFilter:
       type: object
@@ -2896,8 +2905,14 @@ components:
           description: The key of the name of the works without a value of the facet; none - they are not a line of the filter
         itemsWithout:
           type: integer
+        ordered:
+          type: boolean
+          description: |
+            Its values are a scale - the age rating - in their order, every one of them (a value no
+            work has with nought): filtered from one value to another (FacetChoice.from, to)
         values:
           type: array
+          description: The most used first; of a scale, in its order
           items:
             $ref: '#/components/schemas/FacetValueUse'
 

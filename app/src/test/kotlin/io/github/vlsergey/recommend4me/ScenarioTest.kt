@@ -164,8 +164,13 @@ class ScenarioTest {
         assertEquals(3, list(range = listOf("other.parts=1..1")).total)
         assertEquals(mapOf("range" to "test.likes=a..2"), assertThrows<Refused> { list(range = listOf("test.likes=a..2")) }.params)
         assertEquals("A boy finds a dragon egg", items.getItem("test", "w1").body!!.texts.single().content)
-        // The source's filter facet, and the kind, the universe and the language the application gives every book
-        assertEquals(listOf("test.tag", "kind", "universe", "languages"), items.listFacets("books").body!!.map { it.id })
+        // The source's filter facet, and the kind, the universe, the language and the age rating the application gives every book
+        val filters = items.listFacets("books").body!!
+        assertEquals(listOf("test.tag", "kind", "universe", "languages", "age-rating"), filters.map { it.id })
+        // The age rating a scale: every value of it in its order, a value no work has too
+        val rating = filters.single { it.id == "age-rating" }
+        assertEquals(true, rating.ordered)
+        assertEquals(listOf("g", "pg-13", "r", "nc-17", "nc-21"), rating.propertyValues.map { it.key })
 
         // The user's word on what a search found: one line however typed, taken back when pressed again
         items.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", relevant = true))

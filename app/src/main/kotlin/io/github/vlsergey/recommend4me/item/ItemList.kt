@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.api.model.FacetFilter
 import io.github.vlsergey.recommend4me.api.model.FacetValueUse
@@ -31,11 +32,15 @@ enum class ItemOrder { SCORE, INTEREST, GRADE, UPDATED, ADDED, NUMBER, SURPRISE 
 /**
  * What a filter facet shows: a work with a value [shown] — when given, those alone, every other
  * value hidden, one a site adds later too — or else a value not [hidden], every other shown, one
- * added later too; a work without any value of the facet unless [withoutHidden].
+ * added later too; a work without any value of the facet unless [withoutHidden]. Of a facet whose
+ * values are a scale, those of the [range] alone — from one value of it to another — when given.
  */
-class FacetChoice(val facet: String, val hidden: Set<String>, val shown: Set<String>?, val withoutHidden: Boolean) {
+class FacetChoice(
+    val facet: String, val hidden: Set<String>, val shown: Set<String>?, val withoutHidden: Boolean, val range: Set<String>? = null,
+) {
     fun passes(keys: Collection<String>): Boolean = when {
         keys.isEmpty() -> !withoutHidden
+        range != null -> keys.any { it in range }
         shown != null -> keys.any { it in shown }
         else -> keys.any { it !in hidden }
     }
@@ -229,7 +234,7 @@ class ItemList(
     /** The filter facets of a content type: their values with how many works have each, and the works with none. */
     fun facets(typeId: String): List<FacetFilter> {
         val type = stores.type(typeId) ?: return emptyList()
-        class Group(val labelKey: String, val noneLabelKey: String?) {
+        class Group(val labelKey: String, val noneLabelKey: String?, val scale: StandardFacet?) {
             val uses = HashMap<String, Int>()
             val names = HashMap<String, String>()
             val nameKeys = HashMap<String, String>()
@@ -242,7 +247,7 @@ class ItemList(
             val corrections = s.corrections.allFacets().groupBy { it.itemId }
             s.schema.facets.filter { it.filter }.forEach { def ->
                 val group = groups.getOrPut(filterId(s, def)) {
-                    Group(I18nKeys.facetLabel(s.id, def), if (def.none) I18nKeys.facetNoneLabel(s.id, def) else null)
+                    Group(I18nKeys.facetLabel(s.id, def), if (def.none) I18nKeys.facetNoneLabel(s.id, def) else null, def.standard?.takeIf { it.ordered })
                 }
                 valuesOf(s, def, corrections).values.forEach { keys ->
                     if (keys.isNotEmpty()) group.with++
@@ -254,13 +259,23 @@ class ItemList(
             }
         }
         return groups.map { (id, g) ->
+            // Of a scale every value in its order, a value no work has with nought; of any other the most used first
+            val keys = g.scale?.values?.map { it.key } ?: g.uses.entries.sortedByDescending { it.value }.map { it.key }
             FacetFilter(
                 id = id,
                 labelKey = g.labelKey,
                 noneLabelKey = g.noneLabelKey,
                 itemsWithout = total - g.with,
-                propertyValues = g.uses.entries.sortedByDescending { it.value }.map { (key, n) -> FacetValueUse(key, g.names[key] ?: key, n, g.nameKeys[key]) },
+                ordered = (g.scale != null).takeIf { it },
+                propertyValues = keys.map { key -> FacetValueUse(key, g.names[key] ?: key, g.uses[key] ?: 0, g.nameKeys[key] ?: g.scale?.let { I18nKeys.standardValueOf(it, key) }) },
             )
         }
+    }
+
+    /** The values of the scale from [from] to [to] of the filter facet [facet] of the type; null of a facet that is no scale. */
+    fun rangeOf(typeId: String, facet: String, from: String?, to: String?): Set<String>? {
+        val type = stores.type(typeId) ?: return null
+        val scale = type.sources.firstNotNullOfOrNull { s -> s.schema.facets.firstOrNull { it.filter && filterId(s, it) == facet }?.standard?.takeIf { it.ordered } } ?: return null
+        return scale.between(from, to).toSet()
     }
 }

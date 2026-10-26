@@ -8,5 +8,10 @@
   "FacetDropdown.findPlaceholder": "Pronađi…",
   "FacetDropdown.none": "Ništa",
   "FacetDropdown.summaryCount": "{{shown, number}} od {{total, number}}",
-  "FacetDropdown.summaryNone": "ništa"
+  "FacetDropdown.summaryNone": "ništa",
+  "ScaleDropdown.from": "od",
+  "ScaleDropdown.to": "do",
+  "ScaleDropdown.works_one": "{{count}} delo",
+  "ScaleDropdown.works_few": "{{count}} dela",
+  "ScaleDropdown.works_other": "{{count}} dela"
 }
