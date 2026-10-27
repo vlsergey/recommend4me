@@ -16,7 +16,6 @@ import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.CHARS
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.COMMENTS
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.FORM
-import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.GENRE
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.LIKES
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.NOTES
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.REVIEWS
@@ -69,7 +68,7 @@ class AuthorTodayPages(private val context: SourceContext) {
         val title = link.text().trim().ifEmpty { return@mapNotNull null }
         items.upsert(ItemHead(id, "$BASE/work/$id", title, updatedAt = updatedAt(card)), now)
         authors(card.select(".book-author a[href^=/u/]")).takeIf { it.isNotEmpty() }?.let { items.setFacet(id, AUTHOR, it) }
-        genresIn(card.select(".book-genres a[href^=/work/genre/]")).let { (form, genres) -> writeGenres(id, form, genres) }
+        genresIn(card.select(".book-genres a[href^=/work/genre/]")).let { (form, genres) -> writeGenres(id, form, genres, tags = null) }
         status(card)?.let { items.setFacet(id, STATUS, listOf(it)) }
         series(card)?.let { items.setFacet(id, SERIES, listOf(it)) }
         ageRating(id, adult = card.selectFirst(".label-adult-only") != null)
@@ -108,10 +107,21 @@ class AuthorTodayPages(private val context: SourceContext) {
         AgeRating.write(items, id, if (adult) AgeRating.between(AgeRating.NC17, AgeRating.NC21) else AgeRating.between(AgeRating.G, AgeRating.R))
     }
 
-    private fun writeGenres(id: String, form: FacetValue?, genres: List<FacetValue>) {
+    /**
+     * The form, the genres and the tags a card or a work's page shows. The genres are the site's tags
+     * as its tags are, by their names (user, 2026-10-27): of a page, its [tags] and its genres the
+     * work's tags of the site; of a card — no tags on it, [tags] null — its genres added to the tags
+     * known, none of them taken away.
+     */
+    private fun writeGenres(id: String, form: FacetValue?, genres: List<FacetValue>, tags: List<FacetValue>?) {
         form?.let { items.setFacet(id, FORM, listOf(it)) }
+        val genreTags = genres.mapNotNull { g -> g.name?.takeIf { it.isNotBlank() }?.let { siteTag(it) } }
+        if (tags != null) items.setFacet(id, TAG, tags + genreTags)
+        else if (genreTags.isNotEmpty()) {
+            val known = items.facets(id)[TAG].orEmpty()
+            items.setFacet(id, TAG, known.map { FacetValue(it) } + genreTags.filter { it.key !in known })
+        }
         if (genres.isNotEmpty()) {
-            items.setFacet(id, GENRE, genres)
             // The site's genres "Фанфик", "Эротический фанфик" are what fan fiction is filed under, its
             // "Альтернативная история" our world with its history changed; a work shown with neither is an original one
             val kind = when {
@@ -122,6 +132,9 @@ class AuthorTodayPages(private val context: SourceContext) {
             items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(kind)))
         }
     }
+
+    /** A tag of the site by its name: its key the name in lower case. */
+    private fun siteTag(name: String) = FacetValue(name.lowercase(), name)
 
     /** "/work/genre/all/any/novel" is the form (Роман); "/work/genre/<slug>" a genre. */
     private fun genresIn(links: List<Element>): Pair<FacetValue?, List<FacetValue>> {
@@ -180,18 +193,13 @@ class AuthorTodayPages(private val context: SourceContext) {
         items.upsert(ItemHead(id, "$BASE/work/$id", title, updatedAt = updatedAt(panel)), now)
         authors(panel.select(".book-authors a[href^=/u/]")).takeIf { it.isNotEmpty() }?.let { items.setFacet(id, AUTHOR, it) }
         val (form, genres) = genresIn(panel.select(".book-genres a[href^=/work/genre/]"))
-        writeGenres(id, form, genres)
+        // The tags of the block of them; no block — a changed markup — is no word that the work has none
+        val tags = panel.selectFirst(".tags")?.let { block -> block.select("a").map { a -> siteTag(a.attr("title").ifBlank { a.text() }.trim()) } }
+        writeGenres(id, form, genres, tags)
         status(panel)?.let { items.setFacet(id, STATUS, listOf(it)) }
         series(panel)?.let { items.setFacet(id, SERIES, listOf(it)) }
         // The work's "18+" told by its panel; a panel without it says nothing — the card says so
         if (panel.selectFirst(".label-adult-only") != null) ageRating(id, adult = true)
-        // The tags of the block of them; no block — a changed markup — is no word that the work has none
-        panel.selectFirst(".tags")?.let { block ->
-            items.setFacet(id, TAG, block.select("a").map { a ->
-                val name = a.attr("title").ifBlank { a.text() }.trim()
-                FacetValue(name.lowercase(), name)
-            })
-        }
         val like = LIKE_BUTTON.find(html)
         items.setNumbers(
             id,

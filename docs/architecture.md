@@ -287,8 +287,8 @@ any facet's:
 
 - `kind` — fan fiction, realism (our world as it is), an alternative history or an original
   work, the last three of no universe: the site's when it says (ficbook by the fandom
-  "originals", author.today by the genre "Фанфик" — `SourceSchema.kindFrom`, shown above),
-  suggested otherwise;
+  "originals" — `SourceSchema.kindFrom`, shown above; author.today by its genre "Фанфик", one of
+  the site's tags), suggested otherwise;
 - `universe` — the universes of the dictionary the work is fan fiction of, one or several:
   suggested from the work's fandom, tags and texts to a work not known to be original, to be
   confirmed;

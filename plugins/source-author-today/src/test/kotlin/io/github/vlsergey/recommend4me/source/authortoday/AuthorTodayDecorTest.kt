@@ -38,12 +38,14 @@ class AuthorTodayDecorTest {
         assertTrue(doc.select(decor.panelAfter!!).isNotEmpty())
 
         // The site's tags are its word, left alone; the work's tags go in one line right after them
-        assertTrue(decor.facets.none { it.facet == AuthorToday.TAG || it.facet == AuthorToday.GENRE })
+        assertTrue(decor.facets.none { it.facet == AuthorToday.TAG })
         val tags = decor.facets.single { it.facet == Books.TAGS.key }
         val block = doc.select(tags.after!!)
         assertEquals(1, block.size)
         val shown = block.select("a").map { (it.attr("title").ifBlank { it.text() }).trim().lowercase() }
-        assertEquals(context.facets.getValue("216859").getValue(AuthorToday.TAG).sorted(), shown.sorted())
+        // The site's tags kept: the ones of the block and its genres
+        val genres = doc.select(".book-meta-panel .book-genres a[href^=/work/genre/]").filter { "/all/" !in it.attr("href") }.map { it.text().trim().lowercase() }
+        assertEquals(context.facets.getValue("216859").getValue(AuthorToday.TAG).sorted(), (shown + genres).distinct().sorted())
 
         val cover = doc.select(decor.pictures!!.selector).map { it.attr("src").substringBefore('?') }
         assertEquals(context.pictures.getValue("216859").filterNotNull(), cover)

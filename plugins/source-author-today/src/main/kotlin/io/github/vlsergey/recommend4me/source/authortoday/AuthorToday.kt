@@ -37,7 +37,6 @@ class AuthorToday : Source {
     override val schema = SourceSchema(
         facets = listOf(
             Books.AUTHOR.asFacet(AUTHOR),
-            FacetDef(GENRE, filter = true, onCard = true, searchWeight = 0.8f, role = FacetRole.CONTENT),
             FacetDef(FORM, filter = true, role = FacetRole.FORM),
             Books.TAG.asFacet(TAG),
             Books.STATUS.asFacet(STATUS),
@@ -59,8 +58,6 @@ class AuthorToday : Source {
         ),
         reviews = true,
         parts = true,
-        // A work of the genre "Фанфик" is fan fiction, of "Альтернативная история" our world changed
-        kindFrom = GENRE,
     )
 
     override val capturePatterns = listOf(
@@ -72,9 +69,12 @@ class AuthorToday : Source {
      * finished as the standard "read". 4: the shelf as the standard one. 5: the pages that failed
      * when several pages of one work were read at once read again. 6: the alternative history as a
      * kind of its own, the erotic fan fiction as fan fiction. 7: the age ratings a card lets the work
-     * have, by its "18+". 8: of a work without it, G to R.
+     * have, by its "18+". 8: of a work without it, G to R. 9: the genres the site's tags.
      */
-    override val parserVersion = 8
+    override val parserVersion = 9
+
+    /** The genres kept before as a facet of their own moved among the site's tags. */
+    override val migrations = listOf("classpath:db/author.today")
 
     override fun itemUrl(itemId: String) = "$BASE/work/$itemId"
 
@@ -100,7 +100,7 @@ class AuthorToday : Source {
     override val pageDecor = PageDecor(
         // After the whole card of the book: within it the columns are laid out by hand
         panelAfter = ".book-panel",
-        // The site's tags and genres are its word, never answered on: the work's tags after them
+        // The site's tags, its genres among them, are its word, never answered on: the work's tags after them
         facets = listOf(FacetDecor(Books.TAGS.key, after = ".book-meta-panel .tags")),
         reviews = ReviewDecor("article.post[id^='post_']", idPrefix = "post_"),
         pictures = PictureDecor(".book-cover img.cover-image"),
@@ -117,7 +117,6 @@ class AuthorToday : Source {
         private val ITEM_ADDRESS = Regex("^https?://(?:www\\.)?author\\.today/(?:work|reader)/(\\d+)(?:[/?#]|$)")
 
         const val AUTHOR = "author"
-        const val GENRE = "genre"
         const val FORM = "form"
         const val TAG = "tag"
         const val STATUS = "status"

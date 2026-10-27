@@ -35,11 +35,13 @@ class AuthorTodayPagesTest {
         assertEquals(listOf("siu_tower_of_god"), facets["author"])
         assertEquals("Джон Голд", context.facetNames.getValue("author")["siu_tower_of_god"])
         assertEquals(listOf("novel"), facets["form"])
-        assertEquals(listOf("popadantsy-v-magicheskie-miry", "wuxia", "sf-action"), facets["genre"])
+        // The genres the site's tags, by their names
+        assertEquals(setOf("попаданцы в магические миры", "уся", "боевая фантастика"), facets["tag"].orEmpty().toSet())
+        assertEquals("Уся", context.facetNames.getValue("tag")["уся"])
         // Not filed under "Фанфик": an original work
         assertEquals(listOf("original"), facets["kind"])
         // A fan fiction of the list is one
-        assertTrue(context.facets.values.any { it["genre"].orEmpty().contains("fanfiction") && it["kind"] == listOf("fanfiction") })
+        assertTrue(context.facets.values.any { it["tag"].orEmpty().contains("фанфик") && it["kind"] == listOf("fanfiction") })
         assertEquals(listOf("in-progress"), facets["status"])
         assertEquals(listOf("54335"), facets["series"])
         // The age ratings a card lets the work have: no "18+" — G to R; "18+" — NC-17 to NC-21; the model chooses within
@@ -63,6 +65,9 @@ class AuthorTodayPagesTest {
         assertEquals(listOf("661269"), capture(context, "https://author.today/work/661269", page("work-661269.html")))
         val facets = context.facets.getValue("661269")
         assertTrue("выживание" in facets.getValue("tag"), facets.toString())
+        // The genres after the tags of the block
+        val tags = facets.getValue("tag")
+        assertEquals(listOf("уся", "попаданцы в магические миры", "боевая фантастика"), tags.takeLast(3))
         assertEquals(1279.0, context.numbers.getValue("661269")["likes"])
         val texts = context.texts.getValue("661269")
         assertTrue(texts.getValue("annotation").startsWith("Тайна южного берега"))
@@ -72,6 +77,9 @@ class AuthorTodayPagesTest {
         assertEquals(listOf("6337965", "6344849", "6362286"), parts.keys.toList())
         assertEquals("Глава 1. Прикрывая тылы", parts.getValue("6337965").title)
         assertNull(parts.getValue("6337965").content)
+        // A card of the work read later adds nothing of its genres and takes none of its tags away
+        capture(context, "https://author.today/work/genre/fantasy", page("genre-fantasy.html"))
+        assertEquals(tags, context.facets.getValue("661269").getValue("tag"))
     }
 
     @Test
