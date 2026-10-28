@@ -13,19 +13,20 @@ import kotlin.concurrent.withLock
 private val log = LoggerFactory.getLogger(StepOnCard::class.java)
 
 /**
- * A STEP OF THE FITTING ON THE CARD ([Bilinear]): the data of the task — the items' features X, the
- * values' Z, the names' texts H and how the names fall into groups — put on the card once, handed
- * to two sessions of ONNX Runtime from the memory the task lies in ([OnnxGraph.supplied]), the
- * groups among their graphs' constants, and kept there for the whole fitting; a step sends
- * the weights there and takes the gradient back. Forward, of the weights A, B, E and the biases:
+ * A STEP OF THE FITTING ON THE CARD ([Bilinear]): the data of the task — the values' features Z,
+ * the names' texts H and how the names fall into groups — put on the card once, handed to two
+ * sessions of ONNX Runtime from the memory the task lies in ([OnnxGraph.supplied]), the groups
+ * among their graphs' constants, and kept there for the whole fitting; a step sends the weights
+ * there and takes the gradient back. Forward, of the weights A, B, E and the biases:
  *
- *     U = X A,  V = Z B + E,  Uh = H Σ_b s_b A_b + A_const + Σ_b A_mark(b)
+ *     V = Z B + E,  Uh = H Σ_b s_b A_b + A_const + Σ_b A_mark(b)
  *
  * and of every group of names, its names' coordinates against its values': the scores, every pair's
- * logistic loss and slope, carried back to the names and to the values ([NamesLoss]). The pairs of
- * the items and their values — the user's answers, thousands, not millions — are taken on the
- * processor between the two runs: there a fold's items are left out of its fitting. Backward, of
- * the items' and the values' slopes: Xᵀ dU and Zᵀ dV.
+ * logistic loss and slope, carried back to the names and to the values ([NamesLoss]). The items'
+ * features and their pairs with the values — the user's answers, thousands, not millions — are
+ * taken on the processor between the two runs ([ItemFeatures]): there a fold's items are left out
+ * of its fitting, and the features lie as the task holds them, not laid out whole. Backward, of the
+ * values' slopes: Zᵀ dV.
  *
  * In single precision without TF32, the loss summed in double: the optimizer goes by it.
  */
@@ -38,7 +39,6 @@ internal class StepOnCard private constructor(
     private val p: Problem,
     private val rank: Int,
 ) : AutoCloseable {
-    private val n = p.n
     private val m = p.m
     private val dx = p.design.itemWidth
     private val dz = p.design.valueWidth
@@ -49,9 +49,9 @@ internal class StepOnCard private constructor(
     /** One run on the card at a time: the folds share the card, and a large universe's scores take a gigabyte there. */
     private val lock = ReentrantLock()
 
-    /** What the forward run gives: the items' and the values' coordinates, and the names' loss with its gradient. */
+    /** What the forward run gives: the values' coordinates, and the names' loss with its gradient. */
     class Forward(
-        val u: FloatArray, val v: FloatArray,
+        val v: FloatArray,
         val loss: Float, val slope: Float, val own: Float,
         /** The names' slopes carried to the values' coordinates (m × rank) and to their biases (m). */
         val dv: FloatArray, val dBias: FloatArray,
@@ -92,7 +92,7 @@ internal class StepOnCard private constructor(
                     for (q in 0 until rank) dv[value * rank + q] += groups[t * rank + q]
                 }
                 Forward(
-                    floats("U"), floats("V"),
+                    floats("V"),
                     // Σ D: the sum of its columns' sums
                     (r.get("loss").get() as OnnxTensor).doubleBuffer.get(0).toFloat(), columns.sum(), floats("own_slope")[0],
                     dv, dBias, floats("dSum"), floats("dBase"),
@@ -103,21 +103,15 @@ internal class StepOnCard private constructor(
         }
     }
 
-    /** Xᵀ dU and Zᵀ dV: the items' and the values' slopes carried to the weights of their features. */
-    fun backward(du: FloatArray, dv: FloatArray): Pair<FloatArray, FloatArray> = lock.withLock {
+    /** Zᵀ dV: the values' slopes carried to the weights of their features. */
+    fun backward(dv: FloatArray): FloatArray = lock.withLock {
         open()
         val env = onnx.env
-        val inputs = mapOf(
-            "dU" to OnnxTensor.createTensor(env, FloatBuffer.wrap(du), longArrayOf(n.toLong(), rank.toLong())),
-            "dV" to OnnxTensor.createTensor(env, FloatBuffer.wrap(dv), longArrayOf(m.toLong(), rank.toLong())),
-        )
+        val inputs = mapOf("dV" to OnnxTensor.createTensor(env, FloatBuffer.wrap(dv), longArrayOf(m.toLong(), rank.toLong())))
         try {
             backward.run(inputs).use { r ->
-                fun floats(name: String): FloatArray {
-                    val b = (r.get(name).get() as OnnxTensor).floatBuffer
-                    return FloatArray(b.remaining()).also { b.get(it) }
-                }
-                floats("dA") to floats("dB")
+                val b = (r.get("dB").get() as OnnxTensor).floatBuffer
+                FloatArray(b.remaining()).also { b.get(it) }
             }
         } finally {
             inputs.values.forEach { it.close() }
@@ -159,7 +153,6 @@ internal class StepOnCard private constructor(
             // The task's matrices handed to the runtime over the memory they lie in: not copied into
             // the graphs' bytes, nor parsed out of them; on the card a copy each session
             val data = mapOf(
-                "X" to tensor(onnx, p.x.held.buffer(0, p.n * p.design.itemWidth), p.n, p.design.itemWidth),
                 "Z" to tensor(onnx, p.z.held.buffer(0, p.m * p.design.valueWidth), p.m, p.design.valueWidth),
                 "H" to tensor(onnx, p.hintText.held.buffer(0, p.hints.size * p.hintDim), p.hints.size, p.hintDim),
             )
@@ -185,15 +178,13 @@ internal class StepOnCard private constructor(
                 .input("A", f, dx, rank.toLong()).input("B", f, p.design.valueWidth.toLong(), rank.toLong())
                 .input("E", f, p.m.toLong(), rank.toLong()).input("bias", f, p.m.toLong())
                 .input("common", f).input("named", f).input("scale", f)
-                .supplied("X", p.n.toLong(), dx)
                 .supplied("Z", p.m.toLong(), p.design.valueWidth.toLong())
                 .supplied("H", p.hints.size.toLong(), p.hintDim.toLong())
                 .constant("one", floatArrayOf(1f))
                 .constant("first", longArrayOf(0), 1)
                 .constant("second", longArrayOf(1), 1)
-            // The coordinates of the items and of the values
-            g.node("MatMul", listOf("X", "A"), listOf("U"))
-                .node("MatMul", listOf("Z", "B"), listOf("ZB"))
+            // The coordinates of the values
+            g.node("MatMul", listOf("Z", "B"), listOf("ZB"))
                 .node("Add", listOf("ZB", "E"), listOf("V"))
             // Of the names, read as a work's every text block: the blocks' weights summed by their scales,
             // the constant's and the blocks' marks added
@@ -244,7 +235,7 @@ internal class StepOnCard private constructor(
                 .node("Sum", owns, listOf("own_slope"))
                 .node("Concat", columns, listOf("columns"), mapOf("axis" to 0))
                 .node("Concat", dVs, listOf("dVg"), mapOf("axis" to 0))
-                .output("U", f, p.n.toLong(), rank.toLong()).output("V", f, p.m.toLong(), rank.toLong())
+                .output("V", f, p.m.toLong(), rank.toLong())
                 .output("loss", OnnxGraph.DOUBLE).output("own_slope", f)
                 .output("columns", f, "groupValues").output("dVg", f, "groupValues", rank.toLong())
                 .output("dSum", f, p.hintDim.toLong(), rank.toLong()).output("dBase", f, rank.toLong())
@@ -254,12 +245,10 @@ internal class StepOnCard private constructor(
         private fun backwardGraph(p: Problem): ByteArray {
             val f = OnnxGraph.FLOAT
             return OnnxGraph("suggester-step-backward")
-                .input("dU", f, p.n.toLong(), "rank").input("dV", f, p.m.toLong(), "rank")
-                .supplied("X", p.n.toLong(), p.design.itemWidth.toLong())
+                .input("dV", f, p.m.toLong(), "rank")
                 .supplied("Z", p.m.toLong(), p.design.valueWidth.toLong())
-                .node("Gemm", listOf("X", "dU"), listOf("dA"), mapOf("transA" to 1))
                 .node("Gemm", listOf("Z", "dV"), listOf("dB"), mapOf("transA" to 1))
-                .output("dA", f, p.design.itemWidth.toLong(), "rank").output("dB", f, p.design.valueWidth.toLong(), "rank")
+                .output("dB", f, p.design.valueWidth.toLong(), "rank")
                 .bytes(OPSET)
         }
     }

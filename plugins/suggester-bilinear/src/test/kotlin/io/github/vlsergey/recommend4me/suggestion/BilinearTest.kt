@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
@@ -157,6 +158,51 @@ class BilinearTest {
             val together = alone.lossAndGradient(fits.weights[k], FloatArray(alone.size), lambdas[k]) { problem.foldOf[it] != folds[k] }
             // The same search on floats added in another order: the same minimum to the float's resolution of the loss
             assertTrue(abs(loss - together) < 1e-3 * abs(loss), "model $k: loss $loss alone, $together together")
+        }
+    }
+
+    @Test
+    fun `the features' products are those of the features laid out whole`() {
+        val task = task()
+        val design = Design.of(task)
+        val width = design.itemWidth
+        val rank = 3
+        val random = Random(13)
+        listOf(IntArray(task.itemCount) { it }, intArrayOf(7, 2, 11, 5)).forEach { rows ->
+            val x = design.features(task, rows)
+            val n = rows.size
+            // Laid out whole: the constant, every block's mark and its vector times its scale, the values of the context
+            val base = 1 + design.blocks.sumOf { 1 + it.dim }
+            val dense = Array(n) { r ->
+                val i = rows[r]
+                FloatArray(width).also { row ->
+                    row[0] = 1f
+                    design.blocks.forEachIndexed { k, b ->
+                        val block = task.inputs.first { it.name == b.name }
+                        if (!block.present[i]) return@forEachIndexed
+                        row[design.blockOffsets[k]] = 1f
+                        for (q in 0 until b.dim) row[design.blockOffsets[k] + 1 + q] = block.vectors.held[block.vectors.row(i) + q] * b.scale
+                    }
+                    task.context[i].forEach { row[base + design.contextKeys.indexOf(task.contextKeys[it])] = 1f }
+                }
+            }
+            fun close(expected: FloatArray, actual: Floats, what: String) = expected.indices.forEach {
+                assertTrue(abs(expected[it] - actual[it]) < 1e-4f * max(1f, abs(expected[it])), "$what at $it: ${expected[it]}, made ${actual[it]}")
+            }
+            val a = FloatArray(width * rank) { random.nextGaussian().toFloat() }
+            val du = FloatArray(n * rank) { random.nextGaussian().toFloat() }
+            val u = Floats(n * rank).also { x.times(Floats.of(a), rank, it) }
+            close(FloatArray(n * rank) { k -> (0 until width).sumOf { c -> (dense[k / rank][c] * a[c * rank + k % rank]).toDouble() }.toFloat() }, u, "X A")
+            val da = Floats(width * rank).also { x.transposedTimes(Floats.of(du), rank, it) }
+            close(FloatArray(width * rank) { k -> (0 until n).sumOf { i -> (dense[i][k / rank] * du[i * rank + k % rank]).toDouble() }.toFloat() }, da, "Xᵀ dU")
+            // Of two models one under another: Aᵀ and dUᵀ
+            val k = 2 * rank
+            val aT = FloatArray(k * width) { random.nextGaussian().toFloat() }
+            val duT = FloatArray(k * n) { random.nextGaussian().toFloat() }
+            val uT = Floats(k * n).also { x.transposedCoordinates(Floats.of(aT), k, it) }
+            close(FloatArray(k * n) { t -> (0 until width).sumOf { c -> (aT[t / n * width + c] * dense[t % n][c]).toDouble() }.toFloat() }, uT, "Aᵀ Xᵀ")
+            val gA = Floats(k * width).also { x.transposedGradient(Floats.of(duT), k, it) }
+            close(FloatArray(k * width) { t -> (0 until n).sumOf { i -> (duT[t / width * n + i] * dense[i][t % width]).toDouble() }.toFloat() }, gA, "dUᵀ X")
         }
     }
 

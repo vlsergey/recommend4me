@@ -137,14 +137,14 @@ object Blas {
     }
 
     /**
-     * `c = op(a) · op(b) + beta · c`, row-major, ONE CALL OF THE WHOLE: the library shares it out
+     * `c = alpha · op(a) · op(b) + beta · c`, row-major, ONE CALL OF THE WHOLE: the library shares it out
      * among its own threads when a caller asks for them ([wide]), none of ours. Every side
      * addressed where it lies — [aAt], [bAt], [cAt] the numbers it starts at — nothing copied.
      * op(a) is m × k (a is k × m when [transA]), op(b) k × n, c m × n.
      */
     fun gemm(
         transA: Boolean, transB: Boolean, m: Int, n: Int, k: Int,
-        a: Floats, aAt: Int, lda: Int, b: Floats, bAt: Int, ldb: Int, c: Floats, cAt: Int, ldc: Int, beta: Float = 0f,
+        a: Floats, aAt: Int, lda: Int, b: Floats, bAt: Int, ldb: Int, c: Floats, cAt: Int, ldc: Int, beta: Float = 0f, alpha: Float = 1f,
     ) {
         if (m == 0 || n == 0) return
         val pa = a.p
@@ -158,14 +158,14 @@ object Blas {
                     val y = if (transB) b[bAt + j * ldb + q] else b[bAt + q * ldb + j]
                     s += x * y
                 }
-                c[cAt + i * ldc + j] = s + (if (beta == 0f) 0f else beta * c[cAt + i * ldc + j])
+                c[cAt + i * ldc + j] = alpha * s + (if (beta == 0f) 0f else beta * c[cAt + i * ldc + j])
             }
             return
         }
         openblas_full.cblas_sgemm(
             openblas_full.CblasRowMajor, if (transA) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
             if (transB) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
-            m, n, k, 1.0f, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(pb).position(bAt.toLong()), ldb,
+            m, n, k, alpha, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(pb).position(bAt.toLong()), ldb,
             beta, FloatPointer(pc).position(cAt.toLong()), ldc,
         )
     }

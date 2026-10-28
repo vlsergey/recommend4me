@@ -152,16 +152,16 @@ class Cublas private constructor(
     }
 
     /**
-     * `c = op(a) · op(b) + beta · c` of row-major matrices on the card, as [Blas.gemm]: op(a) m × k,
+     * `c = alpha · op(a) · op(b) + beta · c` of row-major matrices on the card, as [Blas.gemm]: op(a) m × k,
      * op(b) k × n, c m × n. cuBLAS reads column-major, where the row-major c is cᵀ = op(b)ᵀ op(a)ᵀ:
      * the two sides handed over swapped, each with its own leading dimension.
      */
     fun gemm(
         transA: Boolean, transB: Boolean, m: Int, n: Int, k: Int,
-        a: DeviceFloats, aAt: Long, lda: Int, b: DeviceFloats, bAt: Long, ldb: Int, c: DeviceFloats, cAt: Long, ldc: Int, beta: Float = 0f,
+        a: DeviceFloats, aAt: Long, lda: Int, b: DeviceFloats, bAt: Long, ldb: Int, c: DeviceFloats, cAt: Long, ldc: Int, beta: Float = 0f, alpha: Float = 1f,
     ) {
         if (m == 0 || n == 0) return
-        scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 0, 1f)
+        scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 0, alpha)
         scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 1, beta)
         val status = cublasSgemm.invokeExact(
             handle, if (transB) OP_T else OP_N, if (transA) OP_T else OP_N, n, m, k,

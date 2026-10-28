@@ -113,32 +113,33 @@ internal class Ensemble(
     )
 
     /**
-     * THE ITEMS' FEATURES ON THE CARD, and the sides of their two products: put there once for the
-     * fitting, the gigabyte and a half of a catalogue of games read there at the card's speed, not
-     * the main memory's. A step sends the models' A there and takes U back, sends dU and takes dA
-     * back — tens of megabytes, not the features. Null on the processor: no card, or no room on it.
+     * THE ITEMS' VECTORS ON THE CARD, and the sides of their two products: every block put there
+     * once for the fitting, the gigabyte and a half of a catalogue of games read there at the card's
+     * speed, not the main memory's. A step sends the models' A there and takes U back, sends dU and
+     * takes dA back — tens of megabytes, not the features; the part of the ones ([ItemFeatures.ones])
+     * made in the main memory and sent with them. Null on the processor: no card, or no room on it.
      */
     private class OnCard(
-        val cublas: Cublas, val x: Cublas.DeviceFloats, val aT: Cublas.DeviceFloats, val uT: Cublas.DeviceFloats,
+        val cublas: Cublas, val blocks: List<Cublas.DeviceFloats>, val aT: Cublas.DeviceFloats, val uT: Cublas.DeviceFloats,
         val duT: Cublas.DeviceFloats, val gA: Cublas.DeviceFloats,
     ) : AutoCloseable {
-        override fun close() = listOf(x, aT, uT, duT, gA).forEach { it.close() }
+        override fun close() = (blocks + listOf(aT, uT, duT, gA)).forEach { it.close() }
     }
 
     private val onCard: OnCard? = card?.let { c ->
         val made = ArrayList<Cublas.DeviceFloats>()
         fun room(count: Long) = c.allocate(count)?.also { made += it }
-        val x = room(n.toLong() * dx)
+        val blocks = p.x.blocks.map { room(n.toLong() * it.dim) }
         val a = room(count.toLong() * r * dx)
         val u = room(count.toLong() * r * n)
         val du = room(count.toLong() * r * n)
         val g = room(count.toLong() * r * dx)
-        if (x == null || a == null || u == null || du == null || g == null) {
+        if (blocks.any { it == null } || a == null || u == null || du == null || g == null) {
             made.forEach { it.close() }
             null
         } else {
-            x.upload(p.x.held, 0, 0, n * dx)
-            OnCard(c, x, a, u, du, g)
+            p.x.blocks.forEachIndexed { k, b -> blocks[k]!!.upload(b.vectors.held, 0, 0, n * b.dim) }
+            OnCard(c, blocks.map { it!! }, a, u, du, g)
         }
     }
 
@@ -160,37 +161,44 @@ internal class Ensemble(
     }
 
     /**
-     * Uᵀ = Aᵀ Xᵀ of the first [kr] rows of Aᵀ — every model still searching: on the card when the
-     * features are there; Aᵀ sent there first unless the searches write it there ([aOnCard]).
+     * Uᵀ = Aᵀ Xᵀ of the first [kr] rows of Aᵀ — every model still searching: the vectors' part on
+     * the card when they are there, onto the ones' part made here; Aᵀ sent there first unless the
+     * searches write it there ([aOnCard]) — then brought over, the ones read it here.
      */
     private fun itemsCoordinates(kr: Int, aOnCard: Boolean, keep: Boolean = false) {
         val c = onCard
         if (c == null) {
-            Blas.gemm(false, true, kr, n, dx, aT, 0, dx, p.x.held, 0, dx, uT, 0, n)
+            p.x.transposedCoordinates(aT, kr, uT)
             return
         }
-        if (aOnCard) {
-            // The names read A in the main memory: brought over, of the tasks with names alone
-            if (h > 0) c.aT.download(aT, 0, 0, kr * dx)
-        } else c.aT.upload(aT, 0, 0, kr * dx)
-        c.cublas.gemm(false, true, kr, n, dx, c.aT, 0, dx, c.x, 0, dx, c.uT, 0, n)
+        if (aOnCard) c.aT.download(aT, 0, 0, kr * dx) else c.aT.upload(aT, 0, 0, kr * dx)
+        p.x.onesCoordinates(aT, kr, uT)
+        c.uT.upload(uT, 0, 0, kr * n)
+        p.x.blocks.forEachIndexed { k, b ->
+            c.cublas.gemm(false, true, kr, n, b.dim, c.aT, b.column.toLong(), dx, c.blocks[k], 0, b.dim, c.uT, 0, n, beta = 1f, alpha = b.scale)
+        }
         // Left there when the pairs are worked out there ([keep]): nothing of the processor reads them then
         if (!keep) c.uT.download(uT, 0, 0, kr * n)
     }
 
     /**
-     * dAᵀ = dUᵀ X of the first [kr] rows: on the card when the features are there; taken back
-     * unless the searches read it there ([aOnCard]) — then only for the names to add their part.
+     * dAᵀ = dUᵀ X of the first [kr] rows: the vectors' part on the card when they are there, beside
+     * the ones' part made here and sent; taken back unless the searches read it there ([aOnCard]) —
+     * then only for the names to add their part.
      */
     private fun itemsGradient(kr: Int, aOnCard: Boolean, duOnCard: Boolean = false) {
         val c = onCard
         if (c == null) {
-            Blas.gemm(false, false, kr, dx, n, duT, 0, n, p.x.held, 0, dx, gA, 0, dx)
+            p.x.transposedGradient(duT, kr, gA)
             return
         }
-        // Written there by the pairs on the card ([duOnCard]), else sent
-        if (!duOnCard) c.duT.upload(duT, 0, 0, kr * n)
-        c.cublas.gemm(false, false, kr, dx, n, c.duT, 0, n, c.x, 0, dx, c.gA, 0, dx)
+        // Written there by the pairs on the card ([duOnCard]) and brought over for the ones, else sent
+        if (duOnCard) c.duT.download(duT, 0, 0, kr * n) else c.duT.upload(duT, 0, 0, kr * n)
+        p.x.onesGradient(duT, kr, gA)
+        c.gA.upload(gA, 0, 0, kr * dx)
+        p.x.blocks.forEachIndexed { k, b ->
+            c.cublas.gemm(false, false, kr, b.dim, n, c.duT, 0, n, c.blocks[k], 0, b.dim, c.gA, b.column.toLong(), dx, alpha = b.scale)
+        }
         if (!aOnCard || h > 0) c.gA.download(gA, 0, 0, kr * dx)
     }
 

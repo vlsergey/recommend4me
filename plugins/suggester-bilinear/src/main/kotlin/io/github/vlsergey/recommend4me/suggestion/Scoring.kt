@@ -74,9 +74,8 @@ internal class Scoring(
             val out = arrayOfNulls<FloatArray>(rows.size)
             val byFold = rows.indices.groupBy { Problem.foldOf(task.itemIds[rows[it]], BilinearSuggester.FOLDS) }
             byFold.forEach { (fold, at) ->
-                val x = design.items(task, IntArray(at.size) { rows[at[it]] })
                 val u = Floats(at.size * rank)
-                Blas.product(x.held, design.itemWidth, at.size, design.itemWidth, Floats.of(a[fold]), rank, u)
+                design.features(task, IntArray(at.size) { rows[at[it]] }).times(Floats.of(a[fold]), rank, u)
                 val s = Floats(at.size * m)
                 Blas.product(u, rank, at.size, rank, sides[fold], m, s)
                 val w = pair[fold]

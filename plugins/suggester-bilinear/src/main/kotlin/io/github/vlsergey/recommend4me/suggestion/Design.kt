@@ -87,31 +87,38 @@ class Design(
         return task.inputs.all { b -> dims[b.name]?.let { it == b.vectors.cols } ?: true }
     }
 
-    /** The features of the [rows] of the task, a row each. */
-    fun items(task: SuggestionTask, rows: IntArray): Matrix {
-        val out = Matrix(rows.size, itemWidth)
-        val held = out.held
+    /**
+     * The features of the [rows] of the task ([ItemFeatures]): of every row of the task, its blocks
+     * the task's own matrices — of an item without a block its row nought, as the task makes them —
+     * nothing copied; of some rows, their vectors gathered. A block of a layout kept when the
+     * vectors were centred: gathered and centred.
+     */
+    internal fun features(task: SuggestionTask, rows: IntArray): ItemFeatures {
         val byName = task.inputs.associateBy { it.name }
-        // The task's context keys as columns of this layout
-        val columns = IntArray(task.contextCount) { contextIndex[task.contextKeys[it]] ?: -1 }
-        val row = FloatArray(itemWidth)
-        rows.forEachIndexed { r, i ->
-            row.fill(0f)
-            row[0] = 1f
-            var at = 1
-            blocks.forEach { scale ->
-                val block = byName[scale.name]
-                if (block != null && block.present[i]) {
-                    row[at] = 1f
-                    val base = block.vectors.row(i)
-                    for (q in 0 until scale.dim) row[at + 1 + q] = (block.vectors.held[base + q] - scale.center[q]) * scale.scale
+        val every = rows.size == task.itemCount && rows.indices.all { rows[it] == it }
+        val dense = blocks.indices.mapNotNull { k ->
+            val scale = blocks[k]
+            val block = byName[scale.name] ?: return@mapNotNull null
+            val centred = scale.center.any { it != 0f }
+            val vectors = if (every && !centred) block.vectors else Matrix(rows.size, scale.dim).also { out ->
+                rows.forEachIndexed { r, i ->
+                    if (!block.present[i]) return@forEachIndexed
+                    out.held.copy(block.vectors.held, block.vectors.row(i), out.row(r), scale.dim)
+                    if (centred) for (q in 0 until scale.dim) out.held[out.row(r) + q] = out.held[out.row(r) + q] - scale.center[q]
                 }
-                at += 1 + scale.dim
             }
-            task.context[i].forEach { c -> columns[c].takeIf { it >= 0 }?.let { row[at + it] = 1f } }
-            held.put(row, 0, out.row(r), itemWidth)
+            ItemFeatures.Dense(vectors, blockOffsets[k] + 1, scale.scale)
         }
-        return out
+        val presence = blocks.map { byName[it.name]?.present }
+        // The task's context keys as columns of this layout
+        val base = 1 + blocks.sumOf { 1 + it.dim }
+        val columns = IntArray(task.contextCount) { contextIndex[task.contextKeys[it]]?.let { c -> base + c } ?: -1 }
+        val ones = Array(rows.size) { r ->
+            val i = rows[r]
+            val marks = blocks.indices.filter { presence[it]?.get(i) == true }.map { blockOffsets[it] }
+            (listOf(0) + marks + task.context[i].map { columns[it] }.filter { it >= 0 }.distinct()).toIntArray()
+        }
+        return ItemFeatures(rows.size, itemWidth, dense, ones)
     }
 
     /** The features of every value of the task, in its order. */
