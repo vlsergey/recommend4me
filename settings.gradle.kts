@@ -36,5 +36,6 @@ include(
     "plugins:suggester-knn",
     "plugins:source-ao3",
     "plugins:source-author-today",
+    "plugins:source-fanfics-me",
     "plugins:source-ficbook",
 )

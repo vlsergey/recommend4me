@@ -30,6 +30,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/source-ao3` | archiveofourown.org, browser tracking and a work's page on request. |
 | `plugins/source-author-today` | author.today, browser tracking only. |
 | `plugins/source-ficbook` | ficbook.net, browser tracking only. |
+| `plugins/source-fanfics-me` | fanfics.me: the whole catalogue, updates, browser tracking and a work's page on request. |
 | `browser-extension` | The Firefox extension of the browser tracking mode. |
 
 The f95zone.to source lives in a private repository of its own, `recommend4me-f95zone`, built
@@ -65,6 +66,16 @@ Every source has up to four modes:
 author.today and ficbook have only browser tracking: their catalogues are never scraped whole.
 Archive of Our Own has browser tracking and single pages, one request at a time, five seconds
 apart, with "bot" in the user agent, as the site asks of anything automated.
+
+fanfics.me asks no visitor to prove itself and publishes no dump of its data; its search of every
+work is its catalogue: twenty cards a page, each with everything a work's header says but its text
+(the authors, the fandoms, the characters and pairings by the ids of the site's encyclopedia, the
+rating, the genres, the warnings and the events, the size, the status, the summary). The whole
+scrape reads every page of it, a second apart, then what the genres, the warnings and the events
+mean (the site's help, every fandom's encyclopedia); the updates read it from the top down to the
+works known. A work's own page and its text in the reader — the notes of its author, the chapters,
+the comments — are read only as a single page, or by the browser; the text of a work rated NC-17
+the site shows only to a reader logged in.
 
 ## Storage
 
@@ -286,8 +297,8 @@ Every work of the type has five facets of the application's own beside the sourc
 any facet's:
 
 - `kind` — fan fiction, realism (our world as it is), an alternative history or an original
-  work, the last three of no universe: the site's when it says (ficbook by the fandom
-  "originals" — `SourceSchema.kindFrom`, shown above; author.today by its genre "Фанфик", one of
+  work, the last three of no universe: the site's when it says (ficbook and fanfics.me by the
+  fandom "originals" — `SourceSchema.kindFrom`, shown above; author.today by its genre "Фанфик", one of
   the site's tags), suggested otherwise;
 - `universe` — the universes of the dictionary the work is fan fiction of, one or several:
   suggested from the work's fandom, tags and texts to a work not known to be original, to be

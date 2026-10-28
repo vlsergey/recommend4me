@@ -25,6 +25,7 @@ folder of jars in `plugins/`:
 | `source-ao3` | [Archive of Our Own](https://archiveofourown.org) fan works in every language, browser tracking and a work's page on request |
 | `source-author-today` | [author.today](https://author.today) books, browser tracking only |
 | `source-ficbook` | [ficbook.net](https://ficbook.net) fanfics and originals, browser tracking only |
+| `source-fanfics-me` | [fanfics.me](https://fanfics.me) fanfics and originals: the whole catalogue by the site's search, updates, browser tracking and a work's page on request |
 | `encoder-bge-m3` | texts → vectors by bge-m3 (any language, one space, 1024 numbers); the one used when its files are there |
 | `encoder-e5` | texts → vectors by multilingual-e5-small: the one used without bge-m3's files |
 | `encoder-siglip2` | pictures → vectors by SigLIP2 NaFlex, proportions kept |
