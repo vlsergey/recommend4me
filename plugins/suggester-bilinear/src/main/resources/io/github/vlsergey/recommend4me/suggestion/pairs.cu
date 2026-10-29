@@ -45,32 +45,77 @@ __device__ void block_sums(double a, double b, double c, double d, double* sums)
     }
 }
 
-// Every pair that weighs anything — an entry: its item, its value, weight, label, whether the site
-// gives it as an example, how much the item's texts name it — of the items outside the held-out fold:
-// its score S[item, value] (U Vᵀ, made before) with the bias, the common bias, the example and the
-// mention; its slope written into G (nought elsewhere), its loss and slopes summed
-extern "C" __global__ void pairs(
-    long long entries, int m, const float* S, float* G,
-    const int* item, const int* value, const float* weight, const float* label, const float* exampleOf, const float* mentionOf,
-    const int* foldOf, int heldOut, const float* bias, float common, float example, float mention, float scale, double* sums
+// Whether the item i may have the value j: its array of the values it may have, as a mask of a bit
+// a value — group[i] the array's, -1 any value
+__device__ __forceinline__ bool may(const int* group, const unsigned int* masks, int words, int i, int j) {
+    int g = group[i];
+    return g < 0 || ((masks[(size_t) g * words + (j >> 5)] >> (j & 31)) & 1u);
+}
+
+// Every pair of a block of rows — the items from `from` on, against every value — as a value the item
+// merely lacks: of the items outside the held-out fold that have any value, every value they may
+// have, weighing lack[i], labelled nought. The score S (U Vᵀ of the block, made before) with the
+// bias and the common bias; the slope written into G (nought elsewhere), the loss and slope summed.
+// The item's own pairs are set right after (owns)
+extern "C" __global__ void lacks(
+    int rows, int m, int from, const float* S, float* G, const float* lack, const int* group, const unsigned int* masks, int words,
+    const int* foldOf, int heldOut, const float* bias, float common, float scale, double* sums
 ) {
     long long k = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    double l = 0.0, dCommon = 0.0;
+    if (k < (long long) rows * m) {
+        int i = from + (int) (k / m);
+        int j = (int) (k % m);
+        float w = lack[i];
+        if (w > 0.0f && foldOf[i] != heldOut && may(group, masks, words, i, j)) {
+            float loss, slope;
+            logistic(S[k] + bias[j] + common, 0.0f, w, scale, &loss, &slope);
+            G[k] = slope;
+            l = loss;
+            dCommon = slope;
+        }
+    }
+    block_sums(l, dCommon, 0.0, 0.0, sums);
+}
+
+// Every pair of the block's items not merely lacked — an entry: its item, its value, weight (nought:
+// no pair), label, whether the site gives it as an example, how much the item's texts name it —
+// of the items outside the held-out fold: what lacks took it for, if anything, taken back — the same
+// score, the same numbers — and the pair as it is, with the example and the mention; its slope
+// written into G over the lacking one, its loss and slopes summed
+extern "C" __global__ void owns(
+    int count, int m, int from, const float* S, float* G,
+    const int* item, const int* value, const float* weight, const float* label, const float* exampleOf, const float* mentionOf,
+    const float* lack, const int* group, const unsigned int* masks, int words,
+    const int* foldOf, int heldOut, const float* bias, float common, float example, float mention, float scale, double* sums
+) {
+    int k = blockIdx.x * blockDim.x + threadIdx.x;
     double l = 0.0, dCommon = 0.0, dExample = 0.0, dMention = 0.0;
-    if (k < entries) {
+    if (k < count) {
         int i = item[k];
         if (foldOf[i] != heldOut) {
             int j = value[k];
-            size_t at = (size_t) i * m + j;
-            float ex = exampleOf[k];
-            float me = mentionOf[k];
-            float z = S[at] + bias[j] + common + example * ex + mention * me;
+            size_t at = (size_t) (i - from) * m + j;
+            float z = S[at] + bias[j] + common;
+            float lacking = lack[i];
             float loss, slope;
-            logistic(z, label[k], weight[k], scale, &loss, &slope);
+            if (lacking > 0.0f && may(group, masks, words, i, j)) {
+                logistic(z, 0.0f, lacking, scale, &loss, &slope);
+                l -= loss;
+                dCommon -= slope;
+            }
+            float w = weight[k];
+            slope = 0.0f;
+            if (w > 0.0f) {
+                float ex = exampleOf[k];
+                float me = mentionOf[k];
+                logistic(z + example * ex + mention * me, label[k], w, scale, &loss, &slope);
+                l += loss;
+                dCommon += slope;
+                dExample = slope * ex;
+                dMention = slope * me;
+            }
             G[at] = slope;
-            l = loss;
-            dCommon = slope;
-            dExample = slope * ex;
-            dMention = slope * me;
         }
     }
     block_sums(l, dCommon, dExample, dMention, sums);

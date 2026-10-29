@@ -15,8 +15,11 @@ import java.util.zip.GZIPOutputStream
  * of the model tried on it — as often as needed, without waiting for the data to change.
  */
 object SuggestionTaskFile {
-    /** 4: the drafts and their weight at the end; 3: the names' texts a matrix, their arrays of values once each; 2 and 1 read too. */
-    private const val FORMAT = 4
+    /**
+     * 5: the arrays of the allowed once each, the barred at the end; 4: the drafts and their weight at
+     * the end; 3: the names' texts a matrix, their arrays of values once each; 2 and 1 read too.
+     */
+    private const val FORMAT = 5
 
     fun write(task: SuggestionTask, file: Path) {
         Files.createDirectories(file.parent)
@@ -39,11 +42,13 @@ object SuggestionTaskFile {
                 out.writeInt(named?.size ?: -1)
                 named?.forEach { (v, count) -> out.writeInt(v); out.writeInt(count) }
             }
+            // Every array of the allowed once, each item by its number: one of thousands of characters for every work of a universe
+            val allowed = IdentityHashMap<IntArray, Int>()
+            task.allowed.forEach { a -> if (a != null) allowed.putIfAbsent(a, allowed.size) }
+            out.writeInt(allowed.size)
+            allowed.entries.sortedBy { it.value }.forEach { ints(out, it.key) }
             out.writeInt(task.allowed.size)
-            task.allowed.forEach { a ->
-                out.writeBoolean(a != null)
-                if (a != null) ints(out, a)
-            }
+            task.allowed.forEach { a -> out.writeInt(a?.let(allowed::getValue) ?: -1) }
             out.writeInt(task.groupings.size)
             task.groupings.forEach { g ->
                 out.writeUTF(g.name)
@@ -64,6 +69,7 @@ object SuggestionTaskFile {
             matrix(out, task.hintTexts)
             lists(out, task.drafts)
             out.writeDouble(task.draftWeight)
+            lists(out, task.barred)
         }
     }
 
@@ -84,7 +90,10 @@ object SuggestionTaskFile {
             val size = input.readInt()
             if (size < 0) null else HashMap<Int, Int>(size).also { m -> repeat(size) { m[input.readInt()] = input.readInt() } }
         }
-        val allowed = List(input.readInt()) { if (input.readBoolean()) ints(input) else null }
+        val allowed = if (format >= 5) {
+            val arrays = List(input.readInt()) { ints(input) }
+            List(input.readInt()) { input.readInt().takeIf { it >= 0 }?.let(arrays::get) }
+        } else List(input.readInt()) { if (input.readBoolean()) ints(input) else null }
         val groupings = List(input.readInt()) { ValueGrouping(input.readUTF(), strings(input), lists(input)) }
         val lackWeight = input.readDouble()
         val (hints, hintTexts) = if (format >= 3) {
@@ -106,9 +115,10 @@ object SuggestionTaskFile {
         // The formats before 4 had no drafts
         val drafts = if (format >= 4) lists(input) else List(itemIds.size) { IntArray(0) }
         val draftWeight = if (format >= 4) input.readDouble() else 1.0
+        val barred = if (format >= 5) lists(input) else List(itemIds.size) { IntArray(0) }
         SuggestionTask(
             itemIds, inputs, values, valueKeys, assigned, confirmed, rejected, context, contextKeys, mentions, allowed, groupings, lackWeight, examples, hints, hintTexts,
-            drafts, draftWeight,
+            drafts, draftWeight, barred,
         )
     }
 

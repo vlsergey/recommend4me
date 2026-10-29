@@ -375,7 +375,7 @@ class FacetSuggestions(
             val mentions = vocabulary?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)
             val data = FacetData.load(
                 store, facet, encoder, imageEncoder = plugins.imageEncoder()?.id, sets = stores.typeOf(store.id).embeddings.ids(), only = ids,
-                modelled = made, mentions = mentions, allowed = vocabulary?.allowed, examples = vocabulary?.examples, kept = kept.values,
+                modelled = made, mentions = mentions, allowed = vocabulary?.allowed, barred = vocabulary?.barred, examples = vocabulary?.examples, kept = kept.values,
             )
             if (data.values.isEmpty()) return null
             return suggester.scoring(kept.bytes, data.task)?.let { Scored(data, it, vocabulary) }
@@ -414,7 +414,7 @@ class FacetSuggestions(
             val chances = scores.of(chunk.toIntArray())
             chunk.forEachIndexed { j, i ->
                 val id = data.ids[i]
-                val own = chancesOf(id, facet.key, chances[j], data, i, vocabulary?.allowed?.invoke(id)).associateBy { it.key }
+                val own = chancesOf(id, facet.key, chances[j], data, i, vocabulary?.may(id)).associateBy { it.key }
                 if (facet.infer) given[id] = ModelValues.given(own).toSet()
                 val byFacet = made.getOrPut(id) { HashMap() }
                 val drafts = byFacet[facet.key].orEmpty().values.filter { it.drafted }
@@ -448,7 +448,8 @@ class FacetSuggestions(
         modelled = made, valueKeys = valueKeys,
         // Counted in the texts of the works [ids] alone: no other work's chances are made
         mentions = vocabulary?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search),
-        allowed = vocabulary?.allowed, groupings = vocabulary?.groupings, examples = vocabulary?.examples, lackWeight = vocabulary?.lackWeight ?: 1.0,
+        allowed = vocabulary?.allowed, barred = vocabulary?.barred, groupings = vocabulary?.groupings, examples = vocabulary?.examples,
+        lackWeight = vocabulary?.lackWeight ?: 1.0,
         hintNames = vocabulary?.hintNames.orEmpty(), hintAmong = vocabulary?.hintAmong ?: { emptyList() },
     )
 
@@ -525,14 +526,14 @@ class FacetSuggestions(
      * its characters) of those alone. Not every value it may have: of a work of a large universe
      * thousands of characters — the user choosing among them gets every one at the asking ([candidates]).
      */
-    private fun chancesOf(id: String, facet: String, chances: FloatArray, data: FacetData, i: Int, allowed: Set<String>?): List<Chance> {
+    private fun chancesOf(id: String, facet: String, chances: FloatArray, data: FacetData, i: Int, allows: ((String) -> Boolean)?): List<Chance> {
         val has = data.held[i].toHashSet()
         val rejected = data.task.rejected[i].toHashSet()
         val named = data.task.mentions[i]
         fun chance(v: Int, had: Boolean) = Chance(id, facet, data.values[v], had, chances[v].toDouble(), named?.let { it[v] ?: 0 })
         // All named by the user's word: the item has its own values and is offered no other
         if (data.complete[i]) return has.map { chance(it, true) }
-        fun may(v: Int) = allowed == null || data.values[v] in allowed
+        fun may(v: Int) = allows == null || allows(data.values[v])
         val examples = data.task.examples[i].toHashSet()
         // The likeliest of the rest too, likely or not, to offer the work at least so many the site does not
         // give ([ModelValues.offered]): chosen of the values by their places, not of a map of thousands of
@@ -593,7 +594,19 @@ class FacetSuggestions(
          * the task's indices once ([NameHint.among]).
          */
         val hintAmong: (String) -> Collection<String> = { emptyList() },
+        /**
+         * Of each item, the values of its [allowed] it may not have after all ([SuggestionTask.barred]):
+         * [allowed] one set for every work of the same universes, this the work's own; null: none.
+         */
+        val barred: ((String) -> Set<String>)? = null,
     ) {
+        /** Whether the item [id] may have a value: of its [allowed] but its [barred]; null when it may have any. */
+        fun may(id: String): ((String) -> Boolean)? {
+            val a = allowed?.invoke(id) ?: return null
+            val b = barred?.invoke(id).orEmpty()
+            return { key: String -> key in a && key !in b }
+        }
+
         /**
          * How often each item's own words name each value, by [names], of the index of the [search] —
          * a call for every map of names shared by works; of the pairings, in how many paragraphs two
@@ -755,7 +768,14 @@ class FacetSuggestions(
                 // One map of names for every work of the same characters, the index read once for them all
                 val nameSets = HashMap<Set<String>, Map<String, List<String>>>()
                 val named = { id: String -> of(id).takeIf { it.isNotEmpty() }?.let { own -> nameSets.getOrPut(own) { own.associateWith { names[it].orEmpty() } } } }
-                if (light) return Vocabulary(emptyMap(), allowed = { id -> of(id) + UniverseFacet.ORIGINAL_CHARACTERS.keys }, names = named)
+                // What a work may have: one set for every work of the same universes — of a large universe
+                // thousands of characters, not a copy a work — its own characters of the other facet barred
+                val unions = HashMap<Set<String>, Set<String>>()
+                fun mayOf(id: String) = universes[id].orEmpty().toSet().let { us ->
+                    unions.getOrPut(us) { us.flatMap { ofUniverse[it].orEmpty() }.toSet() + UniverseFacet.ORIGINAL_CHARACTERS.keys }
+                }
+                val barred = { id: String -> out(id).filterTo(HashSet()) { it in mayOf(id) && it !in UniverseFacet.ORIGINAL_CHARACTERS } }
+                if (light) return Vocabulary(emptyMap(), allowed = ::mayOf, names = named, barred = barred)
                 // A name of a character names it and none of the other characters of its universes:
                 // judged among them all, one set for every character of the same universes
                 val universesOf = HashMap<String, MutableSet<String>>()
@@ -766,7 +786,8 @@ class FacetSuggestions(
                     values,
                     hintNames = names,
                     hintAmong = { c -> universesOf[c]?.let(among::getValue).orEmpty() },
-                    allowed = { id -> of(id) + UniverseFacet.ORIGINAL_CHARACTERS.keys },
+                    allowed = ::mayOf,
+                    barred = barred,
                     names = named,
                     // A work's tags tell the sex of its main characters
                     groupings = { list -> listOf(ValueGrouping("sex", CharacterSex.entries.map { it.name }, list.map { c -> sexes[c]?.let { intArrayOf(it.ordinal) } ?: IntArray(0) })) },
@@ -976,7 +997,8 @@ class FacetSuggestions(
         // Every value made, not those shown alone — of a work's universes, characters and pairings, those it may have
         val ofModel = scoredOne(store, def, itemId, made)
         val vocabulary = ofModel?.vocabulary ?: vocabularyOf(store, def, ids, made, light = true)
-        val may = vocabulary?.allowed?.invoke(itemId)
+        // Of the one work: what it may have but its barred, a set of its own
+        val may = vocabulary?.allowed?.invoke(itemId)?.let { it - vocabulary.barred?.invoke(itemId).orEmpty() }
         val every = ofModel?.let { everyChance(def, itemId, it, made) }
         val chances = every?.filter { may == null || it.key in may || it.had } ?: made[itemId].orEmpty()[facet].orEmpty().values
         val answered = corrections.filter { it.facet == facet }.map { it.key }.toSet()
@@ -1134,6 +1156,7 @@ internal class FacetData(
             modelled: WorkChances = emptyMap(), valueKeys: List<String>? = null,
             mentions: ((String) -> Map<String, Int>?)? = null,
             allowed: ((String) -> Set<String>)? = null,
+            barred: ((String) -> Set<String>)? = null,
             groupings: ((List<String>) -> List<ValueGrouping>)? = null,
             examples: ((String) -> List<String>)? = null,
             lackWeight: Double = 1.0,
@@ -1178,7 +1201,8 @@ internal class FacetData(
             val values = if (kept != null) kept else if (only == null || allowed == null) everyValue else {
                 val own = HashSet<String>()
                 every.forEach { id ->
-                    own += allowed(id)
+                    val out = barred?.invoke(id).orEmpty()
+                    allowed(id).forEach { if (it !in out) own += it }
                     own += corrected[id]?.get(facet.key).orEmpty()
                     answers[id].orEmpty().filter { it.facet == facet.key }.forEach { own += it.key }
                     own += drafted[id].orEmpty()
@@ -1246,7 +1270,9 @@ internal class FacetData(
                 context = context,
                 contextKeys = contextIndex.entries.sortedBy { it.value }.map { it.key },
                 mentions = ids.map { id -> mentions?.invoke(id)?.mapNotNull { (key, n) -> index[key]?.let { it to n } }?.toMap() },
-                allowed = ids.map { id -> allowed?.invoke(id)?.let(::indices) },
+                // One array for every work of the same: of a universe's thousands of characters, made once
+                allowed = IdentityHashMap<Set<String>, IntArray>().let { made -> ids.map { id -> allowed?.invoke(id)?.let { a -> made.getOrPut(a) { indices(a) } } } },
+                barred = ids.map { id -> barred?.invoke(id)?.let(::indices) ?: IntArray(0) },
                 groupings = grouped,
                 lackWeight = lackWeight,
                 examples = ids.map { id -> examples?.invoke(id)?.let(::indices) ?: IntArray(0) },

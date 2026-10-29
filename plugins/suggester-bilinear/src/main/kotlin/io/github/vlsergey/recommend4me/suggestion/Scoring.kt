@@ -54,7 +54,11 @@ internal class Scoring(
             scores.of(chunk.toIntArray()).forEachIndexed { r, row ->
                 val allowed = task.allowed[chunk[r]]
                 if (allowed == null) for (j in 0 until m) sums[j] += row[j]
-                else allowed.forEach { j -> if (j in 0 until m) sums[j] += row[j] }
+                else {
+                    allowed.forEach { j -> if (j in 0 until m) sums[j] += row[j] }
+                    // Of those, the ones the item may not have after all
+                    task.barred[chunk[r]].forEach { j -> if (j in 0 until m) sums[j] -= row[j] }
+                }
             }
         }
         val n = task.itemCount.coerceAtLeast(1)

@@ -6,6 +6,8 @@ import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.matrix.Simd
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.Random
 import java.util.stream.IntStream
 import kotlin.math.abs
@@ -44,7 +46,7 @@ class Weights(val rank: Int, val a: FloatArray, val b: FloatArray, val e: FloatA
  * a value the item has and for one the user rejected; [SuggestionTask.draftWeight] for a value the
  * application drafted ([SuggestionTask.drafts]) the user has not confirmed;
  * [SuggestionTask.lackWeight] for a value the item merely lacks; nought for a value the item may not have at all ([SuggestionTask.allowed]: a
- * character of another universe), for every value an item without any value of the facet lacks —
+ * character of another universe; [SuggestionTask.barred]), for every value an item without any value of the facet lacks —
  * such an item is unknown, not denied.
  */
 internal class Problem(val task: SuggestionTask, val design: Design, val folds: Int) {
@@ -52,13 +54,19 @@ internal class Problem(val task: SuggestionTask, val design: Design, val folds: 
     val m = task.valueCount
     val x: ItemFeatures = design.features(task, IntArray(n) { it })
     val z: Matrix = design.values(task)
-    /** The values the site gives each item as an example: the site's word, an input of the pair. */
-    val examples: List<IntArray> = task.examples
-    /** The values each item's texts name, with log(1 + how many times). */
-    val mentions: List<Pair<IntArray, FloatArray>> = task.mentions.map { named ->
-        val list = named.orEmpty().entries.filter { it.key in 0 until m }
-        list.map { it.key }.toIntArray() to FloatArray(list.size) { ln1p(list[it].value.toDouble()).toFloat() }
+    /** The values the site gives each item as an example — the site's word, an input of the pair — ascending. */
+    val exampleValues: Array<IntArray> = Array(n) { i -> task.examples[i].filter { it in 0 until m }.distinct().sorted().toIntArray() }
+
+    /** The values each item's texts name, ascending, with log(1 + how many times). */
+    val namedValues: Array<IntArray>
+    val namedCounts: Array<FloatArray>
+
+    init {
+        val named = task.mentions.map { it.orEmpty().entries.filter { e -> e.key in 0 until m }.sortedBy { e -> e.key } }
+        namedValues = Array(n) { i -> named[i].map { it.key }.toIntArray() }
+        namedCounts = Array(n) { i -> FloatArray(named[i].size) { ln1p(named[i][it].value.toDouble()).toFloat() } }
     }
+
     val foldOf = IntArray(n) { foldOf(task.itemIds[it], folds) }
 
     /**
@@ -91,70 +99,52 @@ internal class Problem(val task: SuggestionTask, val design: Design, val folds: 
     val hintPairs: Long = hintGroups.sumOf { it.rows.size.toLong() * it.values.size }
 
     /**
-     * The values of every item whose pair with it weighs anything, in order: the only pairs it is
-     * learnt by — a work of no universe, or with no answer on the facet, has none.
+     * Of every item, the values whose pair with it weighs anything ([SuggestionPairs]) — the only
+     * pairs it is learnt by; a work of no universe, or with no answer on the facet, has none. Those
+     * of a value it merely lacks not kept one by one: read a row at a time ([pairsOf]).
      */
-    val active: Array<IntArray> = Array(n) { IntArray(0) }
-
-    /** Of every item's [active] pairs: the weight, the label. */
-    val activeWeight: Array<FloatArray> = Array(n) { FloatArray(0) }
-    val activeLabel: Array<FloatArray> = Array(n) { FloatArray(0) }
+    val pairs = SuggestionPairs(task)
 
     /** The weights of every item's pairs summed: the training's total is that of its items. */
-    val rowWeight = FloatArray(n)
+    val rowWeight: FloatArray get() = pairs.rowWeight
 
-    init {
-        // A row of every pair's weight and label, an item at a time: of the millions only the
-        // thousands that weigh anything are kept
-        val row = FloatArray(m)
-        val labels = FloatArray(m)
-        for (i in 0 until n) {
-            row.fill(0f)
-            labels.fill(0f)
-            val has = task.assigned[i]
-            if (has.isNotEmpty()) {
-                val lack = task.lackWeight.toFloat()
-                val allowed = task.allowed[i]
-                if (allowed == null) row.fill(lack) else allowed.forEach { if (it in 0 until m) row[it] = lack }
-            }
-            task.rejected[i].forEach { row[it] = 1f }
-            has.forEach { row[it] = 1f; labels[it] = 1f }
-            // A drafted value the item still has, the user not confirming it: likely, no one's word
-            val drafted = task.drafts[i]
-            if (drafted.isNotEmpty()) {
-                val confirmed = task.confirmed[i].toHashSet()
-                val weight = task.draftWeight.toFloat()
-                drafted.forEach { if (labels[it] > 0f && it !in confirmed) row[it] = weight }
-            }
-            val at = (0 until m).filter { row[it] != 0f }.toIntArray()
-            active[i] = at
-            activeWeight[i] = FloatArray(at.size) { row[at[it]] }
-            activeLabel[i] = FloatArray(at.size) { labels[at[it]] }
-            rowWeight[i] = row.sum()
-        }
-    }
+    /** The most pairs an item has: how long a [Row] is. */
+    val longest: Int get() = pairs.longest
 
     /**
-     * Of every item's [active] pairs: where those the site gives as examples are, and those its
-     * texts name with log(1 + how many times) — a pair that weighs nothing teaches nothing by them.
+     * A row of an item's pairs, worked on in place — made once for many items: of each its value, its
+     * weight and label, whether the site gives it as an example, and log(1 + how many times the
+     * item's texts name it).
      */
-    val activeExamples: Array<IntArray> = Array(n) { i -> positions(i, examples[i]) }
-    val activeNamed: Array<IntArray> = Array(n) { i -> positions(i, mentions[i].first) }
-    val activeCounts: Array<FloatArray> = Array(n) { i ->
-        val (named, counts) = mentions[i]
-        val at = active[i]
-        named.indices.filter { at.binarySearch(named[it]) >= 0 }.map { counts[it] }.toFloatArray()
+    class Row(size: Int) {
+        val values = IntArray(size)
+        val weights = FloatArray(size)
+        val labels = FloatArray(size)
+        val examples = FloatArray(size)
+        val mentions = FloatArray(size)
     }
 
-    /** Where the [values] among the item's [active] pairs are, those not among them left out. */
-    private fun positions(i: Int, values: IntArray): IntArray = values.map { active[i].binarySearch(it) }.filter { it >= 0 }.toIntArray()
+    fun row(): Row = Row(longest)
+
+    /** The pairs of the item [i] written into [row]: how many. */
+    fun pairsOf(i: Int, row: Row): Int {
+        val len = pairs.expand(i, row.values, row.weights, row.labels)
+        row.examples.fill(0f, 0, len)
+        row.mentions.fill(0f, 0, len)
+        // A pair that weighs nothing teaches nothing by them
+        exampleValues[i].forEach { v -> row.values.binarySearch(v, 0, len).takeIf { it >= 0 }?.let { row.examples[it] = 1f } }
+        val counts = namedCounts[i]
+        namedValues[i].forEachIndexed { k, v -> row.values.binarySearch(v, 0, len).takeIf { it >= 0 }?.let { row.mentions[it] = counts[k] } }
+        return len
+    }
 
     /** The values no item outside [fold] has: what the model fitted without the fold learns of them is their name and groups alone. */
     fun unseenOutside(fold: Int): BooleanArray {
         val unseen = BooleanArray(m) { true }
         for (i in 0 until n) {
             if (foldOf[i] == fold) continue
-            active[i].forEachIndexed { j, value -> if (activeLabel[i][j] > 0f) unseen[value] = false }
+            // A value an item has is among its own pairs, labelled 1
+            pairs.own[i].forEachIndexed { k, value -> if (pairs.ownLabel[i][k] > 0f && pairs.ownWeight[i][k] != 0f) unseen[value] = false }
         }
         return unseen
     }
@@ -234,7 +224,17 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         val random = Random(seed)
         val out = FloatArray(size)
         val used = BooleanArray(m)
-        p.active.forEach { at -> at.forEach { used[it] = true } }
+        // The values an item may lack, every array of them once, and its own pairs
+        val marked = Collections.newSetFromMap(IdentityHashMap<IntArray, Boolean>())
+        var every = false
+        for (i in 0 until n) {
+            if (p.pairs.lack[i] > 0f) {
+                val may = p.pairs.may[i]
+                if (may == null) every = true else if (marked.add(may)) may.forEach { used[it] = true }
+            }
+            p.pairs.own[i].forEachIndexed { k, v -> if (p.pairs.ownWeight[i][k] != 0f) used[v] = true }
+        }
+        if (every) used.fill(true)
         p.hints.forEach { hint -> hint.among.forEach { used[it] = true } }
         val eAt = dx * rank + dz * rank
         val se = 0.1 / sqrt(rank.toDouble())
@@ -306,22 +306,17 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         val vH = FloatArray(m * rank).also { v.take(it, 0, 0, m * rank) }
         val pair = theta.copyOfRange(size - PAIR, size)
         val bias = size - PAIR - m
+        val row = p.row()
         for (i in 0 until n) {
             if (p.foldOf[i] != fold) continue
-            val at = p.active[i]
-            val z = FloatArray(at.size) { j ->
-                var dot = theta[bias + at[j]] + pair[2]
-                for (q in 0 until rank) dot += uH[i * rank + q] * vH[at[j] * rank + q]
-                dot
-            }
-            p.activeExamples[i].forEach { z[it] += pair[0] }
-            p.activeNamed[i].forEachIndexed { k, j -> z[j] += pair[1] * p.activeCounts[i][k] }
-            val w = p.activeWeight[i]
-            val y = p.activeLabel[i]
-            for (j in at.indices) {
-                val l = (softplus(z[j]) - y[j] * z[j]).toDouble()
-                into.add(w[j].toDouble(), l)
-                if (fresh != null && fresh[at[j]]) unseen!!.add(w[j].toDouble(), l)
+            val len = p.pairsOf(i, row)
+            for (j in 0 until len) {
+                val v = row.values[j]
+                var z = theta[bias + v] + pair[2] + pair[0] * row.examples[j] + pair[1] * row.mentions[j]
+                for (q in 0 until rank) z += uH[i * rank + q] * vH[v * rank + q]
+                val l = (softplus(z) - row.labels[j] * z).toDouble()
+                into.add(row.weights[j].toDouble(), l)
+                if (fresh != null && fresh[v]) unseen!!.add(row.weights[j].toDouble(), l)
             }
         }
     }
@@ -521,59 +516,65 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
     /**
      * The pairs of the items and their values, of the coordinates [uH] and [vH]: only those that
      * weigh anything are scored and carried back — fifteen thousand of the millions of a work and a
-     * character, the rest have the slope nought — every item on a core of its own, what it adds to
-     * the shared sums kept by it and added after.
+     * character, the rest have the slope nought. The items shared out among the cores, a part each:
+     * a row of pairs made once a part, what a part adds to the values' slopes and the shared sums
+     * kept by it and added after.
      */
     private fun pairs(uH: FloatArray, vH: FloatArray, theta: FloatArray, pair: FloatArray, bias: Int, scale: Float, trains: (Int) -> Boolean): Pairs {
         // Every value's own bias with the common one: the loss of a row taken in the wide registers
         val biases = FloatArray(m) { theta[bias + it] + pair[2] }
         val duH = FloatArray(n * rank)
-        val rowSlopes = arrayOfNulls<FloatArray>(n)
-        val rowLoss = FloatArray(n)
-        val rowCommon = FloatArray(n)
-        val rowExample = FloatArray(n)
-        val rowMention = FloatArray(n)
-        IntStream.range(0, n).parallel().forEach { i ->
-            val at = p.active[i]
-            if (!trains(i) || at.isEmpty()) return@forEach
-            val z = FloatArray(at.size) { j ->
-                var dot = 0f
-                for (q in 0 until rank) dot += uH[i * rank + q] * vH[at[j] * rank + q]
-                dot
-            }
-            p.activeExamples[i].forEach { z[it] += pair[0] }
-            val named = p.activeNamed[i]
-            val counts = p.activeCounts[i]
-            for (k in named.indices) z[named[k]] += pair[1] * counts[k]
-            val shift = FloatArray(at.size) { biases[at[it]] }
-            val slopes = FloatArray(at.size)
+        val parts = maxOf(1, minOf(n, Runtime.getRuntime().availableProcessors()))
+        val partLoss = FloatArray(parts)
+        val partCommon = FloatArray(parts)
+        val partExample = FloatArray(parts)
+        val partMention = FloatArray(parts)
+        val partDv = Array(parts) { FloatArray(m * rank) }
+        val partBias = Array(parts) { FloatArray(m) }
+        IntStream.range(0, parts).parallel().forEach { part ->
+            val row = p.row()
+            val z = FloatArray(p.longest)
+            val shift = FloatArray(p.longest)
+            val slopes = FloatArray(p.longest)
             val sums = FloatArray(2)
-            Simd.weightedLogisticRow(z, shift, p.activeWeight[i], p.activeLabel[i], at.size, scale, slopes, sums)
-            rowSlopes[i] = slopes
-            // dU of the item: its pairs' slopes times their values' coordinates
-            for (j in at.indices) for (q in 0 until rank) duH[i * rank + q] += slopes[j] * vH[at[j] * rank + q]
-            rowLoss[i] = sums[0]
-            rowCommon[i] = sums[1]
-            var example = 0f
-            p.activeExamples[i].forEach { example += slopes[it] }
-            rowExample[i] = example
-            var mention = 0f
-            for (k in named.indices) mention += slopes[named[k]] * counts[k]
-            rowMention[i] = mention
+            val dv = partDv[part]
+            val gBias = partBias[part]
+            for (i in n * part / parts until n * (part + 1) / parts) {
+                if (!trains(i)) continue
+                val len = p.pairsOf(i, row)
+                if (len == 0) continue
+                val at = row.values
+                for (j in 0 until len) {
+                    var dot = pair[0] * row.examples[j] + pair[1] * row.mentions[j]
+                    for (q in 0 until rank) dot += uH[i * rank + q] * vH[at[j] * rank + q]
+                    z[j] = dot
+                    shift[j] = biases[at[j]]
+                }
+                sums.fill(0f)
+                Simd.weightedLogisticRow(z, shift, row.weights, row.labels, len, scale, slopes, sums)
+                // dU of the item, dV of its values and their biases' slopes: its pairs' slopes times the other side's coordinates, and alone
+                for (j in 0 until len) {
+                    val s = slopes[j]
+                    val v = at[j]
+                    for (q in 0 until rank) {
+                        duH[i * rank + q] += s * vH[v * rank + q]
+                        dv[v * rank + q] += s * uH[i * rank + q]
+                    }
+                    gBias[v] += s
+                    partExample[part] += s * row.examples[j]
+                    partMention[part] += s * row.mentions[j]
+                }
+                partLoss[part] += sums[0]
+                partCommon[part] += sums[1]
+            }
         }
-        // dV of every value and the slope of its bias: its pairs' slopes, times their items' coordinates and alone
         val gBias = FloatArray(m)
         val dvH = FloatArray(m * rank)
-        for (i in 0 until n) {
-            val slopes = rowSlopes[i] ?: continue
-            val at = p.active[i]
-            for (j in at.indices) {
-                val value = at[j]
-                gBias[value] += slopes[j]
-                for (q in 0 until rank) dvH[value * rank + q] += slopes[j] * uH[i * rank + q]
-            }
+        for (part in 0 until parts) {
+            Simd.axpy(1f, partDv[part], dvH)
+            for (v in 0 until m) gBias[v] += partBias[part][v]
         }
-        return Pairs(rowLoss.sum(), rowCommon.sum(), rowExample.sum(), rowMention.sum(), duH, dvH, gBias)
+        return Pairs(partLoss.sum(), partCommon.sum(), partExample.sum(), partMention.sum(), duH, dvH, gBias)
     }
 
     /** The weights [theta] as kept. */

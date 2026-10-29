@@ -103,9 +103,9 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
             val all = DoubleArray(pairs.m)
             for (i in 0 until pairs.n) {
                 if (!counted(i)) continue
-                pairs.active[i].forEachIndexed { j, v ->
-                    all[v] += pairs.weight[i][j].toDouble()
-                    one[v] += (pairs.weight[i][j] * pairs.label[i][j]).toDouble()
+                pairs.forEach(i) { v, w, y ->
+                    all[v] += w.toDouble()
+                    one[v] += (w * y).toDouble()
                 }
             }
             share = DoubleArray(pairs.m) { if (all[it] > 0) one[it] / all[it] else 0.0 }
@@ -288,10 +288,10 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                 taken++
                 val s = near.likeness[i][t].coerceAtLeast(0f).toDouble()
                 if (s == 0.0) continue
-                pairs.active[j].forEachIndexed { q, v ->
-                    val w = s * pairs.weight[j][q]
+                pairs.forEach(j) { v, weight, y ->
+                    val w = s * weight
                     all[v] += w
-                    one[v] += w * pairs.label[j][q]
+                    one[v] += w * y
                 }
             }
             return FloatArray(pairs.m) { v -> ((one[v] + PRIOR * prior.share[v]) / (all[v] + PRIOR)).toFloat() }

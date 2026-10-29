@@ -216,13 +216,18 @@ class NaiveBayesSuggester : FacetSuggester {
             fun sparseOf(task: SuggestionTask, pairs: SuggestionPairs): Array<Triple<IntArray, FloatArray, FloatArray>> {
                 val uniform = uniformOf(task)
                 return Array(task.itemCount) { i ->
-                    val at = pairs.active[i]
-                    val keep = at.indices.filter { k -> pairs.label[i][k] > 0f || pairs.weight[i][k] != uniform[i] }
-                    val values = IntArray(keep.size) { at[keep[it]] }
+                    val values = ArrayList<Int>()
+                    val zeros = ArrayList<Float>()
+                    val ones = ArrayList<Float>()
                     // A pair labelled 1 weighs as 1, and no longer as one lacking; one labelled 0 weighs its own weight instead of the uniform
-                    val zeros = FloatArray(keep.size) { val k = keep[it]; if (pairs.label[i][k] > 0f) -uniform[i] else pairs.weight[i][k] - uniform[i] }
-                    val ones = FloatArray(keep.size) { val k = keep[it]; if (pairs.label[i][k] > 0f) pairs.weight[i][k] else 0f }
-                    Triple(values, zeros, ones)
+                    pairs.forEach(i) { v, w, y ->
+                        if (y > 0f || w != uniform[i]) {
+                            values += v
+                            zeros += if (y > 0f) -uniform[i] else w - uniform[i]
+                            ones += if (y > 0f) w else 0f
+                        }
+                    }
+                    Triple(values.toIntArray(), zeros.toFloatArray(), ones.toFloatArray())
                 }
             }
         }

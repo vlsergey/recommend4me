@@ -10,6 +10,7 @@ import java.util.Random
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class BilinearTest {
@@ -41,7 +42,37 @@ class BilinearTest {
             examples = List(n) { i -> if (i % 2 == 0) intArrayOf(i % m) else IntArray(0) },
             hints = IntArray(m) { it }.let { all -> List(6) { k -> NameHint(k % m, all) } },
             hintTexts = Matrix(6, d).also { t -> for (k in 0 until 6) t.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, t.row(k), d) },
+            // Values some items may have, one array for them all, one of them barred to an item; a draft not confirmed
+            allowed = intArrayOf(2, 0, 1).let { shared -> List(n) { i -> if (i % 3 == 1) shared else null } },
+            barred = List(n) { i -> if (i == 7) intArrayOf(0) else IntArray(0) },
+            drafts = List(n) { i -> if (i == 5) intArrayOf(i % m) else IntArray(0) },
+            draftWeight = 0.5,
         )
+    }
+
+    @Test
+    fun `the pairs not kept one by one are those laid out whole`() {
+        val task = task()
+        val pairs = SuggestionPairs(task)
+        val m = task.valueCount
+        for (i in 0 until task.itemCount) {
+            // Laid out whole: a row of every value's weight and label
+            val weight = FloatArray(m)
+            val label = FloatArray(m)
+            if (task.assigned[i].isNotEmpty()) {
+                val allowed = task.allowed[i]?.toSet()
+                for (v in 0 until m) if ((allowed == null || v in allowed) && v !in task.barred[i]) weight[v] = task.lackWeight.toFloat()
+            }
+            task.rejected[i].forEach { weight[it] = 1f }
+            task.assigned[i].forEach { weight[it] = 1f; label[it] = 1f }
+            task.drafts[i].forEach { if (label[it] > 0f && it !in task.confirmed[i]) weight[it] = task.draftWeight.toFloat() }
+            val expected = (0 until m).filter { weight[it] != 0f }.map { Triple(it, weight[it], label[it]) }
+            val read = ArrayList<Triple<Int, Float, Float>>()
+            pairs.forEach(i) { v, w, y -> read += Triple(v, w, y) }
+            assertEquals(expected, read, "item $i")
+            assertEquals(expected.size, pairs.count[i], "item $i")
+            assertEquals(expected.sumOf { it.second.toDouble() }.toFloat(), pairs.rowWeight[i], "item $i")
+        }
     }
 
     @Test

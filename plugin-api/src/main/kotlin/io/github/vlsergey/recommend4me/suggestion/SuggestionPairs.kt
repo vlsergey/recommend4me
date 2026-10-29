@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import java.util.IdentityHashMap
 import kotlin.math.ln
 import kotlin.math.sqrt
 
@@ -7,65 +8,161 @@ import kotlin.math.sqrt
  * THE PAIRS EVERY SUGGESTER IS JUDGED BY, ALIKE — so that the held-out losses of two methods
  * compare on the page of the models. Of every item, the values whose pair with it weighs anything,
  * in ascending order, with the weight and the label of each: when the item has any value, every
- * value it may have ([SuggestionTask.allowed]) weighs [SuggestionTask.lackWeight] as one it lacks;
- * one the user rejected weighs 1, labelled 0; one it has weighs 1, labelled 1 — a draft the user has
- * not confirmed [SuggestionTask.draftWeight]. The items are dealt into [FOLDS] folds by their ids,
- * the same way every time: a work one method holds out, every other holds out too.
+ * value it may have ([SuggestionTask.allowed], but the [SuggestionTask.barred]) weighs
+ * [SuggestionTask.lackWeight] as one it lacks; one the user rejected weighs 1, labelled 0; one it
+ * has weighs 1, labelled 1 — a draft the user has not confirmed [SuggestionTask.draftWeight]. The
+ * items are dealt into [FOLDS] folds by their ids, the same way every time: a work one method holds
+ * out, every other holds out too.
+ *
+ * THE PAIRS OF A VALUE MERELY LACKED ARE NOT KEPT: all alike — the lacking weight, the label
+ * nought — they are the values the item may have ([may], one array for every item of the same), and
+ * what an item has of its own is kept beside them ([own]). Kept one by one, the 75 000 works of
+ * fanfics.me, of a universe of 4 400 characters each, were 330 million pairs — gigabytes of the same
+ * two numbers. Read by [forEach], merged as they are read.
  */
 class SuggestionPairs(task: SuggestionTask) {
     val n = task.itemCount
     val m = task.valueCount
 
-    /** Of every item, its pairs' values, ascending; their weights and labels. */
-    val active: Array<IntArray> = Array(n) { IntArray(0) }
-    val weight: Array<FloatArray> = Array(n) { FloatArray(0) }
-    val label: Array<FloatArray> = Array(n) { FloatArray(0) }
-
     /** The fold of every item. */
     val foldOf = IntArray(n) { foldOf(task.itemIds[it]) }
 
+    /**
+     * Of every item, the weight of a value it may have and merely lacks: [SuggestionTask.lackWeight]
+     * when it has any value; nought when it has none — such an item is unknown, not denied.
+     */
+    val lack = FloatArray(n)
+
+    /** Of every item, the values it may have, ascending — one array for every item of the same; null: every value. */
+    val may: Array<IntArray?>
+
+    /**
+     * Of every item, the values whose pair is not one merely lacked, ascending — one it has, one the
+     * user rejected, a draft, one barred or out of [may] — with their weights and labels; a weight
+     * nought: no pair.
+     */
+    val own: Array<IntArray>
+    val ownWeight: Array<FloatArray>
+    val ownLabel: Array<FloatArray>
+
+    /** Of every item, how many pairs it has, and their weights summed. */
+    val count = IntArray(n)
+    val rowWeight = FloatArray(n)
+
+    /** The most pairs an item has. */
+    val longest: Int
+
     init {
-        // A row of every pair's weight and label, an item at a time: of the millions only those that weigh anything are kept
-        val row = FloatArray(m)
-        val labels = FloatArray(m)
+        // Every array of the allowed made ascending once, however many items share it
+        val ascending = IdentityHashMap<IntArray, IntArray>()
+        may = Array(n) { i -> task.allowed[i]?.let { a -> ascending.getOrPut(a) { a.filter { it in 0 until m }.distinct().sorted().toIntArray() } } }
+        val lackWeight = task.lackWeight.toFloat()
+        val draftWeight = task.draftWeight.toFloat()
+        val ownOf = arrayOfNulls<IntArray>(n)
+        val weightOf = arrayOfNulls<FloatArray>(n)
+        val labelOf = arrayOfNulls<FloatArray>(n)
         for (i in 0 until n) {
-            row.fill(0f)
-            labels.fill(0f)
             val has = task.assigned[i]
-            if (has.isNotEmpty()) {
-                val lack = task.lackWeight.toFloat()
-                val allowed = task.allowed[i]
-                if (allowed == null) row.fill(lack) else allowed.forEach { if (it in 0 until m) row[it] = lack }
-            }
-            task.rejected[i].forEach { row[it] = 1f }
-            has.forEach { row[it] = 1f; labels[it] = 1f }
+            val lacking = if (has.isNotEmpty()) lackWeight else 0f
+            lack[i] = lacking
+            val allowed = may[i]
+            fun base(v: Int) = if (lacking > 0f && (allowed == null || allowed.binarySearch(v) >= 0)) lacking else 0f
+            // The item's own word over the lacking: barred, rejected, had — a draft not confirmed weighing less
+            val weight = HashMap<Int, Float>()
+            val labelled = HashSet<Int>()
+            task.barred[i].forEach { if (it in 0 until m) weight[it] = 0f }
+            task.rejected[i].forEach { weight[it] = 1f }
+            has.forEach { weight[it] = 1f; labelled += it }
             val drafted = task.drafts[i]
             if (drafted.isNotEmpty()) {
                 val confirmed = task.confirmed[i].toHashSet()
-                val w = task.draftWeight.toFloat()
-                drafted.forEach { if (labels[it] > 0f && it !in confirmed) row[it] = w }
+                drafted.forEach { if (it in labelled && it !in confirmed) weight[it] = draftWeight }
             }
-            val at = (0 until m).filter { row[it] != 0f }.toIntArray()
-            active[i] = at
-            weight[i] = FloatArray(at.size) { row[at[it]] }
-            label[i] = FloatArray(at.size) { labels[at[it]] }
+            val values = weight.keys.filter { v -> v in labelled || weight.getValue(v) != base(v) }.sorted()
+            ownOf[i] = values.toIntArray()
+            weightOf[i] = FloatArray(values.size) { weight.getValue(values[it]) }
+            labelOf[i] = FloatArray(values.size) { if (values[it] in labelled) 1f else 0f }
+            val lacked = if (lacking > 0f) allowed?.size ?: m else 0
+            var pairs = lacked
+            var sum = lacked * lacking
+            values.forEach { v ->
+                val w = weight.getValue(v)
+                val b = base(v)
+                if (w != 0f && b == 0f) pairs++
+                if (w == 0f && b != 0f) pairs--
+                sum += w - b
+            }
+            count[i] = pairs
+            rowWeight[i] = sum
         }
+        own = Array(n) { ownOf[it]!! }
+        ownWeight = Array(n) { weightOf[it]!! }
+        ownLabel = Array(n) { labelOf[it]!! }
+        longest = count.maxOrNull() ?: 0
+    }
+
+    /** The weight of the value [v] of the item [i] were it merely lacked: [lack] when the item may have it, else nought. */
+    fun lacking(i: Int, v: Int): Float {
+        val lacking = lack[i]
+        if (lacking == 0f) return 0f
+        val allowed = may[i]
+        return if (allowed == null || allowed.binarySearch(v) >= 0) lacking else 0f
+    }
+
+    /** Every pair of the item [i], its values ascending: [action] of its value, weight and label. */
+    inline fun forEach(i: Int, action: (value: Int, weight: Float, label: Float) -> Unit) {
+        val values = own[i]
+        val weights = ownWeight[i]
+        val labels = ownLabel[i]
+        var k = 0
+        val lacking = lack[i]
+        if (lacking > 0f) {
+            val allowed = may[i]
+            val size = allowed?.size ?: m
+            for (t in 0 until size) {
+                val v = allowed?.get(t) ?: t
+                while (k < values.size && values[k] < v) {
+                    if (weights[k] != 0f) action(values[k], weights[k], labels[k])
+                    k++
+                }
+                if (k < values.size && values[k] == v) {
+                    if (weights[k] != 0f) action(v, weights[k], labels[k])
+                    k++
+                } else action(v, lacking, 0f)
+            }
+        }
+        while (k < values.size) {
+            if (weights[k] != 0f) action(values[k], weights[k], labels[k])
+            k++
+        }
+    }
+
+    /** The pairs of the item [i] written into [values], [weights] and [labels], as long as [longest]: how many. */
+    fun expand(i: Int, values: IntArray, weights: FloatArray, labels: FloatArray): Int {
+        var at = 0
+        forEach(i) { v, w, y ->
+            values[at] = v
+            weights[at] = w
+            labels[at] = y
+            at++
+        }
+        return at
     }
 
     /**
      * The held-out loss of a method: of every fold, the chances [chances] gives the items of the fold
-     * by what it learnt of the others — of each item its chance of every value of [active] — their
-     * pairs' logistic losses weighed and summed.
+     * by what it learnt of the others — of each item its chance of every value of its pairs — their
+     * logistic losses weighed and summed.
      */
     fun heldOut(chances: (fold: Int, items: IntArray) -> List<FloatArray>): HeldLoss {
         val held = HeldLoss()
         for (fold in 0 until FOLDS) {
-            val items = (0 until n).filter { foldOf[it] == fold && active[it].isNotEmpty() }.toIntArray()
+            val items = (0 until n).filter { foldOf[it] == fold && count[it] > 0 }.toIntArray()
             if (items.isEmpty()) continue
             val chancesOf = chances(fold, items)
             items.forEachIndexed { k, i ->
                 val c = chancesOf[k]
-                active[i].forEachIndexed { j, v -> held.add(weight[i][j].toDouble(), logLoss(c[v].toDouble(), label[i][j])) }
+                forEach(i) { v, w, y -> held.add(w.toDouble(), logLoss(c[v].toDouble(), y)) }
             }
         }
         return held

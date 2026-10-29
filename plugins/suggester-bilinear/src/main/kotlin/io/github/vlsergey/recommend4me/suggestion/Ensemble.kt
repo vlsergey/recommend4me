@@ -69,7 +69,8 @@ internal class Ensemble(
     private val ones = Floats(maxOf(blockRows, p.hintGroups.maxOfOrNull { it.rows.size } ?: 0, 1)).also { o -> for (k in 0 until o.count) o[k] = 1f }
 
     // A row of the pairs that weigh anything, worked on in Java between the products: made once, as long as the longest row
-    private val longest = p.active.maxOfOrNull { it.size } ?: 0
+    private val longest = p.longest
+    private val pairRow = p.row()
     private val z = FloatArray(longest)
     private val shift = FloatArray(maxOf(longest, p.hintGroups.maxOfOrNull { it.values.size } ?: 0))
     private val slopes = FloatArray(longest)
@@ -401,30 +402,28 @@ internal class Ensemble(
             Blas.gemm(true, false, rows, m, r, uT, uAt + from, n, vT, vAt, m, scores, 0, m)
             for (b in 0 until rows) {
                 val i = from + b
-                val at = p.active[i]
-                val row = b * m
-                if (p.foldOf[i] == heldOut[model] || at.isEmpty()) {
-                    scores.clear(row, m)
+                val at = b * m
+                val len = if (p.foldOf[i] == heldOut[model]) 0 else p.pairsOf(i, pairRow)
+                if (len == 0) {
+                    scores.clear(at, m)
                     continue
                 }
-                val len = at.size
+                val values = pairRow.values
                 for (j in 0 until len) {
-                    z[j] = scores[row + at[j]]
-                    shift[j] = bias[biasAt + at[j]] + common
+                    z[j] = scores[at + values[j]] + example * pairRow.examples[j] + mention * pairRow.mentions[j]
+                    shift[j] = bias[biasAt + values[j]] + common
                 }
-                p.activeExamples[i].forEach { z[it] += example }
-                val named = p.activeNamed[i]
-                val counts = p.activeCounts[i]
-                for (q in named.indices) z[named[q]] += mention * counts[q]
                 sums[0] = 0f
                 sums[1] = 0f
-                Simd.weightedLogisticRow(z, shift, p.activeWeight[i], p.activeLabel[i], len, scale, slopes, sums)
+                Simd.weightedLogisticRow(z, shift, pairRow.weights, pairRow.labels, len, scale, slopes, sums)
                 loss += sums[0]
                 gCommon += sums[1]
-                p.activeExamples[i].forEach { gExample += slopes[it] }
-                for (q in named.indices) gMention += slopes[named[q]] * counts[q]
-                scores.clear(row, m)
-                for (j in 0 until len) scores[row + at[j]] = slopes[j]
+                for (j in 0 until len) {
+                    gExample += slopes[j] * pairRow.examples[j]
+                    gMention += slopes[j] * pairRow.mentions[j]
+                }
+                scores.clear(at, m)
+                for (j in 0 until len) scores[at + values[j]] = slopes[j]
             }
             // dUᵀ of the block's rows = Vᵀ Sᵀ; dVᵀ += Uᵀ of them · S; the biases' slopes += Sᵀ 1
             Blas.gemm(false, true, r, rows, m, vT, vAt, m, scores, 0, m, duT, uAt + from, n)
@@ -570,20 +569,14 @@ internal class Ensemble(
             val common = pair[model * Bilinear.PAIR + 2]
             for (i in 0 until n) {
                 if (p.foldOf[i] != fold) continue
-                val at = p.active[i]
-                for (j in at.indices) {
-                    var dot = bias[model * m + at[j]] + common
-                    for (q in 0 until r) dot += uT[uAt + q * n + i] * vT[vAt + q * m + at[j]]
-                    z[j] = dot
-                }
-                p.activeExamples[i].forEach { z[it] += example }
-                p.activeNamed[i].forEachIndexed { q, j -> z[j] += mention * p.activeCounts[i][q] }
-                val w = p.activeWeight[i]
-                val y = p.activeLabel[i]
-                for (j in at.indices) {
-                    val l = (Bilinear.softplus(z[j]) - y[j] * z[j]).toDouble()
-                    into[model].add(w[j].toDouble(), l)
-                    if (fresh[at[j]]) unseen[model].add(w[j].toDouble(), l)
+                val len = p.pairsOf(i, pairRow)
+                for (j in 0 until len) {
+                    val v = pairRow.values[j]
+                    var dot = bias[model * m + v] + common + example * pairRow.examples[j] + mention * pairRow.mentions[j]
+                    for (q in 0 until r) dot += uT[uAt + q * n + i] * vT[vAt + q * m + v]
+                    val l = (Bilinear.softplus(dot) - pairRow.labels[j] * dot).toDouble()
+                    into[model].add(pairRow.weights[j].toDouble(), l)
+                    if (fresh[v]) unseen[model].add(pairRow.weights[j].toDouble(), l)
                 }
             }
         }

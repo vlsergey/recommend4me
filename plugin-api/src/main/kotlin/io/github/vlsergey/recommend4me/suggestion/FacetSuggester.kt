@@ -78,7 +78,9 @@ class SuggestionTask(
     /**
      * The values each item may have at all — a work's characters are of its universes — null for
      * an item that may have any. A value outside them is no example of the item: not one it lacks,
-     * one it cannot have; its chance is still worked out.
+     * one it cannot have; its chance is still worked out. ONE ARRAY FOR EVERY ITEM OF THE SAME —
+     * the works of a universe its thousands of characters: what an item alone may not have of them
+     * is told by [barred].
      */
     val allowed: List<IntArray?> = List(assigned.size) { null },
     /** The groupings of the values, none for a facet whose values are not known to fall into groups. */
@@ -114,6 +116,11 @@ class SuggestionTask(
     val drafts: List<IntArray> = List(assigned.size) { IntArray(0) },
     /** How much a drafted value the user has not confirmed weighs, against 1 of a value the site or the user gives. */
     val draftWeight: Double = 1.0,
+    /**
+     * Of each item, the values of its [allowed] it may not have after all — of a work's secondary
+     * characters, its main ones: as outside them.
+     */
+    val barred: List<IntArray> = List(assigned.size) { IntArray(0) },
 ) {
     val itemCount: Int get() = assigned.size
     val valueCount: Int get() = values.rows
@@ -134,6 +141,7 @@ class SuggestionTask(
         require(lackWeight > 0 && lackWeight <= 1) { "A lacking value weighs $lackWeight" }
         require(examples.size == itemCount) { "$itemCount items, ${examples.size} lists of examples" }
         require(drafts.size == itemCount) { "$itemCount items, ${drafts.size} lists of drafts" }
+        require(barred.size == itemCount) { "$itemCount items, ${barred.size} lists of the barred" }
         require(draftWeight > 0 && draftWeight <= 1) { "A drafted value weighs $draftWeight" }
         require(hintTexts.rows == hints.size) { "${hints.size} names, ${hintTexts.rows} texts of them" }
         // Every array of values checked once, however many names share it
