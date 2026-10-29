@@ -17,6 +17,7 @@
   "error.noSiteTags": "Ни у одного сайта нет тегов",
   "error.noSuchType": "Нет такого типа",
   "error.noSuchUniverse": "Нет такой вселенной в словаре",
+  "error.noFandoms": "Нет такого сайта с фандомами",
   "error.noSuchWork": "Такой работы нет",
   "error.noUniverses": "Ни у одного сайта нет вселенных",
   "error.noValue": "Не указано значение",

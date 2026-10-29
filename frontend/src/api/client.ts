@@ -25,6 +25,7 @@ export type TagByTextVerdict = Schemas["TagByTextAnswer"]["verdict"];
 export type MarkedWork = Schemas["MarkedWork"];
 export type MarkVerdict = Schemas["MarkVerdict"];
 export type Pairing = Schemas["Pairing"];
+export type SiteFandom = Schemas["SiteFandom"];
 export type FacetInfo = Schemas["FacetInfo"];
 export type NumberInfo = Schemas["NumberInfo"];
 export type ItemView = Schemas["ItemView"];

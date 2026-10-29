@@ -11,6 +11,7 @@ import { ITEMS } from "@/item/lists";
 import { cn } from "@/lib/utils";
 import { followLink, navigate, screenHref } from "@/screen/screens";
 import { LocalNameEdit } from "./LocalName";
+import { SiteFandoms } from "./SiteFandoms";
 
 /** The cache key of the dictionary: ["universes", type]; a universe's characters lie under it. */
 const UNIVERSES = "universes";
@@ -101,6 +102,12 @@ export function UniversesScreen({ type, selected }: { type: ContentTypeInfo; sel
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="flex flex-col gap-2 text-sm">
+        <h4 className="font-semibold">{t("UniversesScreen.fandoms")}</h4>
+        <p className="text-muted-foreground">{t("UniversesScreen.fandomsDescription")}</p>
+        <SiteFandoms type={type} dictionary={universes.data} />
       </section>
     </div>
   );

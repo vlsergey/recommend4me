@@ -42,7 +42,7 @@ object UniverseFacet {
                 filter = true,
                 // One facet across the sources of the type: a universe is one whichever site a work is from
                 shared = KEY, searchWeight = 0.9f, onCard = true, infer = true, editable = true,
-                originalFacet = keyOf(UniverseFacets.FANDOM_FACET),
+                originalFacet = fandomFacet(schema),
             ),
             FacetDef(
                 UniverseFacets.CHARACTERS,
@@ -60,6 +60,9 @@ object UniverseFacet {
             ),
         )
     }
+
+    /** The source's facet of the site's fandoms, the works' universes told by them ([UniverseRepository.fandomUniverses]); null when it has none. */
+    fun fandomFacet(schema: SourceSchema): String? = schema.facets.firstOrNull { it.standard === UniverseFacets.FANDOM_FACET }?.key
 
     /** The value of a universe or a character of a catalogue: "wikidata:Q8337". */
     fun valueOf(catalogue: String, id: String) = "$catalogue:$id"

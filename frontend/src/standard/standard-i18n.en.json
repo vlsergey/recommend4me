@@ -17,6 +17,7 @@
   "error.noSiteTags": "No site has tags",
   "error.noSuchType": "There is no such type",
   "error.noSuchUniverse": "There is no such universe in the dictionary",
+  "error.noFandoms": "There is no such site with fandoms",
   "error.noSuchWork": "There is no such work",
   "error.noUniverses": "No site has universes",
   "error.noValue": "No value given",

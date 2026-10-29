@@ -2,16 +2,20 @@ package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.UniversesApi
 import io.github.vlsergey.recommend4me.api.model.CharacterInfo
+import io.github.vlsergey.recommend4me.api.model.FandomBinding
 import io.github.vlsergey.recommend4me.api.model.Inclusion
 import io.github.vlsergey.recommend4me.api.model.LocalName
+import io.github.vlsergey.recommend4me.api.model.SiteFandom
 import io.github.vlsergey.recommend4me.api.model.UniverseClassInfo
 import io.github.vlsergey.recommend4me.api.model.UniverseInfo
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
+import io.github.vlsergey.recommend4me.draft.LayerDrafts
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+import java.time.Instant
 import java.time.ZoneOffset
 import io.github.vlsergey.recommend4me.api.model.FoundUniverse as ApiFoundUniverse
 
@@ -20,7 +24,7 @@ private fun catalogueSilent(e: Exception) = Refusal.CATALOGUE_SILENT.refuse(
 )
 
 @RestController
-class UniversesController(private val stores: Stores, private val universes: Universes) : UniversesApi {
+class UniversesController(private val stores: Stores, private val universes: Universes, private val drafts: LayerDrafts) : UniversesApi {
 
     /** The types that have universes — one dictionary of them all; 404 when none has. */
     private fun withUniverses() = stores.types.filter { it.type.universes }.takeIf { it.isNotEmpty() }
@@ -100,6 +104,30 @@ class UniversesController(private val stores: Stores, private val universes: Uni
 
     override fun resetUniverseEntry(catalogue: String, universe: String, character: String): ResponseEntity<Unit> =
         chosen { universes.chooseEntry(catalogue, universe, character, null) }
+
+    override fun listSiteFandoms(): ResponseEntity<List<SiteFandom>> {
+        val dictionary = dictionary()
+        val fandoms = withUniverses().flatMap { it.sources }.flatMap { s ->
+            val facet = UniverseFacet.fandomFacet(s.schema) ?: return@flatMap emptyList()
+            val bound = dictionary.fandomUniverses(s.id)
+            val names = s.items.facetNames(facet)
+            s.items.valueUses(facet).map { (key, works) -> SiteFandom(s.id, key, names[key] ?: key, works, bound[key].orEmpty().sorted()) }
+        }
+        return ResponseEntity.ok(fandoms.sortedWith(compareByDescending<SiteFandom> { it.works }.thenBy { it.name }))
+    }
+
+    override fun bindSiteFandom(fandomBinding: FandomBinding): ResponseEntity<Unit> {
+        val b = fandomBinding
+        val store = withUniverses().flatMap { it.sources }.firstOrNull { it.id == b.source }?.takeIf { UniverseFacet.fandomFacet(it.schema) != null }
+            ?: throw Refusal.NO_FANDOMS.refuse(HttpStatus.NOT_FOUND, "No source ${b.source} with fandoms")
+        val universe = UniverseFacet.parse(b.universe)?.let { (catalogue, id) -> UniverseKey(catalogue, id) }
+        if (universe == null || !dictionary().bindFandom(store.id, b.fandom, universe, b.bound, Instant.now())) {
+            throw Refusal.NO_SUCH_UNIVERSE.refuse(HttpStatus.NOT_FOUND, "No such universe in the dictionary: ${b.universe}")
+        }
+        // The works of the fandom drafted with the universe, or no longer, in the background
+        drafts.fandomsBound(store.id)
+        return ResponseEntity.noContent().build()
+    }
 
     private fun chosen(choose: () -> Unit): ResponseEntity<Unit> {
         try {

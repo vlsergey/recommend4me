@@ -17,6 +17,7 @@
   "error.noSiteTags": "Nijedan sajt nema tagove",
   "error.noSuchType": "Takva vrsta ne postoji",
   "error.noSuchUniverse": "U rečniku nema takvog univerzuma",
+  "error.noFandoms": "Nema takvog sajta sa fandomima",
   "error.noSuchWork": "Takvo delo ne postoji",
   "error.noUniverses": "Nijedan sajt nema univerzume",
   "error.noValue": "Vrednost nije navedena",
