@@ -19,24 +19,41 @@ export function useSuggestions(ref: ItemRef, source: SourceInfo | undefined) {
   });
 }
 
-/** Every candidate of one facet of the item; the prefix of them all is the item's. */
-export function candidatesKey(ref: ItemRef, facet?: string) {
-  return facet === undefined ? ["candidates", ref.source, ref.item] : ["candidates", ref.source, ref.item, facet];
+/** The candidates of one facet of the item — every one, or the likeliest [limit]; the prefix of them all is the item's, of a facet the facet's. */
+export function candidatesKey(ref: ItemRef, facet?: string, limit?: number) {
+  return facet === undefined ? ["candidates", ref.source, ref.item] : ["candidates", ref.source, ref.item, facet, limit ?? "all"];
+}
+
+/** How long candidates just read stay current: an answer reads them anew all the same (invalidated). */
+const JUST_READ = 5_000;
+
+/** The query of the candidates of a facet of the work: every one, or the likeliest [limit] alone. */
+export function candidatesQuery(ref: ItemRef, facet: string, limit?: number) {
+  return {
+    queryKey: candidatesKey(ref, facet, limit),
+    // Read by the press of "…" just before the line shows them: not read again at once as it does
+    staleTime: limit === undefined ? 0 : JUST_READ,
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/items/{source}/{item}/candidates", { params: { path: { source: ref.source, item: ref.item }, query: { facet, limit } } }),
+      ),
+  };
 }
 
 /**
  * Every value of a facet the work may be given and lacks — the characters of its universes, the
  * pairs of its characters — with the model's chance and how often its texts name it, the likeliest
- * first; asked for only when [enabled].
+ * first, or the likeliest [limit] alone: of the tags, every one is thousands; asked for only when [enabled].
  */
-export function useCandidates(ref: ItemRef, facet: string, enabled: boolean) {
+export function useCandidates(ref: ItemRef, facet: string, enabled: boolean, limit?: number) {
+  // So many more asked for — a value of the line answered on, the line longer — the ones shown stay
+  // till the next come; never those of another work or facet, whose chips would answer on this one
+  const own = candidatesKey(ref, facet).slice(0, -1);
   return useQuery({
-    queryKey: candidatesKey(ref, facet),
+    ...candidatesQuery(ref, facet, limit),
     enabled,
-    queryFn: async () =>
-      unwrap(
-        await api.GET("/api/items/{source}/{item}/candidates", { params: { path: { source: ref.source, item: ref.item }, query: { facet } } }),
-      ),
+    placeholderData: (previous, query) =>
+      limit !== undefined && query && own.every((part, i) => query.queryKey[i] === part) ? previous : undefined,
   });
 }
 

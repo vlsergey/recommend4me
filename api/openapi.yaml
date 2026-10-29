@@ -371,6 +371,15 @@ paths:
           required: true
           schema:
             type: string
+        - name: limit
+          in: query
+          required: false
+          description: |
+            The likeliest so many alone - what "…" shows: of the tags of a work, every one is some
+            8 600 candidates, 2.4 MB, more than a tablet draws. None - every candidate
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: The candidates

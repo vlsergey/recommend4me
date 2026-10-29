@@ -44,7 +44,11 @@ function shownName(queryClient: QueryClient, item: ItemRef, facet: string, key: 
   if (own) return { name: own.name, nameKey: own.nameKey };
   const suggested = queryClient.getQueryData<FacetSuggestions[]>(suggestionsKey(item))?.find((s) => s.facet === facet)?.suggested.find((v) => v.key === key);
   if (suggested) return { name: suggested.name, nameKey: suggested.nameKey };
-  const candidate = queryClient.getQueryData<Candidate[]>(candidatesKey(item, facet))?.find((c) => c.key === key);
+  // Of every reading of the facet's candidates: all of them, or the likeliest few
+  const candidate = queryClient
+    .getQueriesData<Candidate[]>({ queryKey: candidatesKey(item, facet).slice(0, -1) })
+    .flatMap(([, data]) => data ?? [])
+    .find((c) => c.key === key);
   return candidate && { name: candidate.name, nameKey: candidate.nameKey };
 }
 

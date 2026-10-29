@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type FacetValueInfo, type ItemFacet, type ItemRef, type SourceInfo } from "@/api/client";
@@ -13,7 +13,7 @@ import { label, valueName } from "@/i18n/label";
 import { OriginalOf } from "@/item/WorkFacts";
 import { cn } from "@/lib/utils";
 import { SuggestedValues } from "@/suggestion/Suggestions";
-import { useCandidates, useSuggestions } from "@/suggestion/useSuggestions";
+import { candidatesQuery, useCandidates, useSuggestions } from "@/suggestion/useSuggestions";
 import { TagNameLink } from "@/tag/TagNameLink";
 import { TagsByText } from "@/tagtext/TagsByText";
 import { CHIP_TOUCH, FacetAnswers } from "./FacetAnswers";
@@ -170,7 +170,9 @@ export function SearchButton({ onClick, title }: { onClick: () => void; title: s
 /**
  * "…" after a facet's values: each press shows the next [MORE_STEP] likeliest candidates the line
  * does not show yet ([shown]), dashed, to answer on — one answered on gives its place to the next —
- * until there are none. How many stays while the work is open.
+ * until there are none. How many stays while the work is open. Only so many read as are shown —
+ * the line's values and those asked for — not every candidate: of the tags, some 8 600, 2.4 MB, read
+ * again after every answer, hung an iPad.
  */
 export function MoreCandidates({
   item,
@@ -187,17 +189,21 @@ export function MoreCandidates({
   tagLink?: boolean;
 }) {
   const { t } = useTranslation("correction");
+  const queryClient = useQueryClient();
   const [asked, setAsked] = useState(0);
-  const candidates = useCandidates(item, facet, asked > 0);
+  // The line's values may be among the likeliest candidates: read so many more
+  const wanted = (n: number) => shown.length + n;
+  const candidates = useCandidates(item, facet, asked > 0, wanted(asked));
   const keys = new Set(shown.map((v) => v.key));
   const rest = (candidates.data ?? []).filter((c) => !keys.has(c.key));
   if (candidates.isError) return null;
-  const done = candidates.data !== undefined && rest.length <= asked;
-  // The press reads the candidates when there are none yet, and shows the next ones once they are
-  // there: the button is at work while ITS press is ([AsyncButton]) — never while the candidates
-  // are read anew after answers, which waits for the work's chances
+  // Fewer read than asked for: there are no more
+  const done = candidates.data !== undefined && !candidates.isPlaceholderData && candidates.data.length < wanted(asked) && rest.length <= asked;
+  // The press reads the next ones and shows them once they are there: the button is at work while
+  // ITS press is ([AsyncButton]) — never while the candidates are read anew after answers, which
+  // waits for the work's chances
   const more = async () => {
-    if (candidates.data === undefined) await candidates.refetch();
+    await queryClient.fetchQuery(candidatesQuery(item, facet, wanted(asked + MORE_STEP)));
     setAsked(asked + MORE_STEP);
   };
   return (

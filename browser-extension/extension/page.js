@@ -186,10 +186,13 @@
 
   /**
    * How many of a facet's candidates the user asked to see besides what the page shows, by facet
-   * — kept while the page is open — and the candidates read for them, the likeliest first.
+   * — kept while the page is open — and the candidates read for them, the likeliest first, with how
+   * many were asked of the server: so many as are shown, not every one — of the tags, some 8 600,
+   * 2.4 MB, read again after every answer, more than an iPad takes.
    */
   const more = new Map();
   const candidatesOf = new Map();
+  const candidatesRead = new Map();
 
   /**
    * The tags by the work's own text, by facet, kept while the page is open: whether the block is
@@ -455,7 +458,7 @@
     // the work may yet have, and they wait for its chances to be made
     if (view && view.item && more.size) {
       try {
-        for (const facet of more.keys()) await readCandidates(view.item, facet);
+        for (const facet of more.keys()) await readCandidates(view.item, facet, candidatesRead.get(facet));
       } catch (e) {
         unread = e.message;
       }
@@ -893,10 +896,12 @@
     return withFailure(chip, on);
   }
 
-  async function readCandidates(item, facet) {
+  /** The likeliest [limit] candidates of the facet, read and kept. */
+  async function readCandidates(item, facet, limit) {
     const s = item.summary;
+    candidatesRead.set(facet, limit);
     try {
-      candidatesOf.set(facet, await api("GET", `/api/items/${enc(s.source)}/${enc(s.item)}/candidates?facet=${enc(facet)}`));
+      candidatesOf.set(facet, await api("GET", `/api/items/${enc(s.source)}/${enc(s.item)}/candidates?facet=${enc(facet)}&limit=${limit}`));
     } catch (e) {
       // A facet the model does not work on has none to show
       candidatesOf.set(facet, []);
@@ -917,7 +922,8 @@
       chip.title = [c.description, named ? t("candidate.title", { mentions: named }) : t("value.suggested")].filter(Boolean).join("\n");
       line.appendChild(chip);
     });
-    if (all && rest.length <= asked) return;
+    // Fewer read than asked for: there are no more
+    if (all && all.length < candidatesRead.get(facet) && rest.length <= asked) return;
     const b = el("button", "r4m-button r4m-more", "…");
     b.type = "button";
     // One key, not a word of every plural form: the count is always MORE_STEP, the words written for it
@@ -925,11 +931,11 @@
     b.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      more.set(facet, (more.get(facet) || 0) + MORE_STEP);
-      if (!candidatesOf.has(facet)) {
-        b.classList.add("r4m-saving");
-        await readCandidates(item, facet);
-      }
+      const asking = (more.get(facet) || 0) + MORE_STEP;
+      // The line's values may be among the likeliest candidates: so many more read
+      b.classList.add("r4m-saving");
+      await readCandidates(item, facet, shown.size + asking);
+      more.set(facet, asking);
       render();
     });
     line.appendChild(b);

@@ -981,9 +981,9 @@ class FacetSuggestions(
      * facet of characters or pairings offers every value the work may have that the model has no
      * chance of — none answered on to learn from, or given the work after the fitting: a pairing of
      * two characters added since — all the same, without a chance, the most named first.
-     * Null for an item or a facet the model does not work on.
+     * Null for an item or a facet the model does not work on. [limit]: the first so many alone.
      */
-    fun candidates(store: SourceStore, itemId: String, facet: String): ItemFacetCandidates? {
+    fun candidates(store: SourceStore, itemId: String, facet: String, limit: Int? = null): ItemFacetCandidates? {
         val facets = facetsOf(store)
         val k = facets.indexOfFirst { it.key == facet }.takeIf { it >= 0 } ?: return null
         val def = facets[k]
@@ -1030,6 +1030,7 @@ class FacetSuggestions(
             .sortedWith(compareByDescending<FacetCandidate> { it.chance ?: -1.0 }.thenByDescending { it.mentions ?: 0 })
             // A tag above another before it, whatever its chance
             .let { list -> hierarchy?.parentsFirst(list) { it.key } ?: list }
+            .let { list -> if (limit == null) list else list.take(limit) }
         return ItemFacetCandidates(def, candidates, store.names(facet, candidates.map { it.key }))
     }
 
