@@ -28,6 +28,10 @@
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
 | `work_rating` | the grade of a work, and the item and version it was given through: one current of a work, the rest grades of releases before |
 | `work_interest` | the user's word on whether a work is interesting at all |
+| `work_facet_correction` | the user's word on a value of a facet of a work: added (true) or taken away (false) |
+| `work_field_correction` | a field of a work as the user wrote it: the title, a text, a number |
+| `work_facet_complete` | the user said a work's values of a facet are all named |
+| `work_facet_unknown` | the user's word that whether a work has a value is not clear of it (a pairing): asked so no more, nothing learnt |
 | `universe` | a universe of the dictionary: an entry of a catalogue the user added |
 | `universe_property` | what else the catalogue says of a universe |
 | `universe_character` | a character of a universe |
@@ -248,6 +252,31 @@ erDiagram
         VARCHAR property PK
         VARCHAR property_value PK
     }
+    work_facet_complete {
+        BIGINT work PK, FK
+        VARCHAR facet PK
+        TIMESTAMPTZ completed_at
+    }
+    work_facet_correction {
+        BIGINT work PK, FK
+        VARCHAR facet PK
+        VARCHAR value_key PK
+        BOOLEAN added
+        VARCHAR name "null"
+        TIMESTAMPTZ corrected_at
+    }
+    work_facet_unknown {
+        BIGINT work PK, FK
+        VARCHAR facet PK
+        VARCHAR value_key PK
+        TIMESTAMPTZ said_at
+    }
+    work_field_correction {
+        BIGINT work PK, FK
+        VARCHAR field PK
+        CLOB content
+        TIMESTAMPTZ corrected_at
+    }
     work_interest {
         BIGINT work PK, FK
         BOOLEAN interesting
@@ -276,6 +305,10 @@ erDiagram
     normalized_work ||--o{ normalized_work_relation : "first_work"
     normalized_work ||--o{ normalized_work_relation : "other_work"
     normalized_work ||--o{ site_work : "normalized"
+    normalized_work ||--o{ work_facet_complete : "work"
+    normalized_work ||--o{ work_facet_correction : "work"
+    normalized_work ||--o{ work_facet_unknown : "work"
+    normalized_work ||--o{ work_field_correction : "work"
     normalized_work ||--o{ work_interest : "work"
     normalized_work ||--o{ work_rating : "work"
     tag_entry ||--o{ normalized_author_entry : "catalogue, entry"

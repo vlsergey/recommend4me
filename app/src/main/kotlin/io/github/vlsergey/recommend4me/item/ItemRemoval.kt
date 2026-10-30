@@ -32,8 +32,6 @@ class ItemRemoval(private val stores: Stores, private val recommendations: Recom
         // The files of its pictures first: their names are in the rows that go with the work
         store.files.delete(store.pictures.sync(key.id, emptyList()))
         store.items.remove(key.id)
-        store.corrections.forget(key.id)
-        store.unknowns.forgetItem(key.id)
         store.signals.forget(key.id)
         store.drafts.forget(key.id)
         // A word on a match of a mark of any source may name it

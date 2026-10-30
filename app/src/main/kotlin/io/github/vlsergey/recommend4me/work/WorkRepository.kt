@@ -3,6 +3,10 @@ package io.github.vlsergey.recommend4me.work
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_WORK_RELATION
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_COMPLETE
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_CORRECTION
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_UNKNOWN
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FIELD_CORRECTION
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_INTEREST
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_RATING
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -66,9 +70,10 @@ class WorkRepository(private val db: DSLContext) {
     /**
      * The normalized work [from] merged into [into]: every item of it bound to [into], the words on
      * it moved to [into] — a word [into] has on the same work kept, none of [into] with itself — its
-     * grades and mark too, the newest of the two the one that stands, and [from] gone.
+     * grades, mark and corrections too, the newest of the two the one that stands — of the [single]
+     * facets one value — and [from] gone.
      */
-    fun merge(from: Long, into: Long, now: Instant) = db.transaction { c ->
+    fun merge(from: Long, into: Long, now: Instant, single: Set<String> = emptySet()) = db.transaction { c ->
         val tx = DSL.using(c)
         tx.update(SITE_WORK).set(SITE_WORK.NORMALIZED, into).set(SITE_WORK.BOUND_AT, now).where(SITE_WORK.NORMALIZED.eq(from)).execute()
         val r = NORMALIZED_WORK_RELATION
@@ -84,13 +89,54 @@ class WorkRepository(private val db: DSLContext) {
         val i = WORK_INTEREST
         val marks = tx.selectFrom(i).where(i.WORK.`in`(from, into)).fetch()
         marks.maxByOrNull { it.markedAt!! }?.let { newest -> putInterest(tx, into, newest.interesting!!, newest.markedAt!!) }
+        giveWord(tx, from, into, newestOnly = true)
+        keepOneOfSingle(tx, into, single)
         tx.deleteFrom(NORMALIZED_WORK).where(NORMALIZED_WORK.ID.eq(from)).execute()
     }
 
     /**
+     * The corrections of the work [from] given to [to], besides its own. Of a value or a field both
+     * have the answer given [from] stands unless, [newestOnly], the one of [to] is the newer; the facets
+     * all named and the values not clear are all kept.
+     */
+    private fun giveWord(tx: DSLContext, from: Long, to: Long, newestOnly: Boolean) {
+        val f = WORK_FACET_CORRECTION
+        tx.selectFrom(f).where(f.WORK.eq(from)).fetch().forEach {
+            val kept = tx.select(f.CORRECTED_AT).from(f).where(f.WORK.eq(to), f.FACET.eq(it.facet), f.VALUE_KEY.eq(it.valueKey)).fetchOne()?.value1()
+            if (kept != null && newestOnly && !kept.isBefore(it.correctedAt)) return@forEach
+            tx.insertInto(f).set(f.WORK, to).set(f.FACET, it.facet).set(f.VALUE_KEY, it.valueKey).set(f.ADDED, it.added).set(f.NAME, it.name).set(f.CORRECTED_AT, it.correctedAt)
+                .onDuplicateKeyUpdate().set(f.ADDED, it.added).set(f.NAME, it.name).set(f.CORRECTED_AT, it.correctedAt).execute()
+        }
+        val d = WORK_FIELD_CORRECTION
+        tx.selectFrom(d).where(d.WORK.eq(from)).fetch().forEach {
+            val kept = tx.select(d.CORRECTED_AT).from(d).where(d.WORK.eq(to), d.FIELD.eq(it.field)).fetchOne()?.value1()
+            if (kept != null && newestOnly && !kept.isBefore(it.correctedAt)) return@forEach
+            tx.insertInto(d).set(d.WORK, to).set(d.FIELD, it.field).set(d.CONTENT, it.content).set(d.CORRECTED_AT, it.correctedAt)
+                .onDuplicateKeyUpdate().set(d.CONTENT, it.content).set(d.CORRECTED_AT, it.correctedAt).execute()
+        }
+        val o = WORK_FACET_COMPLETE
+        tx.selectFrom(o).where(o.WORK.eq(from)).fetch().forEach {
+            tx.insertInto(o).set(o.WORK, to).set(o.FACET, it.facet).set(o.COMPLETED_AT, it.completedAt).onDuplicateKeyIgnore().execute()
+        }
+        val u = WORK_FACET_UNKNOWN
+        tx.selectFrom(u).where(u.WORK.eq(from)).fetch().forEach {
+            tx.insertInto(u).set(u.WORK, to).set(u.FACET, it.facet).set(u.VALUE_KEY, it.valueKey).set(u.SAID_AT, it.saidAt).onDuplicateKeyIgnore().execute()
+        }
+    }
+
+    /** Of a facet of one value, of the values added to the work the newest left: two works merged may bring two. */
+    private fun keepOneOfSingle(tx: DSLContext, work: Long, single: Set<String>) {
+        if (single.isEmpty()) return
+        val f = WORK_FACET_CORRECTION
+        tx.selectFrom(f).where(f.WORK.eq(work), f.FACET.`in`(single), f.ADDED.isTrue).fetch().groupBy { it.facet!! }.forEach { (facet, added) ->
+            added.sortedByDescending { it.correctedAt!! }.drop(1).forEach { tx.deleteFrom(f).where(f.WORK.eq(work), f.FACET.eq(facet), f.VALUE_KEY.eq(it.valueKey)).execute() }
+        }
+    }
+
+    /**
      * The item taken out of its work of several items, to a work of its own; the new id. Nothing the
-     * user said is lost: the grades given through the item go with it, the work's current grade and
-     * mark stand on both after.
+     * user said is lost: the grades given through the item go with it, the work's current grade, its
+     * mark and its corrections stand on both after.
      */
     fun takeOut(key: ItemKey, now: Instant): Long = db.transactionResult { c ->
         val tx = DSL.using(c)
@@ -105,6 +151,7 @@ class WorkRepository(private val db: DSLContext) {
             members(tx, old).firstOrNull()?.let { giveGrade(tx, old, it, current) }
         }
         if (mark != null) putInterest(tx, id, mark.interesting!!, mark.markedAt!!)
+        giveWord(tx, old, id, newestOnly = false)
         id
     }
 

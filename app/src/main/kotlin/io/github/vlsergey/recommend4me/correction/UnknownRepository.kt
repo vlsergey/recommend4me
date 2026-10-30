@@ -1,6 +1,10 @@
 package io.github.vlsergey.recommend4me.correction
 
 import io.github.vlsergey.recommend4me.database.corrections.tables.references.FACET_UNKNOWN
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_UNKNOWN
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.work.WorkRepository
 import org.jooq.DSLContext
 import java.time.Instant
 
@@ -8,28 +12,43 @@ import java.time.Instant
 data class Unknown(val itemId: String, val facet: String, val key: String, val saidAt: Instant)
 
 /**
- * The user's word, of the works of one source, that whether a work has a value is not clear of it —
- * kept with the corrections, apart from them: the value is asked of the work no more, and nothing
- * learns of it; the work's values stay as they were.
+ * The user's word, of the normalized works (in the dictionaries) as the items of one source see them,
+ * that whether a work has a value is not clear of it — apart from the corrections: the value is asked
+ * of the work no more, and nothing learns of it; the work's values stay as they were.
  */
-class UnknownRepository(private val db: DSLContext) {
+class UnknownRepository(
+    private val db: DSLContext,
+    private val source: String,
+    private val works: WorkRepository,
+    /** The corrections of the source, where the word was kept before the normalized works. */
+    private val before: DSLContext,
+) {
 
     fun say(itemId: String, facet: String, key: String, now: Instant) {
-        db.insertInto(FACET_UNKNOWN).set(FACET_UNKNOWN.ITEM_ID, itemId).set(FACET_UNKNOWN.FACET, facet).set(FACET_UNKNOWN.VALUE_KEY, key).set(FACET_UNKNOWN.SAID_AT, now)
-            .onDuplicateKeyUpdate().set(FACET_UNKNOWN.SAID_AT, now)
+        val u = WORK_FACET_UNKNOWN
+        db.insertInto(u).set(u.WORK, works.of(ItemKey(source, itemId), now)).set(u.FACET, facet).set(u.VALUE_KEY, key).set(u.SAID_AT, now)
+            .onDuplicateKeyUpdate().set(u.SAID_AT, now)
             .execute()
     }
 
     fun forget(itemId: String, facet: String, key: String) {
-        db.deleteFrom(FACET_UNKNOWN).where(FACET_UNKNOWN.ITEM_ID.eq(itemId), FACET_UNKNOWN.FACET.eq(facet), FACET_UNKNOWN.VALUE_KEY.eq(key)).execute()
+        val u = WORK_FACET_UNKNOWN
+        db.deleteFrom(u).where(u.WORK.eq(works.of(ItemKey(source, itemId), Instant.now())), u.FACET.eq(facet), u.VALUE_KEY.eq(key)).execute()
     }
 
-    /** Every word of the [facet] of any work. */
-    fun ofFacet(facet: String): List<Unknown> =
-        db.selectFrom(FACET_UNKNOWN).where(FACET_UNKNOWN.FACET.eq(facet)).fetch { Unknown(it.itemId!!, it.facet!!, it.valueKey!!, it.saidAt!!) }
+    /** Every word of the [facet] of any work of the source. */
+    fun ofFacet(facet: String): List<Unknown> {
+        val u = WORK_FACET_UNKNOWN
+        return db.select(SITE_WORK.ITEM, u.FACET, u.VALUE_KEY, u.SAID_AT).from(SITE_WORK).join(u).on(u.WORK.eq(SITE_WORK.NORMALIZED))
+            .where(SITE_WORK.SOURCE.eq(source), u.FACET.eq(facet))
+            .fetch { Unknown(it.value1()!!, it.value2()!!, it.value3()!!, it.value4()!!) }
+    }
 
-    /** The words of the work's facets, removed with it. */
-    fun forgetItem(itemId: String) {
-        db.deleteFrom(FACET_UNKNOWN).where(FACET_UNKNOWN.ITEM_ID.eq(itemId)).execute()
+    /** The words kept before the normalized works given to them, and taken from there. */
+    fun moveToWorks(): Int {
+        val rows = before.selectFrom(FACET_UNKNOWN).fetch()
+        rows.forEach { say(it.itemId!!, it.facet!!, it.valueKey!!, it.saidAt!!) }
+        before.deleteFrom(FACET_UNKNOWN).execute()
+        return rows.size
     }
 }

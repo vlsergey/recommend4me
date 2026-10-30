@@ -101,6 +101,9 @@ class ScenarioTest {
     @Autowired
     lateinit var translations: TranslationsController
 
+    @Autowired
+    lateinit var stores: io.github.vlsergey.recommend4me.source.Stores
+
     private fun capture(body: String) = captures.capturePage(CaptureRequest("https://test.example/work/${body.substringBefore('|')}", body)).body!!
 
     private fun list(
@@ -212,7 +215,15 @@ class ScenarioTest {
         assertEquals(false, interestOf("w3"))
         items.unmarkInterest("test", "w3")
         assertNull(interestOf("w2"))
+        // A correction is of the work: seen through either item, kept by both when the work is parted
+        fun correctedOf(id: String) = stores.source("test")!!.corrections.facetsOf(id).map { it.key }
+        corrections.correctFacet("test", "w2", FacetCorrection(facet = "tags", added = true, key = "magic"))
+        assertEquals(listOf("magic"), correctedOf("w3"))
         corrections.unlinkItem("test", "w2", "test", "w3")
+        assertEquals(listOf("magic"), correctedOf("w2"))
+        assertEquals(listOf("magic"), correctedOf("w3"))
+        corrections.uncorrectFacet("test", "w2", "tags", "magic")
+        corrections.uncorrectFacet("test", "w3", "tags", "magic")
 
         // Removed from the library — gone from the site — with its grade and the user's answers
         items.markInterest("test", "w1", InterestRequest(true))

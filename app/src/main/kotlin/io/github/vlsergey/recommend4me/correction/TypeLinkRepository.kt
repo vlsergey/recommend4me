@@ -17,6 +17,8 @@ class TypeLinkRepository(
     private val works: WorkRepository,
     /** The corrections of every source of the type, by source: where the links were kept before the normalized works. */
     private val corrections: Map<String, DSLContext>,
+    /** The facets of one value of the type ([io.github.vlsergey.recommend4me.source.FacetDef.single]): of two works merged, one stands. */
+    private val single: Set<String> = emptySet(),
 ) {
 
     private val sources = corrections.keys
@@ -28,7 +30,7 @@ class TypeLinkRepository(
     fun link(a: ItemKey, b: ItemKey, now: Instant) {
         val x = works.of(a, now)
         val y = works.of(b, now)
-        if (x != y) works.merge(maxOf(x, y), minOf(x, y), now)
+        if (x != y) works.merge(maxOf(x, y), minOf(x, y), now, single)
     }
 
     /** The two items one work no more: of a work holding both, [b] taken out. */

@@ -81,6 +81,8 @@ class Works(private val stores: Stores) {
                 type.links.keepNewestGrades()
                 log.info("{}: {} grades and {} marks of interest moved to the normalized works", type.id, grades, marks)
             }
+            val answers = type.sources.sumOf { it.corrections.moveToWorks(now) + it.unknowns.moveToWorks() }
+            if (answers > 0) log.info("{}: {} corrections moved to the normalized works", type.id, answers)
         }
     }
 }

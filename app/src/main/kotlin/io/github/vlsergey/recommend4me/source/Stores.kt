@@ -108,13 +108,13 @@ class SourceStore(
     /** The normalized works: the items of every site bound to them. */
     val works = WorkRepository(databases.dictionaries.dsl)
 
-    val corrections = CorrectionRepository(dbs.corrections.dsl, source.id)
+    val corrections = CorrectionRepository(databases.dictionaries.dsl, source.id, works, dbs.corrections.dsl)
 
     /** The user's answers on the tags offered by the paragraphs of the works' texts, kept with the corrections. */
     val tagTextAnswers = TagTextAnswerRepository(dbs.corrections.dsl)
 
     /** The user's word that whether a work has a value is not clear of it — a pairing — kept with the corrections. */
-    val unknowns = UnknownRepository(dbs.corrections.dsl)
+    val unknowns = UnknownRepository(databases.dictionaries.dsl, source.id, works, dbs.corrections.dsl)
 
     val ratings = RatingRepository(databases.dictionaries.dsl, source.id, works, dbs.ratings.dsl)
     val interest = InterestRepository(databases.dictionaries.dsl, source.id, works, dbs.ratings.dsl)
@@ -206,7 +206,9 @@ class SourceStore(
 class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases: Databases, languages: List<String>) {
     val id: String get() = type.id
 
-    val links = TypeLinkRepository(WorkRepository(databases.dictionaries.dsl), sources.associate { it.id to databases.corrections(it.id) })
+    val links = TypeLinkRepository(
+        WorkRepository(databases.dictionaries.dsl), sources.associate { it.id to databases.corrections(it.id) }, sources.flatMapTo(HashSet()) { it.singleFacets },
+    )
     val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
