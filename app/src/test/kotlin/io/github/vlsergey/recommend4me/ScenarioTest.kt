@@ -170,7 +170,7 @@ class ScenarioTest {
         // The age rating a scale: every value of it in its order, a value no work has too
         val rating = filters.single { it.id == "age-rating" }
         assertEquals(true, rating.ordered)
-        assertEquals(listOf("g", "pg-13", "r", "nc-17", "nc-21"), rating.propertyValues.map { it.key })
+        assertEquals(listOf("g", "pg-13", "r", "nc-17", "nc-21"), items.listFilterValues("books", rating.id).body!!.propertyValues.map { it.key })
 
         // The user's word on what a search found: one line however typed, taken back when pressed again
         items.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", relevant = true))

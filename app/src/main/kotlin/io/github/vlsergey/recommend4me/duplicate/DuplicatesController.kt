@@ -15,8 +15,8 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
 
     override fun getDuplicates(type: String, answered: Boolean, offset: Int, limit: Int): ResponseEntity<DuplicatePage> {
         val page = duplicates.page(type, answered, offset, limit) ?: return ResponseEntity.notFound().build()
-        // A search planned or running: what there is, the page asks again
-        return ResponseEntity.status(if (page.searching) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
+        // A search or a fitting planned or running: what there is, the page asks again
+        return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
     }
 
     override fun searchDuplicates(type: String): ResponseEntity<Unit> {

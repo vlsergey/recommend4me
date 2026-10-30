@@ -21,8 +21,8 @@ const PAGE = 30;
 /** How often the pairs are read again till the user chooses ([RefreshSelect]): never — they change by the user's answers and searches. */
 const EVERY_MS = 0;
 
-/** While a search runs, the pairs are asked for again so often: what it found comes when it is done. */
-const SEARCHING_MS = 3000;
+/** While a search or a fitting of the model of the answers runs, the pairs are asked for again so often: what it made comes when it is done. */
+const PENDING_MS = 3000;
 
 const duplicatesKey = (type: string) => ["duplicates", type];
 
@@ -36,12 +36,14 @@ const sameRow = (a: DuplicatePair, b: DuplicatePair) => a.answer === b.answer;
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
 
 /**
- * THE SCREEN OF THE WORKS THAT MAY BE ONE across the sites of a content type: pairs of works of
- * different sites whose titles and descriptions are alike by their vectors — of every work its two
- * nearest of every other site, the most alike first, none hidden — each to answer on: one work
- * (linked, its grade and interest shared, as the work's window links them) or different works (never
- * offered again). The answered ones apart, their word changed or taken back there. The pairs are
- * looked for in the background, on the first start and when asked anew here.
+ * THE SCREEN OF THE WORKS THAT MAY BE ONE across the sites of a content type: of every work, the work
+ * of every other site likeliest one work with it — compared by every field every site has alike, the
+ * text aside — none hidden; first the pairs of a work the user would read first (the larger of the two
+ * works' scores by the formula of the list) times the chance the pair is one work. Each to answer on:
+ * one work (linked, its grade and interest shared, as the work's window links them) or different works
+ * (never offered again); the answers teach the model of the chances, fitted again a few seconds after
+ * them. The answered ones apart, their word changed or taken back there. The pairs are looked for in
+ * the background, on the first start and when asked anew here.
  */
 export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const { t } = useTranslation("duplicate");
@@ -56,8 +58,8 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
       return result.data;
     },
-    // A search under way: asked again till it is done, whatever is chosen
-    refetchInterval: (query) => (query.state.data?.searching ? SEARCHING_MS : every || false),
+    // A search or a fitting under way: asked again till it is done, whatever is chosen
+    refetchInterval: (query) => (query.state.data?.pending ? PENDING_MS : every || false),
   });
   const data = list.data;
   const calm = useCalmUpdates(data?.pairs, rowOf, sameRow);
@@ -68,11 +70,14 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
     queryClient.invalidateQueries({ queryKey: itemKey(p.second) });
     queryClient.invalidateQueries({ queryKey: [ITEMS] });
   };
-  /** The user's word on a pair: once kept, the row leaves — of the answered ones, it shows the new word. */
+  /**
+   * The user's word on a pair: once kept, the row leaves — of the answered ones, it shows the new word —
+   * and the pairs are read again: the model of the answers is fitted anew, the order may change.
+   */
   const answer = async (p: DuplicatePair, same: boolean) => {
     ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { ...refs(p), same } }));
-    if (answered) queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
-    else calm.remove([rowOf(p)]);
+    if (!answered) calm.remove([rowOf(p)]);
+    queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
     changed(p);
   };
   /** The word taken back: once kept, the row leaves the answered ones. */
@@ -84,6 +89,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       }),
     );
     calm.remove([rowOf(p)]);
+    queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
     changed(p);
   };
   const search = async () => {
@@ -108,18 +114,22 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
         </Tabs>
         {data && <span className="text-sm text-muted-foreground tabular-nums">{t("DuplicatesScreen.total", { count: data.total })}</span>}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {data?.searching ? (
+          {data?.pending ? (
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" /> {t("DuplicatesScreen.searching")}
+              <Loader2Icon className="size-4 animate-spin" /> {t("DuplicatesScreen.pending")}
             </span>
           ) : (
             data?.searchedAt && (
               <span className="text-xs text-muted-foreground" title={formatDate(data.searchedAt)}>
                 {t("DuplicatesScreen.searchedAt", { ago: ago(data.searchedAt), works: data.works ?? 0 })}
+                {" · "}
+                <span title={t(data.learnt ? "DuplicatesScreen.learntHint" : "DuplicatesScreen.notLearntHint")}>
+                  {t(data.learnt ? "DuplicatesScreen.learnt" : "DuplicatesScreen.notLearnt")}
+                </span>
               </span>
             )
           )}
-          <AsyncButton size="sm" variant="outline" icon={<RefreshCwIcon />} disabled={data?.searching} title={t("DuplicatesScreen.searchHint")} onClick={search}>
+          <AsyncButton size="sm" variant="outline" icon={<RefreshCwIcon />} disabled={data?.pending} title={t("DuplicatesScreen.searchHint")} onClick={search}>
             {t("DuplicatesScreen.search")}
           </AsyncButton>
           <RefreshSelect every={every} onChange={setEvery} />
@@ -127,7 +137,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       </div>
       {list.isLoading && <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.loading")}</p>}
       {list.isError && <p className="text-sm text-destructive">{t("DuplicatesScreen.failed", { error: list.error.message })}</p>}
-      {data && shown.length === 0 && !data.searching && (
+      {data && shown.length === 0 && !data.pending && (
         <p className="text-sm text-muted-foreground">{t(answered ? "DuplicatesScreen.noneAnswered" : data.searchedAt ? "DuplicatesScreen.none" : "DuplicatesScreen.neverSearched")}</p>
       )}
       {shown.length > 0 && (
@@ -147,8 +157,8 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
 }
 
 /**
- * A pair: the two works side by side, how alike their titles and descriptions are, whether an author
- * goes by the same name, and the answers — the one given marked, with the taking back beside.
+ * A pair: the two works side by side, the chance they are one work, how alike each layer of theirs is,
+ * whether an author goes by the same name, and the answers — the one given marked, with the taking back beside.
  */
 function PairRow({
   pair: p,
@@ -168,13 +178,28 @@ function PairRow({
   return (
     <li ref={rowRef} className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        {p.similarity != null && (
-          <span className="font-semibold text-foreground tabular-nums" title={t("PairRow.similarityHint")}>
-            {percent(p.similarity)}
+        {p.chance != null && (
+          <span className="font-semibold text-foreground tabular-nums" title={t("PairRow.chanceHint")}>
+            {percent(p.chance)}
           </span>
         )}
         {p.title != null && <span className="tabular-nums">{t("PairRow.title", { value: percent(p.title) })}</span>}
         {p.description != null && <span className="tabular-nums">{t("PairRow.description", { value: percent(p.description) })}</span>}
+        {p.facets != null && (
+          <span className="tabular-nums" title={t("PairRow.facetsHint")}>
+            {t("PairRow.facets", { value: percent(p.facets) })}
+          </span>
+        )}
+        {p.size != null && (
+          <span className="tabular-nums" title={t("PairRow.sizeHint")}>
+            {t("PairRow.size", { value: percent(p.size) })}
+          </span>
+        )}
+        {p.priority != null && p.priority > 0 && (
+          <span className="tabular-nums" title={t("PairRow.priorityHint")}>
+            {t("PairRow.priority", { value: p.priority.toFixed(2) })}
+          </span>
+        )}
         {p.sameAuthor && (
           <span className="flex items-center gap-1 text-foreground" title={t("PairRow.sameAuthorHint")}>
             <UserIcon className="size-3.5" /> {t("PairRow.sameAuthor")}

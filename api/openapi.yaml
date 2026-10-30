@@ -530,12 +530,13 @@ paths:
       operationId: getDuplicates
       summary: Pairs of works of different sites that may be one work, the likeliest first, to say whether they are
       description: |
-        As the last search of the type found them (searchDuplicates): of every work, the two works of
-        every other site whose title and description are nearest to its own by their vectors - no
-        threshold, every pair kept, the most alike first. "answered" false: the pairs not answered on -
-        neither one work (linked, by any way) nor said to be different; true: those answered on, the
-        works linked across the sites and those said to be different. 202 while a search is planned or
-        running: what there is, the page asks again.
+        As the last search of the type found them (searchDuplicates): of every work, the work of every
+        other site likeliest one work with it - compared by every field every site has alike, the text
+        aside - no threshold, every pair kept. First the pairs of the larger of the two works' scores by
+        the formula of the list times the chance the pair is one work, by the model of the user's
+        answers. "answered" false: the pairs not answered on - neither one work (linked, by any way) nor
+        said to be different; true: those answered on. 202 while a search or a fitting of the model of
+        the answers is planned or running: what there is, the page asks again.
       parameters:
         - $ref: '#/components/parameters/Type'
         - name: answered
@@ -4598,7 +4599,7 @@ components:
       enum: ['YES', 'UNKNOWN', 'NO']
     DuplicatePage:
       type: object
-      required: [total, pairs, searching]
+      required: [total, pairs, pending, learnt]
       properties:
         total:
           type: integer
@@ -4607,9 +4608,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DuplicatePair'
-        searching:
+        pending:
           type: boolean
-          description: A search is planned or running
+          description: A search or a fitting of the model of the answers is planned or running
+        learnt:
+          type: boolean
+          description: The chances are of the model of the user's answers; false - no pair said to be one work yet, the mean of the layers stands for them
         searchedAt:
           type: string
           format: date-time
@@ -4626,15 +4630,24 @@ components:
           $ref: '#/components/schemas/DuplicateWork'
         second:
           $ref: '#/components/schemas/DuplicateWork'
-        similarity:
+        chance:
           type: number
-          description: What the pairs are ordered by - the mean of the two below, the title's alone without a description; none of an answered pair the search did not find
+          description: The chance the pair is one work, by the model of the user's answers (the mean of the layers before any answer); none of an answered pair the search did not compare
+        priority:
+          type: number
+          description: What the pairs are ordered by - the larger of the two works' scores by the formula of the list times the chance
         title:
           type: number
           description: The cosine of the vectors of their titles
         description:
           type: number
           description: The cosine of the vectors of their descriptions; none when either has none
+        facets:
+          type: number
+          description: The cosine of the values of the facets the sites share (the tags, the universes, the characters, the status...), each weighed by its rarity; none when either has none
+        size:
+          type: number
+          description: Of the numbers of their size both have (words, parts), the smaller over the larger, their mean; none when they share none
         sameAuthor:
           type: boolean
           description: An author of one goes by the same name as an author of the other
