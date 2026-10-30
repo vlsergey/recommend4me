@@ -7,6 +7,7 @@ import java.time.Instant
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
@@ -95,16 +96,23 @@ class WorkloadTest {
         val blocker = thread { workload.run(Work("train", type = "t"), emptyMap()) { started.countDown(); release.await() } }
         started.await()
         val runs = AtomicInteger()
-        val answers = (1..3).map { i -> CompletableFuture.supplyAsync { workload.run(held, mapOf("page" to 1)) { runs.incrementAndGet(); "answer" } } }
-        while (workload.waiting().singleOrNull()?.reasons?.get("page") != 3) Thread.sleep(5)
-        // A batch of its own is not joined
-        val own = CompletableFuture.supplyAsync { workload.run(held, mapOf("items" to 1), joinAlike = false) { runs.incrementAndGet(); "own" } }
-        while (workload.waiting().size < 2) Thread.sleep(5)
-        release.countDown()
-        blocker.join()
-        assertEquals(listOf("answer", "answer", "answer"), answers.map { it.get(5, TimeUnit.SECONDS) })
-        assertEquals("own", own.get(5, TimeUnit.SECONDS))
-        assertEquals(2, runs.get())
+        // A thread of its own for every caller: of the common pool, a runner of two cores has one, and the
+        // callers after the first, which waits there, never began — the test waited for them for ever
+        val callers = Executors.newFixedThreadPool(4)
+        try {
+            val answers = (1..3).map { CompletableFuture.supplyAsync({ workload.run(held, mapOf("page" to 1)) { runs.incrementAndGet(); "answer" } }, callers) }
+            while (workload.waiting().singleOrNull()?.reasons?.get("page") != 3) Thread.sleep(5)
+            // A batch of its own is not joined
+            val own = CompletableFuture.supplyAsync({ workload.run(held, mapOf("items" to 1), joinAlike = false) { runs.incrementAndGet(); "own" } }, callers)
+            while (workload.waiting().size < 2) Thread.sleep(5)
+            release.countDown()
+            blocker.join()
+            assertEquals(listOf("answer", "answer", "answer"), answers.map { it.get(5, TimeUnit.SECONDS) })
+            assertEquals("own", own.get(5, TimeUnit.SECONDS))
+            assertEquals(2, runs.get())
+        } finally {
+            callers.shutdownNow()
+        }
     }
 
     @Test
