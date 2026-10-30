@@ -13,6 +13,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -86,6 +87,7 @@ class Duplicates(
     private val workload: Workload,
     private val works: Works,
     private val workEvents: WorkEvents,
+    private val sizes: WorkSizes,
 ) {
     private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "duplicates").apply { isDaemon = true } }
 
@@ -611,6 +613,7 @@ class Duplicates(
                 facet?.let { f -> s.names(f, facets.values.flatMap { it[f].orEmpty() }.distinct()) }.orEmpty()
             val authorNames = namesOf(authorFacet)
             val fandomNames = namesOf(fandomFacet)
+            val itemSizes = sizes.ofItems(type, s, ids, s.items.numbersOf(ids), fields)
             ids.forEach { id ->
                 val head = heads[id] ?: return@forEach
                 val written = fields[id].orEmpty()
@@ -622,6 +625,8 @@ class Duplicates(
                         authors = authors,
                         fandoms = fandomFacet?.let { f -> facets[id]?.get(f).orEmpty().map { fandomNames[it] ?: it } }.orEmpty(),
                         description = description?.let { shown[it] },
+                        words = itemSizes[id]?.words,
+                        chars = itemSizes[id]?.chars,
                     ),
                     authors.map { it.trim().lowercase() }.toSet(),
                 )

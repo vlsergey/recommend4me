@@ -53,7 +53,18 @@
   "PairRow.translationHint": "Одна — перевод другой: разные работы одного текста, у каждой своя оценка и интерес; пара больше не предлагается. Модель на переводах не учится: авторы у них разные, а теги и описания — одни",
   "PairRow.unanswer": "Снять ответ",
   "PairRow.unanswerHint": "Снять ответ: связь, «разные», «перевод» или «частично» снимаются, пара вернётся в список без ответа",
+  "WorkSide.chars_few": "{{value}} знака",
+  "WorkSide.chars_many": "{{value}} знаков",
+  "WorkSide.chars_one": "{{value}} знак",
+  "WorkSide.chars_other": "{{value}} знака",
+  "WorkSide.estimate": "Вычислено из другого числа сайта по тому, сколько в работе слов на знак",
   "WorkSide.fold": "Свернуть аннотацию",
+  "WorkSide.millions": "{{value}}М",
   "WorkSide.page": "Страница на сайте",
-  "WorkSide.unfold": "Показать аннотацию целиком"
+  "WorkSide.thousands": "{{value}}к",
+  "WorkSide.unfold": "Показать аннотацию целиком",
+  "WorkSide.words_few": "{{value}} слова",
+  "WorkSide.words_many": "{{value}} слов",
+  "WorkSide.words_one": "{{value}} слово",
+  "WorkSide.words_other": "{{value}} слова"
 }

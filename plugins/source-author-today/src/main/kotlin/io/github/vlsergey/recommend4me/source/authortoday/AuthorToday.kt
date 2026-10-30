@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.source.FacetDecor
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberDef
-import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.PictureDecor
@@ -45,7 +44,7 @@ class AuthorToday : Source {
         ),
         numbers = listOf(
             // Characters, not words: a number of its own
-            NumberDef(CHARS, NumberScale.LOG, sortable = true, role = NumberRole.SIZE),
+            StandardNumbers.CHARS.asNumber(CHARS),
             StandardNumbers.VIEWS.asNumber(VIEWS),
             StandardNumbers.LIKES.asNumber(LIKES),
             NumberDef(COMMENTS, NumberScale.LOG),

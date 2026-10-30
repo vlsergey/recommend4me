@@ -9,8 +9,8 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.Chance
 import io.github.vlsergey.recommend4me.suggestion.FacetModel
-import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.TagsChanged
+import io.github.vlsergey.recommend4me.tag.normalizedTags
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
@@ -71,20 +71,7 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
      * tags over them; no tag the model works out.
      */
     private fun featuresOf(s: SourceStore, ids: Collection<String>?): Map<String, List<String>> {
-        val tags = HashMap<String, MutableSet<Long>>()
-        s.tagFacets.firstOrNull()?.let { layer ->
-            val siteFacet = s.schema.facet(layer)?.examplesFrom
-            val bound = s.tags.bindingsOf(s.id)
-            fun site(id: String, keys: List<String>) = keys.mapNotNull { bound[it] }.forEach { tags.getOrPut(id) { HashSet() } += it }
-            if (siteFacet != null) {
-                if (ids == null) s.items.forEachFacet(siteFacet, ::site)
-                else s.items.facetsOf(ids).forEach { (id, own) -> site(id, own[siteFacet].orEmpty()) }
-            }
-            (if (ids == null) s.corrections.allFacets() else s.corrections.facetsOf(ids).values.flatten()).filter { it.facet == layer }.forEach { c ->
-                val tag = TagRepository.idOf(c.key) ?: return@forEach
-                if (c.added) tags.getOrPut(c.itemId) { HashSet() } += tag else tags[c.itemId]?.remove(tag)
-            }
-        }
+        val tags = s.normalizedTags(ids, if (ids == null) s.corrections.allFacets() else s.corrections.facetsOf(ids).values.flatten())
         val source = AgeRatingRepository.source(s.id)
         return (ids ?: s.items.keys().map { it.id }).associateWith { id -> listOf(source) + tags[id].orEmpty().map(AgeRatingRepository::tag) }
     }

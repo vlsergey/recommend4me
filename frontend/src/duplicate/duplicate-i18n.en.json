@@ -51,5 +51,12 @@
   "PairRow.unanswerHint": "Take the answer back: the link, \"different\", \"translation\" or \"partly\" goes, the pair returns to the unanswered",
   "WorkSide.fold": "Fold the description",
   "WorkSide.page": "Its page on the site",
-  "WorkSide.unfold": "Show the whole description"
+  "WorkSide.chars_one": "{{value}} character",
+  "WorkSide.chars_other": "{{value}} characters",
+  "WorkSide.estimate": "Worked out of the site's other number by how many words the work has to a character",
+  "WorkSide.millions": "{{value}}M",
+  "WorkSide.thousands": "{{value}}k",
+  "WorkSide.unfold": "Show the whole description",
+  "WorkSide.words_one": "{{value}} word",
+  "WorkSide.words_other": "{{value}} words"
 }

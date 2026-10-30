@@ -27,6 +27,16 @@ class WorkRepository(private val db: DSLContext) {
             db.select(SITE_WORK.ITEM, SITE_WORK.VERSION).from(SITE_WORK).where(SITE_WORK.SOURCE.eq(source), SITE_WORK.ITEM.`in`(chunk)).fetch { it.value1()!! to it.value2()!! }
         }.toMap()
 
+    /** Every item of the [source] bound to a normalized work: item to work. */
+    fun allOf(source: String): Map<String, Long> =
+        db.select(SITE_WORK.ITEM, SITE_WORK.NORMALIZED).from(SITE_WORK).where(SITE_WORK.SOURCE.eq(source)).fetchMap({ it.value1()!! }, { it.value2()!! })
+
+    /** The normalized works of the [items] of the [source]: item to work. */
+    fun ofItems(source: String, items: Collection<String>): Map<String, Long> =
+        items.distinct().chunked(BATCH).flatMap { chunk ->
+            db.select(SITE_WORK.ITEM, SITE_WORK.NORMALIZED).from(SITE_WORK).where(SITE_WORK.SOURCE.eq(source), SITE_WORK.ITEM.`in`(chunk)).fetch { it.value1()!! to it.value2()!! }
+        }.toMap()
+
     /** The [items] of the [source], none bound yet, with their versions, bound to a normalized work each of its own, at once. */
     fun bindNew(source: String, items: Map<String, String>, now: Instant) = db.transaction { c ->
         val tx = DSL.using(c)

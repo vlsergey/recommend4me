@@ -53,6 +53,7 @@
   "What.train": "Obučavanje modela ocene i interesovanja, prognoza za sva dela",
   "What.weighing": "Težine delova",
   "What.workChances": "Verovatnoće dela posle vaših odgovora",
+  "What.workSizes": "Obim dela u rečima i znakovima",
   "What.worth": "Doprinos delova",
   "WorkQueue.because": "zašto:",
   "WorkQueue.began": "počelo u {{time}} (pre {{span}})",

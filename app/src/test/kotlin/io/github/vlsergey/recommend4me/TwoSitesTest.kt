@@ -20,7 +20,11 @@ import io.github.vlsergey.recommend4me.api.model.TagRelation
 import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.capture.CaptureController
 import io.github.vlsergey.recommend4me.capture.Captures
+import io.github.vlsergey.recommend4me.api.model.SizeNumber
 import io.github.vlsergey.recommend4me.contenttype.Books
+import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
+import io.github.vlsergey.recommend4me.size.WorkSizes
+import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.duplicate.DuplicatesController
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -135,6 +139,7 @@ class TwoSitesTest {
         override val homepage = "https://alpha.example"
         override val schema = SourceSchema(
             facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
+            numbers = listOf(StandardNumbers.WORDS.asNumber()),
             texts = listOf(TextDef("annotation", block = "text:annotation")),
             reviews = true,
         )
@@ -170,7 +175,11 @@ class TwoSitesTest {
         override val id = "beta"
         override val contentType = "books"
         override val homepage = "https://beta.example"
-        override val schema = SourceSchema(facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()), texts = listOf(TextDef("annotation", block = "text:annotation")))
+        override val schema = SourceSchema(
+            facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
+            numbers = listOf(StandardNumbers.CHARS.asNumber()),
+            texts = listOf(TextDef("annotation", block = "text:annotation")),
+        )
         override val modes = setOf(SourceMode.SCRAPE_ALL, SourceMode.UPDATES, SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://beta\\.example/work/.*"))
         override fun itemUrl(itemId: String) = "https://beta.example/work/$itemId"
@@ -234,6 +243,7 @@ class TwoSitesTest {
     @Autowired lateinit var tagService: Tags
     @Autowired lateinit var contexts: SourceContexts
     @Autowired lateinit var searchService: io.github.vlsergey.recommend4me.search.Search
+    @Autowired lateinit var workSizes: WorkSizes
 
     private fun alpha(body: String) = captures.capturePage(CaptureRequest("https://alpha.example/work/${body.substringBefore('|')}", body))
     private fun beta(body: String) = captures.capturePage(CaptureRequest("https://beta.example/work/${body.substringBefore('|')}", body))
@@ -249,6 +259,33 @@ class TwoSitesTest {
             Thread.sleep(50)
         }
         return condition()
+    }
+
+    @Test
+    fun `the number a site states is shown as it is, the other worked out of it by the words to a character the kept texts teach`() {
+        alpha("z1|The Long Road|river|A road along a river||")
+        beta("z2|The Short Road|river|A road along a brook")
+        val type = stores.type("books")!!
+        val a = stores.source("alpha")!!
+        val b = stores.source("beta")!!
+        a.items.setNumbers("z1", mapOf("words" to 900.0))
+        b.items.setNumbers("z2", mapOf("chars" to 6000.0))
+        // Words of five letters and a space: one word to six characters
+        a.parts.save("z1", listOf(PartData("1", 0, null, "слово ".repeat(1000))))
+        workSizes.fit(type)
+        assertEquals(1000, a.parts.counted().getValue("z1").first.toInt())
+        val first = workSizes.ofItems(type, a, listOf("z1"), a.items.numbersOf(listOf("z1")), emptyMap()).getValue("z1")
+        assertEquals(SizeNumber(900.0, true), first.words)
+        assertEquals(false, first.chars!!.stated)
+        assertTrue(first.chars!!.value in 5300.0..5500.0, first.chars.toString())
+        val second = workSizes.ofItems(type, b, listOf("z2"), b.items.numbersOf(listOf("z2")), emptyMap()).getValue("z2")
+        assertEquals(SizeNumber(6000.0, true), second.chars)
+        assertEquals(false, second.words!!.stated)
+        // Of the one example the model has, its ratio
+        assertTrue(second.words!!.value in 950.0..1050.0, second.words.toString())
+        // A text changed is counted anew
+        a.parts.save("z1", listOf(PartData("1", 0, null, "слово")))
+        assertNull(a.parts.counted()["z1"])
     }
 
     @Test

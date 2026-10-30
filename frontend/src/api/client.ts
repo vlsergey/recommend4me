@@ -35,6 +35,7 @@ export type AuthorSide = Schemas["AuthorSide"];
 export type AuthorWork = Schemas["AuthorWork"];
 export type FoundAuthorEntry = Schemas["FoundAuthorEntry"];
 export type DuplicateWork = Schemas["DuplicateWork"];
+export type SizeNumber = Schemas["SizeNumber"];
 export type DuplicateSort = Schemas["DuplicateSort"];
 export type FacetInfo = Schemas["FacetInfo"];
 export type NumberInfo = Schemas["NumberInfo"];

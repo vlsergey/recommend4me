@@ -20,6 +20,9 @@ data class StoredPart(
 /** A part whose text is to be encoded: its text and the hash it will be kept with. */
 class PartToEncode(val itemId: String, val partId: String, val content: String, val hash: String)
 
+/** A part whose text is to be counted. */
+class PartToCount(val itemId: String, val partId: String, val content: String)
+
 /**
  * The parts of the works' texts — chapters — of one source, and the vector of every window of
  * every part: a long text is a set of vectors rather than their average.
@@ -50,6 +53,7 @@ class PartRepository(private val db: DSLContext) {
             if (p.content != null && p.content != known.value1()) {
                 update = update.set(PART.CONTENT, p.content).setNull(PART.ENCODER).setNull(PART.ENCODED_HASH)
                     .setNull(PART.PARAGRAPHS_ENCODER).setNull(PART.PARAGRAPHS_HASH)
+                    .setNull(PART.CHARS).setNull(PART.WORDS)
             }
             update.where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).execute()
         }
@@ -84,6 +88,22 @@ class PartRepository(private val db: DSLContext) {
         db.fetchCount(PART, PART.CONTENT.isNotNull.and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder))))
 
     fun countWithText(): Int = db.fetchCount(PART, PART.CONTENT.isNotNull)
+
+    /** The parts whose text is not counted yet, at most [limit]. */
+    fun uncounted(limit: Int): List<PartToCount> =
+        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT).from(PART)
+            .where(PART.CONTENT.isNotNull, PART.CHARS.isNull)
+            .limit(limit)
+            .fetch { PartToCount(it.value1()!!, it.value2()!!, it.value3()!!) }
+
+    fun setCounted(itemId: String, partId: String, chars: Int, words: Int) {
+        db.update(PART).set(PART.CHARS, chars).set(PART.WORDS, words).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).execute()
+    }
+
+    /** The words and the characters of the texts kept, every part counted summed, of every item that has any. */
+    fun counted(): Map<String, Pair<Double, Double>> =
+        db.select(PART.ITEM_ID, DSL.sum(PART.WORDS), DSL.sum(PART.CHARS)).from(PART).where(PART.CHARS.isNotNull).groupBy(PART.ITEM_ID)
+            .fetch().associate { it.value1()!! to (it.value2()!!.toDouble() to it.value3()!!.toDouble()) }
 
     /** Replaces the vectors of the windows of a part, made by [encoder] of the text of [hash]. */
     fun saveVectors(itemId: String, partId: String, encoder: String, hash: String, windows: List<FloatArray>) {

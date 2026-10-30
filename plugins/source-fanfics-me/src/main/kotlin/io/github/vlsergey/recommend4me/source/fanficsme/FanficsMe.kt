@@ -10,7 +10,6 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.Job
 import io.github.vlsergey.recommend4me.source.NumberDef
-import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.PictureDecor
@@ -64,7 +63,7 @@ class FanficsMe : Source {
         ),
         numbers = listOf(
             // Characters, not words, on every card: a number of its own; the words on the work's page alone
-            NumberDef(CHARS, NumberScale.LOG, sortable = true, role = NumberRole.SIZE),
+            StandardNumbers.CHARS.asNumber(CHARS),
             StandardNumbers.WORDS.asNumber(WORDS),
             Books.PARTS.asNumber(PARTS),
             StandardNumbers.VIEWS.asNumber(VIEWS),

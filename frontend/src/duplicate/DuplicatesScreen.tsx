@@ -2,13 +2,14 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateSort, type DuplicateWork } from "@/api/client";
+import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateSort, type DuplicateWork, type SizeNumber } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ago, formatDate, percent } from "@/i18n/format";
+import { ago, formatDate, number, percent } from "@/i18n/format";
+import { intlTag } from "@/i18n/i18n";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { ITEMS, itemKey } from "@/item/lists";
@@ -279,10 +280,11 @@ function PairRow({
   );
 }
 
-/** One work of a pair: its site, its title opening the work, its page on the site, its authors and fandoms, its description folded. */
+/** One work of a pair: its site, its title opening the work, its page on the site, its authors and fandoms, its size, its description folded. */
 function WorkSide({ work: w }: { work: DuplicateWork }) {
   const { t } = useTranslation("duplicate");
   const [whole, setWhole] = useState(false);
+  const names = [w.authors.join(", "), w.fandoms.join(", ")].filter(Boolean).join(" · ");
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="flex items-baseline gap-2">
@@ -296,8 +298,14 @@ function WorkSide({ work: w }: { work: DuplicateWork }) {
           <ExternalLinkIcon className="size-3.5" />
         </a>
       </div>
-      {(w.authors.length > 0 || w.fandoms.length > 0) && (
-        <div className="text-xs text-muted-foreground">{[w.authors.join(", "), w.fandoms.join(", ")].filter(Boolean).join(" · ")}</div>
+      {(names || w.words || w.chars) && (
+        <div className="text-xs text-muted-foreground">
+          {names}
+          {names && (w.words || w.chars) && " · "}
+          {w.words && <Size size={w.words} word="words" />}
+          {w.words && w.chars && "; "}
+          {w.chars && <Size size={w.chars} word="chars" />}
+        </div>
       )}
       {w.description && (
         // Text to select and copy: unfolded or folded by a press that selects nothing
@@ -312,6 +320,25 @@ function WorkSide({ work: w }: { work: DuplicateWork }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** How many significant digits a size keeps: the site's number three, one worked out two — it is known no better. */
+const STATED_DIGITS = 3;
+const WORKED_OUT_DIGITS = 2;
+
+/** How long a work is, short, in thousands or millions: a number worked out after a "≈". */
+function Size({ size, word }: { size: SizeNumber; word: "words" | "chars" }) {
+  const { t } = useTranslation("duplicate");
+  const count = Math.round(size.value);
+  const digits = (n: number) => n.toLocaleString(intlTag(), { maximumSignificantDigits: size.stated ? STATED_DIGITS : WORKED_OUT_DIGITS });
+  const short =
+    count >= 1_000_000 ? t("WorkSide.millions", { value: digits(count / 1_000_000) }) : count >= 1000 ? t("WorkSide.thousands", { value: digits(count / 1000) }) : digits(count);
+  const shown = t(`WorkSide.${word}`, { count, value: short });
+  return size.stated ? (
+    <span title={number(count)}>{shown}</span>
+  ) : (
+    <span title={t("WorkSide.estimate")}>≈ {shown}</span>
   );
 }
 

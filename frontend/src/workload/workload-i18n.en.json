@@ -53,6 +53,7 @@
   "What.train": "Models of grade and interest trained, every work scored",
   "What.weighing": "Weights of the parts",
   "What.workChances": "A work's chances after your answers",
+  "What.workSizes": "The sizes of the works in words and characters",
   "What.worth": "Worth of the parts",
   "WorkQueue.because": "because:",
   "WorkQueue.began": "began at {{time}} ({{span}} ago)",

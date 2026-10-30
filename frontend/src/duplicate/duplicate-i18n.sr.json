@@ -51,7 +51,16 @@
   "PairRow.translationHint": "Jedno je prevod drugog: različita dela jednog teksta, svako sa svojom ocenom i interesovanjem; par se više ne nudi. Model ne uči na prevodima: autori su im različiti, a oznake i opisi isti",
   "PairRow.unanswer": "Povuci odgovor",
   "PairRow.unanswerHint": "Povuci odgovor: veza, „različita”, „prevod” ili „delimično” se uklanja, par se vraća među one bez odgovora",
+  "WorkSide.chars_few": "{{value}} znaka",
+  "WorkSide.chars_one": "{{value}} znak",
+  "WorkSide.chars_other": "{{value}} znakova",
+  "WorkSide.estimate": "Izračunato iz drugog broja sajta prema tome koliko dela ima reči po znaku",
   "WorkSide.fold": "Skupi opis",
+  "WorkSide.millions": "{{value}}M",
   "WorkSide.page": "Stranica na sajtu",
-  "WorkSide.unfold": "Prikaži ceo opis"
+  "WorkSide.thousands": "{{value}}k",
+  "WorkSide.unfold": "Prikaži ceo opis",
+  "WorkSide.words_few": "{{value}} reči",
+  "WorkSide.words_one": "{{value}} reč",
+  "WorkSide.words_other": "{{value}} reči"
 }

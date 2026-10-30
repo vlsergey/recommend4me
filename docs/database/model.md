@@ -16,6 +16,7 @@
 | `layer_draft` | a value a source drafts of a work from its own values through the dictionary of universes |
 | `search_score` | the reranker's score of a work for a line searched |
 | `duplicate_candidate` | two works of different sites that may be one, as the last search of the duplicates found them — of every work the likeliest of every other site — with how alike each layer of theirs is: the title, the description, the size, every facet the sites share (`facets`, "<facet>=<cosine>" a line), and the works it was found for (`found_for`: 1 the first, 2 the second, 3 both); the chance they are one work made when read |
+| `work_size` | how many words a normalized work has to a character: of its kept text or what its sites state, else by the model of them, made again in the queue; the other of a work's two sizes is worked out of it |
 | `duplicate_search` | when the duplicates were last looked for, by which encoder, of how many works, and the weights of the model of the user's answers by feature ("<feature>=<weight>" a line) |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
@@ -120,5 +121,9 @@ erDiagram
         TIMESTAMPTZ fitted_at
         BLOB content
         INTEGER members "null"
+    }
+    work_size {
+        BIGINT work PK
+        DOUBLE words_per_char
     }
 ```

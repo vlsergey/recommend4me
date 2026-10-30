@@ -5114,6 +5114,22 @@ components:
             type: string
         description:
           type: string
+        words:
+          $ref: '#/components/schemas/SizeNumber'
+        chars:
+          $ref: '#/components/schemas/SizeNumber'
+
+    SizeNumber:
+      type: object
+      required: [value, stated]
+      description: How long a work is in words or in characters
+      properties:
+        value:
+          type: number
+          format: double
+        stated:
+          type: boolean
+          description: The site's own number (or the user's); false when worked out of the other one by how many words the work has to a character
 
     DuplicateAnswer:
       type: object
