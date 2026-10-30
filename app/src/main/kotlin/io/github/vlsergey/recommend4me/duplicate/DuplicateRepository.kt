@@ -14,10 +14,12 @@ import java.time.Instant
  * ([facets], by the facet). How likely they are one work is the model's of the user's answers
  * ([DuplicateModel]), made when read. [foundFor]: the works it was found for — whose likeliest of
  * the other site it is — [FIRST], [SECOND], both, or neither (an answered pair the search did not keep).
+ * [sameAuthor]: the dictionary of authors gives the two one author, fully or in part
+ * ([io.github.vlsergey.recommend4me.author.AuthorKin]).
  */
 class DuplicateCandidate(
     val first: ItemKey, val second: ItemKey, val title: Float, val description: Float?, val size: Float?, val facets: Map<String, Float>,
-    var foundFor: Int = 0,
+    var foundFor: Int = 0, val sameAuthor: Boolean = false,
 ) {
     val pair: Pair<ItemKey, ItemKey> get() = first to second
 
@@ -45,7 +47,7 @@ class DuplicateRepository(private val db: DSLContext) {
                     .set(DUPLICATE_CANDIDATE.OTHER_SOURCE, d.second.source).set(DUPLICATE_CANDIDATE.OTHER_ITEM_ID, d.second.id)
                     .set(DUPLICATE_CANDIDATE.TITLE, d.title).set(DUPLICATE_CANDIDATE.DESCRIPTION, d.description)
                     .set(DUPLICATE_CANDIDATE.SIZE, d.size).set(DUPLICATE_CANDIDATE.FACETS, d.facets.takeIf { it.isNotEmpty() }?.let(::written))
-                    .set(DUPLICATE_CANDIDATE.FOUND_FOR, d.foundFor.toByte())
+                    .set(DUPLICATE_CANDIDATE.FOUND_FOR, d.foundFor.toByte()).set(DUPLICATE_CANDIDATE.SAME_AUTHOR, d.sameAuthor)
             }).execute()
         }
         tx.deleteFrom(DUPLICATE_SEARCH).execute()
@@ -71,11 +73,12 @@ class DuplicateRepository(private val db: DSLContext) {
         db.select(
             DUPLICATE_CANDIDATE.SOURCE, DUPLICATE_CANDIDATE.ITEM_ID, DUPLICATE_CANDIDATE.OTHER_SOURCE, DUPLICATE_CANDIDATE.OTHER_ITEM_ID,
             DUPLICATE_CANDIDATE.TITLE, DUPLICATE_CANDIDATE.DESCRIPTION, DUPLICATE_CANDIDATE.SIZE, DUPLICATE_CANDIDATE.FACETS, DUPLICATE_CANDIDATE.FOUND_FOR,
+            DUPLICATE_CANDIDATE.SAME_AUTHOR,
         ).from(DUPLICATE_CANDIDATE).fetchSize(FETCH).fetch { r ->
             DuplicateCandidate(
                 ItemKey(r.value1()!!, r.value2()!!), ItemKey(r.value3()!!, r.value4()!!), r.value5()!!, r.value6(), r.value7(),
                 r.value8()?.let(::read)?.mapValues { (_, v) -> v.toFloat() }.orEmpty(),
-                r.value9()!!.toInt(),
+                r.value9()!!.toInt(), r.value10()!!,
             )
         }
 

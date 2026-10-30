@@ -1,7 +1,9 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
+import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.author.AuthorRepository
+import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.DuplicateStatus
@@ -42,6 +44,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 private val log = LoggerFactory.getLogger(Duplicates::class.java)
 
@@ -134,13 +137,19 @@ class Duplicates(
      * rows ([titles], one row a work, [width] numbers), and of their descriptions ([descriptions],
      * a row of noughts and [described] false of a work without one); the values of the facets the
      * sites share ([values], by their places among every value of the type) — weighed once every site
-     * is read ([weigh]), and of every value the works that have it with its weight in each; and the
-     * numbers of its size the sites share ([sizes], by the standard number, nought when not given).
+     * is read ([weigh]), and of every value the works that have it with its weight in each; the
+     * numbers of its size the sites share ([sizes], by the standard number, nought when not known);
+     * and every work's normalized authors ([authors]).
      */
     private class Side(
         val store: SourceStore, val ids: List<String>, val width: Int, val titles: Floats, val descriptions: Floats, val described: BooleanArray,
-        val values: Array<IntArray>, val sizes: Map<String, DoubleArray>,
+        val values: Array<IntArray>, val sizes: Map<String, DoubleArray>, val authors: Array<LongArray>,
     ) {
+        /** Of every normalized author, the works of this site they are of. */
+        val withAuthor: Map<Long, List<Int>> = HashMap<Long, MutableList<Int>>().also { out ->
+            authors.forEachIndexed { i, own -> own.forEach { out.getOrPut(it) { ArrayList() } += i } }
+        }
+
         /** Of every work, the weight of each of its [values]: the value's rarity among every work of the type, the work's values of each facet of unit length. */
         lateinit var weights: Array<FloatArray>
 
@@ -186,7 +195,7 @@ class Duplicates(
      * (the status, the direction, the ratings the site allows) its values; the normalized authors. By
      * their places in [places], every new value given one.
      */
-    private fun valuesOf(s: SourceStore, ids: List<String>, places: HashMap<String, Int>): Array<IntArray> {
+    private fun valuesOf(s: SourceStore, ids: List<String>, authors: Array<LongArray>, places: HashMap<String, Int>): Array<IntArray> {
         val own = HashMap<String, MutableSet<String>>()
         fun add(id: String, prefix: String, key: String) {
             own.getOrPut(id) { HashSet() } += "$prefix:$key"
@@ -209,28 +218,49 @@ class Duplicates(
             s.items.forEachFacet(f.key) { id, keys -> keys.forEach { add(id, f.standard!!.key, it) } }
         }
         // The authors as the normalized authors they are: one writer's accounts on two sites one value
+        ids.forEachIndexed { i, id -> authors[i].forEach { add(id, AUTHOR_FAMILY, AuthorRepository.key(it)) } }
+        return Array(ids.size) { i -> own[ids[i]].orEmpty().map { places.getOrPut(it) { places.size } }.sorted().toIntArray() }
+    }
+
+    /** The normalized authors of every work of the source, by the places of [ids]. */
+    private fun authorsOf(s: SourceStore, ids: List<String>): Array<LongArray> {
+        val out = Array(ids.size) { LongArray(0) }
+        val at = ids.withIndex().associate { it.value to it.index }
         s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.let { f ->
             val authors = s.authors.bindingsOf(s.id)
-            s.items.forEachFacet(f.key) { id, keys -> keys.forEach { k -> authors[k]?.let { add(id, AUTHOR_FAMILY, AuthorRepository.key(it)) } } }
+            s.items.forEachFacet(f.key) { id, keys -> at[id]?.let { i -> out[i] = keys.mapNotNull { authors[it] }.distinct().toLongArray() } }
         }
-        return Array(ids.size) { i -> own[ids[i]].orEmpty().map { places.getOrPut(it) { places.size } }.sorted().toIntArray() }
+        return out
     }
 
     /** The facet a facet of the layer's values are compared as: the characters of either facet of them are one — a main one on a site, a secondary one on another. */
     private fun familyOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACETS) UniverseFacets.CHARACTERS else facet
 
-    /** The numbers of the size of every work the sites share — a standard number, not how the site's readers met it — by its key. */
-    private fun sizesOf(s: SourceStore, ids: List<String>): Map<String, DoubleArray> {
+    /**
+     * The numbers of the size of every work the sites share — a standard number, not how the site's
+     * readers met it — by its key; the words of a work of its characters alone, or the characters of its
+     * words alone, worked out by the [ratios] of the works: so two sites compare, whichever they state.
+     */
+    private fun sizesOf(s: SourceStore, ids: List<String>, ratios: Map<Long, Double>): Map<String, DoubleArray> {
         val at = ids.withIndex().associate { it.value to it.index }
-        return s.schema.numbers.filter { it.standard != null && it.standard!!.role !in SITE_ROLES }.associate { n ->
-            val out = DoubleArray(ids.size)
-            s.items.number(n.key).forEach { (id, v) -> at[id]?.let { out[it] = v } }
-            n.standard!!.key to out
+        val out = s.schema.numbers.filter { it.standard != null && it.standard!!.role !in SITE_ROLES }.associateTo(HashMap()) { n ->
+            val numbers = DoubleArray(ids.size)
+            s.items.number(n.key).forEach { (id, v) -> at[id]?.let { numbers[it] = v } }
+            n.standard!!.key to numbers
         }
+        val bound = s.works.allOf(s.id)
+        val words = out.getOrPut(StandardNumbers.WORDS.key) { DoubleArray(ids.size) }
+        val chars = out.getOrPut(StandardNumbers.CHARS.key) { DoubleArray(ids.size) }
+        ids.forEachIndexed { i, id ->
+            val ratio = bound[id]?.let { ratios[it] } ?: return@forEachIndexed
+            if (words[i] <= 0 && chars[i] > 0) words[i] = chars[i] * ratio
+            if (chars[i] <= 0 && words[i] > 0) chars[i] = words[i] / ratio
+        }
+        return out
     }
 
-    /** The side of the source by the [encoder]'s vectors, read as they go, and its works' values and sizes; null when it has none. */
-    private fun side(s: SourceStore, encoder: String, places: HashMap<String, Int>): Side? {
+    /** The side of the source by the [encoder]'s vectors, read as they go, and its works' values, sizes and authors; null when it has none. */
+    private fun side(s: SourceStore, encoder: String, places: HashMap<String, Int>, ratios: Map<Long, Double>): Side? {
         val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
         val ids = s.textVectors.keys().filter { it.second == TextVectors.TITLE }.map { it.first }.distinct().sorted()
         if (ids.isEmpty()) return null
@@ -254,7 +284,10 @@ class Duplicates(
                 described[i] = true
             }
         }
-        return titles?.let { Side(s, ids, width, it, descriptions!!, described, valuesOf(s, ids, places), sizesOf(s, ids)) }
+        return titles?.let {
+            val authors = authorsOf(s, ids)
+            Side(s, ids, width, it, descriptions!!, described, valuesOf(s, ids, authors, places), sizesOf(s, ids, ratios), authors)
+        }
     }
 
     /**
@@ -264,7 +297,8 @@ class Duplicates(
      * all, each value weighed by how rare it is among every work of the type (the logarithm of the
      * works over those with it: "finished", a value of most works, tells little, a character of a few
      * much), through the works of the other site that have each value; of their size, the mean of the
-     * smaller over the larger of every number both have — how alike two works are the mean of the
+     * smaller over the larger of every number both have, stated or worked out; whether the dictionary of
+     * authors gives them one author, fully or in part — how alike two works are the mean of the
      * layers both have; the most alike of every other site kept of every work, both ways, and the whole
      * kept in place of the last search's.
      */
@@ -272,7 +306,9 @@ class Duplicates(
         val encoder = plugins.textEncoder()?.id ?: return
         val started = System.currentTimeMillis()
         val places = HashMap<String, Int>()
-        val sides = type.sources.mapNotNull { side(it, encoder, places) }
+        val ratios = type.sizes.all()
+        val sides = type.sources.mapNotNull { side(it, encoder, places, ratios) }
+        val kin = AuthorKin(type.authors.told())
         val works = sides.sumOf { it.ids.size }
         val having = IntArray(places.size)
         sides.forEach { side -> side.values.forEach { own -> own.forEach { having[it]++ } } }
@@ -316,6 +352,8 @@ class Duplicates(
             val sizeKeys = a.sizes.keys.filter { it in b.sizes }
             val touched = IntArray(n)
             val isTouched = BooleanArray(n)
+            // Of a work of this site, the works of the other of one author with it: made false again after
+            val sameAuthor = BooleanArray(n)
             var from = 0
             while (from < a.ids.size) {
                 val m = minOf(rows, a.ids.size - from)
@@ -342,6 +380,8 @@ class Duplicates(
                         }
                     }
                     val ownFacets = a.facets[i]
+                    val ofOneAuthor = a.authors[i].flatMap { author -> kin.of(author).flatMap { b.withAuthor[it].orEmpty() } }
+                    ofOneAuthor.forEach { sameAuthor[it] = true }
                     /** How alike the sizes of the two are: of every number both have, the smaller over the larger, their mean; null when they share none. */
                     fun size(j: Int): Float? {
                         var sum = 0.0
@@ -366,7 +406,7 @@ class Duplicates(
                         val sized = size(j)
                         val s = scorer.score(
                             title[j], description[j], a.described[i] && b.described[j], sized ?: 0f, sized != null,
-                            ownFacets and b.facets[j], valued, j,
+                            ownFacets and b.facets[j], valued, j, sameAuthor[j],
                         )
                         if (s > score) {
                             score = s
@@ -382,6 +422,7 @@ class Duplicates(
                                 description = if (a.described[i] && b.described[best]) description[best] else null,
                                 size = size(best),
                                 facets = families.indices.filter { (ownFacets and b.facets[best]) and (1L shl it) != 0L }.associate { families[it] to valued[it][best] },
+                                sameAuthor = sameAuthor[best],
                             )
                         }
                         // Found for this work: the one it is the likeliest of the other site of
@@ -392,6 +433,7 @@ class Duplicates(
                         isTouched[j] = false
                         for (f in valued.indices) valued[f][j] = 0f
                     }
+                    ofOneAuthor.forEach { sameAuthor[it] = false }
                     own?.forEach { passed[it] = false }
                 }
                 from += m
@@ -404,7 +446,7 @@ class Duplicates(
             if (a === b || a.width != b.width) return@forEach
             val i = a.ids.binarySearch(pair.first.id).takeIf { it >= 0 } ?: return@forEach
             val j = b.ids.binarySearch(pair.second.id).takeIf { it >= 0 } ?: return@forEach
-            found[pair] = layersOf(pair, a, i, b, j, families, familyOf)
+            found[pair] = layersOf(pair, a, i, b, j, families, familyOf, kin)
         }
         val compared = System.currentTimeMillis() - started
         val fitted = fit(found.values, said)
@@ -417,7 +459,7 @@ class Duplicates(
     }
 
     /** The layers of the pair of [a]'s [i]-th work and [b]'s [j]-th, worked out alone: a pair the user answered on that the search did not keep. */
-    private fun layersOf(pair: Pair<ItemKey, ItemKey>, a: Side, i: Int, b: Side, j: Int, families: List<String>, familyOf: IntArray): DuplicateCandidate {
+    private fun layersOf(pair: Pair<ItemKey, ItemKey>, a: Side, i: Int, b: Side, j: Int, families: List<String>, familyOf: IntArray, kin: AuthorKin): DuplicateCandidate {
         fun dot(x: Floats, y: Floats): Float {
             val u = FloatArray(a.width).also { x.take(it, 0, i * a.width, a.width) }
             val v = FloatArray(b.width).also { y.take(it, 0, j * b.width, b.width) }
@@ -448,6 +490,7 @@ class Duplicates(
             description = if (a.described[i] && b.described[j]) dot(a.descriptions, b.descriptions) else null,
             size = if (ratios.isEmpty()) null else ratios.average().toFloat(),
             facets = families.indices.filter { both and (1L shl it) != 0L }.associate { families[it] to facets[it] },
+            sameAuthor = kin.share(a.authors[i].asList(), b.authors[j].asList()),
         )
     }
 
@@ -514,7 +557,9 @@ class Duplicates(
      * ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list (the
      * prediction times the chance of interest: a work the user would read first), its chance of
      * interest, its predicted grade, or nothing — a work of a high score, the likeliest of many works
-     * of another site, does not lift every pair of them; equal, the likelier pair first.
+     * of another site, does not lift every pair of them; equal, the likelier pair first. Or, of the
+     * pairs in doubt ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change
+     * ([DuplicateModel.boundary]): what an answer teaches the model most.
      * Every pair read for the request and let go. Null of no such type.
      */
     fun page(typeId: String, answered: Boolean, offset: Int, limit: Int, sort: DuplicateSort = DuplicateSort.FORMULA): DuplicatePage? {
@@ -526,7 +571,7 @@ class Duplicates(
         // What the sort says of every work: of the prediction (not below nought) and the chance of interest
         // (the user's mark over the model's; without a model of interest, as likely as not to tell nothing: 1)
         val worth = HashMap<ItemKey, Double>()
-        if (sort != DuplicateSort.CHANCE) type.sources.forEach { s ->
+        if (sort != DuplicateSort.CHANCE && sort != DuplicateSort.UNCERTAIN) type.sources.forEach { s ->
             val marks = s.interest.all()
             type.models.predicted(s.id).forEach { (id, p) ->
                 val grade = p.score.coerceAtLeast(0.0)
@@ -535,7 +580,7 @@ class Duplicates(
                     DuplicateSort.FORMULA -> grade * interest
                     DuplicateSort.INTEREST -> interest
                     DuplicateSort.GRADE -> grade
-                    DuplicateSort.CHANCE -> 1.0
+                    DuplicateSort.CHANCE, DuplicateSort.UNCERTAIN -> 1.0
                 }
             }
         }
@@ -551,10 +596,12 @@ class Duplicates(
                 if (family != null && (!def.editable || family == def.key)) labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
             }
         }
+        val boundary = if (sort == DuplicateSort.UNCERTAIN) model.boundary(kept) { c -> said[c.pair]?.takeIf { !it.related }?.let { it == DuplicateAnswer.SAME } } else 0.0
         class Ranked(val pair: Pair<ItemKey, ItemKey>, val layers: DuplicateCandidate?, val chance: Double?, val priority: Double)
         fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
             val chance = layers?.let(model::chance)
             if (sort == DuplicateSort.CHANCE) return Ranked(pair, layers, chance, chance ?: 0.0)
+            if (sort == DuplicateSort.UNCERTAIN) return Ranked(pair, layers, chance, layers?.let { 1 / (1 + abs(model.logit(it) - boundary)) } ?: 0.0)
             // What the sort says of the work the pair was found for — of both, the larger; of neither (an answered pair not kept), the larger too
             val first = worth[pair.first] ?: 0.0
             val second = worth[pair.second] ?: 0.0
@@ -570,6 +617,7 @@ class Duplicates(
         val sorted = rows.sortedWith(compareByDescending<Ranked> { it.priority }.thenByDescending { it.chance ?: -1.0 }.thenBy { it.pair.first.toString() })
         val page = sorted.drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE))
         val described = describe(type, page.flatMap { listOf(it.pair.first, it.pair.second) })
+        val kin = AuthorKin(type.authors.told())
         return DuplicatePage(
             total = rows.size,
             pairs = page.mapNotNull { r ->
@@ -583,7 +631,7 @@ class Duplicates(
                     facets = d?.facets.orEmpty().entries.sortedByDescending { it.value }.map { (family, v) ->
                         DuplicateFacet(key = family, labelKey = labels[family] ?: family, `value` = v.toBigDecimal())
                     },
-                    sameAuthor = first.authors.any { it in second.authors },
+                    sameAuthor = kin.share(first.authors, second.authors),
                     answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
                 )
             },
@@ -594,8 +642,8 @@ class Duplicates(
         )
     }
 
-    /** A work as a pair shows it, and its authors' names in lower case: what "the same author" is told by. */
-    private class Described(val work: DuplicateWork, val authors: Set<String>)
+    /** A work as a pair shows it, and its normalized authors: what "the same author" is told by. */
+    private class Described(val work: DuplicateWork, val authors: Set<Long>)
 
     /** The works as the pairs show them: each source's read in one go; a work no longer there, none. */
     private fun describe(type: TypeStore, keys: List<ItemKey>): Map<ItemKey, Described> {
@@ -613,6 +661,7 @@ class Duplicates(
             fun namesOf(facet: String?): Map<String, String> =
                 facet?.let { f -> s.names(f, facets.values.flatMap { it[f].orEmpty() }.distinct()) }.orEmpty()
             val authorNames = namesOf(authorFacet)
+            val normalized = s.authors.bindingsOf(s.id)
             val fandomNames = namesOf(fandomFacet)
             val statusFacet = s.schema.facets.firstOrNull { it.role == FacetRole.STATUS }?.key
             val statusNames = namesOf(statusFacet)
@@ -620,19 +669,19 @@ class Duplicates(
             ids.forEach { id ->
                 val head = heads[id] ?: return@forEach
                 val written = fields[id].orEmpty()
-                val authors = authorFacet?.let { f -> facets[id]?.get(f).orEmpty().map { authorNames[it] ?: it } }.orEmpty()
+                val authors = authorFacet?.let { f -> facets[id]?.get(f) }.orEmpty()
                 val shown = Corrected.texts(texts[id].orEmpty(), written)
                 out[ItemKey(source, id)] = Described(
                     DuplicateWork(
                         source = source, item = id, title = Corrected.title(head.title, written), url = head.url,
-                        authors = authors,
-                        fandoms = fandomFacet?.let { f -> facets[id]?.get(f).orEmpty().map { fandomNames[it] ?: it } }.orEmpty(),
+                        authors = authors.map { authorNames[it] ?: it },
+                        fandoms =fandomFacet?.let { f -> facets[id]?.get(f).orEmpty().map { fandomNames[it] ?: it } }.orEmpty(),
                         description = description?.let { shown[it] },
                         status = statusFacet?.let { f -> facets[id]?.get(f).orEmpty().map { DuplicateStatus(statusNames[it] ?: it, s.nameKey(f, it)) } },
                         words = itemSizes[id]?.words,
                         chars = itemSizes[id]?.chars,
                     ),
-                    authors.map { it.trim().lowercase() }.toSet(),
+                    authors.mapNotNull { normalized[it] }.toSet(),
                 )
             }
         }

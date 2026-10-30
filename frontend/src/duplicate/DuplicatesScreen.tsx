@@ -51,7 +51,7 @@ const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | 
 ];
 
 /** What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default. */
-const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "CHANCE"];
+const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "CHANCE", "UNCERTAIN"];
 
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
@@ -188,7 +188,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       {shown.length > 0 && (
         <ul className={cn("flex flex-col gap-2", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>
           {shown.map((p) => (
-            <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked} pair={p} answer={(verdict) => answer(p, verdict)} unanswer={() => unanswer(p)} />
+            <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked} pair={p} sort={sort} answer={(verdict) => answer(p, verdict)} unanswer={() => unanswer(p)} />
           ))}
         </ul>
       )}
@@ -203,17 +203,20 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
 
 /**
  * A pair: the two works side by side, the chance they are one work, how alike each layer of theirs is,
- * whether an author goes by the same name, and the answers — the one given marked, with the taking back beside.
+ * whether the dictionary of authors gives them one author, and the answers — the one given marked, with the taking back beside.
  */
 function PairRow({
   pair: p,
   rowRef,
   locked,
+  sort,
   answer,
   unanswer,
 }: {
   pair: DuplicatePair;
   rowRef: (e: HTMLElement | null) => void;
+  /** Of the pairs in doubt the order says nothing of the work: no priority shown. */
+  sort: DuplicateSort;
   /** The rows moving: the buttons shown disabled, the reason no press is taken. */
   locked: boolean;
   answer: (verdict: Verdict) => Promise<void>;
@@ -240,7 +243,7 @@ function PairRow({
             {t("PairRow.size", { value: percent(p.size) })}
           </span>
         )}
-        {p.priority != null && p.priority > 0 && (
+        {sort !== "UNCERTAIN" && p.priority != null && p.priority > 0 && (
           <span className="tabular-nums" title={t("PairRow.priorityHint")}>
             {t("PairRow.priority", { value: p.priority.toFixed(2) })}
           </span>

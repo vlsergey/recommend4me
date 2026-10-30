@@ -2,12 +2,14 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.ln
 
 /**
  * THE CHANCE A PAIR IS ONE WORK, by the user's answers: a logistic model of how alike each layer of
  * the two is ([DuplicateCandidate]) — the titles, the descriptions, the size, and every facet the sites
- * share apart (the universes, the characters, the tags, the status...) — and whether both have the
- * layer at all, fitted on the pairs the user said are one work and those said to be different
+ * share apart (the universes, the characters, the tags, the status...) — whether both have the
+ * layer at all, and whether the dictionary of authors gives them one author, fully or in part,
+ * fitted on the pairs the user said are one work and those said to be different
  * ([fit]): which facet tells a pair is one work, and how much, is learnt. [weights] by the name of the
  * feature ([TITLE], [facet]...); null — no answer that any pair is one work yet: the mean of the
  * layers both have stands for the chance, the facets' mean one layer of them.
@@ -15,15 +17,30 @@ import kotlin.math.exp
 class DuplicateModel(val weights: Map<String, Double>?) {
 
     /** The chance the pair of these layers is one work. */
-    fun chance(title: Float, description: Float?, size: Float?, facets: Map<String, Float>): Double {
+    fun chance(title: Float, description: Float?, size: Float?, facets: Map<String, Float>, sameAuthor: Boolean = false): Double {
         val w = weights ?: return listOfNotNull(title, description, size, facets.values.takeIf { it.isNotEmpty() }?.average()?.toFloat())
             .map { it.toDouble() }.average()
         var z = 0.0
-        features(title, description, size, facets).forEach { (name, x) -> z += (w[name] ?: 0.0) * x }
+        features(title, description, size, facets, sameAuthor).forEach { (name, x) -> z += (w[name] ?: 0.0) * x }
         return sigmoid(z)
     }
 
-    fun chance(c: DuplicateCandidate): Double = chance(c.title, c.description, c.size, c.facets)
+    fun chance(c: DuplicateCandidate): Double = chance(c.title, c.description, c.size, c.facets, c.sameAuthor)
+
+    /** The chance of the pair on the scale the model adds up on. */
+    fun logit(c: DuplicateCandidate): Double = chance(c).coerceIn(LEAST_CHANCE, 1 - LEAST_CHANCE).let { ln(it / (1 - it)) }
+
+    /**
+     * Where on the scale of [logit] the user's answers change: between the mean of the [pairs] said one
+     * work and of those said different ([said], null of one not answered). Nearly every pair the model
+     * learns from is an unanswered one, so that even a pair worth asking about has a chance of some
+     * percent: what is in doubt is told by the answers, not by a half. Nought with neither kind of answer.
+     */
+    fun boundary(pairs: Collection<DuplicateCandidate>, said: (DuplicateCandidate) -> Boolean?): Double {
+        val same = pairs.filter { said(it) == true }.map(::logit)
+        val different = pairs.filter { said(it) == false }.map(::logit)
+        return if (same.isEmpty() || different.isEmpty()) 0.0 else (same.average() + different.average()) / 2
+    }
 
     /**
      * The model as the search weighs pair after pair of it: the [families] of facets by their places,
@@ -36,11 +53,12 @@ class DuplicateModel(val weights: Map<String, Double>?) {
         private val described = weights?.get(has(DESCRIPTION)) ?: 0.0
         private val size = weights?.get(SIZE) ?: 0.0
         private val sized = weights?.get(has(SIZE)) ?: 0.0
+        private val author = weights?.get(SAME_AUTHOR) ?: 0.0
         private val facet = DoubleArray(families.size) { weights?.get(facet(families[it])) ?: 0.0 }
         private val faceted = DoubleArray(families.size) { weights?.get(has(facet(families[it]))) ?: 0.0 }
 
         /** The facets both have: the bits of [both]; of the f-th, how alike they are [valued][f][j]. */
-        fun score(t: Float, d: Float, hasDescription: Boolean, s: Float, hasSize: Boolean, both: Long, valued: Array<FloatArray>, j: Int): Double {
+        fun score(t: Float, d: Float, hasDescription: Boolean, s: Float, hasSize: Boolean, both: Long, valued: Array<FloatArray>, j: Int, sameAuthor: Boolean): Double {
             if (weights == null) {
                 var sum = t.toDouble()
                 var layers = 1
@@ -70,6 +88,7 @@ class DuplicateModel(val weights: Map<String, Double>?) {
             var z = constant + title * t
             if (hasDescription) z += description * d + described
             if (hasSize) z += size * s + sized
+            if (sameAuthor) z += author
             var bits = both
             while (bits != 0L) {
                 val k = java.lang.Long.numberOfTrailingZeros(bits)
@@ -86,11 +105,17 @@ class DuplicateModel(val weights: Map<String, Double>?) {
         const val DESCRIPTION = "description"
         const val SIZE = "size"
 
+        /** The feature of the dictionary of authors giving the two one author, fully or in part. */
+        const val SAME_AUTHOR = "sameAuthor"
+
         /** The feature of how alike the values of a facet the sites share are: "facet:<facet>". */
         fun facet(family: String) = "facet:$family"
 
         /** The feature of whether both have the layer: "<layer>?". */
         fun has(feature: String) = "$feature?"
+
+        /** A chance of nought or one has no place on the scale of [logit]. */
+        private const val LEAST_CHANCE = 1e-12
 
         /** How far the weights are held to nought: the user's few answers do not swing them wide. */
         private const val PENALTY = 1.0
@@ -98,10 +123,11 @@ class DuplicateModel(val weights: Map<String, Double>?) {
         private const val STEPS = 50
 
         /** The features of a pair by their names: the constant, every layer both have and that they have it. */
-        fun features(title: Float, description: Float?, size: Float?, facets: Map<String, Float>): Map<String, Double> {
+        fun features(title: Float, description: Float?, size: Float?, facets: Map<String, Float>, sameAuthor: Boolean): Map<String, Double> {
             val out = HashMap<String, Double>()
             out[CONSTANT] = 1.0
             out[TITLE] = title.toDouble()
+            if (sameAuthor) out[SAME_AUTHOR] = 1.0
             description?.let {
                 out[DESCRIPTION] = it.toDouble()
                 out[has(DESCRIPTION)] = 1.0
@@ -134,7 +160,7 @@ class DuplicateModel(val weights: Map<String, Double>?) {
             if (same == 0) return null
             val different = labels.count { it == false }
             val lack = (different + 1.0) / (same + different + 2.0)
-            val names = (listOf(CONSTANT, TITLE, DESCRIPTION, has(DESCRIPTION), SIZE, has(SIZE)) +
+            val names = (listOf(CONSTANT, TITLE, DESCRIPTION, has(DESCRIPTION), SIZE, has(SIZE), SAME_AUTHOR) +
                 pairs.flatMap { it.facets.keys }.distinct().sorted().flatMap { listOf(facet(it), has(facet(it))) })
             val at = names.withIndex().associate { it.value to it.index }
             val count = names.size
@@ -142,7 +168,7 @@ class DuplicateModel(val weights: Map<String, Double>?) {
             val places = ArrayList<IntArray>(pairs.size)
             val values = ArrayList<DoubleArray>(pairs.size)
             pairs.forEach { c ->
-                val own = features(c.title, c.description, c.size, c.facets)
+                val own = features(c.title, c.description, c.size, c.facets, c.sameAuthor)
                 places += IntArray(own.size)
                 values += DoubleArray(own.size)
                 own.entries.forEachIndexed { k, (name, x) ->

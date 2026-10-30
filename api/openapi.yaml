@@ -4873,10 +4873,10 @@ components:
             $ref: '#/components/schemas/DuplicateFacet'
         size:
           type: number
-          description: Of the numbers of their size both have (words, parts), the smaller over the larger, their mean; none when they share none
+          description: Of the numbers of their size both have (words, characters, parts; the words or the characters a site does not state worked out), the smaller over the larger, their mean; none when they share none
         sameAuthor:
           type: boolean
-          description: An author of one goes by the same name as an author of the other
+          description: The dictionary of authors gives the two one author - a normalized author of both, or two the user said are partly one
         answer:
           type: string
           enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
@@ -5071,13 +5071,14 @@ components:
 
     DuplicateSort:
       type: string
-      enum: [FORMULA, CHANCE, INTEREST, GRADE]
+      enum: [FORMULA, CHANCE, INTEREST, GRADE, UNCERTAIN]
       default: FORMULA
       description: >
         What the chance a pair is one work is multiplied by, of the work the pair was found for (of both, the larger):
         FORMULA - its score by the formula of the list, the predicted grade (not below nought) times the chance of
         interest; INTEREST - the chance of interest alone; GRADE - the predicted grade alone; CHANCE - nothing, the
-        likeliest pairs first
+        likeliest pairs first. UNCERTAIN - no such product: the pairs nearest where the user's answers change from
+        different to one work first, whose answer teaches the model most
 
     DuplicateFacet:
       type: object

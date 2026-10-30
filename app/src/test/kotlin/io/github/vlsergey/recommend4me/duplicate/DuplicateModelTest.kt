@@ -14,6 +14,18 @@ class DuplicateModelTest {
     private fun DuplicateModel.chance(title: Float, description: Float?, facets: Map<String, Float> = emptyMap()) = chance(title, description, null, facets)
 
     @Test
+    fun `one author by the dictionary lifts a pair, and the boundary of the answers stands between what is said one work and what different`() {
+        fun one(n: Int) = DuplicateCandidate(ItemKey("a", "$n"), ItemKey("b", "$n"), 0.6f, null, null, emptyMap(), sameAuthor = true)
+        fun two(n: Int) = pair(n, 0.6f, null)
+        val pairs = (0 until 30).map(::one) + (30 until 60).map(::two)
+        val model = DuplicateModel.fit(pairs) { c -> c.sameAuthor }!!
+        assertTrue(model.chance(one(100)) > model.chance(two(100)))
+        val boundary = model.boundary(pairs) { c -> c.sameAuthor }
+        assertTrue(boundary > model.logit(two(100)) && boundary < model.logit(one(100)), "$boundary")
+        assertEquals(0.0, DuplicateModel(null).boundary(pairs) { null })
+    }
+
+    @Test
     fun `without an answer that a pair is one work the mean of the layers stands for the chance`() {
         val pairs = listOf(pair(1, 0.9f, 0.5f), pair(2, 0.4f, null, facets = mapOf("tags" to 0.1f, "status" to 0.3f)))
         assertNull(DuplicateModel.fit(pairs) { null })
@@ -70,8 +82,8 @@ class DuplicateModelTest {
         val model = DuplicateModel.fit(same + others) { if (it.pair in sameKeys) true else null }!!
         val scorer = model.Scorer(listOf("characters", "status"))
         val valued = arrayOf(floatArrayOf(0.8f, 0.1f), floatArrayOf(0f, 0f))
-        val near = scorer.score(0.5f, 0.9f, true, 0f, false, 1L, valued, 0)
-        val far = scorer.score(0.5f, 0.3f, true, 0f, false, 1L, valued, 1)
+        val near = scorer.score(0.5f, 0.9f, true, 0f, false, 1L, valued, 0, false)
+        val far = scorer.score(0.5f, 0.3f, true, 0f, false, 1L, valued, 1, false)
         assertTrue(near > far)
         assertEquals(
             model.chance(0.5f, 0.9f, mapOf("characters" to 0.8f)), DuplicateModel.sigmoid(near), 1e-9,

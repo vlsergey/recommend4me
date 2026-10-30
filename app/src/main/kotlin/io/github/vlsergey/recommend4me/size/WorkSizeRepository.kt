@@ -13,6 +13,9 @@ class WorkSizeRepository(private val db: DSLContext) {
             db.select(WORK_SIZE.WORK, WORK_SIZE.WORDS_PER_CHAR).from(WORK_SIZE).where(WORK_SIZE.WORK.`in`(chunk)).fetch { it.value1()!! to it.value2()!! }
         }.toMap()
 
+    /** The ratio of every work. */
+    fun all(): Map<Long, Double> = db.select(WORK_SIZE.WORK, WORK_SIZE.WORDS_PER_CHAR).from(WORK_SIZE).fetchMap({ it.value1()!! }, { it.value2()!! })
+
     /** The [ratios] in place of the last. */
     fun keep(ratios: Map<Long, Double>) = db.transaction { c ->
         val tx = DSL.using(c)
