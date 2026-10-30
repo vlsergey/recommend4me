@@ -27,5 +27,7 @@
   "Stop.noAsking": "Ne pitaj više",
   "Stop.startAgain": "Pokrenite je ponovo na računaru (run.bat), pa osvežite ovu stranicu.",
   "Stop.stopped": "Aplikacija je zaustavljena",
-  "Stop.title": "Zaustaviti aplikaciju?"
+  "Stop.title": "Zaustaviti aplikaciju?",
+  "Menu.duplicates": "Duplikati",
+  "Menu.duplicates.title": "Dela sa različitih sajtova koja mogu biti jedno: označiti jedno delo ili različita"
 }

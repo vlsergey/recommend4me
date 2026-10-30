@@ -29,6 +29,7 @@
   "Span.minutesSeconds": "{{minutes}} min {{seconds}} s",
   "Span.seconds": "{{value}} s",
   "What.ageRatingModel": "Model starosne oznake po oznakama",
+  "What.duplicates": "Traženje duplikata na različitim sajtovima",
   "What.heldOut": "Model bez ocene dela",
   "What.interestScorersCompared": "Poređenje metoda interesovanja",
   "What.methodsCompared": "Poređenje metoda polja",

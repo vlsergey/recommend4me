@@ -77,5 +77,6 @@
   "Theme.dark": "Tamna",
   "Theme.light": "Svetla",
   "Theme.system": "Kao u sistemu",
-  "Theme.title": "Tema"
+  "Theme.title": "Tema",
+  "App.failed.duplicates": "Duplikati se ne prikazuju"
 }

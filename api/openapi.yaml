@@ -27,6 +27,7 @@ tags:
   - name: tagsByText
   - name: pairings
   - name: marking
+  - name: duplicates
   - name: workload
   - name: launcher
 
@@ -522,6 +523,112 @@ paths:
                 $ref: '#/components/schemas/Pairing'
         '400':
           description: No pairing of two characters
+
+  /api/types/{type}/duplicates:
+    get:
+      tags: [duplicates]
+      operationId: getDuplicates
+      summary: Pairs of works of different sites that may be one work, the likeliest first, to say whether they are
+      description: |
+        As the last search of the type found them (searchDuplicates): of every work, the two works of
+        every other site whose title and description are nearest to its own by their vectors - no
+        threshold, every pair kept, the most alike first. "answered" false: the pairs not answered on -
+        neither one work (linked, by any way) nor said to be different; true: those answered on, the
+        works linked across the sites and those said to be different. 202 while a search is planned or
+        running: what there is, the page asks again.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: answered
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: The pairs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicatePage'
+        '202':
+          description: A search is planned or running; the pairs of the last one, if any
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicatePage'
+        '404':
+          description: No such type
+
+  /api/types/{type}/duplicates/search:
+    post:
+      tags: [duplicates]
+      operationId: searchDuplicates
+      summary: The pairs looked for anew, of the works and their vectors as they are now - in the background
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '202':
+          description: Planned
+        '404':
+          description: No such type
+
+  /api/types/{type}/duplicates/answer:
+    put:
+      tags: [duplicates]
+      operationId: answerDuplicate
+      summary: The user's word on a pair - one work (linked, the grade and interest shared, as in the work's window), or different works
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateAnswer'
+      responses:
+        '204':
+          description: Saved
+        '400':
+          description: No such work, works of one site, or of another type
+    delete:
+      tags: [duplicates]
+      operationId: unanswerDuplicate
+      summary: The word on a pair taken back - their link, or that they are different
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: source
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: item
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: otherSource
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: otherItem
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Taken back
 
   /api/marking/works:
     get:
@@ -4489,6 +4596,89 @@ components:
     MarkVerdict:
       type: string
       enum: ['YES', 'UNKNOWN', 'NO']
+    DuplicatePage:
+      type: object
+      required: [total, pairs, searching]
+      properties:
+        total:
+          type: integer
+          description: The pairs of the tab, every page
+        pairs:
+          type: array
+          items:
+            $ref: '#/components/schemas/DuplicatePair'
+        searching:
+          type: boolean
+          description: A search is planned or running
+        searchedAt:
+          type: string
+          format: date-time
+          description: When the pairs were last looked for; none - never yet
+        works:
+          type: integer
+          description: The works the last search compared - those with a vector of their title
+
+    DuplicatePair:
+      type: object
+      required: [first, second, sameAuthor]
+      properties:
+        first:
+          $ref: '#/components/schemas/DuplicateWork'
+        second:
+          $ref: '#/components/schemas/DuplicateWork'
+        similarity:
+          type: number
+          description: What the pairs are ordered by - the mean of the two below, the title's alone without a description; none of an answered pair the search did not find
+        title:
+          type: number
+          description: The cosine of the vectors of their titles
+        description:
+          type: number
+          description: The cosine of the vectors of their descriptions; none when either has none
+        sameAuthor:
+          type: boolean
+          description: An author of one goes by the same name as an author of the other
+        answer:
+          type: string
+          enum: [SAME, DIFFERENT]
+          description: The user's word - one work (linked), or different; none when not answered
+
+    DuplicateWork:
+      type: object
+      required: [source, item, title, url, authors, fandoms]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        fandoms:
+          type: array
+          description: The site's fandoms of it, by their names
+          items:
+            type: string
+        description:
+          type: string
+
+    DuplicateAnswer:
+      type: object
+      required: [first, second, same]
+      properties:
+        first:
+          $ref: '#/components/schemas/ItemRef'
+        second:
+          $ref: '#/components/schemas/ItemRef'
+        same:
+          type: boolean
+          description: One work, or different works
+
     MarkedWork:
       type: object
       required: [source, item, title, url, tags]

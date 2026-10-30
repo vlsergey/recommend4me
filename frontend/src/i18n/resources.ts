@@ -14,6 +14,9 @@ import itemSr from "../item/item-i18n.sr.json";
 import jobEn from "../job/job-i18n.en.json";
 import jobRu from "../job/job-i18n.ru.json";
 import jobSr from "../job/job-i18n.sr.json";
+import duplicateEn from "../duplicate/duplicate-i18n.en.json";
+import duplicateRu from "../duplicate/duplicate-i18n.ru.json";
+import duplicateSr from "../duplicate/duplicate-i18n.sr.json";
 import markingEn from "../marking/marking-i18n.en.json";
 import markingRu from "../marking/marking-i18n.ru.json";
 import markingSr from "../marking/marking-i18n.sr.json";
@@ -114,6 +117,7 @@ const NAMESPACES = {
   item: namespace(itemEn, itemRu, itemSr),
   job: namespace(jobEn, jobRu, jobSr),
   mark: namespace(markEn, markRu, markSr),
+  duplicate: namespace(duplicateEn, duplicateRu, duplicateSr),
   marking: namespace(markingEn, markingRu, markingSr),
   model: namespace(modelEn, modelRu, modelSr),
   number: namespace(numberEn, numberRu, numberSr),
@@ -151,6 +155,7 @@ export type Resources = {
   item: typeof itemEn;
   job: typeof jobEn;
   mark: typeof markEn;
+  duplicate: typeof duplicateEn;
   marking: typeof markingEn;
   model: typeof modelEn;
   number: typeof numberEn;

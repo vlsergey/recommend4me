@@ -21,6 +21,7 @@ import { SortMenu } from "@/item/SortMenu";
 import { JobControl } from "@/job/JobControl";
 import { useJobs } from "@/job/useJobs";
 import { usePref } from "@/lib/usePref";
+import { DuplicatesScreen } from "@/duplicate/DuplicatesScreen";
 import { ModelsScreen } from "@/model/ModelsScreen";
 import { useModel } from "@/model/useModel";
 import { SettingsDialog } from "@/settings/SettingsDialog";
@@ -58,7 +59,7 @@ export function App() {
   const screen = useScreen();
   const [remembered, setRemembered] = usePref<string>("type", "");
   const list = types.data ?? [];
-  const named = screen.kind === "works" || screen.kind === "models" ? list.find((t) => t.id === screen.type) : undefined;
+  const named = screen.kind === "works" || screen.kind === "models" || screen.kind === "duplicates" ? list.find((t) => t.id === screen.type) : undefined;
   const type = named ?? list.find((t) => t.id === remembered) ?? list[0];
   useEffect(() => {
     if (!type || screen.kind !== "works") return;
@@ -216,6 +217,11 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
       {screen.kind === "models" && (
         <ErrorBoundary resetKey={type.id} title={t("App.failed.models")}>
           <ModelsScreen type={type} />
+        </ErrorBoundary>
+      )}
+      {screen.kind === "duplicates" && (
+        <ErrorBoundary resetKey={type.id} title={t("App.failed.duplicates")}>
+          <DuplicatesScreen type={type} />
         </ErrorBoundary>
       )}
       {screen.kind === "history" && (

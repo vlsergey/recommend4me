@@ -32,6 +32,7 @@ import io.github.vlsergey.recommend4me.signal.SignalRepository
 import io.github.vlsergey.recommend4me.suggestion.SuggestionRepository
 import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
+import io.github.vlsergey.recommend4me.duplicate.DuplicateRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.tag.TagRepository
@@ -205,6 +206,7 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val embeddings = SetEmbeddingRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
+    val duplicates = DuplicateRepository(databases.model(type.id))
 
     fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
 }

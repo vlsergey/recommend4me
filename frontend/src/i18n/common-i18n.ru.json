@@ -77,5 +77,6 @@
   "Theme.dark": "Тёмная",
   "Theme.light": "Светлая",
   "Theme.system": "Как в системе",
-  "Theme.title": "Тема"
+  "Theme.title": "Тема",
+  "App.failed.duplicates": "Дубли не показываются"
 }

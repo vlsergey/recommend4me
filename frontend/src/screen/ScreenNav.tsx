@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
-import { HeartHandshakeIcon, HistoryIcon, MenuIcon, OrbitIcon, PowerIcon, RadarIcon, TagsIcon } from "lucide-react";
+import { CopyIcon, HeartHandshakeIcon, HistoryIcon, MenuIcon, OrbitIcon, PowerIcon, RadarIcon, TagsIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ContentTypeInfo } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -99,6 +99,17 @@ function entries({ types, type, screen, onCapture, onStop }: MenuProps, t: TFunc
       ),
       title: t("Menu.history.title"),
       active: screen.kind === "history",
+    },
+    {
+      key: "duplicates",
+      screen: { kind: "duplicates", type: type.id },
+      label: (
+        <>
+          <CopyIcon /> {t("Menu.duplicates")}
+        </>
+      ),
+      title: t("Menu.duplicates.title"),
+      active: screen.kind === "duplicates",
     },
     {
       key: "models",

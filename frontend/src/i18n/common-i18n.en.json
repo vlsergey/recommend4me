@@ -77,5 +77,6 @@
   "Theme.dark": "Dark",
   "Theme.light": "Light",
   "Theme.system": "Same as system",
-  "Theme.title": "Theme"
+  "Theme.title": "Theme",
+  "App.failed.duplicates": "The duplicates are not shown"
 }

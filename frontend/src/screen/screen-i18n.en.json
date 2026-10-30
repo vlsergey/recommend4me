@@ -27,5 +27,7 @@
   "Stop.noAsking": "Do not ask again",
   "Stop.startAgain": "Start it again on the computer (run.bat), then reload this page.",
   "Stop.stopped": "The application is stopped",
-  "Stop.title": "Stop the application?"
+  "Stop.title": "Stop the application?",
+  "Menu.duplicates": "Duplicates",
+  "Menu.duplicates.title": "Works of different sites that may be one: mark them one work or different"
 }
