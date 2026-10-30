@@ -4707,7 +4707,7 @@ components:
           enum: [SAME, DIFFERENT, TRANSLATION]
           description: >
             One work (linked, the grade and interest shared); different works; or one the translation of the other -
-            different works of one text, not linked, each its own grade - the same text for the comparing
+            different works of one text, not linked, each its own grade - left out of the model of the answers
 
     MarkedWork:
       type: object

@@ -36,7 +36,7 @@
   "PairRow.sizeHint": "How alike the size is: the smaller over the larger in words and parts, their mean",
   "PairRow.title": "titles {{value}}",
   "PairRow.translation": "Translation",
-  "PairRow.translationHint": "One is the translation of the other: different works of one text, each its own grade and interest; the pair is offered no more, and the model learns from it as from one work",
+  "PairRow.translationHint": "One is the translation of the other: different works of one text, each its own grade and interest; the pair is offered no more. The model does not learn from translations: their authors differ, their tags and descriptions are one",
   "PairRow.unanswer": "Take back",
   "PairRow.unanswerHint": "Take the answer back: the link, \"translation\" or \"different\" goes, the pair returns to the unanswered",
   "WorkSide.fold": "Fold the description",

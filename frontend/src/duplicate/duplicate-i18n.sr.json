@@ -38,7 +38,7 @@
   "PairRow.sizeHint": "Sličnost veličine: manje prema većem po rečima i delovima, prosek",
   "PairRow.title": "naslovi {{value}}",
   "PairRow.translation": "Prevod",
-  "PairRow.translationHint": "Jedno je prevod drugog: različita dela jednog teksta, svako sa svojom ocenom i interesovanjem; par se više ne nudi, a model uči na njemu kao na jednom delu",
+  "PairRow.translationHint": "Jedno je prevod drugog: različita dela jednog teksta, svako sa svojom ocenom i interesovanjem; par se više ne nudi. Model ne uči na prevodima: autori su im različiti, a oznake i opisi isti",
   "PairRow.unanswer": "Povuci odgovor",
   "PairRow.unanswerHint": "Povuci odgovor: veza, „prevod” ili „različita” se uklanja, par se vraća među one bez odgovora",
   "WorkSide.fold": "Skupi opis",

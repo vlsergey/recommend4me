@@ -44,14 +44,10 @@ private val log = LoggerFactory.getLogger(Duplicates::class.java)
 
 /**
  * The user's word on a pair: one work; different works; or one the TRANSLATION of the other —
- * different works, each its own grade and interest, of one text: for the comparing, as one work.
+ * different works, each its own grade and interest, of one text: left out of the model of the answers
+ * ([fit]) — its authors differ, its tags and description are the other's: neither one work nor two.
  */
-enum class DuplicateAnswer {
-    SAME, DIFFERENT, TRANSLATION;
-
-    /** What the model of the answers learns of it: the same text, or not. */
-    val sameText: Boolean get() = this != DIFFERENT
-}
+enum class DuplicateAnswer { SAME, DIFFERENT, TRANSLATION }
 
 /**
  * THE WORKS OF DIFFERENT SITES THAT MAY BE ONE WORK, and the user's word on each pair. A search
@@ -374,7 +370,7 @@ class Duplicates(
             found[pair] = layersOf(pair, a, i, b, j, families, familyOf)
         }
         val compared = System.currentTimeMillis() - started
-        val fitted = DuplicateModel.fit(found.values.toList()) { said[it.pair]?.sameText }
+        val fitted = fit(found.values, said)
         type.duplicates.replace(found.values, DuplicateSearch(Instant.now(), encoder, works, fitted?.weights))
         log.info(
             "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs in {} ms (reading {}, comparing {}, keeping {}): {}",
@@ -418,6 +414,14 @@ class Duplicates(
         )
     }
 
+    /**
+     * The model of the user's answers of the [pairs]: one work, different — every pair not answered
+     * on a likely different one — the translations left out (user, 2026-10-30): their authors differ,
+     * their tags and descriptions are the other's, they teach neither one work nor two.
+     */
+    private fun fit(pairs: Collection<DuplicateCandidate>, said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>): DuplicateModel? =
+        DuplicateModel.fit(pairs.filter { said[it.pair] != DuplicateAnswer.TRANSLATION }) { c -> said[c.pair]?.let { it == DuplicateAnswer.SAME } }
+
     /** The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different, a translation. */
     private fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> {
         val out = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
@@ -447,7 +451,7 @@ class Duplicates(
                         val started = System.currentTimeMillis()
                         val said = said(type)
                         val pairs = type.duplicates.all()
-                        val model = DuplicateModel.fit(pairs) { said[it.pair]?.sameText }
+                        val model = fit(pairs, said)
                         type.duplicates.keepWeights(model?.weights)
                         log.info(
                             "{}: the model of the duplicates fitted on {} pairs, {} said one work, {} translations, {} different, in {} ms: {}",
