@@ -1,16 +1,6 @@
-import { ChevronDownIcon, LanguagesIcon } from "lucide-react";
+import { LanguagesIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu";
 import { currentLocale, setLocale } from "./i18n";
 import { isLocale, LOCALE_NAMES, LOCALES } from "./locales";
 
@@ -33,7 +23,7 @@ function Choices() {
   );
 }
 
-/** The language of the interface as a submenu of the folded menu ([ScreenMenuButton][@/screen/ScreenNav]). */
+/** The language of the interface as a submenu of the settings in the menu ([ScreenBar][@/screen/ScreenNav]). */
 export function LanguageSubmenu() {
   const { t } = useTranslation();
   return (
@@ -47,21 +37,5 @@ export function LanguageSubmenu() {
         <Choices />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
-  );
-}
-
-/** The language of the interface as an entry of the menu's bar on a wide screen ([ScreenBar][@/screen/ScreenNav]), its choices dropped down. */
-export function LanguageBarMenu({ className }: { className: string }) {
-  const { t } = useTranslation();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<button type="button" className={cn(className)} title={t("Language.title")} />}>
-        <LanguagesIcon /> {LOCALE_NAMES[currentLocale()]}
-        <ChevronDownIcon className="opacity-60" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-auto min-w-36">
-        <Choices />
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

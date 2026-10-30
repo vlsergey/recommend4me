@@ -1,17 +1,10 @@
 import { useEffect } from "react";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu";
 import { usePref } from "@/lib/usePref";
 
-type Theme = "light" | "dark" | "system";
+export type Theme = "light" | "dark" | "system";
 
 const THEMES: Theme[] = ["light", "dark", "system"];
 
@@ -20,8 +13,8 @@ function apply(theme: Theme) {
   document.documentElement.classList.toggle("dark", dark);
 }
 
-export function ThemeToggle() {
-  const { t } = useTranslation();
+/** The theme chosen, applied to the page: held above the menu, whose entries are there only while it is open. */
+export function useTheme() {
   const [theme, setTheme] = usePref<Theme>("theme", "system");
 
   useEffect(() => {
@@ -34,21 +27,29 @@ export function ThemeToggle() {
     return () => media.removeEventListener("change", onChange);
   }, [theme]);
 
+  return [theme, setTheme] as const;
+}
+
+/** The theme as a submenu of the settings in the menu ([ScreenBar][@/screen/ScreenNav]). */
+export function ThemeSubmenu({ theme, onChange }: { theme: Theme; onChange: (theme: Theme) => void }) {
+  const { t } = useTranslation();
   const Icon = theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : MonitorIcon;
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={t("Theme.title")} title={t("Theme.title")} />}>
-        <Icon />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setTheme(v as Theme)}>
+    <DropdownMenuSub>
+      {/* Opened by a press alone: on a touch screen there is no hover, and a hover opening it first makes the press close it */}
+      <DropdownMenuSubTrigger openOnHover={false}>
+        <Icon /> {t("Theme.title")}
+        <span className="ms-2 text-muted-foreground">{t(`Theme.${theme}`)}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioGroup value={theme} onValueChange={(v) => onChange(v as Theme)}>
           {THEMES.map((th) => (
             <DropdownMenuRadioItem key={th} value={th}>
               {t(`Theme.${th}`)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }

@@ -26,7 +26,7 @@
   "JobControl.stopping": "Stopping…",
   "JobControl.updatesLoaded": "{{source}}: updates loaded",
   "JobControl.updatesOf": "Updates: {{sources}}",
-  "JobControl.whatToLoad": "What to load",
+  "JobControl.update": "Updates",
   "JobDialog.backgroundAbout": "Pictures and texts are processed separately and continuously — see the counters in the header.",
   "JobDialog.close": "Close",
   "JobDialog.description": "Works come from the site <link>{{source}}</link>. The model learns from the ones you graded, so it is worth loading the ones you have known for a long time too.",

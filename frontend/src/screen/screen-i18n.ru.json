@@ -6,7 +6,10 @@
   "History.loadError": "История не загрузилась: {{error}}",
   "History.title": "История оценок и отметок",
   "History.version": "Версии {{version}}",
-  "Menu.capture": "Расширение",
+  "Menu.capture": "Расширение для браузера",
+  "Menu.group.markup": "Разметка",
+  "Menu.group.settings": "Настройки",
+  "Menu.group.works": "Работы",
   "Menu.capture.title": "Расширение для Firefox и скрипт для Safari на iPad: как подключить, что они присылают",
   "Menu.history": "История",
   "Menu.history.title": "Ваши оценки и отметки интереса, сначала последние: найти случайно поставленную и снять",
@@ -30,6 +33,6 @@
   "Stop.title": "Остановить приложение?",
   "Menu.authors": "Авторы",
   "Menu.authors.title": "Авторы сайтов: объединить одного писателя по совпадающим работам или отметить разными",
-  "Menu.duplicates": "Дубли",
+  "Menu.duplicates": "Дубликаты",
   "Menu.duplicates.title": "Работы с разных сайтов, которые могут быть одной: отметить одну работу или разные"
 }

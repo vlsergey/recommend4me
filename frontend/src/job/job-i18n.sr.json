@@ -27,7 +27,7 @@
   "JobControl.stopping": "Zaustavljam…",
   "JobControl.updatesLoaded": "{{source}}: ažuriranja su učitana",
   "JobControl.updatesOf": "Ažuriranja: {{sources}}",
-  "JobControl.whatToLoad": "Šta učitati",
+  "JobControl.update": "Ažuriranje",
   "JobDialog.backgroundAbout": "Slike i tekstovi se obrađuju odvojeno i neprekidno — pogledajte brojače u zaglavlju.",
   "JobDialog.close": "Zatvori",
   "JobDialog.description": "Dela dolaze sa sajta <link>{{source}}</link>. Model uči na onima koja ste ocenili, pa vredi učitati i ona koja odavno znate.",

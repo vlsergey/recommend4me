@@ -1,18 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, DatabaseIcon, DownloadIcon, Loader2Icon, SquareIcon, TriangleAlertIcon } from "lucide-react";
+import { DatabaseIcon, DownloadIcon, Loader2Icon, SquareIcon, TriangleAlertIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ContentTypeInfo, JobStatus, SourceInfo } from "@/api/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/components/ui/toast";
@@ -24,7 +24,13 @@ import { ITEMS } from "@/item/lists";
 import { JobDialog } from "./JobDialog";
 import { catalogueUnfinished, isActive, useCancelJob, useJobs, useStartJob } from "./useJobs";
 
-type Props = { type: ContentTypeInfo; onNeedSettings: () => void };
+type Props = {
+  type: ContentTypeInfo;
+  /** The source whose window of loads is open: opened from the menu too ([UpdateSubmenu]). */
+  dialog: string | null;
+  onDialog: (source: string | null) => void;
+  onNeedSettings: () => void;
+};
 
 /**
  * The sources of the type that scrape by themselves: the others (the book sites) are filled by
@@ -35,16 +41,15 @@ function scraping(type: ContentTypeInfo): SourceInfo[] {
 }
 
 /**
- * "Load updates" of the sources of the current content type and the loads of their whole
- * catalogues, with their progress; finished jobs refresh the list, the filters and the model.
+ * The loads of the sources of the current content type as they go, started from the menu
+ * ([UpdateSubmenu]): their progress and what is left of them; finished jobs refresh the list, the
+ * filters and the model.
  */
-export function JobControl({ type, onNeedSettings }: Props) {
+export function JobControl({ type, dialog, onDialog: setDialog, onNeedSettings }: Props) {
   const { t } = useTranslation("job");
   const queryClient = useQueryClient();
   const jobs = useJobs();
-  const start = useStartJob();
   const cancel = useCancelJob();
-  const [dialog, setDialog] = useState<string | null>(null);
 
   const sources = scraping(type);
   const jobOf = (source: string) => jobs.data?.find((j) => j.source === source);
@@ -130,8 +135,6 @@ export function JobControl({ type, onNeedSettings }: Props) {
     );
   }
 
-  const withUpdates = sources.filter((s) => s.modes.includes("UPDATES"));
-  const updateAll = () => withUpdates.forEach((s) => start.mutate({ source: s.id, mode: "UPDATES" }));
   const last = ours
     .filter((j) => j.state === "DONE" && j.finishedAt)
     .sort((a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? ""))[0];
@@ -140,44 +143,6 @@ export function JobControl({ type, onNeedSettings }: Props) {
 
   return (
     <div className="flex items-center gap-2">
-      <div className="flex">
-        <Button
-          onClick={() => (withUpdates.length > 0 ? updateAll() : setDialog(sources[0].id))}
-          disabled={start.isPending}
-          className="rounded-r-none"
-          title={withUpdates.length > 0 ? t("JobControl.updatesOf", { sources: withUpdates.map((s) => sourceTitle(s.id)).join(", ") }) : undefined}
-        >
-          {withUpdates.length > 0 ? <DownloadIcon /> : <DatabaseIcon />}
-          <span className="hidden sm:inline">{withUpdates.length > 0 ? t("JobControl.loadUpdates") : t("JobControl.loadCatalogue")}</span>
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button className="rounded-l-none border-l border-primary-foreground/20 px-1.5" aria-label={t("JobControl.whatToLoad")} />}>
-            <ChevronDownIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-auto min-w-64">
-            {sources.map((s, i) => {
-              const catalogue = s.modes.includes("SCRAPE_ALL") ? jobOf(s.id)?.catalogue : undefined;
-              return (
-                <DropdownMenuGroup key={s.id}>
-                  {i > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuLabel>
-                    {sourceTitle(s.id)}
-                    {catalogue && <div className="font-normal text-muted-foreground">{catalogueLabel(catalogue)}</div>}
-                  </DropdownMenuLabel>
-                  {s.modes.includes("UPDATES") && (
-                    <DropdownMenuItem onClick={() => start.mutate({ source: s.id, mode: "UPDATES" })}>
-                      <DownloadIcon /> {modeLabel("UPDATES")}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => setDialog(s.id)}>
-                    <DatabaseIcon /> {s.modes.includes("SCRAPE_ALL") ? `${modeLabel("SCRAPE_ALL")}…` : t("JobControl.more")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
       {last && (
         <span className="hidden text-xs text-muted-foreground xl:inline" title={formatDate(last.finishedAt)}>
           {t("JobControl.newItems", { count: last.newItems })}
@@ -211,5 +176,61 @@ export function JobControl({ type, onNeedSettings }: Props) {
       ))}
       {dialogElement}
     </div>
+  );
+}
+
+/**
+ * The updates in the menu: of every source of the type at once, and of each, with the load of its
+ * catalogue. Not to be opened while a load of the type goes: its progress in the header says so.
+ */
+export function UpdateSubmenu({ type, onDialog }: { type: ContentTypeInfo; onDialog: (source: string) => void }) {
+  const { t } = useTranslation("job");
+  const jobs = useJobs();
+  const start = useStartJob();
+  const sources = scraping(type);
+  if (sources.length === 0) return null;
+  const jobOf = (source: string) => jobs.data?.find((j) => j.source === source);
+  const running = sources.some((s) => {
+    const job = jobOf(s.id);
+    return job && isActive(job);
+  });
+  const withUpdates = sources.filter((s) => s.modes.includes("UPDATES"));
+  const updateAll = () => withUpdates.forEach((s) => start.mutate({ source: s.id, mode: "UPDATES" }));
+  return (
+    <DropdownMenuSub>
+      {/* Opened by a press alone: on a touch screen there is no hover, and a hover opening it first makes the press close it */}
+      <DropdownMenuSubTrigger openOnHover={false} disabled={running}>
+        <DownloadIcon /> {t("JobControl.update")}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-auto min-w-64">
+        <DropdownMenuItem
+          onClick={() => (withUpdates.length > 0 ? updateAll() : onDialog(sources[0].id))}
+          title={withUpdates.length > 0 ? t("JobControl.updatesOf", { sources: withUpdates.map((s) => sourceTitle(s.id)).join(", ") }) : undefined}
+        >
+          {withUpdates.length > 0 ? <DownloadIcon /> : <DatabaseIcon />}
+          {withUpdates.length > 0 ? t("JobControl.loadUpdates") : t("JobControl.loadCatalogue")}
+        </DropdownMenuItem>
+        {sources.map((s) => {
+          const catalogue = s.modes.includes("SCRAPE_ALL") ? jobOf(s.id)?.catalogue : undefined;
+          return (
+            <DropdownMenuGroup key={s.id}>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>
+                {sourceTitle(s.id)}
+                {catalogue && <div className="font-normal text-muted-foreground">{catalogueLabel(catalogue)}</div>}
+              </DropdownMenuLabel>
+              {s.modes.includes("UPDATES") && (
+                <DropdownMenuItem onClick={() => start.mutate({ source: s.id, mode: "UPDATES" })}>
+                  <DownloadIcon /> {modeLabel("UPDATES")}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => onDialog(s.id)}>
+                <DatabaseIcon /> {s.modes.includes("SCRAPE_ALL") ? `${modeLabel("SCRAPE_ALL")}…` : t("JobControl.more")}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          );
+        })}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }

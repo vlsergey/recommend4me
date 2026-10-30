@@ -28,7 +28,7 @@
   "JobControl.stopping": "Останавливаю…",
   "JobControl.updatesLoaded": "{{source}}: обновления загружены",
   "JobControl.updatesOf": "Обновления: {{sources}}",
-  "JobControl.whatToLoad": "Что загрузить",
+  "JobControl.update": "Обновление",
   "JobDialog.backgroundAbout": "Картинки и тексты разбираются отдельно и непрерывно — см. счётчики в шапке.",
   "JobDialog.close": "Закрыть",
   "JobDialog.description": "Работы приходят с сайта <link>{{source}}</link>. Модель учится на тех, что вы оценили, поэтому стоит загрузить и те, что вы знаете давно.",

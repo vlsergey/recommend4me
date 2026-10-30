@@ -29,8 +29,8 @@ import { SettingsDialog } from "@/settings/SettingsDialog";
 import { SearchQualityDialog } from "@/search/SearchQualityDialog";
 import { SourceFilter } from "@/source/SourceFilter";
 import { WorkProgress } from "@/status/WorkProgress";
-import { ThemeToggle } from "@/theme/ThemeToggle";
-import { ScreenBar, ScreenMenuButton } from "@/screen/ScreenNav";
+import { useTheme } from "@/theme/ThemeToggle";
+import { ScreenBar } from "@/screen/ScreenNav";
 import { StopDialog, Stopped, stopApplication, stopsWithoutAsking } from "@/screen/StopDialog";
 import { replaceScreen, useScreen, type Screen } from "@/screen/screens";
 import { HistoryScreen } from "@/history/HistoryScreen";
@@ -120,7 +120,10 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
     if (!stopsWithoutAsking()) return setStopOpen(true);
     stopApplication().then(() => setStopped(true), () => setStopOpen(true));
   };
-  const menu = { types, type, screen, onCapture: () => setCaptureOpen(true), onStop };
+  const [theme, setTheme] = useTheme();
+  // The window of a source's loads: opened from the menu, kept by their progress in the header
+  const [jobDialog, setJobDialog] = useState<string | null>(null);
+  const menu = { types, type, screen, theme, onTheme: setTheme, onCapture: () => setCaptureOpen(true), onJobDialog: setJobDialog, onStop };
 
   // The list asks for the shown sources by name, and for none when all are shown
   const sources = useMemo(() => {
@@ -173,7 +176,6 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
     <div className="min-h-screen">
       <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur supports-backdrop-filter:bg-background/70">
         <div className="mx-auto flex h-14 max-w-[1800px] items-center gap-1 px-4 sm:gap-3">
-          <ScreenMenuButton {...menu} />
           <div className="flex items-center gap-2 font-semibold">
             <TelescopeIcon className="hidden size-5 sm:block" />
             <span className="hidden 2xl:inline">recommend4me</span>
@@ -181,16 +183,15 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
           <ErrorBoundary compact resetKey={type.id} title={t("App.failed.menu")}>
             <ScreenBar {...menu} />
           </ErrorBoundary>
-          {/* On a phone the progress takes what the icons leave; on a wide screen it sits in the middle */}
-          <div className="mx-1 min-w-0 flex-1 sm:mx-auto sm:flex-none">
+          {/* On a phone the progress takes most of what the icons leave, the menu folded beside it; on a wide screen as much as it says, the menu the rest */}
+          <div className="mx-1 min-w-0 flex-[3] sm:flex-none">
             <ErrorBoundary compact resetKey={type.id} title={t("App.failed.jobs")}>
-              <JobControl type={type} onNeedSettings={() => setSettingsOpen(true)} />
+              <JobControl type={type} dialog={jobDialog} onDialog={setJobDialog} onNeedSettings={() => setSettingsOpen(true)} />
             </ErrorBoundary>
           </div>
           <ErrorBoundary compact title={t("App.failed.progress")}>
             <WorkProgress />
           </ErrorBoundary>
-          <ThemeToggle />
           <Button
             variant="ghost"
             size="icon"
