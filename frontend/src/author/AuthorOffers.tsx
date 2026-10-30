@@ -67,8 +67,11 @@ export function Offers({
   const answer = async (o: AuthorOffer, verdict: Verdict) => {
     ensureOk(await api.PUT("/api/authors/answer", { body: { first: o.first.id, second: o.second.id, verdict } }));
     if (verdict === "SAME") onMerged?.();
-    if (author === undefined) calm.remove([rowOf(o)]);
-    else await queryClient.invalidateQueries({ queryKey: authorsKey(type.id) });
+    if (author === undefined) {
+      // Two merged, the smaller id kept: every row of the other names an author no more, come back under the kept one when read anew
+      const gone = Math.max(o.first.id, o.second.id);
+      calm.remove(verdict === "SAME" ? offers.filter((q) => q.first.id === gone || q.second.id === gone).map(rowOf) : [rowOf(o)]);
+    } else await queryClient.invalidateQueries({ queryKey: authorsKey(type.id) });
   };
   return (
     <div className="flex flex-col gap-3">
