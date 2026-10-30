@@ -74,8 +74,9 @@ enum class DuplicateAnswer {
  * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work is a model of the user's answers
  * ([DuplicateModel]) over how alike its layers are, fitted at every search and a few seconds after
  * the answers ([answered]); the search keeps of every work the pair the model finds likeliest. The
- * pairs are shown by the larger of the two works' scores by the formula of the list (the prediction
- * times the chance of interest) times that chance: a likely pair of a work the user would read first.
+ * pairs are shown by the score by the formula of the list (the prediction times the chance of
+ * interest) of the work the pair was found for times that chance: a likely pair of a work the user
+ * would read first.
  */
 @Component
 class Duplicates(
@@ -365,8 +366,9 @@ class Duplicates(
                         }
                     }
                     if (best >= 0) {
-                        val (first, second) = type.links.ordered(ItemKey(a.store.id, a.ids[i]), ItemKey(b.store.id, b.ids[best]))
-                        found.getOrPut(first to second) {
+                        val sought = ItemKey(a.store.id, a.ids[i])
+                        val (first, second) = type.links.ordered(sought, ItemKey(b.store.id, b.ids[best]))
+                        val candidate = found.getOrPut(first to second) {
                             DuplicateCandidate(
                                 first, second, title[best],
                                 description = if (a.described[i] && b.described[best]) description[best] else null,
@@ -374,6 +376,8 @@ class Duplicates(
                                 facets = families.indices.filter { (ownFacets and b.facets[best]) and (1L shl it) != 0L }.associate { families[it] to valued[it][best] },
                             )
                         }
+                        // Found for this work: the one it is the likeliest of the other site of
+                        candidate.foundFor = candidate.foundFor or (if (sought == first) DuplicateCandidate.FIRST else DuplicateCandidate.SECOND)
                     }
                     for (q in 0 until touches) {
                         val j = touched[q]
@@ -497,9 +501,11 @@ class Duplicates(
     /**
      * A page of the pairs of the type: not [answered] — those neither linked (by any way, through
      * other works too) nor said to be different — or answered, the works linked across the sites and
-     * those said to be different. The first by the larger of the two works' scores by the formula of
-     * the list (the prediction times the chance of interest: a work the user would read first) times
-     * the chance the pair is one work, by the model of the answers; equal, the likelier pair first.
+     * those said to be different. The first by the score by the formula of the list (the prediction
+     * times the chance of interest: a work the user would read first) of the work the pair was found
+     * for ([DuplicateCandidate.foundFor]; of both, the larger) times the chance the pair is one work,
+     * by the model of the answers — a work of a high score, the likeliest of many works of another
+     * site, does not lift every pair of them; equal, the likelier pair first.
      * Every pair read for the request and let go. Null of no such type.
      */
     fun page(typeId: String, answered: Boolean, offset: Int, limit: Int): DuplicatePage? {
@@ -528,8 +534,15 @@ class Duplicates(
         class Ranked(val pair: Pair<ItemKey, ItemKey>, val layers: DuplicateCandidate?, val chance: Double?, val priority: Double)
         fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
             val chance = layers?.let(model::chance)
-            val best = maxOf(formula[pair.first] ?: 0.0, formula[pair.second] ?: 0.0)
-            return Ranked(pair, layers, chance, best * (chance ?: 0.0))
+            // The score of the work the pair was found for — of both, the larger; of neither (an answered pair not kept), the larger too
+            val first = formula[pair.first] ?: 0.0
+            val second = formula[pair.second] ?: 0.0
+            val sought = when (layers?.foundFor) {
+                DuplicateCandidate.FIRST -> first
+                DuplicateCandidate.SECOND -> second
+                else -> maxOf(first, second)
+            }
+            return Ranked(pair, layers, chance, sought * (chance ?: 0.0))
         }
         val rows = if (!answered) kept.filter { it.pair !in said }.map { ranked(it.pair, it) }
         else kept.associateBy { it.pair }.let { byPair -> said.keys.map { ranked(it, byPair[it]) } }

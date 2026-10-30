@@ -15,7 +15,7 @@
 | `facet_suggester` | the fitted state of the suggester of a facet — the model the chances of a work's values are made by when the work is read, none of them kept — the values it chooses from, its scoring of them apart from their names (every value's coordinates and bias, read by a page in place of the dictionary), and how it was fitted: the report of what it tried and chose, how long it took, how many works and values it learnt from |
 | `layer_draft` | a value a source drafts of a work from its own values through the dictionary of universes |
 | `search_score` | the reranker's score of a work for a line searched |
-| `duplicate_candidate` | two works of different sites that may be one, as the last search of the duplicates found them — of every work the likeliest of every other site — with how alike each layer of theirs is: the title, the description, the size, every facet the sites share (`facets`, "<facet>=<cosine>" a line); the chance they are one work made when read |
+| `duplicate_candidate` | two works of different sites that may be one, as the last search of the duplicates found them — of every work the likeliest of every other site — with how alike each layer of theirs is: the title, the description, the size, every facet the sites share (`facets`, "<facet>=<cosine>" a line), and the works it was found for (`found_for`: 1 the first, 2 the second, 3 both); the chance they are one work made when read |
 | `duplicate_search` | when the duplicates were last looked for, by which encoder, of how many works, and the weights of the model of the user's answers by feature ("<feature>=<weight>" a line) |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
@@ -31,6 +31,7 @@ erDiagram
         REAL description "null"
         VARCHAR facets "null"
         REAL size "null"
+        TINYINT found_for
     }
     duplicate_search {
         INTEGER id PK

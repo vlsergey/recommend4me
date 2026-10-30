@@ -532,9 +532,9 @@ paths:
       description: |
         As the last search of the type found them (searchDuplicates): of every work, the work of every
         other site likeliest one work with it - compared by every field every site has alike, the text
-        aside - no threshold, every pair kept. First the pairs of the larger of the two works' scores by
-        the formula of the list times the chance the pair is one work, by the model of the user's
-        answers. "answered" false: the pairs not answered on - neither one work (linked, by any way) nor
+        aside - no threshold, every pair kept. First the pairs of the highest score by the formula of
+        the list of the work the pair was found for (of both, the larger) times the chance the pair is
+        one work, by the model of the user's answers. "answered" false: the pairs not answered on - neither one work (linked, by any way) nor
         said to be different; true: those answered on. 202 while a search or a fitting of the model of
         the answers is planned or running: what there is, the page asks again.
       parameters:
@@ -4635,7 +4635,7 @@ components:
           description: The chance the pair is one work, by the model of the user's answers (the mean of the layers before any answer); none of an answered pair the search did not compare
         priority:
           type: number
-          description: What the pairs are ordered by - the larger of the two works' scores by the formula of the list times the chance
+          description: What the pairs are ordered by - the score by the formula of the list of the work the pair was found for (of both, the larger) times the chance
         title:
           type: number
           description: The cosine of the vectors of their titles

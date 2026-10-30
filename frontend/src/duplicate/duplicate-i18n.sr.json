@@ -1,6 +1,6 @@
 {
   "DuplicatesScreen.answered": "Sa odgovorom",
-  "DuplicatesScreen.description": "Za svako delo — najverovatniji par sa svakog drugog sajta: porede se sva polja zajednička sajtovima, osim samog teksta — naslov, opis, oznake, univerzumi, likovi, parovi, status i druge vrednosti, veličina. Prvo parovi gde je veća od ocena dva dela po formuli, pomnožena verovatnoćom da je to jedno delo, viša. „Jedno delo” ih povezuje kao u prozoru dela: ocena i interesovanje postaju zajednički. „Različita” — par se više ne nudi. Odgovori uče model verovatnoće.",
+  "DuplicatesScreen.description": "Za svako delo — najverovatniji par sa svakog drugog sajta: porede se sva polja zajednička sajtovima, osim samog teksta — naslov, opis, oznake, univerzumi, likovi, parovi, status i druge vrednosti, veličina. Prvo parovi gde je ocena po formuli dela za koje je par tražen, pomnožena verovatnoćom da je to jedno delo, viša. „Jedno delo” ih povezuje kao u prozoru dela: ocena i interesovanje postaju zajednički. „Različita” — par se više ne nudi. Odgovori uče model verovatnoće.",
   "DuplicatesScreen.failed": "Parovi nisu pročitani: {{error}}",
   "DuplicatesScreen.learnt": "po vašim odgovorima",
   "DuplicatesScreen.learntHint": "Verovatnoća jednog dela je model obučen na vašim odgovorima „jedno delo” i „različita”; ponovo se obučava nekoliko sekundi posle odgovora",
@@ -31,7 +31,7 @@
   "PairRow.partial": "Delimično",
   "PairRow.partialHint": "Jedno sadrži deo teksta drugog — na jednom sajtu nisu sva poglavlja, ili je jedno zbirka u kojoj je drugo (tomovi jedne serije su različita dela): svako sa svojom ocenom i interesovanjem; par se više ne nudi, model ne uči na njemu",
   "PairRow.priority": "prioritet {{value}}",
-  "PairRow.priorityHint": "Veća od ocena dva dela po formuli pomnožena verovatnoćom jednog dela: po njemu su parovi poređani",
+  "PairRow.priorityHint": "Ocena po formuli dela za koje je par tražen (kad su dela našla jedno drugo — veća od dve) pomnožena verovatnoćom jednog dela: po njemu su parovi poređani",
   "PairRow.related": "Povezana",
   "PairRow.relatedHint": "Druga veza dva dela: prevod ili deo",
   "PairRow.same": "Jedno delo",

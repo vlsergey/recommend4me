@@ -1,6 +1,6 @@
 {
   "DuplicatesScreen.answered": "Answered",
-  "DuplicatesScreen.description": "Of every work, its likeliest pair of every other site: every field the sites share is compared, the text itself aside — the title, the description, the tags, universes, characters, pairings, the status and other values, the size. First the pairs where the larger of the two works' scores by the formula times the chance the pair is one work is higher. \"One work\" links them as the work's window does: the grade and the interest become shared. \"Different\" — the pair is offered no more. The answers teach the model of the chance.",
+  "DuplicatesScreen.description": "Of every work, its likeliest pair of every other site: every field the sites share is compared, the text itself aside — the title, the description, the tags, universes, characters, pairings, the status and other values, the size. First the pairs where the score by the formula of the work the pair was looked for times the chance the pair is one work is higher. \"One work\" links them as the work's window does: the grade and the interest become shared. \"Different\" — the pair is offered no more. The answers teach the model of the chance.",
   "DuplicatesScreen.failed": "The pairs were not read: {{error}}",
   "DuplicatesScreen.learnt": "by your answers",
   "DuplicatesScreen.learntHint": "The chance of one work is a model fitted on your answers \"one work\" and \"different\"; fitted again a few seconds after an answer",
@@ -29,7 +29,7 @@
   "PairRow.partial": "Partly",
   "PairRow.partialHint": "One holds a part of the other's text — one site has only some of its chapters, or one is a collection the other is in (the volumes of a series are different works): each its own grade and interest; the pair is offered no more, the model does not learn from it",
   "PairRow.priority": "priority {{value}}",
-  "PairRow.priorityHint": "The larger of the two works' scores by the formula times the chance of one work: what the pairs are ordered by",
+  "PairRow.priorityHint": "The score by the formula of the work the pair was looked for (of both, when each is the other's likeliest, the larger) times the chance of one work: what the pairs are ordered by",
   "PairRow.related": "Related",
   "PairRow.relatedHint": "Another relation of the two works: a translation or a part",
   "PairRow.same": "One work",
