@@ -27,13 +27,13 @@ work takes hours and days to read, and seconds saved on marking it are worth not
 │               ▓▓▓ A. Writer · in progress · 412k words · ≈ 2.7M chars · 34 chapters          │
 │ Interest [Yes][No] 72%   Grade [1][2][3][4][5]   ▲ 6.8 predicted                             │
 ├───────────────────────────────────┬──────────────────────────────────────────────────────────┤
-│ Work Chapters 34 Reviews 412      │ 12 to answer · 3 offers                     ✓ Angst · Z  │
+│ Work Chapters 34 Reviews 412      │ 12 to answer · 3 offers                                  │
 │ Pictures 3 Why Sites 2            │                                                          │
 │                                   │ AGE RATING   AO3: PG-13, R                               │
 │ Harry, in his sixth year, learns  │  G 2  [PG-13 31]  ( R  by tags 61 )  NC-17 6             │
 │ that the blood wards were never   │                                                          │
 │ meant to protect him...           │ CHARACTERS   AO3: Harry/Hermione, Snape    ✓all … + No other │
-│                                   │ ▸Harry Potter  site 97 ✓✕ │ ┆Sirius Black┆ 38 ✓✕         │
+│                                   │  Harry Potter  site 97 ✓✕ │ ┆Sirius Black┆ 38 ✓✕         │
 │ ▸ Author's notes                  │  Hermione G.   site 95 ✓✕ │ ┆Remus Lupin┆  21 ✓✕         │
 │ ▸ Spoilers                        │                                                          │
 │                                   │ TAGS         AO3: Angst, Slow burn   ✓all … + By text    │
