@@ -95,8 +95,8 @@ closes.
 ## 4. What is read, and when
 
 As today: the work is read when it opens and 2 s after answers. Waiting for one answer the user needs (Why of a
-graded work, 202) is a fixed wait of that view. By text keeps its `RefreshSelect`; its "chapters still being
-encoded" waits while the view is open. Nothing else reads by itself. Sites reads `WorkSite` alone, carrying
+graded work, 202) is a fixed wait of that view. The window of By text keeps its `RefreshSelect`; its "chapters
+still being encoded" waits while the window is open. Nothing else reads by itself. Sites reads `WorkSite` alone, carrying
 numbers and counts, rather than a `getItem` per item.
 
 ## 5. The left page
@@ -125,8 +125,9 @@ A failed section says so in its place; the rest stands. The hints stay as toolti
 "No other" does for the model, what taking an item out keeps. The address stays `#item=<source>/<item>`: the
 extension writes it. Press outside no longer closes: there is no outside.
 
-**By text** is answering, so it is on the right, in place of the facets, the text to read staying on the left. A row is
-a tag, its paragraph, ✓ / not enough / ✕ / not in the work / ignore. The list comes calmly, as `AGENTS.md` says.
+**By text** is a window of its own, as `AGENTS.md` says: its rows, each a tag and a whole paragraph, are too many and
+too long for either page of the screen of a work. It opens by a button in the facet of tags and in the head. A row
+is a tag, its paragraph, ✓ / not enough / ✕ / not in the work / ignore. The list comes calmly.
 
 ## 6. The verdict
 
@@ -149,7 +150,6 @@ Interest implied by a grade reads "by your grade", and pressing it makes it the 
 
 1. **The extension.** `AGENTS.md` asks the same behaviour in both. Proposed: its panel takes the rows; chips stay on
    the site's own elements.
-2. **By text** leaves "a window of its own", and the table of `AGENTS.md` changes.
 
 ## 9. Order of the work
 
