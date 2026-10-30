@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +25,9 @@ const EVERY_MS = 0;
 
 /** While a search or a fitting of the model of the answers runs, the pairs are asked for again so often: what it made comes when it is done. */
 const PENDING_MS = 3000;
+
+/** The quiet after the last answer before the pairs are read again: past the server's own before it fits the model anew (3 s). */
+const READ_AFTER_MS = 4000;
 
 const duplicatesKey = (type: string) => ["duplicates", type];
 
@@ -94,13 +97,33 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
     queryClient.invalidateQueries({ queryKey: [ITEMS] });
   };
   /**
-   * The user's word on a pair: once kept, the row leaves — of the answered ones, it shows the new word —
-   * and the pairs are read again: the model of the answers is fitted anew, the order may change.
+   * The pairs read again once the answers are quiet for [READ_AFTER_MS], not after every one: the model
+   * of the answers is fitted anew only after the server's own quiet, and a list read meanwhile moved
+   * the rows — locking them — between two presses of the user. Read then, the fitting is under way:
+   * the page asks again till it is done ([PENDING_MS]), the new order shown once.
+   */
+  const quiet = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (quiet.current) clearTimeout(quiet.current);
+  }, []);
+  const readLater = () => {
+    if (quiet.current) clearTimeout(quiet.current);
+    quiet.current = setTimeout(() => {
+      quiet.current = null;
+      void queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
+    }, READ_AFTER_MS);
+  };
+  /**
+   * The user's word on a pair: once kept, the row leaves — the pairs read again after the answers'
+   * quiet ([readLater]) — or, of the answered ones, it shows the new word, read at once.
    */
   const answer = async (p: DuplicatePair, verdict: Verdict) => {
     ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { ...refs(p), verdict } }));
-    if (!answered) calm.remove([rowOf(p)]);
-    queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
+    if (answered) void queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
+    else {
+      calm.remove([rowOf(p)]);
+      readLater();
+    }
     changed(p);
   };
   /** The word taken back: once kept, the row leaves the answered ones. */
@@ -112,7 +135,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       }),
     );
     calm.remove([rowOf(p)]);
-    queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
+    readLater();
     changed(p);
   };
   const search = async () => {
