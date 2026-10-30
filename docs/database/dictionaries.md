@@ -41,7 +41,6 @@
 | `universe_class_choice` | the user's word on a class of a universe |
 | `universe_character_choice` | the user's word on one character of a universe |
 | `site_fandom` | a site's fandom bound by the user to a universe of the dictionary: every work of the fandom drafted with it |
-| `dictionary_moved` | the files of the types whose tags and universes were moved here |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
@@ -52,10 +51,6 @@ erDiagram
         DOUBLE weight
         INTEGER works
         TIMESTAMPTZ fitted_at
-    }
-    dictionary_moved {
-        VARCHAR owner PK
-        TIMESTAMPTZ moved_at
     }
     normalized_author {
         BIGINT id PK
