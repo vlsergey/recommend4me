@@ -12,10 +12,11 @@ Nothing here is built yet.
 - **Head:** what the work is, and the verdict: interest and grade, the model's prediction beside them.
 - **Left page:** one view at a time of what there is to read: the work, chapters, reviews, pictures, why,
   sites. It never covers the answers.
-- **Right page:** every value of the work, as rows, each with its chance and who gives it.
+- **Right page:** every value of the work, as chips, each with its chance and who gives it.
 
-Rows, not chips: the chances stand in a line to the eye. They flow by CSS `columns: 15rem`, so a wider
-screen has more columns and nothing is measured. A long name wraps, never cuts.
+Chips, as in the extension: the most values in the room, and one look in both. The server's order, likeliest
+first, does what a column of chances would. They wrap by CSS, so a wider screen has more in a line and nothing is
+measured. A long name wraps, never cuts.
 
 Marking is by the pointer and by touch. There is no keyboard marking and no walk from value to value: a
 work takes hours and days to read, and seconds saved on marking it are worth nothing (the owner,
@@ -33,12 +34,12 @@ work takes hours and days to read, and seconds saved on marking it are worth not
 │ Harry, in his sixth year, learns  │  G 2  [PG-13 31]  ( R  by tags 61 )  NC-17 6             │
 │ that the blood wards were never   │                                                          │
 │ meant to protect him...           │ CHARACTERS   AO3: Harry/Hermione, Snape    ✓all … + No other │
-│                                   │  Harry Potter  site 97 ✓✕ │ ┆Sirius Black┆ 38 ✓✕         │
-│ ▸ Author's notes                  │  Hermione G.   site 95 ✓✕ │ ┆Remus Lupin┆  21 ✓✕         │
+│                                   │  [Harry Potter site 97 ✓✕] [Hermione G. site 95 ✓✕]      │
+│ ▸ Author's notes                  │  ┆Sirius Black 38 ✓✕┆ ┆Remus Lupin 21 ✓✕┆                │
 │ ▸ Spoilers                        │                                                          │
 │                                   │ TAGS         AO3: Angst, Slow burn   ✓all … + By text    │
-│ FACTS                             │  Angst   site 92 ✓✕ │ Hurt/comfort 73 ✓✕                 │
-│ ALSO BY A. WRITER                 │  ~Magic~        ↺   │ Politics ↑                         │
+│ FACTS                             │  [Angst site 92 ✓✕] [Hurt/comfort 73 ✓✕]                 │
+│ ALSO BY A. WRITER                 │  ~Magic~ ↺  Politics ↑                                   │
 │ The Long Road   5                 │                                                          │
 └───────────────────────────────────┴──────────────────────────────────────────────────────────┘
 ```
@@ -49,12 +50,12 @@ being the work's. The mark of the site says the most and comes first; each carri
 
 Below 56rem the pages are one at a time, under two labelled buttons (Answers 12 · Work). The verdict folds to one line and opens by a tap, so that a missed tap under the last ✕
 neither grades nor overwrites. A landscape iPad has both pages. A tap on a name opens a sheet: the
-evidence, the link to its page, the row's menu. Targets are 44 px. The head folds to two lines on a short
-screen, by a container query on height. Below 1366×768 about half of a work's rows are in sight.
+evidence, the link to its page, the chip's menu. Targets are 44 px. The head folds to two lines on a short
+screen, by a container query on height.
 
-## 2. A value's row
+## 2. A value's chip
 
-| State | Row | Controls |
+| State | Chip | Controls |
 |---|---|---|
 | The work's or the site's, unanswered | Name, "site", chance | ✓ ✕ |
 | Model's offer | Dashed, muted | ✓ ✕ |
@@ -67,7 +68,7 @@ screen, by a container query on height. Below 1366×768 about half of a work's r
 | Press at work | A spinner in place of the pressed control | neighbours stay usable |
 | Refused or failed | A warning in place of the control, a toast naming the reason | ✓ ✕ |
 
-A row's menu (⋯ on hover or touch): evidence; the value's page; ignore the tag; works
+A chip's menu (⋯ on hover or touch): evidence; the value's page; ignore the tag; works
 to confirm by this value; of a character, move between main and secondary.
 
 `+` finds by name: every word in any name, "ё" as "е", a Q-number or a pasted Wikidata address finds the
@@ -80,7 +81,7 @@ is gone while the kind has no universe.
 
 ## 3. An answer
 
-Rows come as the server orders them and do not move while the work is open.
+Chips come as the server orders them and do not move while the work is open.
 
 - **What counts:** the heading counts the work's and the site's values, as "✓ all" does, with the offers apart
   ("12 to answer · 3 offers"). The server refills offers (at least three in a facet), so a count of them would
@@ -110,7 +111,7 @@ numbers and counts, rather than a `getItem` per item.
   30 of the total; + −, influence; a likeness with "alike" / "similar, but not in that sense", undo in a toast.
 - **Pictures:** the grid, the cover named, + −, influence, not analysed or failed, the original on a press.
 - **Why:** the parts by what they move, each open to its features, the absent crossed out; of a graded work
-  by the model that has not seen it. A feature that is a value leads to its row. Under it, the history of
+  by the model that has not seen it. A feature that is a value leads to its chip. Under it, the history of
   grades of any work with dates and sites, an old grade to take back.
 - **Sites:** a table, site by site: title, authors, about, numbers, counts, `≠` by plain comparison skipping an
   absent value; open, refresh, not this work. What each site says stands apart from the user's correction,
@@ -146,14 +147,7 @@ Interest implied by a grade reads "by your grade", and pressing it makes it the 
 5. Corrected texts of `removeItem`, `settleSuggestions`, `getSuggestions` in the API: the first removes the item
    alone, the second never waits.
 
-## 8. The extension
-
-The extension keeps its chips, in its panel and on the site's own elements alike: they take the least room (the
-owner, 2026-10-30). Rows are the look of the screen of a work alone. What a value does stays the same in both, as
-`AGENTS.md` asks: a change of behaviour is made in both in the same commit, and the first row of its table is to
-say, once the screen is built, that the two differ in look on purpose.
-
-## 9. Order of the work
+## 8. Order of the work
 
 1. What the server needs.
 2. The new screen beside the old, behind a choice, the old one kept till everything of sections 2 to 6 stands.
