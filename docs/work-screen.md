@@ -146,14 +146,15 @@ Interest implied by a grade reads "by your grade", and pressing it makes it the 
 5. Corrected texts of `removeItem`, `settleSuggestions`, `getSuggestions` in the API: the first removes the item
    alone, the second never waits.
 
-## 8. Open for the owner
+## 8. The extension
 
-1. **The extension.** `AGENTS.md` asks the same behaviour in both. Proposed: its panel takes the rows; chips stay on
-   the site's own elements.
+The extension keeps its chips, in its panel and on the site's own elements alike: they take the least room (the
+owner, 2026-10-30). Rows are the look of the screen of a work alone. What a value does stays the same in both, as
+`AGENTS.md` asks: a change of behaviour is made in both in the same commit, and the first row of its table is to
+say, once the screen is built, that the two differ in look on purpose.
 
 ## 9. Order of the work
 
 1. What the server needs.
 2. The new screen beside the old, behind a choice, the old one kept till everything of sections 2 to 6 stands.
-3. The extension, by the decision above.
-4. The old window removed.
+3. The old window removed.
