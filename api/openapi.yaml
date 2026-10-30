@@ -4836,7 +4836,7 @@ components:
             $ref: '#/components/schemas/DuplicatePair'
         pending:
           type: boolean
-          description: A search or a fitting of the model of the answers is planned or running
+          description: A search is planned or running; a fitting of the model of the answers is not told, nothing being read for an answer
         learnt:
           type: boolean
           description: The chances are of the model of the user's answers; false - no pair said to be one work yet, the mean of the layers stands for them

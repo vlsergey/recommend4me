@@ -105,8 +105,8 @@ class Duplicates(
 
     private fun fittingWork(type: TypeStore) = Work("duplicatesModel", type = type.id)
 
-    /** Whether a search or a fitting of the type is planned or running: the pairs shown may change. */
-    private fun pending(type: TypeStore) = type.id in searching || fitting.containsKey(type.id)
+    /** Whether a search of the type is planned or running: the pairs are to come. A fitting after an answer is not told: nothing is read for an answer. */
+    private fun pending(type: TypeStore) = type.id in searching
 
     /** Every type of several sites never searched yet: searched once, in the background. */
     @Order(20)

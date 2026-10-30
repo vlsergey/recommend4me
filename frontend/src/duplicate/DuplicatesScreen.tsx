@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -24,7 +24,7 @@ const PAGE = 30;
 /** How often the pairs are read again till the user chooses ([RefreshSelect]): never — they change by the user's answers and searches. */
 const EVERY_MS = 0;
 
-/** While a search or a fitting of the model of the answers runs, the pairs are asked for again so often: what it made comes when it is done. */
+/** While a search the user pressed here runs, or one with no pairs to mark yet, the pairs are asked for again so often: what it made comes when it is done. Nothing else reads by itself but the choice in the heading. */
 const PENDING_MS = 3000;
 
 const duplicatesKey = (type: string) => ["duplicates", type];
@@ -74,6 +74,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const [limit, setLimit] = useState(PAGE);
   const [every, setEvery] = useRefresh("duplicates.refresh", EVERY_MS);
   const [sort, setSort] = usePref<DuplicateSort>("duplicates.sort", "FORMULA");
+  const [searchPressed, setSearchPressed] = useState(false);
   const queryClient = useQueryClient();
   const list = useQuery({
     queryKey: [...duplicatesKey(type.id), answered, limit, sort],
@@ -82,17 +83,22 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
       return result.data;
     },
-    // A search or a fitting under way: asked again till it is done, whatever is chosen
-    refetchInterval: (query) => (query.state.data?.pending ? PENDING_MS : every || false),
+    refetchInterval: (query) => {
+      const page = query.state.data;
+      return page?.pending && (searchPressed || page.pairs.length === 0) ? PENDING_MS : every || false;
+    },
   });
   const data = list.data;
+  useEffect(() => {
+    if (data && !data.pending) setSearchPressed(false);
+  }, [data]);
   const calm = useCalmUpdates(data?.pairs, rowOf, sameRow);
   const shown = calm.shown ?? [];
-  /** What else shows the works' links read anew: their dialogs, their cards. */
+  /** What else shows the works' links marked out of date, read when next opened: nothing is read now. */
   const changed = (p: DuplicatePair) => {
-    queryClient.invalidateQueries({ queryKey: itemKey(p.first) });
-    queryClient.invalidateQueries({ queryKey: itemKey(p.second) });
-    queryClient.invalidateQueries({ queryKey: [ITEMS] });
+    queryClient.invalidateQueries({ queryKey: itemKey(p.first), refetchType: "none" });
+    queryClient.invalidateQueries({ queryKey: itemKey(p.second), refetchType: "none" });
+    queryClient.invalidateQueries({ queryKey: [ITEMS], refetchType: "none" });
   };
   /**
    * The user's word on a pair: once kept, the row leaves — or, of the answered ones, shows the new word
@@ -122,6 +128,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   };
   const search = async () => {
     ensureOk(await api.POST("/api/types/{type}/duplicates/search", { params: { path: { type: type.id } } }));
+    setSearchPressed(true);
     await queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
   };
 
