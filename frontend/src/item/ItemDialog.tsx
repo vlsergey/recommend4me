@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, XIcon } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
-import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemSummary, type RatingRecord, type SourceInfo } from "@/api/client";
+import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemRef, type ItemSummary, type RatingRecord, type SourceInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import { FITTING, useHeldOut } from "./useHeldOut";
 import { useTakeBackGrade } from "./useRateItem";
 import { useRefreshItem } from "./useRefreshItem";
 import { Byline, ContentFacts, FactLine } from "./WorkFacts";
+import { SiteTabs, sitesDiffer, WorkSites } from "./WorkSites";
 
 type Props = {
   items: ItemSummary[];
@@ -133,7 +134,7 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }
 
 function Shell({
   type,
-  source,
+  source: listedSource,
   summary,
   index,
   count,
@@ -155,14 +156,21 @@ function Shell({
   onMarking: (marking: boolean) => void;
 }) {
   const { t } = useTranslation("item");
-  const ref = { source: summary.source, item: summary.item };
+  // The site of the work the window stands on: at first the one listed, the one that says the most;
+  // the grade, the interest and the marking are the work's, whichever it is
+  const [ref, setRef] = useState<ItemRef>({ source: summary.source, item: summary.item });
   const details = useQuery({
     queryKey: itemKey(ref),
     queryFn: async () => unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: ref } })),
+    // The tabs of the sites stay while another site is read
+    placeholderData: keepPreviousData,
   });
   const corrections = useCorrections(ref, type.id);
   const [editingTitle, setEditingTitle] = useState(false);
   const d = details.data;
+  const shown = d?.summary ?? summary;
+  // The source of what is shown: while another site is read, the one before stays whole
+  const source = useSource(shown.source)?.source ?? listedSource;
   // The facets of the card until the work's own are in
   const facets = d?.allFacets ?? summary.facets;
   /** The facet of tags the work is marked in: what its tags by the text are answered on. */
@@ -172,14 +180,14 @@ function Shell({
     <>
       <div className="flex shrink-0 gap-4 border-b p-4 pr-12">
         <div className={cn("shrink-0 overflow-hidden rounded-md bg-muted", source.picturesTell ? "h-24 w-40 sm:h-28 sm:w-48" : "h-28 w-20 sm:h-32 sm:w-24")}>
-          <Cover typeId={type.id} summary={summary} className="size-full" />
+          <Cover typeId={type.id} summary={shown} className="size-full" />
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               {editingTitle ? (
                 <FieldEditor
-                  value={summary.title}
+                  value={shown.title}
                   corrected={d?.titleCorrected ?? false}
                   onSave={(content) => corrections.setField(titleField, content)}
                   onReset={() => corrections.resetField(titleField)}
@@ -188,7 +196,7 @@ function Shell({
                 />
               ) : (
                 <div className="group/title flex items-center gap-1">
-                  <DialogTitle className="text-xl leading-tight font-semibold sm:text-2xl">{summary.title}</DialogTitle>
+                  <DialogTitle className="text-xl leading-tight font-semibold sm:text-2xl">{shown.title}</DialogTitle>
                   {d?.titleCorrected && <CorrectedMark />}
                   {marking && <EditButton onClick={() => setEditingTitle(true)} title={t("ItemDialog.editTitle")} />}
                 </div>
@@ -198,19 +206,21 @@ function Shell({
             <ScoreBadge type={type} summary={summary} className="h-10 min-w-16 shrink-0 text-lg" />
           </div>
           <DialogDescription render={<div />} className="flex flex-col gap-1 text-sm text-muted-foreground">
-            <FactLine source={source} summary={summary} facets={facets} />
+            <FactLine source={source} summary={shown} facets={facets} />
             <span className="flex flex-wrap items-center gap-2">
               {type.sources.length > 1 && (
                 <span className="text-xs" title={sourceTitle(source.id)}>
                   {sourceShort(source.id)}
                 </span>
               )}
-              <SignalBadges source={source} signals={summary.signals} />
-              <LinkedBadges linked={summary.linked} className="text-xs" />
+              <SignalBadges source={source} signals={shown.signals} />
+              <LinkedBadges linked={shown.linked} className="text-xs" />
             </span>
           </DialogDescription>
         </div>
       </div>
+
+      {d && d.sites.length > 1 && <SiteTabs sites={d.sites} shown={ref} onShow={setRef} />}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {details.isLoading ? (
@@ -242,7 +252,7 @@ function Shell({
         >
           <ChevronRightIcon />
         </Button>
-        <Button variant="outline" size="sm" nativeButton={false} render={<a href={summary.url} target="_blank" rel="noreferrer" />} title={t("ItemDialog.openOnSite")}>
+        <Button variant="outline" size="sm" nativeButton={false} render={<a href={shown.url} target="_blank" rel="noreferrer" />} title={t("ItemDialog.openOnSite")}>
           <ExternalLinkIcon /> {sourceTitle(source.id)}
         </Button>
         {d?.canRefresh && <RefreshButton item={ref} />}
@@ -323,6 +333,7 @@ function Details({
           <>
             <Separator />
             <Part title={t("ItemDialog.facets")}>
+              {d.sites.length > 1 && <p className="mb-2 text-xs text-muted-foreground">{t("WorkSites.markingOfWork")}</p>}
               <FacetCorrections item={ref} source={source} facets={d.allFacets} corrections={corrections} except={except} />
             </Part>
             <Part title={t("ItemDialog.numbers")}>
@@ -392,6 +403,11 @@ function Details({
 
       <div className="flex min-w-0 flex-col gap-5 lg:order-1">
         {nothing && d.canRefresh && <NotFetched item={ref} />}
+        {sitesDiffer(d.sites) && (
+          <Part title={t("WorkSites.heading")}>
+            <WorkSites details={d} shown={ref} />
+          </Part>
+        )}
         {source.picturesTell && (
           <Part title={t("ItemDialog.pictures")}>
             <Pictures item={ref} pictures={d.pictures} explained={marking} />

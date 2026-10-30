@@ -170,6 +170,41 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
     }
 
     /**
+     * What the sites and the model give the work of the item [key] in the facets the application works
+     * out — the universes, the characters, the pairings, the tags, the age rating: of every item of a
+     * work of several, over its own [site] values and [chances]; a value given by more than one, by the
+     * likeliest. The rest of the facets are the site's own word on the item.
+     */
+    fun ofWork(
+        type: TypeStore,
+        clusters: WorkClusters,
+        key: ItemKey,
+        site: Map<String, List<String>>,
+        chances: Map<String, Map<String, Chance>>?,
+        wanted: Collection<String>? = null,
+    ): Pair<Map<String, List<String>>, Map<String, Map<String, Chance>>?> {
+        val others = clusters.members(key).drop(1)
+        val store = type.source(key.source)
+        if (others.isEmpty() || store == null) return site to chances
+        val worked = store.schema.facets.filter { it.infer && (wanted == null || it.key in wanted) }.map { it.key }
+        val values = LinkedHashMap(site)
+        val likely = HashMap(chances.orEmpty())
+        others.forEach { m ->
+            val s = type.source(m.source) ?: return@forEach
+            val theirs = s.items.facetsOf(listOf(m.id))[m.id].orEmpty()
+            val made = (if (wanted == null) suggestions.chances(s, listOf(m.id)) else suggestions.chancesOf(s, listOf(m.id), wanted))[m.id].orEmpty()
+            worked.forEach { facet ->
+                theirs[facet]?.let { values[facet] = (values[facet].orEmpty() + it).distinct() }
+                made[facet]?.forEach { (value, chance) ->
+                    val own = likely[facet].orEmpty()
+                    if ((own[value]?.chance ?: -1.0) < chance.chance) likely[facet] = own + (value to chance)
+                }
+            }
+        }
+        return values to likely
+    }
+
+    /**
      * The cards of [keys] of one content type, in their order; [matches] what a search found in
      * them, [places] where in the work each is ([Search.places][io.github.vlsergey.recommend4me.search.Search.places]).
      * Every source's items are read in one go.
@@ -217,6 +252,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 val key = ItemKey(source, id)
                 val (head, title) = heads[key] ?: return@forEach
                 val g = graded[id]
+                val (values, likely) = ofWork(type, clusters, key, facets[id].orEmpty(), chances[id], onCard)
                 out[key] = ItemSummary(
                     source = source,
                     item = id,
@@ -225,7 +261,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                     version = head.version,
                     url = head.url,
                     updatedAt = head.updatedAt.atOffset(ZoneOffset.UTC),
-                    facets = facets(store, facets[id].orEmpty(), chances[id], corrections[id].orEmpty(), names) { it in onCard },
+                    facets = facets(store, values, likely, corrections[id].orEmpty(), names) { it in onCard },
                     numbers = Corrected.numbers(numbers[id].orEmpty(), fields[id].orEmpty()),
                     hasCover = pictures[id]?.second ?: false,
                     pictureCount = pictures[id]?.first ?: 0,

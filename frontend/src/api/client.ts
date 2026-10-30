@@ -46,6 +46,7 @@ export type ItemSummary = Schemas["ItemSummary"];
 export type ItemDetails = Schemas["ItemDetails"];
 export type ItemPage = Schemas["ItemPage"];
 export type ItemRef = Schemas["ItemRef"];
+export type WorkSite = Schemas["WorkSite"];
 export type HistoryEntry = Schemas["HistoryEntry"];
 export type LinkedItem = Schemas["LinkedItem"];
 export type SearchMatch = Schemas["SearchMatch"];

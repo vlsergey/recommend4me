@@ -3447,7 +3447,7 @@ components:
 
     ItemDetails:
       type: object
-      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh, related]
+      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh, related, sites]
       properties:
         summary:
           $ref: '#/components/schemas/ItemSummary'
@@ -3507,6 +3507,30 @@ components:
           description: The other works of its series, then of the people who made it (but those of the series), with the user's grades
           items:
             $ref: '#/components/schemas/RelatedWorks'
+        sites:
+          type: array
+          description: Of a work of several items, what each says of it, the one that says the most first; none of a work of one
+          items:
+            $ref: '#/components/schemas/WorkSite'
+
+    WorkSite:
+      type: object
+      required: [source, item, title, url, authors]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
 
     RelatedWorks:
       type: object

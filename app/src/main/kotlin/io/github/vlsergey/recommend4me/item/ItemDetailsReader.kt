@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.api.model.ReviewInfo
 import io.github.vlsergey.recommend4me.api.model.ReviewMatch
 import io.github.vlsergey.recommend4me.api.model.TextValue
+import io.github.vlsergey.recommend4me.api.model.WorkSite
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.mark.MarkKind
 import io.github.vlsergey.recommend4me.model.ContributionGroup
@@ -23,6 +24,7 @@ import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.downloadsPages
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.work.Works
@@ -53,10 +55,10 @@ class ItemDetailsReader(
         val type = stores.typeOf(key.source)
         val summary = cards.cards(type, listOf(key)).firstOrNull() ?: return null
         val schema = store.schema
-        val site = store.items.facets(key.id)
+        val clusters = works.of(type)
         val corrections = store.corrections.facetsOf(key.id)
         val fields = store.corrections.fieldsOf(key.id)
-        val chances = suggestions.chances(store, listOf(key.id))[key.id]
+        val (site, chances) = cards.ofWork(type, clusters, key, store.items.facets(key.id), suggestions.chances(store, listOf(key.id))[key.id])
         val names = schema.facets.associate { def ->
             def.key to store.names(
                 def.key,
@@ -135,7 +137,29 @@ class ItemDetailsReader(
             },
             canRefresh = store.source.downloadsPages,
             related = related(type, store, key, Corrected.facets(site, corrections), names),
+            sites = sites(type, clusters.members(key)),
         )
+    }
+
+    /** What each item of a work of several says of it: the one that says the most first ([Works.fullness]). None of a work of one. */
+    private fun sites(type: io.github.vlsergey.recommend4me.source.TypeStore, members: List<ItemKey>): List<WorkSite> {
+        if (members.size < 2) return emptyList()
+        val fullness = works.fullness(type, members)
+        return members.sortedByDescending { fullness[it] ?: 0 }.mapNotNull { m ->
+            val s = type.source(m.source) ?: return@mapNotNull null
+            val head = s.items.find(m.id) ?: return@mapNotNull null
+            val fields = s.corrections.fieldsOf(m.id)
+            val texts = Corrected.texts(s.items.texts(m.id), fields)
+            val authors = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key?.let { facet ->
+                val keys = s.items.facets(m.id)[facet].orEmpty()
+                val names = s.names(facet, keys)
+                keys.map { names[it] ?: it }
+            }.orEmpty()
+            WorkSite(
+                source = m.source, item = m.id, title = Corrected.title(head.title, fields), url = head.url, authors = authors,
+                description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.let { texts[it.key] },
+            )
+        }
     }
 
     /**

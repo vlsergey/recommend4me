@@ -34,6 +34,23 @@ and tell the user to update the extension.
 | Marks of reviews and pictures | `review/Reviews.tsx`, `picture/Pictures.tsx` | `marks`, `reviews`, `pictures` |
 | A list's cards: grade, prediction, interest | `item/ItemBoard.tsx`, `item/pieces.tsx` | `cards`, `fillBadge` |
 
+## A work is a normalized work; a site's item is what a site says of it
+
+Every item of every site is bound to a normalized work (`work/WorkRepository.kt`), at first one of its
+own; "one work" merges two. A translation and a part stay two works, related.
+
+- **Of the normalized work, in the dictionaries:** the grade, the mark of interest, the user's word on
+  values and fields. `RatingRepository`, `InterestRepository`, `CorrectionRepository` and
+  `UnknownRepository` read and write them by the item, every item of a work seeing them alike: nothing
+  is copied between items.
+- **Of the model:** a work is one row, made of all its items (`model/WorkFeatures.kt`, `Catalogue`); the
+  prediction is the work's, written to each of its items. In the list a work is one row
+  (`item/ItemList.kt`); the card is of the item that says the most (`Works.fullness`).
+- **Of the site's item, in its source:** its own data and texts, parts, pictures, reviews and the marks
+  on them, the answers on the paragraphs of its text.
+- **New data about a work** goes on the normalized work, never on an item, and travels in
+  `WorkRepository.merge` and `takeOut`.
+
 ## An area that reads itself again lets the user choose how often
 
 Every part of the web interface that reads its data again by itself has, in its heading, the choice
