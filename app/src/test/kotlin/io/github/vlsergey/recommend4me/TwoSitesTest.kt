@@ -17,6 +17,8 @@ import io.github.vlsergey.recommend4me.capture.CaptureController
 import io.github.vlsergey.recommend4me.capture.Captures
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
+import io.github.vlsergey.recommend4me.duplicate.DuplicatesController
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.ItemsController
 import io.github.vlsergey.recommend4me.job.Jobs
@@ -215,6 +217,7 @@ class TwoSitesTest {
     @Autowired lateinit var captured: Captures
     @Autowired lateinit var items: ItemsController
     @Autowired lateinit var corrections: CorrectionsController
+    @Autowired lateinit var duplicates: DuplicatesController
     @Autowired lateinit var tags: TagsController
     @Autowired lateinit var stores: Stores
     @Autowired lateinit var jobs: Jobs
@@ -255,6 +258,41 @@ class TwoSitesTest {
         assertEquals(4, items.getItem("alpha", "a1").body!!.summary.grade)
         items.unrateItem("alpha", "a1", null)
         items.unrateItem("beta", "b9", null)
+    }
+
+    @Test
+    fun `a word on a pair of the duplicates is carried across one work — what is said of one of two works one is said of the other`() {
+        alpha("m1|The Mill|river|A miller and his river||")
+        beta("m2|The Mill|river|A miller and his river")
+        beta("m3|The Mill, translated|river|A miller and his river, in another tongue")
+        alpha("m4|The Mill Again|river|The miller's son||")
+        val links = stores.type("books")!!.links
+        fun key(source: String, id: String) = ItemKey(source, id)
+        fun answer(a: ItemKey, b: ItemKey, verdict: io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict) =
+            duplicates.answerDuplicate("books", io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(ItemRef(a.source, a.id), ItemRef(b.source, b.id), verdict))
+        fun relation(a: ItemKey, b: ItemKey) = links.relations()[links.ordered(a, b)]
+        fun different(a: ItemKey, b: ItemKey) = links.ordered(a, b) in links.distincts()
+        val (m1, m2, m3, m4) = listOf(key("alpha", "m1"), key("beta", "m2"), key("beta", "m3"), key("alpha", "m4"))
+
+        answer(m1, m2, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
+        // Of one of two works one, a translation: of the other too
+        answer(m1, m3, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.TRANSLATION)
+        assertEquals("TRANSLATION", relation(m2, m3))
+        // Taken back of one pair: of every pair of the two works' groups
+        duplicates.unanswerDuplicate("books", "beta", "m2", "beta", "m3")
+        assertEquals(null, relation(m1, m3))
+        assertEquals(null, relation(m2, m3))
+
+        // A word said before the works were one: carried to the work that joins them
+        answer(m4, m3, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT)
+        answer(m4, m1, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT)
+        assertTrue(different(m4, m2), "m4 is different from m1, so from m2, one with it")
+        answer(m3, m2, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
+        // m3 joins m1 and m2: m4, different from them, different from m3 as it was; a word of the group's own two taken away
+        assertTrue(different(m4, m3))
+        assertEquals(null, relation(m1, m3))
+
+        for ((a, b) in listOf(m1 to m2, m2 to m3, m4 to m1, m4 to m3)) duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
     }
 
     @Test
