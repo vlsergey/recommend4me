@@ -108,16 +108,16 @@ class SourceStore(
     /** The normalized works: the items of every site bound to them. */
     val works = WorkRepository(databases.dictionaries.dsl)
 
-    val corrections = CorrectionRepository(databases.dictionaries.dsl, source.id, works, dbs.corrections.dsl)
+    val corrections = CorrectionRepository(databases.dictionaries.dsl, source.id, works)
 
     /** The user's answers on the tags offered by the paragraphs of the works' texts, kept with the corrections. */
     val tagTextAnswers = TagTextAnswerRepository(dbs.corrections.dsl)
 
     /** The user's word that whether a work has a value is not clear of it — a pairing — kept with the corrections. */
-    val unknowns = UnknownRepository(databases.dictionaries.dsl, source.id, works, dbs.corrections.dsl)
+    val unknowns = UnknownRepository(databases.dictionaries.dsl, source.id, works)
 
-    val ratings = RatingRepository(databases.dictionaries.dsl, source.id, works, dbs.ratings.dsl)
-    val interest = InterestRepository(databases.dictionaries.dsl, source.id, works, dbs.ratings.dsl)
+    val ratings = RatingRepository(databases.dictionaries.dsl, source.id, works)
+    val interest = InterestRepository(databases.dictionaries.dsl, source.id, works)
     val marks = MarkRepository(source.id, dbs.ratings.dsl)
     val signals = SignalRepository(dbs.ratings.dsl)
 
@@ -207,7 +207,7 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val id: String get() = type.id
 
     val links = TypeLinkRepository(
-        WorkRepository(databases.dictionaries.dsl), sources.associate { it.id to databases.corrections(it.id) }, sources.flatMapTo(HashSet()) { it.singleFacets },
+        WorkRepository(databases.dictionaries.dsl), sources.map { it.id }, sources.flatMapTo(HashSet()) { it.singleFacets },
     )
     val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })

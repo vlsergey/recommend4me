@@ -25,10 +25,8 @@ class BoostingScorer : Scorer {
     override val candidates = listOf(25.0, 50.0, 100.0, 200.0, 400.0)
     override val defaultParameter = 100.0
 
-    override fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer {
-        val learnt = (rows.asSequence() + task.ungraded.asSequence()).distinct().toList().toIntArray()
-        return fit(task.x, learnt, RankingPairs.of(task, rows), parameter.toInt())
-    }
+    override fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer =
+        fit(task.x, rows.distinct().toIntArray(), RankingPairs.of(task, rows), parameter.toInt())
 
     override fun unpack(bytes: ByteArray): FittedScorer = Forest.unpack(bytes)
 

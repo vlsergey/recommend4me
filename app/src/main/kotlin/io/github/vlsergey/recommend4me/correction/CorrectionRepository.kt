@@ -1,8 +1,5 @@
 package io.github.vlsergey.recommend4me.correction
 
-import io.github.vlsergey.recommend4me.database.corrections.tables.references.FACET_COMPLETE
-import io.github.vlsergey.recommend4me.database.corrections.tables.references.FACET_CORRECTION
-import io.github.vlsergey.recommend4me.database.corrections.tables.references.FIELD_CORRECTION
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_COMPLETE
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_CORRECTION
@@ -22,13 +19,7 @@ data class FacetCorrection(val itemId: String, val facet: String, val key: Strin
  * see them — every item of a work has them alike: facet values added and taken away, facets whose
  * values are all named, fields overridden.
  */
-class CorrectionRepository(
-    private val db: DSLContext,
-    private val source: String,
-    private val works: WorkRepository,
-    /** The corrections of the source, where the user's word was kept before the normalized works. */
-    private val before: DSLContext,
-) {
+class CorrectionRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) {
 
     private fun workOf(itemId: String, now: Instant = Instant.now()) = works.of(ItemKey(source, itemId), now)
 
@@ -153,20 +144,6 @@ class CorrectionRepository(
 
     /** Every item with a facet whose values are all named: they are few, the user says it by hand. */
     fun allComplete(): Map<String, Set<String>> = seenComplete(DSL.noCondition())
-
-    /** The answers kept before the normalized works given to them, the newest of a work's standing, and taken from there. */
-    fun moveToWorks(now: Instant): Int {
-        val facets = before.selectFrom(FACET_CORRECTION).orderBy(FACET_CORRECTION.CORRECTED_AT).fetch()
-        val fields = before.selectFrom(FIELD_CORRECTION).orderBy(FIELD_CORRECTION.CORRECTED_AT).fetch()
-        val complete = before.selectFrom(FACET_COMPLETE).fetch()
-        facets.forEach { setFacet(it.itemId!!, it.facet!!, it.valueKey!!, it.added!!, it.name, it.correctedAt!!) }
-        fields.forEach { setField(it.itemId!!, it.field!!, it.content!!, it.correctedAt!!) }
-        complete.forEach { setComplete(it.itemId!!, it.facet!!, true, it.completedAt!!) }
-        before.deleteFrom(FACET_CORRECTION).execute()
-        before.deleteFrom(FIELD_CORRECTION).execute()
-        before.deleteFrom(FACET_COMPLETE).execute()
-        return facets.size + fields.size + complete.size
-    }
 
     companion object {
         private const val BATCH = 1000

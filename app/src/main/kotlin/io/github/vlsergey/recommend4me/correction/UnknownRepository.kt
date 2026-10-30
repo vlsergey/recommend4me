@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.correction
 
-import io.github.vlsergey.recommend4me.database.corrections.tables.references.FACET_UNKNOWN
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_UNKNOWN
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -16,13 +15,7 @@ data class Unknown(val itemId: String, val facet: String, val key: String, val s
  * that whether a work has a value is not clear of it — apart from the corrections: the value is asked
  * of the work no more, and nothing learns of it; the work's values stay as they were.
  */
-class UnknownRepository(
-    private val db: DSLContext,
-    private val source: String,
-    private val works: WorkRepository,
-    /** The corrections of the source, where the word was kept before the normalized works. */
-    private val before: DSLContext,
-) {
+class UnknownRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) {
 
     fun say(itemId: String, facet: String, key: String, now: Instant) {
         val u = WORK_FACET_UNKNOWN
@@ -42,13 +35,5 @@ class UnknownRepository(
         return db.select(SITE_WORK.ITEM, u.FACET, u.VALUE_KEY, u.SAID_AT).from(SITE_WORK).join(u).on(u.WORK.eq(SITE_WORK.NORMALIZED))
             .where(SITE_WORK.SOURCE.eq(source), u.FACET.eq(facet))
             .fetch { Unknown(it.value1()!!, it.value2()!!, it.value3()!!, it.value4()!!) }
-    }
-
-    /** The words kept before the normalized works given to them, and taken from there. */
-    fun moveToWorks(): Int {
-        val rows = before.selectFrom(FACET_UNKNOWN).fetch()
-        rows.forEach { say(it.itemId!!, it.facet!!, it.valueKey!!, it.saidAt!!) }
-        before.deleteFrom(FACET_UNKNOWN).execute()
-        return rows.size
     }
 }

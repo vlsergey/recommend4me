@@ -228,9 +228,6 @@ class WorkRepository(private val db: DSLContext) {
             .onDuplicateKeyUpdate().set(i.INTERESTING, interesting).set(i.MARKED_AT, at).execute()
     }
 
-    /** Of the current grades of every work of several items the newest left: once the grades of before are moved, each item's own. */
-    fun keepNewestGrades(sources: Collection<String>) = groups(sources).keys.forEach { keepNewestGrade(db, it) }
-
     companion object {
         private const val BATCH = 1000
 

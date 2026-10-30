@@ -119,20 +119,18 @@ object GroupWeights {
         val folds = CrossValidation.folds(grades, works)
         val k = (folds.maxOrNull() ?: 0) + 1
         if (k < 2) return emptyList()
-        val ungraded = task.ungraded.toList()
         return (0 until k).map { fold ->
-            val inner = grades.indices.filter { folds[it] != fold }
+            // The rows the choice sees: those of the other folds
+            val kept = grades.indices.filter { folds[it] != fold }.toIntArray()
             val test = grades.indices.filter { folds[it] == fold }.toIntArray()
             val outerWorks = test.map { works[it] }.toSet()
             val rowsAll = base?.invoke(outerWorks) ?: task.x
-            // The rows the choice sees: the graded ones of the other folds, and every row without a grade
-            val kept = (inner + ungraded).toIntArray()
-            val innerTask = RankingTask(rowsAll.gather(kept), IntArray(inner.size) { grades[inner[it]] }, LongArray(kept.size) { works[kept[it]] }, LongArray(kept.size) { task.items[kept[it]] })
+            val innerTask = RankingTask(rowsAll.gather(kept), IntArray(kept.size) { grades[kept[it]] }, LongArray(kept.size) { works[kept[it]] }, LongArray(kept.size) { task.items[kept[it]] })
             val innerFor = base?.let { f -> { underTest: Set<Long> -> f(outerWorks + underTest).gather(kept) } }
             fun ranked(weights: DoubleArray): Double {
                 val chosen = measure(innerTask, innerFor, scorer, groups, weights)?.parameter ?: scorer.candidates.first()
                 val weighed = RankingTask(scaled(innerTask.x, groups, weights), innerTask.grades, innerTask.works, innerTask.items)
-                val fitted = scorer.fit(weighed, IntArray(inner.size) { it }, chosen)
+                val fitted = scorer.fit(weighed, IntArray(kept.size) { it }, chosen)
                 val scores = fitted.scores(scaled(rowsAll, groups, weights)).map { it.toDouble() }.toDoubleArray()
                 return CrossValidation.concordance(grades, works, test, scores) ?: 0.5
             }

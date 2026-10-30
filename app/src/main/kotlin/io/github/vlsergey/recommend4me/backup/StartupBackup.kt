@@ -60,13 +60,10 @@ class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
         fun personalFiles(dataDir: Path): List<Path> {
             val out = ArrayList<Path>()
             listOf("app.mv.db", "dictionaries.mv.db", "preferences.mv.db").map(dataDir::resolve).filter { it.exists() }.forEach(out::add)
-            // A type's corrections of before too: kept on the start it is moved on ([TypeCorrectionsMove])
-            for (level in listOf("sources", "types")) {
-                val dir = dataDir.resolve(level)
-                if (!dir.isDirectory()) continue
-                dir.listDirectoryEntries().filter { it.isDirectory() }.forEach { owner ->
-                    listOf("corrections.mv.db", "ratings.mv.db").map(owner::resolve).filter { it.exists() && it.fileSize() > 0 }.forEach(out::add)
-                }
+            val dir = dataDir.resolve("sources")
+            if (!dir.isDirectory()) return out
+            dir.listDirectoryEntries().filter { it.isDirectory() }.forEach { owner ->
+                listOf("corrections.mv.db", "ratings.mv.db").map(owner::resolve).filter { it.exists() && it.fileSize() > 0 }.forEach(out::add)
             }
             return out
         }

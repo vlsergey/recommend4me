@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.interest
 
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_INTEREST
-import io.github.vlsergey.recommend4me.database.ratings.tables.references.INTEREST
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import org.jooq.DSLContext
@@ -12,13 +11,7 @@ import java.time.Instant
 data class InterestMark(val itemId: String, val interesting: Boolean, val markedAt: Instant)
 
 /** The interest marks of the normalized works (in the dictionaries), one a work, as the items of one source see them. */
-class InterestRepository(
-    private val db: DSLContext,
-    private val source: String,
-    private val works: WorkRepository,
-    /** The ratings of the source, where the marks were kept before the normalized works. */
-    private val before: DSLContext,
-) {
+class InterestRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) {
 
     private fun workOf(itemId: String, now: Instant) = works.of(ItemKey(source, itemId), now)
 
@@ -45,21 +38,5 @@ class InterestRepository(
     /** The mark of the work of the item taken back. */
     fun forget(itemId: String) {
         db.deleteFrom(WORK_INTEREST).where(WORK_INTEREST.WORK.eq(workOf(itemId, Instant.now()))).execute()
-    }
-
-    /** The marks kept before the normalized works given to them, the newest of a work's standing, and taken from there. */
-    fun moveToWorks(now: Instant): Int {
-        val rows = before.selectFrom(INTEREST).fetch()
-        val i = WORK_INTEREST
-        rows.forEach {
-            val work = workOf(it.itemId!!, now)
-            val kept = db.select(i.MARKED_AT).from(i).where(i.WORK.eq(work)).fetchOne()?.value1()
-            if (kept == null || kept.isBefore(it.markedAt)) {
-                db.insertInto(i).set(i.WORK, work).set(i.INTERESTING, it.interesting).set(i.MARKED_AT, it.markedAt)
-                    .onDuplicateKeyUpdate().set(i.INTERESTING, it.interesting).set(i.MARKED_AT, it.markedAt).execute()
-            }
-        }
-        before.deleteFrom(INTEREST).execute()
-        return rows.size
     }
 }

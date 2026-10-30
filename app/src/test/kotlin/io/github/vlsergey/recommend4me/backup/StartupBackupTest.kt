@@ -33,18 +33,16 @@ class StartupBackupTest {
         file("sources/site/corrections.mv.db", "answers")
         file("sources/site/ratings.mv.db", "grades")
         file("sources/site/source.mv.db")
-        file("types/books/corrections.mv.db", "tags")
         file("types/books/model.mv.db")
         // An empty file is no data yet
         file("sources/other/ratings.mv.db", "")
 
         val kept = StartupBackup.personalFiles(data).map { data.relativize(it).toString().replace('\\', '/') }.toSet()
-        assertEquals(setOf("app.mv.db", "sources/site/corrections.mv.db", "sources/site/ratings.mv.db", "types/books/corrections.mv.db"), kept)
+        assertEquals(setOf("app.mv.db", "sources/site/corrections.mv.db", "sources/site/ratings.mv.db"), kept)
 
         val copy = StartupBackup.copy(data, LocalDateTime.of(2026, 10, 14, 9, 30, 5))!!
         assertEquals("backup-20261014-093005", copy.name)
         assertEquals("answers", copy.resolve("sources/site/corrections.mv.db").readText())
-        assertEquals("tags", copy.resolve("types/books/corrections.mv.db").readText())
         assertTrue(!copy.resolve("types/books/model.mv.db").exists())
         // No copy left half made
         assertTrue(copy.parent.listDirectoryEntries().none { it.name.endsWith(".tmp") })

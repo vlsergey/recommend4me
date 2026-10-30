@@ -34,8 +34,7 @@ class KernelScorer : Scorer {
     override val defaultParameter = 0.1
 
     override fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer {
-        // The rows learnt from: the graded ones of the fit and those without a grade, which have equals
-        val learnt = (rows.asSequence() + task.ungraded.asSequence()).distinct().toList().toIntArray()
+        val learnt = rows.distinct().toIntArray()
         val at = IntArray(task.x.rows) { -1 }.also { a -> learnt.forEachIndexed { k, i -> a[i] = k } }
         val all = RankingPairs.of(task, rows)
         // The pairs in the numbering of the rows learnt from

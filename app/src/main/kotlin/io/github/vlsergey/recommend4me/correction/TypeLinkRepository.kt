@@ -1,11 +1,7 @@
 package io.github.vlsergey.recommend4me.correction
 
-import io.github.vlsergey.recommend4me.database.corrections.tables.references.ITEM_DISTINCT
-import io.github.vlsergey.recommend4me.database.corrections.tables.references.ITEM_LINK
-import io.github.vlsergey.recommend4me.database.corrections.tables.references.ITEM_RELATION
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.work.WorkRepository
-import org.jooq.DSLContext
 import java.time.Instant
 
 /**
@@ -15,13 +11,11 @@ import java.time.Instant
  */
 class TypeLinkRepository(
     private val works: WorkRepository,
-    /** The corrections of every source of the type, by source: where the links were kept before the normalized works. */
-    private val corrections: Map<String, DSLContext>,
+    /** Every source of the type. */
+    private val sources: Collection<String>,
     /** The facets of one value of the type ([io.github.vlsergey.recommend4me.source.FacetDef.single]): of two works merged, one stands. */
     private val single: Set<String> = emptySet(),
 ) {
-
-    private val sources = corrections.keys
 
     /** Every work of several items: its items. */
     fun groups(): List<List<ItemKey>> = works.groups(sources).values.toList()
@@ -74,47 +68,6 @@ class TypeLinkRepository(
 
     /** The item removed from the library. */
     fun forget(key: ItemKey) = works.forget(key)
-
-    /** Of the current grades of every work of several items the newest left. */
-    fun keepNewestGrades() = works.keepNewestGrades(sources)
-
-    /**
-     * What the corrections of the sources kept before the normalized works given to them — the links
-     * first, a word on two works after — and taken from there: nothing to do once done, and what a
-     * start broken off left is taken up by the next.
-     */
-    fun moveToWorks(now: Instant): Int {
-        var moved = 0
-        corrections.forEach { (source, db) ->
-            db.select(ITEM_LINK.ITEM_ID, ITEM_LINK.OTHER_SOURCE, ITEM_LINK.OTHER_ITEM_ID).from(ITEM_LINK).fetch().forEach {
-                link(ItemKey(source, it.value1()!!), ItemKey(it.value2()!!, it.value3()!!), now)
-                moved++
-            }
-        }
-        corrections.forEach { (source, db) ->
-            db.select(ITEM_DISTINCT.ITEM_ID, ITEM_DISTINCT.OTHER_SOURCE, ITEM_DISTINCT.OTHER_ITEM_ID).from(ITEM_DISTINCT).fetch().forEach {
-                moved += moveWord(ItemKey(source, it.value1()!!), ItemKey(it.value2()!!, it.value3()!!), DIFFERENT, now)
-            }
-            db.select(ITEM_RELATION.ITEM_ID, ITEM_RELATION.OTHER_SOURCE, ITEM_RELATION.OTHER_ITEM_ID, ITEM_RELATION.KIND).from(ITEM_RELATION).fetch().forEach {
-                moved += moveWord(ItemKey(source, it.value1()!!), ItemKey(it.value2()!!, it.value3()!!), it.value4()!!, now)
-            }
-        }
-        corrections.values.forEach { db ->
-            db.deleteFrom(ITEM_LINK).execute()
-            db.deleteFrom(ITEM_DISTINCT).execute()
-            db.deleteFrom(ITEM_RELATION).execute()
-        }
-        return moved
-    }
-
-    /** A word on two items of before: of two that are one work by then, the links win, as they did. */
-    private fun moveWord(a: ItemKey, b: ItemKey, kind: String, now: Instant): Int {
-        val x = works.of(a, now)
-        val y = works.of(b, now)
-        if (x == y) return 0
-        works.say(x, y, kind, now)
-        return 1
-    }
 
     companion object {
         const val DIFFERENT = "DIFFERENT"

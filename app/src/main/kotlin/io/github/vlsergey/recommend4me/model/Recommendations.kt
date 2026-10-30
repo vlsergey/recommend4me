@@ -240,8 +240,8 @@ class Recommendations(
     // --- Training ---
 
     /**
-     * The graded items as the model sees them, a row a grade — then the ungraded items of linked
-     * works, rows without a grade; null when there are too few grades to train on.
+     * The graded items as the model sees them, a row a grade; null when there are too few grades to
+     * train on.
      */
     private class Prepared(
         val used: List<TypedRating>,
@@ -345,9 +345,8 @@ class Recommendations(
         val chosen = CrossValidation.choose(candidates)
         val parameter = chosen?.parameter ?: scorer.defaultParameter
         log.info(
-            "{}: {} values of the {} parameter measured on {} grades and {} ungraded linked items × {} features in {} ms, chosen {}",
-            type.id, candidates.size, scorer.id, p.used.size, p.task.ungraded.count(), p.layout.width,
-            System.currentTimeMillis() - started, parameter,
+            "{}: {} values of the {} parameter measured on {} grades × {} features in {} ms, chosen {}",
+            type.id, candidates.size, scorer.id, p.used.size, p.layout.width, System.currentTimeMillis() - started, parameter,
         )
         val (fitted, scale) = scaled(scorer, p, parameter, chosen)
         val share = categoricalShare(p.layout, catalogue)

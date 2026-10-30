@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.item.SynonymsSet
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.work.WorkClusters
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -27,6 +28,9 @@ class TagScope(val sources: List<SourceStore>, val tags: TagRepository, val face
     val id = "tags"
 
     fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
+
+    /** The works of several items of the sources, read for the operation. */
+    fun works(): WorkClusters = WorkClusters.of(sources.first().works.groups(sources.map { it.id }).values.toList())
 }
 
 /**

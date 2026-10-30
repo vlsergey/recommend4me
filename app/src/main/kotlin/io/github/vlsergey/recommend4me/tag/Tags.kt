@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.rating.Grades
 import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
+import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import tools.jackson.databind.json.JsonMapper
@@ -45,7 +46,8 @@ class TagVariant(val site: SiteTagRef, val name: String, val uses: Uses)
 
 /**
  * A normalized tag: its key (its id written out), the sites' tags bound to it, its works, and the
- * graded works the user said have it not ([rejected]).
+ * graded works the user said have it not ([rejected]). A work is in the sets once, by the item that
+ * names it ([WorkClusters.representative]), whatever items of it have the tag.
  */
 class TagStats(val key: String) {
     val variants = LinkedHashMap<SiteTagRef, TagVariant>()
@@ -230,6 +232,9 @@ class Tags(
         val bindings = scope.tags.bindings()
         val out = HashMap<String, TagStats>()
         val rejections = HashMap<String, MutableSet<ItemKey>>()
+        val works = scope.works()
+        // The sites' tags counted of the works of several items: two items of a work, one use
+        val usedBy = HashSet<Pair<SiteTagRef, ItemKey>>()
         scope.sources.forEach { s ->
             val siteFacet = normalization.siteFacetOf(s, facet) ?: return@forEach
             val names = s.names(siteFacet)
@@ -240,15 +245,16 @@ class Tags(
             fun count(id: String, tag: String, site: SiteTagRef?, written: String?) {
                 val stats = out.getOrPut(tag) { TagStats(tag) }
                 val key = ItemKey(s.id, id)
-                val uses = site?.let { stats.variant(it, written!!).uses }
+                val work = works.representative(key)
+                val uses = site?.let { stats.variant(it, written!!).uses }?.takeIf { !works.linked(key) || usedBy.add(site to work) }
                 uses?.let { it.works++ }
-                stats.items += key
+                stats.items += work
                 grades[id]?.let { g ->
                     uses?.let { it.graded++ }
-                    stats.graded += key
+                    stats.graded += work
                     if (liked(g)) {
                         uses?.let { it.liked++ }
-                        stats.liked += key
+                        stats.liked += work
                     }
                 }
             }
@@ -272,7 +278,7 @@ class Tags(
             // A tag the user gave a work the site does not; a graded work the user said has it not
             s.corrections.allFacets().filter { it.facet == facet && TagRepository.idOf(it.key) != null }.forEach { c ->
                 if (!c.added) {
-                    if (c.itemId in grades) rejections.getOrPut(c.key) { HashSet() } += ItemKey(s.id, c.itemId)
+                    if (c.itemId in grades) rejections.getOrPut(c.key) { HashSet() } += works.representative(ItemKey(s.id, c.itemId))
                 } else if (fromSite[c.itemId]?.contains(c.key) != true) count(c.itemId, c.key, null, null)
             }
         }

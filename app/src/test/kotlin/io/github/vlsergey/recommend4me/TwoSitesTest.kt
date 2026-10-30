@@ -381,6 +381,24 @@ class TwoSitesTest {
     }
 
     @Test
+    fun `a work of several items counts once in the statistics of its tag and of each site's tag`() {
+        alpha("h1|The Harbour|harbours|Ships in the harbour||")
+        alpha("h2|The Harbour, a new upload|harbours|Ships in the harbour||")
+        beta("h3|The Harbour|harbours|Ships in the harbour")
+        alpha("h4|Another harbour|harbours|Boats in another harbour||")
+        corrections.linkItem("alpha", "h1", ItemRef("alpha", "h2"))
+        corrections.linkItem("alpha", "h1", ItemRef("beta", "h3"))
+        items.rateItem("beta", "h3", RatingRequest(5))
+        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
+        val tag = tags.getTag(tagOf("alpha", "harbours")).body!!
+        assertEquals(Triple(2, 1, 1), Triple(tag.works, tag.graded, tag.liked))
+        val bySite = tag.variants.associateBy { it.source }
+        assertEquals(Triple(2, 1, 1), bySite.getValue("alpha").let { Triple(it.works, it.graded, it.liked) })
+        assertEquals(Triple(1, 1, 1), bySite.getValue("beta").let { Triple(it.works, it.graded, it.liked) })
+        items.unrateItem("beta", "h3", null)
+    }
+
+    @Test
     fun `tags of two sites merged — the user's answers on both move to the one kept, in each site's database`() {
         alpha("a2|Waves|waves|Waves on the shore||")
         alpha("a3|Calm|calm|A calm sea||")

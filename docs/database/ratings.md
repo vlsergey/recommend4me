@@ -1,11 +1,9 @@
 # A source's ratings: `ratings`
 
-`sources/<source>/ratings.mv.db` — The user's own judgments of the works of one source. Backed up on every start.
+`sources/<source>/ratings.mv.db` — The user's own judgments of what a source's works show: their pictures and reviews, and what the user did on the site. Backed up on every start. The grades and the marks of interest stand on the normalized works, in the [dictionaries](dictionaries.md).
 
 | Table | What it holds |
 |---|---|
-| `rating` | the user's grade of a version of a work |
-| `interest` | the user's mark of interest of a work |
 | `picture_mark` | the user's mark of a picture |
 | `review_mark` | the user's mark of a review |
 | `match_feedback` | the user's word on a match the application found for a mark |
@@ -15,11 +13,6 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
 ```mermaid
 erDiagram
-    interest {
-        VARCHAR item_id PK
-        BOOLEAN interesting
-        TIMESTAMPTZ marked_at
-    }
     match_feedback {
         VARCHAR mark_kind PK
         VARCHAR mark_item PK
@@ -36,12 +29,6 @@ erDiagram
         VARCHAR url
         SMALLINT mark
         TIMESTAMPTZ marked_at
-    }
-    rating {
-        VARCHAR item_id PK
-        VARCHAR version PK
-        INTEGER grade
-        TIMESTAMPTZ rated_at
     }
     review_mark {
         VARCHAR item_id PK

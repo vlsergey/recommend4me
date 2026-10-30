@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.rating
 
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_RATING
-import io.github.vlsergey.recommend4me.database.ratings.tables.references.RATING
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import org.jooq.Condition
@@ -20,13 +19,7 @@ data class GivenRating(val key: ItemKey, val version: String, val grade: Int, va
  * version while the grade stands — a work has one such — and a new release of the item it was given
  * through makes it a grade of before.
  */
-class RatingRepository(
-    private val db: DSLContext,
-    private val source: String,
-    private val works: WorkRepository,
-    /** The ratings of the source, where the grades were kept before the normalized works. */
-    private val before: DSLContext,
-) {
+class RatingRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) {
 
     private val through = SITE_WORK.`as`("through")
 
@@ -92,16 +85,4 @@ class RatingRepository(
     fun gradedItems(): Set<String> = all().mapTo(HashSet()) { it.itemId }
 
     fun count(): Int = all().size
-
-    /** The grades kept before the normalized works given to them, and taken from there. */
-    fun moveToWorks(now: Instant): Int {
-        val rows = before.selectFrom(RATING).fetch()
-        val r = WORK_RATING
-        rows.forEach {
-            db.insertInto(r).set(r.WORK, works.of(ItemKey(source, it.itemId!!), now)).set(r.SOURCE, source).set(r.ITEM, it.itemId).set(r.VERSION, it.version)
-                .set(r.GRADE, it.grade).set(r.RATED_AT, it.ratedAt).onDuplicateKeyIgnore().execute()
-        }
-        before.deleteFrom(RATING).execute()
-        return rows.size
-    }
 }

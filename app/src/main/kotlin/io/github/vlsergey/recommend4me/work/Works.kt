@@ -85,24 +85,11 @@ class Works(private val stores: Stores) {
         bind(s, s.items.heads(event.ids).mapValues { it.value.version })
     }
 
-    /** Before anything reads the works: every item bound, and what the corrections and the ratings kept of the works given to them. */
+    /** Before anything reads the works: every item bound. */
     @Order(-200)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.sources.forEach { s -> bind(s, s.items.keys().associate { it.id to it.version }) }
-        val now = Instant.now()
-        stores.types.forEach { type ->
-            val moved = type.links.moveToWorks(now)
-            if (moved > 0) log.info("{}: {} links and words on works moved to the normalized works", type.id, moved)
-            val grades = type.sources.sumOf { it.ratings.moveToWorks(now) }
-            val marks = type.sources.sumOf { it.interest.moveToWorks(now) }
-            if (grades > 0 || marks > 0) {
-                type.links.keepNewestGrades()
-                log.info("{}: {} grades and {} marks of interest moved to the normalized works", type.id, grades, marks)
-            }
-            val answers = type.sources.sumOf { it.corrections.moveToWorks(now) + it.unknowns.moveToWorks() }
-            if (answers > 0) log.info("{}: {} corrections moved to the normalized works", type.id, answers)
-        }
     }
 
     companion object {

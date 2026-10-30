@@ -1,7 +1,5 @@
 package io.github.vlsergey.recommend4me.database
 
-import io.github.vlsergey.recommend4me.correction.TypeCorrectionsMove
-import io.github.vlsergey.recommend4me.dictionary.DictionaryMove
 import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -9,7 +7,7 @@ import org.jooq.DSLContext
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.stereotype.Component
 
-/** The three files of a source: what the site says, what the user corrected, what the user graded. */
+/** The three files of a source: what the site says, the user's answers on the paragraphs of its texts, the user's marks of its pictures and reviews. */
 class SourceDatabases(val source: Database, val corrections: Database, val ratings: Database)
 
 /** The file of a content type: what is learnt. */
@@ -24,15 +22,14 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
 
     /**
      * The user's preferences, every content type's: the names the user gives the entities of a
-     * catalogue, the user's word on what a search found. Opened first: the other files give theirs
+     * catalogue, the user's word on what a search found. Opened first: the dictionaries give theirs
      * to it.
      */
     val preferences = Database("preferences", DataFolder.database(folder.root, "preferences"), "preferences")
 
     /**
      * The user's dictionaries, common to every content type: the tags of every site as the user
-     * merges and names them, and the universes. Opened before the files of the types: they give
-     * theirs to it, once, before their migrations drop them ([DictionaryMove]).
+     * merges and names them, the universes, and the normalized works with what the user said of them.
      */
     val dictionaries = Database("dictionaries", DataFolder.database(folder.root, "dictionaries"), "dictionaries") { db ->
         CatalogueRenameRepository.moveFrom("dictionaries", db, preferences.dsl)
@@ -48,21 +45,12 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
     }
 
     private val types: Map<String, TypeDatabases> = plugins.types.associate { t ->
-        val dir = folder.type(t.id)
-        TypeCorrectionsMove.move(
-            t.id, dir.resolve("corrections"), sources.mapValues { it.value.corrections.dsl }, preferences.dsl, dictionaries.dsl,
-        )
-        t.id to TypeDatabases(
-            model = Database("${t.id}/model", dir.resolve("model"), "model") { db ->
-                DictionaryMove.copy("${t.id}/model", db, dictionaries.dsl, DictionaryMove.MODEL)
-            },
-        )
+        t.id to TypeDatabases(model = Database("${t.id}/model", folder.type(t.id).resolve("model"), "model"))
     }
 
     fun of(sourceId: String): SourceDatabases = sources[sourceId] ?: error("No such source: $sourceId")
 
     fun source(sourceId: String): DSLContext = of(sourceId).source.dsl
-    fun corrections(sourceId: String): DSLContext = of(sourceId).corrections.dsl
     fun ratings(sourceId: String): DSLContext = of(sourceId).ratings.dsl
 
     fun type(typeId: String): TypeDatabases = types[typeId] ?: error("No such content type: $typeId")

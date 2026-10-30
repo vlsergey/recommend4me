@@ -13,10 +13,9 @@ import kotlin.math.ln
  * ten, a pair of grades of four works weighed as much.
  *
  * And the rows of two items of one work, [first] and [second]: the work on two sites, EQUAL —
- * graded or not, their loss is least when their scores are the same. A pair of equals weighs
- * [equalWeight]: as much as all the pairs of grades of an average graded row together, so that
- * the two items of a work are held together as firmly as a graded work is held in its place —
- * whether the work has a grade or not.
+ * their loss is least when their scores are the same. A pair of equals weighs [equalWeight]: as
+ * much as all the pairs of grades of an average row together, so that the two items of a work are
+ * held together as firmly as a work is held in its place.
  */
 class RankingPairs(val better: IntArray, val worse: IntArray, val first: IntArray, val second: IntArray, val equalWeight: Double) {
     /** The weight of all the pairs together. */
@@ -48,11 +47,11 @@ class RankingPairs(val better: IntArray, val worse: IntArray, val first: IntArra
     }
 
     companion object {
-        /** The pairs of the graded rows [rows] of [task] and of its rows without a grade, which only have equals. */
-        fun of(task: RankingTask, rows: IntArray): RankingPairs = of(task.grades, task.works, task.items, rows, task.ungraded)
+        /** The pairs of the rows [rows] of [task]. */
+        fun of(task: RankingTask, rows: IntArray): RankingPairs = of(task.grades, task.works, task.items, rows)
 
-        /** The pairs of the graded rows [subset] and of the rows without a grade, [ungraded], which only have equals. */
-        fun of(grades: IntArray, works: LongArray, items: LongArray, subset: IntArray, ungraded: IntRange = IntRange.EMPTY): RankingPairs {
+        /** The pairs of the rows [subset]. */
+        fun of(grades: IntArray, works: LongArray, items: LongArray, subset: IntArray): RankingPairs {
             val better = ArrayList<Int>()
             val worse = ArrayList<Int>()
             for (a in subset) for (b in subset) {
@@ -63,7 +62,7 @@ class RankingPairs(val better: IntArray, val worse: IntArray, val first: IntArra
             }
             val first = ArrayList<Int>()
             val second = ArrayList<Int>()
-            (subset.asSequence() + ungraded.asSequence()).groupBy { works[it] }.values.forEach { rows ->
+            subset.groupBy { works[it] }.values.forEach { rows ->
                 for (a in rows) for (b in rows) {
                     if (items[a] < items[b]) {
                         first += a
