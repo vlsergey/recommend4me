@@ -2,6 +2,7 @@
   "character.oc-female": "OFC (original female character)",
   "character.oc-male": "OMC (original male character)",
   "error.accessRefused": "Access only from this computer and from the allowed networks",
+  "error.authorsOne": "These authors are one author by now: to part them, take an account out on the author's card",
   "error.badAnswer": "An answer is +1, 0 or −1",
   "error.badGrade": "A grade is from {{min}} to {{max}}",
   "error.badMark": "A mark is +1 or −1",

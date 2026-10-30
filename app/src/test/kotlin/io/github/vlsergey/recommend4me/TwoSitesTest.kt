@@ -20,7 +20,9 @@ import io.github.vlsergey.recommend4me.api.model.TagRelation
 import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.capture.CaptureController
 import io.github.vlsergey.recommend4me.capture.Captures
+import io.github.vlsergey.recommend4me.api.model.SiteAuthorKey
 import io.github.vlsergey.recommend4me.api.model.SizeNumber
+import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.size.WorkSizes
@@ -367,19 +369,24 @@ class TwoSitesTest {
         assertEquals(listOf("w1" to "w2"), offer.pairs.map { it.first.item to it.second.item })
         assertEquals(listOf("w3"), offer.first.rest.map { it.item })
 
+        // An answer names the authors of the sites
+        val alphaAnn = SiteAuthorKey("alpha", "ann")
+        val betaAnna = SiteAuthorKey("beta", "anna-b")
+        val betaAnn = SiteAuthorKey("beta", "ann")
+
         // Told apart: offered no more, till the word is taken back
-        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.DIFFERENT))
+        authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.DIFFERENT))
         assertEquals(null, of(ann, annaB))
         assertEquals(listOf(ann to annaB), offers(AuthorSaid.DIFFERENT).map { it.first.id to it.second.id })
-        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.NONE))
+        authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.NONE))
 
         // Partly one: offered no more, kept apart from the different; of the author's own pairs with the word
-        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.PARTIAL))
+        authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.PARTIAL))
         assertEquals(null, of(ann, annaB))
         assertEquals(emptyList(), offers(AuthorSaid.DIFFERENT))
         assertEquals(listOf(ann to annaB), offers(AuthorSaid.PARTIAL).map { it.first.id to it.second.id })
         assertEquals(AuthorOffer.Said.PARTIAL, authors.getAuthorOffers("books", AuthorSaid.ALL, annaB, 0, 50).body!!.offers.single().said)
-        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.NONE))
+        authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.NONE))
 
         // Every author with works listed, the most works first, by a name of theirs
         assertEquals(listOf(ann, annaB, namesake), authors.listAuthors("books", AuthorKind.ALL, null, 0, 50).body!!.authors.map { it.id }.sortedWith(compareBy { if (it == ann) 0L else it }))
@@ -388,15 +395,23 @@ class TwoSitesTest {
         assertEquals(setOf("w1", "w3"), authors.getAuthor("books", ann).body!!.rest.map { it.item }.toSet())
 
         // One writer: merged, offered no more; a site's author taken out is told apart
-        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.SAME))
+        authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.SAME))
         assertEquals(ann, dictionary.bindingsOf("beta")["anna-b"])
         assertEquals(null, offers().firstOrNull { it.first.id == ann && it.second.id == ann })
+        // A row read before the merge stays good: the author merged away answered on by their site's name
+        assertEquals(204, authors.answerAuthors(AuthorAnswer(betaAnna, betaAnn, AuthorAnswer.Verdict.DIFFERENT)).statusCode.value())
+        assertEquals(true, stores.type("books")!!.authors.told()[AuthorRepository.pair(ann, namesake)]?.not())
+        authors.answerAuthors(AuthorAnswer(betaAnna, betaAnn, AuthorAnswer.Verdict.NONE))
+        // Of two who are one by now: one writer needs nothing, different is refused
+        assertEquals(204, authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.SAME)).statusCode.value())
+        assertEquals(Refusal.AUTHORS_ONE, assertThrows<Refused> { authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.DIFFERENT)) }.refusal)
+        assertEquals(404, authors.answerAuthors(AuthorAnswer(alphaAnn, SiteAuthorKey("beta", "nobody"), AuthorAnswer.Verdict.DIFFERENT)).statusCode.value())
         assertEquals(setOf("ann", "anna-b"), authors.listAuthors("books", AuthorKind.MERGED, null, 0, 50).body!!.authors.single { it.id == ann }.sites.map { it.author }.toSet())
         authors.takeOutSiteAuthor(ann, "beta", "anna-b")
         val apart = dictionary.bindingsOf("beta").getValue("anna-b")
         assertTrue(apart != ann)
         assertEquals(null, of(ann, apart))
-        authors.answerAuthors(AuthorAnswer(ann, apart, AuthorAnswer.Verdict.NONE))
+        authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.NONE))
         corrections.unlinkItem("alpha", "w1", "beta", "w2")
     }
 

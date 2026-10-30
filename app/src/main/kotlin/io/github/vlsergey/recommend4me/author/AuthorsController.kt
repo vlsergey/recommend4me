@@ -25,15 +25,9 @@ class AuthorsController(private val authors: Authors) : AuthorsApi {
         authors.offers(type, said, author, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun answerAuthors(authorAnswer: AuthorAnswer): ResponseEntity<Unit> {
-        val a = authorAnswer.first
-        val b = authorAnswer.second
-        val done = when (authorAnswer.verdict) {
-            AuthorAnswer.Verdict.SAME -> authors.merge(a, b)
-            AuthorAnswer.Verdict.DIFFERENT -> authors.tell(a, b, false)
-            AuthorAnswer.Verdict.PARTIAL -> authors.tell(a, b, true)
-            AuthorAnswer.Verdict.NONE -> authors.takeBack(a, b)
-        }
-        return if (done) ResponseEntity.noContent().build() else ResponseEntity.notFound().build()
+        val first = SiteAuthorRef(authorAnswer.first.source, authorAnswer.first.author)
+        val second = SiteAuthorRef(authorAnswer.second.source, authorAnswer.second.author)
+        return if (authors.answer(first, second, authorAnswer.verdict)) ResponseEntity.noContent().build() else ResponseEntity.notFound().build()
     }
 
     override fun findAuthorEntries(type: String, query: String): ResponseEntity<List<FoundAuthorEntry>> =

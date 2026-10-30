@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.author
 
+import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
 import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOffer
 import io.github.vlsergey.recommend4me.api.model.AuthorOfferPage
@@ -19,6 +20,7 @@ import io.github.vlsergey.recommend4me.duplicate.Duplicates
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -31,6 +33,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import java.time.Instant
 
@@ -317,27 +320,30 @@ class Authors(
         return out
     }
 
-    /** The two authors one writer: merged, the smaller id kept. False when either is no more. */
-    fun merge(a: Long, b: Long): Boolean {
+    /**
+     * The user's word on the two authors of the sites, of the normalized authors they are bound to now:
+     * so a row read before a merge stays good. One writer: merged, the smaller id kept; different, or
+     * partly one; or the word said of them taken back. Of two who are one by now, one writer and a word
+     * taken back need nothing, and different or partly one is refused: only an author of a site taken out
+     * parts them. False when either is no author of a site.
+     */
+    fun answer(first: SiteAuthorRef, second: SiteAuthorRef, verdict: AuthorAnswer.Verdict): Boolean {
         val type = stores.types.firstOrNull() ?: return false
-        if (a == b || !type.authors.exists(a) || !type.authors.exists(b)) return false
-        type.authors.merge(maxOf(a, b), minOf(a, b), Instant.now())
-        return true
-    }
-
-    /** The two authors told apart — or, [partly], a part of the works of one the other's. False when either is no more. */
-    fun tell(a: Long, b: Long, partly: Boolean): Boolean {
-        val type = stores.types.firstOrNull() ?: return false
-        if (a == b || !type.authors.exists(a) || !type.authors.exists(b)) return false
-        type.authors.tell(a, b, partly, Instant.now())
-        return true
-    }
-
-    /** The word said of the two authors taken back. False when either is no more. */
-    fun takeBack(a: Long, b: Long): Boolean {
-        val type = stores.types.firstOrNull() ?: return false
-        if (a == b || !type.authors.exists(a) || !type.authors.exists(b)) return false
-        type.authors.takeBack(a, b)
+        val a = type.authors.of(first) ?: return false
+        val b = type.authors.of(second) ?: return false
+        val now = Instant.now()
+        if (a == b) {
+            if (verdict == AuthorAnswer.Verdict.DIFFERENT || verdict == AuthorAnswer.Verdict.PARTIAL) {
+                throw Refusal.AUTHORS_ONE.refuse(HttpStatus.CONFLICT, "$first and $second are one normalized author, $a")
+            }
+            return true
+        }
+        when (verdict) {
+            AuthorAnswer.Verdict.SAME -> type.authors.merge(maxOf(a, b), minOf(a, b), now)
+            AuthorAnswer.Verdict.DIFFERENT -> type.authors.tell(a, b, false, now)
+            AuthorAnswer.Verdict.PARTIAL -> type.authors.tell(a, b, true, now)
+            AuthorAnswer.Verdict.NONE -> type.authors.takeBack(a, b)
+        }
         return true
     }
 

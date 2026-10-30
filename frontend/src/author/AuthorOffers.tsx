@@ -18,6 +18,9 @@ const PAIRS_SHOWN = 5;
 
 type Verdict = "SAME" | "DIFFERENT" | "PARTIAL" | "NONE";
 
+/** The author of a site an answer names a side by: theirs whatever the normalized authors merged since the row was read. */
+const accountOf = ({ sites: [site] }: AuthorOffer["first"]) => ({ source: site.source, author: site.author });
+
 /** A row: a pair of authors. */
 const rowOf = (o: AuthorOffer) => `${o.first.id}|${o.second.id}`;
 
@@ -65,13 +68,10 @@ export function Offers({
   const calm = useCalmUpdates(data?.offers, rowOf, sameRow);
   const offers = calm.shown ?? [];
   const answer = async (o: AuthorOffer, verdict: Verdict) => {
-    ensureOk(await api.PUT("/api/authors/answer", { body: { first: o.first.id, second: o.second.id, verdict } }));
+    ensureOk(await api.PUT("/api/authors/answer", { body: { first: accountOf(o.first), second: accountOf(o.second), verdict } }));
     if (verdict === "SAME") onMerged?.();
-    if (author === undefined) {
-      // Two merged, the smaller id kept: every row of the other names an author no more, come back under the kept one when read anew
-      const gone = Math.max(o.first.id, o.second.id);
-      calm.remove(verdict === "SAME" ? offers.filter((q) => q.first.id === gone || q.second.id === gone).map(rowOf) : [rowOf(o)]);
-    } else await queryClient.invalidateQueries({ queryKey: authorsKey(type.id) });
+    if (author === undefined) calm.remove([rowOf(o)]);
+    else await queryClient.invalidateQueries({ queryKey: authorsKey(type.id) });
   };
   return (
     <div className="flex flex-col gap-3">

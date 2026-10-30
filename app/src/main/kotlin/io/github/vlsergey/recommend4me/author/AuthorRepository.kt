@@ -23,6 +23,10 @@ class AuthorRepository(private val db: DSLContext) {
     fun bindingsOf(source: String): Map<String, Long> =
         db.select(SITE_AUTHOR.AUTHOR, SITE_AUTHOR.NORMALIZED).from(SITE_AUTHOR).where(SITE_AUTHOR.SOURCE.eq(source)).fetchMap({ it.value1()!! }, { it.value2()!! })
 
+    /** The normalized author the author of a site is bound to now. */
+    fun of(site: SiteAuthorRef): Long? =
+        db.select(SITE_AUTHOR.NORMALIZED).from(SITE_AUTHOR).where(SITE_AUTHOR.SOURCE.eq(site.source), SITE_AUTHOR.AUTHOR.eq(site.author)).fetchOne()?.value1()
+
     /** Every author of every site of the normalized authors [ids]. */
     fun sitesOf(ids: Collection<Long>): Map<Long, List<SiteAuthorRef>> =
         ids.distinct().chunked(BATCH).flatMap { chunk ->

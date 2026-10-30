@@ -716,7 +716,9 @@ paths:
         '204':
           description: Saved
         '404':
-          description: No such author
+          description: No such author of a site
+        '409':
+          description: Two authors said different or partly one who are one normalized author by now
 
   /api/authors/{id}/entries:
     put:
@@ -5054,16 +5056,25 @@ components:
           type: string
           description: The work's page on its site
 
+    SiteAuthorKey:
+      type: object
+      required: [source, author]
+      properties:
+        source:
+          type: string
+        author:
+          type: string
+          description: The site's own key of them
+
     AuthorAnswer:
       type: object
       required: [first, second, verdict]
+      description: Two authors of the sites, a word on the normalized authors they are bound to at the moment - a row read before a merge stays good
       properties:
         first:
-          type: integer
-          format: int64
+          $ref: '#/components/schemas/SiteAuthorKey'
         second:
-          type: integer
-          format: int64
+          $ref: '#/components/schemas/SiteAuthorKey'
         verdict:
           type: string
           enum: [SAME, DIFFERENT, PARTIAL, NONE]

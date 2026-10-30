@@ -2,6 +2,7 @@
   "character.oc-female": "OŽL (originalni ženski lik)",
   "character.oc-male": "OML (originalni muški lik)",
   "error.accessRefused": "Pristup samo sa ovog računara i iz dozvoljenih mreža",
+  "error.authorsOne": "Ovi autori su već spojeni: da ih razdvojite, izdvojite nalog na kartici autora",
   "error.badAnswer": "Odgovor je +1, 0 ili −1",
   "error.badGrade": "Ocena je od {{min}} do {{max}}",
   "error.badMark": "Oznaka je +1 ili −1",
