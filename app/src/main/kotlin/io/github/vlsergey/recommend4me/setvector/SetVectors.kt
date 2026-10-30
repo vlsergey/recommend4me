@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.setvector
 
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.review.ReviewRepository
 import io.github.vlsergey.recommend4me.source.SourceContexts
@@ -114,6 +115,24 @@ class SetVectors(
         SetKind.SCREENS -> s.pictures.sample(n, encoder)
         SetKind.REVIEWS -> s.reviews.sample(n).distinct().let { texts -> phrases.of(s, texts).values.toList() }
         SetKind.PARTS -> s.parts.sample(n, encoder)
+    }
+
+    /**
+     * The sets of a normalized work of several [items], each made of the members of all of them by
+     * the directions in use: the reviews of one work on two sites are one set. A review not encoded
+     * yet is encoded now: for a computation, not a request.
+     */
+    fun ofWork(type: TypeStore, items: List<ItemKey>): Map<String, FloatArray> {
+        val out = HashMap<String, FloatArray>()
+        for (kind in SetKind.entries) {
+            val encoder = encoderOf(kind) ?: continue
+            val embedding = type.embeddings.find(kind)?.takeIf { it.encoder == encoder } ?: continue
+            val all = items.groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
+                type.source(source)?.let { s -> members(s, kind, encoder, ids).values.flatten() }.orEmpty()
+            }
+            embedding.embedding.of(all)?.let { out[kind.key] = it }
+        }
+        return out
     }
 
     /** Fits the missing directions of a type, then makes the vectors of every item whose set grew. */

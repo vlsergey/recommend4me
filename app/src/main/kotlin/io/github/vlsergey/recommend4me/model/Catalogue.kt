@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Rating
+import io.github.vlsergey.recommend4me.setvector.SetVectors
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -38,10 +39,14 @@ class CatalogueItem(
 class TypedRating(val key: ItemKey, val version: String, val grade: Int, val ratedAt: Instant)
 
 /**
- * EVERYTHING THE MODEL READS OF EVERY ITEM OF A CONTENT TYPE, loaded in batch for one operation —
- * one pass over each source of each file: the items with their corrected facets and numbers, the
- * grades, the works — and handed to every step that needs it. Nothing of it outlives the operation.
+ * EVERYTHING THE MODEL READS OF EVERY NORMALIZED WORK OF A CONTENT TYPE, loaded in batch for one
+ * operation — one pass over each source of each file: the works with their corrected facets and
+ * numbers, the grades — and handed to every step that needs it. Nothing of it outlives the operation.
  * Not the user's signals on the sites: they are the user's verdict, the very thing the grades teach.
+ *
+ * A WORK IS ONE ROW, whatever sites have it: of several items it is made of all of them
+ * ([WorkFeatures]), named by the first of them ([WorkClusters.representative]); its grades and its
+ * mark are the grades and the mark of that item, as of every item of it.
  *
  * THE VECTORS OF THE WORKS THE TRAINING READS ALONE ([vectors]): the graded, those marked of interest,
  * those linked to them, and any asked for — a few hundred of 27 718 games, each a few thousand
@@ -67,14 +72,18 @@ class Catalogue(
 
     fun versionOf(key: ItemKey): String? = byKey[key]?.version
 
+    /** The likeness of a work to the marks, [excluded] left out: of a work of several items, the mean of theirs. */
+    fun likenessOf(key: ItemKey, excluded: Set<ItemKey> = emptySet()): Map<String, FloatArray> =
+        WorkFeatures.vectors(works.members(key).map { likeness.vectors(it, excluded) }.filter { it.isNotEmpty() })
+
     /** The vectors of a work the training reads, with its likeness to the marks. */
-    fun vectorsOf(key: ItemKey): Map<String, FloatArray> = (vectors[key] ?: emptyMap()) + likeness.vectors(key)
+    fun vectorsOf(key: ItemKey): Map<String, FloatArray> = (vectors[key] ?: emptyMap()) + likenessOf(key)
 
     /** The vectors of [keys] with their likeness to the marks: those kept, the rest read now. */
     fun vectorsOfMany(keys: List<ItemKey>): Map<ItemKey, Map<String, FloatArray>> {
         val missing = keys.filter { it !in vectors }
         val fresh = if (missing.isEmpty()) emptyMap() else read(missing)
-        return keys.associateWith { key -> (vectors[key] ?: fresh[key] ?: emptyMap()) + likeness.vectors(key) }
+        return keys.associateWith { key -> (vectors[key] ?: fresh[key] ?: emptyMap()) + likenessOf(key) }
     }
 }
 
@@ -85,6 +94,7 @@ class CatalogueReader(
     private val works: Works,
     private val likenesses: Likenesses,
     private val suggestions: FacetSuggestions,
+    private val setVectors: SetVectors,
 ) {
 
     /**
@@ -142,16 +152,29 @@ class CatalogueReader(
             s.setVectors.forEach(embeddings) { id, key, v -> put(id, key, v) }
         }
         val read = System.currentTimeMillis()
-        val keys = items.map { it.key }.toSet()
-        val graded = ratings.map { it.key }.filter { it in keys }.toSet()
+        val graded = items.map { it.key }.toSet().let { keys -> ratings.map { it.key }.filter { it in keys }.toSet() }
+        // A work of several items becomes one row, named by the first of them
+        val merged = HashMap<ItemKey, CatalogueItem>()
+        val itemOf = items.associateBy { it.key }
+        clusters.linkedWorks().forEach { members ->
+            val own = members.mapNotNull(itemOf::get)
+            val name = members.first()
+            if (name !in itemOf) return@forEach
+            merged[name] = WorkFeatures.item(name, own)
+            val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + setVectors.ofWork(type, members)
+            members.forEach(vectors::remove)
+            vectors[name] = HashMap(joined)
+        }
+        val named = items.filter { clusters.representative(it.key) == it.key }.map { merged[it.key] ?: it }
+        val keys = named.map { it.key }.toSet()
         val center = centerSum?.takeIf { pictures > 0 }?.let { sum -> FloatArray(sum.size) { (sum[it] / pictures).toFloat() } }
         val likeness = if (withLikeness) likenesses.forTraining(type, center, graded) else likenesses.stored(type)
         log.info(
-            "{}: catalogue of {} items read in {} ms, the vectors of {} kept, likeness in {} ms",
-            type.id, items.size, read - started, vectors.size, System.currentTimeMillis() - read,
+            "{}: catalogue of {} works read of {} items in {} ms, the vectors of {} kept, likeness in {} ms",
+            type.id, named.size, items.size, read - started, vectors.size, System.currentTimeMillis() - read,
         )
         return Catalogue(
-            type, items, ratings.filter { it.key in keys }, vectors, likeness, clusters, interest,
+            type, named, ratings.filter { it.key in keys }, vectors, likeness, clusters, interest.filterKeys { it in keys },
             spreads = spreads.spreads(), read = { wanted -> vectorsOfMany(type, wanted) },
         )
     }
@@ -217,8 +240,24 @@ class CatalogueReader(
         return CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)
     }
 
-    /** The vectors of one item — texts, pictures, sets — without its likeness to the marks. */
-    fun vectors(type: TypeStore, key: ItemKey): Map<String, FloatArray> = vectorsOfMany(type, listOf(key))[key].orEmpty()
+    /** The work of the item as the model reads it, without its vectors, named by the first of its items; null when there is no such item. */
+    fun work(type: TypeStore, key: ItemKey): CatalogueItem? {
+        val members = works.of(type).members(key).sortedBy { it.toString() }
+        if (members.size == 1) return item(type, key)
+        val own = members.mapNotNull { item(type, it) }
+        return own.takeIf { it.isNotEmpty() }?.let { WorkFeatures.item(it.first().key, it) }
+    }
+
+    /**
+     * The vectors of the work of the item — texts, pictures, sets — without its likeness to the marks:
+     * for a request, of what is kept alone, so of several items the mean of their sets too, the sets of
+     * all of them made in a computation ([SetVectors.ofWork]).
+     */
+    fun vectors(type: TypeStore, key: ItemKey): Map<String, FloatArray> {
+        val members = works.of(type).members(key)
+        val read = vectorsOfMany(type, members)
+        return WorkFeatures.vectors(members.mapNotNull { read[it] })
+    }
 
     /** The vectors of [keys] — texts, pictures, sets — without their likeness to the marks: a query of each kind a source. */
     fun vectorsOfMany(type: TypeStore, keys: List<ItemKey>): Map<ItemKey, Map<String, FloatArray>> {

@@ -26,6 +26,7 @@ import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.suggestion.FacetChancesChanged
 import io.github.vlsergey.recommend4me.tag.TagsChanged
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
+import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import io.github.vlsergey.recommend4me.vector.Vectors
@@ -76,6 +77,7 @@ class Recommendations(
     private val stores: Stores,
     private val plugins: Plugins,
     private val reader: CatalogueReader,
+    private val works: Works,
     private val likenesses: Likenesses,
     private val phrases: PhraseVectors,
     private val settings: Settings,
@@ -272,7 +274,7 @@ class Recommendations(
     /**
      * The rows of [used] — the user's grades, or the works labelled interesting or not as grades
      * [INTERESTING] and [NOT_INTERESTING] — each with the grade of an earlier version [previousOf]
-     * gives it, and the rows of the linked items without one.
+     * gives it. A work is one row however many sites have it ([Catalogue]).
      */
     private fun prepare(catalogue: Catalogue, used: List<TypedRating>, what: String, previousOf: (TypedRating) -> Int?): Prepared? {
         val likeness = catalogue.likeness
@@ -283,13 +285,9 @@ class Recommendations(
             log.info("{}: not enough {} to train: {} of {} values", catalogue.type.id, what, used.size, grades.distinct().size)
             return null
         }
-        // An item of a linked work the user did not grade has no grade, but it is the same work as
-        // the others: a row without a grade, compared to them as an equal — and so put in order with them
-        val gradedKeys = used.map { it.key }.toSet()
-        val ungraded = catalogue.items.filter { clusters.linked(it.key) && it.key !in gradedKeys }
         val rows = used.map { r ->
             CatalogueReader.inputOf(catalogue.byKey.getValue(r.key), catalogue.vectorsOf(r.key), previousOf(r))
-        } +ungraded.map { CatalogueReader.inputOf(it, catalogue.vectorsOf(it.key), previousForCurrent[it.key]) }
+        }
         // The current input of every graded item: what the vocabulary and the importances are counted on
         val perItem = used.map { it.key }.distinct().map { key ->
             CatalogueReader.inputOf(catalogue.byKey.getValue(key), catalogue.vectorsOf(key), previousForCurrent[key])
@@ -310,9 +308,9 @@ class Recommendations(
         val xFor = if (likeness.empty) null else { underTest: Set<Long> ->
             synchronized(ofFold) {
                 ofFold.getOrPut(underTest) {
-                    val excluded = underTest.flatMap { keysOfWork[it].orEmpty() }.toSet()
+                    val excluded = underTest.flatMap { keysOfWork[it].orEmpty() }.flatMap(clusters::members).toSet()
                     layout.matrix(rows.map { input ->
-                        input.withVectors(input.vectors - MARK_KEYS + likeness.vectors(input.key, excluded))
+                        input.withVectors(input.vectors - MARK_KEYS + catalogue.likenessOf(input.key, excluded))
                     })
                 }
             }
@@ -370,7 +368,8 @@ class Recommendations(
             trainMillis = System.currentTimeMillis() - began,
         )
         type.models.save(scorer.id, Instant.ofEpochMilli(meta.trainedAtMillis), json.writeValueAsString(meta), fitted.pack())
-        type.models.replaceHeldOut(heldOutScores(p, chosen, scale))
+        // Of a work, every item of it: each shows the work's
+        type.models.replaceHeldOut(heldOutScores(p, chosen, scale).flatMap { (key, score) -> catalogue.works.members(key).map { it to score } }.toMap())
         return TrainedModel(meta, fitted)
     }
 
@@ -490,9 +489,10 @@ class Recommendations(
     /** A word on a graded work: what the model that had not seen it said is of the work as it was. */
     private fun heldOutChanged(source: String, itemId: String) = stores.typeOf(source).models.forgetExplained(ItemKey(source, itemId))
 
-    private fun fitHeldOut(key: ItemKey): HeldOut? {
-        val type = stores.typeOf(key.source)
-        if (type.source(key.source)?.ratings?.ofItem(key.id).isNullOrEmpty()) return null
+    private fun fitHeldOut(asked: ItemKey): HeldOut? {
+        val type = stores.typeOf(asked.source)
+        if (type.source(asked.source)?.ratings?.ofItem(asked.id).isNullOrEmpty()) return null
+        val key = works.of(type).representative(asked)
         val model = load(type) ?: return null
         val scorer = plugins.scorers.firstOrNull { it.id == model.meta.scorer } ?: return null
         // The work's own vectors kept with the graded ones': it is graded, but said so all the same
@@ -519,10 +519,10 @@ class Recommendations(
             fitted,
         )
         // The work as the fold saw it: its current input, its likeness to the marks of the fold's works left out
-        val excluded = underTest.flatMap { p.keysOfWork[it].orEmpty() }.toSet()
+        val excluded = underTest.flatMap { p.keysOfWork[it].orEmpty() }.flatMap(catalogue.works::members).toSet()
         val current = CatalogueReader.previousGradesOfCurrentVersions(catalogue.ratings, catalogue::versionOf)[key]
         val input = CatalogueReader.inputOf(catalogue.byKey.getValue(key), catalogue.vectorsOf(key), current).let { i ->
-            if (catalogue.likeness.empty) i else i.withVectors(i.vectors - MARK_KEYS + catalogue.likeness.vectors(key, excluded))
+            if (catalogue.likeness.empty) i else i.withVectors(i.vectors - MARK_KEYS + catalogue.likenessOf(key, excluded))
         }
         val grade = p.used[own].grade
         return HeldOut(
@@ -543,27 +543,33 @@ class Recommendations(
             val inputs = chunk.map { CatalogueReader.inputOf(it, vectors.getValue(it.key), previousForCurrent[it.key]) }
             val raw = model.scores(model.layout.matrix(inputs))
             val chances = interest?.chances(inputs)
-            chunk.indices.map { i -> chunk[i].key to Predicted(model.scale.score(raw[i].toDouble()), chances?.get(i)) }.stream()
+            // Of a work, every item of it: each shows the work's
+            chunk.indices.flatMap { i ->
+                val prediction = Predicted(model.scale.score(raw[i].toDouble()), chances?.get(i))
+                catalogue.works.members(chunk[i].key).map { it to prediction }
+            }.stream()
         }.toList()
         val written = System.currentTimeMillis()
         catalogue.type.models.replacePredictions(predicted)
         log.info("{}: {} predictions written in {} ms", catalogue.type.id, predicted.size, System.currentTimeMillis() - written)
     }
 
-    /** Re-scores one item, after its data changed outside a training. */
+    /** Re-scores the work of one item, after its data changed outside a training. */
     fun scoreItem(key: ItemKey) {
         val type = stores.typeOf(key.source)
         val model = load(type) ?: return
         val input = inputOf(type, key, likenesses.stored(type)) ?: return
-        type.models.savePrediction(key, Predicted(model.score(input), loadInterest(type)?.chances(listOf(input))?.single()))
+        val prediction = Predicted(model.score(input), loadInterest(type)?.chances(listOf(input))?.single())
+        works.of(type).members(key).forEach { type.models.savePrediction(it, prediction) }
     }
 
-    /** The input of one item as the model reads it now. */
+    /** The input of the work of one item as the model reads it now. */
     private fun inputOf(type: TypeStore, key: ItemKey, stored: TypeLikeness, vectors: Map<String, FloatArray>? = null): ItemInput? {
-        val item = reader.item(type, key) ?: return null
-        val ratings = type.source(key.source)!!.ratings.ofItem(key.id).map { TypedRating(key, it.version, it.grade, it.ratedAt) }
-        val previous = CatalogueReader.previousGradesOfCurrentVersions(ratings) { item.version }[key]
-        return CatalogueReader.inputOf(item, vectors ?: (reader.vectors(type, key) + likenesses.of(type, key, stored)), previous)
+        val item = reader.work(type, key) ?: return null
+        val ratings = type.source(key.source)!!.ratings.ofItem(key.id).map { TypedRating(item.key, it.version, it.grade, it.ratedAt) }
+        val previous = CatalogueReader.previousGradesOfCurrentVersions(ratings) { item.version }[item.key]
+        val likeness = works.of(type).members(key).map { likenesses.of(type, it, stored) }.filter { it.isNotEmpty() }
+        return CatalogueReader.inputOf(item, vectors ?: (reader.vectors(type, key) + WorkFeatures.vectors(likeness)), previous)
     }
 
     // --- What the interface shows ---
@@ -818,7 +824,9 @@ class Recommendations(
         val type = type(typeId)
         val model = load(type)
         val changedAt = settings.get("model.$typeId.gradesChangedAt")?.toLongOrNull() ?: 0L
-        val counts = counts(type.sources.flatMap { s -> s.ratings.all().map { it.grade } }.toIntArray())
+        val clusters = works.of(type)
+        // A grade of a work once, whichever of its items see it
+        val counts = counts(type.sources.flatMap { s -> s.ratings.all().filter { clusters.representative(ItemKey(s.id, it.itemId)) == ItemKey(s.id, it.itemId) }.map { it.grade } }.toIntArray())
         return ModelSummary(
             meta = model?.meta,
             training = training(typeId),
