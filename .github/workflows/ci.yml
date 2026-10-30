@@ -15,7 +15,7 @@ jobs:
     # A build takes a quarter of an hour: one that hangs is stopped after an hour, not the runner's six
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v4
         with:
