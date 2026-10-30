@@ -28,7 +28,7 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
     override fun answerDuplicate(type: String, duplicateAnswer: ApiDuplicateAnswer): ResponseEntity<Unit> {
         val a = duplicateAnswer.first.let { ItemKey(it.source, it.item) }
         val b = duplicateAnswer.second.let { ItemKey(it.source, it.item) }
-        if (!duplicates.answer(type, a, b, duplicateAnswer.same)) {
+        if (!duplicates.answer(type, a, b, DuplicateAnswer.valueOf(duplicateAnswer.verdict.name))) {
             throw Refusal.NO_SUCH_WORK.refuse(HttpStatus.BAD_REQUEST, "No such pair of works of $type: $a, $b")
         }
         return ResponseEntity.noContent().build()

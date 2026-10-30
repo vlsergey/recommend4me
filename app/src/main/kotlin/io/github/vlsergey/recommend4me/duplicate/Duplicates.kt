@@ -1,9 +1,11 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.interest.LinkedInterest
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -40,8 +42,16 @@ import java.util.concurrent.TimeUnit
 
 private val log = LoggerFactory.getLogger(Duplicates::class.java)
 
-/** The user's word on a pair: one work, or different works. */
-enum class DuplicateAnswer { SAME, DIFFERENT }
+/**
+ * The user's word on a pair: one work; different works; or one the TRANSLATION of the other —
+ * different works, each its own grade and interest, of one text: for the comparing, as one work.
+ */
+enum class DuplicateAnswer {
+    SAME, DIFFERENT, TRANSLATION;
+
+    /** What the model of the answers learns of it: the same text, or not. */
+    val sameText: Boolean get() = this != DIFFERENT
+}
 
 /**
  * THE WORKS OF DIFFERENT SITES THAT MAY BE ONE WORK, and the user's word on each pair. A search
@@ -49,12 +59,13 @@ enum class DuplicateAnswer { SAME, DIFFERENT }
  * type with every work of every other site by every field of a work every site has alike, the text
  * itself aside: the vectors of their titles and of their descriptions (the encoder of texts reads
  * many languages: an original on Archive of Our Own and its translation on fanfics.me are near), the
- * values of every facet the sites share ([valuesOf]) and the numbers of their size — and keeps of
+ * values of every facet the sites share, each apart ([valuesOf]), and the numbers of their size — and keeps of
  * every work the one of every other site likeliest one work with it; no threshold, none hidden. It
  * runs on start when the type was never searched, and when the user asks. The pairs are answered on
  * as the work's window links the works: one work — linked, its grade and interest shared
- * ([LinkedGrades], [LinkedInterest]) — or different works, never offered again
- * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct]).
+ * ([LinkedGrades], [LinkedInterest]) — different works, or one the translation of the other (different
+ * works of one text, each its own grade), never offered again
+ * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct], [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.translation]).
  *
  * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work is a model of the user's answers
  * ([DuplicateModel]) over how alike its layers are, fitted at every search and a few seconds after
@@ -122,19 +133,24 @@ class Duplicates(
         val store: SourceStore, val ids: List<String>, val width: Int, val titles: Floats, val descriptions: Floats, val described: BooleanArray,
         val values: Array<IntArray>, val sizes: Map<String, DoubleArray>,
     ) {
-        /** Of every work, the weight of each of its [values]: the value's rarity among every work of the type, the work's whole of unit length. */
+        /** Of every work, the weight of each of its [values]: the value's rarity among every work of the type, the work's values of each facet of unit length. */
         lateinit var weights: Array<FloatArray>
+
+        /** Of every work, the facets it has a value of: a bit a facet, by its place among the type's ([familyOf]). */
+        lateinit var facets: LongArray
 
         /** Of every value of the type, the works of this site that have it ([withValueItems]) and its weight in each. */
         lateinit var withValueItems: Array<IntArray>
         lateinit var withValueWeights: Array<FloatArray>
 
-        /** Its works' values weighed by the [rarity] of every value, and every value's works laid out. */
-        fun weigh(rarity: FloatArray) {
+        /** Its works' values weighed by the [rarity] of every value, every facet's of a work apart, and every value's works laid out. */
+        fun weigh(rarity: FloatArray, familyOf: IntArray) {
+            facets = LongArray(values.size) { i -> values[i].fold(0L) { bits, v -> bits or (1L shl familyOf[v]) } }
             weights = Array(values.size) { i ->
                 val w = FloatArray(values[i].size) { k -> rarity[values[i][k]] }
-                val norm = Math.sqrt(w.sumOf { it.toDouble() * it }).toFloat()
-                if (norm > 0f) for (k in w.indices) w[k] /= norm
+                val norms = HashMap<Int, Double>()
+                values[i].forEachIndexed { k, v -> norms.merge(familyOf[v], w[k].toDouble() * w[k], Double::plus) }
+                values[i].forEachIndexed { k, v -> norms[familyOf[v]]?.let { n -> if (n > 0) w[k] /= Math.sqrt(n).toFloat() } }
                 w
             }
             val count = IntArray(rarity.size)
@@ -167,27 +183,28 @@ class Duplicates(
         fun add(id: String, prefix: String, key: String) {
             own.getOrPut(id) { HashSet() } += "$prefix:$key"
         }
-        // The characters of either facet of them are one: a main one on a site, a secondary one on another
-        fun prefixOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACETS) UniverseFacets.CHARACTERS else facet
         val layers = s.schema.facets.filter { it.editable }
         val bound = s.tags.bindingsOf(s.id)
         val ignored = s.ignoredTags()
         layers.forEach { f ->
-            s.items.forEachFacet(f.key) { id, keys -> keys.forEach { add(id, prefixOf(f.key), it) } }
-            f.examplesFrom?.let { site -> s.items.forEachFacet(site) { id, keys -> keys.forEach { k -> bound[k]?.let { add(id, prefixOf(f.key), TagRepository.key(it)) } } } }
+            s.items.forEachFacet(f.key) { id, keys -> keys.forEach { add(id, familyOf(f.key), it) } }
+            f.examplesFrom?.let { site -> s.items.forEachFacet(site) { id, keys -> keys.forEach { k -> bound[k]?.let { add(id, familyOf(f.key), TagRepository.key(it)) } } } }
         }
         val layerKeys = layers.map { it.key }.toSet()
-        s.drafts.all().forEach { (id, drafts) -> drafts.filter { it.facet in layerKeys }.forEach { add(id, prefixOf(it.facet), it.key) } }
+        s.drafts.all().forEach { (id, drafts) -> drafts.filter { it.facet in layerKeys }.forEach { add(id, familyOf(it.facet), it.key) } }
         s.corrections.allFacets().filter { it.facet in layerKeys }.forEach { c ->
-            val value = "${prefixOf(c.facet)}:${c.key}"
+            val value = "${familyOf(c.facet)}:${c.key}"
             if (c.added) own.getOrPut(c.itemId) { HashSet() } += value else own[c.itemId]?.remove(value)
         }
-        ignored.forEach { (facet, keys) -> keys.forEach { k -> own.values.forEach { it -= "${prefixOf(facet)}:$k" } } }
+        ignored.forEach { (facet, keys) -> keys.forEach { k -> own.values.forEach { it -= "${familyOf(facet)}:$k" } } }
         s.schema.facets.filter { !it.editable && it.standard?.values != null }.forEach { f ->
             s.items.forEachFacet(f.key) { id, keys -> keys.forEach { add(id, f.standard!!.key, it) } }
         }
         return Array(ids.size) { i -> own[ids[i]].orEmpty().map { places.getOrPut(it) { places.size } }.sorted().toIntArray() }
     }
+
+    /** The facet a facet of the layer's values are compared as: the characters of either facet of them are one — a main one on a site, a secondary one on another. */
+    private fun familyOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACETS) UniverseFacets.CHARACTERS else facet
 
     /** The numbers of the size of every work the sites share — a standard number, not how the site's readers met it — by its key. */
     private fun sizesOf(s: SourceStore, ids: List<String>): Map<String, DoubleArray> {
@@ -247,9 +264,15 @@ class Duplicates(
         val having = IntArray(places.size)
         sides.forEach { side -> side.values.forEach { own -> own.forEach { having[it]++ } } }
         val rarity = FloatArray(places.size) { t -> if (having[t] == 0) 0f else Math.log(works.toDouble() / having[t]).toFloat() }
-        sides.forEach { it.weigh(rarity) }
+        // Every value's facet: the name before its value ("characters:wikidata:Q…")
+        val names = arrayOfNulls<String>(places.size).also { out -> places.forEach { (name, at) -> out[at] = name } }
+        val families = names.map { it!!.substringBefore(':') }.distinct().sorted()
+        require(families.size < Long.SIZE_BITS) { "${families.size} facets of the type: no bit of a mask each" }
+        val familyAt = families.withIndex().associate { it.value to it.index }
+        val familyOf = IntArray(places.size) { familyAt.getValue(names[it]!!.substringBefore(':')) }
+        sides.forEach { it.weigh(rarity, familyOf) }
         // The pairs chosen by the model of the answers as the last fitting left it
-        val model = DuplicateModel(type.duplicates.search()?.weights)
+        val scorer = DuplicateModel(type.duplicates.search()?.weights).Scorer(families)
         val read = System.currentTimeMillis() - started
         val found = HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate>()
         for (a in sides) for (b in sides) {
@@ -260,10 +283,11 @@ class Duplicates(
             val descriptions = Floats(rows * n)
             val title = FloatArray(n)
             val description = FloatArray(n)
-            // Of a work of this site, its values' cosine with every work of the other, and the works it touched: made nought again after
-            val valued = FloatArray(n)
+            // Of a work of this site, its values' cosine of every facet with every work of the other, and the works it touched: made nought again after
+            val valued = Array(families.size) { FloatArray(n) }
             val sizeKeys = a.sizes.keys.filter { it in b.sizes }
             val touched = IntArray(n)
+            val isTouched = BooleanArray(n)
             var from = 0
             while (from < a.ids.size) {
                 val m = minOf(rows, a.ids.size - from)
@@ -277,15 +301,19 @@ class Duplicates(
                     val ownValues = a.values[i]
                     for (k in ownValues.indices) {
                         val w = a.weights[i][k]
+                        val into = valued[familyOf[ownValues[k]]]
                         val items = b.withValueItems[ownValues[k]]
                         val weights = b.withValueWeights[ownValues[k]]
                         for (q in items.indices) {
                             val j = items[q]
-                            if (valued[j] == 0f) touched[touches++] = j
-                            valued[j] += w * weights[q]
+                            if (!isTouched[j]) {
+                                isTouched[j] = true
+                                touched[touches++] = j
+                            }
+                            into[j] += w * weights[q]
                         }
                     }
-                    val hasValues = ownValues.isNotEmpty()
+                    val ownFacets = a.facets[i]
                     /** How alike the sizes of the two are: of every number both have, the smaller over the larger, their mean; null when they share none. */
                     fun size(j: Int): Float? {
                         var sum = 0.0
@@ -304,11 +332,10 @@ class Duplicates(
                     var best = -1
                     var score = Double.NEGATIVE_INFINITY
                     for (j in 0 until n) {
-                        val s = model.chance(
-                            title[j],
-                            if (a.described[i] && b.described[j]) description[j] else null,
-                            if (hasValues && b.values[j].isNotEmpty()) valued[j] else null,
-                            size(j),
+                        val sized = size(j)
+                        val s = scorer.score(
+                            title[j], description[j], a.described[i] && b.described[j], sized ?: 0f, sized != null,
+                            ownFacets and b.facets[j], valued, j,
                         )
                         if (s > score) {
                             score = s
@@ -321,12 +348,16 @@ class Duplicates(
                             DuplicateCandidate(
                                 first, second, title[best],
                                 description = if (a.described[i] && b.described[best]) description[best] else null,
-                                facets = if (hasValues && b.values[best].isNotEmpty()) valued[best] else null,
                                 size = size(best),
+                                facets = families.indices.filter { (ownFacets and b.facets[best]) and (1L shl it) != 0L }.associate { families[it] to valued[it][best] },
                             )
                         }
                     }
-                    for (q in 0 until touches) valued[touched[q]] = 0f
+                    for (q in 0 until touches) {
+                        val j = touched[q]
+                        isTouched[j] = false
+                        for (f in valued.indices) valued[f][j] = 0f
+                    }
                 }
                 from += m
             }
@@ -340,19 +371,20 @@ class Duplicates(
             if (a === b || a.width != b.width) return@forEach
             val i = a.ids.binarySearch(pair.first.id).takeIf { it >= 0 } ?: return@forEach
             val j = b.ids.binarySearch(pair.second.id).takeIf { it >= 0 } ?: return@forEach
-            found[pair] = layersOf(pair, a, i, b, j)
+            found[pair] = layersOf(pair, a, i, b, j, families, familyOf)
         }
         val compared = System.currentTimeMillis() - started
-        val fitted = DuplicateModel.fit(found.values.toList()) { said[it.pair] }
+        val fitted = DuplicateModel.fit(found.values.toList()) { said[it.pair]?.sameText }
         type.duplicates.replace(found.values, DuplicateSearch(Instant.now(), encoder, works, fitted?.weights))
         log.info(
-            "{}: duplicates looked for among {} works of {} sites — {} pairs in {} ms (reading {}, comparing {}, keeping {})",
-            type.id, works, sides.size, found.size, System.currentTimeMillis() - started, read, compared - read, System.currentTimeMillis() - started - compared,
+            "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs in {} ms (reading {}, comparing {}, keeping {}): {}",
+            type.id, works, sides.size, families.size, found.size, System.currentTimeMillis() - started, read, compared - read,
+            System.currentTimeMillis() - started - compared, fitted?.weights,
         )
     }
 
     /** The layers of the pair of [a]'s [i]-th work and [b]'s [j]-th, worked out alone: a pair the user answered on that the search did not keep. */
-    private fun layersOf(pair: Pair<ItemKey, ItemKey>, a: Side, i: Int, b: Side, j: Int): DuplicateCandidate {
+    private fun layersOf(pair: Pair<ItemKey, ItemKey>, a: Side, i: Int, b: Side, j: Int, families: List<String>, familyOf: IntArray): DuplicateCandidate {
         fun dot(x: Floats, y: Floats): Float {
             val u = FloatArray(a.width).also { x.take(it, 0, i * a.width, a.width) }
             val v = FloatArray(b.width).also { y.take(it, 0, j * b.width, b.width) }
@@ -360,14 +392,15 @@ class Duplicates(
             for (k in u.indices) sum += u[k] * v[k]
             return sum
         }
-        var facets = 0f
+        val both = a.facets[i] and b.facets[j]
+        val facets = FloatArray(families.size)
         var p = 0
         var q = 0
         while (p < a.values[i].size && q < b.values[j].size) {
             val x = a.values[i][p]
             val y = b.values[j][q]
             when {
-                x == y -> facets += a.weights[i][p++] * b.weights[j][q++]
+                x == y -> facets[familyOf[x]] += a.weights[i][p++] * b.weights[j][q++]
                 x < y -> p++
                 else -> q++
             }
@@ -380,17 +413,20 @@ class Duplicates(
         return DuplicateCandidate(
             pair.first, pair.second, dot(a.titles, b.titles),
             description = if (a.described[i] && b.described[j]) dot(a.descriptions, b.descriptions) else null,
-            facets = if (a.values[i].isNotEmpty() && b.values[j].isNotEmpty()) facets else null,
             size = if (ratios.isEmpty()) null else ratios.average().toFloat(),
+            facets = families.indices.filter { both and (1L shl it) != 0L }.associate { families[it] to facets[it] },
         )
     }
 
-    /** The user's word on every pair across the sites: true — one work (linked, the smaller key first), false — different. */
-    private fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, Boolean> {
-        val out = HashMap<Pair<ItemKey, ItemKey>, Boolean>()
-        type.links.distincts().forEach { out[it] = false }
+    /** The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different, a translation. */
+    private fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> {
+        val out = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
+        type.links.distincts().forEach { out[it] = DuplicateAnswer.DIFFERENT }
+        type.links.translations().forEach { out[it] = DuplicateAnswer.TRANSLATION }
         works.of(type).linkedWorks().forEach { members ->
-            members.forEachIndexed { k, a -> members.drop(k + 1).filter { it.source != a.source }.forEach { b -> out[type.links.ordered(a, b)] = true } }
+            members.forEachIndexed { k, a ->
+                members.drop(k + 1).filter { it.source != a.source }.forEach { b -> out[type.links.ordered(a, b)] = DuplicateAnswer.SAME }
+            }
         }
         return out
     }
@@ -411,11 +447,12 @@ class Duplicates(
                         val started = System.currentTimeMillis()
                         val said = said(type)
                         val pairs = type.duplicates.all()
-                        val model = DuplicateModel.fit(pairs) { said[it.pair] }
+                        val model = DuplicateModel.fit(pairs) { said[it.pair]?.sameText }
                         type.duplicates.keepWeights(model?.weights)
                         log.info(
-                            "{}: the model of the duplicates fitted on {} pairs, {} said one work, {} different, in {} ms: {}",
-                            type.id, pairs.size, said.values.count { it }, said.values.count { !it }, System.currentTimeMillis() - started, model?.weights?.toList(),
+                            "{}: the model of the duplicates fitted on {} pairs, {} said one work, {} translations, {} different, in {} ms: {}",
+                            type.id, pairs.size, said.values.count { it == DuplicateAnswer.SAME }, said.values.count { it == DuplicateAnswer.TRANSLATION },
+                            said.values.count { it == DuplicateAnswer.DIFFERENT }, System.currentTimeMillis() - started, model?.weights,
                         )
                     }
                 } catch (e: Exception) {
@@ -450,6 +487,14 @@ class Duplicates(
                 formula[ItemKey(s.id, id)] = p.score.coerceAtLeast(0.0) * (chance ?: 1.0)
             }
         }
+        // How every facet compared is named: the label of the facet of any source of the type that is it
+        val labels = HashMap<String, String>()
+        type.sources.forEach { s ->
+            s.schema.facets.forEach { def ->
+                val family = if (def.editable) familyOf(def.key) else def.standard?.takeIf { it.values != null }?.key
+                if (family != null && (!def.editable || family == def.key)) labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
+            }
+        }
         class Ranked(val pair: Pair<ItemKey, ItemKey>, val layers: DuplicateCandidate?, val chance: Double?, val priority: Double)
         fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
             val chance = layers?.let(model::chance)
@@ -470,10 +515,12 @@ class Duplicates(
                 DuplicatePair(
                     first = first.work, second = second.work,
                     chance = r.chance?.toBigDecimal(), priority = r.priority.toBigDecimal(),
-                    title = d?.title?.toBigDecimal(), description = d?.description?.toBigDecimal(),
-                    facets = d?.facets?.toBigDecimal(), propertySize = d?.size?.toBigDecimal(),
+                    title = d?.title?.toBigDecimal(), description = d?.description?.toBigDecimal(), propertySize = d?.size?.toBigDecimal(),
+                    facets = d?.facets.orEmpty().entries.sortedByDescending { it.value }.map { (family, v) ->
+                        DuplicateFacet(key = family, labelKey = labels[family] ?: family, `value` = v.toBigDecimal())
+                    },
                     sameAuthor = first.authors.any { it in second.authors },
-                    answer = said[r.pair]?.let { if (it) DuplicatePair.Answer.SAME else DuplicatePair.Answer.DIFFERENT },
+                    answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
                 )
             },
             pending = pending(type),
@@ -523,35 +570,45 @@ class Duplicates(
     }
 
     /**
-     * The user's word on the pair: one work — linked as the work's window links them, its grade and
-     * interest shared, a word that they are different taken back — or different works, a link
-     * between them taken away. False when either is no work of the type, or they are one item.
+     * The user's word on the pair, in place of any before: one work — linked as the work's window
+     * links them, its grade and interest shared — different works, or one the translation of the
+     * other (not linked: each its own grade and interest), a link between them taken away. False when
+     * either is no work of the type, or they are one item.
      */
-    fun answer(typeId: String, a: ItemKey, b: ItemKey, same: Boolean): Boolean {
+    fun answer(typeId: String, a: ItemKey, b: ItemKey, verdict: DuplicateAnswer): Boolean {
         val type = stores.type(typeId) ?: return false
         val first = type.source(a.source)?.takeIf { it.items.find(a.id) != null } ?: return false
         if (type.source(b.source)?.items?.find(b.id) == null || a == b) return false
         val now = Instant.now()
-        if (same) {
-            type.links.undistinct(a, b)
-            if (a.source == b.source) first.corrections.link(a.id, b.id, now) else type.links.link(a, b, now)
-            // One work, one grade and one interest mark: written to each of its items
-            linkedGrades.share(a)
-            linkedInterest.share(a)
-        } else {
-            if (a.source == b.source) first.corrections.unlink(a.id, b.id)
-            type.links.distinct(a, b, now)
+        type.links.undistinct(a, b)
+        type.links.untranslation(a, b)
+        when (verdict) {
+            DuplicateAnswer.SAME -> {
+                if (a.source == b.source) first.corrections.link(a.id, b.id, now) else type.links.link(a, b, now)
+                // One work, one grade and one interest mark: written to each of its items
+                linkedGrades.share(a)
+                linkedInterest.share(a)
+            }
+            DuplicateAnswer.DIFFERENT -> {
+                if (a.source == b.source) first.corrections.unlink(a.id, b.id)
+                type.links.distinct(a, b, now)
+            }
+            DuplicateAnswer.TRANSLATION -> {
+                if (a.source == b.source) first.corrections.unlink(a.id, b.id)
+                type.links.translation(a, b, now)
+            }
         }
         answered(type)
         return true
     }
 
-    /** The word on the pair taken back: their link, or that they are different. */
+    /** The word on the pair taken back: their link, that they are different, or a translation. */
     fun unanswer(typeId: String, a: ItemKey, b: ItemKey) {
         val type = stores.type(typeId) ?: return
         if (a.source == b.source) type.source(a.source)?.corrections?.unlink(a.id, b.id)
         type.links.unlink(a, b)
         type.links.undistinct(a, b)
+        type.links.untranslation(a, b)
         answered(type)
     }
 

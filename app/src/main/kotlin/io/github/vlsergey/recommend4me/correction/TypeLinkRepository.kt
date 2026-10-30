@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.correction
 
 import io.github.vlsergey.recommend4me.database.corrections.tables.references.ITEM_DISTINCT
 import io.github.vlsergey.recommend4me.database.corrections.tables.references.ITEM_LINK
+import io.github.vlsergey.recommend4me.database.corrections.tables.references.ITEM_TRANSLATION
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.DSLContext
 import java.time.Instant
@@ -9,7 +10,7 @@ import java.time.Instant
 /**
  * Items of different sources of one content type that the user said are one work: a link kept in the
  * corrections of the source of the smaller of the two keys, its item first; and those the user said
- * are different works ([distinct]), kept alike.
+ * are different works ([distinct]) or one the translation of the other ([translation]), kept alike.
  */
 class TypeLinkRepository(
     /** The corrections of every source of the type, by source. */
@@ -62,6 +63,29 @@ class TypeLinkRepository(
             .fetch { ItemKey(source, it.value1()!!) to ItemKey(it.value2()!!, it.value3()!!) }
     }
 
+    /** The two items said to be one the translation of the other: different works of one text, not linked — a link between them, if any, taken away. */
+    fun translation(a: ItemKey, b: ItemKey, now: Instant) {
+        unlink(a, b)
+        val (first, second) = ordered(a, b)
+        of(first.source).insertInto(ITEM_TRANSLATION)
+            .set(ITEM_TRANSLATION.ITEM_ID, first.id).set(ITEM_TRANSLATION.OTHER_SOURCE, second.source).set(ITEM_TRANSLATION.OTHER_ITEM_ID, second.id)
+            .set(ITEM_TRANSLATION.SAID_AT, now)
+            .onDuplicateKeyIgnore().execute()
+    }
+
+    /** The word that one is the translation of the other taken back. */
+    fun untranslation(a: ItemKey, b: ItemKey) {
+        val (first, second) = ordered(a, b)
+        corrections[first.source]?.deleteFrom(ITEM_TRANSLATION)
+            ?.where(ITEM_TRANSLATION.ITEM_ID.eq(first.id), ITEM_TRANSLATION.OTHER_SOURCE.eq(second.source), ITEM_TRANSLATION.OTHER_ITEM_ID.eq(second.id))?.execute()
+    }
+
+    /** Every pair said to be one the translation of the other, the smaller key first, read source by source. */
+    fun translations(): List<Pair<ItemKey, ItemKey>> = corrections.flatMap { (source, db) ->
+        db.select(ITEM_TRANSLATION.ITEM_ID, ITEM_TRANSLATION.OTHER_SOURCE, ITEM_TRANSLATION.OTHER_ITEM_ID).from(ITEM_TRANSLATION)
+            .fetch { ItemKey(source, it.value1()!!) to ItemKey(it.value2()!!, it.value3()!!) }
+    }
+
     /** The two keys, the smaller first: the order the pair is kept in. */
     fun ordered(a: ItemKey, b: ItemKey): Pair<ItemKey, ItemKey> = if (a.toString() < b.toString()) a to b else b to a
 
@@ -74,6 +98,9 @@ class TypeLinkRepository(
             val ownDistinct = if (source == key.source) ITEM_DISTINCT.ITEM_ID.eq(key.id) else null
             val theirDistinct = ITEM_DISTINCT.OTHER_SOURCE.eq(key.source).and(ITEM_DISTINCT.OTHER_ITEM_ID.eq(key.id))
             db.deleteFrom(ITEM_DISTINCT).where(if (ownDistinct != null) ownDistinct.or(theirDistinct) else theirDistinct).execute()
+            val ownTranslation = if (source == key.source) ITEM_TRANSLATION.ITEM_ID.eq(key.id) else null
+            val theirTranslation = ITEM_TRANSLATION.OTHER_SOURCE.eq(key.source).and(ITEM_TRANSLATION.OTHER_ITEM_ID.eq(key.id))
+            db.deleteFrom(ITEM_TRANSLATION).where(if (ownTranslation != null) ownTranslation.or(theirTranslation) else theirTranslation).execute()
         }
     }
 }

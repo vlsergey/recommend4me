@@ -587,7 +587,7 @@ paths:
     put:
       tags: [duplicates]
       operationId: answerDuplicate
-      summary: The user's word on a pair - one work (linked, the grade and interest shared, as in the work's window), or different works
+      summary: The user's word on a pair - one work (linked, the grade and interest shared, as in the work's window), different works, or one the translation of the other (not linked, each its own grade)
       parameters:
         - $ref: '#/components/parameters/Type'
       requestBody:
@@ -604,7 +604,7 @@ paths:
     delete:
       tags: [duplicates]
       operationId: unanswerDuplicate
-      summary: The word on a pair taken back - their link, or that they are different
+      summary: The word on a pair taken back - their link, that they are different, or a translation
       parameters:
         - $ref: '#/components/parameters/Type'
         - name: source
@@ -4643,8 +4643,10 @@ components:
           type: number
           description: The cosine of the vectors of their descriptions; none when either has none
         facets:
-          type: number
-          description: The cosine of the values of the facets the sites share (the tags, the universes, the characters, the status...), each weighed by its rarity; none when either has none
+          type: array
+          description: Of every facet the sites share both have (the tags, the universes, the characters, the status...), the cosine of their values, each weighed by its rarity; the most alike first
+          items:
+            $ref: '#/components/schemas/DuplicateFacet'
         size:
           type: number
           description: Of the numbers of their size both have (words, parts), the smaller over the larger, their mean; none when they share none
@@ -4653,8 +4655,20 @@ components:
           description: An author of one goes by the same name as an author of the other
         answer:
           type: string
-          enum: [SAME, DIFFERENT]
-          description: The user's word - one work (linked), or different; none when not answered
+          enum: [SAME, DIFFERENT, TRANSLATION]
+          description: The user's word - one work (linked), different, or one the translation of the other; none when not answered
+
+    DuplicateFacet:
+      type: object
+      required: [key, labelKey, value]
+      properties:
+        key:
+          type: string
+          description: The facet as compared - the facet of the layer ("characters" of the main and the secondary alike) or the standard one ("status")
+        labelKey:
+          type: string
+        value:
+          type: number
 
     DuplicateWork:
       type: object
@@ -4682,15 +4696,18 @@ components:
 
     DuplicateAnswer:
       type: object
-      required: [first, second, same]
+      required: [first, second, verdict]
       properties:
         first:
           $ref: '#/components/schemas/ItemRef'
         second:
           $ref: '#/components/schemas/ItemRef'
-        same:
-          type: boolean
-          description: One work, or different works
+        verdict:
+          type: string
+          enum: [SAME, DIFFERENT, TRANSLATION]
+          description: >
+            One work (linked, the grade and interest shared); different works; or one the translation of the other -
+            different works of one text, not linked, each its own grade - the same text for the comparing
 
     MarkedWork:
       type: object

@@ -8,15 +8,18 @@ import kotlin.test.assertTrue
 
 class DuplicateModelTest {
 
-    private fun pair(n: Int, title: Float, description: Float?, facets: Float? = null, size: Float? = null) =
-        DuplicateCandidate(ItemKey("a", "$n"), ItemKey("b", "$n"), title, description, facets, size)
+    private fun pair(n: Int, title: Float, description: Float?, size: Float? = null, facets: Map<String, Float> = emptyMap()) =
+        DuplicateCandidate(ItemKey("a", "$n"), ItemKey("b", "$n"), title, description, size, facets)
+
+    private fun DuplicateModel.chance(title: Float, description: Float?, facets: Map<String, Float> = emptyMap()) = chance(title, description, null, facets)
 
     @Test
     fun `without an answer that a pair is one work the mean of the layers stands for the chance`() {
-        val pairs = listOf(pair(1, 0.9f, 0.5f), pair(2, 0.4f, null, facets = 0.2f))
+        val pairs = listOf(pair(1, 0.9f, 0.5f), pair(2, 0.4f, null, facets = mapOf("tags" to 0.1f, "status" to 0.3f)))
         assertNull(DuplicateModel.fit(pairs) { null })
         val model = DuplicateModel(null)
         assertEquals(0.7, model.chance(pairs[0]), 1e-6)
+        // The facets' mean one layer of them
         assertEquals(0.3, model.chance(pairs[1]), 1e-6)
     }
 
@@ -28,8 +31,23 @@ class DuplicateModelTest {
         val sameKeys = same.map { it.pair }.toSet()
         val model = DuplicateModel.fit(same + others) { if (it.pair in sameKeys) true else null }!!
         // A pair of alike descriptions and a plain title is likelier one work than one of a near title and unlike descriptions
-        assertTrue(model.chance(0.4f, 0.95f, null, null) > model.chance(0.9f, 0.3f, null, null))
-        assertTrue(model.weights!![2] > model.weights!![1], "the description weighs more than the title: ${model.weights!!.toList()}")
+        assertTrue(model.chance(0.4f, 0.95f) > model.chance(0.9f, 0.3f))
+        val w = model.weights!!
+        assertTrue(w.getValue(DuplicateModel.DESCRIPTION) > w.getValue(DuplicateModel.TITLE), "the description weighs more than the title: $w")
+    }
+
+    @Test
+    fun `every facet is weighed apart by the answers`() {
+        // The pairs said to be one work share their characters; the status every pair shares alike
+        val same = (0 until 20).map { pair(it, 0.5f, null, facets = mapOf("characters" to 0.9f, "status" to 1f)) }
+        val others = (100 until 2100).map { pair(it, 0.5f, null, facets = mapOf("characters" to (it % 10) * 0.03f, "status" to 1f)) }
+        val sameKeys = same.map { it.pair }.toSet()
+        val model = DuplicateModel.fit(same + others) { if (it.pair in sameKeys) true else null }!!
+        val w = model.weights!!
+        assertTrue(w.getValue(DuplicateModel.facet("characters")) > w.getValue(DuplicateModel.facet("status")), "the characters tell more than the status: $w")
+        assertTrue(
+            model.chance(0.5f, null, mapOf("characters" to 0.9f, "status" to 1f)) > model.chance(0.5f, null, mapOf("characters" to 0.1f, "status" to 1f)),
+        )
     }
 
     @Test
@@ -40,7 +58,23 @@ class DuplicateModelTest {
         val sameKeys = same.map { it.pair }.toSet()
         val differentKeys = different.map { it.pair }.toSet()
         val model = DuplicateModel.fit(same + different + rest) { when (it.pair) { in sameKeys -> true; in differentKeys -> false; else -> null } }!!
-        assertTrue(model.chance(0.9f, 0.9f, null, null) > model.chance(0.5f, 0.5f, null, null))
-        assertTrue(model.chance(0.9f, 0.3f, null, null) < model.chance(0.9f, 0.9f, null, null))
+        assertTrue(model.chance(0.9f, 0.9f) > model.chance(0.5f, 0.5f))
+        assertTrue(model.chance(0.9f, 0.3f) < model.chance(0.9f, 0.9f))
+    }
+
+    @Test
+    fun `the scorer of the search orders the pairs as the chance does`() {
+        val same = (0 until 20).map { pair(it, 0.5f, 0.9f, facets = mapOf("characters" to 0.8f)) }
+        val others = (100 until 600).map { pair(it, 0.5f, 0.3f, facets = mapOf("characters" to 0.1f)) }
+        val sameKeys = same.map { it.pair }.toSet()
+        val model = DuplicateModel.fit(same + others) { if (it.pair in sameKeys) true else null }!!
+        val scorer = model.Scorer(listOf("characters", "status"))
+        val valued = arrayOf(floatArrayOf(0.8f, 0.1f), floatArrayOf(0f, 0f))
+        val near = scorer.score(0.5f, 0.9f, true, 0f, false, 1L, valued, 0)
+        val far = scorer.score(0.5f, 0.3f, true, 0f, false, 1L, valued, 1)
+        assertTrue(near > far)
+        assertEquals(
+            model.chance(0.5f, 0.9f, mapOf("characters" to 0.8f)), DuplicateModel.sigmoid(near), 1e-9,
+        )
     }
 }

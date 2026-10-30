@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CopyIcon, ExternalLinkIcon, Loader2Icon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
+import { CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateWork } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -8,7 +8,7 @@ import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ago, formatDate, percent } from "@/i18n/format";
-import { sourceShort, sourceTitle } from "@/i18n/label";
+import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
@@ -32,6 +32,16 @@ const rowOf = (p: DuplicatePair) => `${p.first.source}/${p.first.item}|${p.secon
 /** A row read again the same: its answer. */
 const sameRow = (a: DuplicatePair, b: DuplicatePair) => a.answer === b.answer;
 
+/** The user's word on a pair. */
+type Verdict = NonNullable<DuplicatePair["answer"]>;
+
+/** The answers, in the order of the buttons: one work, a translation, different works. */
+const VERDICTS: { verdict: Verdict; icon: React.ReactNode; word: "same" | "translation" | "different" }[] = [
+  { verdict: "SAME", icon: <CopyIcon />, word: "same" },
+  { verdict: "TRANSLATION", icon: <LanguagesIcon />, word: "translation" },
+  { verdict: "DIFFERENT", icon: <SplitIcon />, word: "different" },
+];
+
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
 
@@ -40,9 +50,9 @@ const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.f
  * of every other site likeliest one work with it — compared by every field every site has alike, the
  * text aside — none hidden; first the pairs of a work the user would read first (the larger of the two
  * works' scores by the formula of the list) times the chance the pair is one work. Each to answer on:
- * one work (linked, its grade and interest shared, as the work's window links them) or different works
- * (never offered again); the answers teach the model of the chances, fitted again a few seconds after
- * them. The answered ones apart, their word changed or taken back there. The pairs are looked for in
+ * one work (linked, its grade and interest shared, as the work's window links them), one the translation
+ * of the other (different works of one text, each its own grade) or different works — never offered
+ * again; the answers teach the model of the chances, fitted again a few seconds after them. The answered ones apart, their word changed or taken back there. The pairs are looked for in
  * the background, on the first start and when asked anew here.
  */
 export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
@@ -74,8 +84,8 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
    * The user's word on a pair: once kept, the row leaves — of the answered ones, it shows the new word —
    * and the pairs are read again: the model of the answers is fitted anew, the order may change.
    */
-  const answer = async (p: DuplicatePair, same: boolean) => {
-    ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { ...refs(p), same } }));
+  const answer = async (p: DuplicatePair, verdict: Verdict) => {
+    ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { ...refs(p), verdict } }));
     if (!answered) calm.remove([rowOf(p)]);
     queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
     changed(p);
@@ -143,7 +153,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       {shown.length > 0 && (
         <ul className={cn("flex flex-col gap-2", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>
           {shown.map((p) => (
-            <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked} pair={p} answer={(same) => answer(p, same)} unanswer={() => unanswer(p)} />
+            <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked} pair={p} answer={(verdict) => answer(p, verdict)} unanswer={() => unanswer(p)} />
           ))}
         </ul>
       )}
@@ -171,7 +181,7 @@ function PairRow({
   rowRef: (e: HTMLElement | null) => void;
   /** The rows moving: the buttons shown disabled, the reason no press is taken. */
   locked: boolean;
-  answer: (same: boolean) => Promise<void>;
+  answer: (verdict: Verdict) => Promise<void>;
   unanswer: () => Promise<void>;
 }) {
   const { t } = useTranslation("duplicate");
@@ -185,11 +195,11 @@ function PairRow({
         )}
         {p.title != null && <span className="tabular-nums">{t("PairRow.title", { value: percent(p.title) })}</span>}
         {p.description != null && <span className="tabular-nums">{t("PairRow.description", { value: percent(p.description) })}</span>}
-        {p.facets != null && (
-          <span className="tabular-nums" title={t("PairRow.facetsHint")}>
-            {t("PairRow.facets", { value: percent(p.facets) })}
+        {p.facets?.map((f) => (
+          <span key={f.key} className="tabular-nums" title={t("PairRow.facetsHint")}>
+            {t("PairRow.facet", { name: label(f.labelKey), value: percent(f.value) })}
           </span>
-        )}
+        ))}
         {p.size != null && (
           <span className="tabular-nums" title={t("PairRow.sizeHint")}>
             {t("PairRow.size", { value: percent(p.size) })}
@@ -206,26 +216,19 @@ function PairRow({
           </span>
         )}
         <div className="ml-auto flex flex-wrap gap-1.5">
-          <AsyncButton
-            size="sm"
-            variant={p.answer === "SAME" ? "default" : "outline"}
-            icon={<CopyIcon />}
-            disabled={locked || p.answer === "SAME"}
-            title={t("PairRow.sameHint")}
-            onClick={() => answer(true)}
-          >
-            {t("PairRow.same")}
-          </AsyncButton>
-          <AsyncButton
-            size="sm"
-            variant={p.answer === "DIFFERENT" ? "default" : "outline"}
-            icon={<SplitIcon />}
-            disabled={locked || p.answer === "DIFFERENT"}
-            title={t("PairRow.differentHint")}
-            onClick={() => answer(false)}
-          >
-            {t("PairRow.different")}
-          </AsyncButton>
+          {VERDICTS.map(({ verdict, icon, word }) => (
+            <AsyncButton
+              key={verdict}
+              size="sm"
+              variant={p.answer === verdict ? "default" : "outline"}
+              icon={icon}
+              disabled={locked || p.answer === verdict}
+              title={t(`PairRow.${word}Hint`)}
+              onClick={() => answer(verdict)}
+            >
+              {t(`PairRow.${word}`)}
+            </AsyncButton>
+          ))}
           {p.answer && (
             <AsyncButton size="sm" variant="ghost" icon={<Undo2Icon />} disabled={locked} title={t("PairRow.unanswerHint")} onClick={unanswer}>
               {t("PairRow.unanswer")}
