@@ -60,10 +60,10 @@ class FanficsMePagesTest {
         val pairings = context.facets.getValue("218574").getValue("pairing")
         assertTrue("72/98" in pairings, "$pairings")
         assertTrue("1" in pairings, "$pairings")
-        // A translation's card names its translator alone: the author of the original is on its page
+        // A translation's card names its translator alone, its author here: the writer of the original is on its page
         val translation = context.facets.getValue("251745")
-        assertEquals(listOf("52961"), translation["translator"])
-        assertNull(translation["author"])
+        assertEquals(listOf("52961"), translation["author"])
+        assertNull(translation["originalAuthor"])
         assertEquals(listOf("original"), context.facets.getValue("252329")["kind"])
         assertEquals(6, context.facets.getValue("251243").getValue("fandom").size)
     }
@@ -114,8 +114,9 @@ class FanficsMePagesTest {
         val work = "251745"
         capture(context, "https://fanfics.me/fic$work", "fic-translation.html")
         val facets = context.facets.getValue(work)
-        assertEquals(listOf("anorc"), facets["author"])
-        assertEquals(listOf("52961"), facets["translator"])
+        // Its author is who put it on the site, the translator
+        assertEquals(listOf("52961"), facets["author"])
+        assertEquals(listOf("anorc"), facets["originalAuthor"])
         assertEquals(listOf("английский"), facets["originalLanguage"])
         // The work's own status, not its original's
         assertEquals(listOf("in-progress"), facets["status"])

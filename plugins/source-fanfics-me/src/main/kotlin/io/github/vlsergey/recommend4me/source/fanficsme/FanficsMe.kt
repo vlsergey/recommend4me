@@ -36,6 +36,8 @@ import java.time.Instant
  * The site's word on a work is structured: the fandoms, the characters and the pairings by their
  * ids of its encyclopedia; the genres, the warnings and the events ("События") of its lists — the
  * three the site's tags here, each described by the site's own help and the encyclopedia of a fandom.
+ * The author of a translation is its translator, who put it on the site; the writer of the original
+ * is a facet of its own, named on the work's page alone.
  */
 class FanficsMe : Source {
     override val id = ID
@@ -46,7 +48,7 @@ class FanficsMe : Source {
     override val schema = SourceSchema(
         facets = listOf(
             Books.AUTHOR.asFacet(AUTHOR),
-            FacetDef(TRANSLATOR, searchWeight = 0.6f, names = true),
+            FacetDef(ORIGINAL_AUTHOR, searchWeight = 0.6f, names = true),
             Books.FANDOM.asFacet(FANDOM),
             Books.DIRECTION.asFacet(DIRECTION),
             AgeRating.SITE.asFacet(),
@@ -83,6 +85,9 @@ class FanficsMe : Source {
         // A work of the fandom "Ориджиналы" is an original one
         kindFrom = FANDOM,
     )
+
+    /** The translators kept before as a facet of their own made the authors of their translations. */
+    override val migrations = listOf("classpath:db/fanfics.me")
 
     override val capturePatterns = listOf(
         Regex("https://fanfics\\.me/(fic\\d+|read\\.php|find|fandom\\d+|character\\d+|paring[\\d_]+|serie\\d+|collection\\d+|user\\d+|translations|recommends|fics_rating|html)([/?#].*)?"),
@@ -170,7 +175,7 @@ class FanficsMe : Source {
         const val COMMENT_PREFIX = "MessageCommentTable_"
 
         const val AUTHOR = "author"
-        const val TRANSLATOR = "translator"
+        const val ORIGINAL_AUTHOR = "originalAuthor"
         const val FANDOM = "fandom"
         const val DIRECTION = "direction"
         const val STATUS = "status"

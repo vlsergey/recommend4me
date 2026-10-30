@@ -19,6 +19,7 @@ import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.DIRE
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.FANDOM
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.NOTES
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.ORIGINALS
+import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.ORIGINAL_AUTHOR
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.ORIGINAL_LANGUAGE
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.ORIGINAL_LINK
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.ORIGINAL_TITLE
@@ -31,7 +32,6 @@ import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.SERI
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.SIZE
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.STATUS
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.TAG
-import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.TRANSLATOR
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.VIEWS
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.WORDS
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
@@ -154,7 +154,7 @@ class FanficsMePages(private val context: SourceContext) {
         val info = block?.select("table.translation_info tr")?.associate { tr ->
             clean(tr.selectFirst("td.first")?.text().orEmpty()).removeSuffix(":") to tr.selectFirst("td.second")
         }.orEmpty()
-        info["Автор"]?.let { clean(it.text()) }?.takeIf { it.isNotEmpty() }?.let { items.setFacet(id, AUTHOR, listOf(FacetValue(it.lowercase(), it))) }
+        info["Автор"]?.let { clean(it.text()) }?.takeIf { it.isNotEmpty() }?.let { items.setFacet(id, ORIGINAL_AUTHOR, listOf(FacetValue(it.lowercase(), it))) }
         items.setFacet(id, ORIGINAL_LANGUAGE, listOfNotNull(info["Язык"]?.let { clean(it.text()) }?.takeIf { it.isNotEmpty() }?.let { FacetValue(it.lowercase(), it) }))
         items.setTexts(
             id,
@@ -198,10 +198,16 @@ class FanficsMePages(private val context: SourceContext) {
         items.setFacet(id, DIRECTION, listOfNotNull(Books.DIRECTION.values?.firstOrNull { it.modelName.equals(text, ignoreCase = true) }?.let { FacetValue(it.key, it.modelName) }))
     }
 
-    /** The lines of a card or a header by their labels: the author, the fandoms, the characters, the genres, the size. */
+    /**
+     * The lines of a card or a header by their labels: the author, the fandoms, the characters, the
+     * genres, the size. The author of a work is who put it on the site: of a translation its translator,
+     * the writer of the original apart.
+     */
     private fun described(id: String, info: Map<String, Element>) {
-        (info["Автор"] ?: info["Авторы"])?.let(::members)?.takeIf { it.isNotEmpty() }?.let { items.setFacet(id, AUTHOR, it) }
-        (info["Переводчик"] ?: info["Переводчики"])?.let(::members)?.takeIf { it.isNotEmpty() }?.let { items.setFacet(id, FanficsMe.TRANSLATOR, it) }
+        val writers = (info["Автор"] ?: info["Авторы"])?.let(::members).orEmpty()
+        val translators = (info["Переводчик"] ?: info["Переводчики"])?.let(::members).orEmpty()
+        translators.ifEmpty { writers }.takeIf { it.isNotEmpty() }?.let { items.setFacet(id, AUTHOR, it) }
+        if (translators.isNotEmpty() && writers.isNotEmpty()) items.setFacet(id, ORIGINAL_AUTHOR, writers)
         (info["Фандом"] ?: info["Фандомы"])?.let { content ->
             val fandoms = content.select("a[href^=/fandom]").mapNotNull { a ->
                 FANDOM_LINK.matchEntire(a.attr("href"))?.groupValues?.get(1)?.let { FacetValue(it, clean(a.text())) }
