@@ -584,20 +584,7 @@ class Duplicates(
                 }
             }
         }
-        // How every facet compared is named: the label of the facet of any source of the type that is it
-        val labels = HashMap<String, String>()
-        type.sources.forEach { s ->
-            s.schema.facets.forEach { def ->
-                val family = when {
-                    def.role == FacetRole.AUTHOR -> AUTHOR_FAMILY
-                    def.editable -> familyOf(def.key)
-                    else -> def.standard?.takeIf { it.values != null }?.key
-                }
-                if (family != null && (!def.editable || family == def.key)) labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
-            }
-        }
         val boundary = if (sort == DuplicateSort.UNCERTAIN) model.boundary(kept) { c -> said[c.pair]?.takeIf { !it.related }?.let { it == DuplicateAnswer.SAME } } else 0.0
-        class Ranked(val pair: Pair<ItemKey, ItemKey>, val layers: DuplicateCandidate?, val chance: Double?, val priority: Double)
         fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
             val chance = layers?.let(model::chance)
             if (sort == DuplicateSort.CHANCE) return Ranked(pair, layers, chance, chance ?: 0.0)
@@ -616,30 +603,69 @@ class Duplicates(
         else kept.associateBy { it.pair }.let { byPair -> said.keys.map { ranked(it, byPair[it]) } }
         val sorted = rows.sortedWith(compareByDescending<Ranked> { it.priority }.thenByDescending { it.chance ?: -1.0 }.thenBy { it.pair.first.toString() })
         val page = sorted.drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE))
-        val described = describe(type, page.flatMap { listOf(it.pair.first, it.pair.second) })
-        val kin = AuthorKin(type.authors.told())
         return DuplicatePage(
             total = rows.size,
-            pairs = page.mapNotNull { r ->
-                val first = described[r.pair.first] ?: return@mapNotNull null
-                val second = described[r.pair.second] ?: return@mapNotNull null
-                val d = r.layers
-                DuplicatePair(
-                    first = first.work, second = second.work,
-                    chance = r.chance?.toBigDecimal(), priority = r.priority.toBigDecimal(),
-                    title = d?.title?.toBigDecimal(), description = d?.description?.toBigDecimal(), propertySize = d?.size?.toBigDecimal(),
-                    facets = d?.facets.orEmpty().entries.sortedByDescending { it.value }.map { (family, v) ->
-                        DuplicateFacet(key = family, labelKey = labels[family] ?: family, `value` = v.toBigDecimal())
-                    },
-                    sameAuthor = kin.share(first.authors, second.authors),
-                    answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
-                )
-            },
+            pairs = pairs(type, said, page),
             pending = pending(type),
             searchedAt = search?.madeAt?.atOffset(ZoneOffset.UTC),
             works = search?.works,
             learnt = search?.weights != null,
         )
+    }
+
+    /**
+     * What the last search found for the work of [key]: every pair of an item of it and an item of
+     * another work, answered or not, the likeliest first.
+     */
+    fun ofItem(key: ItemKey): List<DuplicatePair> {
+        val type = stores.typeOf(key.source)
+        val own = works.of(type).members(key).toSet()
+        val model = DuplicateModel(type.duplicates.search()?.weights)
+        val found = type.duplicates.all().filter { (it.pair.first in own) != (it.pair.second in own) }
+            .map { c -> model.chance(c).let { Ranked(c.pair, c, it, it) } }
+            .sortedByDescending { it.priority }
+        return pairs(type, said(type), found)
+    }
+
+    /** A pair with what ranks it: its layers, none of an answered pair not kept. */
+    private class Ranked(val pair: Pair<ItemKey, ItemKey>, val layers: DuplicateCandidate?, val chance: Double?, val priority: Double)
+
+    /** How every facet compared is named: the label of the facet of any source of the type that is it. */
+    private fun familyLabels(type: TypeStore): Map<String, String> {
+        val labels = HashMap<String, String>()
+        type.sources.forEach { s ->
+            s.schema.facets.forEach { def ->
+                val family = when {
+                    def.role == FacetRole.AUTHOR -> AUTHOR_FAMILY
+                    def.editable -> familyOf(def.key)
+                    else -> def.standard?.takeIf { it.values != null }?.key
+                }
+                if (family != null && (!def.editable || family == def.key)) labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
+            }
+        }
+        return labels
+    }
+
+    /** The pairs as the user is shown them: a pair of a work no longer there, none. */
+    private fun pairs(type: TypeStore, said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>, rows: List<Ranked>): List<DuplicatePair> {
+        val labels = familyLabels(type)
+        val described = describe(type, rows.flatMap { listOf(it.pair.first, it.pair.second) })
+        val kin = AuthorKin(type.authors.told())
+        return rows.mapNotNull { r ->
+            val first = described[r.pair.first] ?: return@mapNotNull null
+            val second = described[r.pair.second] ?: return@mapNotNull null
+            val d = r.layers
+            DuplicatePair(
+                first = first.work, second = second.work,
+                chance = r.chance?.toBigDecimal(), priority = r.priority.toBigDecimal(),
+                title = d?.title?.toBigDecimal(), description = d?.description?.toBigDecimal(), propertySize = d?.size?.toBigDecimal(),
+                facets = d?.facets.orEmpty().entries.sortedByDescending { it.value }.map { (family, v) ->
+                    DuplicateFacet(key = family, labelKey = labels[family] ?: family, `value` = v.toBigDecimal())
+                },
+                sameAuthor = kin.share(first.authors, second.authors),
+                answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
+            )
+        }
     }
 
     /** A work as a pair shows it, and its normalized authors: what "the same author" is told by. */

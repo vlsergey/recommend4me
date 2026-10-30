@@ -3,7 +3,12 @@
 A design made from nothing, with no look at the window of a work it is to replace, then reviewed on its
 own and compared with that window function by function (339 functions: 157 kept, 106 changed, 51 lost,
 25 new). This is the result: every blocker of the review and every lost function has an answer below.
-Nothing here is built yet.
+
+Built, beside the old window and chosen by a button there (`item/WorkScreen.tsx`): what the server needs, the
+head, the two pages, the views of the left page, the answers as chips, the verdict. Not built yet: the chip's
+menu and the sheet of a tap on a name, the evidence on the left page, offers that come later after a divider,
+interest "by your grade", the mark of a grade of an earlier version on the grades, the head folding on a short
+screen, the address moving when an item is taken out, the search of the same work run at once.
 
 ## 1. The idea
 

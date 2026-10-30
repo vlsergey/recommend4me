@@ -15,6 +15,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.tag.TagRepository
+import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -56,8 +57,8 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         corrections: List<FacetCorrection>,
         names: Map<String, Map<String, String>>,
         texts: Map<String, String> = emptyMap(),
-        /** Every facet asked for, one the work has no values of included: a page adds values to it. */
-        empty: Boolean = false,
+        /** The facets shown with no value too: a value can be added to them. */
+        empty: (FacetDef) -> Boolean = { false },
         /** The facets the user said the work's values of are all named: none offered besides. */
         complete: Set<String> = emptySet(),
         only: (String) -> Boolean,
@@ -113,7 +114,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 )
             }
             // A facet said to have no other values is shown with none too: the answer is there to take back
-            if (!empty && keys.isEmpty() && removed.isEmpty() && offered.isEmpty() && original == null && def.key !in complete) return@mapNotNull null
+            if (!empty(def) && keys.isEmpty() && removed.isEmpty() && offered.isEmpty() && original == null && def.key !in complete) return@mapNotNull null
             // The value's own name — a tag's as the user and the sites name it — the name the answer was given with only of a value nothing else names
             // The names of the values the caller did not read — a site's tags bound to tags of the layer
             // offered, a tag above one of the work's — in one read

@@ -335,6 +335,12 @@ class TwoSitesTest {
         // Of one of two works one, a translation: of the other too
         answer(m1, m3, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.TRANSLATION)
         assertEquals("TRANSLATION", relation(m2, m3))
+        // The window of the work tells it, of whichever item, and what each site says
+        val window = items.getItem("beta", "m2").body!!
+        assertEquals(listOf("beta/m3"), window.relations.map { "${it.source}/${it.item}" })
+        assertEquals(setOf("alpha/m1", "beta/m2"), window.sites.map { "${it.source}/${it.item}" }.toSet())
+        assertEquals(listOf("alpha/m4"), items.getItem("alpha", "m4").body!!.sites.map { "${it.source}/${it.item}" })
+        assertEquals(404, duplicates.getItemDuplicates("alpha", "nothing").statusCode.value())
         // Taken back of one pair: of every pair of the two works' groups
         duplicates.unanswerDuplicate("books", "beta", "m2", "beta", "m3")
         assertEquals(null, relation(m1, m3))

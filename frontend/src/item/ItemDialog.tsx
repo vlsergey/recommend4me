@@ -1,20 +1,19 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, DownloadIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, ExternalLinkIcon, LayoutPanelLeftIcon, PencilIcon } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
-import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemRef, type ItemSummary, type RatingRecord, type SourceInfo } from "@/api/client";
-import { AsyncButton } from "@/components/AsyncButton";
+import { api, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemRef, type ItemSummary, type SourceInfo } from "@/api/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { gradeLabel, useSource } from "@/contenttype/types";
+import { useSource } from "@/contenttype/types";
 import { FacetCorrections } from "@/correction/FacetCorrections";
 import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor";
 import { Links } from "@/correction/Links";
 import { titleField, useCorrections, type Corrections } from "@/correction/useCorrections";
-import { formatDate, score } from "@/i18n/format";
+import { score } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { cn } from "@/lib/utils";
 import { Explanation } from "@/model/Explanation";
@@ -28,13 +27,13 @@ import { useStackedDialog } from "./dialogStack";
 import { ItemNumbers } from "./ItemNumbers";
 import { ItemTexts } from "./ItemTexts";
 import { itemKey } from "./lists";
-import { Cover, GRADE_TEXT, InterestButtons, KEY_GRADES, LinkedBadges, PreviousRating, RatingButtons, ScoreBadge, SignalBadges } from "./pieces";
+import { Cover, InterestButtons, KEY_GRADES, LinkedBadges, PreviousRating, RatingButtons, ScoreBadge, SignalBadges } from "./pieces";
 import { RelatedWorks } from "./RelatedWorks";
 import { RemoveItem } from "./RemoveItem";
 import { FITTING, useHeldOut } from "./useHeldOut";
-import { useTakeBackGrade } from "./useRateItem";
-import { useRefreshItem } from "./useRefreshItem";
 import { Byline, ContentFacts, FactLine } from "./WorkFacts";
+import { NotFetched, Part, Ratings, RefreshButton } from "./WorkParts";
+import { useChosenWorkScreen, WorkScreen, WORK_SCREEN_CLASS } from "./WorkScreen";
 import { SiteTabs, sitesDiffer, WorkSites } from "./WorkSites";
 
 type Props = {
@@ -62,6 +61,7 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }
   const summary = index !== null ? items[index] : undefined;
   const of = useSource(summary?.source);
   const [marking, setMarking] = useState(false);
+  const [newScreen, setNewScreen] = useChosenWorkScreen();
 
   useEffect(() => {
     if (index !== null && index >= items.length) onIndex(items.length > 0 ? items.length - 1 : null);
@@ -107,24 +107,40 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves }
   return (
     // Esc or a press outside closes the dialog on top alone, not the one under it too
     <Dialog open={summary !== undefined} onOpenChange={(open) => !open && onTop() && onIndex(null)}>
-      <DialogContent className="flex h-[92vh] max-w-6xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className={newScreen ? WORK_SCREEN_CLASS : "flex h-[92vh] max-w-6xl flex-col gap-0 overflow-hidden p-0"}>
         {summary && index !== null && of && (
           // A work that fails to draw says so in the dialog, and the next one is drawn anew
           <ErrorBoundary resetKey={`${summary.source}/${summary.item}`} title={t("ItemDialog.failed")}>
-            <Shell
-              // A new work is a new dialog: the editors of the last one do not stay open
-              key={`${summary.source}/${summary.item}`}
-              type={of.type}
-              source={of.source}
-              summary={summary}
-              index={index}
-              count={items.length}
-              total={total}
-              onIndex={onIndex}
-              onRate={rate}
-              marking={marking}
-              onMarking={setMarking}
-            />
+            {newScreen ? (
+              <WorkScreen
+                key={`${summary.source}/${summary.item}`}
+                type={of.type}
+                source={of.source}
+                summary={summary}
+                index={index}
+                count={items.length}
+                total={total}
+                onIndex={onIndex}
+                onRate={rate}
+                onOldScreen={() => setNewScreen(false)}
+              />
+            ) : (
+              <Shell
+                // A new work is a new dialog: the editors of the last one do not stay open
+                key={`${summary.source}/${summary.item}`}
+                type={of.type}
+                source={of.source}
+                summary={summary}
+                index={index}
+                count={items.length}
+                total={total}
+                onIndex={onIndex}
+                onRate={rate}
+                marking={marking}
+                onMarking={setMarking}
+                onNewScreen={() => setNewScreen(true)}
+              />
+            )}
           </ErrorBoundary>
         )}
       </DialogContent>
@@ -143,6 +159,7 @@ function Shell({
   onRate,
   marking,
   onMarking,
+  onNewScreen,
 }: {
   type: ContentTypeInfo;
   source: SourceInfo;
@@ -154,6 +171,7 @@ function Shell({
   onRate: (grade: Grade | null) => unknown;
   marking: boolean;
   onMarking: (marking: boolean) => void;
+  onNewScreen: () => void;
 }) {
   const { t } = useTranslation("item");
   // The site of the work the window stands on: at first the one listed, the one that says the most;
@@ -268,6 +286,9 @@ function Shell({
         </Button>
         {/* The tags by the work's own text, beside the marking: of a source with tags alone */}
         {tagFacet && <TagsByText item={ref} facet={tagFacet} corrections={corrections} size="sm" className="" />}
+        <Button variant="ghost" size="sm" onClick={onNewScreen} title={t("WorkScreen.newHint")}>
+          <LayoutPanelLeftIcon /> {t("WorkScreen.new")}
+        </Button>
         <PreviousRating type={type} summary={summary} />
         {/* Keyed by the work: a press at work on one is not shown on the next the dialog moves to */}
         <InterestButtons key={`interest:${summary.source}/${summary.item}`} summary={summary} size="lg" labels className="ml-auto" />
@@ -442,16 +463,6 @@ function Details({
   );
 }
 
-/** A section of the card that fails to draw says so in its place; the grade and the rest of the card stay. */
-function Part({ title, children }: { title: string; children: ReactNode }) {
-  const { t } = useTranslation("item");
-  return (
-    <ErrorBoundary title={t("ItemDialog.partFailed", { part: title.toLowerCase() })} className="m-0 p-3">
-      {children}
-    </ErrorBoundary>
-  );
-}
-
 /**
  * What the model says of the work and the user has not answered on, outside the fan fiction's
  * section: values it suggests adding, values it gave by itself — counted in a line that opens
@@ -480,75 +491,6 @@ function OpenSuggestions({
   return (
     <Button variant="link" size="sm" className="h-auto self-start p-0 text-xs" onClick={onMark}>
       {t("OpenSuggestions.review", { count: suggested + inferred })}
-    </Button>
-  );
-}
-
-/**
- * The grades of every item of the work, newest first: the item of each when it is not this one,
- * and a cross to take one back — an old version's grade, or one given to the work on another site.
- */
-function Ratings({ type, details: d }: { type: ContentTypeInfo; details: ItemDetails }) {
-  const { t } = useTranslation("item");
-  const takeBack = useTakeBackGrade(d.summary);
-  const itemOf = (r: RatingRecord) =>
-    sameItem(r, d.summary)
-      ? undefined
-      : `${sourceShort(r.source)} · ${d.summary.linked.find((l) => sameItem(l, r))?.title ?? r.item}`;
-  return (
-    <section>
-      <h4 className="mb-2 text-sm font-semibold">{t("Ratings.heading")}</h4>
-      <ul className="flex flex-col gap-1 text-sm">
-        {d.ratings.map((r) => (
-          <li key={`${r.source}/${r.item}-${r.version}-${r.ratedAt}`} className="group/rating flex items-center gap-2">
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className={cn("truncate", !r.current && "text-muted-foreground")} title={formatDate(r.ratedAt)}>
-                {r.version || formatDate(r.ratedAt)}
-                {!r.current && r.version && ` · ${t("Ratings.previousVersion")}`}
-              </span>
-              {itemOf(r) && <span className="truncate text-xs text-muted-foreground">{itemOf(r)}</span>}
-            </span>
-            <span className={cn("shrink-0", GRADE_TEXT[r.grade as Grade])}>
-              {r.grade} · {gradeLabel(type.id, r.grade as Grade)}
-            </span>
-            <AsyncButton
-              variant="ghost"
-              size="icon-xs"
-              title={t("Ratings.takeBack")}
-              onClick={() => takeBack(r)}
-              icon={<XIcon />}
-              className="text-muted-foreground opacity-0 transition-opacity group-hover/rating:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-            />
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/** Nothing of the work is here yet: its page has not come in — fetch it now. */
-function NotFetched({ item }: { item: { source: string; item: string } }) {
-  const { t } = useTranslation("item");
-  const refresh = useRefreshItem(item);
-  return (
-    <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-      {t("NotFetched.message")}
-      <Button onClick={() => refresh.mutate()} disabled={refresh.isPending}>
-        {refresh.isPending ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
-        {refresh.isPending ? t("NotFetched.loading") : t("NotFetched.load")}
-      </Button>
-    </div>
-  );
-}
-
-/** Downloads the page again: after a login was set, or to see a fresh update before the next job. */
-function RefreshButton({ item }: { item: { source: string; item: string } }) {
-  const { t } = useTranslation("item");
-  const refresh = useRefreshItem(item);
-  return (
-    <Button variant="outline" size="sm" onClick={() => refresh.mutate()} disabled={refresh.isPending} title={t("RefreshButton.title")}>
-      {refresh.isPending ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />}
-      {t("RefreshButton.label")}
     </Button>
   );
 }

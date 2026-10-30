@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.DuplicatesApi
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
+import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
@@ -18,6 +19,11 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
         val page = duplicates.page(type, answered, offset, limit, sort) ?: return ResponseEntity.notFound().build()
         // A search or a fitting planned or running: what there is, the page asks again
         return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
+    }
+
+    override fun getItemDuplicates(source: String, item: String): ResponseEntity<List<DuplicatePair>> {
+        if (stores.source(source)?.items?.exists(item) != true) return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(duplicates.ofItem(ItemKey(source, item)))
     }
 
     override fun searchDuplicates(type: String): ResponseEntity<Unit> {

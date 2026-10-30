@@ -8,8 +8,8 @@ import type { Corrections } from "./useCorrections";
 /** A small button inside a chip; a finger's size on a touch screen. */
 const BUTTON = "size-4 rounded-sm pointer-coarse:size-8";
 
-/** A chip the buttons are in: as high as they are on a touch screen. */
-export const CHIP_TOUCH = "pointer-coarse:h-9 pointer-coarse:text-sm";
+/** A chip the buttons are in: as high as they are on a touch screen, a long name wrapped within the room, never cut. */
+export const CHIP_TOUCH = "h-auto min-h-5 max-w-full whitespace-normal pointer-coarse:min-h-9 pointer-coarse:text-sm";
 
 /**
  * The user's word on a value of a facet, inside its chip: ✓ the work has it, ✕ it has it not — for

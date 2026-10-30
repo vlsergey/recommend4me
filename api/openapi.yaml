@@ -269,18 +269,39 @@ paths:
     delete:
       tags: [items]
       operationId: removeItem
-      summary: Removes the work from the library, with everything of it
+      summary: Removes the site's item from the library, with everything of it
       description: |
-        For a work gone from the site: the work, its texts, pictures (their files too), reviews,
-        parts and every vector of them, the user's answers, links, grades and marks, and what the
-        model made of it. Not undone: seen on the site again, the work is made anew, as one never
-        seen - without the user's grades and answers.
+        For an item gone from the site: the item, its texts, pictures (their files too), reviews,
+        parts and every vector of them, the marks on them, and what the model made of it. The
+        normalized work stays with the items it has left, and with them the user's grade, interest
+        and answers; of a work of this item alone they go too. Not undone: seen on the site again,
+        the item is made anew, as one never seen.
       parameters:
         - $ref: '#/components/parameters/Source'
         - $ref: '#/components/parameters/Item'
       responses:
         '204':
           description: Removed
+        '404':
+          description: No such item
+
+  /api/items/{source}/{item}/duplicates:
+    get:
+      tags: [duplicates]
+      operationId: getItemDuplicates
+      summary: What the last search of the duplicates found for this work, of every item of it, the likeliest first, answered or not
+      parameters:
+        - $ref: '#/components/parameters/Source'
+        - $ref: '#/components/parameters/Item'
+      responses:
+        '200':
+          description: The pairs; none before the first search
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DuplicatePair'
         '404':
           description: No such item
 
@@ -345,7 +366,8 @@ paths:
       description: |
         For every facet its source suggests values of. The user confirms one by adding it
         (correctFacet, added) and rejects one by taking it away (correctFacet, not added); an
-        answered value is no longer listed. Made at once for a work that never had any.
+        answered value is no longer listed. Made in memory for this reading, of the answers as they are;
+        nothing is kept of them.
       parameters:
         - $ref: '#/components/parameters/Source'
         - $ref: '#/components/parameters/Item'
@@ -365,13 +387,10 @@ paths:
     get:
       tags: [suggestions]
       operationId: settleSuggestions
-      summary: Answers once the work's chances are made current after every answer on it so far
+      summary: Answers at once - the work's chances are made when it is read, there is nothing to wait for
       description: |
-        An answer on a facet (correctFacet, uncorrectFacet, completeFacet) is saved and returned at
-        once; the chances it changes - of that facet and of those made of its values - are made
-        apart, a second or two. Answers that come meanwhile are gathered and made once for them all.
-        This answers when that is done, at once when nothing is being made: the page then reads the
-        work and its suggestions anew.
+        Never waits: a work's chances are made when it is read, of its answers as they are. Kept for
+        the callers that ask before they read the work and its suggestions anew.
       parameters:
         - $ref: '#/components/parameters/Source'
         - $ref: '#/components/parameters/Item'
@@ -3414,6 +3433,10 @@ components:
           format: double
         corrected:
           type: boolean
+        siteValue:
+          type: number
+          format: double
+          description: Of a number the user corrected, in what a site says of a work, the site's own
 
     PartInfo:
       type: object
@@ -3451,7 +3474,7 @@ components:
 
     ItemDetails:
       type: object
-      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh, related, sites]
+      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh, related, sites, relations]
       properties:
         summary:
           $ref: '#/components/schemas/ItemSummary'
@@ -3459,7 +3482,7 @@ components:
           type: boolean
         allFacets:
           type: array
-          description: Every facet of the item, corrections included
+          description: Every facet of the item, corrections included, those the user can answer on with no value too
           items:
             $ref: '#/components/schemas/ItemFacet'
         texts:
@@ -3513,13 +3536,18 @@ components:
             $ref: '#/components/schemas/RelatedWorks'
         sites:
           type: array
-          description: Of a work of several items, what each says of it, the one that says the most first; none of a work of one
+          description: What each item of the work says of it, the one that says the most first
           items:
             $ref: '#/components/schemas/WorkSite'
+        relations:
+          type: array
+          description: The works the user said to be related to this one - a translation, a part
+          items:
+            $ref: '#/components/schemas/WorkRelation'
 
-    WorkSite:
+    WorkRelation:
       type: object
-      required: [source, item, title, url, authors]
+      required: [source, item, title, url, kind]
       properties:
         source:
           type: string
@@ -3529,12 +3557,49 @@ components:
           type: string
         url:
           type: string
+        kind:
+          type: string
+          enum: [TRANSLATION, PARTIAL]
+
+    WorkSite:
+      type: object
+      required: [source, item, title, titleCorrected, url, authors, descriptionCorrected, numbers, reviewCount, pictureCount, partCount]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+        titleCorrected:
+          type: boolean
+        siteTitle:
+          type: string
+          description: Of a title the user corrected, the site's own
+        url:
+          type: string
         authors:
           type: array
           items:
             type: string
         description:
           type: string
+        descriptionCorrected:
+          type: boolean
+        siteDescription:
+          type: string
+          description: Of a description the user corrected, the site's own, if it has one
+        numbers:
+          type: array
+          description: Its numbers, the user's corrections included
+          items:
+            $ref: '#/components/schemas/NumberValue'
+        reviewCount:
+          type: integer
+        pictureCount:
+          type: integer
+        partCount:
+          type: integer
 
     RelatedWorks:
       type: object

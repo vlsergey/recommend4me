@@ -50,6 +50,7 @@
   "PairRow.translationHint": "One is the translation of the other: different works of one text, each its own grade and interest; the pair is offered no more. The model does not learn from translations: their authors differ, their tags and descriptions are one",
   "PairRow.unanswer": "Take back",
   "PairRow.unanswerHint": "Take the answer back: the link, \"different\", \"translation\" or \"partly\" goes, the pair returns to the unanswered",
+  "WorkDuplicates.more": "More ({{shown, number}} of {{total, number}})",
   "WorkSide.fold": "Fold the description",
   "WorkSide.page": "Its page on the site",
   "WorkSide.chars_one": "{{value}} character",

@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.api.model.ReviewInfo
 import io.github.vlsergey.recommend4me.api.model.ReviewMatch
 import io.github.vlsergey.recommend4me.api.model.TextValue
+import io.github.vlsergey.recommend4me.api.model.WorkRelation
 import io.github.vlsergey.recommend4me.api.model.WorkSite
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.mark.MarkKind
@@ -86,7 +87,7 @@ class ItemDetailsReader(
         return ItemDetails(
             summary = summary,
             titleCorrected = Corrected.TITLE in fields,
-            allFacets = cards.facets(store, site, chances, corrections, names, texts, complete = store.corrections.completeOf(key.id)) { true },
+            allFacets = cards.facets(store, site, chances, corrections, names, texts, empty = { it.editable }, complete = store.corrections.completeOf(key.id)) { true },
             texts = schema.texts.filter { it.key !in originals }.mapNotNull { def ->
                 texts[def.key]?.let { TextValue(def.key, I18nKeys.textLabel(store.id, def.key), it, def.spoiler, Corrected.textField(def.key) in fields) }
             },
@@ -138,28 +139,59 @@ class ItemDetailsReader(
             canRefresh = store.source.downloadsPages,
             related = related(type, store, key, Corrected.facets(site, corrections), names),
             sites = sites(type, clusters.members(key)),
+            relations = relations(type, clusters.members(key)),
         )
     }
 
-    /** What each item of a work of several says of it: the one that says the most first ([Works.fullness]). None of a work of one. */
+    /** What each item of a work says of it: the one that says the most first ([Works.fullness]). */
     private fun sites(type: io.github.vlsergey.recommend4me.source.TypeStore, members: List<ItemKey>): List<WorkSite> {
-        if (members.size < 2) return emptyList()
         val fullness = works.fullness(type, members)
+        val encoder = plugins.imageEncoder()?.id
         return members.sortedByDescending { fullness[it] ?: 0 }.mapNotNull { m ->
             val s = type.source(m.source) ?: return@mapNotNull null
             val head = s.items.find(m.id) ?: return@mapNotNull null
             val fields = s.corrections.fieldsOf(m.id)
-            val texts = Corrected.texts(s.items.texts(m.id), fields)
+            val siteTexts = s.items.texts(m.id)
+            val texts = Corrected.texts(siteTexts, fields)
+            val siteNumbers = s.items.numbers(m.id)
+            val numbers = Corrected.numbers(siteNumbers, fields)
             val authors = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key?.let { facet ->
                 val keys = s.items.facets(m.id)[facet].orEmpty()
                 val names = s.names(facet, keys)
                 keys.map { names[it] ?: it }
             }.orEmpty()
+            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+            val titleCorrected = Corrected.TITLE in fields
+            val descriptionCorrected = description != null && Corrected.textField(description) in fields
             WorkSite(
-                source = m.source, item = m.id, title = Corrected.title(head.title, fields), url = head.url, authors = authors,
-                description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.let { texts[it.key] },
+                source = m.source, item = m.id, title = Corrected.title(head.title, fields), titleCorrected = titleCorrected,
+                siteTitle = head.title.takeIf { titleCorrected }, url = head.url, authors = authors,
+                description = description?.let { texts[it] }, descriptionCorrected = descriptionCorrected,
+                siteDescription = description?.takeIf { descriptionCorrected }?.let { siteTexts[it] },
+                numbers = s.schema.numbers.mapNotNull { def ->
+                    numbers[def.key]?.let {
+                        val corrected = Corrected.numberField(def.key) in fields
+                        NumberValue(def.key, I18nKeys.numberLabel(s.id, def), it, corrected, siteNumbers[def.key]?.takeIf { corrected })
+                    }
+                },
+                reviewCount = s.reviews.countOf(m.id), pictureCount = s.pictures.ofItem(m.id, encoder).size, partCount = s.parts.ofItem(m.id).size,
             )
         }
+    }
+
+    /** The works the user said to be related to the work of the [members]: every item of them. */
+    private fun relations(type: io.github.vlsergey.recommend4me.source.TypeStore, members: List<ItemKey>): List<WorkRelation> {
+        val own = members.toSet()
+        return type.links.relations().entries.mapNotNull { (pair, kind) ->
+            val other = when {
+                pair.first in own -> pair.second
+                pair.second in own -> pair.first
+                else -> return@mapNotNull null
+            }
+            val s = type.source(other.source) ?: return@mapNotNull null
+            val head = s.items.find(other.id) ?: return@mapNotNull null
+            WorkRelation(other.source, other.id, Corrected.title(head.title, s.corrections.fieldsOf(other.id)), head.url, WorkRelation.Kind.valueOf(kind))
+        }.distinctBy { it.source to it.item }
     }
 
     /**

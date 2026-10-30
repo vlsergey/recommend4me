@@ -82,7 +82,7 @@ class PagesController(
         val pictureMarks = store.marks.pictureMarksOf(itemId)
         return PageItem(
             summary = summary,
-            facets = cards.facets(store, site, workChances, corrections, names, texts, empty = true, complete = store.corrections.completeOf(itemId)) { it in wanted },
+            facets = cards.facets(store, site, workChances, corrections, names, texts, empty = { true }, complete = store.corrections.completeOf(itemId)) { it in wanted },
             suggestions = suggested,
             pictures = store.pictures.ofItem(itemId, plugins.imageEncoder()?.id).map { p ->
                 PagePicture(p.position, p.url, pictureMarks.firstOrNull { it.position == p.position && it.url == p.url }?.mark)

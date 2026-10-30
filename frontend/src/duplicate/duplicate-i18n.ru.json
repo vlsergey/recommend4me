@@ -54,6 +54,7 @@
   "PairRow.translationHint": "Одна — перевод другой: разные работы одного текста, у каждой своя оценка и интерес; пара больше не предлагается. Модель на переводах не учится: авторы у них разные, а теги и описания — одни",
   "PairRow.unanswer": "Снять ответ",
   "PairRow.unanswerHint": "Снять ответ: связь, «разные», «перевод» или «частично» снимаются, пара вернётся в список без ответа",
+  "WorkDuplicates.more": "Ещё ({{shown, number}} из {{total, number}})",
   "WorkSide.chars_few": "{{value}} знака",
   "WorkSide.chars_many": "{{value}} знаков",
   "WorkSide.chars_one": "{{value}} знак",
