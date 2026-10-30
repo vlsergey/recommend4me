@@ -47,6 +47,25 @@ class Works(private val stores: Stores) {
     /** The works of several items of a content type, across its sources and within each. */
     fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
 
+    /**
+     * How much each of the items [keys] says of its work: the characters of its texts, then how many
+     * values its facets have. Of a work of several items the one that says the most is the one shown
+     * for it. Read for the operation: such works are few, and what a site says of them changes.
+     */
+    fun fullness(type: TypeStore, keys: Collection<ItemKey>): Map<ItemKey, Long> {
+        val out = HashMap<ItemKey, Long>()
+        keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+            val s = type.source(source) ?: return@forEach
+            val texts = s.items.textsOf(ids)
+            val facets = s.items.facetsOf(ids)
+            ids.forEach { id ->
+                val chars = texts[id].orEmpty().values.sumOf { it.length.toLong() }
+                out[ItemKey(source, id)] = chars * FIELDS_AT_MOST + facets[id].orEmpty().values.sumOf { it.size.toLong() }.coerceAtMost(FIELDS_AT_MOST - 1)
+            }
+        }
+        return out
+    }
+
     /** The [items] of the source — id to version — bound if not yet, their versions kept; one at a time: two at once would bind one item twice. */
     @Synchronized
     private fun bind(s: SourceStore, items: Map<String, String>) {
@@ -84,5 +103,10 @@ class Works(private val stores: Stores) {
             val answers = type.sources.sumOf { it.corrections.moveToWorks(now) + it.unknowns.moveToWorks() }
             if (answers > 0) log.info("{}: {} corrections moved to the normalized works", type.id, answers)
         }
+    }
+
+    companion object {
+        /** Above any number of values a work has: the characters of its texts come first. */
+        private const val FIELDS_AT_MOST = 100_000L
     }
 }

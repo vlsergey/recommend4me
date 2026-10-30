@@ -3,7 +3,9 @@ package io.github.vlsergey.recommend4me.history
 import io.github.vlsergey.recommend4me.api.HistoryApi
 import io.github.vlsergey.recommend4me.api.model.HistoryEntry
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 import java.time.ZoneOffset
@@ -14,17 +16,20 @@ import java.time.ZoneOffset
  * here and taken back in the work's window. One read of each source's grades, marks and titles.
  */
 @RestController
-class HistoryController(private val stores: Stores) : HistoryApi {
+class HistoryController(private val stores: Stores, private val works: Works) : HistoryApi {
 
     override fun listHistory(limit: Int): ResponseEntity<List<HistoryEntry>> {
         val entries = stores.types.flatMap { type ->
+            val clusters = works.of(type)
             type.sources.flatMap { s ->
-                val grades = s.ratings.all().map { r ->
+                // A grade or a mark is of a work: once, by the item that names it
+                fun names(id: String) = ItemKey(s.id, id).let { clusters.representative(it) == it }
+                val grades = s.ratings.all().filter { names(it.itemId) }.map { r ->
                     Triple(r.itemId, r.ratedAt) { title: String ->
                         HistoryEntry(type.id, s.id, r.itemId, title, HistoryEntry.Kind.GRADE, r.ratedAt.atOffset(ZoneOffset.UTC), grade = r.grade, version = r.version)
                     }
                 }
-                val marks = s.interest.all().values.map { m ->
+                val marks = s.interest.all().values.filter { names(it.itemId) }.map { m ->
                     Triple(m.itemId, m.markedAt) { title: String ->
                         HistoryEntry(type.id, s.id, m.itemId, title, HistoryEntry.Kind.INTEREST, m.markedAt.atOffset(ZoneOffset.UTC), interesting = m.interesting)
                     }

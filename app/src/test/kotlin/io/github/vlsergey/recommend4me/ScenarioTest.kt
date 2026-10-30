@@ -185,12 +185,12 @@ class ScenarioTest {
         assertEquals(1, quality.queries.single().relevant)
         assertEquals(1, quality.queries.single().irrelevant)
 
-        // Linked, two items are one work: a grade of either is written to both, in the list as graded alike
+        // Linked, two items are one work: a grade of either is of both, in the list one row
         fun gradeOf(id: String) = items.getItem("test", id).body!!.summary.grade
         corrections.linkItem("test", "w2", ItemRef("test", "w3"))
         items.rateItem("test", "w2", RatingRequest(3))
         assertEquals(3, gradeOf("w3"))
-        assertEquals(3, list(view = ItemView.RATED).total)
+        assertEquals(2, list(view = ItemView.RATED).total)
         // Taken back of one, taken back of both
         items.unrateItem("test", "w3", null)
         assertNull(gradeOf("w2"))

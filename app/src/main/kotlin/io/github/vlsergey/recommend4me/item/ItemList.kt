@@ -155,7 +155,13 @@ class ItemList(
                 rows += Row(key, k.updatedAt, k.firstSeenAt, k.id in grades, p?.score, expected, chance, numbers[k.id] ?: surprises[k.id])
             }
         }
-        val viewed = rows.filter { row ->
+        // A work is one row, whatever sites have it: of those found, the item a search found best, else the one that says the most
+        val several = rows.filter { clusters.linked(it.key) }
+        val fullness = works.fullness(type, several.map { it.key })
+        val shown = several.groupBy { clusters.representative(it.key) }.values.mapTo(HashSet()) { same ->
+            (if (relevance != null) same.minBy { relevance.getValue(it.key) } else same.maxBy { fullness[it.key] ?: 0 }).key
+        }
+        val viewed = rows.filter { !clusters.linked(it.key) || it.key in shown }.filter { row ->
             when (view) {
                 ItemView.UNRATED -> !row.graded
                 ItemView.RATED -> row.graded
