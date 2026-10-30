@@ -5114,10 +5114,25 @@ components:
             type: string
         description:
           type: string
+        status:
+          type: array
+          description: Whether the work is finished, in progress, frozen, as its site says
+          items:
+            $ref: '#/components/schemas/DuplicateStatus'
         words:
           $ref: '#/components/schemas/SizeNumber'
         chars:
           $ref: '#/components/schemas/SizeNumber'
+
+    DuplicateStatus:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        nameKey:
+          type: string
+          description: Of a value of the application's own, the key of its name, shown instead of name (FacetValueInfo.nameKey)
 
     SizeNumber:
       type: object

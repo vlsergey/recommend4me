@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ago, formatDate, number, percent } from "@/i18n/format";
 import { intlTag } from "@/i18n/i18n";
-import { label, sourceShort, sourceTitle } from "@/i18n/label";
+import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
@@ -280,11 +280,11 @@ function PairRow({
   );
 }
 
-/** One work of a pair: its site, its title opening the work, its page on the site, its authors and fandoms, its size, its description folded. */
+/** One work of a pair: its site, its title opening the work, its page on the site, its authors, fandoms, status and size, its description folded. */
 function WorkSide({ work: w }: { work: DuplicateWork }) {
   const { t } = useTranslation("duplicate");
   const [whole, setWhole] = useState(false);
-  const names = [w.authors.join(", "), w.fandoms.join(", ")].filter(Boolean).join(" · ");
+  const names = [w.authors.join(", "), w.fandoms.join(", "), w.status?.map(valueName).join(", ")].filter(Boolean).join(" · ");
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="flex items-baseline gap-2">

@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
 import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
+import io.github.vlsergey.recommend4me.api.model.DuplicateStatus
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
 import io.github.vlsergey.recommend4me.correction.Corrected
@@ -613,6 +614,8 @@ class Duplicates(
                 facet?.let { f -> s.names(f, facets.values.flatMap { it[f].orEmpty() }.distinct()) }.orEmpty()
             val authorNames = namesOf(authorFacet)
             val fandomNames = namesOf(fandomFacet)
+            val statusFacet = s.schema.facets.firstOrNull { it.role == FacetRole.STATUS }?.key
+            val statusNames = namesOf(statusFacet)
             val itemSizes = sizes.ofItems(type, s, ids, s.items.numbersOf(ids), fields)
             ids.forEach { id ->
                 val head = heads[id] ?: return@forEach
@@ -625,6 +628,7 @@ class Duplicates(
                         authors = authors,
                         fandoms = fandomFacet?.let { f -> facets[id]?.get(f).orEmpty().map { fandomNames[it] ?: it } }.orEmpty(),
                         description = description?.let { shown[it] },
+                        status = statusFacet?.let { f -> facets[id]?.get(f).orEmpty().map { DuplicateStatus(statusNames[it] ?: it, s.nameKey(f, it)) } },
                         words = itemSizes[id]?.words,
                         chars = itemSizes[id]?.chars,
                     ),
