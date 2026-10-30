@@ -532,9 +532,9 @@ paths:
       description: |
         As the last search of the type found them (searchDuplicates): of every work, the work of every
         other site likeliest one work with it - compared by every field every site has alike, the text
-        aside - no threshold, every pair kept. First the pairs of the highest score by the formula of
-        the list of the work the pair was found for (of both, the larger) times the chance the pair is
-        one work, by the model of the user's answers. "answered" false: the pairs not answered on - neither one work (linked, by any way) nor
+        aside - no threshold, every pair kept. Ordered by the chance the pair is one work, by the model
+        of the user's answers, times what the sort says of the work the pair was found for (of both, the
+        larger). "answered" false: the pairs not answered on - neither one work (linked, by any way) nor
         said to be different; true: those answered on. 202 while a search or a fitting of the model of
         the answers is planned or running: what there is, the page asks again.
       parameters:
@@ -554,6 +554,10 @@ paths:
           schema:
             type: integer
             default: 30
+        - name: sort
+          in: query
+          schema:
+            $ref: '#/components/schemas/DuplicateSort'
       responses:
         '200':
           description: The pairs
@@ -4635,7 +4639,7 @@ components:
           description: The chance the pair is one work, by the model of the user's answers (the mean of the layers before any answer); none of an answered pair the search did not compare
         priority:
           type: number
-          description: What the pairs are ordered by - the score by the formula of the list of the work the pair was found for (of both, the larger) times the chance
+          description: What the pairs are ordered by - the chance times what the sort says of the work the pair was found for (of both, the larger)
         title:
           type: number
           description: The cosine of the vectors of their titles
@@ -4657,6 +4661,16 @@ components:
           type: string
           enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
           description: The user's word - one work (linked), different, one the translation of the other, or one a part of the other; none when not answered
+
+    DuplicateSort:
+      type: string
+      enum: [FORMULA, CHANCE, INTEREST, GRADE]
+      default: FORMULA
+      description: >
+        What the chance a pair is one work is multiplied by, of the work the pair was found for (of both, the larger):
+        FORMULA - its score by the formula of the list, the predicted grade (not below nought) times the chance of
+        interest; INTEREST - the chance of interest alone; GRADE - the predicted grade alone; CHANCE - nothing, the
+        likeliest pairs first
 
     DuplicateFacet:
       type: object

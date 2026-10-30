@@ -29,6 +29,7 @@ export type SiteFandom = Schemas["SiteFandom"];
 export type DuplicatePage = Schemas["DuplicatePage"];
 export type DuplicatePair = Schemas["DuplicatePair"];
 export type DuplicateWork = Schemas["DuplicateWork"];
+export type DuplicateSort = Schemas["DuplicateSort"];
 export type FacetInfo = Schemas["FacetInfo"];
 export type NumberInfo = Schemas["NumberInfo"];
 export type ItemView = Schemas["ItemView"];

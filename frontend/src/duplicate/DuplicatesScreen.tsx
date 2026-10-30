@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateWork } from "@/api/client";
+import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateSort, type DuplicateWork } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
+import { usePref } from "@/lib/usePref";
 import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
 
@@ -48,14 +49,18 @@ const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | 
   { verdict: "PARTIAL", icon: <PuzzleIcon />, word: "partial" },
 ];
 
+/** What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default. */
+const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "CHANCE"];
+
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
 
 /**
  * THE SCREEN OF THE WORKS THAT MAY BE ONE across the sites of a content type: of every work, the work
  * of every other site likeliest one work with it — compared by every field every site has alike, the
- * text aside — none hidden; first the pairs of a work the user would read first (the larger of the two
- * works' scores by the formula of the list) times the chance the pair is one work. Each to answer on:
+ * text aside — none hidden; ordered by the chance the pair is one work times what the chosen sort says
+ * of the work the pair was found for — its score by the formula of the list (the default), its chance
+ * of interest, its predicted grade, or nothing — the sort kept in the browser. Each to answer on:
  * one work (linked, its grade and interest shared, as the work's window links them), different works,
  * or — behind a drop-down — related ones: a translation, a part (not linked, each its own grade); never
  * offered again. The answers of one work and different works teach the model of the chances, fitted
@@ -67,11 +72,12 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const [answered, setAnswered] = useState(false);
   const [limit, setLimit] = useState(PAGE);
   const [every, setEvery] = useRefresh("duplicates.refresh", EVERY_MS);
+  const [sort, setSort] = usePref<DuplicateSort>("duplicates.sort", "FORMULA");
   const queryClient = useQueryClient();
   const list = useQuery({
-    queryKey: [...duplicatesKey(type.id), answered, limit],
+    queryKey: [...duplicatesKey(type.id), answered, limit, sort],
     queryFn: async (): Promise<DuplicatePage> => {
-      const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { answered, offset: 0, limit } } });
+      const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { answered, offset: 0, limit, sort } } });
       if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
       return result.data;
     },
@@ -130,6 +136,23 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
           </TabsList>
         </Tabs>
         {data && <span className="text-sm text-muted-foreground tabular-nums">{t("DuplicatesScreen.total", { count: data.total })}</span>}
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={t("DuplicatesScreen.sortHint")}>
+          {t("DuplicatesScreen.sort")}
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as DuplicateSort);
+              setLimit(PAGE);
+            }}
+            className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
+          >
+            {SORTS.map((s) => (
+              <option key={s} value={s}>
+                {t(`DuplicatesScreen.sortBy.${s}`)}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {data?.pending ? (
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">

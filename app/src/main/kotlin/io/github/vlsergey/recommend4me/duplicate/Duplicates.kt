@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
+import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
 import io.github.vlsergey.recommend4me.correction.Corrected
@@ -501,26 +502,34 @@ class Duplicates(
     /**
      * A page of the pairs of the type: not [answered] — those neither linked (by any way, through
      * other works too) nor said to be different — or answered, the works linked across the sites and
-     * those said to be different. The first by the score by the formula of the list (the prediction
-     * times the chance of interest: a work the user would read first) of the work the pair was found
-     * for ([DuplicateCandidate.foundFor]; of both, the larger) times the chance the pair is one work,
-     * by the model of the answers — a work of a high score, the likeliest of many works of another
-     * site, does not lift every pair of them; equal, the likelier pair first.
+     * those said to be different. The first by the chance the pair is one work, by the model of the
+     * answers, times what the [sort] says of the work the pair was found for
+     * ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list (the
+     * prediction times the chance of interest: a work the user would read first), its chance of
+     * interest, its predicted grade, or nothing — a work of a high score, the likeliest of many works
+     * of another site, does not lift every pair of them; equal, the likelier pair first.
      * Every pair read for the request and let go. Null of no such type.
      */
-    fun page(typeId: String, answered: Boolean, offset: Int, limit: Int): DuplicatePage? {
+    fun page(typeId: String, answered: Boolean, offset: Int, limit: Int, sort: DuplicateSort = DuplicateSort.FORMULA): DuplicatePage? {
         val type = stores.type(typeId) ?: return null
         val said = said(type)
         val search = type.duplicates.search()
         val model = DuplicateModel(search?.weights)
         val kept = type.duplicates.all()
-        // The score of every work by the formula of the list: the prediction (not below nought) times the chance of interest
-        val formula = HashMap<ItemKey, Double>()
-        type.sources.forEach { s ->
+        // What the sort says of every work: of the prediction (not below nought) and the chance of interest
+        // (the user's mark over the model's; without a model of interest, as likely as not to tell nothing: 1)
+        val worth = HashMap<ItemKey, Double>()
+        if (sort != DuplicateSort.CHANCE) type.sources.forEach { s ->
             val marks = s.interest.all()
             type.models.predicted(s.id).forEach { (id, p) ->
-                val chance = Interest.chance(marks[id]?.interesting, p.interest)
-                formula[ItemKey(s.id, id)] = p.score.coerceAtLeast(0.0) * (chance ?: 1.0)
+                val grade = p.score.coerceAtLeast(0.0)
+                val interest = Interest.chance(marks[id]?.interesting, p.interest) ?: 1.0
+                worth[ItemKey(s.id, id)] = when (sort) {
+                    DuplicateSort.FORMULA -> grade * interest
+                    DuplicateSort.INTEREST -> interest
+                    DuplicateSort.GRADE -> grade
+                    DuplicateSort.CHANCE -> 1.0
+                }
             }
         }
         // How every facet compared is named: the label of the facet of any source of the type that is it
@@ -534,9 +543,10 @@ class Duplicates(
         class Ranked(val pair: Pair<ItemKey, ItemKey>, val layers: DuplicateCandidate?, val chance: Double?, val priority: Double)
         fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
             val chance = layers?.let(model::chance)
-            // The score of the work the pair was found for — of both, the larger; of neither (an answered pair not kept), the larger too
-            val first = formula[pair.first] ?: 0.0
-            val second = formula[pair.second] ?: 0.0
+            if (sort == DuplicateSort.CHANCE) return Ranked(pair, layers, chance, chance ?: 0.0)
+            // What the sort says of the work the pair was found for — of both, the larger; of neither (an answered pair not kept), the larger too
+            val first = worth[pair.first] ?: 0.0
+            val second = worth[pair.second] ?: 0.0
             val sought = when (layers?.foundFor) {
                 DuplicateCandidate.FIRST -> first
                 DuplicateCandidate.SECOND -> second
