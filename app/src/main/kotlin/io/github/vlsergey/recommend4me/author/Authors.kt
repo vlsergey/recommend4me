@@ -1,23 +1,33 @@
 package io.github.vlsergey.recommend4me.author
 
+import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOffer
 import io.github.vlsergey.recommend4me.api.model.AuthorOfferPage
+import io.github.vlsergey.recommend4me.api.model.AuthorPage
+import io.github.vlsergey.recommend4me.api.model.AuthorRef
+import io.github.vlsergey.recommend4me.api.model.AuthorSaid
 import io.github.vlsergey.recommend4me.api.model.AuthorSide
 import io.github.vlsergey.recommend4me.api.model.AuthorWork
 import io.github.vlsergey.recommend4me.api.model.AuthorWorkPair
+import io.github.vlsergey.recommend4me.api.model.FoundAuthorEntry
 import io.github.vlsergey.recommend4me.api.model.SiteAuthor
+import io.github.vlsergey.recommend4me.api.model.TagEntryInfo
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.duplicate.DuplicateAnswer
 import io.github.vlsergey.recommend4me.duplicate.DuplicateModel
 import io.github.vlsergey.recommend4me.duplicate.Duplicates
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.tag.BoundEntry
+import io.github.vlsergey.recommend4me.tag.TagEntryRef
 import io.github.vlsergey.recommend4me.work.Works
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
@@ -32,10 +42,20 @@ private val log = LoggerFactory.getLogger(Authors::class.java)
  * two names. The user merges them on the evidence of their works ([offers]): of two authors, the pairs
  * of their works the user said are one work or a part of the other, and those the search of the
  * duplicates kept with the chance they are one. A translation proves no author: its translator is
- * another. Several authors of one site may be one.
+ * another. Several authors of one site may be one. Two authors may be partly one: a part of the works
+ * of one is the other's — an account putting up the works of others, two writing together — neither
+ * merged nor offered again. An author may be bound to the entries of the catalogues of tags (Wikidata);
+ * two bound to one entry are offered first.
  */
 @Component
-class Authors(private val stores: Stores, private val works: Works, private val duplicates: Duplicates) {
+class Authors(
+    private val stores: Stores,
+    private val works: Works,
+    private val duplicates: Duplicates,
+    private val plugins: Plugins,
+    /** The languages an entry is asked in, the user's first: of its texts, those of the first that has them are shown. */
+    @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
+) {
 
     /** The source's facet of the authors; null when it has none. */
     private fun facetOf(s: SourceStore): String? = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key
@@ -136,15 +156,20 @@ class Authors(private val stores: Stores, private val works: Works, private val 
     }
 
     /**
-     * A page of the pairs of authors of the type: those that may be one, the most works matching
-     * first, then the most expected to — none hidden: of a chance however small — or, of [distinct],
-     * the pairs the user told apart. Read for the request and let go. Null of no such type.
+     * A page of the pairs of authors of the type — of the [author] alone, when asked — by what was
+     * [said] of them: those that may be one, the two bound to one entry first, then the most works
+     * matching, then the most expected to — none hidden: of a chance however small — those told apart,
+     * those partly one, or all of them. Read for the request and let go. Null of no such type.
      */
-    fun offers(typeId: String, distinct: Boolean, offset: Int, limit: Int): AuthorOfferPage? {
+    fun offers(typeId: String, said: AuthorSaid, author: Long?, offset: Int, limit: Int): AuthorOfferPage? {
         val type = stores.type(typeId) ?: return null
         val library = library(type)
         val pairs = workPairs(type)
-        val told = type.authors.distinct()
+        val told = type.authors.told()
+        val bound = type.authors.entries()
+        val sharing = HashMap<TagEntryRef, MutableList<Long>>()
+        bound.forEach { (id, refs) -> refs.forEach { sharing.getOrPut(it) { ArrayList() } += id } }
+        val oneEntry = sharing.values.flatMap { ids -> ids.flatMapIndexed { k, a -> ids.drop(k + 1).map { b -> AuthorRepository.pair(a, b) } } }.toSet()
         val tallies = HashMap<Pair<Long, Long>, Tally>()
         pairs.forEach { p ->
             forEachAuthors(p, library) { authors, _ ->
@@ -153,9 +178,17 @@ class Authors(private val stores: Stores, private val works: Works, private val 
             }
         }
         val known = library.worksOf.keys
-        val rows = (if (distinct) told.filter { it.first in known && it.second in known } else (tallies.keys - told)).toList()
+        val answered = told.filterKeys { it.first in known && it.second in known }
+        val offered = tallies.keys + oneEntry.filter { it.first in known && it.second in known } - told.keys
+        val rows = when (said) {
+            AuthorSaid.OFFERED -> offered
+            AuthorSaid.DIFFERENT -> answered.filterValues { !it }.keys
+            AuthorSaid.PARTIAL -> answered.filterValues { it }.keys
+            AuthorSaid.ALL -> offered + answered.keys
+        }.filter { author == null || it.first == author || it.second == author }
         val page = rows.sortedWith(
-            compareByDescending<Pair<Long, Long>> { tallies[it]?.matching ?: 0 }.thenByDescending { tallies[it]?.expected ?: 0.0 }.thenBy { it.first }.thenBy { it.second },
+            compareByDescending<Pair<Long, Long>> { it in oneEntry }.thenByDescending { tallies[it]?.matching ?: 0 }.thenByDescending { tallies[it]?.expected ?: 0.0 }
+                .thenBy { it.first }.thenBy { it.second },
         ).drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE))
         val wanted = page.toSet()
         val ofOffer = HashMap<Pair<Long, Long>, MutableList<WorkPair>>()
@@ -167,39 +200,94 @@ class Authors(private val stores: Stores, private val works: Works, private val 
         val ids = page.flatMap { listOf(it.first, it.second) }
         val titles = titles(type, ids.flatMap { library.worksOf[it].orEmpty() } + ofOffer.values.flatten().flatMap { listOf(it.first, it.second) })
         val sites = sites(type, ids)
-        fun work(key: ItemKey) = AuthorWork(key.source, key.id, titles[key] ?: key.id)
+        val entries = entryInfos(type, bound.filterKeys { it in ids })
+        fun work(key: ItemKey) = work(type, titles, key)
+        fun side(id: Long, inPairs: Set<ItemKey>) = side(id, sites, entries, library, library.worksOf[id].orEmpty().filter { it !in inPairs }.map(::work))
         return AuthorOfferPage(
             total = rows.size,
             offers = page.map { authors ->
                 val own = ofOffer[authors].orEmpty().sortedWith(compareByDescending<WorkPair> { it.answer != null }.thenByDescending { it.chance ?: 0.0 })
                 AuthorOffer(
-                    first = side(authors.first, sites, library, own.map { it.first }.toSet(), ::work),
-                    second = side(authors.second, sites, library, own.map { it.second }.toSet(), ::work),
+                    first = side(authors.first, own.map { it.first }.toSet()),
+                    second = side(authors.second, own.map { it.second }.toSet()),
                     matching = tallies[authors]?.matching ?: 0,
                     expected = (tallies[authors]?.expected ?: 0.0).toBigDecimal(),
                     pairs = own.map { p ->
                         AuthorWorkPair(work(p.first), work(p.second), p.answer?.let { AuthorWorkPair.Answer.valueOf(it.name) }, p.chance?.toBigDecimal())
                     },
+                    oneEntry = authors in oneEntry,
+                    said = told[authors]?.let { partly -> if (partly) AuthorOffer.Said.PARTIAL else AuthorOffer.Said.DIFFERENT },
                 )
             },
         )
     }
 
-    /** The normalized authors of several authors of the sites of the type, of the most works first; null of no such type. */
-    fun merged(typeId: String): List<AuthorSide>? {
+    /**
+     * A page of the authors of the type with works, the most works first: every one, of several authors
+     * of the sites, or bound to an entry; of [search], those a name of theirs on a site or of their
+     * entry holds it. Their works are not listed. Null of no such type.
+     */
+    fun list(typeId: String, kind: AuthorKind, search: String?, offset: Int, limit: Int): AuthorPage? {
         val type = stores.type(typeId) ?: return null
         val library = library(type)
-        val sources = type.sources.map { it.id }.toSet()
-        val ids = type.authors.merged().filterValues { refs -> refs.any { it.source in sources } }.keys
-        val titles = titles(type, ids.flatMap { library.worksOf[it].orEmpty() })
-        val sites = sites(type, ids)
-        return ids.map { side(it, sites, library, emptySet()) { key -> AuthorWork(key.source, key.id, titles[key] ?: key.id) } }.sortedByDescending { it.works }
+        val bound = type.authors.entries()
+        val ofKind: Set<Long> = when (kind) {
+            AuthorKind.ALL -> library.worksOf.keys
+            AuthorKind.MERGED -> library.worksOf.keys intersect type.authors.merged().keys
+            AuthorKind.CATALOGUED -> library.worksOf.keys intersect bound.keys
+        }
+        val needle = search?.trim()?.lowercase().orEmpty()
+        val found = if (needle.isEmpty()) ofKind else ofKind intersect named(type, needle, bound)
+        val page = found.sortedWith(compareByDescending<Long> { library.worksOf[it]?.size ?: 0 }.thenBy { it }).drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE))
+        val sites = sites(type, page)
+        val entries = entryInfos(type, bound.filterKeys { it in page })
+        return AuthorPage(total = found.size, authors = page.map { side(it, sites, entries, library, emptyList()) })
     }
 
-    private fun side(id: Long, sites: Map<Long, List<SiteAuthor>>, library: Library, inPairs: Set<ItemKey>, work: (ItemKey) -> AuthorWork): AuthorSide {
-        val own = library.worksOf[id].orEmpty()
-        return AuthorSide(id = id, sites = sites[id].orEmpty(), works = own.size, rest = own.filter { it !in inPairs }.map(work))
+    /** The authors a name of theirs holds [needle], lowercase: of the sites and of the entries they are bound to. */
+    private fun named(type: TypeStore, needle: String, bound: Map<Long, List<TagEntryRef>>): Set<Long> {
+        val out = HashSet<Long>()
+        type.sources.forEach { s ->
+            val facet = facetOf(s) ?: return@forEach
+            val ofKey = s.authors.bindingsOf(s.id)
+            val names = s.names(facet, ofKey.keys)
+            ofKey.forEach { (key, id) -> if ((names[key] ?: key).lowercase().contains(needle)) out += id }
+        }
+        val kept = type.tags.keptEntries(bound.values.flatten().toSet())
+        bound.forEach { (id, refs) ->
+            if (refs.any { ref -> kept[ref]?.let { e -> BoundEntry(ref.catalogue, e).names.any { it.lowercase().contains(needle) } } == true }) out += id
+        }
+        return out
     }
+
+    /** The author [id] with every work of theirs; null of no such type or author. */
+    fun one(typeId: String, id: Long): AuthorSide? {
+        val type = stores.type(typeId) ?: return null
+        if (!type.authors.exists(id)) return null
+        val library = library(type)
+        val own = library.worksOf[id].orEmpty()
+        val titles = titles(type, own)
+        val entries = entryInfos(type, type.authors.entries().filterKeys { it == id })
+        return side(id, sites(type, listOf(id)), entries, library, own.map { work(type, titles, it) })
+    }
+
+    private fun work(type: TypeStore, titles: Map<ItemKey, String>, key: ItemKey) =
+        AuthorWork(key.source, key.id, titles[key] ?: key.id, type.source(key.source)?.source?.itemUrl(key.id).orEmpty())
+
+    private fun side(id: Long, sites: Map<Long, List<SiteAuthor>>, entries: Map<Long, List<TagEntryInfo>>, library: Library, rest: List<AuthorWork>) =
+        AuthorSide(id = id, sites = sites[id].orEmpty(), works = library.worksOf[id].orEmpty().size, rest = rest, propertyEntries = entries[id].orEmpty())
+
+    /** The entries [bound] as kept, by the author. */
+    private fun entryInfos(type: TypeStore, bound: Map<Long, List<TagEntryRef>>): Map<Long, List<TagEntryInfo>> {
+        val kept = type.tags.keptEntries(bound.values.flatten().toSet())
+        return bound.mapValues { (_, refs) ->
+            refs.mapNotNull { ref ->
+                kept[ref]?.let { e -> TagEntryInfo(ref.catalogue, e.id, e.url, BoundEntry(ref.catalogue, e).names, e.labels.first(), e.descriptions.first()) }
+            }
+        }
+    }
+
+    private fun Map<String, String>.first(): String? = languages.firstNotNullOfOrNull { this[it] }
 
     /** The authors of the sites of the normalized authors [ids]: their names and how many works each has, of every source in one go. */
     private fun sites(type: TypeStore, ids: Collection<Long>): Map<Long, List<SiteAuthor>> {
@@ -237,11 +325,54 @@ class Authors(private val stores: Stores, private val works: Works, private val 
         return true
     }
 
-    /** The two authors told apart, or the word taken back. False when either is no more. */
-    fun setDistinct(a: Long, b: Long, different: Boolean): Boolean {
+    /** The two authors told apart — or, [partly], a part of the works of one the other's. False when either is no more. */
+    fun tell(a: Long, b: Long, partly: Boolean): Boolean {
         val type = stores.types.firstOrNull() ?: return false
         if (a == b || !type.authors.exists(a) || !type.authors.exists(b)) return false
-        type.authors.setDistinct(a, b, different, Instant.now())
+        type.authors.tell(a, b, partly, Instant.now())
+        return true
+    }
+
+    /** The word said of the two authors taken back. False when either is no more. */
+    fun takeBack(a: Long, b: Long): Boolean {
+        val type = stores.types.firstOrNull() ?: return false
+        if (a == b || !type.authors.exists(a) || !type.authors.exists(b)) return false
+        type.authors.takeBack(a, b)
+        return true
+    }
+
+    /** The entries every catalogue of tags finds by [text] — an id or a page's address is the entry itself — each with the authors of the type bound to it already. */
+    fun findEntries(typeId: String, text: String): List<FoundAuthorEntry>? {
+        val type = stores.type(typeId) ?: return null
+        if (text.isBlank()) return emptyList()
+        val found = plugins.tagCatalogues.flatMap { c -> c.find(text, languages).map { c.id to it } }
+        val ofEntry = HashMap<TagEntryRef, MutableList<Long>>()
+        type.authors.entries().forEach { (id, refs) -> refs.forEach { ofEntry.getOrPut(it) { ArrayList() } += id } }
+        val sites = sites(type, found.flatMap { (c, e) -> ofEntry[TagEntryRef(c, e.id)].orEmpty() })
+        return found.map { (c, e) ->
+            val authors = ofEntry[TagEntryRef(c, e.id)].orEmpty().map { id -> AuthorRef(id, sites[id].orEmpty().maxByOrNull { it.works }?.name ?: id.toString()) }
+            FoundAuthorEntry(c, e.id, e.url, authors, e.labels.first(), e.descriptions.first())
+        }
+    }
+
+    /**
+     * The author [id] bound to the entry [entry] of [catalogue] besides the ones they are, the entry
+     * read of the catalogue now and kept — or, [bound] false, no more to it. False when the author, the
+     * catalogue or the entry is no more.
+     */
+    fun bindEntry(id: Long, catalogue: String, entry: String, bound: Boolean): Boolean {
+        val type = stores.types.firstOrNull() ?: return false
+        if (!type.authors.exists(id)) return false
+        val now = Instant.now()
+        if (!bound) {
+            type.authors.bindEntry(id, TagEntryRef(catalogue, entry), false, now)
+            return true
+        }
+        val source = plugins.tagCatalogues.firstOrNull { it.id == catalogue } ?: return false
+        val read = source.entries(listOf(entry), languages).firstOrNull() ?: return false
+        type.tags.keepEntry(catalogue, read, now)
+        type.authors.bindEntry(id, TagEntryRef(catalogue, read.id), true, now)
+        log.info("author {} bound to {}:{} ({})", id, catalogue, read.id, read.labels.first())
         return true
     }
 

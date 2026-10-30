@@ -2,29 +2,46 @@ package io.github.vlsergey.recommend4me.author
 
 import io.github.vlsergey.recommend4me.api.AuthorsApi
 import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
+import io.github.vlsergey.recommend4me.api.model.AuthorEntryRequest
+import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOfferPage
+import io.github.vlsergey.recommend4me.api.model.AuthorPage
+import io.github.vlsergey.recommend4me.api.model.AuthorSaid
 import io.github.vlsergey.recommend4me.api.model.AuthorSide
+import io.github.vlsergey.recommend4me.api.model.FoundAuthorEntry
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
 class AuthorsController(private val authors: Authors) : AuthorsApi {
 
-    override fun getAuthorOffers(type: String, distinct: Boolean, offset: Int, limit: Int): ResponseEntity<AuthorOfferPage> =
-        authors.offers(type, distinct, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+    override fun listAuthors(type: String, kind: AuthorKind, search: String?, offset: Int, limit: Int): ResponseEntity<AuthorPage> =
+        authors.list(type, kind, search, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
-    override fun getMergedAuthors(type: String): ResponseEntity<List<AuthorSide>> =
-        authors.merged(type)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+    override fun getAuthor(type: String, id: Long): ResponseEntity<AuthorSide> =
+        authors.one(type, id)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+
+    override fun getAuthorOffers(type: String, said: AuthorSaid, author: Long?, offset: Int, limit: Int): ResponseEntity<AuthorOfferPage> =
+        authors.offers(type, said, author, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun answerAuthors(authorAnswer: AuthorAnswer): ResponseEntity<Unit> {
         val a = authorAnswer.first
         val b = authorAnswer.second
         val done = when (authorAnswer.verdict) {
             AuthorAnswer.Verdict.SAME -> authors.merge(a, b)
-            AuthorAnswer.Verdict.DIFFERENT -> authors.setDistinct(a, b, true)
-            AuthorAnswer.Verdict.NONE -> authors.setDistinct(a, b, false)
+            AuthorAnswer.Verdict.DIFFERENT -> authors.tell(a, b, false)
+            AuthorAnswer.Verdict.PARTIAL -> authors.tell(a, b, true)
+            AuthorAnswer.Verdict.NONE -> authors.takeBack(a, b)
         }
         return if (done) ResponseEntity.noContent().build() else ResponseEntity.notFound().build()
+    }
+
+    override fun findAuthorEntries(type: String, query: String): ResponseEntity<List<FoundAuthorEntry>> =
+        authors.findEntries(type, query)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+
+    override fun bindAuthorEntry(id: Long, authorEntryRequest: AuthorEntryRequest): ResponseEntity<Unit> {
+        val r = authorEntryRequest
+        return if (authors.bindEntry(id, r.catalogue, r.entry, r.bound)) ResponseEntity.noContent().build() else ResponseEntity.notFound().build()
     }
 
     override fun takeOutSiteAuthor(id: Long, source: String, author: String): ResponseEntity<Unit> =

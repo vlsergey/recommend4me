@@ -21,7 +21,8 @@
 | `age_rating_weight` | the model of a work's age rating by its tags and its site, learnt from every site's works whose rating is known to lie between two steps: every feature's weight ("tag:<id>", "source:<id>"), and the thresholds between the ratings ("threshold:<k>") |
 | `normalized_author` | a writer of the user's, whatever accounts the sites know them by |
 | `site_author` | a site's author bound to a normalized author: at first of their own, merged by the user on the evidence of their works, never of their names; several of one site may be one |
-| `normalized_author_distinct` | two authors the user told apart: never offered as one again |
+| `normalized_author_distinct` | two authors the user told apart, or said are partly one (`partly`: a part of the works of one is the other's): never offered as one again |
+| `normalized_author_entry` | an entry of a catalogue (Wikidata) an author is bound to |
 | `universe` | a universe of the dictionary: an entry of a catalogue the user added |
 | `universe_property` | what else the catalogue says of a universe |
 | `universe_character` | a character of a universe |
@@ -54,6 +55,13 @@ erDiagram
         BIGINT first_author PK, FK
         BIGINT other_author PK, FK
         TIMESTAMPTZ said_at
+        BOOLEAN partly
+    }
+    normalized_author_entry {
+        BIGINT author PK, FK
+        VARCHAR catalogue PK, FK
+        VARCHAR entry PK, FK
+        TIMESTAMPTZ bound_at
     }
     normalized_tag {
         BIGINT id PK
@@ -221,6 +229,7 @@ erDiagram
     }
     normalized_author ||--o{ normalized_author_distinct : "first_author"
     normalized_author ||--o{ normalized_author_distinct : "other_author"
+    normalized_author ||--o{ normalized_author_entry : "author"
     normalized_author ||--o{ site_author : "normalized"
     normalized_tag ||--o{ normalized_tag_distinct : "first_tag"
     normalized_tag ||--o{ normalized_tag_distinct : "other_tag"
@@ -230,6 +239,7 @@ erDiagram
     normalized_tag ||--o{ site_tag : "normalized"
     normalized_tag ||--o{ tag_stat : "tag"
     normalized_tag ||--o{ tag_vector : "tag"
+    tag_entry ||--o{ normalized_author_entry : "catalogue, entry"
     tag_entry ||--o{ normalized_tag_entry : "catalogue, entry"
     tag_entry ||--o{ tag_entry_above : "catalogue, above"
     tag_entry ||--o{ tag_entry_above : "catalogue, entry"
