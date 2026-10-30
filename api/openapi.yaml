@@ -4655,8 +4655,8 @@ components:
           description: An author of one goes by the same name as an author of the other
         answer:
           type: string
-          enum: [SAME, DIFFERENT, TRANSLATION]
-          description: The user's word - one work (linked), different, or one the translation of the other; none when not answered
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
+          description: The user's word - one work (linked), different, one the translation of the other, or one a part of the other; none when not answered
 
     DuplicateFacet:
       type: object
@@ -4704,10 +4704,11 @@ components:
           $ref: '#/components/schemas/ItemRef'
         verdict:
           type: string
-          enum: [SAME, DIFFERENT, TRANSLATION]
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
           description: >
-            One work (linked, the grade and interest shared); different works; or one the translation of the other -
-            different works of one text, not linked, each its own grade - left out of the model of the answers
+            One work (linked, the grade and interest shared); different works; or related works - one the translation of
+            the other, one holding a part of the other's text (some of its chapters, a collection it is in; a volume of a series is a work of its own) - not linked, each its own grade, left out of the
+            model of the answers
 
     MarkedWork:
       type: object

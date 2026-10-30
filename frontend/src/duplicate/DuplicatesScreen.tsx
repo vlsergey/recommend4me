@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
+import { ChevronDownIcon, CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateWork } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ago, formatDate, percent } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
@@ -35,11 +36,16 @@ const sameRow = (a: DuplicatePair, b: DuplicatePair) => a.answer === b.answer;
 /** The user's word on a pair. */
 type Verdict = NonNullable<DuplicatePair["answer"]>;
 
-/** The answers, in the order of the buttons: one work, a translation, different works. */
-const VERDICTS: { verdict: Verdict; icon: React.ReactNode; word: "same" | "translation" | "different" }[] = [
+/** The answers of the buttons: one work, different works. */
+const VERDICTS: { verdict: Verdict; icon: React.ReactNode; word: "same" | "different" }[] = [
   { verdict: "SAME", icon: <CopyIcon />, word: "same" },
-  { verdict: "TRANSLATION", icon: <LanguagesIcon />, word: "translation" },
   { verdict: "DIFFERENT", icon: <SplitIcon />, word: "different" },
+];
+
+/** The answers of related works, behind a drop-down beside the buttons: a translation, a part. */
+const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | "partial" }[] = [
+  { verdict: "TRANSLATION", icon: <LanguagesIcon />, word: "translation" },
+  { verdict: "PARTIAL", icon: <PuzzleIcon />, word: "partial" },
 ];
 
 /** The pair's two works as the server names them. */
@@ -50,9 +56,10 @@ const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.f
  * of every other site likeliest one work with it — compared by every field every site has alike, the
  * text aside — none hidden; first the pairs of a work the user would read first (the larger of the two
  * works' scores by the formula of the list) times the chance the pair is one work. Each to answer on:
- * one work (linked, its grade and interest shared, as the work's window links them), one the translation
- * of the other (different works of one text, each its own grade) or different works — never offered
- * again; the answers teach the model of the chances, fitted again a few seconds after them. The answered ones apart, their word changed or taken back there. The pairs are looked for in
+ * one work (linked, its grade and interest shared, as the work's window links them), different works,
+ * or — behind a drop-down — related ones: a translation, a part (not linked, each its own grade); never
+ * offered again. The answers of one work and different works teach the model of the chances, fitted
+ * again a few seconds after them. The answered ones apart, their word changed or taken back there. The pairs are looked for in
  * the background, on the first start and when asked anew here.
  */
 export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
@@ -229,6 +236,7 @@ function PairRow({
               {t(`PairRow.${word}`)}
             </AsyncButton>
           ))}
+          <Related answered={p.answer} locked={locked} answer={answer} />
           {p.answer && (
             <AsyncButton size="sm" variant="ghost" icon={<Undo2Icon />} disabled={locked} title={t("PairRow.unanswerHint")} onClick={unanswer}>
               {t("PairRow.unanswer")}
@@ -277,5 +285,42 @@ function WorkSide({ work: w }: { work: DuplicateWork }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The answers of related works — a translation, a part — behind a drop-down: not beside the buttons
+ * of one work and different works, which most pairs take. The one given names the drop-down, marked;
+ * the drop-down is at work while its own answer is.
+ */
+function Related({ answered, locked, answer }: { answered?: Verdict; locked: boolean; answer: (verdict: Verdict) => Promise<void> }) {
+  const { t } = useTranslation("duplicate");
+  const [busy, setBusy] = useState(false);
+  const given = RELATED.find((r) => r.verdict === answered);
+  const choose = async (verdict: Verdict) => {
+    setBusy(true);
+    try {
+      await answer(verdict);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button size="sm" variant={given ? "default" : "outline"} disabled={locked || busy} title={t("PairRow.relatedHint")} />}
+      >
+        {busy ? <Loader2Icon className="animate-spin" /> : given?.icon}
+        {given ? t(`PairRow.${given.word}`) : t("PairRow.related")}
+        <ChevronDownIcon className="opacity-60" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-auto">
+        {RELATED.map(({ verdict, icon, word }) => (
+          <DropdownMenuItem key={verdict} disabled={answered === verdict} title={t(`PairRow.${word}Hint`)} onClick={() => void choose(verdict)}>
+            {icon} {t(`PairRow.${word}`)}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

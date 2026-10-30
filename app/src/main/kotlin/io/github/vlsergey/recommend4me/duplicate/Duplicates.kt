@@ -43,11 +43,17 @@ import java.util.concurrent.TimeUnit
 private val log = LoggerFactory.getLogger(Duplicates::class.java)
 
 /**
- * The user's word on a pair: one work; different works; or one the TRANSLATION of the other —
- * different works, each its own grade and interest, of one text: left out of the model of the answers
- * ([fit]) — its authors differ, its tags and description are the other's: neither one work nor two.
+ * The user's word on a pair: one work; different works; or related works ([related]) — one the
+ * TRANSLATION of the other, one holding a PARTIAL of the other's text (a site's fewer chapters, a collection) — not linked,
+ * each its own grade and interest, left out of the model of the answers ([fit]): a translation's
+ * authors differ while its tags and description are the other's — neither one work nor two.
  */
-enum class DuplicateAnswer { SAME, DIFFERENT, TRANSLATION }
+enum class DuplicateAnswer {
+    SAME, DIFFERENT, TRANSLATION, PARTIAL;
+
+    /** Related works, kept by their kind ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]): neither one work nor two. */
+    val related: Boolean get() = this == TRANSLATION || this == PARTIAL
+}
 
 /**
  * THE WORKS OF DIFFERENT SITES THAT MAY BE ONE WORK, and the user's word on each pair. A search
@@ -59,9 +65,9 @@ enum class DuplicateAnswer { SAME, DIFFERENT, TRANSLATION }
  * every work the one of every other site likeliest one work with it; no threshold, none hidden. It
  * runs on start when the type was never searched, and when the user asks. The pairs are answered on
  * as the work's window links the works: one work — linked, its grade and interest shared
- * ([LinkedGrades], [LinkedInterest]) — different works, or one the translation of the other (different
- * works of one text, each its own grade), never offered again
- * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct], [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.translation]).
+ * ([LinkedGrades], [LinkedInterest]) — different works, or related ones (a translation, a part: not
+ * linked, each its own grade), never offered again
+ * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct], [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]).
  *
  * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work is a model of the user's answers
  * ([DuplicateModel]) over how alike its layers are, fitted at every search and a few seconds after
@@ -416,17 +422,18 @@ class Duplicates(
 
     /**
      * The model of the user's answers of the [pairs]: one work, different — every pair not answered
-     * on a likely different one — the translations left out (user, 2026-10-30): their authors differ,
-     * their tags and descriptions are the other's, they teach neither one work nor two.
+     * on a likely different one — the related works left out (user, 2026-10-30): a translation's
+     * authors differ, its tags and description are the other's, a part is neither one nor two — they
+     * teach neither one work nor two.
      */
     private fun fit(pairs: Collection<DuplicateCandidate>, said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>): DuplicateModel? =
-        DuplicateModel.fit(pairs.filter { said[it.pair] != DuplicateAnswer.TRANSLATION }) { c -> said[c.pair]?.let { it == DuplicateAnswer.SAME } }
+        DuplicateModel.fit(pairs.filter { said[it.pair]?.related != true }) { c -> said[c.pair]?.let { it == DuplicateAnswer.SAME } }
 
-    /** The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different, a translation. */
+    /** The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different, related. */
     private fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> {
         val out = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
         type.links.distincts().forEach { out[it] = DuplicateAnswer.DIFFERENT }
-        type.links.translations().forEach { out[it] = DuplicateAnswer.TRANSLATION }
+        type.links.relations().forEach { (pair, kind) -> runCatching { DuplicateAnswer.valueOf(kind) }.getOrNull()?.takeIf { it.related }?.let { out[pair] = it } }
         works.of(type).linkedWorks().forEach { members ->
             members.forEachIndexed { k, a ->
                 members.drop(k + 1).filter { it.source != a.source }.forEach { b -> out[type.links.ordered(a, b)] = DuplicateAnswer.SAME }
@@ -454,8 +461,8 @@ class Duplicates(
                         val model = fit(pairs, said)
                         type.duplicates.keepWeights(model?.weights)
                         log.info(
-                            "{}: the model of the duplicates fitted on {} pairs, {} said one work, {} translations, {} different, in {} ms: {}",
-                            type.id, pairs.size, said.values.count { it == DuplicateAnswer.SAME }, said.values.count { it == DuplicateAnswer.TRANSLATION },
+                            "{}: the model of the duplicates fitted on {} pairs, {} said one work, {} related, {} different, in {} ms: {}",
+                            type.id, pairs.size, said.values.count { it == DuplicateAnswer.SAME }, said.values.count { it.related },
                             said.values.count { it == DuplicateAnswer.DIFFERENT }, System.currentTimeMillis() - started, model?.weights,
                         )
                     }
@@ -575,8 +582,8 @@ class Duplicates(
 
     /**
      * The user's word on the pair, in place of any before: one work — linked as the work's window
-     * links them, its grade and interest shared — different works, or one the translation of the
-     * other (not linked: each its own grade and interest), a link between them taken away. False when
+     * links them, its grade and interest shared — different works, or related ones (a translation, a
+     * part: not linked, each its own grade and interest), a link between them taken away. False when
      * either is no work of the type, or they are one item.
      */
     fun answer(typeId: String, a: ItemKey, b: ItemKey, verdict: DuplicateAnswer): Boolean {
@@ -585,7 +592,7 @@ class Duplicates(
         if (type.source(b.source)?.items?.find(b.id) == null || a == b) return false
         val now = Instant.now()
         type.links.undistinct(a, b)
-        type.links.untranslation(a, b)
+        type.links.unrelate(a, b)
         when (verdict) {
             DuplicateAnswer.SAME -> {
                 if (a.source == b.source) first.corrections.link(a.id, b.id, now) else type.links.link(a, b, now)
@@ -597,22 +604,22 @@ class Duplicates(
                 if (a.source == b.source) first.corrections.unlink(a.id, b.id)
                 type.links.distinct(a, b, now)
             }
-            DuplicateAnswer.TRANSLATION -> {
+            DuplicateAnswer.TRANSLATION, DuplicateAnswer.PARTIAL -> {
                 if (a.source == b.source) first.corrections.unlink(a.id, b.id)
-                type.links.translation(a, b, now)
+                type.links.relate(a, b, verdict.name, now)
             }
         }
         answered(type)
         return true
     }
 
-    /** The word on the pair taken back: their link, that they are different, or a translation. */
+    /** The word on the pair taken back: their link, that they are different, or related. */
     fun unanswer(typeId: String, a: ItemKey, b: ItemKey) {
         val type = stores.type(typeId) ?: return
         if (a.source == b.source) type.source(a.source)?.corrections?.unlink(a.id, b.id)
         type.links.unlink(a, b)
         type.links.undistinct(a, b)
-        type.links.untranslation(a, b)
+        type.links.unrelate(a, b)
         answered(type)
     }
 
