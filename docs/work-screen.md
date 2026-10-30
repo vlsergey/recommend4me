@@ -167,7 +167,9 @@ it would be a cache of stored data, and none is asked for.
   and "why it is listed": the universe, the classes, leaving out a class or an entry, the Wikidata page. A tag has
   no passages: it says so and offers By text.
 
-A failed section says so in its place; the rest stands.
+A failed section says so in its place; the rest stands. The hints stay as tooltips: what the points mean, what
+"No other" does for the model, what taking an item out keeps. The address stays `#item=<source>/<item>`: the
+extension writes it. Press outside no longer closes: there is no outside.
 
 **By text** is answering, so it is on the right: a mode with a banner saying the keys act on it. A row is a tag, its
 paragraph, ✓ / not enough / ✕ / not in the work / ignore (`F` `G` `D` `N` `Delete`). The list comes calmly, as
