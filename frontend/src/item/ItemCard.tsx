@@ -7,14 +7,13 @@ import {
   Cover,
   FacetBadges,
   InterestButtons,
-  LinkedBadges,
   NumberLine,
   PreviousRating,
   RatingButtons,
   ScoreBadge,
   SearchMatchLine,
   SignalBadges,
-  SourceBadge,
+  SiteBadges,
 } from "./pieces";
 
 export type ItemViewProps = {
@@ -45,7 +44,7 @@ export const ItemCard = forwardRef<HTMLElement, ItemViewProps>(function ItemCard
       <div className="relative aspect-[2/1] overflow-hidden">
         <Cover typeId={type.id} summary={summary} className="size-full transition-transform duration-300 group-hover:scale-[1.03]" />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-        <SourceBadge type={type} source={summary.source} className="absolute top-2 left-2 border-0 bg-background/85 text-foreground shadow-sm" />
+        <SiteBadges type={type} summary={summary} className="absolute top-2 right-16 left-2" badgeClassName="border-0 bg-background/85 text-foreground shadow-sm" />
         <ScoreBadge type={type} summary={summary} className="absolute top-2 right-2" />
         <div className="absolute inset-x-0 bottom-0 p-3 text-white">
           <h3 className="line-clamp-2 text-base leading-tight font-semibold drop-shadow">{summary.title}</h3>
@@ -70,8 +69,6 @@ export const ItemCard = forwardRef<HTMLElement, ItemViewProps>(function ItemCard
         {onJudge && summary.searchMatch && <SearchJudge value={summary.searchRelevant} onJudge={onJudge} />}
 
         <FacetBadges facets={summary.facets} limit={SHOWN_FACET_VALUES} />
-
-        <LinkedBadges linked={summary.linked} className="text-xs text-muted-foreground" />
 
         <InterestButtons summary={summary} className="mt-auto" />
         <RatingButtons type={type} value={summary.grade as Grade | undefined} onRate={onRate} size="sm" />

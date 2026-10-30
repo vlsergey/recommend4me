@@ -8,14 +8,13 @@ import type { ItemViewProps } from "./ItemCard";
 import {
   Cover,
   InterestButtons,
-  LinkedBadges,
   NumberLine,
   PreviousRating,
   RatingButtons,
   ScoreBadge,
   SearchMatchLine,
   SignalBadges,
-  SourceBadge,
+  SiteBadges,
 } from "./pieces";
 
 /**
@@ -39,7 +38,7 @@ export const ItemRow = forwardRef<HTMLElement, ItemViewProps>(function ItemRow({
       <Cover typeId={type.id} summary={summary} className="aspect-[2/1] w-28 shrink-0 rounded-md md:w-40" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 md:flex-nowrap">
-          <SourceBadge type={type} source={summary.source} />
+          <SiteBadges type={type} summary={summary} className="shrink-0" />
           {/* On a phone the title has a line of its own, above the badges */}
           <h3 className="order-first min-w-0 basis-full truncate font-semibold md:order-none md:basis-auto">{summary.title}</h3>
           {summary.version && <span className="shrink-0 text-sm text-muted-foreground">{summary.version}</span>}
@@ -49,7 +48,6 @@ export const ItemRow = forwardRef<HTMLElement, ItemViewProps>(function ItemRow({
           <NumberLine type={type} summary={summary} />
           <PreviousRating type={type} summary={summary} />
           <SignalBadges source={type.sources.find((s) => s.id === summary.source)} signals={summary.signals} />
-          <LinkedBadges linked={summary.linked} />
         </div>
         {summary.searchMatch ? (
           <SearchMatchLine match={summary.searchMatch} className="mt-1 line-clamp-2" />

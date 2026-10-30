@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.item
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemFacet
+import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.api.model.LinkedItem
 import io.github.vlsergey.recommend4me.api.model.Prediction
@@ -227,6 +228,10 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 ItemKey(source, id) to (head to Corrected.title(head.title, store.corrections.fieldsOf(id)))
             }
         }.toMap()
+        // The pictures of every member: the cover of a work is any of its items'
+        val pictures = members.groupBy { it.source }.flatMap { (source, list) ->
+            stores.source(source)?.pictures?.countsOf(list.map { it.id })?.map { (id, count) -> ItemKey(source, id) to count }.orEmpty()
+        }.toMap()
         keys.groupBy { it.source }.forEach { (source, list) ->
             val store = stores.source(source) ?: return@forEach
             val ids = list.map { it.id }
@@ -240,7 +245,6 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 store.names(facet, ids.flatMap { facets[it]?.get(facet).orEmpty() + ModelValues.named(chances[it]?.get(facet)) + corrections[it].orEmpty().filter { c -> c.facet == facet }.map { c -> c.key } })
             }
             val numbers = store.items.numbersOf(ids)
-            val pictures = store.pictures.countsOf(ids)
             val ratings = store.ratings.all().filter { it.itemId in ids.toSet() }
             val versions = ids.mapNotNull { id -> heads[ItemKey(source, id)]?.first?.let { id to it.version } }.toMap()
             val graded = graded(ratings, versions)
@@ -263,8 +267,8 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                     updatedAt = head.updatedAt.atOffset(ZoneOffset.UTC),
                     facets = facets(store, values, likely, corrections[id].orEmpty(), names) { it in onCard },
                     numbers = Corrected.numbers(numbers[id].orEmpty(), fields[id].orEmpty()),
-                    hasCover = pictures[id]?.second ?: false,
-                    pictureCount = pictures[id]?.first ?: 0,
+                    cover = clusters.members(key).firstOrNull { pictures[it]?.second == true }?.let { ItemRef(it.source, it.id) },
+                    pictureCount = pictures[key]?.first ?: 0,
                     linked = clusters.members(key).drop(1).mapNotNull { m ->
                         heads[m]?.let { (h, t) -> LinkedItem(m.source, m.id, t, h.url) }
                     },

@@ -291,6 +291,18 @@ class TwoSitesTest {
     }
 
     @Test
+    fun `the cover of a work is its own item's, else another site's`() {
+        alpha("c1|The Cover|sea|A work with a cover on one site|cover.png|")
+        beta("c2|The Cover|sea|A work with a cover on one site")
+        assertNull(items.getItem("beta", "c2").body!!.summary.cover)
+        corrections.linkItem("alpha", "c1", ItemRef("beta", "c2"))
+        assertEquals(ItemRef("alpha", "c1"), items.getItem("alpha", "c1").body!!.summary.cover)
+        assertEquals(ItemRef("alpha", "c1"), items.getItem("beta", "c2").body!!.summary.cover)
+        assertEquals(0, items.getItem("beta", "c2").body!!.summary.pictureCount, "the pictures of the site's page stay its own")
+        corrections.unlinkItem("alpha", "c1", "beta", "c2")
+    }
+
+    @Test
     fun `one work on two sites is one work — a grade or a mark of either is of both`() {
         alpha("a1|The Lighthouse|sea|A keeper of a lighthouse waits for the storm||")
         beta("b9|The Lighthouse|ocean|A keeper of a lighthouse waits for the storm")

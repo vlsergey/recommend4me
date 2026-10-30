@@ -404,13 +404,26 @@ export function SignalBadges({ source, signals, className }: { source?: SourceIn
   );
 }
 
-/** Where the work comes from, when its content type has several sources. */
-export function SourceBadge({ type, source, className }: { type: ContentTypeInfo; source: string; className?: string }) {
+/**
+ * The sites of the work, when its content type has several: the one the card shows first, the others
+ * fainter after it, each a link to the work's page there.
+ */
+export function SiteBadges({ type, summary, className, badgeClassName }: { type: ContentTypeInfo; summary: ItemSummary; className?: string; badgeClassName?: string }) {
   if (type.sources.length < 2) return null;
   return (
-    <Badge variant="outline" className={cn("font-normal", className)} title={sourceTitle(source)}>
-      {sourceShort(source)}
-    </Badge>
+    <span className={cn("flex flex-wrap gap-1", className)}>
+      {[summary, ...summary.linked].map((site, i) => (
+        <Badge
+          key={`${site.source}/${site.item}`}
+          variant="outline"
+          render={<a href={site.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} />}
+          title={`${sourceTitle(site.source)}: ${site.title}`}
+          className={cn("font-normal", badgeClassName, i > 0 && "opacity-70 hover:opacity-100")}
+        >
+          {sourceShort(site.source)}
+        </Badge>
+      ))}
+    </span>
   );
 }
 
@@ -507,7 +520,7 @@ export function PreviousRating({ type, summary }: { type: ContentTypeInfo; summa
   );
 }
 
-/** The cover — the preview, or the original where [full] — or the type's icon when there is none. */
+/** The cover of the work, whichever of its sites has it — the preview, or the original where [full] — or the type's icon when there is none. */
 export function Cover({
   typeId,
   summary,
@@ -520,7 +533,7 @@ export function Cover({
   full?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
-  if (!summary.hasCover || failed) {
+  if (!summary.cover || failed) {
     const Icon = typeIcon(typeId);
     return (
       <div className={cn("flex items-center justify-center bg-muted text-muted-foreground", className)}>
@@ -530,7 +543,7 @@ export function Cover({
   }
   return (
     <img
-      src={pictureSrc(summary, 0, full)}
+      src={pictureSrc(summary.cover, 0, full)}
       alt=""
       loading="lazy"
       decoding="async"

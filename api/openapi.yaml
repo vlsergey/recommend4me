@@ -3019,7 +3019,7 @@ components:
 
     ItemSummary:
       type: object
-      required: [source, item, title, version, url, updatedAt, facets, numbers, hasCover, pictureCount, linked, work]
+      required: [source, item, title, version, url, updatedAt, facets, numbers, pictureCount, linked, work]
       properties:
         work:
           type: string
@@ -3051,8 +3051,10 @@ components:
           additionalProperties:
             type: number
             format: double
-        hasCover:
-          type: boolean
+        cover:
+          description: The item of the work whose first picture is its cover - this one if it has one, else another site's; none when no item has any
+          allOf:
+            - $ref: '#/components/schemas/ItemRef'
         pictureCount:
           type: integer
         grade:
