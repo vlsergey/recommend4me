@@ -27,6 +27,7 @@
 | `universe_class` | a class of the catalogue, and whether its instances are characters |
 | `universe_class_choice` | the user's word on a class of a universe |
 | `universe_character_choice` | the user's word on one character of a universe |
+| `site_fandom` | a site's fandom bound by the user to a universe of the dictionary: every work of the fandom drafted with it |
 | `dictionary_moved` | the files of the types whose tags and universes were moved here |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
@@ -68,6 +69,13 @@ erDiagram
         BIGINT child PK, FK
         BIGINT parent PK, FK
         TIMESTAMPTZ linked_at
+    }
+    site_fandom {
+        VARCHAR source PK
+        VARCHAR fandom PK
+        VARCHAR catalogue PK, FK
+        VARCHAR universe_id PK, FK
+        TIMESTAMPTZ bound_at
     }
     site_tag {
         VARCHAR source PK
@@ -207,6 +215,7 @@ erDiagram
     tag_entry ||--o{ tag_entry_above : "catalogue, entry"
     tag_entry ||--o{ tag_entry_text : "catalogue, entry"
     tag_entry ||--o{ tag_entry_too_general : "catalogue, entry"
+    universe ||--o{ site_fandom : "catalogue, universe_id"
     universe ||--o{ universe_character : "catalogue, universe_id"
     universe ||--o{ universe_character_choice : "catalogue, universe_id"
     universe ||--o{ universe_class_choice : "catalogue, universe_id"

@@ -12,6 +12,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A build takes a quarter of an hour: one that hangs is stopped after an hour, not the runner's six
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 

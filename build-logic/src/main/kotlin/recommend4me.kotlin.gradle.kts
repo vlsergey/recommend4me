@@ -37,4 +37,12 @@ tasks.withType<Test>().configureEach {
     // The Vector API is incubating; JavaCPP and the off-heap segments call native code
     jvmArgs("--add-modules", "jdk.incubator.vector", "--enable-native-access=ALL-UNNAMED")
     maxHeapSize = "2g"
+    // A test that hangs fails after so long, where it stood told, instead of holding the build till
+    // the runner's six hours are up; every test's start and end in the log, the one that hung named
+    systemProperty("junit.jupiter.execution.timeout.default", "10 m")
+    systemProperty("junit.jupiter.execution.timeout.thread.mode.default", "SEPARATE_THREAD")
+    testLogging {
+        events("started", "passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
