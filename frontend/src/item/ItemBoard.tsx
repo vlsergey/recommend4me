@@ -4,7 +4,7 @@ import { InboxIcon, Loader2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, refKey, unwrap, type ContentTypeInfo, type Grade, type ItemSummary, type ItemView } from "@/api/client";
 import { Skeleton } from "@/components/ui/skeleton";
-import { facetQuery, isFiltered, useFacets, type FacetSelection } from "@/facet/FacetFilters";
+import { facetQuery, isFiltered, type FacetSelection } from "@/facet/FacetFilters";
 import { rangeParams, type NumberRanges } from "@/number/NumberFilters";
 import { ItemCard } from "./ItemCard";
 import { workDialogOpen } from "./dialogStack";
@@ -42,9 +42,8 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
   const sentinel = useRef<HTMLDivElement>(null);
   const rate = useRateItem();
 
-  // Every facet's choice the shorter list of the values it has now: two fandoms checked are sent as two
-  const facetValues = useFacets(type.id).data;
-  const facetChoices = useMemo(() => facetQuery(facets, facetValues), [facets, facetValues]);
+  // Every facet's choice as kept — the shorter list at the choice: two fandoms checked are sent as two
+  const facetChoices = useMemo(() => facetQuery(facets), [facets]);
   const list = useInfiniteQuery({
     queryKey: [ITEMS, type.id, view, sort, search, facetChoices, sources, ranges],
     initialPageParam: 0,

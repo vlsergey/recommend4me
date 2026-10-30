@@ -3,7 +3,7 @@
   "ChanceMark.draftedFrom": "Заполнено по тегу сайта «{{from}}» через словарь вселенных; подтвердите или уберите",
   "ChanceMark.fromSite": "сайт",
   "ChanceMark.fromSiteNote": "Этот тег работе даёт сайт; процент — мнение модели. Подтвердите или уберите",
-  "ChanceMark.unlikely":"Модель считает, что скорее этого у работы нет",
+  "ChanceMark.unlikely": "Модель считает, что скорее этого у работы нет",
   "FacetDropdown.all": "Всё",
   "FacetDropdown.findPlaceholder": "Найти…",
   "FacetDropdown.none": "Ничего",
@@ -14,5 +14,12 @@
   "ScaleDropdown.works_one": "{{count}} работа",
   "ScaleDropdown.works_few": "{{count}} работы",
   "ScaleDropdown.works_many": "{{count}} работ",
-  "ScaleDropdown.works_other": "{{count}} работы"
+  "ScaleDropdown.works_other": "{{count}} работы",
+  "FacetDropdown.estimatedHint": "Ожидание модели: её доля работ с этим значением, а не подсчёт работ",
+  "FacetDropdown.loadFailed": "Не удалось загрузить значения: {{error}}",
+  "FacetDropdown.noValues": "Значений нет",
+  "ScaleDropdown.worksEstimated_one": "≈{{count}} работа по модели",
+  "ScaleDropdown.worksEstimated_few": "≈{{count}} работы по модели",
+  "ScaleDropdown.worksEstimated_many": "≈{{count}} работ по модели",
+  "ScaleDropdown.worksEstimated_other": "≈{{count}} работы по модели"
 }

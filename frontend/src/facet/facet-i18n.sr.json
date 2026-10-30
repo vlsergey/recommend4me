@@ -3,7 +3,7 @@
   "ChanceMark.draftedFrom": "Popunjeno po tagu sajta „{{from}}“ preko rečnika univerzuma; potvrdite ili uklonite",
   "ChanceMark.fromSite": "sajt",
   "ChanceMark.fromSiteNote": "Ovaj tag delu daje sajt; procenat je mišljenje modela. Potvrdite ili uklonite",
-  "ChanceMark.unlikely":"Model smatra da delo verovatnije nema ovo",
+  "ChanceMark.unlikely": "Model smatra da delo verovatnije nema ovo",
   "FacetDropdown.all": "Sve",
   "FacetDropdown.findPlaceholder": "Pronađi…",
   "FacetDropdown.none": "Ništa",
@@ -13,5 +13,11 @@
   "ScaleDropdown.to": "do",
   "ScaleDropdown.works_one": "{{count}} delo",
   "ScaleDropdown.works_few": "{{count}} dela",
-  "ScaleDropdown.works_other": "{{count}} dela"
+  "ScaleDropdown.works_other": "{{count}} dela",
+  "FacetDropdown.estimatedHint": "Očekivanje modela: njegov udeo dela sa ovom vrednošću, ne broj dela",
+  "FacetDropdown.loadFailed": "Vrednosti nisu učitane: {{error}}",
+  "FacetDropdown.noValues": "Nema vrednosti",
+  "ScaleDropdown.worksEstimated_one": "≈{{count}} delo po modelu",
+  "ScaleDropdown.worksEstimated_few": "≈{{count}} dela po modelu",
+  "ScaleDropdown.worksEstimated_other": "≈{{count}} dela po modelu"
 }

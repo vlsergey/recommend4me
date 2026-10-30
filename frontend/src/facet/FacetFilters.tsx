@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDownIcon, SearchIcon } from "lucide-react";
+import { ChevronDownIcon, Loader2Icon, SearchIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, unwrap, type FacetFilter } from "@/api/client";
+import { api, unwrap, type FacetFilter, type FilterValue } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -57,16 +57,15 @@ export function compact(all: string[], shown: Set<string>, withoutHidden: boolea
   return visible.length < hidden.length ? { shown: visible, withoutHidden } : { hidden, withoutHidden };
 }
 
-/** The choices as the list asks for them: each of the values the facets have now, the shorter list. */
-export function facetQuery(selection: FacetSelection, facets: FacetFilter[] | undefined) {
-  return Object.entries(selection).flatMap(([facet, choice]) => {
+/**
+ * The choices as the list asks for them, as they are kept — the shorter list at the choice: the
+ * values of a filter are not read till it is opened, and the list waits for none of them.
+ */
+export function facetQuery(selection: FacetSelection) {
+  return Object.entries(selection).map(([facet, choice]) =>
     // Of a scale, its ends alone
-    if (choice.from !== undefined || choice.to !== undefined) return [{ facet, from: choice.from, to: choice.to }];
-    const values = facets?.find((f) => f.id === facet)?.values.map((v) => v.key);
-    // The values not known yet: the choice as it is kept
-    const asked = values ? compact(values, new Set(values.filter((k) => isShown(choice, k))), choice.withoutHidden === true) : choice;
-    return asked ? [{ facet, ...asked }] : [];
-  });
+    choice.from !== undefined || choice.to !== undefined ? { facet, from: choice.from, to: choice.to } : { facet, ...choice },
+  );
 }
 
 /**
@@ -93,11 +92,44 @@ export function validSelection(s: unknown): FacetSelection {
 /** A list this long gets a line to find a value in. */
 const FINDABLE = 15;
 
+/** The filter facets of the type, without their values: no work read, at once. */
 export function useFacets(type: string) {
   return useQuery({
     queryKey: ["facets", type],
     queryFn: async () => unwrap(await api.GET("/api/types/{type}/facets", { params: { path: { type } } })),
   });
+}
+
+/**
+ * The values of one filter with how many works have each, read apart — when it is opened, or has a
+ * choice to name ([enabled]): of a facet a model works out, the model's expectations, no work read.
+ */
+function useFilterValues(type: string, facet: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["facets", type, facet],
+    enabled,
+    queryFn: async () => unwrap(await api.GET("/api/types/{type}/facets/{facet}/values", { params: { path: { type, facet } } })),
+  });
+}
+
+/** How many works have a value: the model's expectation marked "≈"; nothing when not known. */
+function Count({ value }: { value: FilterValue }) {
+  const { t } = useTranslation("facet");
+  if (value.items === undefined) return null;
+  return (
+    <span className="text-xs tabular-nums text-muted-foreground" title={value.estimated ? t("FacetDropdown.estimatedHint") : undefined}>
+      {value.estimated ? "≈" : ""}
+      {value.items}
+    </span>
+  );
+}
+
+/** What the drop-down shows while its values are read, or why they are not. */
+function Reading({ values }: { values: { isLoading: boolean; isError: boolean; error: Error | null } }) {
+  const { t } = useTranslation("facet");
+  if (values.isLoading) return <Loader2Icon className="mx-auto my-2 size-4 animate-spin text-muted-foreground" />;
+  if (values.isError) return <p className="px-2 py-1 text-xs text-destructive">{t("FacetDropdown.loadFailed", { error: values.error?.message })}</p>;
+  return null;
 }
 
 /**
@@ -111,7 +143,11 @@ export function FacetFilters({ type, value, onChange }: { type: string; value: F
     // No box of its own: every facet is an item of the toolbar, wrapped to the next line alone
     <div className="contents">
       {(facets.data ?? []).map((f) =>
-        f.ordered ? <ScaleDropdown key={f.id} facet={f} value={value} onChange={onChange} /> : <FacetDropdown key={f.id} facet={f} value={value} onChange={onChange} />,
+        f.ordered ? (
+          <ScaleDropdown key={f.id} type={type} facet={f} value={value} onChange={onChange} />
+        ) : (
+          <FacetDropdown key={f.id} type={type} facet={f} value={value} onChange={onChange} />
+        ),
       )}
     </div>
   );
@@ -121,16 +157,19 @@ export function FacetFilters({ type, value, onChange }: { type: string; value: F
  * A facet whose values are a scale — the age rating: the works from one value of it to another, both
  * in — two rows of its values, from the mildest, the ends chosen; every one at first.
  */
-function ScaleDropdown({ facet, value, onChange }: { facet: FacetFilter; value: FacetSelection; onChange: (v: FacetSelection) => void }) {
+function ScaleDropdown({ type, facet, value, onChange }: { type: string; facet: FacetFilter; value: FacetSelection; onChange: (v: FacetSelection) => void }) {
   const { t } = useTranslation("facet");
-  const keys = facet.values.map((v) => v.key);
   const choice = value[facet.id];
+  const [open, setOpen] = useState(false);
+  const read = useFilterValues(type, facet.id, open || choice !== undefined);
+  const scale = read.data?.values ?? [];
+  const keys = scale.map((v) => v.key);
   const from = Math.max(0, choice?.from ? keys.indexOf(choice.from) : 0);
   const toAt = choice?.to ? keys.indexOf(choice.to) : -1;
   const to = toAt >= 0 ? toAt : keys.length - 1;
   const whole = from === 0 && to === keys.length - 1;
-  const name = (i: number) => valueName(facet.values[i]);
-  const summary = whole ? null : from === to ? name(from) : `${name(from)} – ${name(to)}`;
+  const name = (i: number) => (scale[i] ? valueName(scale[i]) : "…");
+  const summary = whole || keys.length === 0 ? null : from === to ? name(from) : `${name(from)} – ${name(to)}`;
   /** The ends chosen anew: the whole scale is no choice; the other facets' kept. */
   const choose = (lo: number, hi: number) => {
     const rest = { ...value };
@@ -141,16 +180,21 @@ function ScaleDropdown({ facet, value, onChange }: { facet: FacetFilter; value: 
   const row = (word: string, at: number, pick: (i: number) => void) => (
     <div className="flex items-center gap-1 px-1 py-1">
       <span className="w-8 text-xs text-muted-foreground">{word}</span>
-      {facet.values.map((v, i) => (
-        <Button key={v.key} size="xs" variant={i === at ? "default" : "outline"} onClick={() => pick(i)} title={t("ScaleDropdown.works", { count: v.items })}>
+      {scale.map((v, i) => (
+        <Button
+          key={v.key}
+          size="xs"
+          variant={i === at ? "default" : "outline"}
+          onClick={() => pick(i)}
+          title={v.items === undefined ? undefined : t(v.estimated ? "ScaleDropdown.worksEstimated" : "ScaleDropdown.works", { count: v.items })}
+        >
           {valueName(v)}
         </Button>
       ))}
     </div>
   );
-  if (keys.length === 0) return null;
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={setOpen}>
       <DropdownMenuTrigger render={<Button variant="outline" size="sm" className={cn(summary && "border-primary/60")} />}>
         <span className="max-w-44 truncate">
           {label(facet.labelKey)}
@@ -159,10 +203,11 @@ function ScaleDropdown({ facet, value, onChange }: { facet: FacetFilter; value: 
         <ChevronDownIcon className="opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-auto">
-        {row(t("ScaleDropdown.from"), from, (i) => choose(i, Math.max(i, to)))}
-        {row(t("ScaleDropdown.to"), to, (i) => choose(Math.min(from, i), i))}
+        <Reading values={read} />
+        {keys.length > 0 && row(t("ScaleDropdown.from"), from, (i) => choose(i, Math.max(i, to)))}
+        {keys.length > 0 && row(t("ScaleDropdown.to"), to, (i) => choose(Math.min(from, i), i))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="justify-center" onClick={() => choose(0, keys.length - 1)} closeOnClick={false} disabled={whole}>
+        <DropdownMenuItem className="justify-center" onClick={() => choose(0, keys.length - 1)} closeOnClick={false} disabled={whole || keys.length === 0}>
           {t("FacetDropdown.all")}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -170,20 +215,25 @@ function ScaleDropdown({ facet, value, onChange }: { facet: FacetFilter; value: 
   );
 }
 
-function FacetDropdown({ facet, value, onChange }: { facet: FacetFilter; value: FacetSelection; onChange: (v: FacetSelection) => void }) {
+function FacetDropdown({ type, facet, value, onChange }: { type: string; facet: FacetFilter; value: FacetSelection; onChange: (v: FacetSelection) => void }) {
   const { t } = useTranslation("facet");
   const [find, setFind] = useState("");
+  const [open, setOpen] = useState(false);
   const hasWithout = facet.noneLabelKey !== undefined && facet.noneLabelKey !== "";
   const withoutLabel = hasWithout ? label(facet.noneLabelKey!) : "";
   const choice = value[facet.id];
-  const keys = facet.values.map((v) => v.key);
-  const shownValues = facet.values.filter((v) => isShown(choice, v.key));
+  // Read when opened, or when chosen by: its summary names what is shown
+  const read = useFilterValues(type, facet.id, open || choice !== undefined);
+  const values = read.data?.values ?? [];
+  const keys = values.map((v) => v.key);
+  const shownValues = values.filter((v) => isShown(choice, v.key));
   const withoutShown = !choice?.withoutHidden;
-  const total = facet.values.length + (hasWithout ? 1 : 0);
+  const total = values.length + (hasWithout ? 1 : 0);
   const shown = shownValues.length + (hasWithout && withoutShown ? 1 : 0);
   // All shown says nothing; one shown is named; else how many of how many
-  const summary =
-    shown === total
+  const summary = !read.data
+    ? null
+    : shown === total
       ? null
       : shown === 0
         ? t("FacetDropdown.summaryNone")
@@ -210,11 +260,15 @@ function FacetDropdown({ facet, value, onChange }: { facet: FacetFilter; value: 
   const none = () => choose(new Set(), hasWithout);
 
   const needle = find.trim().toLowerCase();
-  const listed = needle ? facet.values.filter((v) => valueName(v).toLowerCase().includes(needle)) : facet.values;
+  const listed = needle ? values.filter((v) => valueName(v).toLowerCase().includes(needle)) : values;
 
-  if (facet.values.length === 0 && !hasWithout) return null;
   return (
-    <DropdownMenu onOpenChange={(open) => !open && setFind("")}>
+    <DropdownMenu
+      onOpenChange={(opened) => {
+        setOpen(opened);
+        if (!opened) setFind("");
+      }}
+    >
       <DropdownMenuTrigger render={<Button variant="outline" size="sm" className={cn(summary && "border-primary/60")} />}>
         <span className="max-w-44 truncate">
           {label(facet.labelKey)}
@@ -231,7 +285,7 @@ function FacetDropdown({ facet, value, onChange }: { facet: FacetFilter; value: 
             {t("FacetDropdown.none")}
           </DropdownMenuItem>
         </div>
-        {facet.values.length > FINDABLE && (
+        {values.length > FINDABLE && (
           <div className="relative px-1 py-1">
             <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -245,16 +299,18 @@ function FacetDropdown({ facet, value, onChange }: { facet: FacetFilter; value: 
           </div>
         )}
         <DropdownMenuSeparator />
+        <Reading values={read} />
+        {read.data && values.length === 0 && <p className="px-2 py-1 text-xs text-muted-foreground">{t("FacetDropdown.noValues")}</p>}
         {listed.map((v) => (
           <DropdownMenuCheckboxItem key={v.key} checked={isShown(choice, v.key)} onCheckedChange={(on) => toggle(v.key, on)} closeOnClick={false}>
             <span className="flex-1">{valueName(v)}</span>
-            <span className="text-xs tabular-nums text-muted-foreground">{v.items}</span>
+            <Count value={v} />
           </DropdownMenuCheckboxItem>
         ))}
-        {hasWithout && !needle && (
+        {hasWithout && read.data && !needle && (
           <DropdownMenuCheckboxItem checked={withoutShown} onCheckedChange={toggleWithout} closeOnClick={false}>
             <span className="flex-1 italic">{withoutLabel}</span>
-            <span className="text-xs tabular-nums text-muted-foreground">{facet.itemsWithout}</span>
+            {read.data.itemsWithout !== undefined && <span className="text-xs tabular-nums text-muted-foreground">{read.data.itemsWithout}</span>}
           </DropdownMenuCheckboxItem>
         )}
       </DropdownMenuContent>

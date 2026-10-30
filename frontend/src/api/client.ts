@@ -42,6 +42,7 @@ export type SearchMatch = Schemas["SearchMatch"];
 export type QueryRanks = Schemas["QueryRanks"];
 export type SearchQualitySum = Schemas["SearchQualitySum"];
 export type FacetFilter = Schemas["FacetFilter"];
+export type FilterValue = Schemas["FilterValue"];
 export type TextValue = Schemas["TextValue"];
 export type NumberValue = Schemas["NumberValue"];
 export type PartInfo = Schemas["PartInfo"];

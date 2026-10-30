@@ -3,7 +3,7 @@
   "ChanceMark.draftedFrom": "Filled in by the site's tag «{{from}}» through the universes dictionary; confirm or remove it",
   "ChanceMark.fromSite": "site",
   "ChanceMark.fromSiteNote": "The site gives the work this tag; the percentage is the model's word. Confirm or remove it",
-  "ChanceMark.unlikely":"The model thinks the work more likely lacks this",
+  "ChanceMark.unlikely": "The model thinks the work more likely lacks this",
   "FacetDropdown.all": "All",
   "FacetDropdown.findPlaceholder": "Find…",
   "FacetDropdown.none": "None",
@@ -12,5 +12,10 @@
   "ScaleDropdown.from": "from",
   "ScaleDropdown.to": "to",
   "ScaleDropdown.works_one": "{{count}} work",
-  "ScaleDropdown.works_other": "{{count}} works"
+  "ScaleDropdown.works_other": "{{count}} works",
+  "FacetDropdown.estimatedHint": "The model's expectation: its share of the works with this value, not a count of them",
+  "FacetDropdown.loadFailed": "The values were not loaded: {{error}}",
+  "FacetDropdown.noValues": "No values",
+  "ScaleDropdown.worksEstimated_one": "≈{{count}} work by the model",
+  "ScaleDropdown.worksEstimated_other": "≈{{count}} works by the model"
 }

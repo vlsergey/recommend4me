@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.api.ItemsApi
 import io.github.vlsergey.recommend4me.api.model.FacetFilter
+import io.github.vlsergey.recommend4me.api.model.FilterValues
 import io.github.vlsergey.recommend4me.api.model.ContributionGroup as ApiContributionGroup
 import io.github.vlsergey.recommend4me.api.model.FacetValueUse
 import io.github.vlsergey.recommend4me.api.model.HeldOut as ApiHeldOut
@@ -115,6 +116,9 @@ class ItemsController(
     }
 
     override fun listFacets(type: String): ResponseEntity<List<FacetFilter>> = ResponseEntity.ok(list.facets(type))
+
+    override fun listFilterValues(type: String, facet: String): ResponseEntity<FilterValues> =
+        list.filterValues(type, facet)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun listFacetValues(source: String, facet: String, query: String?, limit: Int): ResponseEntity<List<FacetValueUse>> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()

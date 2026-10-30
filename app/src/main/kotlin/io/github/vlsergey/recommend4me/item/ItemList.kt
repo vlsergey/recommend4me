@@ -3,7 +3,8 @@ package io.github.vlsergey.recommend4me.item
 import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.api.model.FacetFilter
-import io.github.vlsergey.recommend4me.api.model.FacetValueUse
+import io.github.vlsergey.recommend4me.api.model.FilterValue
+import io.github.vlsergey.recommend4me.api.model.FilterValues
 import io.github.vlsergey.recommend4me.api.model.ItemPage
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
@@ -231,45 +232,90 @@ class ItemList(
         return byItem
     }
 
-    /** The filter facets of a content type: their values with how many works have each, and the works with none. */
+    /**
+     * The filter facets of a content type, without their values: no work read, no model run — shown
+     * at once. The values of each are read apart, when it is opened or chosen by ([filterValues]).
+     */
     fun facets(typeId: String): List<FacetFilter> {
         val type = stores.type(typeId) ?: return emptyList()
-        class Group(val labelKey: String, val noneLabelKey: String?, val scale: StandardFacet?) {
-            val uses = HashMap<String, Int>()
-            val names = HashMap<String, String>()
-            val nameKeys = HashMap<String, String>()
-            var with = 0
-        }
-        val groups = LinkedHashMap<String, Group>()
-        var total = 0
+        val filters = LinkedHashMap<String, FacetFilter>()
         type.sources.forEach { s ->
-            total += s.items.count()
-            val corrections = s.corrections.allFacets().groupBy { it.itemId }
             s.schema.facets.filter { it.filter }.forEach { def ->
-                val group = groups.getOrPut(filterId(s, def)) {
-                    Group(I18nKeys.facetLabel(s.id, def), if (def.none) I18nKeys.facetNoneLabel(s.id, def) else null, def.standard?.takeIf { it.ordered })
+                filters.getOrPut(filterId(s, def)) {
+                    FacetFilter(
+                        id = filterId(s, def),
+                        labelKey = I18nKeys.facetLabel(s.id, def),
+                        noneLabelKey = if (def.none) I18nKeys.facetNoneLabel(s.id, def) else null,
+                        ordered = (def.standard?.ordered == true).takeIf { it },
+                    )
                 }
-                valuesOf(s, def, corrections).values.forEach { keys ->
-                    if (keys.isNotEmpty()) group.with++
-                    keys.forEach { group.uses.merge(it, 1, Int::plus) }
-                }
-                group.names += s.names(def.key, group.uses.keys)
-                group.uses.keys.forEach { key -> s.nameKey(def.key, key)?.let { group.nameKeys.putIfAbsent(key, it) } }
-                corrections.values.flatten().filter { it.facet == def.key && it.name != null }.forEach { group.names.putIfAbsent(it.key, it.name!!) }
             }
         }
-        return groups.map { (id, g) ->
-            // Of a scale every value in its order, a value no work has with nought; of any other the most used first
-            val keys = g.scale?.values?.map { it.key } ?: g.uses.entries.sortedByDescending { it.value }.map { it.key }
-            FacetFilter(
-                id = id,
-                labelKey = g.labelKey,
-                noneLabelKey = g.noneLabelKey,
-                itemsWithout = total - g.with,
-                ordered = (g.scale != null).takeIf { it },
-                propertyValues = keys.map { key -> FacetValueUse(key, g.names[key] ?: key, g.uses[key] ?: 0, g.nameKeys[key] ?: g.scale?.let { I18nKeys.standardValueOf(it, key) }) },
+        return filters.values.toList()
+    }
+
+    /**
+     * THE VALUES OF ONE FILTER FACET with how many works have each — every source of the type that
+     * has it, summed. Of a facet the site gives, its works' own values with the user's answers,
+     * counted. Of a facet a model works out (the universe, the languages), NO WORK READ AND NO MODEL
+     * RUN: the values of the model kept with how many works it expects of each — its share of the
+     * works it was fitted on ([FacetSuggestions.weights]) — and those the site or the user give
+     * that it does not know, counted; the works without any value not told. (Run over every work at
+     * every opening of the filters, the chain of the models took 150-195 s of the 75 621 works of
+     * fanfics.me.) Null of no such type or filter.
+     */
+    fun filterValues(typeId: String, facetId: String): FilterValues? {
+        val type = stores.type(typeId) ?: return null
+        val counted = HashMap<String, Int>()
+        val expected = HashMap<String, Double>()
+        val names = HashMap<String, String>()
+        val nameKeys = HashMap<String, String>()
+        var scale: StandardFacet? = null
+        var with = 0
+        var total = 0
+        var withKnown = true
+        var found = false
+        type.sources.forEach { s ->
+            val def = s.schema.facets.firstOrNull { it.filter && filterId(s, it) == facetId } ?: return@forEach
+            found = true
+            def.standard?.takeIf { it.ordered }?.let { scale = it }
+            val corrections = s.corrections.allFacets().filter { it.facet == def.key }
+            val weights = if (def.infer) suggestions.weights(s, def.key) else null
+            if (!def.infer) {
+                total += s.items.count()
+                valuesOf(s, def, corrections.groupBy { it.itemId }).values.forEach { keys ->
+                    if (keys.isNotEmpty()) with++
+                    keys.forEach { counted.merge(it, 1, Int::plus) }
+                }
+            } else {
+                withKnown = false
+                // The model's share of a value over the works it was fitted on, as so many of this source's works
+                val works = s.items.count()
+                weights?.forEach { (key, share) -> expected.merge(key, share * works, Double::plus) }
+                // What the site or the user gives that the model does not know: counted as given
+                s.items.valueUses(def.key).forEach { (key, n) -> if (weights?.containsKey(key) != true) counted.merge(key, n, Int::plus) }
+                corrections.filter { it.added && weights?.containsKey(it.key) != true }.forEach { counted.merge(it.key, 1, Int::plus) }
+            }
+            val keys = counted.keys + expected.keys
+            names += s.names(def.key, keys)
+            keys.forEach { key -> s.nameKey(def.key, key)?.let { nameKeys.putIfAbsent(key, it) } }
+            corrections.filter { it.name != null }.forEach { names.putIfAbsent(it.key, it.name!!) }
+        }
+        if (!found) return null
+        fun value(key: String): FilterValue {
+            val estimate = expected[key]
+            val count = counted[key]
+            return FilterValue(
+                key = key, name = names[key] ?: key,
+                nameKey = nameKeys[key] ?: scale?.let { I18nKeys.standardValueOf(it, key) },
+                items = estimate?.let { Math.round(it + (count ?: 0)).toInt() } ?: count,
+                estimated = (estimate != null).takeIf { it },
             )
         }
+        // Of a scale every value in its order, one no work has with nought; of any other the most works first
+        val values = scale?.values?.map { value(it.key) }
+            ?: (counted.keys + expected.keys).map(::value).sortedByDescending { it.items ?: 0 }
+        return FilterValues(propertyValues = values, itemsWithout = if (withKnown) total - with else null)
     }
 
     /** The values of the scale from [from] to [to] of the filter facet [facet] of the type; null of a facet that is no scale. */

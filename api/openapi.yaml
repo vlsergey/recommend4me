@@ -141,7 +141,8 @@ paths:
     get:
       tags: [items]
       operationId: listFacets
-      summary: The filter facets of a content type with their values and how many works have each
+      summary: The filter facets of a content type, without their values - those read apart, of each filter its own (listFilterValues)
+      description: No work is read and no model runs - shown at once.
       parameters:
         - $ref: '#/components/parameters/Type'
       responses:
@@ -153,6 +154,35 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/FacetFilter'
+
+  /api/types/{type}/facets/{facet}/values:
+    get:
+      tags: [items]
+      operationId: listFilterValues
+      summary: The values of one filter facet with how many works have each
+      description: |
+        Read when the filter is opened or chosen by. Of a facet the site gives, the works' own values
+        with the user's answers, counted; of a facet a model works out (the universe, the languages),
+        the values of the model kept with how many works it expects of each - its share of the works
+        it was fitted on (estimated) - no work read, no model run; and the values the site or the user
+        give that the model does not know, counted.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: facet
+          in: path
+          required: true
+          description: The filter's id (FacetFilter.id)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilterValues'
+        '404':
+          description: No such type or filter
 
   /api/types/{type}/lookup:
     get:
@@ -2964,7 +2994,7 @@ components:
 
     FacetFilter:
       type: object
-      required: [id, labelKey, itemsWithout, values]
+      required: [id, labelKey]
       properties:
         id:
           type: string
@@ -2973,18 +3003,42 @@ components:
         noneLabelKey:
           type: string
           description: The key of the name of the works without a value of the facet; none - they are not a line of the filter
-        itemsWithout:
-          type: integer
         ordered:
           type: boolean
           description: |
             Its values are a scale - the age rating - in their order, every one of them (a value no
             work has with nought): filtered from one value to another (FacetChoice.from, to)
+
+    FilterValues:
+      type: object
+      required: [values]
+      properties:
+        itemsWithout:
+          type: integer
+          description: The works without any value of it; none when a model works it out - not counted without running it
         values:
           type: array
-          description: The most used first; of a scale, in its order
+          description: The most works first; of a scale, in its order
           items:
-            $ref: '#/components/schemas/FacetValueUse'
+            $ref: '#/components/schemas/FilterValue'
+
+    FilterValue:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        nameKey:
+          type: string
+          description: Of a value of the application's own, the key of its name, shown instead of name
+        items:
+          type: integer
+          description: How many works have it; none when not known - a step of a scale no model tells the share of
+        estimated:
+          type: boolean
+          description: The number is the model's expectation - its share of the works it was fitted on - not a count
 
     FacetValueUse:
       type: object
