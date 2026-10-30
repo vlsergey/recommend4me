@@ -39,7 +39,7 @@ function Saying({ label, values, shown }: { label: string; values: [string, Work
           <span className="shrink-0 text-xs text-muted-foreground" title={sites.map((s) => sourceTitle(s.source)).join(", ")}>
             {sites.map((s) => sourceShort(s.source)).join(", ")}
           </span>
-          <span className={sites.some((s) => sameItem(s, shown)) ? "line-clamp-4 font-medium" : "line-clamp-4"}>{value}</span>
+          <span className={sites.some((s) => sameItem(s, shown)) ? "line-clamp-4 min-w-0 font-medium" : "line-clamp-4 min-w-0"}>{value}</span>
         </div>
       ))}
     </div>
