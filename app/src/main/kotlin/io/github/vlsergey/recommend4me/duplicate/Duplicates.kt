@@ -63,7 +63,8 @@ enum class DuplicateAnswer {
  * many languages: an original on Archive of Our Own and its translation on fanfics.me are near), the
  * values of every facet the sites share, each apart ([valuesOf]), and the numbers of their size — and keeps of
  * every work the one of every other site likeliest one work with it, of the pairs the user did not
- * turn down (different, related: the next likeliest in their place); no threshold, none hidden. It
+ * answer on (the next likeliest in their place: of a work linked, a translation or a part of it on
+ * the same site may be there); no threshold, none hidden. It
  * runs on start when the type was never searched, and when the user asks. The pairs are answered on
  * as the work's window links the works: one work — linked, its grade and interest shared
  * ([LinkedGrades], [LinkedInterest]) — different works, or related ones (a translation, a part: not
@@ -277,11 +278,12 @@ class Duplicates(
         // The pairs chosen by the model of the answers as the last fitting left it
         val scorer = DuplicateModel(type.duplicates.search()?.weights).Scorer(families)
         val read = System.currentTimeMillis() - started
-        // The pairs the user turned down — different works, related ones — passed over: the next likeliest of that site taken
+        // The pairs the user answered on — one work too: the site may hold a translation of it, a part of
+        // it, and one more pair the model is unsure of teaches it — passed over: the next likeliest of that site taken
         val said = said(type)
         val turnedDown = HashMap<Pair<String, String>, HashMap<Int, MutableList<Int>>>()
         val bySource = sides.associateBy { it.store.id }
-        said.filter { it.value != DuplicateAnswer.SAME }.keys.forEach { (x, y) ->
+        said.keys.forEach { (x, y) ->
             val a = bySource[x.source] ?: return@forEach
             val b = bySource[y.source] ?: return@forEach
             val i = a.ids.binarySearch(x.id).takeIf { it >= 0 } ?: return@forEach
@@ -345,7 +347,7 @@ class Duplicates(
                         }
                         return if (known == 0) null else (sum / known).toFloat()
                     }
-                    // The likeliest one work with it of the other site, of those the user did not turn down
+                    // The likeliest one work with it of the other site, of those the user did not answer on
                     val own = passedOver[i]
                     own?.forEach { passed[it] = true }
                     var best = -1
