@@ -1,32 +1,65 @@
 package io.github.vlsergey.recommend4me.interest
 
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_INTEREST
 import io.github.vlsergey.recommend4me.database.ratings.tables.references.INTEREST
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.work.WorkRepository
 import org.jooq.DSLContext
 import java.time.Instant
 
 /** The user's word on whether a work is interesting to read at all, and when it was said. */
 data class InterestMark(val itemId: String, val interesting: Boolean, val markedAt: Instant)
 
-/** The interest marks of the items of one source, one an item, in its ratings database. */
-class InterestRepository(private val db: DSLContext) {
+/** The interest marks of the normalized works (in the dictionaries), one a work, as the items of one source see them. */
+class InterestRepository(
+    private val db: DSLContext,
+    private val source: String,
+    private val works: WorkRepository,
+    /** The ratings of the source, where the marks were kept before the normalized works. */
+    private val before: DSLContext,
+) {
+
+    private fun workOf(itemId: String, now: Instant) = works.of(ItemKey(source, itemId), now)
 
     fun mark(itemId: String, interesting: Boolean, now: Instant) {
-        db.insertInto(INTEREST)
-            .set(INTEREST.ITEM_ID, itemId).set(INTEREST.INTERESTING, interesting).set(INTEREST.MARKED_AT, now)
-            .onDuplicateKeyUpdate()
-            .set(INTEREST.INTERESTING, interesting).set(INTEREST.MARKED_AT, now)
+        val i = WORK_INTEREST
+        db.insertInto(i).set(i.WORK, workOf(itemId, now)).set(i.INTERESTING, interesting).set(i.MARKED_AT, now)
+            .onDuplicateKeyUpdate().set(i.INTERESTING, interesting).set(i.MARKED_AT, now)
             .execute()
     }
 
-    fun ofItem(itemId: String): InterestMark? =
-        db.selectFrom(INTEREST).where(INTEREST.ITEM_ID.eq(itemId)).fetchOne { InterestMark(it.itemId!!, it.interesting!!, it.markedAt!!) }
+    fun ofItem(itemId: String): InterestMark? = seen(itemId).firstOrNull()
 
-    /** Every mark of the source: item to mark. */
-    fun all(): Map<String, InterestMark> =
-        db.selectFrom(INTEREST).fetch().associate { it.itemId!! to InterestMark(it.itemId!!, it.interesting!!, it.markedAt!!) }
+    /** Every mark the source's items have: item to mark. */
+    fun all(): Map<String, InterestMark> = seen(null).associateBy { it.itemId }
 
-    /** The mark taken back; also of the item removed from the library. */
+    private fun seen(itemId: String?): List<InterestMark> {
+        val i = WORK_INTEREST
+        val own = SITE_WORK.SOURCE.eq(source)
+        return db.select(SITE_WORK.ITEM, i.INTERESTING, i.MARKED_AT).from(SITE_WORK).join(i).on(i.WORK.eq(SITE_WORK.NORMALIZED))
+            .where(if (itemId == null) own else own.and(SITE_WORK.ITEM.eq(itemId)))
+            .fetch { InterestMark(it.value1()!!, it.value2()!!, it.value3()!!) }
+    }
+
+    /** The mark of the work of the item taken back. */
     fun forget(itemId: String) {
-        db.deleteFrom(INTEREST).where(INTEREST.ITEM_ID.eq(itemId)).execute()
+        db.deleteFrom(WORK_INTEREST).where(WORK_INTEREST.WORK.eq(workOf(itemId, Instant.now()))).execute()
+    }
+
+    /** The marks kept before the normalized works given to them, the newest of a work's standing, and taken from there. */
+    fun moveToWorks(now: Instant): Int {
+        val rows = before.selectFrom(INTEREST).fetch()
+        val i = WORK_INTEREST
+        rows.forEach {
+            val work = workOf(it.itemId!!, now)
+            val kept = db.select(i.MARKED_AT).from(i).where(i.WORK.eq(work)).fetchOne()?.value1()
+            if (kept == null || kept.isBefore(it.markedAt)) {
+                db.insertInto(i).set(i.WORK, work).set(i.INTERESTING, it.interesting).set(i.MARKED_AT, it.markedAt)
+                    .onDuplicateKeyUpdate().set(i.INTERESTING, it.interesting).set(i.MARKED_AT, it.markedAt).execute()
+            }
+        }
+        before.deleteFrom(INTEREST).execute()
+        return rows.size
     }
 }

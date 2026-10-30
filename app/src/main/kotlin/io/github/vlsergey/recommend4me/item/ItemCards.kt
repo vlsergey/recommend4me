@@ -232,13 +232,11 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                     linked = clusters.members(key).drop(1).mapNotNull { m ->
                         heads[m]?.let { (h, t) -> LinkedItem(m.source, m.id, t, h.url) }
                     },
-                    // Its own: a linked item has the work's grade written to it ([LinkedGrades][io.github.vlsergey.recommend4me.rating.LinkedGrades])
                     grade = g?.grade,
                     previousGrade = g?.previousGrade,
                     previousGradeVersion = g?.previousVersion,
                     prediction = predicted[id]?.let { Prediction(it.score) },
                     heldOut = heldOut[id]?.let { Prediction(it) },
-                    // Its own too: a linked item has the work's mark written to it ([LinkedInterest][io.github.vlsergey.recommend4me.interest.LinkedInterest])
                     interest = interest[id]?.interesting,
                     interestChance = predicted[id]?.interest,
                     searchMatch = matches[key]?.let { m ->

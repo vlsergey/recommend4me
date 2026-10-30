@@ -155,7 +155,6 @@ class ItemList(
                 rows += Row(key, k.updatedAt, k.firstSeenAt, k.id in grades, p?.score, expected, chance, numbers[k.id] ?: surprises[k.id])
             }
         }
-        // An item is graded by its own grade: a linked one has the work's written to it ([LinkedGrades][io.github.vlsergey.recommend4me.rating.LinkedGrades])
         val viewed = rows.filter { row ->
             when (view) {
                 ItemView.UNRATED -> !row.graded

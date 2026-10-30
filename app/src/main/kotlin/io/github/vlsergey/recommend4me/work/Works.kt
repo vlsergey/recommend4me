@@ -47,10 +47,12 @@ class Works(private val stores: Stores) {
     /** The works of several items of a content type, across its sources and within each. */
     fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
 
-    /** The items of the source not bound yet bound; one at a time: two at once would bind one item twice. */
+    /** The [items] of the source — id to version — bound if not yet, their versions kept; one at a time: two at once would bind one item twice. */
     @Synchronized
-    private fun bind(s: SourceStore, items: Collection<String>) {
-        val fresh = items - s.works.boundAmong(s.id, items)
+    private fun bind(s: SourceStore, items: Map<String, String>) {
+        val bound = s.works.boundAmong(s.id, items.keys)
+        items.filter { (id, version) -> bound[id].let { it != null && it != version } }.forEach { (id, version) -> s.works.setVersion(ItemKey(s.id, id), version) }
+        val fresh = items - bound.keys
         if (fresh.isEmpty()) return
         s.works.bindNew(s.id, fresh, Instant.now())
         log.info("{}: {} items bound to normalized works of their own", s.id, fresh.size)
@@ -61,17 +63,24 @@ class Works(private val stores: Stores) {
     @EventListener
     fun itemsChanged(event: ItemsChanged) {
         val s = stores.source(event.source) ?: return
-        bind(s, s.items.heads(event.ids).keys)
+        bind(s, s.items.heads(event.ids).mapValues { it.value.version })
     }
 
-    /** Before anything reads the works: every item bound, and what the corrections kept of the works given to them. */
+    /** Before anything reads the works: every item bound, and what the corrections and the ratings kept of the works given to them. */
     @Order(-200)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        stores.sources.forEach { s -> bind(s, s.items.keys().map { it.id }) }
+        stores.sources.forEach { s -> bind(s, s.items.keys().associate { it.id to it.version }) }
+        val now = Instant.now()
         stores.types.forEach { type ->
-            val moved = type.links.moveToWorks(Instant.now())
+            val moved = type.links.moveToWorks(now)
             if (moved > 0) log.info("{}: {} links and words on works moved to the normalized works", type.id, moved)
+            val grades = type.sources.sumOf { it.ratings.moveToWorks(now) }
+            val marks = type.sources.sumOf { it.interest.moveToWorks(now) }
+            if (grades > 0 || marks > 0) {
+                type.links.keepNewestGrades()
+                log.info("{}: {} grades and {} marks of interest moved to the normalized works", type.id, grades, marks)
+            }
         }
     }
 }

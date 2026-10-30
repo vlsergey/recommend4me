@@ -73,6 +73,9 @@ class TypeLinkRepository(
     /** The item removed from the library. */
     fun forget(key: ItemKey) = works.forget(key)
 
+    /** Of the current grades of every work of several items the newest left. */
+    fun keepNewestGrades() = works.keepNewestGrades(sources)
+
     /**
      * What the corrections of the sources kept before the normalized works given to them — the links
      * first, a word on two works after — and taken from there: nothing to do once done, and what a

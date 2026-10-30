@@ -175,13 +175,9 @@ class ItemDetailsReader(
         }
     }
 
-    /** The grades of every item of the work [key] is of, newest first. */
+    /** The grades of the work [key] is of as they were given, newest first. */
     fun ratings(type: io.github.vlsergey.recommend4me.source.TypeStore, key: ItemKey): List<RatingRecord> =
-        works.of(type).members(key).flatMap { m ->
-            val s = stores.source(m.source) ?: return@flatMap emptyList()
-            val version = s.items.find(m.id)?.version
-            s.ratings.ofItem(m.id).map {
-                RatingRecord(source = m.source, item = m.id, version = it.version, grade = it.grade, ratedAt = it.ratedAt.atOffset(ZoneOffset.UTC), current = it.version == version)
-            }
-        }.sortedByDescending { it.ratedAt }
+        type.source(key.source)?.ratings?.given(key.id).orEmpty().map {
+            RatingRecord(source = it.key.source, item = it.key.id, version = it.version, grade = it.grade, ratedAt = it.ratedAt.atOffset(ZoneOffset.UTC), current = it.current)
+        }
 }

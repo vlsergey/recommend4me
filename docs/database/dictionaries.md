@@ -26,6 +26,8 @@
 | `normalized_work` | a work of the user's, whatever sites have it |
 | `site_work` | an item of a site bound to a normalized work: at first of its own, merged when the user says two are one work; several of one site may be one |
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
+| `work_rating` | the grade of a work, and the item and version it was given through: one current of a work, the rest grades of releases before |
+| `work_interest` | the user's word on whether a work is interesting at all |
 | `universe` | a universe of the dictionary: an entry of a catalogue the user added |
 | `universe_property` | what else the catalogue says of a universe |
 | `universe_character` | a character of a universe |
@@ -129,6 +131,7 @@ erDiagram
         VARCHAR item PK
         BIGINT normalized FK
         TIMESTAMPTZ bound_at
+        VARCHAR version
     }
     tag_entry {
         VARCHAR catalogue PK
@@ -245,6 +248,19 @@ erDiagram
         VARCHAR property PK
         VARCHAR property_value PK
     }
+    work_interest {
+        BIGINT work PK, FK
+        BOOLEAN interesting
+        TIMESTAMPTZ marked_at
+    }
+    work_rating {
+        BIGINT work PK, FK
+        VARCHAR source PK
+        VARCHAR item PK
+        VARCHAR version PK
+        INTEGER grade
+        TIMESTAMPTZ rated_at
+    }
     normalized_author ||--o{ normalized_author_distinct : "first_author"
     normalized_author ||--o{ normalized_author_distinct : "other_author"
     normalized_author ||--o{ normalized_author_entry : "author"
@@ -260,6 +276,8 @@ erDiagram
     normalized_work ||--o{ normalized_work_relation : "first_work"
     normalized_work ||--o{ normalized_work_relation : "other_work"
     normalized_work ||--o{ site_work : "normalized"
+    normalized_work ||--o{ work_interest : "work"
+    normalized_work ||--o{ work_rating : "work"
     tag_entry ||--o{ normalized_author_entry : "catalogue, entry"
     tag_entry ||--o{ normalized_tag_entry : "catalogue, entry"
     tag_entry ||--o{ tag_entry_above : "catalogue, above"

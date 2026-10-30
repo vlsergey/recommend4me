@@ -9,12 +9,10 @@ import io.github.vlsergey.recommend4me.api.model.DuplicateWork
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.Interest
-import io.github.vlsergey.recommend4me.interest.LinkedInterest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.rating.LinkedGrades
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -26,6 +24,7 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.vector.Vectors
+import io.github.vlsergey.recommend4me.work.WorkEvents
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
@@ -69,7 +68,7 @@ enum class DuplicateAnswer {
  * the same site may be there); no threshold, none hidden. It
  * runs on start when the type was never searched, and when the user asks. The pairs are answered on
  * as the work's window links the works: one work — their normalized works merged, its grade and
- * interest shared ([LinkedGrades], [LinkedInterest]) — different works, or related ones (a translation,
+ * interest one — different works, or related ones (a translation,
  * a part: each its own grade), never offered again
  * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct], [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]).
  *
@@ -86,8 +85,7 @@ class Duplicates(
     private val plugins: Plugins,
     private val workload: Workload,
     private val works: Works,
-    private val linkedGrades: LinkedGrades,
-    private val linkedInterest: LinkedInterest,
+    private val workEvents: WorkEvents,
 ) {
     private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "duplicates").apply { isDaemon = true } }
 
@@ -646,9 +644,7 @@ class Duplicates(
         when (verdict) {
             DuplicateAnswer.SAME -> {
                 type.links.link(a, b, now)
-                // One work, one grade and one interest mark: written to each of its items
-                linkedGrades.share(a)
-                linkedInterest.share(a)
+                workEvents.merged(a)
             }
             DuplicateAnswer.DIFFERENT -> type.links.distinct(a, b, now)
             else -> type.links.relate(a, b, verdict.name, now)

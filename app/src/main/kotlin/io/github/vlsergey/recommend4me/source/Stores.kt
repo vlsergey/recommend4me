@@ -105,6 +105,9 @@ class SourceStore(
     val wanted = WantedPageRepository(dbs.source.dsl)
     val valueNames = ValueNameRepository(dbs.source.dsl)
 
+    /** The normalized works: the items of every site bound to them. */
+    val works = WorkRepository(databases.dictionaries.dsl)
+
     val corrections = CorrectionRepository(dbs.corrections.dsl, source.id)
 
     /** The user's answers on the tags offered by the paragraphs of the works' texts, kept with the corrections. */
@@ -113,8 +116,8 @@ class SourceStore(
     /** The user's word that whether a work has a value is not clear of it — a pairing — kept with the corrections. */
     val unknowns = UnknownRepository(dbs.corrections.dsl)
 
-    val ratings = RatingRepository(dbs.ratings.dsl)
-    val interest = InterestRepository(dbs.ratings.dsl)
+    val ratings = RatingRepository(databases.dictionaries.dsl, source.id, works, dbs.ratings.dsl)
+    val interest = InterestRepository(databases.dictionaries.dsl, source.id, works, dbs.ratings.dsl)
     val marks = MarkRepository(source.id, dbs.ratings.dsl)
     val signals = SignalRepository(dbs.ratings.dsl)
 
@@ -182,9 +185,6 @@ class SourceStore(
 
     /** The normalized authors: the authors of every site bound to them. */
     val authors = AuthorRepository(databases.dictionaries.dsl)
-
-    /** The normalized works: the items of every site bound to them. */
-    val works = WorkRepository(databases.dictionaries.dsl)
 
     /** The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the user added takes the place of every other. */
     val singleFacets: Set<String> = schema.facets.filter { it.single }.map { it.key }.toSet()

@@ -21,8 +21,6 @@ import io.github.vlsergey.recommend4me.api.model.MatchFeedbackRequest
 import io.github.vlsergey.recommend4me.api.model.PartText
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.api.model.InterestRequest
-import io.github.vlsergey.recommend4me.interest.InterestChanged
-import io.github.vlsergey.recommend4me.interest.LinkedInterest
 import io.github.vlsergey.recommend4me.mark.MarkKind
 import io.github.vlsergey.recommend4me.mark.MarksChanged
 import io.github.vlsergey.recommend4me.mark.ThingRef
@@ -30,13 +28,12 @@ import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.picture.PictureService
 import io.github.vlsergey.recommend4me.picture.Served
 import io.github.vlsergey.recommend4me.rating.Grades
-import io.github.vlsergey.recommend4me.rating.GradesChanged
-import io.github.vlsergey.recommend4me.rating.LinkedGrades
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.downloadsPages
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.tag.Tags
+import io.github.vlsergey.recommend4me.work.WorkEvents
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.core.io.FileSystemResource
@@ -70,8 +67,7 @@ class ItemsController(
     private val recommendations: Recommendations,
     private val events: ApplicationEventPublisher,
     private val removal: ItemRemoval,
-    private val linkedGrades: LinkedGrades,
-    private val linkedInterest: LinkedInterest,
+    private val workEvents: WorkEvents,
     private val searchQuality: io.github.vlsergey.recommend4me.search.SearchQuality,
     private val tags: Tags,
     /** The user's languages: of an entry of a catalogue, its label and description in the first that has them. */
@@ -226,9 +222,7 @@ class ItemsController(
             )
         }
         store.ratings.rate(item, head.version, ratingRequest.grade, Instant.now())
-        events.publishEvent(GradesChanged(store.type, source, item))
-        // The items linked to it are the same work: graded the same
-        linkedGrades.share(ItemKey(source, item))
+        workEvents.gradesChanged(ItemKey(source, item))
         return card(ItemKey(source, item))
     }
 
@@ -236,9 +230,7 @@ class ItemsController(
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         val head = store.items.find(item) ?: return ResponseEntity.notFound().build()
         store.ratings.unrate(item, version ?: head.version)
-        events.publishEvent(GradesChanged(store.type, source, item))
-        // The grade of the work taken back: of the items linked to it too; an old version's grade is the item's own
-        if ((version ?: head.version) == head.version) linkedGrades.takeBack(ItemKey(source, item))
+        workEvents.gradesChanged(ItemKey(source, item))
         return card(ItemKey(source, item))
     }
 
@@ -246,9 +238,7 @@ class ItemsController(
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (!store.items.exists(item)) return ResponseEntity.notFound().build()
         store.interest.mark(item, interestRequest.interesting, Instant.now())
-        events.publishEvent(InterestChanged(store.type, source, item))
-        // The items linked to it are the same work: marked the same
-        linkedInterest.share(ItemKey(source, item))
+        workEvents.interestChanged(ItemKey(source, item))
         return card(ItemKey(source, item))
     }
 
@@ -256,8 +246,7 @@ class ItemsController(
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (!store.items.exists(item)) return ResponseEntity.notFound().build()
         store.interest.forget(item)
-        events.publishEvent(InterestChanged(store.type, source, item))
-        linkedInterest.takeBack(ItemKey(source, item))
+        workEvents.interestChanged(ItemKey(source, item))
         return card(ItemKey(source, item))
     }
 

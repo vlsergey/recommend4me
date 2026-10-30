@@ -10,8 +10,6 @@ import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.model.Recommendations
-import io.github.vlsergey.recommend4me.interest.LinkedInterest
-import io.github.vlsergey.recommend4me.rating.LinkedGrades
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -19,6 +17,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import org.springframework.context.ApplicationEventPublisher
 import io.github.vlsergey.recommend4me.tag.Tags
+import io.github.vlsergey.recommend4me.work.WorkEvents
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
@@ -44,8 +43,7 @@ class CorrectionsController(
     private val recommendations: Recommendations,
     private val suggestions: FacetSuggestions,
     private val events: ApplicationEventPublisher,
-    private val linkedGrades: LinkedGrades,
-    private val linkedInterest: LinkedInterest,
+    private val workEvents: WorkEvents,
     private val tags: Tags,
     private val answering: Answering,
 ) : CorrectionsApi {
@@ -147,9 +145,7 @@ class CorrectionsController(
             throw Refusal.JOIN_SELF.refuse(HttpStatus.BAD_REQUEST, "The work $source/$item is not joined with itself")
         }
         stores.typeOf(source).links.link(ItemKey(source, item), ItemKey(itemRef.source, itemRef.item), Instant.now())
-        // One work, one grade and one interest mark: written to each of its items; a link taken back leaves them them
-        linkedGrades.share(ItemKey(source, item))
-        linkedInterest.share(ItemKey(source, item))
+        workEvents.merged(ItemKey(source, item))
         return corrected(store, item)
     }
 
