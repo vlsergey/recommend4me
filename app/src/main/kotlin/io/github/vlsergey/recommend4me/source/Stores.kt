@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.CorrectionRepository
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
+import io.github.vlsergey.recommend4me.work.WorkRepository
 import io.github.vlsergey.recommend4me.correction.UnknownRepository
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.draft.DraftRepository
@@ -182,6 +183,9 @@ class SourceStore(
     /** The normalized authors: the authors of every site bound to them. */
     val authors = AuthorRepository(databases.dictionaries.dsl)
 
+    /** The normalized works: the items of every site bound to them. */
+    val works = WorkRepository(databases.dictionaries.dsl)
+
     /** The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the user added takes the place of every other. */
     val singleFacets: Set<String> = schema.facets.filter { it.single }.map { it.key }.toSet()
 
@@ -202,7 +206,7 @@ class SourceStore(
 class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases: Databases, languages: List<String>) {
     val id: String get() = type.id
 
-    val links = TypeLinkRepository(sources.associate { it.id to databases.corrections(it.id) })
+    val links = TypeLinkRepository(WorkRepository(databases.dictionaries.dsl), sources.associate { it.id to databases.corrections(it.id) })
     val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)

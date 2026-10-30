@@ -146,8 +146,7 @@ class CorrectionsController(
         if (other.id == store.id && itemRef.item == item) {
             throw Refusal.JOIN_SELF.refuse(HttpStatus.BAD_REQUEST, "The work $source/$item is not joined with itself")
         }
-        if (other.id == store.id) store.corrections.link(item, itemRef.item, Instant.now())
-        else stores.typeOf(source).links.link(ItemKey(source, item), ItemKey(itemRef.source, itemRef.item), Instant.now())
+        stores.typeOf(source).links.link(ItemKey(source, item), ItemKey(itemRef.source, itemRef.item), Instant.now())
         // One work, one grade and one interest mark: written to each of its items; a link taken back leaves them them
         linkedGrades.share(ItemKey(source, item))
         linkedInterest.share(ItemKey(source, item))
@@ -156,8 +155,7 @@ class CorrectionsController(
 
     override fun unlinkItem(source: String, item: String, otherSource: String, otherItem: String): ResponseEntity<ItemDetails> {
         val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
-        if (otherSource == source) store.corrections.unlink(item, otherItem)
-        else stores.typeOf(source).links.unlink(ItemKey(source, item), ItemKey(otherSource, otherItem))
+        stores.typeOf(source).links.unlink(ItemKey(source, item), ItemKey(otherSource, otherItem), Instant.now())
         return corrected(store, item)
     }
 }

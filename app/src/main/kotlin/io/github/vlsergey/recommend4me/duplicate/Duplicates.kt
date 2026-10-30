@@ -68,9 +68,9 @@ enum class DuplicateAnswer {
  * answer on (the next likeliest in their place: of a work linked, a translation or a part of it on
  * the same site may be there); no threshold, none hidden. It
  * runs on start when the type was never searched, and when the user asks. The pairs are answered on
- * as the work's window links the works: one work — linked, its grade and interest shared
- * ([LinkedGrades], [LinkedInterest]) — different works, or related ones (a translation, a part: not
- * linked, each its own grade), never offered again
+ * as the work's window links the works: one work — their normalized works merged, its grade and
+ * interest shared ([LinkedGrades], [LinkedInterest]) — different works, or related ones (a translation,
+ * a part: each its own grade), never offered again
  * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct], [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]).
  *
  * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work is a model of the user's answers
@@ -633,124 +633,37 @@ class Duplicates(
     }
 
     /**
-     * The user's word on the pair, in place of any before: one work — linked as the work's window
-     * links them, its grade and interest shared — different works, or related ones (a translation, a
-     * part: not linked, each its own grade and interest), a link between them taken away. A word that
-     * is no link said of every pair of the two works' groups of one work at once; every word carried
-     * across the groups after ([spread]). False when either is no work of the type, or they are one item.
+     * The user's word on the pair, in place of any before: one work — their normalized works merged,
+     * the grade and interest shared — different works, or related ones (a translation, a part: each its
+     * own grade and interest), [b] taken out of a work holding both. A word is a word on the two
+     * normalized works: of every item of them alike. False when either is no work of the type, or
+     * they are one item.
      */
     fun answer(typeId: String, a: ItemKey, b: ItemKey, verdict: DuplicateAnswer): Boolean {
         val type = stores.type(typeId) ?: return false
-        val first = type.source(a.source)?.takeIf { it.items.find(a.id) != null } ?: return false
-        if (type.source(b.source)?.items?.find(b.id) == null || a == b) return false
+        if (type.source(a.source)?.items?.find(a.id) == null || type.source(b.source)?.items?.find(b.id) == null || a == b) return false
         val now = Instant.now()
-        if (verdict == DuplicateAnswer.SAME) {
-            type.links.undistinct(a, b)
-            type.links.unrelate(a, b)
-            if (a.source == b.source) first.corrections.link(a.id, b.id, now) else type.links.link(a, b, now)
-            // One work, one grade and one interest mark: written to each of its items
-            linkedGrades.share(a)
-            linkedInterest.share(a)
-        } else {
-            if (a.source == b.source) first.corrections.unlink(a.id, b.id)
-            type.links.unlink(a, b)
-            val clusters = works.of(type)
-            for (x in clusters.members(a)) for (y in clusters.members(b)) {
-                if (x == y) continue
-                type.links.undistinct(x, y)
-                type.links.unrelate(x, y)
-                write(type, x, y, verdict, now)
+        when (verdict) {
+            DuplicateAnswer.SAME -> {
+                type.links.link(a, b, now)
+                // One work, one grade and one interest mark: written to each of its items
+                linkedGrades.share(a)
+                linkedInterest.share(a)
             }
+            DuplicateAnswer.DIFFERENT -> type.links.distinct(a, b, now)
+            else -> type.links.relate(a, b, verdict.name, now)
         }
-        spread(type)
         answered(type)
         return true
     }
 
-    /**
-     * The word on the pair taken back: their link — or that they are different, or related, of every
-     * pair of the two works' groups of one work: else it would be carried back to the pair ([spread]).
-     */
+    /** The word on the pair taken back: that they are different or related — or, of none, that they are one work. */
     fun unanswer(typeId: String, a: ItemKey, b: ItemKey) {
         val type = stores.type(typeId) ?: return
-        val pair = type.links.ordered(a, b)
-        val word = type.links.relations()[pair] ?: pair.takeIf { it in type.links.distincts() }?.let { DuplicateAnswer.DIFFERENT.name }
-        if (word == null) {
-            if (a.source == b.source) type.source(a.source)?.corrections?.unlink(a.id, b.id)
-            type.links.unlink(a, b)
-        } else {
-            val clusters = works.of(type)
-            for (x in clusters.members(a)) for (y in clusters.members(b)) {
-                type.links.undistinct(x, y)
-                type.links.unrelate(x, y)
-            }
-        }
-        answered(type)
-    }
-
-    /** The word that is no link written of the pair: different, or related of its kind. */
-    private fun write(type: TypeStore, x: ItemKey, y: ItemKey, word: DuplicateAnswer, now: Instant) {
-        if (word == DuplicateAnswer.DIFFERENT) type.links.distinct(x, y, now) else type.links.relate(x, y, word.name, now)
-    }
-
-    /** The words said before carried across the groups of one work once more on start: those said before the rule was, and any a change elsewhere left. */
-    @Order(19)
-    @EventListener(ApplicationReadyEvent::class)
-    fun spreadOnStart() {
-        stores.types.filter { it.sources.size > 1 }.forEach { type ->
-            try {
-                spread(type)
-            } catch (e: Exception) {
-                log.error("{}: the words on the duplicates were not carried across the works one", type.id, e)
-            }
-        }
-    }
-
-    /**
-     * EVERY WORD ON A PAIR CARRIED ACROSS ONE WORK (user, 2026-10-30): of two works one (linked, by
-     * any way), what is said of one of them and a third — different, a translation, a part — is said
-     * of the other and the third. Of two groups of one work — a work linked to none a group of its
-     * own — the one word said of some pairs of them written of every pair of them; a word of two works
-     * of one group, said before they were one, taken away: one work they are now. Two groups of
-     * different words of their pairs left as they are, told in the log: the user decides. Nothing
-     * written when nothing is missing: on start and after every answer alike.
-     */
-    private fun spread(type: TypeStore) {
-        val clusters = works.of(type)
-        val words = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
-        type.links.distincts().forEach { words[it] = DuplicateAnswer.DIFFERENT }
-        type.links.relations().forEach { (pair, kind) -> runCatching { DuplicateAnswer.valueOf(kind) }.getOrNull()?.takeIf { it.related }?.let { words[pair] = it } }
         val now = Instant.now()
-        var added = 0
-        var dropped = 0
-        // Of every two groups, the words of their pairs: by the groups' representatives
-        val byGroups = HashMap<Pair<ItemKey, ItemKey>, MutableMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>>()
-        words.forEach { (pair, word) ->
-            val x = clusters.representative(pair.first)
-            val y = clusters.representative(pair.second)
-            if (x == y) {
-                type.links.undistinct(pair.first, pair.second)
-                type.links.unrelate(pair.first, pair.second)
-                dropped++
-            } else {
-                byGroups.getOrPut(type.links.ordered(x, y)) { HashMap() }[pair] = word
-            }
-        }
-        val conflicts = ArrayList<String>()
-        byGroups.forEach { (groups, said) ->
-            val word = said.values.toSet().singleOrNull()
-            if (word == null) {
-                conflicts += "$groups: ${said.entries.joinToString { "${it.key.first}–${it.key.second} ${it.value}" }}"
-                return@forEach
-            }
-            for (x in clusters.members(groups.first)) for (y in clusters.members(groups.second)) {
-                if (type.links.ordered(x, y) in said) continue
-                write(type, x, y, word, now)
-                added++
-            }
-        }
-        if (added > 0 || dropped > 0) log.info("{}: the words on the duplicates carried across the works one — {} pairs said, {} of one work taken away", type.id, added, dropped)
-        if (conflicts.isNotEmpty()) log.warn("{}: works one with different words of another, left as they are: {}", type.id, conflicts)
+        val pair = type.links.ordered(a, b)
+        if (pair in type.links.relations() || pair in type.links.distincts()) type.links.takeBack(a, b, now) else type.links.unlink(a, b, now)
+        answered(type)
     }
 
     @PreDestroy

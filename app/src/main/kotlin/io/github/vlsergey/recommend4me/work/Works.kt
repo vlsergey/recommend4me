@@ -1,14 +1,24 @@
 package io.github.vlsergey.recommend4me.work
 
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
+import org.slf4j.LoggerFactory
+import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.event.EventListener
+import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
+import java.time.Instant
+
+private val log = LoggerFactory.getLogger(Works::class.java)
 
 /**
- * Which items are one work: the links the user made within sources and across them, closed under
- * "is the same as". An item of no link is a work alone. Read at the start of every operation that
- * needs it — the links are few, made by hand.
+ * Which items are one work: the items of a normalized work of several ([WorkRepository]). An item of
+ * no other is a work alone. Read at the start of every operation that needs it — such works are few,
+ * made by hand.
  */
 class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
 
@@ -27,29 +37,41 @@ class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
     fun linkedWorks(): List<List<ItemKey>> = clusters.values.distinct()
 
     companion object {
-        fun of(links: List<Pair<ItemKey, ItemKey>>): WorkClusters {
-            val parent = HashMap<ItemKey, ItemKey>()
-            fun find(x: ItemKey): ItemKey {
-                var r = x
-                while (parent[r] != null && parent[r] != r) r = parent.getValue(r)
-                return r
-            }
-            links.forEach { (a, b) ->
-                parent.putIfAbsent(a, a)
-                parent.putIfAbsent(b, b)
-                val ra = find(a)
-                val rb = find(b)
-                if (ra != rb) parent[ra] = rb
-            }
-            val groups = parent.keys.groupBy(::find).values.map { members -> members.sortedBy { it.toString() } }
-            return WorkClusters(groups.flatMap { members -> members.map { it to members } }.toMap())
-        }
+        fun of(groups: List<List<ItemKey>>): WorkClusters =
+            WorkClusters(groups.map { members -> members.sortedBy { it.toString() } }.flatMap { members -> members.map { it to members } }.toMap())
     }
 }
 
 @Component
-class Works {
-    /** The clusters of a content type: the links across its sources and within each. */
-    fun of(type: TypeStore): WorkClusters =
-        WorkClusters.of(type.links.links() + type.sources.flatMap { s -> s.corrections.links().map { (a, b) -> ItemKey(s.id, a) to ItemKey(s.id, b) } })
+class Works(private val stores: Stores) {
+    /** The works of several items of a content type, across its sources and within each. */
+    fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
+
+    /** The items of the source not bound yet bound; one at a time: two at once would bind one item twice. */
+    @Synchronized
+    private fun bind(s: SourceStore, items: Collection<String>) {
+        val fresh = items - s.works.boundAmong(s.id, items)
+        if (fresh.isEmpty()) return
+        s.works.bindNew(s.id, fresh, Instant.now())
+        log.info("{}: {} items bound to normalized works of their own", s.id, fresh.size)
+    }
+
+    /** The items [event] names that are there bound at once, before anything reads the works. */
+    @Order(-200)
+    @EventListener
+    fun itemsChanged(event: ItemsChanged) {
+        val s = stores.source(event.source) ?: return
+        bind(s, s.items.heads(event.ids).keys)
+    }
+
+    /** Before anything reads the works: every item bound, and what the corrections kept of the works given to them. */
+    @Order(-200)
+    @EventListener(ApplicationReadyEvent::class)
+    fun start() {
+        stores.sources.forEach { s -> bind(s, s.items.keys().map { it.id }) }
+        stores.types.forEach { type ->
+            val moved = type.links.moveToWorks(Instant.now())
+            if (moved > 0) log.info("{}: {} links and words on works moved to the normalized works", type.id, moved)
+        }
+    }
 }
