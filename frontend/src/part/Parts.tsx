@@ -15,9 +15,9 @@ const FIRST_SHOWN = 20;
  * read (their text kept), how many of those raise the prediction and how many lower it; opened,
  * the list in order, each read part with the points it moves the work by, opening its text in place.
  */
-export function Parts({ item, label, parts }: { item: ItemRef; label: string; parts: PartInfo[] }) {
+export function Parts({ item, label, parts, unfolded = false }: { item: ItemRef; label: string; parts: PartInfo[]; /** Open from the start: a page of its own. */ unfolded?: boolean }) {
   const { t } = useTranslation("part");
-  const [listed, setListed] = useState(false);
+  const [listed, setListed] = useState(unfolded);
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   if (parts.length === 0) return null;

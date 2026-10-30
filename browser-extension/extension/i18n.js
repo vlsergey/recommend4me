@@ -42,6 +42,8 @@ var R4M_WORDS = {
     "interest.yesTitle": "Interesting",
     "interest.noTitle": "Not interesting",
     "interest.byModel": "model: interesting with a chance of {{percent}}%",
+    "interest.byGrade": "by your grade",
+    "facet.laterOffers": "Offered after the work was opened",
 
     "value.restore": "Bring back: you said the work does not have this",
     "value.removeAdded": "Remove what you added",
@@ -194,6 +196,8 @@ var R4M_WORDS = {
     "interest.yesTitle": "Интересно",
     "interest.noTitle": "Неинтересно",
     "interest.byModel": "модель: интересно с вероятностью {{percent}}%",
+    "interest.byGrade": "по вашей оценке",
+    "facet.laterOffers": "Предложено уже после открытия работы",
 
     "value.restore": "Вернуть: вы сказали, что этого у работы нет",
     "value.removeAdded": "Убрать добавленное вами",
@@ -346,6 +350,8 @@ var R4M_WORDS = {
     "interest.yesTitle": "Zanimljivo",
     "interest.noTitle": "Nezanimljivo",
     "interest.byModel": "model: zanimljivo sa verovatnoćom od {{percent}}%",
+    "interest.byGrade": "po vašoj oceni",
+    "facet.laterOffers": "Predloženo pošto je delo otvoreno",
 
     "value.restore": "Vrati: rekli ste da delo ovo nema",
     "value.removeAdded": "Uklonite ono što ste dodali",

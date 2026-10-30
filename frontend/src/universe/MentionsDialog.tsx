@@ -1,10 +1,11 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ExternalLinkIcon, Loader2Icon, XIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type CharacterInfo, type ContentTypeInfo, type FacetValueInfo, type ItemRef, type MentionQuote, type UniverseInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ValueActions } from "@/correction/valueActions";
 import { cn } from "@/lib/utils";
 import { placeName } from "@/part/place";
 import { charactersQuery, classesQuery, keptByClasses, useInclusion, useUniverses } from "./Universes";
@@ -44,10 +45,19 @@ export function MentionsDialog({
   children: ReactNode;
 }) {
   const { t } = useTranslation("universe");
+  const actions = useContext(ValueActions);
+  const trigger = "inline-flex cursor-pointer items-baseline gap-1 underline decoration-dotted underline-offset-2 hover:decoration-solid";
+  // The screen of a work opens it on its left page, beside the answers
+  if (actions)
+    return (
+      <button type="button" className={trigger} title={t("MentionsDialog.trigger")} onClick={() => actions.evidence({ facet, value, name, url, summary })}>
+        {children}
+      </button>
+    );
   return (
     <Dialog>
       <DialogTrigger
-        render={<button type="button" className="inline-flex cursor-pointer items-baseline gap-1 underline decoration-dotted underline-offset-2 hover:decoration-solid" />}
+        render={<button type="button" className={trigger} />}
         title={t("MentionsDialog.trigger")}
       >
         {children}
@@ -67,11 +77,20 @@ export function MentionsDialog({
         </DialogHeader>
         {/* The keys of the work's dialog (grades, steps) stay out of this one; Escape still closes it */}
         <div className="flex flex-col gap-4" onKeyDown={(e) => e.key !== "Escape" && e.stopPropagation()}>
-          <Origins type={type} values={charactersOf(value)} universes={universes} />
-          <Quotes item={item} facet={facet} value={value} />
+          <Evidence type={type} item={item} facet={facet} value={value} universes={universes} />
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** What the counts of a value were made of: why the dictionary has it, and every passage that names it. */
+export function Evidence({ type, item, facet, value, universes }: { type: ContentTypeInfo; item: ItemRef; facet: string; value: string; universes: FacetValueInfo[] }) {
+  return (
+    <>
+      <Origins type={type} values={charactersOf(value)} universes={universes} />
+      <Quotes item={item} facet={facet} value={value} />
+    </>
   );
 }
 

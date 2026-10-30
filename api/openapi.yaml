@@ -3563,8 +3563,11 @@ components:
 
     WorkSite:
       type: object
-      required: [source, item, title, titleCorrected, url, authors, descriptionCorrected, numbers, reviewCount, pictureCount, partCount]
+      required: [source, item, title, titleCorrected, url, authors, descriptionCorrected, numbers, reviewCount, pictureCount, partCount, canRefresh]
       properties:
+        canRefresh:
+          type: boolean
+          description: The source can download the item's page again
         source:
           type: string
         item:

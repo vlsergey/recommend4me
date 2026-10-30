@@ -1,17 +1,31 @@
-import { useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ExternalLinkIcon, LayoutPanelTopIcon, StarIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ExternalLinkIcon, StarIcon, XIcon } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
-import { api, sameItem, unwrap, type ContentTypeInfo, type Grade, type ItemDetails, type ItemRef, type ItemSummary, type SourceInfo } from "@/api/client";
+import {
+  api,
+  ensureOk,
+  sameItem,
+  unwrap,
+  type ContentTypeInfo,
+  type FeatureContribution,
+  type Grade,
+  type ItemDetails,
+  type ItemFacet,
+  type ItemRef,
+  type ItemSummary,
+  type SourceInfo,
+} from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useSource } from "@/contenttype/types";
+import { gradeLabel, useSource } from "@/contenttype/types";
 import { FacetCorrections } from "@/correction/FacetCorrections";
 import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor";
-import { Links } from "@/correction/Links";
+import { LinkSearch } from "@/correction/Links";
 import { titleField, useCorrections, type Corrections } from "@/correction/useCorrections";
+import { chipKey, ValueActions, type AskedValue } from "@/correction/valueActions";
 import { WorkDuplicates, WorkRelations } from "@/duplicate/WorkDuplicates";
 import { decided } from "@/facet/valueOrder";
 import { score } from "@/i18n/format";
@@ -21,12 +35,15 @@ import { Explanation } from "@/model/Explanation";
 import { Parts } from "@/part/Parts";
 import { PictureMatches, Pictures } from "@/picture/Pictures";
 import { ReviewMatches, Reviews } from "@/review/Reviews";
-import { FANFIC_FACETS, FanficSection } from "@/universe/FanficSection";
+import { SearchJudge } from "@/search/SearchJudge";
 import { TagsByText } from "@/tagtext/TagsByText";
+import { FANFIC_FACETS, FanficSection } from "@/universe/FanficSection";
+import { Evidence } from "@/universe/MentionsDialog";
+import { itemHref, readItemHash, writeItemHash } from "./itemHash";
 import { ItemNumbers } from "./ItemNumbers";
 import { ItemTexts } from "./ItemTexts";
-import { itemKey } from "./lists";
-import { Cover, InterestButtons, PreviousRating, RatingButtons, ScoreBadge, SignalBadges } from "./pieces";
+import { ITEMS, itemKey } from "./lists";
+import { Cover, InterestButtons, RatingButtons, ScoreBadge, SearchMatchLine, SignalBadges } from "./pieces";
 import { RelatedWorks } from "./RelatedWorks";
 import { RemoveItem } from "./RemoveItem";
 import { FITTING, useHeldOut } from "./useHeldOut";
@@ -37,34 +54,14 @@ import { SitesTable } from "./WorkSites";
 /** The dialog as the whole screen: there is no outside to press. */
 export const WORK_SCREEN_CLASS = "flex h-dvh w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 ring-0 sm:w-screen";
 
-const CHOICE_KEY = "work.screen";
-
-/** Which screen of a work the user chose, kept in the browser: the new one, or the window it is to replace. */
-export function useChosenWorkScreen() {
-  const [chosen, setChosen] = useState(() => {
-    try {
-      return localStorage.getItem(CHOICE_KEY) === "new";
-    } catch {
-      return false;
-    }
-  });
-  const choose = (value: boolean) => {
-    setChosen(value);
-    try {
-      localStorage.setItem(CHOICE_KEY, value ? "new" : "old");
-    } catch {
-      // Not kept: the choice lasts while the page is open
-    }
-  };
-  return [chosen, choose] as const;
-}
+/** The facets whose values the texts are searched for. */
+const MENTIONED: readonly string[] = ["universe", "characters", "secondary-characters", "pairings"];
 
 /** What the left page shows, one at a time. */
-type View = "work" | "chapters" | "reviews" | "pictures" | "why" | "sites";
+type View = "work" | "chapters" | "reviews" | "pictures" | "why" | "sites" | "evidence";
 
 /**
  * THE SCREEN OF A WORK: left to read, right to answer, head to decide (docs/work-screen.md). The
- * values of the right page are the same chips as in the window it replaces and in the extension. The
  * marks of the sites in the head switch the whole screen to that site; the values and answers stay,
  * being the work's. On a narrow screen the pages are one at a time, and the verdict folds: a missed
  * tap under the last ✕ neither grades nor overwrites.
@@ -78,7 +75,7 @@ export function WorkScreen({
   total,
   onIndex,
   onRate,
-  onOldScreen,
+  onJudge,
 }: {
   type: ContentTypeInfo;
   source: SourceInfo;
@@ -88,9 +85,11 @@ export function WorkScreen({
   total: number;
   onIndex: (index: number | null) => void;
   onRate: (grade: Grade | null) => unknown;
-  onOldScreen: () => void;
+  /** Found by a search: the user's word on whether it answers the line. */
+  onJudge?: (relevant: boolean | null) => Promise<unknown>;
 }) {
   const { t } = useTranslation("item");
+  const queryClient = useQueryClient();
   const [ref, setRef] = useState<ItemRef>({ source: summary.source, item: summary.item });
   const details = useQuery({
     queryKey: itemKey(ref),
@@ -103,6 +102,8 @@ export function WorkScreen({
   const [page, setPage] = useState<"answers" | "work">("answers");
   const [view, setView] = useState<View>("work");
   const [verdictOpen, setVerdictOpen] = useState(false);
+  const [asked, setAsked] = useState<AskedValue | null>(null);
+  const [revealed, setRevealed] = useState<string>();
   const d = details.data;
   const shown = d?.summary ?? summary;
   const source = useSource(shown.source)?.source ?? listedSource;
@@ -111,10 +112,67 @@ export function WorkScreen({
   const values = d?.allFacets.filter((f) => f.editable).flatMap((f) => f.values) ?? [];
   const toAnswer = values.filter((v) => !decided(v) && !v.offered && !v.implied).length;
   const offers = values.filter((v) => !decided(v) && v.offered).length;
-  const graded = summary.grade != null;
+  const grade = summary.grade as Grade | undefined;
+  const earlier = !grade && summary.previousGrade ? { grade: summary.previousGrade as Grade, version: summary.previousGradeVersion } : undefined;
+
+  // The chip a feature of the explanation led to, brought into sight
+  useEffect(() => {
+    if (revealed) document.querySelector(`[data-value="${CSS.escape(revealed)}"]`)?.scrollIntoView({ block: "center" });
+  }, [revealed]);
+
+  const actions = useMemo(
+    () => ({
+      item: ref,
+      revealed,
+      evidence: (value: AskedValue) => {
+        setAsked(value);
+        setView("evidence");
+        setPage("work");
+      },
+      evidenceBody: (value: AskedValue) => <EvidenceBody type={type} item={ref} asked={value} facets={d?.allFacets ?? []} corrections={corrections} />,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- [corrections] is made anew at every drawing and acts by [ref]
+    [ref, revealed, type, d?.allFacets],
+  );
+
+  /** The value of a feature among the answers, if it is there to be led to. */
+  const leadTo = (feature: FeatureContribution) => {
+    const found = /^facet:([^:]+):(.+)$/.exec(feature.feature);
+    if (!found) return undefined;
+    const facet = source.facets.find((f) => f.id === found[1])?.key;
+    const key = found[2];
+    if (!facet || !d?.allFacets.find((f) => f.facet === facet)?.values.some((v) => v.key === key)) return undefined;
+    return () => {
+      setRevealed(chipKey(facet, key));
+      setPage("answers");
+    };
+  };
+
+  /** An item taken out of the work: the screen stays on one that is left, the address with it. */
+  const takeOut = async (site: ItemRef) => {
+    const rest = d?.sites.find((s) => !sameItem(s, site));
+    if (!rest) return;
+    const left = { source: rest.source, item: rest.item };
+    if (sameItem(site, ref)) {
+      ensureOk(await api.DELETE("/api/items/{source}/{item}/links", { params: { path: left, query: { otherSource: site.source, otherItem: site.item } } }));
+      queryClient.invalidateQueries({ queryKey: [ITEMS] });
+      queryClient.invalidateQueries({ queryKey: itemKey(left) });
+      setRef(left);
+    } else await corrections.unlink(site);
+    // The list's own item taken out: this screen is of it no more, the work left opens by the address
+    if (sameItem(site, summary)) {
+      onIndex(null);
+      setTimeout(() => {
+        window.location.hash = itemHref(left);
+      });
+    } else {
+      const named = readItemHash();
+      if (named && sameItem(named, site)) writeItemHash(left);
+    }
+  };
 
   return (
-    <>
+    <ValueActions.Provider value={actions}>
       <header className="shrink-0 border-b px-3 py-2 pr-11">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <div className="flex items-center">
@@ -128,7 +186,8 @@ export function WorkScreen({
               <ChevronRightIcon />
             </Button>
           </div>
-          <div className="h-10 w-14 shrink-0 overflow-hidden rounded bg-muted">
+          {/* A short screen: the head folds to its two lines, and what it holds besides stands on the left page */}
+          <div className={cn("h-10 shrink-0 overflow-hidden rounded bg-muted [@media(max-height:40rem)]:hidden", source.picturesTell ? "w-20" : "w-14")}>
             <Cover typeId={type.id} summary={shown} className="size-full" />
           </div>
           <div className="min-w-0 flex-1 basis-64">
@@ -148,40 +207,41 @@ export function WorkScreen({
                 <EditButton onClick={() => setEditingTitle(true)} title={t("ItemDialog.editTitle")} />
               </div>
             )}
-            <DialogDescription render={<div />} className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+            <DialogDescription render={<div />} className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground [@media(max-height:40rem)]:sr-only">
               <Byline source={source} facets={facets} />
               <FactLine source={source} summary={shown} facets={facets} />
-              <SignalBadges source={source} signals={shown.signals} />
             </DialogDescription>
           </div>
           <SiteMarks sites={d?.sites ?? [{ source: shown.source, item: shown.item, url: shown.url, title: shown.title }]} shown={ref} onShow={setRef} />
           <div className="flex flex-wrap items-center gap-1">
             {tagFacet && <TagsByText item={ref} facet={tagFacet} corrections={corrections} size="sm" className="" />}
             {d?.canRefresh && <RefreshButton item={ref} />}
-            <Button variant="ghost" size="sm" onClick={onOldScreen} title={t("WorkScreen.oldHint")}>
-              <LayoutPanelTopIcon /> {t("WorkScreen.old")}
-            </Button>
           </div>
         </div>
         {/* A phone keeps the verdict folded: the buttons under a thumb are the answers' */}
         <Button variant="outline" size="sm" className="mt-1 w-full justify-between min-[56rem]:hidden" aria-expanded={verdictOpen} onClick={() => setVerdictOpen(!verdictOpen)}>
-          {t("WorkScreen.verdict")}
+          <span className="min-w-0 truncate">
+            {t("WorkScreen.verdict")}
+            {grade && ` · ${grade} ${gradeLabel(type.id, grade)}`}
+          </span>
           <ChevronDownIcon className={cn("transition-transform", verdictOpen && "rotate-180")} />
         </Button>
-        <div className={cn("mt-1 flex-wrap items-center gap-x-3 gap-y-1", verdictOpen ? "flex" : "hidden min-[56rem]:flex")}>
+        <div className={cn("mt-1 flex-wrap items-center gap-x-3 gap-y-1 [&_button]:pointer-coarse:h-11", verdictOpen ? "flex" : "hidden min-[56rem]:flex")}>
           {/* Keyed by the work: a press at work on one is not shown on the next the screen moves to */}
           <InterestButtons key={`interest:${summary.source}/${summary.item}`} summary={summary} labels />
           <RatingButtons
             key={`grade:${summary.source}/${summary.item}`}
             type={type}
-            value={summary.grade as Grade | undefined}
+            value={grade}
             onRate={onRate}
             size="sm"
             labels
+            earlier={earlier}
             className="min-w-0 flex-1 basis-full min-[56rem]:basis-[36rem]"
           />
-          <PredictionNumber type={type} summary={summary} graded={graded} />
-          <PreviousRating type={type} summary={summary} />
+          {grade && <span className="w-full text-xs text-muted-foreground sm:hidden">{gradeLabel(type.id, grade)}</span>}
+          <PredictionNumber type={type} summary={summary} />
+          {earlier && <span className="text-xs text-muted-foreground">{t("RatingButtons.newVersion")}</span>}
         </div>
       </header>
 
@@ -199,7 +259,25 @@ export function WorkScreen({
           {details.isLoading ? (
             <Loading />
           ) : d ? (
-            <LeftPage type={type} source={source} details={d} corrections={corrections} view={view} onView={setView} onShow={setRef} shown={ref} />
+            <LeftPage
+              type={type}
+              source={source}
+              details={d}
+              listed={summary}
+              corrections={corrections}
+              view={view}
+              onView={setView}
+              onShow={setRef}
+              onTakeOut={takeOut}
+              shown={ref}
+              asked={asked}
+              onLeave={() => {
+                setAsked(null);
+                setView("work");
+              }}
+              leadTo={leadTo}
+              onJudge={onJudge}
+            />
           ) : (
             <div className="p-4 text-destructive">{t("ItemDialog.detailsFailed")}</div>
           )}
@@ -226,7 +304,7 @@ export function WorkScreen({
           ) : null}
         </section>
       </div>
-    </>
+    </ValueActions.Provider>
   );
 }
 
@@ -269,9 +347,9 @@ function SiteMarks({ sites, shown, onShow }: { sites: { source: string; item: st
  * model learns from would anchor the grade. Of a graded work the number of the model that had not
  * seen it, drawn as such; till there is one, says so.
  */
-function PredictionNumber({ type, summary, graded }: { type: ContentTypeInfo; summary: ItemSummary; graded: boolean }) {
+function PredictionNumber({ type, summary }: { type: ContentTypeInfo; summary: ItemSummary }) {
   const { t } = useTranslation("item");
-  if (!graded) return <ScoreBadge type={type} summary={summary} />;
+  if (summary.grade == null) return <ScoreBadge type={type} summary={summary} />;
   return (
     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title={t("ItemDialog.withoutGrade")}>
       <StarIcon className="size-3" />
@@ -280,31 +358,69 @@ function PredictionNumber({ type, summary, graded }: { type: ContentTypeInfo; su
   );
 }
 
+/** Where a value comes from: its name, and what the counts were made of; a value of no passages says so and offers the tags by the text. */
+function EvidenceBody({ type, item, asked, facets, corrections }: { type: ContentTypeInfo; item: ItemRef; asked: AskedValue; facets: ItemFacet[]; corrections: Corrections }) {
+  const { t } = useTranslation("item");
+  const universes = facets.find((f) => f.facet === "universe")?.values.filter((v) => v.corrected !== "REMOVED" && !v.offered) ?? [];
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      {asked.url && (
+        <a href={asked.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground">
+          {asked.name} <ExternalLinkIcon className="size-3" />
+        </a>
+      )}
+      {asked.summary && <p className="text-muted-foreground">{asked.summary}</p>}
+      {MENTIONED.includes(asked.facet) ? (
+        <Evidence type={type} item={item} facet={asked.facet} value={asked.value} universes={universes} />
+      ) : (
+        <>
+          <p className="text-muted-foreground">{t("WorkScreen.noPassages")}</p>
+          {facets.find((f) => f.facet === asked.facet)?.tags && <TagsByText item={item} facet={asked.facet} corrections={corrections} size="sm" className="" />}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** The left page: one view at a time of what there is to read. It never covers the answers. */
 function LeftPage({
   type,
   source,
   details: d,
+  listed,
   corrections,
   view,
   onView,
   onShow,
+  onTakeOut,
   shown,
+  asked,
+  onLeave,
+  leadTo,
+  onJudge,
 }: {
   type: ContentTypeInfo;
   source: SourceInfo;
   details: ItemDetails;
+  /** The work as its list has it: what the search found in it. */
+  listed: ItemSummary;
   corrections: Corrections;
   view: View;
   onView: (view: View) => void;
   onShow: (site: ItemRef) => void;
+  onTakeOut: (site: ItemRef) => Promise<unknown>;
   shown: ItemRef;
+  asked: AskedValue | null;
+  onLeave: () => void;
+  leadTo: (feature: FeatureContribution) => (() => void) | undefined;
+  onJudge?: (relevant: boolean | null) => Promise<unknown>;
 }) {
   const { t } = useTranslation("item");
   const ref = { source: d.summary.source, item: d.summary.item };
   const reviewsLabel = source.reviewsLabelKey ? label(source.reviewsLabelKey) : t("ItemDialog.reviews");
   const partsLabel = source.partsLabelKey ? label(source.partsLabelKey) : t("ItemDialog.parts");
   const nothing = d.texts.length === 0 && d.pictures.length === 0 && d.reviews.length === 0 && d.parts.length === 0;
+  const rest = d.sites.find((s) => !sameItem(s, ref));
   return (
     <div className="flex flex-col gap-3 p-3">
       <Tabs value={view} onValueChange={(v) => onView(v as View)}>
@@ -323,11 +439,26 @@ function LeftPage({
           <TabsTrigger value="sites">
             {t("WorkScreen.sites")} {d.sites.length}
           </TabsTrigger>
+          {asked && <TabsTrigger value="evidence">{t("WorkScreen.evidence", { name: asked.name })}</TabsTrigger>}
         </TabsList>
       </Tabs>
       {view === "work" && (
         <>
           {nothing && d.canRefresh && <NotFetched item={ref} />}
+          {listed.searchMatch && (
+            <div className="flex flex-col gap-1">
+              <SearchMatchLine match={listed.searchMatch} />
+              {onJudge && <SearchJudge value={listed.searchRelevant} onJudge={onJudge} />}
+            </div>
+          )}
+          <SignalBadges source={source} signals={d.summary.signals} />
+          {/* What the head folds away on a short screen */}
+          <FactLine source={source} summary={d.summary} facets={d.allFacets} className="hidden text-xs text-muted-foreground [@media(max-height:40rem)]:flex" />
+          {source.picturesTell && (
+            <Part title={t("ItemDialog.pictures")}>
+              <Pictures item={ref} pictures={d.pictures} explained />
+            </Part>
+          )}
           <Part title={t("ItemDialog.texts")}>
             <ItemTexts texts={d.texts} source={source} corrections={corrections} editing />
           </Part>
@@ -341,7 +472,7 @@ function LeftPage({
       )}
       {view === "chapters" && (
         <Part title={partsLabel}>
-          <Parts item={ref} label={partsLabel} parts={d.parts} />
+          <Parts item={ref} label={partsLabel} parts={d.parts} unfolded />
         </Part>
       )}
       {view === "reviews" && (
@@ -357,37 +488,56 @@ function LeftPage({
       {view === "pictures" && (
         <>
           <Part title={t("ItemDialog.pictures")}>
-            <Pictures item={ref} pictures={d.pictures} explained />
+            <Pictures item={ref} pictures={d.pictures} large={source.picturesTell} explained />
           </Part>
           <Part title={t("ItemDialog.similarPictures")}>
             <PictureMatches item={ref} matches={d.pictureMatches} />
           </Part>
         </>
       )}
-      {view === "why" && <WhyView type={type} details={d} />}
+      {view === "why" && <WhyView type={type} details={d} leadTo={leadTo} />}
       {view === "sites" && (
         <>
           <Part title={t("WorkScreen.sites")}>
-            <SitesTable type={type} sites={d.sites} shown={shown} onShow={onShow} corrections={corrections} />
+            <SitesTable type={type} sites={d.sites} shown={shown} onShow={onShow} onTakeOut={onTakeOut} corrections={corrections} />
           </Part>
           <Part title={t("ItemDialog.sameWork")}>
-            <Links type={type} summary={d.summary} corrections={corrections} />
+            <section className="flex flex-col gap-1">
+              <h4 className="text-sm font-semibold">{t("ItemDialog.sameWork")}</h4>
+              <LinkSearch type={type} summary={d.summary} corrections={corrections} />
+            </section>
           </Part>
           <Part title={t("WorkScreen.duplicates")}>
-            <WorkDuplicates type={type} item={ref} sites={d.sites} corrections={corrections} />
+            <section className="flex flex-col gap-1">
+              <h4 className="text-sm font-semibold">{t("WorkScreen.duplicates")}</h4>
+              <WorkDuplicates type={type} item={ref} sites={d.sites} corrections={corrections} />
+            </section>
           </Part>
           <Part title={t("WorkScreen.relations")}>
             <WorkRelations type={type} item={ref} relations={d.relations} />
           </Part>
-          <RemoveItem summary={d.summary} typeId={type.id} />
+          <div>
+            <RemoveItem summary={d.summary} typeId={type.id} ofSeveral={d.sites.length > 1} onRemoved={() => rest && onShow({ source: rest.source, item: rest.item })} />
+          </div>
         </>
+      )}
+      {view === "evidence" && asked && (
+        <Part title={asked.name}>
+          <div className="flex items-center gap-2">
+            <h3 className="min-w-0 flex-1 text-sm font-semibold break-words">{asked.name}</h3>
+            <Button variant="ghost" size="icon-xs" title={t("WorkScreen.close")} aria-label={t("WorkScreen.close")} onClick={onLeave}>
+              <XIcon />
+            </Button>
+          </div>
+          <EvidenceBody type={type} item={ref} asked={asked} facets={d.allFacets} corrections={corrections} />
+        </Part>
       )}
     </div>
   );
 }
 
 /** Why the prediction: of a graded work by the model that has not seen it, read for this view alone; the grades given under it. */
-function WhyView({ type, details: d }: { type: ContentTypeInfo; details: ItemDetails }) {
+function WhyView({ type, details: d, leadTo }: { type: ContentTypeInfo; details: ItemDetails; leadTo: (feature: FeatureContribution) => (() => void) | undefined }) {
   const { t } = useTranslation("item");
   const ref = { source: d.summary.source, item: d.summary.item };
   const graded = d.summary.grade != null;
@@ -406,13 +556,20 @@ function WhyView({ type, details: d }: { type: ContentTypeInfo; details: ItemDet
                 values={{ score: score(Math.max(0, heldOut.data.score)) }}
                 components={{ score: <span className="font-semibold tabular-nums" /> }}
               />
+              {heldOut.data.gradePlace != null && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  ·{" "}
+                  <Trans t={t} i18nKey="ItemDialog.gradePlace" values={{ place: score(heldOut.data.gradePlace) }} components={{ place: <span className="tabular-nums" /> }} />
+                </span>
+              )}
             </div>
-            <Explanation groups={heldOut.data.explanation} title={t("ItemDialog.drivenBy")} />
+            <Explanation groups={heldOut.data.explanation} title={t("ItemDialog.drivenBy")} unfolded onFeature={leadTo} />
           </div>
         </Part>
       ) : (
         <Part title={t("ItemDialog.whyPrediction")}>
-          <Explanation groups={d.explanation} />
+          <Explanation groups={d.explanation} unfolded onFeature={leadTo} />
         </Part>
       )}
       {d.ratings.length > 0 && (

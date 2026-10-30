@@ -26,3 +26,13 @@ export function useStableOrder(values: FacetValueInfo[]): FacetValueInfo[] {
   const at = new Map(order.current.map((k, i) => [k, i]));
   return [...values].sort((a, b) => (at.get(a.key) ?? 0) - (at.get(b.key) ?? 0));
 }
+
+/**
+ * The first of the offers that came after the values were first shown: the server refills them as
+ * they are answered on, and they stand after a quiet line, not among the first.
+ */
+export function useLaterOffer(values: FacetValueInfo[]): string | undefined {
+  const first = useRef<Set<string> | null>(null);
+  if (first.current === null && values.length > 0) first.current = new Set(values.map((v) => v.key));
+  return values.find((v) => v.offered && first.current !== null && !first.current.has(v.key))?.key;
+}

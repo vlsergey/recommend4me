@@ -12,7 +12,6 @@ import {
   type Grade,
   type ItemFacet,
   type ItemSummary,
-  type LinkedItem,
   type SearchMatch,
   type SignalInfo,
   type SourceInfo,
@@ -74,6 +73,7 @@ export function RatingButtons({
   onRate,
   size = "default",
   labels = false,
+  earlier,
   className,
 }: {
   type: ContentTypeInfo;
@@ -81,6 +81,8 @@ export function RatingButtons({
   onRate: (grade: Grade | null) => unknown;
   size?: "sm" | "default" | "lg";
   labels?: boolean;
+  /** The grade of an earlier version, of a work whose new one is not graded yet: outlined on its button. */
+  earlier?: { grade: Grade; version?: string };
   className?: string;
 }) {
   const { t } = useTranslation("item");
@@ -94,7 +96,7 @@ export function RatingButtons({
               <AsyncButton
                 variant="outline"
                 size={size}
-                className={cn("w-full min-w-0 px-1", value === g ? ACTIVE[g] : HOVER[g])}
+                className={cn("w-full min-w-0 px-1", value === g ? ACTIVE[g] : HOVER[g], value !== g && earlier?.grade === g && cn("border-2 border-dashed", GRADE_TEXT[g]))}
                 onClick={() => onRate(value === g ? null : g)}
               />
             }
@@ -114,6 +116,7 @@ export function RatingButtons({
             {value === g ? t("RatingButtons.takeBack") : gradeLabel(type.id, g)}
             {value !== g && ladder[g] !== undefined && ` ${t("RatingButtons.onScale", { score: score(ladder[g]) })}`} ·{" "}
             <Trans t={t} i18nKey="RatingButtons.key" values={{ grade: g }} components={{ kbd: <kbd className="font-mono" /> }} />
+            {value !== g && earlier?.grade === g && ` · ${t("PreviousRating.title", { version: earlier.version ?? "", grade: gradeLabel(type.id, g) })}`}
           </TooltipContent>
         </Tooltip>
       ))}
@@ -122,9 +125,21 @@ export function RatingButtons({
 }
 
 /**
+ * What the user's grade says of interest, of a work with no mark of it: a grade of 4 or 5, of the
+ * current version or the latest earlier one, that it was interesting; of 1, that it was not.
+ */
+export function interestByGrade(summary: ItemSummary): boolean | undefined {
+  if (summary.interest != null) return undefined;
+  const grade = summary.grade ?? summary.previousGrade;
+  if (grade == null) return undefined;
+  return grade >= 4 ? true : grade === 1 ? false : undefined;
+}
+
+/**
  * Whether the work is interesting to read at all — beside how good it is: the user's mark, pressed
- * again to take it back; without one the model's chance is shown. A grade says nothing of it. The
- * list sorted by the formula multiplies the prediction by the chance.
+ * again to take it back; without one what a grade says of it, outlined and pressed to make it the
+ * user's word; without that the model's chance. The list sorted by the formula multiplies the
+ * prediction by the chance.
  */
 export function InterestButtons({
   summary,
@@ -140,7 +155,8 @@ export function InterestButtons({
 }) {
   const { t } = useTranslation("item");
   const mark = useMarkInterest();
-  const chance = summary.interest == null ? summary.interestChance : undefined;
+  const byGrade = interestByGrade(summary);
+  const chance = summary.interest == null && byGrade === undefined ? summary.interestChance : undefined;
   // At work while its own press is: the face gives way to a spinner. A failure is told by the mutation
   const press = (value: boolean) => () =>
     mark.mutateAsync({ summary, interesting: summary.interest === value ? null : value }).catch(() => undefined);
@@ -157,6 +173,7 @@ export function InterestButtons({
               className={cn(
                 "min-w-0 px-2",
                 summary.interest === true ? "border-emerald-600! bg-emerald-600! text-white! hover:bg-emerald-600/90!" : "hover:border-emerald-600 hover:text-emerald-600",
+                byGrade === true && "border-dashed border-emerald-600",
               )}
               onClick={press(true)}
               icon={<span>🤔</span>}
@@ -181,6 +198,7 @@ export function InterestButtons({
               className={cn(
                 "min-w-0 px-2",
                 summary.interest === false ? "border-grade-1! bg-grade-1! text-white! hover:bg-grade-1/90!" : "hover:border-grade-1 hover:text-grade-1",
+                byGrade === false && "border-dashed border-grade-1",
               )}
               onClick={press(false)}
               icon={<span>🥱</span>}
@@ -193,6 +211,11 @@ export function InterestButtons({
           {summary.interest === false ? t("InterestButtons.takeBackDull") : t("InterestButtons.dullHint")}
         </TooltipContent>
       </Tooltip>
+      {byGrade !== undefined && labels && (
+        <span className="text-xs text-muted-foreground" title={t("InterestButtons.byGradeHint")}>
+          {t("InterestButtons.byGrade")}
+        </span>
+      )}
       {chance != null && (
         <Tooltip>
           <TooltipTrigger render={<span className="text-xs text-muted-foreground tabular-nums" />}>{percent(chance)}</TooltipTrigger>
@@ -422,30 +445,6 @@ export function SiteBadges({ type, summary, className, badgeClassName }: { type:
         >
           {sourceShort(site.source)}
         </Badge>
-      ))}
-    </span>
-  );
-}
-
-/** The other items of the same work: the site of each, linking to its page there. */
-export function LinkedBadges({ linked, className }: { linked: LinkedItem[]; className?: string }) {
-  const { t } = useTranslation("item");
-  if (linked.length === 0) return null;
-  return (
-    <span className={cn("inline-flex flex-wrap items-center gap-1", className)}>
-      <span>{t("LinkedBadges.also")}</span>
-      {linked.map((l) => (
-        <a
-          key={`${l.source}/${l.item}`}
-          href={l.url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          title={`${sourceTitle(l.source)}: ${l.title}`}
-          className="underline-offset-2 hover:underline"
-        >
-          {sourceShort(l.source)}
-        </a>
       ))}
     </span>
   );

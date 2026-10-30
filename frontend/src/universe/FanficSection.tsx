@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { CheckIcon, Loader2Icon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { CHIP_TOUCH, FacetAnswers } from "@/correction/FacetAnswers";
-import { FacetValue, MoreCandidates, SearchButton } from "@/correction/FacetCorrections";
+import { FacetValue, LaterOffers, MoreCandidates, SearchButton } from "@/correction/FacetCorrections";
 import type { Corrections } from "@/correction/useCorrections";
-import { useStableOrder } from "@/facet/valueOrder";
+import { useLaterOffer, useStableOrder } from "@/facet/valueOrder";
 import { OriginalOf } from "@/item/WorkFacts";
 import { percent } from "@/i18n/format";
 import i18n from "@/i18n/i18n";
@@ -165,64 +165,6 @@ export function FanficSection({
   );
 }
 
-/**
- * The section to read: whether the work is fan fiction, of which universes, with which main
- * characters and pairings — the names alone, the user's filled with a ✓, nothing the user took
- * away. What the model gave or suggests and the user has not answered on is counted in a line that
- * opens the marking ([onMark]).
- */
-export function FanficSummary({ source, details: d, onMark }: { source: SourceInfo; details: ItemDetails; onMark: () => void }) {
-  const { t } = useTranslation("universe");
-  const ref = { source: d.summary.source, item: d.summary.item };
-  const suggestions = useSuggestions(ref, source);
-  const valuesOf = (key: string) => (d.allFacets.find((f) => f.facet === key)?.values ?? []).filter(has);
-  const kinds = valuesOf(KIND);
-  const original = universeless(kinds);
-  // What the user has not answered on: values the model or a draft gave, values the model suggests
-  const open =
-    FANFIC_FACETS.flatMap((f) => valuesOf(f)).filter((v) => (v.inferred || v.draftedFrom != null) && !v.corrected).length +
-    (suggestions.data ?? []).filter((s) => FANFIC_FACETS.includes(s.facet)).reduce((n, s) => n + s.suggested.length, 0);
-
-  const line = (label: string, values: FacetValueInfo[]) =>
-    values.length > 0 && (
-      <div className="flex flex-col gap-1">
-        <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="flex flex-wrap gap-1">
-          {values.map((v) => (
-            <Badge key={v.key} variant="secondary" className={cn("font-normal", v.corrected && "border-yes/50 bg-yes/15")} title={[v.description, v.corrected ? undefined : t("FanficSummary.notAnswered")].filter(Boolean).join("\n") || undefined}>
-              {v.corrected && <CheckIcon className="size-3 text-yes" />}
-              {valueName(v)}
-            </Badge>
-          ))}
-        </div>
-      </div>
-    );
-
-  if (original) {
-    return <section className="text-sm text-muted-foreground">{kinds.map((k) => {
-          const known = KINDS.find((x) => x.key === k.key);
-          return known ? t(known.label) : valueName(k);
-        }).join(", ")}</section>;
-  }
-  if (kinds.length === 0 && valuesOf(UNIVERSE).length === 0) return null;
-  return (
-    <section className="flex flex-col gap-2">
-      <h4 className="text-sm font-semibold">{t("FanficSummary.heading")}</h4>
-      <OriginalOf source={source} facets={d.allFacets} facet={UNIVERSE} />
-      {line(t("Facet.universe"), valuesOf(UNIVERSE))}
-      <OriginalOf source={source} facets={d.allFacets} facet={CHARACTERS} />
-      {line(t("Facet.mainCharacters"), valuesOf(CHARACTERS))}
-      {line(t("Facet.secondaryCharacters"), valuesOf(SECONDARY_CHARACTERS))}
-      {line(t("Facet.pairings"), valuesOf(PAIRINGS))}
-      {open > 0 && (
-        <Button variant="link" size="sm" className="h-auto self-start p-0 text-xs" onClick={onMark}>
-          {t("FanficSummary.unanswered", { n: open })}
-        </Button>
-      )}
-    </section>
-  );
-}
-
 /** A part of the section: its label, then the rest — the site's own word on it is shown above the section. */
 function Block({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -254,12 +196,16 @@ function Chips({
   search?: { onClick: () => void; title: string };
 }) {
   const ordered = useStableOrder(values);
+  const later = useLaterOffer(ordered);
   if (values.length === 0 && suggested.length === 0 && !item) return <div className="text-sm text-muted-foreground">—</div>;
   return (
     <div className="flex flex-wrap items-center gap-1">
       {values.length === 0 && suggested.length === 0 && <span className="text-sm text-muted-foreground">—</span>}
       {ordered.map((v) => (
-        <FacetValue key={v.key} facet={facet} value={v} corrections={corrections} />
+        <Fragment key={v.key}>
+          {v.key === later && <LaterOffers />}
+          <FacetValue facet={facet} value={v} corrections={corrections} />
+        </Fragment>
       ))}
       {suggested.map((v) => (
         <SuggestedChip key={v.key} facet={facet} value={v} corrections={corrections} />

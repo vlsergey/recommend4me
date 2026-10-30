@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { ContributionGroup } from "@/api/client";
+import type { ContributionGroup, FeatureContribution } from "@/api/client";
 import { label } from "@/i18n/label";
 import { cn } from "@/lib/utils";
 import { FeatureBars } from "./FeatureBars";
@@ -16,14 +16,19 @@ export function Explanation({
   groups,
   className,
   title,
+  unfolded = false,
+  onFeature,
 }: {
   groups: ContributionGroup[];
   className?: string;
   /** What the folded line says the parts explain; "Why this prediction" when not given. */
   title?: string;
+  /** Open from the start: a page of its own, not a line of a card. */
+  unfolded?: boolean;
+  onFeature?: (feature: FeatureContribution) => (() => void) | undefined;
 }) {
   const { t } = useTranslation("model");
-  const [shown, setShown] = useState(false);
+  const [shown, setShown] = useState(unfolded);
   const [open, setOpen] = useState<string | null>(null);
   if (groups.length === 0) return null;
   const max = Math.max(...groups.map((g) => Math.abs(g.contribution)), 1e-9);
@@ -84,7 +89,7 @@ export function Explanation({
                   {g.contribution.toFixed(2)}
                 </span>
               </button>
-              {expanded && <FeatureBars items={g.features} className="mt-1 mb-2 ml-6 max-h-64 overflow-y-auto pr-1" />}
+              {expanded && <FeatureBars items={g.features} onFeature={onFeature} className="mt-1 mb-2 ml-6 max-h-64 overflow-y-auto pr-1" />}
             </li>
           );
         })}

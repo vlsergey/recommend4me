@@ -746,11 +746,14 @@
 
   /**
    * Whether the work is interesting to read at all, beside how good it is: the user's mark; without
-   * one, the chance the model gives it. A grade says nothing of it.
+   * one, what a grade says of it, a button pressed making it the user's word; without that, the
+   * chance the model gives it.
    */
   function interest(item) {
     const s = item.summary;
     const line = el("r4m-line", "r4m-interest");
+    const grade = s.grade || s.previousGrade;
+    const byGrade = s.interest != null || !grade ? null : grade >= 4 ? true : grade === 1 ? false : null;
     line.appendChild(el("span", null, `${t("interest.title")} `));
     // Not thumbs: a thumb says liked or not, and interest is another thing
     [[true, `🤔 ${t("interest.yes")}`], [false, `🥱 ${t("interest.no")}`]].forEach(([value, label]) => {
@@ -768,7 +771,8 @@
         `interest|${value}`,
       ));
     });
-    if (s.interest == null && s.interestChance != null) {
+    if (byGrade !== null) line.appendChild(el("span", "r4m-muted", ` ${t(byGrade ? "interest.yes" : "interest.no")}: ${t("interest.byGrade")}`));
+    else if (s.interest == null && s.interestChance != null) {
       line.appendChild(el("span", "r4m-muted", ` ${t("interest.byModel", { percent: Math.round(s.interestChance * 100) })}`));
     }
     return withFailures(line, ["interest|true", "interest|false"]);
@@ -830,6 +834,7 @@
 
   /** The order a facet's values of an item were first shown in, by their keys: kept while the page is open. */
   const orders = new Map();
+  const firstShown = new Map();
 
   /**
    * The values in the order first shown — the application's: by the model's chance, the likeliest
@@ -844,8 +849,18 @@
     const fresh = values.filter((v) => !known.has(v.key)).map((v) => v.key);
     const all = order.concat(fresh);
     orders.set(id, all);
+    if (!firstShown.has(id) && all.length > 0) firstShown.set(id, new Set(all));
     const at = new Map(all.map((k, i) => [k, i]));
     return [...values].sort((a, b) => at.get(a.key) - at.get(b.key));
+  }
+
+  /**
+   * The first of the offers that came after the values were first shown: the server refills them
+   * as they are answered on, and they stand after a quiet line, not among the first.
+   */
+  function laterOffer(item, facet, values) {
+    const first = firstShown.get(`${item.summary.source}/${item.summary.item}/${facet}`);
+    return first && values.find((v) => v.offered && !first.has(v.key));
   }
 
   /**
@@ -1292,7 +1307,12 @@
     }
     const allNamed = completeButton(item, facet);
     if (allNamed) label.appendChild(allNamed);
-    stableOrder(item, facet.facet, values).forEach((v) => line.appendChild(valueChip(item, facet.facet, v, editable)));
+    const ordered = stableOrder(item, facet.facet, values);
+    const later = laterOffer(item, facet.facet, ordered);
+    ordered.forEach((v) => {
+      if (v === later) line.appendChild(Object.assign(el("r4m-later"), { title: t("facet.laterOffers") }));
+      line.appendChild(valueChip(item, facet.facet, v, editable));
+    });
     if (editable) {
       ((suggestions && suggestions.suggested) || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
       // A facet of one value that has one offers no other: one chosen in its place replaces it

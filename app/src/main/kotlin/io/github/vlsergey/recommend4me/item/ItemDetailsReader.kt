@@ -175,6 +175,7 @@ class ItemDetailsReader(
                     }
                 },
                 reviewCount = s.reviews.countOf(m.id), pictureCount = s.pictures.ofItem(m.id, encoder).size, partCount = s.parts.ofItem(m.id).size,
+                canRefresh = s.source.downloadsPages,
             )
         }
     }

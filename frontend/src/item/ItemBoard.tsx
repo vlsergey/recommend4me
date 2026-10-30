@@ -166,6 +166,17 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  /** The user's word on whether a work found by the search answers the line. */
+  const judge = search
+    ? async (summary: ItemSummary, relevant: boolean | null) =>
+        ensureOk(
+          await api.PUT("/api/types/{type}/search/judgments", {
+            params: { path: { type: type.id } },
+            body: { query: search, source: summary.source, item: summary.item, relevant: relevant ?? undefined },
+          }),
+        )
+    : undefined;
+
   if (list.isLoading) {
     return (
       <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-4">
@@ -212,17 +223,7 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
                 setOpened(i);
               }}
               onRate={(grade) => onRate(summary, grade)}
-              onJudge={
-                search
-                  ? async (relevant) =>
-                      ensureOk(
-                        await api.PUT("/api/types/{type}/search/judgments", {
-                          params: { path: { type: type.id } },
-                          body: { query: search, source: summary.source, item: summary.item, relevant: relevant ?? undefined },
-                        }),
-                      )
-                  : undefined
-              }
+              onJudge={judge && ((relevant) => judge(summary, relevant))}
             />
           );
         })}
@@ -240,6 +241,7 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
         }}
         onRate={onRate}
         ratedLeaves={view === "UNRATED"}
+        onJudge={judge}
       />
     </>
   );

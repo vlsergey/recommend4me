@@ -4,11 +4,7 @@ A design made from nothing, with no look at the window of a work it is to replac
 own and compared with that window function by function (339 functions: 157 kept, 106 changed, 51 lost,
 25 new). This is the result: every blocker of the review and every lost function has an answer below.
 
-Built, beside the old window and chosen by a button there (`item/WorkScreen.tsx`): what the server needs, the
-head, the two pages, the views of the left page, the answers as chips, the verdict. Not built yet: the chip's
-menu and the sheet of a tap on a name, the evidence on the left page, offers that come later after a divider,
-interest "by your grade", the mark of a grade of an earlier version on the grades, the head folding on a short
-screen, the address moving when an item is taken out, the search of the same work run at once.
+Built: `item/WorkScreen.tsx`, in place of the window of a work.
 
 ## 1. The idea
 
@@ -151,9 +147,3 @@ Interest implied by a grade reads "by your grade", and pressing it makes it the 
 4. `GET /items/{source}/{item}/duplicates`.
 5. Corrected texts of `removeItem`, `settleSuggestions`, `getSuggestions` in the API: the first removes the item
    alone, the second never waits.
-
-## 8. Order of the work
-
-1. What the server needs.
-2. The new screen beside the old, behind a choice, the old one kept till everything of sections 2 to 6 stands.
-3. The old window removed.

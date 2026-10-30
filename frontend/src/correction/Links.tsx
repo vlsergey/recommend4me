@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckIcon, ExternalLinkIcon, Link2Icon, Loader2Icon, SearchIcon, UnlinkIcon } from "lucide-react";
+import { CheckIcon, ExternalLinkIcon, Link2Icon, Loader2Icon, SearchIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, refKey, sameItem, unwrap, type ContentTypeInfo, type ItemRef, type ItemSummary } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import type { Corrections } from "./useCorrections";
@@ -12,65 +11,11 @@ import type { Corrections } from "./useCorrections";
 const FOUND = 8;
 
 /**
- * The other items that are this same work — on another site, or twice on one — and a search to
- * add one: the items of the same content type by a piece of the title or by the address of the
- * page, each item by itself, picked by a click.
+ * The search for the same work on another site or twice on one, prefilled with the title and run at
+ * once: the items of the same content type by a piece of the title or by the address of the page,
+ * each item by itself, picked by a click.
  */
-export function Links({ type, summary, corrections }: { type: ContentTypeInfo; summary: ItemSummary; corrections: Corrections }) {
-  const { t } = useTranslation("correction");
-  const [searching, setSearching] = useState(false);
-  return (
-    <section>
-      <div className="mb-2 flex items-center gap-1">
-        <h4 className="text-sm font-semibold">{t("Links.heading")}</h4>
-        {!searching && (
-          <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => setSearching(true)}>
-            <Link2Icon /> {t("Links.link")}
-          </Button>
-        )}
-      </div>
-      {summary.linked.length === 0 && !searching && (
-        <p className="text-xs text-muted-foreground">
-          {t("Links.hint")}
-        </p>
-      )}
-      <ul className="flex flex-col gap-1 text-sm">
-        {summary.linked.map((l) => (
-          <li key={refKey(l)} className="flex items-center gap-2">
-            <span className="shrink-0 text-xs text-muted-foreground" title={sourceTitle(l.source)}>
-              {sourceShort(l.source)}
-            </span>
-            <a href={l.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate underline-offset-2 hover:underline" title={l.title}>
-              {l.title}
-              <ExternalLinkIcon className="ml-1 inline size-3 opacity-60" />
-            </a>
-            <AsyncButton
-              variant="ghost"
-              size="icon-xs"
-              title={t("Links.unlink")}
-              onClick={() => corrections.unlink(l)}
-              icon={<UnlinkIcon />}
-              className="text-muted-foreground"
-            />
-          </li>
-        ))}
-      </ul>
-      {searching && <LinkSearch type={type} summary={summary} corrections={corrections} onDone={() => setSearching(false)} />}
-    </section>
-  );
-}
-
-function LinkSearch({
-  type,
-  summary,
-  corrections,
-  onDone,
-}: {
-  type: ContentTypeInfo;
-  summary: ItemSummary;
-  corrections: Corrections;
-  onDone: () => void;
-}) {
+export function LinkSearch({ type, summary, corrections }: { type: ContentTypeInfo; summary: ItemSummary; corrections: Corrections }) {
   const { t } = useTranslation("correction");
   const [input, setInput] = useState(summary.title);
   const [search, setSearch] = useState(summary.title);
@@ -93,10 +38,8 @@ function LinkSearch({
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Escape" && (e.preventDefault(), onDone())}
           placeholder={t("LinkSearch.placeholder")}
           className="h-8 pl-8"
           type="search"
@@ -114,10 +57,7 @@ function LinkSearch({
             <AsyncButton
               variant="ghost"
               className="h-auto min-w-0 flex-1 justify-start gap-2 px-1 py-1 text-left font-normal"
-              onClick={async () => {
-                await corrections.link(s);
-                onDone();
-              }}
+              onClick={() => corrections.link(s)}
               disabled={linked(s)}
               title={linked(s) ? t("LinkSearch.alreadyLinkedHint") : t("LinkSearch.linkHint")}
               icon={linked(s) ? <CheckIcon /> : <Link2Icon />}
@@ -136,9 +76,6 @@ function LinkSearch({
           </li>
         ))}
       </ul>
-      <Button variant="ghost" size="sm" onClick={onDone} className="self-end">
-        {t("LinkSearch.done")}
-      </Button>
     </div>
   );
 }

@@ -10,7 +10,9 @@ The user answers on a work's values in two places with the same behaviour:
 
 **Every change of how answering looks or behaves is made in both, in the same commit**, and the
 commit message says so. A change only one of them can have (the extension has no screen of tags,
-the web interface no site's page to mark up) is named as such in the commit message. Before
+the web interface no site's page to mark up) is named as such in the commit message. The screen of
+a work (`docs/work-screen.md`) has what a site's page has no room for — its pages, a chip's menu, a
+finger's 44 px — and the extension stays compact by the owner's choice. Before
 finishing such a change, go through the table below and check each row in both places.
 
 **After a change of the extension, bump `version` in `browser-extension/extension/manifest.json`**
@@ -29,8 +31,9 @@ and tell the user to update the extension.
 | An answer: only written; shown once kept, never before; read anew after 2 s of quiet, the work once its chances are made | `correction/useCorrections.ts`, `suggestion/useSuggestions.ts` `suggestionsLater` | `act`, `loadLater`, `settledLater` |
 | A facet whose values are a scale (the age rating, `steps`): the steps in order, the chosen one with where it is from (the user's / the site's / by the tags with its chance), the model's chance under every other, a step the site lets not faded yet chosen; a step pressed is the user's answer, the user's own pressed again taken back | `correction/ScaleChoice.tsx` | `scaleBlock`, `chosenShown` |
 | The suggestions of a facet | `suggestion/Suggestions.tsx` | `suggestedChip` |
-| Grades and interest | `item/useRateItem.ts`, `item/pieces.tsx` | `grades`, `interest` |
-| The tags by the work's own text: a button opening a window of its own — under the facet of tags, and beside the way to the site and the marking in the work's window (the extension: in its panel's head) — read again as often as chosen and shown calmly (another list: locked, the rows moved, free after 2 s; a row answered on fades, the rest move up), a row a tag with its paragraph — its name a link to its page, its place a link to the site's chapter — ✓ / not enough / ✕ / not in the work / the red bin of the tag (ignored, as on the screen of the tags) | `tagtext/TagsByText.tsx`, `correction/useCorrections.ts` `answerTagByText` | `byTextBlock`, `byTextRow` |
+| Grades and interest; interest with no mark by what a grade says of it ("by your grade"), a press making it the user's word | `item/useRateItem.ts`, `item/pieces.tsx` | `grades`, `interest` |
+| The offers that came after the work was opened stand after a quiet line | `facet/valueOrder.ts` `useLaterOffer`, `correction/FacetCorrections.tsx` `LaterOffers` | `laterOffer` |
+| The tags by the work's own text: a button opening a window of its own — under the facet of tags, and in the head of the screen of a work (`item/WorkScreen.tsx`; the extension: in its panel's head) — read again as often as chosen and shown calmly (another list: locked, the rows moved, free after 2 s; a row answered on fades, the rest move up), a row a tag with its paragraph — its name a link to its page, its place a link to the site's chapter — ✓ / not enough / ✕ / not in the work / the red bin of the tag (ignored, as on the screen of the tags) | `tagtext/TagsByText.tsx`, `correction/useCorrections.ts` `answerTagByText` | `byTextBlock`, `byTextRow` |
 | Marks of reviews and pictures | `review/Reviews.tsx`, `picture/Pictures.tsx` | `marks`, `reviews`, `pictures` |
 | A list's cards: grade, prediction, interest | `item/ItemBoard.tsx`, `item/pieces.tsx` | `cards`, `fillBadge` |
 

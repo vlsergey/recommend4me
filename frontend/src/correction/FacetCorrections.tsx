@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { Fragment, useContext, useEffect, useId, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChanceMark, unlikely } from "@/facet/FacetValueMarks";
-import { decided, useStableOrder } from "@/facet/valueOrder";
+import { decided, useLaterOffer, useStableOrder } from "@/facet/valueOrder";
 import { label, valueName } from "@/i18n/label";
 import { OriginalOf } from "@/item/WorkFacts";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ import { CHIP_TOUCH, FacetAnswers } from "./FacetAnswers";
 import { EditButton } from "./FieldEditor";
 import { ScaleChoice } from "./ScaleChoice";
 import type { Corrections } from "./useCorrections";
+import { chipKey, ValueActions } from "./valueActions";
+import { ValueMenu, ValueName } from "./ValueMenu";
 
 /** How many values of a facet the line of a new value offers. */
 const OFFERED = 30;
@@ -99,6 +101,7 @@ export function FacetCorrections({
 function FacetLine({ facet: f, item, source, corrections }: { facet: ItemFacet; item?: ItemRef; source?: SourceInfo; corrections?: Corrections }) {
   const { t } = useTranslation("correction");
   const values = useStableOrder(f.values);
+  const later = useLaterOffer(values);
   const [searching, setSearching] = useState(false);
   // A value of this facet alone found by its name, when the facet takes values the user adds
   const own = source?.facets.filter((d) => d.key === f.facet && d.editable) ?? [];
@@ -130,7 +133,10 @@ function FacetLine({ facet: f, item, source, corrections }: { facet: ItemFacet; 
       </div>
       <div className="flex flex-wrap gap-1">
         {values.map((v) => (
-          <FacetValue key={v.key} facet={f.facet} value={v} corrections={corrections} tagLink={f.tags === true} />
+          <Fragment key={v.key}>
+            {v.key === later && <LaterOffers />}
+            <FacetValue facet={f.facet} value={v} corrections={corrections} tagLink={f.tags === true} />
+          </Fragment>
         ))}
         {/* A facet of one value that has it offers no other: one chosen in its place replaces it */}
         {item && corrections && !held && <MoreCandidates item={item} facet={f.facet} shown={f.values} corrections={corrections} tagLink={f.tags === true} />}
@@ -155,8 +161,14 @@ function FacetLine({ facet: f, item, source, corrections }: { facet: ItemFacet; 
   );
 }
 
+/** The quiet line before the offers that came after the work was opened. */
+export function LaterOffers() {
+  const { t } = useTranslation("correction");
+  return <span className="mx-0.5 h-4 w-px self-center bg-border" title={t("LaterOffers.title")} aria-label={t("LaterOffers.title")} role="separator" />;
+}
+
 /** A button by a line of values — "✓ all", 🔍, "…": as high as a chip, a finger's size on a touch screen. */
-const SMALL_BUTTON = "h-5 px-1.5 pointer-coarse:h-8 pointer-coarse:px-2.5 pointer-coarse:text-sm";
+const SMALL_BUTTON = "h-5 px-1.5 pointer-coarse:h-11 pointer-coarse:px-2.5 pointer-coarse:text-sm";
 
 /** A small 🔍 after a line of values, beside "…": a value found by its name and added. */
 export function SearchButton({ onClick, title }: { onClick: () => void; title: string }) {
@@ -257,15 +269,21 @@ export function FacetValue({
   tagLink?: boolean;
 }) {
   const { t } = useTranslation("correction");
+  const actions = useContext(ValueActions);
   const mine = value.corrected === "CONFIRMED" || value.corrected === "ADDED";
   const removed = value.corrected === "REMOVED";
   const open = corrections && !value.corrected;
+  const name = tagLink ? <TagNameLink tag={value.key}>{valueName(value)}</TagNameLink> : valueName(value);
+  const key = chipKey(facet, value.key);
+  const asked = { facet, value: value.key, name: valueName(value), summary: value.description ?? undefined };
   return (
     <Badge
       variant="outline"
+      data-value={key}
       className={cn(
         "group pr-0.5 font-normal",
         CHIP_TOUCH,
+        actions?.revealed === key && "ring-2 ring-primary",
         mine && "border-yes/50 bg-yes/15 text-foreground",
         removed && "border-dashed text-muted-foreground opacity-70",
         open && "bg-background",
@@ -284,9 +302,18 @@ export function FacetValue({
       {mine && <CheckIcon className="size-3 text-yes" aria-label={t("FacetValue.yourAnswerYes")} />}
       {/* Given by a tag under it: marked as such, not by a chance of its own */}
       {value.implied && !value.corrected && <span className="text-muted-foreground" aria-label={t("FacetValue.fromSubtag")}>↑</span>}
-      <span className={cn(removed && "line-through")}>{tagLink ? <TagNameLink tag={value.key}>{valueName(value)}</TagNameLink> : valueName(value)}</span>
+      <span className={cn(removed && "line-through")}>
+        {actions && corrections ? (
+          <ValueName asked={asked} corrections={corrections} tag={tagLink === true}>
+            {name}
+          </ValueName>
+        ) : (
+          name
+        )}
+      </span>
       <ChanceMark value={value} />
       {corrections && <FacetAnswers facet={facet} value={value} corrections={corrections} />}
+      {actions && corrections && <ValueMenu asked={asked} corrections={corrections} tag={tagLink === true} />}
     </Badge>
   );
 }

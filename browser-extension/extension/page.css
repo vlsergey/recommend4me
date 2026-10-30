@@ -289,6 +289,15 @@ r4m-tools {
   margin: 0 4px 0 1px;
 }
 
+r4m-later {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  margin: 0 3px;
+  vertical-align: middle;
+  background: var(--r4m-muted);
+}
+
 r4m-chip {
   display: inline-flex;
   gap: 4px;

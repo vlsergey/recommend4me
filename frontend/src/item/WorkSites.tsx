@@ -1,40 +1,15 @@
 import type { ReactNode } from "react";
-import { Undo2Icon } from "lucide-react";
+import { ExternalLinkIcon, UnlinkIcon, Undo2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { ContentTypeInfo, ItemDetails, ItemRef, WorkSite } from "@/api/client";
+import type { ContentTypeInfo, ItemRef, WorkSite } from "@/api/client";
 import { refKey, sameItem } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { numberField, textField, titleField, type Corrections } from "@/correction/useCorrections";
 import { number } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { cn } from "@/lib/utils";
-
-/** The items of a work of several, each a tab: the site's own data of it below. */
-export function SiteTabs({ sites, shown, onShow }: { sites: WorkSite[]; shown: ItemRef; onShow: (site: ItemRef) => void }) {
-  const { t } = useTranslation("item");
-  return (
-    <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
-      <span className="text-xs text-muted-foreground">{t("WorkSites.tabs")}</span>
-      <Tabs
-        value={refKey(shown)}
-        onValueChange={(v) => {
-          const site = sites.find((s) => refKey(s) === v);
-          if (site) onShow({ source: site.source, item: site.item });
-        }}
-      >
-        <TabsList>
-          {sites.map((s) => (
-            <TabsTrigger key={refKey(s)} value={refKey(s)} title={`${sourceTitle(s.source)}: ${s.title}`}>
-              {sourceShort(s.source)}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-    </div>
-  );
-}
+import { RefreshButton } from "./WorkParts";
 
 /** The site's own word under the user's correction, the correction taken back by ↺. */
 function SiteSaid({ said, onReset }: { said?: string; onReset: () => Promise<unknown> }) {
@@ -51,19 +26,21 @@ function SiteSaid({ said, onReset }: { said?: string; onReset: () => Promise<unk
  * WHAT EACH SITE SAYS OF THE WORK, side by side, read from the work alone: its title, authors,
  * description, numbers and how many reviews, pictures and parts it has. A row whose sites say
  * otherwise, an absent value not counted, is marked ≠. What the user corrected stands apart from the
- * site's own word, with ↺.
+ * site's own word, with ↺. Under every site its page, its refresh, and "not this work".
  */
 export function SitesTable({
   type,
   sites,
   shown,
   onShow,
+  onTakeOut,
   corrections,
 }: {
   type: ContentTypeInfo;
   sites: WorkSite[];
   shown: ItemRef;
   onShow: (site: ItemRef) => void;
+  onTakeOut: (site: ItemRef) => Promise<unknown>;
   corrections: Corrections;
 }) {
   const { t } = useTranslation("item");
@@ -145,58 +122,27 @@ export function SitesTable({
               </tr>
             );
           })}
+          <tr className="border-t align-top">
+            <th />
+            {sites.map((s) => (
+              <td key={refKey(s)} className="px-2 py-1">
+                <div className="flex flex-wrap gap-1">
+                  <Button variant="outline" size="sm" nativeButton={false} render={<a href={s.url} target="_blank" rel="noreferrer" />} title={sourceTitle(s.source)}>
+                    <ExternalLinkIcon /> {t("WorkScreen.open")}
+                  </Button>
+                  {s.canRefresh && <RefreshButton item={s} />}
+                  {sites.length > 1 && (
+                    <AsyncButton variant="ghost" size="sm" icon={<UnlinkIcon />} title={t("WorkScreen.notThisWorkHint")} onClick={() => onTakeOut({ source: s.source, item: s.item })}>
+                      {t("WorkScreen.notThisWork")}
+                    </AsyncButton>
+                  )}
+                </div>
+              </td>
+            ))}
+          </tr>
         </tbody>
       </table>
     </div>
   );
 }
 
-/** The sites saying one thing, as many as they are: one value with the marks of those that give it. */
-function Saying({ label, values, shown }: { label: string; values: [string, WorkSite[]][]; shown: ItemRef }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {values.map(([value, sites]) => (
-        <div key={value} className="flex items-baseline gap-2 text-sm">
-          <span className="shrink-0 text-xs text-muted-foreground" title={sites.map((s) => sourceTitle(s.source)).join(", ")}>
-            {sites.map((s) => sourceShort(s.source)).join(", ")}
-          </span>
-          <span className={sites.some((s) => sameItem(s, shown)) ? "line-clamp-4 min-w-0 font-medium" : "line-clamp-4 min-w-0"}>{value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Of what a site says, the values of each, the sites giving one and the same together; none when they all say the same. */
-function differing(sites: WorkSite[], say: (site: WorkSite) => string | undefined): [string, WorkSite[]][] {
-  const values = new Map<string, WorkSite[]>();
-  for (const site of sites) {
-    const value = say(site)?.trim();
-    if (value) values.set(value, [...(values.get(value) ?? []), site]);
-  }
-  return values.size > 1 ? [...values] : [];
-}
-
-/** Whether the sites of the work say anything otherwise. */
-export const sitesDiffer = (sites: WorkSite[]) =>
-  [(s: WorkSite) => s.title, (s: WorkSite) => s.authors.join(", "), (s: WorkSite) => s.description].some((say) => differing(sites, say).length > 0);
-
-/**
- * WHAT THE SITES OF A WORK SAY OTHERWISE: its title, its authors and its description may come
- * from several sites and differ. Only what differs is shown, each value with the sites that give it;
- * the one of the site the window stands on stands out.
- */
-export function WorkSites({ details, shown }: { details: ItemDetails; shown: ItemRef }) {
-  const { t } = useTranslation("item");
-  const titles = differing(details.sites, (s) => s.title);
-  const authors = differing(details.sites, (s) => s.authors.join(", "));
-  const descriptions = differing(details.sites, (s) => s.description);
-  return (
-    <div className="flex flex-col gap-2">
-      {titles.length > 0 && <Saying label={t("WorkSites.title")} values={titles} shown={shown} />}
-      {authors.length > 0 && <Saying label={t("WorkSites.authors")} values={authors} shown={shown} />}
-      {descriptions.length > 0 && <Saying label={t("WorkSites.description")} values={descriptions} shown={shown} />}
-    </div>
-  );
-}

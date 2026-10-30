@@ -18,30 +18,48 @@ export function featureLabel(feature: FeatureContribution): string {
  * the change of the score, in points of 0..10, against the average work; a feature the work
  * lacks is shown crossed out with "absent".
  */
-export function FeatureBars({ items, className }: { items: FeatureContribution[]; className?: string }) {
+export function FeatureBars({
+  items,
+  className,
+  onFeature,
+}: {
+  items: FeatureContribution[];
+  className?: string;
+  /** What a press on a feature does, of one that leads somewhere: to its value among the answers. */
+  onFeature?: (feature: FeatureContribution) => (() => void) | undefined;
+}) {
   const { t } = useTranslation("model");
   if (items.length === 0) return <div className="text-sm text-muted-foreground">—</div>;
   const max = Math.max(...items.map((i) => Math.abs(i.contribution)), 1e-9);
   return (
     <div className={cn("flex flex-col gap-1", className)}>
-      {items.map((item) => (
-        <div key={item.feature} className="grid grid-cols-[minmax(0,1fr)_6rem_3rem] items-center gap-2 text-sm" title={item.feature}>
-          <div className="min-w-0 truncate">
-            {!item.present && <span className="text-xs text-muted-foreground">{t("FeatureBars.absent")} </span>}
-            <span className={cn(!item.present && "text-muted-foreground line-through")}>{featureLabel(item)}</span>
+      {items.map((item) => {
+        const lead = onFeature?.(item);
+        return (
+          <div key={item.feature} className="grid grid-cols-[minmax(0,1fr)_6rem_3rem] items-center gap-2 text-sm" title={item.feature}>
+            <div className="min-w-0 truncate">
+              {!item.present && <span className="text-xs text-muted-foreground">{t("FeatureBars.absent")} </span>}
+              {lead ? (
+                <button type="button" className="underline decoration-dotted underline-offset-2 hover:decoration-solid" onClick={lead}>
+                  {featureLabel(item)}
+                </button>
+              ) : (
+                <span className={cn(!item.present && "text-muted-foreground line-through")}>{featureLabel(item)}</span>
+              )}
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn("h-full rounded-full", item.contribution > 0 ? "bg-yes" : "bg-no")}
+                style={{ width: `${(Math.abs(item.contribution) / max) * 100}%` }}
+              />
+            </div>
+            <div className="text-right font-mono text-xs tabular-nums text-muted-foreground">
+              {item.contribution > 0 ? "+" : ""}
+              {item.contribution.toFixed(2)}
+            </div>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn("h-full rounded-full", item.contribution > 0 ? "bg-yes" : "bg-no")}
-              style={{ width: `${(Math.abs(item.contribution) / max) * 100}%` }}
-            />
-          </div>
-          <div className="text-right font-mono text-xs tabular-nums text-muted-foreground">
-            {item.contribution > 0 ? "+" : ""}
-            {item.contribution.toFixed(2)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

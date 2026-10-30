@@ -14,7 +14,18 @@ import { ITEMS, itemKey } from "./lists";
  * site is made anew when seen there again, without them). Removed, the work leaves the lists, and
  * the card shows the next one in its place.
  */
-export function RemoveItem({ summary, typeId }: { summary: ItemSummary; typeId: string }) {
+export function RemoveItem({
+  summary,
+  typeId,
+  ofSeveral = false,
+  onRemoved,
+}: {
+  summary: ItemSummary;
+  typeId: string;
+  /** One of the work's items: the work stays with the others, and with them the answers. */
+  ofSeveral?: boolean;
+  onRemoved?: () => void;
+}) {
   const { t } = useTranslation("item");
   const [asking, setAsking] = useState(false);
   const queryClient = useQueryClient();
@@ -23,6 +34,7 @@ export function RemoveItem({ summary, typeId }: { summary: ItemSummary; typeId: 
   const remove = async () => {
     ensureOk(await api.DELETE("/api/items/{source}/{item}", { params: { path: ref } }));
     setAsking(false);
+    onRemoved?.();
     queryClient.removeQueries({ queryKey: itemKey(ref) });
     queryClient.invalidateQueries({ queryKey: [ITEMS] });
     // The counts of the filter values were counted with it
@@ -37,8 +49,8 @@ export function RemoveItem({ summary, typeId }: { summary: ItemSummary; typeId: 
       <Dialog open={asking} onOpenChange={setAsking}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{t("RemoveItem.confirmTitle")}</DialogTitle>
-            <DialogDescription>{t("RemoveItem.confirmText", { title: summary.title })}</DialogDescription>
+            <DialogTitle>{t(ofSeveral ? "RemoveItem.confirmTitleOfSite" : "RemoveItem.confirmTitle")}</DialogTitle>
+            <DialogDescription>{t(ofSeveral ? "RemoveItem.confirmTextOfSite" : "RemoveItem.confirmText", { title: summary.title })}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAsking(false)}>
