@@ -28,6 +28,7 @@ tags:
   - name: pairings
   - name: marking
   - name: duplicates
+  - name: authors
   - name: workload
   - name: launcher
 
@@ -573,6 +574,108 @@ paths:
                 $ref: '#/components/schemas/DuplicatePage'
         '404':
           description: No such type
+
+  /api/types/{type}/authors/offers:
+    get:
+      tags: [authors]
+      operationId: getAuthorOffers
+      summary: Pairs of normalized authors that may be one, on the evidence of their works - never of their names
+      description: |
+        Of every two authors, the pairs of their works: one work (linked, by any way) or a part of the other -
+        the works match - and the pairs the search of the duplicates found, with the chance they are one
+        work. A translation proves no author, a pair said to be different counts for nothing, two writers
+        of one work are not offered. The most matching works first, then the most expected, no threshold.
+        With "distinct" true, the pairs the user told apart instead, to take the word back.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: distinct
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: The pairs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorOfferPage'
+        '404':
+          description: No such type
+
+  /api/types/{type}/authors/merged:
+    get:
+      tags: [authors]
+      operationId: getMergedAuthors
+      summary: The normalized authors of several authors of the sites
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '200':
+          description: The authors, of the most works first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuthorSide'
+        '404':
+          description: No such type
+
+  /api/authors/answer:
+    put:
+      tags: [authors]
+      operationId: answerAuthors
+      summary: The user's word on two normalized authors - one writer (merged), different, or that word taken back
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorAnswer'
+      responses:
+        '204':
+          description: Saved
+        '404':
+          description: No such author
+
+  /api/authors/{id}/sites:
+    delete:
+      tags: [authors]
+      operationId: takeOutSiteAuthor
+      summary: An author of a site taken out of a normalized author, to one of their own, the two told apart
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: source
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: author
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Taken out
+        '404':
+          description: No such author
 
   /api/types/{type}/duplicates/search:
     post:
@@ -4661,6 +4764,114 @@ components:
           type: string
           enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
           description: The user's word - one work (linked), different, one the translation of the other, or one a part of the other; none when not answered
+
+    AuthorOfferPage:
+      type: object
+      required: [total, offers]
+      properties:
+        total:
+          type: integer
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorOffer'
+
+    AuthorOffer:
+      type: object
+      required: [first, second, matching, expected, pairs]
+      properties:
+        first:
+          $ref: '#/components/schemas/AuthorSide'
+        second:
+          $ref: '#/components/schemas/AuthorSide'
+        matching:
+          type: integer
+          description: The pairs of their works that match by the user's word
+        expected:
+          type: number
+          description: How many more are expected to - the sum of the chances of the rest of the pairs
+        pairs:
+          type: array
+          description: The pairs of their works, those that match first, then the likeliest
+          items:
+            $ref: '#/components/schemas/AuthorWorkPair'
+
+    AuthorWorkPair:
+      type: object
+      required: [first, second]
+      properties:
+        first:
+          $ref: '#/components/schemas/AuthorWork'
+        second:
+          $ref: '#/components/schemas/AuthorWork'
+        answer:
+          type: string
+          enum: [SAME, PARTIAL]
+          description: The user's word they match by; none of a pair only likely
+        chance:
+          type: number
+          description: The chance they are one work, by the model of the answers on the duplicates; none of a pair the search did not keep
+
+    AuthorSide:
+      type: object
+      required: [id, sites, works, rest]
+      properties:
+        id:
+          type: integer
+          format: int64
+        sites:
+          type: array
+          description: The authors of the sites this one is
+          items:
+            $ref: '#/components/schemas/SiteAuthor'
+        works:
+          type: integer
+          description: How many works of theirs the sites have
+        rest:
+          type: array
+          description: Their works in no pair of the offer; of a merged author, every work
+          items:
+            $ref: '#/components/schemas/AuthorWork'
+
+    SiteAuthor:
+      type: object
+      required: [source, author, name, works]
+      properties:
+        source:
+          type: string
+        author:
+          type: string
+          description: The site's own key of them
+        name:
+          type: string
+        works:
+          type: integer
+
+    AuthorWork:
+      type: object
+      required: [source, item, title]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+
+    AuthorAnswer:
+      type: object
+      required: [first, second, verdict]
+      properties:
+        first:
+          type: integer
+          format: int64
+        second:
+          type: integer
+          format: int64
+        verdict:
+          type: string
+          enum: [SAME, DIFFERENT, NONE]
+          description: One writer, merged - not to be taken back here, only an author of a site taken out; different; or that word taken back
 
     DuplicateSort:
       type: string

@@ -2,7 +2,9 @@ package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.workload.inBackground
 import com.sun.net.httpserver.HttpServer
+import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
 import io.github.vlsergey.recommend4me.api.model.CaptureRequest
+import io.github.vlsergey.recommend4me.author.AuthorsController
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.ItemRef
@@ -129,7 +131,7 @@ class TwoSitesTest {
         override val contentType = "books"
         override val homepage = "https://alpha.example"
         override val schema = SourceSchema(
-            facets = listOf(Books.TAG.asFacet()),
+            facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
             texts = listOf(TextDef("annotation", block = "text:annotation")),
             reviews = true,
         )
@@ -165,7 +167,7 @@ class TwoSitesTest {
         override val id = "beta"
         override val contentType = "books"
         override val homepage = "https://beta.example"
-        override val schema = SourceSchema(facets = listOf(Books.TAG.asFacet()), texts = listOf(TextDef("annotation", block = "text:annotation")))
+        override val schema = SourceSchema(facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()), texts = listOf(TextDef("annotation", block = "text:annotation")))
         override val modes = setOf(SourceMode.SCRAPE_ALL, SourceMode.UPDATES, SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://beta\\.example/work/.*"))
         override fun itemUrl(itemId: String) = "https://beta.example/work/$itemId"
@@ -218,6 +220,7 @@ class TwoSitesTest {
     @Autowired lateinit var items: ItemsController
     @Autowired lateinit var corrections: CorrectionsController
     @Autowired lateinit var duplicates: DuplicatesController
+    @Autowired lateinit var authors: AuthorsController
     @Autowired lateinit var tags: TagsController
     @Autowired lateinit var stores: Stores
     @Autowired lateinit var jobs: Jobs
@@ -293,6 +296,60 @@ class TwoSitesTest {
         assertEquals(null, relation(m1, m3))
 
         for ((a, b) in listOf(m1 to m2, m2 to m3, m4 to m1, m4 to m3)) duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
+    }
+
+    @Test
+    fun `authors are merged on the evidence of their works, never of their names`() {
+        alpha("w1|The Barn|hay|A barn in the hay||")
+        beta("w2|The Barn|hay|A barn in the hay")
+        alpha("w3|The Field|hay|A field of hay||")
+        beta("w4|The Pond|hay|A pond by the hay")
+        val alphaItems = stores.source("alpha")!!.items
+        val betaItems = stores.source("beta")!!.items
+        // One name on two sites, and one writer under two names of a third work
+        alphaItems.setFacet("w1", Books.AUTHOR.key, listOf(FacetValue("ann", "Ann")))
+        alphaItems.setFacet("w3", Books.AUTHOR.key, listOf(FacetValue("ann", "Ann")))
+        betaItems.setFacet("w2", Books.AUTHOR.key, listOf(FacetValue("anna-b", "Anna B")))
+        betaItems.setFacet("w4", Books.AUTHOR.key, listOf(FacetValue("ann", "Ann")))
+        val dictionary = stores.type("books")!!.authors
+        val ann = waitForValue { dictionary.bindingsOf("alpha")["ann"] }
+        val annaB = waitForValue { dictionary.bindingsOf("beta")["anna-b"] }
+        val namesake = waitForValue { dictionary.bindingsOf("beta")["ann"] }
+        assertTrue(ann != namesake, "one name on two sites is no one author")
+
+        fun offers() = authors.getAuthorOffers("books", false, 0, 50).body!!.offers
+        fun of(a: Long, b: Long) = offers().firstOrNull { setOf(it.first.id, it.second.id) == setOf(a, b) }
+        assertEquals(null, of(ann, annaB), "no work of theirs is known to match")
+        // Their works one work: offered, the pair shown, the rest of the works apart
+        corrections.linkItem("alpha", "w1", ItemRef("beta", "w2"))
+        val offer = of(ann, annaB)!!
+        assertEquals(1, offer.matching)
+        assertEquals(listOf("w1" to "w2"), offer.pairs.map { it.first.item to it.second.item })
+        assertEquals(listOf("w3"), offer.first.rest.map { it.item })
+
+        // Told apart: offered no more, till the word is taken back
+        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.DIFFERENT))
+        assertEquals(null, of(ann, annaB))
+        assertEquals(listOf(ann to annaB), authors.getAuthorOffers("books", true, 0, 50).body!!.offers.map { it.first.id to it.second.id })
+        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.NONE))
+
+        // One writer: merged, offered no more; a site's author taken out is told apart
+        authors.answerAuthors(AuthorAnswer(ann, annaB, AuthorAnswer.Verdict.SAME))
+        assertEquals(ann, dictionary.bindingsOf("beta")["anna-b"])
+        assertEquals(null, offers().firstOrNull { it.first.id == ann && it.second.id == ann })
+        assertEquals(setOf("ann", "anna-b"), authors.getMergedAuthors("books").body!!.single { it.id == ann }.sites.map { it.author }.toSet())
+        authors.takeOutSiteAuthor(ann, "beta", "anna-b")
+        val apart = dictionary.bindingsOf("beta").getValue("anna-b")
+        assertTrue(apart != ann)
+        assertEquals(null, of(ann, apart))
+        authors.answerAuthors(AuthorAnswer(ann, apart, AuthorAnswer.Verdict.NONE))
+        corrections.unlinkItem("alpha", "w1", "beta", "w2")
+    }
+
+    /** Waits for a value that is not null yet. */
+    private fun <T : Any> waitForValue(read: () -> T?): T {
+        waitFor { read() != null }
+        return read()!!
     }
 
     @Test

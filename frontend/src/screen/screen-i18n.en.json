@@ -28,6 +28,8 @@
   "Stop.startAgain": "Start it again on the computer (run.bat), then reload this page.",
   "Stop.stopped": "The application is stopped",
   "Stop.title": "Stop the application?",
+  "Menu.authors": "Authors",
+  "Menu.authors.title": "The sites' authors: merge one writer by the works that match, or mark them different",
   "Menu.duplicates": "Duplicates",
   "Menu.duplicates.title": "Works of different sites that may be one: mark them one work or different"
 }

@@ -33,6 +33,7 @@ import io.github.vlsergey.recommend4me.suggestion.SuggestionRepository
 import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
 import io.github.vlsergey.recommend4me.duplicate.DuplicateRepository
+import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.tag.TagRepository
@@ -178,6 +179,9 @@ class SourceStore(
     /** The user's word on the sites' free tags of the content type: merged, named, told apart — every source's alike. */
     val tags = TagRepository(databases.dictionaries.dsl)
 
+    /** The normalized authors: the authors of every site bound to them. */
+    val authors = AuthorRepository(databases.dictionaries.dsl)
+
     /** The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the user added takes the place of every other. */
     val singleFacets: Set<String> = schema.facets.filter { it.single }.map { it.key }.toSet()
 
@@ -202,6 +206,7 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
+    val authors = AuthorRepository(databases.dictionaries.dsl)
     val models = ModelRepository(databases.model(type.id))
     val embeddings = SetEmbeddingRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))

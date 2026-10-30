@@ -78,5 +78,6 @@
   "Theme.light": "Light",
   "Theme.system": "Same as system",
   "Theme.title": "Theme",
+  "App.failed.authors": "The authors are not shown",
   "App.failed.duplicates": "The duplicates are not shown"
 }

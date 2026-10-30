@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
+import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
@@ -181,8 +182,8 @@ class Duplicates(
      * tags, the languages, the age rating) the site's own, the drafts of the layer, of the tags the
      * site's tags by the normalized ones they are bound to, the tags the user ignores left out, the
      * user's answers over them all; of a site's facet of the standard values every site gives alike
-     * (the status, the direction, the ratings the site allows) its values. By their places in
-     * [places], every new value given one.
+     * (the status, the direction, the ratings the site allows) its values; the normalized authors. By
+     * their places in [places], every new value given one.
      */
     private fun valuesOf(s: SourceStore, ids: List<String>, places: HashMap<String, Int>): Array<IntArray> {
         val own = HashMap<String, MutableSet<String>>()
@@ -205,6 +206,11 @@ class Duplicates(
         ignored.forEach { (facet, keys) -> keys.forEach { k -> own.values.forEach { it -= "${familyOf(facet)}:$k" } } }
         s.schema.facets.filter { !it.editable && it.standard?.values != null }.forEach { f ->
             s.items.forEachFacet(f.key) { id, keys -> keys.forEach { add(id, f.standard!!.key, it) } }
+        }
+        // The authors as the normalized authors they are: one writer's accounts on two sites one value
+        s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.let { f ->
+            val authors = s.authors.bindingsOf(s.id)
+            s.items.forEachFacet(f.key) { id, keys -> keys.forEach { k -> authors[k]?.let { add(id, AUTHOR_FAMILY, AuthorRepository.key(it)) } } }
         }
         return Array(ids.size) { i -> own[ids[i]].orEmpty().map { places.getOrPut(it) { places.size } }.sorted().toIntArray() }
     }
@@ -454,7 +460,7 @@ class Duplicates(
         DuplicateModel.fit(pairs.filter { said[it.pair]?.related != true }) { c -> said[c.pair]?.let { it == DuplicateAnswer.SAME } }
 
     /** The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different, related. */
-    private fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> {
+    fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> {
         val out = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
         type.links.distincts().forEach { out[it] = DuplicateAnswer.DIFFERENT }
         type.links.relations().forEach { (pair, kind) -> runCatching { DuplicateAnswer.valueOf(kind) }.getOrNull()?.takeIf { it.related }?.let { out[pair] = it } }
@@ -536,7 +542,11 @@ class Duplicates(
         val labels = HashMap<String, String>()
         type.sources.forEach { s ->
             s.schema.facets.forEach { def ->
-                val family = if (def.editable) familyOf(def.key) else def.standard?.takeIf { it.values != null }?.key
+                val family = when {
+                    def.role == FacetRole.AUTHOR -> AUTHOR_FAMILY
+                    def.editable -> familyOf(def.key)
+                    else -> def.standard?.takeIf { it.values != null }?.key
+                }
                 if (family != null && (!def.editable || family == def.key)) labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
             }
         }
@@ -749,6 +759,9 @@ class Duplicates(
     }
 
     companion object {
+        /** The facet the normalized authors are compared as. */
+        private const val AUTHOR_FAMILY = "author"
+
         /** The roles of the numbers of how a site's readers met a work — its likes, its views —: not the work's own. */
         private val SITE_ROLES = setOf(NumberRole.APPROVAL, NumberRole.REACH)
 
