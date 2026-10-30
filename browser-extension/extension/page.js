@@ -1481,9 +1481,9 @@
 
   /**
    * A list read, shown calmly as the web interface's useCalmUpdates (the table of the similar tags
-   * alike): the same, nothing moves; another, the window locked — taking no press — its rows moved to
-   * the new list for [BY_TEXT_MOVE_MS] and free [BY_TEXT_SETTLE_MS] after; one read while locked
-   * waits till then.
+   * alike): the same, nothing moves; the same rows in their places, a number changed, shown at once,
+   * nothing locked; another, the window locked — taking no press — its rows moved to the new list for
+   * [BY_TEXT_MOVE_MS] and free [BY_TEXT_SETTLE_MS] after; one read while locked waits till then.
    */
   function takeByText(state, fresh) {
     if (state.locked) {
@@ -1496,6 +1496,13 @@
       return;
     }
     if (sameByText(state.list, fresh)) return;
+    // The same rows in the same places, a number of one of them changed: nothing moves, no press goes astray — shown at once
+    const inPlace = state.list.tags.length === fresh.tags.length && state.list.tags.every((tag, i) => byTextKey(tag) === byTextKey(fresh.tags[i]));
+    if (inPlace) {
+      state.list = fresh;
+      render();
+      return;
+    }
     state.locked = true;
     const before = byTextTops();
     state.list = fresh;

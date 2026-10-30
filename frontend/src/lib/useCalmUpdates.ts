@@ -13,8 +13,9 @@ const CLOSE_MS = 500;
 
 /**
  * A LIST READ AGAIN SHOWN CALMLY, as the table of the similar tags is: the list read ([incoming])
- * is held against the one shown; the same, nothing moves; another — a row more, a row less, another
- * order, another number of [same] — the list is [locked] (taking no press, shown busy), every row
+ * is held against the one shown; the same, nothing moves; the same rows in their places, one of them
+ * not [same], it is shown at once, nothing locked; another — a row more, a row less, another
+ * order — the list is [locked] (taking no press, shown busy), every row
  * moves for [MOVE_MS] from where it stood to where it stands now, a new one fading in, and it takes
  * presses again [SETTLE_MS] after: a row that moved is never pressed by the click meant for the one
  * that was there.
@@ -65,8 +66,13 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
       setShown(next);
       return;
     }
-    const alike = old.length === next.length && old.every((o, i) => keyOf(o) === keyOf(next[i]) && same(o, next[i]));
-    if (alike) return;
+    const inPlace = old.length === next.length && old.every((o, i) => keyOf(o) === keyOf(next[i]));
+    if (inPlace && old.every((o, i) => same(o, next[i]))) return;
+    // The same rows in the same places, a word of one of them changed: nothing moves, no press goes astray — shown at once
+    if (inPlace) {
+      setShown(next);
+      return;
+    }
     lock(true);
     before.current = { tops: tops(), ms: MOVE_MS };
     setShown(next);
