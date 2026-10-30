@@ -62,7 +62,8 @@ enum class DuplicateAnswer {
  * itself aside: the vectors of their titles and of their descriptions (the encoder of texts reads
  * many languages: an original on Archive of Our Own and its translation on fanfics.me are near), the
  * values of every facet the sites share, each apart ([valuesOf]), and the numbers of their size — and keeps of
- * every work the one of every other site likeliest one work with it; no threshold, none hidden. It
+ * every work the one of every other site likeliest one work with it, of the pairs the user did not
+ * turn down (different, related: the next likeliest in their place); no threshold, none hidden. It
  * runs on start when the type was never searched, and when the user asks. The pairs are answered on
  * as the work's window links the works: one work — linked, its grade and interest shared
  * ([LinkedGrades], [LinkedInterest]) — different works, or related ones (a translation, a part: not
@@ -276,10 +277,24 @@ class Duplicates(
         // The pairs chosen by the model of the answers as the last fitting left it
         val scorer = DuplicateModel(type.duplicates.search()?.weights).Scorer(families)
         val read = System.currentTimeMillis() - started
+        // The pairs the user turned down — different works, related ones — passed over: the next likeliest of that site taken
+        val said = said(type)
+        val turnedDown = HashMap<Pair<String, String>, HashMap<Int, MutableList<Int>>>()
+        val bySource = sides.associateBy { it.store.id }
+        said.filter { it.value != DuplicateAnswer.SAME }.keys.forEach { (x, y) ->
+            val a = bySource[x.source] ?: return@forEach
+            val b = bySource[y.source] ?: return@forEach
+            val i = a.ids.binarySearch(x.id).takeIf { it >= 0 } ?: return@forEach
+            val j = b.ids.binarySearch(y.id).takeIf { it >= 0 } ?: return@forEach
+            turnedDown.getOrPut(x.source to y.source) { HashMap() }.getOrPut(i) { ArrayList() } += j
+            turnedDown.getOrPut(y.source to x.source) { HashMap() }.getOrPut(j) { ArrayList() } += i
+        }
         val found = HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate>()
         for (a in sides) for (b in sides) {
             if (a === b || a.width != b.width) continue
             val n = b.ids.size
+            val passedOver = turnedDown[a.store.id to b.store.id].orEmpty()
+            val passed = BooleanArray(n)
             val rows = maxOf(1, minOf(a.ids.size, BLOCK / n))
             val titles = Floats(rows * n)
             val descriptions = Floats(rows * n)
@@ -330,10 +345,13 @@ class Duplicates(
                         }
                         return if (known == 0) null else (sum / known).toFloat()
                     }
-                    // The likeliest one work with it of the other site
+                    // The likeliest one work with it of the other site, of those the user did not turn down
+                    val own = passedOver[i]
+                    own?.forEach { passed[it] = true }
                     var best = -1
                     var score = Double.NEGATIVE_INFINITY
                     for (j in 0 until n) {
+                        if (passed[j]) continue
                         val sized = size(j)
                         val s = scorer.score(
                             title[j], description[j], a.described[i] && b.described[j], sized ?: 0f, sized != null,
@@ -360,13 +378,12 @@ class Duplicates(
                         isTouched[j] = false
                         for (f in valued.indices) valued[f][j] = 0f
                     }
+                    own?.forEach { passed[it] = false }
                 }
                 from += m
             }
         }
         // Every pair the user answered on, found or not: what the model learns from
-        val said = said(type)
-        val bySource = sides.associateBy { it.store.id }
         said.keys.filter { it !in found }.forEach { pair ->
             val a = bySource[pair.first.source] ?: return@forEach
             val b = bySource[pair.second.source] ?: return@forEach
