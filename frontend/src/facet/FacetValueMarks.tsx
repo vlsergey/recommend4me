@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import type { FacetValueInfo } from "@/api/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { percent } from "@/i18n/format";
+import { sourceShort } from "@/i18n/label";
 
 /** Below one half the model thinks the work more likely has the value not than has it. */
 const HALF = 0.5;
@@ -28,12 +29,15 @@ function DraftedMark({ from }: { from: string }) {
 }
 
 /** "site" in small print by a value the site gives the work, the user not having answered on it: told apart from the model's offers. */
-function SiteMark() {
+function SiteMark({ sites }: { sites?: string[] }) {
   const { t } = useTranslation("facet");
   return (
     <Tooltip>
       <TooltipTrigger render={<span className="cursor-help text-[10px] text-muted-foreground" />}>{t("ChanceMark.fromSite")}</TooltipTrigger>
-      <TooltipContent>{t("ChanceMark.fromSiteNote")}</TooltipContent>
+      <TooltipContent>
+        {sites && sites.length > 0 && `${sites.map(sourceShort).join(", ")}. `}
+        {t("ChanceMark.fromSiteNote")}
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -55,7 +59,7 @@ export function ChanceMark({ value }: { value: FacetValueInfo }) {
   const site = value.fromSite && !value.corrected && !value.implied;
   return (
     <>
-      {site && <SiteMark />}
+      {site && <SiteMark sites={value.sites} />}
       <Chance value={value} />
     </>
   );

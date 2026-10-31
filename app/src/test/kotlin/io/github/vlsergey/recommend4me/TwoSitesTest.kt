@@ -318,6 +318,21 @@ class TwoSitesTest {
     }
 
     @Test
+    fun `the form of a work is one through either of its items — what every site says stands above the field`() {
+        alpha("f1|The Harbour|harbour-one|A harbour at dusk||")
+        beta("f2|The Harbour|harbour-two|A harbour at dusk")
+        corrections.linkItem("alpha", "f1", ItemRef("beta", "f2"))
+        fun field(source: String, item: String) = items.getItem(source, item).body!!.allFacets.single { it.facet == Books.TAGS.key }
+        val one = field("alpha", "f1")
+        val other = field("beta", "f2")
+        assertEquals(listOf("harbour-one"), one.said.orEmpty().single { it.source == "alpha" }.words.map { it.name })
+        assertEquals(listOf("harbour-two"), one.said.orEmpty().single { it.source == "beta" }.words.map { it.name })
+        assertEquals(one.said, other.said)
+        assertEquals(one.propertyValues.map { it.key to it.fromSite }.toSet(), other.propertyValues.map { it.key to it.fromSite }.toSet())
+        corrections.unlinkItem("alpha", "f1", "beta", "f2")
+    }
+
+    @Test
     fun `a word on a pair of the duplicates is carried across one work — what is said of one of two works one is said of the other`() {
         alpha("m1|The Mill|river|A miller and his river||")
         beta("m2|The Mill|river|A miller and his river")

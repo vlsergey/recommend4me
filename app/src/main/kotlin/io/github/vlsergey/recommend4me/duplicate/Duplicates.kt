@@ -624,6 +624,8 @@ class Duplicates(
         val found = type.duplicates.all().filter { (it.pair.first in own) != (it.pair.second in own) }
             .map { c -> model.chance(c).let { Ranked(c.pair, c, it, it) } }
             .sortedByDescending { it.priority }
+            // Found by several items of the work, the other is one: the likeliest pair of them, an answer going across the work
+            .distinctBy { if (it.pair.first in own) it.pair.second else it.pair.first }
         return pairs(type, said(type), found)
     }
 

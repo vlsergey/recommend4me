@@ -61,9 +61,6 @@
   "KindChoice.answeredNo": "вы ответили «нет»",
   "KindChoice.chooseHint": "Выберите, чтобы ответить",
   "KindChoice.chosenHint": "Ваш ответ. Выберите «не выбран», чтобы снять его",
-  "KindChoice.none": "Не выбран",
-  "KindChoice.noneGiven": "Не выбран — {{kinds}} без вашего ответа",
-  "KindChoice.takeBack": "Не выбран (снять ответ)",
   "LocalName.cancel": "Отмена",
   "LocalName.ownName": "Своё имя",
   "LocalName.ownNameHint": "Своё имя; в Викиданных — «{{name}}»",
@@ -184,5 +181,8 @@
   "UniversesScreen.fandomsDescription": "Фандом, привязанный ко вселенной, даёт её черновиком всем своим работам: работа считается этой вселенной, пока вы не скажете иначе, и на этом учатся модели вселенных, персонажей и пейрингов. Черновики работ сайта пересобираются через 2 секунды после последней привязки.",
   "UniversesScreen.inDictionary": "В словаре",
   "UniversesScreen.loadFailed": "Не удалось загрузить словарь: {{error}}",
-  "UniversesScreen.title": "Вселенные всех сайтов"
+  "UniversesScreen.title": "Вселенные всех сайтов",
+  "Form.world": "Мир",
+  "Form.characters": "Персонажи",
+  "OpenUniverses.searchWord": "Найти в Викиданных: {{word}}"
 }

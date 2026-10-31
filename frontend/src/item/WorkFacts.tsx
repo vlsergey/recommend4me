@@ -76,20 +76,3 @@ export function FactLine({ source, summary, facets, className }: { source: Sourc
   );
 }
 
-/**
- * The site's own word on a facet of the layer ([facet] — its key): its tags above the work's tags,
- * its fandoms above the universes, its line of pairings and characters above the characters — as
- * the site gives them, never answered on, right above the values the user answers on.
- */
-export function OriginalOf({ source, facets, facet }: { source: SourceInfo; facets: ItemFacet[]; facet: string }) {
-  const key = source.facets.find((f) => f.key === facet)?.originalFacet;
-  const original = key && facets.find((f) => f.facet === key);
-  if (!original || original.values.length === 0) return null;
-  return (
-    <div className="mb-1 flex flex-col gap-0.5">
-      <div className="text-xs text-muted-foreground">{label(original.labelKey)}</div>
-      <div className="text-sm break-words">{original.values.map(valueName).join(", ")}</div>
-    </div>
-  );
-}
-

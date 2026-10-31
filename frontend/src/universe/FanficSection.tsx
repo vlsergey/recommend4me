@@ -2,17 +2,17 @@ import { Fragment, useState, type ReactNode } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { CheckIcon, Loader2Icon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { Candidate, ContentTypeInfo, FacetValueInfo, ItemDetails, ItemRef, SourceInfo, SuggestedValue, UniverseInfo } from "@/api/client";
+import type { Candidate, ContentTypeInfo, FacetValueInfo, ItemDetails, ItemFacet, ItemRef, SourceInfo, SuggestedValue, UniverseInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { CHIP_TOUCH, FacetAnswers } from "@/correction/FacetAnswers";
-import { FacetValue, LaterOffers, MoreCandidates, SearchButton } from "@/correction/FacetCorrections";
+import { FacetValue, FieldBlock, LaterOffers, MoreCandidates, SearchButton } from "@/correction/FacetCorrections";
+import { SiteWords } from "@/correction/SiteWords";
 import type { Corrections } from "@/correction/useCorrections";
 import { useLaterOffer, useStableOrder } from "@/facet/valueOrder";
-import { OriginalOf } from "@/item/WorkFacts";
 import { percent } from "@/i18n/format";
 import i18n from "@/i18n/i18n";
 import { label as labelOfKey, valueName } from "@/i18n/label";
@@ -32,6 +32,9 @@ const PAIRINGS = "pairings";
 /** The facets this section answers: the generic list of the work's facets leaves them out. */
 export const FANFIC_FACETS: readonly string[] = [KIND, UNIVERSE, CHARACTERS, SECONDARY_CHARACTERS, PAIRINGS];
 
+/** The fields closed by "No other …". */
+export const NAMED_FACETS: readonly string[] = [UNIVERSE, CHARACTERS, SECONDARY_CHARACTERS, PAIRINGS];
+
 const FANFICTION = "fanfiction";
 const REALISM = "realism";
 const ALTERNATIVE_HISTORY = "alternative-history";
@@ -49,7 +52,7 @@ const KINDS = [
 const UNIVERSELESS: readonly string[] = [REALISM, ALTERNATIVE_HISTORY, ORIGINAL];
 
 /** Known to have no universe: every kind the work has, the user's answers counted, is of no universe. */
-const universeless = (kinds: FacetValueInfo[]) => kinds.length > 0 && kinds.every((k) => UNIVERSELESS.includes(k.key));
+export const universeless = (kinds: FacetValueInfo[]) => kinds.length > 0 && kinds.every((k) => UNIVERSELESS.includes(k.key));
 
 /** The original characters, of no universe: every work may have them besides its universes' characters. */
 export const ORIGINAL_CHARACTERS = [
@@ -67,7 +70,7 @@ const pairingKey = (a: string, b: string) => "pair:" + [a, b].sort().join("|");
 const folded = (text: string) => text.toLocaleLowerCase("ru-RU").replace(/ё/g, "е");
 
 /** The work has the value: the site or the model gave it, or the user added it, and the user did not take it away — not one only offered. */
-const has = (v: FacetValueInfo) => v.corrected !== "REMOVED" && !v.offered;
+export const has = (v: FacetValueInfo) => v.corrected !== "REMOVED" && !v.offered;
 
 /** The user said the work has the value. */
 const answeredYes = (v: FacetValueInfo | undefined) => v?.corrected === "ADDED" || v?.corrected === "CONFIRMED";
@@ -75,10 +78,20 @@ const answeredYes = (v: FacetValueInfo | undefined) => v?.corrected === "ADDED" 
 const SELECT =
   "h-8 min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring dark:bg-input/30";
 
+/** A group of fields of the form under its heading. */
+export function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="border-b pb-0.5 text-sm font-semibold">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 /**
- * Whether the work is fan fiction, of which universes, with which main characters and pairings —
- * everything the site says on it, the model's chances and the user's answers, in one place. For
- * the works of a type with universes only.
+ * Whether the work is fan fiction, of which universes, with which main characters and pairings: the
+ * fields of the form in the order their answers depend on each other, each under what every site
+ * says of it. For the works of a type with universes only.
  */
 export function FanficSection({
   type,
@@ -103,82 +116,72 @@ export function FanficSection({
   };
 
   const original = universeless(valuesOf(KIND).filter(has));
-  // The site's facet above the kind; above the universes too, unless it is the same one (ficbook's fandoms)
-  const siteOf = (key: string) => source.facets.find((f) => f.key === key)?.originalFacet;
-  const universeSite = siteOf(UNIVERSE) !== siteOf(KIND);
+  /** A field's facet: every facet of the layer comes, with no value too. */
+  const fieldOf = (key: string, fallback: string): ItemFacet => facetOf(key) ?? { facet: key, labelKey: fallback, editable: true, values: [] };
 
   return (
-    <section className="flex flex-col gap-4">
-      <div>
-        <OriginalOf source={source} facets={d.allFacets} facet={KIND} />
-        <KindChoice label={labelOf(KIND, t("Facet.kind"))} values={valuesOf(KIND)} suggested={suggestedOf(KIND)} corrections={corrections} />
-      </div>
-      <div>
-        {universeSite && <OriginalOf source={source} facets={d.allFacets} facet={UNIVERSE} />}
+    <>
+      <FieldGroup title={t("Form.world")}>
+        <KindChoice label={labelOf(KIND, t("Facet.kind"))} facet={fieldOf(KIND, "")} suggested={suggestedOf(KIND)} corrections={corrections} />
         {!original && (
           <Universes
             type={type}
             label={labelOf(UNIVERSE, t("Facet.universe"))}
+            facet={fieldOf(UNIVERSE, "")}
             values={valuesOf(UNIVERSE)}
             complete={facetOf(UNIVERSE)?.complete === true}
             suggested={suggestedOf(UNIVERSE)}
             corrections={corrections}
           />
         )}
-      </div>
-      <OriginalOf source={source} facets={d.allFacets} facet={CHARACTERS} />
-      <Characters
-        type={type}
-        item={ref}
-        facet={CHARACTERS}
-        label={labelOf(CHARACTERS, t("Facet.mainCharacters"))}
-        named="mainCharacters"
-        values={valuesOf(CHARACTERS)}
-        complete={facetOf(CHARACTERS)?.complete === true}
-        elsewhere={valuesOf(SECONDARY_CHARACTERS).filter(has)}
-        universes={valuesOf(UNIVERSE).filter(has)}
-        corrections={corrections}
-      />
-      <Characters
-        type={type}
-        item={ref}
-        facet={SECONDARY_CHARACTERS}
-        label={labelOf(SECONDARY_CHARACTERS, t("Facet.secondaryCharacters"))}
-        named="secondaryCharacters"
-        values={valuesOf(SECONDARY_CHARACTERS)}
-        complete={facetOf(SECONDARY_CHARACTERS)?.complete === true}
-        elsewhere={valuesOf(CHARACTERS).filter(has)}
-        universes={valuesOf(UNIVERSE).filter(has)}
-        corrections={corrections}
-      />
-      <Pairings
-        type={type}
-        item={ref}
-        universes={valuesOf(UNIVERSE).filter(has)}
-        label={labelOf(PAIRINGS, t("Facet.pairings"))}
-        values={valuesOf(PAIRINGS)}
-        complete={facetOf(PAIRINGS)?.complete === true}
-        characters={valuesOf(CHARACTERS).filter(has)}
-        corrections={corrections}
-      />
-    </section>
-  );
-}
-
-/** A part of the section: its label, then the rest — the site's own word on it is shown above the section. */
-function Block({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      {children}
-    </div>
+      </FieldGroup>
+      <FieldGroup title={t("Form.characters")}>
+        <Characters
+          type={type}
+          item={ref}
+          field={fieldOf(CHARACTERS, "")}
+          facet={CHARACTERS}
+          label={labelOf(CHARACTERS, t("Facet.mainCharacters"))}
+          named="mainCharacters"
+          values={valuesOf(CHARACTERS)}
+          complete={facetOf(CHARACTERS)?.complete === true}
+          elsewhere={valuesOf(SECONDARY_CHARACTERS).filter(has)}
+          universes={valuesOf(UNIVERSE).filter(has)}
+          corrections={corrections}
+        />
+        <Characters
+          type={type}
+          item={ref}
+          field={fieldOf(SECONDARY_CHARACTERS, "")}
+          facet={SECONDARY_CHARACTERS}
+          label={labelOf(SECONDARY_CHARACTERS, t("Facet.secondaryCharacters"))}
+          named="secondaryCharacters"
+          values={valuesOf(SECONDARY_CHARACTERS)}
+          complete={facetOf(SECONDARY_CHARACTERS)?.complete === true}
+          elsewhere={valuesOf(CHARACTERS).filter(has)}
+          universes={valuesOf(UNIVERSE).filter(has)}
+          corrections={corrections}
+        />
+        <Pairings
+          type={type}
+          item={ref}
+          field={fieldOf(PAIRINGS, "")}
+          universes={valuesOf(UNIVERSE).filter(has)}
+          label={labelOf(PAIRINGS, t("Facet.pairings"))}
+          values={valuesOf(PAIRINGS)}
+          complete={facetOf(PAIRINGS)?.complete === true}
+          characters={valuesOf(CHARACTERS).filter(has)}
+          corrections={corrections}
+        />
+      </FieldGroup>
+    </>
   );
 }
 
 /**
  * The work's values of a facet as chips, the suggested ones dashed after them, a dash when there
  * are none; with [item], "…" for more of its candidates; with [search], a 🔍 after it that opens
- * the search of a value by its name.
+ * the search of a value by its name; with [candidates], how often the texts name each.
  */
 function Chips({
   facet,
@@ -187,6 +190,7 @@ function Chips({
   item,
   corrections,
   search,
+  candidates,
 }: {
   facet: string;
   values: FacetValueInfo[];
@@ -194,6 +198,7 @@ function Chips({
   item?: ItemRef;
   corrections: Corrections;
   search?: { onClick: () => void; title: string };
+  candidates?: Candidate[];
 }) {
   const ordered = useStableOrder(values);
   const later = useLaterOffer(ordered);
@@ -204,7 +209,7 @@ function Chips({
       {ordered.map((v) => (
         <Fragment key={v.key}>
           {v.key === later && <LaterOffers />}
-          <FacetValue facet={facet} value={v} corrections={corrections} />
+          <FacetValue facet={facet} value={v} corrections={corrections} mentions={candidates?.find((c) => c.key === v.key)?.mentions} />
         </Fragment>
       ))}
       {suggested.map((v) => (
@@ -217,33 +222,26 @@ function Chips({
 }
 
 /**
- * Fan fiction, realism, an alternative history or an original work: one list to choose from — a
- * row of buttons no longer fits the side of the dialog. Each kind shows the model's chance of it
- * while the user has not answered; while nothing is chosen the list names what the site or the
- * model gave. Choosing a kind confirms it and says no to the others the work has; choosing none
- * takes the answers back.
+ * Fan fiction, realism, an alternative history or an original work: four buttons, each with the
+ * model's chance of it while the user has not answered, the sites' words over them; one the site or
+ * the model gave is marked. Pressing a kind confirms it and says no to the others the work has;
+ * pressing the chosen one takes the answers back.
  */
 function KindChoice({
   label,
-  values,
+  facet,
   suggested,
   corrections,
 }: {
   label: string;
-  values: FacetValueInfo[];
+  facet: ItemFacet;
   suggested: SuggestedValue[];
   corrections: Corrections;
 }) {
   const { t } = useTranslation("universe");
-  const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState<string | null>(null);
+  const values = facet.values;
   const valueOf = (key: string) => values.find((v) => v.key === key);
   const chosen = KINDS.find((k) => answeredYes(valueOf(k.key)));
-  // What the site or the model gave, while the user has not chosen
-  const given = KINDS.filter((k) => {
-    const v = valueOf(k.key);
-    return v !== undefined && has(v);
-  });
 
   /** The model's chance of the kind: of the work's value, or of the suggestion. */
   const chanceOf = (key: string) => valueOf(key)?.chance ?? suggested.find((x) => x.key === key)?.chance ?? null;
@@ -263,53 +261,31 @@ function KindChoice({
     }
   };
 
-  const change = async (key: string) => {
-    setSaving(true);
-    setFailed(null);
-    try {
-      await (key === "" ? takeBack() : choose(key));
-    } catch (e) {
-      setFailed(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const none =
-    given.length > 0
-      ? t("KindChoice.noneGiven", { kinds: given.map((k) => t(k.label).toLowerCase()).join(", ") })
-      : t("KindChoice.none");
-
-  // One line: the label, the user's mark and the list
   return (
-    <div className="flex flex-col gap-1">
-      <label className="flex items-center gap-1.5">
-        <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-        {saving ? <Loader2Icon className="size-4 shrink-0 animate-spin text-muted-foreground" /> : chosen && <CheckIcon className="size-4 shrink-0 text-yes" />}
-        <select
-          value={chosen?.key ?? ""}
-          onChange={(e) => change(e.target.value)}
-          disabled={saving}
-          aria-label={label}
-          title={chosen ? t("KindChoice.chosenHint") : t("KindChoice.chooseHint")}
-          className={SELECT}
-        >
-          <option value="">{chosen ? t("KindChoice.takeBack") : none}</option>
-          {KINDS.map((k) => {
-            const v = valueOf(k.key);
-            const chance = v?.corrected ? null : chanceOf(k.key);
-            return (
-              <option key={k.key} value={k.key}>
-                {t(k.label)}
-                {chance != null ? ` · ${percent(chance)}` : ""}
-                {v?.corrected === "REMOVED" ? ` · ${t("KindChoice.answeredNo")}` : ""}
-              </option>
-            );
-          })}
-        </select>
-      </label>
-      {failed && <div className="text-xs text-destructive">{failed}</div>}
-    </div>
+    <FieldBlock field={KIND} label={label} facet={facet}>
+      <div className="flex flex-wrap gap-1">
+        {KINDS.map((k) => {
+          const v = valueOf(k.key);
+          const mine = chosen?.key === k.key;
+          const chance = v?.corrected ? null : chanceOf(k.key);
+          return (
+            <AsyncButton
+              key={k.key}
+              size="xs"
+              variant={mine ? "default" : v !== undefined && has(v) ? "secondary" : "outline"}
+              className={cn("h-auto min-h-6 px-2 pointer-coarse:min-h-11 pointer-coarse:text-sm", v?.corrected === "REMOVED" && "text-muted-foreground line-through")}
+              aria-pressed={mine}
+              title={mine ? t("KindChoice.chosenHint") : v?.corrected === "REMOVED" ? t("KindChoice.answeredNo") : t("KindChoice.chooseHint")}
+              icon={mine ? <CheckIcon /> : undefined}
+              onClick={() => (mine ? takeBack() : choose(k.key))}
+            >
+              {t(k.label)}
+              {chance != null && <span className="text-[10px] tabular-nums opacity-70">{percent(chance)}</span>}
+            </AsyncButton>
+          );
+        })}
+      </div>
+    </FieldBlock>
   );
 }
 
@@ -322,6 +298,7 @@ function KindChoice({
 function Universes({
   type,
   label,
+  facet,
   values,
   complete,
   suggested,
@@ -329,6 +306,7 @@ function Universes({
 }: {
   type: ContentTypeInfo;
   label: string;
+  facet: ItemFacet;
   values: FacetValueInfo[];
   complete: boolean;
   suggested: SuggestedValue[];
@@ -339,12 +317,11 @@ function Universes({
   const allNamed = <AllNamed facet={UNIVERSE} named="universes" complete={complete} corrections={corrections} />;
   if (complete)
     return (
-      <Block label={label}>
+      <FieldBlock field={UNIVERSE} label={label} facet={facet} corrections={corrections} tools={allNamed} sources={<SiteWords facet={facet} bindFandoms />}>
         <Chips facet={UNIVERSE} values={own} corrections={corrections} />
-        <div>{allNamed}</div>
-      </Block>
+      </FieldBlock>
     );
-  return <OpenUniverses type={type} label={label} values={values} suggested={suggested} corrections={corrections} allNamed={allNamed} />;
+  return <OpenUniverses type={type} label={label} facet={facet} values={values} suggested={suggested} corrections={corrections} allNamed={allNamed} />;
 }
 
 /**
@@ -382,6 +359,7 @@ function AllNamed({
 function OpenUniverses({
   type,
   label,
+  facet,
   values,
   suggested,
   corrections,
@@ -389,6 +367,7 @@ function OpenUniverses({
 }: {
   type: ContentTypeInfo;
   label: string;
+  facet: ItemFacet;
   values: FacetValueInfo[];
   suggested: SuggestedValue[];
   corrections: Corrections;
@@ -396,6 +375,8 @@ function OpenUniverses({
   allNamed: ReactNode;
 }) {
   const { t } = useTranslation("universe");
+  // A site's word pressed: typed into the picker and the catalogue's search both, the dictionary holding few of the fandoms
+  const [word, setWord] = useState<string>();
   const dictionary = useUniverses(type.id);
   const linked = (value: string) => values.some((v) => v.key === value && has(v));
   const link = (value: string) => corrections.setFacet(UNIVERSE, { key: value }, true);
@@ -408,11 +389,13 @@ function OpenUniverses({
   }));
 
   return (
-    <Block label={label}>
+    <FieldBlock field={UNIVERSE} label={label} facet={facet} corrections={corrections} tools={allNamed} sources={<SiteWords facet={facet} onWord={setWord} bindFandoms />}>
       <Chips facet={UNIVERSE} values={values} suggested={suggested} corrections={corrections} />
       <div className="flex flex-wrap items-start gap-1">
         <Picker
+          key={word}
           label={t("OpenUniverses.add")}
+          word={word}
           placeholder={t("OpenUniverses.placeholder")}
           options={options}
           loading={dictionary.isLoading}
@@ -421,8 +404,8 @@ function OpenUniverses({
           onPick={link}
         />
         <Dialog>
-          <DialogTrigger render={<Button variant="ghost" size="sm" title={t("OpenUniverses.searchHint")} />}>
-            <SearchIcon /> {t("OpenUniverses.search")}
+          <DialogTrigger render={<Button variant={word ? "outline" : "ghost"} size="sm" title={t("OpenUniverses.searchHint")} />}>
+            <SearchIcon /> {word ? t("OpenUniverses.searchWord", { word }) : t("OpenUniverses.search")}
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
@@ -431,13 +414,12 @@ function OpenUniverses({
             </DialogHeader>
             {/* The keys of the work's dialog (grades, steps) stay out of the search; Escape still closes it */}
             <div onKeyDown={(e) => e.key !== "Escape" && e.stopPropagation()}>
-              <CatalogueSearch type={type} dictionary={dictionary.data} forWork={{ linked, link }} />
+              <CatalogueSearch type={type} dictionary={dictionary.data} forWork={{ linked, link }} word={word} />
             </div>
           </DialogContent>
         </Dialog>
-        {allNamed}
       </div>
-    </Block>
+    </FieldBlock>
   );
 }
 
@@ -449,6 +431,7 @@ function OpenUniverses({
 function Characters({
   type,
   item,
+  field,
   facet,
   label,
   named,
@@ -460,6 +443,7 @@ function Characters({
 }: {
   type: ContentTypeInfo;
   item: ItemRef;
+  field: ItemFacet;
   facet: string;
   label: string;
   /** Which characters these are, for the button saying there are no others: "No other main characters". */
@@ -477,15 +461,15 @@ function Characters({
   const allNamed = <AllNamed facet={facet} named={named} complete={complete} corrections={corrections} />;
   if (complete)
     return (
-      <Block label={label}>
+      <FieldBlock field={facet} label={label} facet={field} corrections={corrections} tools={allNamed} sources={<SiteWords facet={field} split />}>
         <Chips facet={facet} values={own} corrections={corrections} />
-        <div>{allNamed}</div>
-      </Block>
+      </FieldBlock>
     );
   return (
     <OpenCharacters
       type={type}
       item={item}
+      field={field}
       facet={facet}
       label={label}
       values={values}
@@ -506,6 +490,7 @@ function Characters({
 function OpenCharacters({
   type,
   item,
+  field,
   facet,
   label,
   values,
@@ -516,6 +501,7 @@ function OpenCharacters({
 }: {
   type: ContentTypeInfo;
   item: ItemRef;
+  field: ItemFacet;
   facet: string;
   label: string;
   values: FacetValueInfo[];
@@ -568,14 +554,25 @@ function OpenCharacters({
   ];
   const candidates = useCandidates(item, facet, true);
   const failed = characters.find((q) => q.isError)?.error?.message ?? dictionary.error?.message ?? candidates.error?.message;
-  // The search of a character by name: opened by the 🔍 after the work's characters
-  const [searching, setSearching] = useState(false);
+  // The search of a character by name: opened by the 🔍 after the work's characters, or a site's word with it typed
+  const [search, setSearch] = useState<{ word: string } | null>(null);
 
   return (
-    <Block label={label}>
-      <Chips facet={facet} values={values} item={item} corrections={corrections} search={{ onClick: () => setSearching(!searching), title: t("OpenCharacters.add") }} />
-      {searching && (
+    <FieldBlock field={facet} label={label} facet={field} corrections={corrections} tools={allNamed} sources={<SiteWords facet={field} split onWord={(word) => setSearch({ word })} />}>
+      <Named type={type} item={item} facet={facet} candidates={candidates.data} shown={values} universes={universes} corrections={corrections} />
+      <Chips
+        facet={facet}
+        values={values}
+        item={item}
+        corrections={corrections}
+        candidates={candidates.data}
+        search={{ onClick: () => setSearch(search ? null : { word: "" }), title: t("OpenCharacters.add") }}
+      />
+      {universes.length === 0 && <p className="text-xs text-muted-foreground">{t("OpenCharacters.noUniverse")}</p>}
+      {search && (
         <Picker
+          key={search.word}
+          word={search.word}
           label={t("OpenCharacters.add")}
           placeholder={t("OpenCharacters.placeholder")}
           options={ranked(options, candidates.data)}
@@ -584,12 +581,10 @@ function OpenCharacters({
           empty={universes.length === 0 ? t("OpenCharacters.noUniverse") : undefined}
           onPick={(key) => corrections.setFacet(facet, { key }, true)}
           onName={(name) => corrections.setFacet(facet, { name }, true)}
-          onClose={() => setSearching(false)}
+          onClose={() => setSearch(null)}
         />
       )}
-      <Named type={type} item={item} facet={facet} candidates={candidates.data} universes={universes} corrections={corrections} />
-      {allNamed && <div className="flex flex-wrap items-start gap-1">{allNamed}</div>}
-    </Block>
+    </FieldBlock>
   );
 }
 
@@ -601,6 +596,7 @@ function OpenCharacters({
 function Pairings({
   type,
   item,
+  field,
   universes,
   label,
   values,
@@ -610,6 +606,7 @@ function Pairings({
 }: {
   type: ContentTypeInfo;
   item: ItemRef;
+  field: ItemFacet;
   /** The universes the work has. */
   universes: FacetValueInfo[];
   label: string;
@@ -624,13 +621,12 @@ function Pairings({
   const allNamed = <AllNamed facet={PAIRINGS} named="pairings" complete={complete} corrections={corrections} />;
   if (complete)
     return (
-      <Block label={label}>
+      <FieldBlock field={PAIRINGS} label={label} facet={field} corrections={corrections} tools={allNamed}>
         <Chips facet={PAIRINGS} values={own} corrections={corrections} />
-        <div>{allNamed}</div>
-      </Block>
+      </FieldBlock>
     );
   return (
-    <OpenPairings type={type} item={item} universes={universes} label={label} values={values} characters={characters} corrections={corrections} allNamed={allNamed} />
+    <OpenPairings type={type} item={item} field={field} universes={universes} label={label} values={values} characters={characters} corrections={corrections} allNamed={allNamed} />
   );
 }
 
@@ -638,6 +634,7 @@ function Pairings({
 function OpenPairings({
   type,
   item,
+  field,
   universes,
   label,
   values,
@@ -647,6 +644,7 @@ function OpenPairings({
 }: {
   type: ContentTypeInfo;
   item: ItemRef;
+  field: ItemFacet;
   universes: FacetValueInfo[];
   label: string;
   values: FacetValueInfo[];
@@ -657,6 +655,8 @@ function OpenPairings({
 }) {
   const { t } = useTranslation("universe");
   const [adding, setAdding] = useState(false);
+  // A site's word of a pair pressed: typed into the choice of pairs; with nothing to choose from, the composing opened
+  const [word, setWord] = useState<string>();
   const [a, setA] = useState("");
   const [b, setB] = useState("");
   // The work's characters and the original ones: they pair with anyone, listed among the main ones or not
@@ -688,12 +688,16 @@ function OpenPairings({
     </select>
   );
 
+  const onWord = (pressed: string) => (characters.length > 0 ? setWord(pressed) : setAdding(true));
+
   return (
-    <Block label={label}>
-      <Chips facet={PAIRINGS} values={values} item={item} corrections={corrections} />
-      <Named type={type} item={item} facet={PAIRINGS} candidates={candidates.data} universes={universes} corrections={corrections} />
+    <FieldBlock field={PAIRINGS} label={label} facet={field} corrections={corrections} tools={allNamed} sources={<SiteWords facet={field} onWord={onWord} />}>
+      <Named type={type} item={item} facet={PAIRINGS} candidates={candidates.data} shown={values} universes={universes} corrections={corrections} />
+      <Chips facet={PAIRINGS} values={values} item={item} corrections={corrections} candidates={candidates.data} />
       {characters.length > 0 && (
         <Picker
+          key={word}
+          word={word}
           label={t("OpenPairings.choose")}
           placeholder={t("OpenPairings.placeholder")}
           options={ranked(pairs, candidates.data)}
@@ -708,7 +712,6 @@ function OpenPairings({
           <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
             <PlusIcon /> {t("OpenPairings.compose")}
           </Button>
-          {allNamed}
         </div>
       ) : (
         <div className="flex flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
@@ -726,7 +729,7 @@ function OpenPairings({
           </div>
         </div>
       )}
-    </Block>
+    </FieldBlock>
   );
 }
 
@@ -766,19 +769,21 @@ function ranked(options: Option[], candidates: Candidate[] | undefined): Option[
     });
 }
 
-/** Of the candidates the texts name, so many are shown: the likeliest. */
-const NAMED_SHOWN = 7;
+/** How many more of the candidates the texts name a press shows. */
+const NAMED_STEP = 7;
 
 /**
- * The candidates the work's texts name, as chips to confirm or refute — a character the chapters
- * name, two characters named in one paragraph — the likeliest [NAMED_SHOWN] of them; the name
- * opens where the texts name it and why the dictionary has it. Nothing when the texts name none.
+ * THE TEXTS' ROW OF A FIELD'S SOURCES: the candidates the work's texts name and no chip of the field
+ * holds ([shown]), to confirm or refute — a character the chapters name, two characters named in one
+ * paragraph — the likeliest first, more by "…"; the name opens where the texts name it and why the
+ * dictionary has it. Nothing when the texts name none.
  */
 function Named({
   type,
   item,
   facet,
   candidates,
+  shown,
   universes,
   corrections,
 }: {
@@ -786,19 +791,20 @@ function Named({
   item: ItemRef;
   facet: string;
   candidates: Candidate[] | undefined;
+  shown: FacetValueInfo[];
   /** The universes the work has. */
   universes: FacetValueInfo[];
   corrections: Corrections;
 }) {
   const { t } = useTranslation("universe");
-  const named = (candidates ?? []).filter((c) => (c.mentions ?? 0) > 0);
+  const [asked, setAsked] = useState(NAMED_STEP);
+  const chips = new Set(shown.map((v) => v.key));
+  const named = (candidates ?? []).filter((c) => (c.mentions ?? 0) > 0 && !chips.has(c.key));
   if (named.length === 0) return null;
-  const shown = named.slice(0, NAMED_SHOWN);
   return (
-    <div className="flex flex-col gap-1">
-      <div className="text-xs text-muted-foreground">{t("Named.heading")}</div>
-      <div className="flex flex-wrap items-center gap-1">
-        {shown.map((c) => (
+    <div className="flex flex-wrap items-center gap-1 text-sm">
+      <span className="text-xs text-muted-foreground">{t("Named.heading")}</span>
+      {named.slice(0, asked).map((c) => (
           <Badge key={c.key} variant="outline" className={cn("border-dashed pr-0.5 font-normal", CHIP_TOUCH)}>
             <MentionsDialog type={type} item={item} facet={facet} value={c.key} name={valueName(c)} url={c.url} summary={mentionsText(c)} universes={universes}>
               {valueName(c)}
@@ -807,8 +813,11 @@ function Named({
             <FacetAnswers facet={facet} value={{ key: c.key }} corrections={corrections} />
           </Badge>
         ))}
-        {named.length > shown.length && <span className="text-xs text-muted-foreground">{t("Named.more", { n: named.length - shown.length })}</span>}
-      </div>
+      {named.length > asked && (
+        <Button variant="outline" size="xs" className="h-5 px-1.5 pointer-coarse:h-11" title={t("Named.more", { n: named.length - asked })} aria-label={t("Named.more", { n: named.length - asked })} onClick={() => setAsked(asked + NAMED_STEP)}>
+          …
+        </Button>
+      )}
     </div>
   );
 }
@@ -829,6 +838,7 @@ export function Picker({
   onPick,
   onName,
   onClose,
+  word,
 }: {
   label: string;
   placeholder: string;
@@ -840,10 +850,12 @@ export function Picker({
   onPick: (key: string) => Promise<unknown>;
   onName?: (name: string) => Promise<unknown>;
   onClose?: () => void;
+  /** A site's word it is opened by: typed, but not the user's typing, so added as a name only once changed. */
+  word?: string;
 }) {
   const { t } = useTranslation("universe");
-  const [open, setOpen] = useState(onClose !== undefined);
-  const [filter, setFilter] = useState("");
+  const [open, setOpen] = useState(onClose !== undefined || !!word);
+  const [filter, setFilter] = useState(word ?? "");
   const close = () => {
     setOpen(false);
     setFilter("");
@@ -852,7 +864,7 @@ export function Picker({
 
   if (!open)
     return (
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="ghost" size="sm" className="self-start" onClick={() => setOpen(true)}>
         <PlusIcon /> {label}
       </Button>
     );
@@ -860,8 +872,8 @@ export function Picker({
   const needle = folded(filter.trim());
   // An id of the catalogue — "Q23991129", or its page's address pasted whole — finds its entry exactly
   const id = needle.split(/[/?#]/).filter((s) => s !== "").pop() ?? "";
-  // Every word typed, each in any of its names: "мадам хуч" finds the one named "Мадам Трюк" and "Роланда Хуч"
-  const words = needle.split(/\s+/).filter((w) => w !== "");
+  // Every word typed, each in any of its names: "мадам хуч" finds the one named "Мадам Трюк" and "Роланда Хуч"; a site's pair by both its names
+  const words = needle.split(/[\s/&]+/).filter((w) => w !== "");
   const shown =
     needle === ""
       ? options
@@ -917,7 +929,7 @@ export function Picker({
           ))}
         </ul>
       )}
-      {onName && typed !== "" && (
+      {onName && typed !== "" && filter !== word && (
         <AsyncButton
           variant="outline"
           size="sm"

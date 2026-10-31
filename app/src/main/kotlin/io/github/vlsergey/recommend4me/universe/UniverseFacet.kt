@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceSchema
@@ -63,6 +64,22 @@ object UniverseFacet {
 
     /** The source's facet of the site's fandoms, the works' universes told by them ([UniverseRepository.fandomUniverses]); null when it has none. */
     fun fandomFacet(schema: SourceSchema): String? = schema.facets.firstOrNull { it.standard === UniverseFacets.FANDOM_FACET }?.key
+
+    /**
+     * The site's facets that speak of a field ([def], a facet of the layer), shown above it: its
+     * [FacetDef.originalFacet]; of the universes, a site with no fandoms the facet it tells the kind
+     * by, a fandom being among author.today's tags; of the secondary characters and the pairings the
+     * line of the characters too, each field having it in sight; of the pairings their direction.
+     */
+    fun saidBy(def: FacetDef, schema: SourceSchema): List<String> = when (def.key) {
+        KEY -> listOfNotNull(fandomFacet(schema) ?: schema.kindFrom)
+        UniverseFacets.CHARACTERS, UniverseFacets.SECONDARY_CHARACTERS -> listOfNotNull(pairingsFacet(schema))
+        UniverseFacets.PAIRINGS -> listOfNotNull(pairingsFacet(schema), schema.facets.firstOrNull { it.standard === Books.DIRECTION }?.key)
+        else -> listOfNotNull(def.originalFacet)
+    }
+
+    /** The source's facet of the site's line of characters and pairings, word by word; null when it has none. */
+    fun pairingsFacet(schema: SourceSchema): String? = schema.facets.firstOrNull { it.standard === UniverseFacets.PAIRINGS_FACET }?.key
 
     /** The value of a universe or a character of a catalogue: "wikidata:Q8337". */
     fun valueOf(catalogue: String, id: String) = "$catalogue:$id"

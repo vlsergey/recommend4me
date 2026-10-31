@@ -687,9 +687,9 @@ class SiteTest {
         corrections.completeFacet("site", "q9", "universe")
         suggestionsApi.settleSuggestions("site", "q9")
         val none = outside()
-        assertTrue(none.all { f -> f.propertyValues.all { it.offered == true } && f.original == "Knight/Princess" }, "outside $none")
+        assertTrue(none.all { f -> f.propertyValues.all { it.offered == true } && f.said.orEmpty().flatMap { it.words }.map { it.name } == listOf("Knight/Princess") }, "outside $none")
         // Its site's line is shown above
-        assertEquals("Pilot/Captain", facets.single { it.facet == "characters" }.original)
+        assertEquals(listOf("Pilot/Captain"), facets.single { it.facet == "characters" }.said.orEmpty().flatMap { it.words }.map { it.name })
 
         // A new work of the universe: every character it may have is offered, with how often its texts name them
         // A name of one word is a name written with a capital: the lower-case "captain" names nobody

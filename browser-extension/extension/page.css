@@ -371,11 +371,55 @@ r4m-chance.r4m-unlikely {
   font-weight: 700;
 }
 
-r4m-original {
+/* What the sites say of a field, right above the place of answering on it */
+r4m-said {
   display: block;
   margin: 0 0 2px;
-  color: var(--r4m-muted);
   font: 12px/1.4 system-ui, sans-serif;
+}
+
+r4m-said-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  align-items: baseline;
+}
+
+a.r4m-said-site {
+  color: var(--r4m-muted);
+}
+
+r4m-said-silent {
+  display: block;
+  color: var(--r4m-muted);
+}
+
+r4m-word:not(:last-child)::after {
+  content: ",";
+  color: var(--r4m-muted);
+}
+
+r4m-word.r4m-word-nothing {
+  text-decoration: underline dotted;
+}
+
+r4m-word.r4m-word-nothing::before {
+  content: "◌ ";
+  color: var(--r4m-amber);
+}
+
+r4m-word.r4m-word-rejected {
+  color: var(--r4m-muted);
+  text-decoration: line-through;
+}
+
+button.r4m-word-press {
+  all: unset;
+  cursor: pointer;
+}
+
+button.r4m-word-press:hover {
+  text-decoration: underline;
 }
 
 /* A facet's block put into the site's page, outside the panel */

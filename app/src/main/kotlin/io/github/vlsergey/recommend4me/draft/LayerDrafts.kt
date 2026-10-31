@@ -140,7 +140,7 @@ class LayerDrafts(private val stores: Stores, private val events: ApplicationEve
         val universes = drafts.filter { it.facet == UniverseFacets.CHARACTERS }.mapNotNull { d ->
             lookup.characterUniverses[d.key]?.singleOrNull()?.let { LayerDraft(UniverseFacets.UNIVERSE, it, d.from) }
         }
-        return (drafts + universes).distinctBy { it.facet to it.key }
+        return (drafts + universes).distinct()
     }
 
     companion object {

@@ -73,7 +73,7 @@ erDiagram
         VARCHAR item_id PK
         VARCHAR facet PK
         VARCHAR value_key PK
-        VARCHAR site_value
+        VARCHAR site_value PK
     }
     mark_likeness {
         VARCHAR mark_kind PK

@@ -1,32 +1,20 @@
 import type { ReactNode } from "react";
-import { ExternalLinkIcon, UnlinkIcon, Undo2Icon } from "lucide-react";
+import { ExternalLinkIcon, UnlinkIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ContentTypeInfo, ItemRef, WorkSite } from "@/api/client";
 import { refKey, sameItem } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
-import { numberField, textField, titleField, type Corrections } from "@/correction/useCorrections";
 import { number } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { cn } from "@/lib/utils";
 import { RefreshButton } from "./WorkParts";
 
-/** The site's own word under the user's correction, the correction taken back by ↺. */
-function SiteSaid({ said, onReset }: { said?: string; onReset: () => Promise<unknown> }) {
-  const { t } = useTranslation("item");
-  return (
-    <div className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
-      <span className="min-w-0 flex-1 line-clamp-3">{said === undefined ? t("WorkScreen.siteSaysNothing") : t("WorkScreen.siteSays", { value: said })}</span>
-      <AsyncButton variant="ghost" size="icon-xs" title={t("WorkScreen.takeBackCorrection")} onClick={onReset} icon={<Undo2Icon />} />
-    </div>
-  );
-}
-
 /**
- * WHAT EACH SITE SAYS OF THE WORK, side by side, read from the work alone: its title, authors,
- * description, numbers and how many reviews, pictures and parts it has. A row whose sites say
- * otherwise, an absent value not counted, is marked ≠. What the user corrected stands apart from the
- * site's own word, with ↺. Under every site its page, its refresh, and "not this work".
+ * IS THIS REALLY THE SAME WORK? What each site has, side by side, read from the work alone: its title,
+ * authors, description, numbers and how many reviews, pictures and parts it has, as the sites have
+ * them. A row whose sites say otherwise, an absent value not counted, is marked ≠. Under every site
+ * its page, its refresh, and "not this work".
  */
 export function SitesTable({
   type,
@@ -34,54 +22,31 @@ export function SitesTable({
   shown,
   onShow,
   onTakeOut,
-  corrections,
 }: {
   type: ContentTypeInfo;
   sites: WorkSite[];
   shown: ItemRef;
   onShow: (site: ItemRef) => void;
   onTakeOut: (site: ItemRef) => Promise<unknown>;
-  corrections: Corrections;
 }) {
   const { t } = useTranslation("item");
-  const description = (s: WorkSite) => type.sources.find((x) => x.id === s.source)?.texts.find((x) => x.role === "DESCRIPTION")?.key;
+  const description = (s: WorkSite) => {
+    const key = type.sources.find((x) => x.id === s.source)?.texts.find((x) => x.role === "DESCRIPTION")?.key;
+    return s.texts.find((x) => x.key === key)?.siteContent;
+  };
   const numbers = [...new Map(sites.flatMap((s) => s.numbers).map((n) => [n.key, n.labelKey])).entries()];
   const rows: { label: string; plain: (s: WorkSite) => string | undefined; cell?: (s: WorkSite) => ReactNode }[] = [
-    {
-      label: t("WorkSites.title"),
-      plain: (s) => s.title,
-      cell: (s) => (
-        <>
-          {s.title}
-          {s.titleCorrected && <SiteSaid said={s.siteTitle} onReset={() => corrections.resetField(titleField)} />}
-        </>
-      ),
-    },
+    { label: t("WorkSites.title"), plain: (s) => s.siteTitle },
     { label: t("WorkSites.authors"), plain: (s) => s.authors.join(", ") || undefined },
-    {
-      label: t("WorkSites.description"),
-      plain: (s) => s.description,
-      cell: (s) => (
-        <>
-          <span className="line-clamp-6">{s.description}</span>
-          {s.descriptionCorrected && <SiteSaid said={s.siteDescription} onReset={() => corrections.resetField(textField(description(s) ?? ""))} />}
-        </>
-      ),
-    },
+    { label: t("WorkSites.description"), plain: description, cell: (s) => <span className="line-clamp-6">{description(s)}</span> },
     ...numbers.map(([key, labelKey]) => {
-      const of = (s: WorkSite) => s.numbers.find((n) => n.key === key);
+      const of = (s: WorkSite) => s.numbers.find((n) => n.key === key)?.siteValue ?? undefined;
       return {
         label: label(labelKey),
-        plain: (s: WorkSite) => of(s)?.value.toString(),
+        plain: (s: WorkSite) => of(s)?.toString(),
         cell: (s: WorkSite) => {
           const n = of(s);
-          if (!n) return null;
-          return (
-            <>
-              {number(n.value)}
-              {n.corrected && <SiteSaid said={n.siteValue === undefined ? undefined : number(n.siteValue)} onReset={() => corrections.resetField(numberField(key))} />}
-            </>
-          );
+          return n === undefined ? null : number(n);
         },
       };
     }),

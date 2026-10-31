@@ -61,9 +61,6 @@
   "KindChoice.answeredNo": "you answered “no”",
   "KindChoice.chooseHint": "Choose to answer",
   "KindChoice.chosenHint": "Your answer. Choose “not chosen” to take it back",
-  "KindChoice.none": "Not chosen",
-  "KindChoice.noneGiven": "Not chosen — {{kinds}} without your answer",
-  "KindChoice.takeBack": "Not chosen (take the answer back)",
   "LocalName.cancel": "Cancel",
   "LocalName.ownName": "Your own name",
   "LocalName.ownNameHint": "Your own name; in Wikidata: “{{name}}”",
@@ -174,5 +171,8 @@
   "UniversesScreen.fandomsDescription": "A fandom bound to a universe gives it to every work of its own as a draft: the work is taken to be of the universe till you say otherwise, and the models of the universes, the characters and the pairings learn from it. The site's drafts are made again 2 seconds after the last binding.",
   "UniversesScreen.inDictionary": "In the dictionary",
   "UniversesScreen.loadFailed": "Could not load the dictionary: {{error}}",
-  "UniversesScreen.title": "Universes of every site"
+  "UniversesScreen.title": "Universes of every site",
+  "Form.world": "World",
+  "Form.characters": "Characters",
+  "OpenUniverses.searchWord": "Search Wikidata: {{word}}"
 }

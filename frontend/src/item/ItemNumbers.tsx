@@ -8,11 +8,11 @@ import { numberField, type Corrections } from "@/correction/useCorrections";
 import { number } from "@/i18n/format";
 import { label } from "@/i18n/label";
 
-/** The numbers of the item, each correctable; a number the source declares but the item lacks can be given. */
-export function ItemNumbers({ numbers, source, corrections }: { numbers: NumberValue[]; source?: SourceInfo; corrections: Corrections }) {
+/** The numbers of the item, to read; in the marking ([source], [corrections] given) each correctable, and a number the source declares but the item lacks can be given. */
+export function ItemNumbers({ numbers, source, corrections }: { numbers: NumberValue[]; source?: SourceInfo; corrections?: Corrections }) {
   const { t } = useTranslation("item");
   const [editing, setEditing] = useState<string | null>(null);
-  const missing = (source?.numbers ?? []).filter((n) => !numbers.some((v) => v.key === n.key));
+  const missing = corrections ? (source?.numbers ?? []).filter((n) => !numbers.some((v) => v.key === n.key)) : [];
   const adding = missing.find((n) => n.key === editing);
   if (numbers.length === 0 && missing.length === 0) return null;
   return (
@@ -23,7 +23,7 @@ export function ItemNumbers({ numbers, source, corrections }: { numbers: NumberV
           <div key={n.key} className="group/number contents">
             <dt className="text-muted-foreground">{label(n.labelKey)}</dt>
             <dd className="flex min-w-0 items-center gap-1">
-              {editing === n.key ? (
+              {corrections && editing === n.key ? (
                 <FieldEditor
                   value={String(n.value)}
                   numeric
@@ -37,17 +37,19 @@ export function ItemNumbers({ numbers, source, corrections }: { numbers: NumberV
                 <>
                   <span className="tabular-nums">{number(n.value)}</span>
                   {n.corrected && <CorrectedMark />}
-                  <EditButton
-                    onClick={() => setEditing(n.key)}
-                    title={t("ItemNumbers.edit")}
-                    className="opacity-0 transition-opacity group-hover/number:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-                  />
+                  {corrections && (
+                    <EditButton
+                      onClick={() => setEditing(n.key)}
+                      title={t("ItemNumbers.edit")}
+                      className="opacity-0 transition-opacity group-hover/number:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                    />
+                  )}
                 </>
               )}
             </dd>
           </div>
         ))}
-        {adding && (
+        {adding && corrections && (
           <>
             <dt className="text-muted-foreground">{label(adding.labelKey)}</dt>
             <dd>

@@ -66,6 +66,12 @@ class Works(private val stores: Stores) {
         return out
     }
 
+    /** The [keys] the one saying the most first, those saying as much in one order whichever is read. */
+    fun fullestFirst(type: TypeStore, keys: Collection<ItemKey>): List<ItemKey> {
+        val fullness = fullness(type, keys)
+        return keys.sortedWith(compareByDescending<ItemKey> { fullness[it] ?: 0 }.thenBy { it.source }.thenBy { it.id })
+    }
+
     /** The [items] of the source — id to version — bound if not yet, their versions kept; one at a time: two at once would bind one item twice. */
     @Synchronized
     private fun bind(s: SourceStore, items: Map<String, String>) {

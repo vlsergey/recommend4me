@@ -57,6 +57,8 @@ class AuthorToday : Source {
         ),
         reviews = true,
         parts = true,
+        // The site's genres, "Фанфик" among them, are among its tags
+        kindFrom = TAG,
     )
 
     override val capturePatterns = listOf(

@@ -10,10 +10,10 @@ import io.github.vlsergey.recommend4me.api.model.PageItem
 import io.github.vlsergey.recommend4me.api.model.PagePicture
 import io.github.vlsergey.recommend4me.api.model.PageView
 import io.github.vlsergey.recommend4me.api.model.ReviewDecorInfo
-import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.item.ItemCards
 import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.SitesSay
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -39,6 +39,7 @@ class PagesController(
     private val details: ItemDetailsReader,
     private val suggestions: FacetSuggestions,
     private val works: Works,
+    private val sitesSay: SitesSay,
 ) : PagesApi {
 
     /** The source whose site the address is on: one that wants the page, or one of the same host. */
@@ -73,16 +74,17 @@ class PagesController(
         val chances = suggestions.chances(store, listOf(itemId))[itemId].orEmpty()
         val suggested = suggestions.ofItem(store, itemId, chances).map { it.toApi(store) }
         // The values of the work, of every item of it, as the web interface shows them
-        val (site, workChances) = cards.ofWork(type, works.of(type), key, store.items.facets(itemId), chances)
+        val clusters = works.of(type)
+        val work = cards.ofWork(type, clusters, key, store.items.facets(itemId), chances)
+        val (site, workChances) = work
         val corrections = store.corrections.facetsOf(itemId)
         val names = wanted.associateWith { facet ->
             store.names(facet, site[facet].orEmpty() + corrections.filter { it.facet == facet }.map { it.key } + ModelValues.named(workChances?.get(facet)))
         }
-        val texts = Corrected.texts(store.items.texts(itemId), store.corrections.fieldsOf(itemId))
         val pictureMarks = store.marks.pictureMarksOf(itemId)
         return PageItem(
             summary = summary,
-            facets = cards.facets(store, site, workChances, corrections, names, texts, empty = { true }, complete = store.corrections.completeOf(itemId)) { it in wanted },
+            facets = cards.facets(store, work, corrections, names, sitesSay.of(type, store, clusters.members(key)), empty = { true }, complete = store.corrections.completeOf(itemId)) { it in wanted },
             suggestions = suggested,
             pictures = store.pictures.ofItem(itemId, plugins.imageEncoder()?.id).map { p ->
                 PagePicture(p.position, p.url, pictureMarks.firstOrNull { it.position == p.position && it.url == p.url }?.mark)

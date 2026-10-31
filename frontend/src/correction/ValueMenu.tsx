@@ -106,7 +106,7 @@ export function ValueName({ asked, corrections, tag, children }: { asked: AskedV
         <DialogContent className="top-auto bottom-0 left-0 flex max-h-[85dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col overflow-y-auto rounded-none rounded-t-xl sm:w-screen">
           <DialogHeader>
             <DialogTitle>{asked.name}</DialogTitle>
-            {asked.summary && <DialogDescription>{asked.summary}</DialogDescription>}
+            {(asked.summary || asked.sites) && <DialogDescription>{[asked.sites, asked.summary].filter(Boolean).join(". ")}</DialogDescription>}
           </DialogHeader>
           <div className="flex flex-wrap gap-1">
             {choices.map((c) =>

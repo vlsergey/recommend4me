@@ -25,7 +25,6 @@ import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.downloadsPages
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.work.Works
@@ -49,6 +48,7 @@ class ItemDetailsReader(
     private val recommendations: Recommendations,
     private val works: Works,
     private val suggestions: FacetSuggestions,
+    private val sitesSay: SitesSay,
 ) {
     /** The work as the dialog shows it, its chances made now in memory ([FacetSuggestions.chances]). */
     fun read(key: ItemKey): ItemDetails? {
@@ -59,7 +59,8 @@ class ItemDetailsReader(
         val clusters = works.of(type)
         val corrections = store.corrections.facetsOf(key.id)
         val fields = store.corrections.fieldsOf(key.id)
-        val (site, chances) = cards.ofWork(type, clusters, key, store.items.facets(key.id), suggestions.chances(store, listOf(key.id))[key.id])
+        val work = cards.ofWork(type, clusters, key, store.items.facets(key.id), suggestions.chances(store, listOf(key.id))[key.id])
+        val (site, chances) = work
         val names = schema.facets.associate { def ->
             def.key to store.names(
                 def.key,
@@ -87,9 +88,9 @@ class ItemDetailsReader(
         return ItemDetails(
             summary = summary,
             titleCorrected = Corrected.TITLE in fields,
-            allFacets = cards.facets(store, site, chances, corrections, names, texts, empty = { it.editable }, complete = store.corrections.completeOf(key.id)) { true },
+            allFacets = cards.facets(store, work, corrections, names, sitesSay.of(type, store, clusters.members(key)), empty = { it.editable }, complete = store.corrections.completeOf(key.id)) { true },
             texts = schema.texts.filter { it.key !in originals }.mapNotNull { def ->
-                texts[def.key]?.let { TextValue(def.key, I18nKeys.textLabel(store.id, def.key), it, def.spoiler, Corrected.textField(def.key) in fields) }
+                texts[def.key]?.let { TextValue(def.key, I18nKeys.textLabel(store.id, def.key), it, def.spoiler, Corrected.textField(def.key) in fields, siteTexts[def.key]) }
             },
             allNumbers = schema.numbers.mapNotNull { def ->
                 numbers[def.key]?.let { NumberValue(def.key, I18nKeys.numberLabel(store.id, def), it, Corrected.numberField(def.key) in fields) }
@@ -145,9 +146,8 @@ class ItemDetailsReader(
 
     /** What each item of a work says of it: the one that says the most first ([Works.fullness]). */
     private fun sites(type: io.github.vlsergey.recommend4me.source.TypeStore, members: List<ItemKey>): List<WorkSite> {
-        val fullness = works.fullness(type, members)
         val encoder = plugins.imageEncoder()?.id
-        return members.sortedByDescending { fullness[it] ?: 0 }.mapNotNull { m ->
+        return works.fullestFirst(type, members).mapNotNull { m ->
             val s = type.source(m.source) ?: return@mapNotNull null
             val head = s.items.find(m.id) ?: return@mapNotNull null
             val fields = s.corrections.fieldsOf(m.id)
@@ -160,19 +160,16 @@ class ItemDetailsReader(
                 val names = s.names(facet, keys)
                 keys.map { names[it] ?: it }
             }.orEmpty()
-            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-            val titleCorrected = Corrected.TITLE in fields
-            val descriptionCorrected = description != null && Corrected.textField(description) in fields
+            // A facet's own line as the site writes it stands with the field, not among the texts
+            val originals = s.schema.facets.mapNotNull { it.original }.toSet()
             WorkSite(
-                source = m.source, item = m.id, title = Corrected.title(head.title, fields), titleCorrected = titleCorrected,
-                siteTitle = head.title.takeIf { titleCorrected }, url = head.url, authors = authors,
-                description = description?.let { texts[it] }, descriptionCorrected = descriptionCorrected,
-                siteDescription = description?.takeIf { descriptionCorrected }?.let { siteTexts[it] },
+                source = m.source, item = m.id, title = Corrected.title(head.title, fields), titleCorrected = Corrected.TITLE in fields,
+                siteTitle = head.title, url = head.url, authors = authors,
+                texts = s.schema.texts.filter { it.key !in originals }.mapNotNull { def ->
+                    texts[def.key]?.let { TextValue(def.key, I18nKeys.textLabel(s.id, def.key), it, def.spoiler, Corrected.textField(def.key) in fields, siteTexts[def.key]) }
+                },
                 numbers = s.schema.numbers.mapNotNull { def ->
-                    numbers[def.key]?.let {
-                        val corrected = Corrected.numberField(def.key) in fields
-                        NumberValue(def.key, I18nKeys.numberLabel(s.id, def), it, corrected, siteNumbers[def.key]?.takeIf { corrected })
-                    }
+                    numbers[def.key]?.let { NumberValue(def.key, I18nKeys.numberLabel(s.id, def), it, Corrected.numberField(def.key) in fields, siteNumbers[def.key]) }
                 },
                 reviewCount = s.reviews.countOf(m.id), pictureCount = s.pictures.ofItem(m.id, encoder).size, partCount = s.parts.ofItem(m.id).size,
                 canRefresh = s.source.downloadsPages,

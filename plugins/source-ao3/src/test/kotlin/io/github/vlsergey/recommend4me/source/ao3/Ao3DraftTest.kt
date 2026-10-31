@@ -45,9 +45,10 @@ class Ao3DraftTest {
                 LayerDraft(UniverseFacets.CHARACTERS, "wikidata:Q174009", "Hermione Granger/Harry Potter"),
                 LayerDraft(UniverseFacets.CHARACTERS, "wikidata:Q3244512", "Hermione Granger/Harry Potter"),
                 LayerDraft(UniverseFacets.PAIRINGS, UniverseFacets.pairing("wikidata:Q174009", "wikidata:Q3244512"), "Hermione Granger/Harry Potter"),
+                LayerDraft(UniverseFacets.CHARACTERS, "wikidata:Q3244512", "Harry Potter & Ron Weasley"),
             ),
-            // A platonic relationship drafts its characters alone, not a pairing — and no new character
-            // here; a tag two characters state is no draft at all
+            // A platonic relationship drafts its characters alone, not a pairing, each kept for every
+            // word that gave it; a tag two characters state is no draft at all
             drafts.toSet(),
         )
     }

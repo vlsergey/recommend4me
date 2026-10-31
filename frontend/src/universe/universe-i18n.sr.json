@@ -61,9 +61,6 @@
   "KindChoice.answeredNo": "odgovorili ste „ne“",
   "KindChoice.chooseHint": "Izaberite da odgovorite",
   "KindChoice.chosenHint": "Vaš odgovor. Izaberite „nije izabrano“ da ga povučete",
-  "KindChoice.none": "Nije izabrano",
-  "KindChoice.noneGiven": "Nije izabrano — {{kinds}} bez vašeg odgovora",
-  "KindChoice.takeBack": "Nije izabrano (povuci odgovor)",
   "LocalName.cancel": "Otkaži",
   "LocalName.ownName": "Sopstveno ime",
   "LocalName.ownNameHint": "Sopstveno ime; u Vikipodacima — „{{name}}“",
@@ -179,5 +176,8 @@
   "UniversesScreen.fandomsDescription": "Fandom vezan za univerzum daje ga svim svojim delima kao nacrt: delo se smatra delom tog univerzuma dok ne kažete drugačije, i na tome uče modeli univerzuma, likova i parova. Nacrti dela sajta prave se ponovo 2 sekunde posle poslednjeg vezivanja.",
   "UniversesScreen.inDictionary": "U rečniku",
   "UniversesScreen.loadFailed": "Učitavanje rečnika nije uspelo: {{error}}",
-  "UniversesScreen.title": "Univerzumi svih sajtova"
+  "UniversesScreen.title": "Univerzumi svih sajtova",
+  "Form.world": "Svet",
+  "Form.characters": "Likovi",
+  "OpenUniverses.searchWord": "Pronađi u Vikipodacima: {{word}}"
 }

@@ -1,4 +1,3 @@
 {
-  "SuggestedChip.chance": "Probability {{chance}}",
-  "SuggestedValues.title": "Suggestions: the work seems to have these too"
+  "SuggestedChip.chance": "Probability {{chance}}"
 }

@@ -450,9 +450,20 @@ export type UniverseForWork = {
  * Each universe found is added to the dictionary by its button — and, with [forWork], linked to
  * that work as well.
  */
-export function CatalogueSearch({ type, dictionary, forWork }: { type: ContentTypeInfo; dictionary?: UniverseInfo[]; forWork?: UniverseForWork }) {
+export function CatalogueSearch({
+  type,
+  dictionary,
+  forWork,
+  word = "",
+}: {
+  type: ContentTypeInfo;
+  dictionary?: UniverseInfo[];
+  forWork?: UniverseForWork;
+  /** A site's word it is opened with: typed, and looked for at once. */
+  word?: string;
+}) {
   const { t } = useTranslation("universe");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(word);
   const search = useMutation({
     mutationFn: async (q: string) =>
       unwrap(await api.GET("/api/universes/search", { params: { query: { query: q } } })),
@@ -461,6 +472,10 @@ export function CatalogueSearch({ type, dictionary, forWork }: { type: ContentTy
     const q = query.trim();
     if (q !== "") search.mutate(q);
   };
+  const { mutate } = search;
+  useEffect(() => {
+    if (word !== "") mutate(word);
+  }, [word, mutate]);
 
   return (
     <div className="flex flex-col gap-2 text-sm">

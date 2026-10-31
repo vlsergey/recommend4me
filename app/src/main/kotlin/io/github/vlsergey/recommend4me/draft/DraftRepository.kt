@@ -47,7 +47,7 @@ class DraftRepository(private val db: DSLContext, private val source: String) {
         drafts.keys.chunked(BATCH).forEach { chunk ->
             t.deleteFrom(LAYER_DRAFT).where(LAYER_DRAFT.SOURCE.eq(source), LAYER_DRAFT.ITEM_ID.`in`(chunk)).execute()
         }
-        drafts.flatMap { (id, list) -> list.distinctBy { it.facet to it.key }.map { id to it } }.chunked(BATCH).forEach { chunk ->
+        drafts.flatMap { (id, list) -> list.distinctBy { Triple(it.facet, it.key, it.from.take(1000)) }.map { id to it } }.chunked(BATCH).forEach { chunk ->
             t.batch(chunk.map { (id, d) ->
                 t.insertInto(LAYER_DRAFT)
                     .set(LAYER_DRAFT.SOURCE, source).set(LAYER_DRAFT.ITEM_ID, id).set(LAYER_DRAFT.FACET, d.facet)

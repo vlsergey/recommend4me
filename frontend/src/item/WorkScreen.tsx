@@ -21,10 +21,10 @@ import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { gradeLabel, useSource } from "@/contenttype/types";
-import { FacetCorrections } from "@/correction/FacetCorrections";
-import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor";
+import { SiteFacet } from "@/correction/FacetCorrections";
+import { CorrectedMark } from "@/correction/FieldEditor";
 import { LinkSearch } from "@/correction/Links";
-import { titleField, useCorrections, type Corrections } from "@/correction/useCorrections";
+import { useCorrections, type Corrections } from "@/correction/useCorrections";
 import { chipKey, ValueActions, type AskedValue } from "@/correction/valueActions";
 import { WorkDuplicates, WorkRelations } from "@/duplicate/WorkDuplicates";
 import { decided } from "@/facet/valueOrder";
@@ -37,7 +37,6 @@ import { PictureMatches, Pictures } from "@/picture/Pictures";
 import { ReviewMatches, Reviews } from "@/review/Reviews";
 import { SearchJudge } from "@/search/SearchJudge";
 import { TagsByText } from "@/tagtext/TagsByText";
-import { FANFIC_FACETS, FanficSection } from "@/universe/FanficSection";
 import { Evidence } from "@/universe/MentionsDialog";
 import { itemHref, readItemHash, writeItemHash } from "./itemHash";
 import { ItemNumbers } from "./ItemNumbers";
@@ -48,6 +47,7 @@ import { RelatedWorks } from "./RelatedWorks";
 import { RemoveItem } from "./RemoveItem";
 import { FITTING, useHeldOut } from "./useHeldOut";
 import { Byline, FactLine } from "./WorkFacts";
+import { WorkForm } from "./WorkForm";
 import { NotFetched, Part, Ratings, RefreshButton } from "./WorkParts";
 import { SitesTable } from "./WorkSites";
 
@@ -61,10 +61,10 @@ const MENTIONED: readonly string[] = ["universe", "characters", "secondary-chara
 type View = "work" | "chapters" | "reviews" | "pictures" | "why" | "sites" | "evidence";
 
 /**
- * THE SCREEN OF A WORK: left to read, right to answer, head to decide (docs/work-screen.md). The
- * marks of the sites in the head switch the whole screen to that site; the values and answers stay,
- * being the work's. On a narrow screen the pages are one at a time, and the verdict folds: a missed
- * tap under the last ✕ neither grades nor overwrites.
+ * THE SCREEN OF A WORK (docs/work-screen.md): the form of the work on the right, every field under
+ * what every site says of it; on the left what there is to read, of the site chosen there, which
+ * changes nothing of the form; the verdict in the head. On a narrow screen the pages are one at a
+ * time, and the verdict folds: a missed tap under the last ✕ neither grades nor overwrites.
  */
 export function WorkScreen({
   type,
@@ -90,30 +90,38 @@ export function WorkScreen({
 }) {
   const { t } = useTranslation("item");
   const queryClient = useQueryClient();
+  // The item the form reads the work through, and the one read on the left: another only when chosen
   const [ref, setRef] = useState<ItemRef>({ source: summary.source, item: summary.item });
-  const details = useQuery({
-    queryKey: itemKey(ref),
-    queryFn: async () => unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: ref } })),
-    // The marks of the sites stay while another site is read
-    placeholderData: keepPreviousData,
+  const [read, setRead] = useState<ItemRef>(ref);
+  const queryOf = (item: ItemRef) => ({
+    queryKey: itemKey(item),
+    queryFn: async () => unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: item } })),
   });
+  const details = useQuery(queryOf(ref));
+  const other = useQuery({ ...queryOf(read), enabled: !sameItem(read, ref), placeholderData: keepPreviousData });
   const corrections = useCorrections(ref, type.id);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [page, setPage] = useState<"answers" | "work">("answers");
+  // A phone opens on the work while it is to be read, on the answers once graded
+  const [page, setPage] = useState<"answers" | "work">(summary.grade ? "answers" : "work");
   const [view, setView] = useState<View>("work");
   const [verdictOpen, setVerdictOpen] = useState(false);
   const [asked, setAsked] = useState<AskedValue | null>(null);
   const [revealed, setRevealed] = useState<string>();
   const d = details.data;
+  const reading = sameItem(read, ref) ? d : other.data;
   const shown = d?.summary ?? summary;
   const source = useSource(shown.source)?.source ?? listedSource;
+  const leftSource = useSource(read.source)?.source ?? source;
   const facets = d?.allFacets ?? summary.facets;
   const tagFacet = d?.allFacets.find((f) => f.tags && f.editable)?.facet;
-  const values = d?.allFacets.filter((f) => f.editable).flatMap((f) => f.values) ?? [];
-  const toAnswer = values.filter((v) => !decided(v) && !v.offered && !v.implied).length;
-  const offers = values.filter((v) => !decided(v) && v.offered).length;
-  const grade = summary.grade as Grade | undefined;
-  const earlier = !grade && summary.previousGrade ? { grade: summary.previousGrade as Grade, version: summary.previousGradeVersion } : undefined;
+  const toAnswer = (d?.allFacets.filter((f) => f.editable).flatMap((f) => f.values) ?? []).filter((v) => !decided(v) && !v.offered && !v.implied).length;
+  // The grade as the work has it, the list's being gone once it leaves the list; while it is read, as the press gave it
+  const graded = details.isFetching ? summary : shown;
+  const grade = graded.grade as Grade | undefined;
+  const earlier = !grade && graded.previousGrade ? { grade: graded.previousGrade as Grade, version: graded.previousGradeVersion } : undefined;
+  const moveTo = (site: ItemRef) => {
+    setRef(site);
+    setRead(site);
+  };
 
   // The chip a feature of the explanation led to, brought into sight
   useEffect(() => {
@@ -123,6 +131,7 @@ export function WorkScreen({
   const actions = useMemo(
     () => ({
       item: ref,
+      sites: d?.sites,
       revealed,
       evidence: (value: AskedValue) => {
         setAsked(value);
@@ -132,7 +141,7 @@ export function WorkScreen({
       evidenceBody: (value: AskedValue) => <EvidenceBody type={type} item={ref} asked={value} facets={d?.allFacets ?? []} corrections={corrections} />,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- [corrections] is made anew at every drawing and acts by [ref]
-    [ref, revealed, type, d?.allFacets],
+    [ref, revealed, type, d?.allFacets, d?.sites],
   );
 
   /** The value of a feature among the answers, if it is there to be led to. */
@@ -159,6 +168,7 @@ export function WorkScreen({
       queryClient.invalidateQueries({ queryKey: itemKey(left) });
       setRef(left);
     } else await corrections.unlink(site);
+    if (sameItem(site, read)) setRead(left);
     // The list's own item taken out: this screen is of it no more, the work left opens by the address
     if (sameItem(site, summary)) {
       onIndex(null);
@@ -191,32 +201,16 @@ export function WorkScreen({
             <Cover typeId={type.id} summary={shown} className="size-full" />
           </div>
           <div className="min-w-0 flex-1 basis-64">
-            {editingTitle ? (
-              <FieldEditor
-                value={shown.title}
-                corrected={d?.titleCorrected ?? false}
-                onSave={(content) => corrections.setField(titleField, content)}
-                onReset={() => corrections.resetField(titleField)}
-                onClose={() => setEditingTitle(false)}
-                className="max-w-2xl"
-              />
-            ) : (
-              <div className="group/title flex items-center gap-1">
-                <DialogTitle className="text-lg leading-tight font-semibold break-words">{shown.title}</DialogTitle>
-                {d?.titleCorrected && <CorrectedMark />}
-                <EditButton onClick={() => setEditingTitle(true)} title={t("ItemDialog.editTitle")} />
-              </div>
-            )}
+            <div className="flex items-center gap-1">
+              <DialogTitle className="text-lg leading-tight font-semibold break-words">{shown.title}</DialogTitle>
+              {d?.titleCorrected && <CorrectedMark />}
+            </div>
             <DialogDescription render={<div />} className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground [@media(max-height:40rem)]:sr-only">
               <Byline source={source} facets={facets} />
               <FactLine source={source} summary={shown} facets={facets} />
             </DialogDescription>
           </div>
-          <SiteMarks sites={d?.sites ?? [{ source: shown.source, item: shown.item, url: shown.url, title: shown.title }]} shown={ref} onShow={setRef} />
-          <div className="flex flex-wrap items-center gap-1">
-            {tagFacet && <TagsByText item={ref} facet={tagFacet} corrections={corrections} size="sm" className="" />}
-            {d?.canRefresh && <RefreshButton item={ref} />}
-          </div>
+          {tagFacet && <TagsByText item={ref} facet={tagFacet} corrections={corrections} size="sm" className="" />}
         </div>
         {/* A phone keeps the verdict folded: the buttons under a thumb are the answers' */}
         <Button variant="outline" size="sm" className="mt-1 w-full justify-between min-[56rem]:hidden" aria-expanded={verdictOpen} onClick={() => setVerdictOpen(!verdictOpen)}>
@@ -228,7 +222,7 @@ export function WorkScreen({
         </Button>
         <div className={cn("mt-1 flex-wrap items-center gap-x-3 gap-y-1 [&_button]:pointer-coarse:h-11", verdictOpen ? "flex" : "hidden min-[56rem]:flex")}>
           {/* Keyed by the work: a press at work on one is not shown on the next the screen moves to */}
-          <InterestButtons key={`interest:${summary.source}/${summary.item}`} summary={summary} labels />
+          <InterestButtons key={`interest:${summary.source}/${summary.item}`} summary={{ ...summary, grade: graded.grade, previousGrade: graded.previousGrade }} labels />
           <RatingButtons
             key={`grade:${summary.source}/${summary.item}`}
             type={type}
@@ -240,7 +234,7 @@ export function WorkScreen({
             className="min-w-0 flex-1 basis-full min-[56rem]:basis-[36rem]"
           />
           {grade && <span className="w-full text-xs text-muted-foreground sm:hidden">{gradeLabel(type.id, grade)}</span>}
-          <PredictionNumber type={type} summary={summary} />
+          <PredictionNumber type={type} summary={graded} />
           {earlier && <span className="text-xs text-muted-foreground">{t("RatingButtons.newVersion")}</span>}
         </div>
       </header>
@@ -256,20 +250,22 @@ export function WorkScreen({
 
       <div className="grid min-h-0 flex-1 min-[56rem]:grid-cols-2 min-[56rem]:divide-x">
         <section className={cn("min-h-0 min-w-0 overflow-y-auto", page === "work" ? "block" : "hidden min-[56rem]:block")}>
-          {details.isLoading ? (
+          {!reading && (details.isLoading || other.isLoading) ? (
             <Loading />
-          ) : d ? (
+          ) : reading ? (
             <LeftPage
               type={type}
-              source={source}
-              details={d}
+              source={leftSource}
+              details={reading}
+              sites={d?.sites ?? reading.sites}
               listed={summary}
               corrections={corrections}
               view={view}
               onView={setView}
-              onShow={setRef}
+              onShow={setRead}
+              onMove={moveTo}
               onTakeOut={takeOut}
-              shown={ref}
+              shown={read}
               asked={asked}
               onLeave={() => {
                 setAsked(null);
@@ -286,21 +282,9 @@ export function WorkScreen({
           {details.isLoading ? (
             <Loading />
           ) : d ? (
-            <div className="flex flex-col gap-4">
-              <p className="text-sm font-medium">
-                {t("WorkScreen.toAnswer", { count: toAnswer })}
-                {offers > 0 && <span className="font-normal text-muted-foreground"> · {t("WorkScreen.offers", { count: offers })}</span>}
-              </p>
-              {d.sites.length > 1 && <p className="text-xs text-muted-foreground">{t("WorkSites.markingOfWork")}</p>}
-              {type.universes && (
-                <Part title={t("ItemDialog.fanfic")}>
-                  <FanficSection type={type} source={source} details={d} corrections={corrections} />
-                </Part>
-              )}
-              <Part title={t("ItemDialog.facets")}>
-                <FacetCorrections item={ref} source={source} facets={d.allFacets} corrections={corrections} except={type.universes ? FANFIC_FACETS : undefined} />
-              </Part>
-            </div>
+            <Part title={t("ItemDialog.facets")}>
+              <WorkForm type={type} source={source} details={d} item={ref} corrections={corrections} />
+            </Part>
           ) : null}
         </section>
       </div>
@@ -318,10 +302,12 @@ function Loading() {
   );
 }
 
-/** The sites of the work, the one that says the most first: a press switches the screen to it, the arrow opens its page. */
+/** The sites of the work, the one that says the most first: a press chooses what the left page reads, the arrow opens its page. */
 function SiteMarks({ sites, shown, onShow }: { sites: { source: string; item: string; url: string; title: string }[]; shown: ItemRef; onShow: (site: ItemRef) => void }) {
+  const { t } = useTranslation("item");
   return (
     <div className="flex flex-wrap items-center gap-1">
+      <span className="text-xs text-muted-foreground">{t("WorkScreen.reading")}</span>
       {sites.map((s) => (
         <span key={`${s.source}/${s.item}`} className="inline-flex items-center">
           <Button
@@ -387,11 +373,13 @@ function LeftPage({
   type,
   source,
   details: d,
+  sites,
   listed,
   corrections,
   view,
   onView,
   onShow,
+  onMove,
   onTakeOut,
   shown,
   asked,
@@ -402,12 +390,15 @@ function LeftPage({
   type: ContentTypeInfo;
   source: SourceInfo;
   details: ItemDetails;
+  sites: ItemDetails["sites"];
   /** The work as its list has it: what the search found in it. */
   listed: ItemSummary;
   corrections: Corrections;
   view: View;
   onView: (view: View) => void;
   onShow: (site: ItemRef) => void;
+  /** The screen moved to another item: the one it read is removed. */
+  onMove: (site: ItemRef) => void;
   onTakeOut: (site: ItemRef) => Promise<unknown>;
   shown: ItemRef;
   asked: AskedValue | null;
@@ -420,9 +411,16 @@ function LeftPage({
   const reviewsLabel = source.reviewsLabelKey ? label(source.reviewsLabelKey) : t("ItemDialog.reviews");
   const partsLabel = source.partsLabelKey ? label(source.partsLabelKey) : t("ItemDialog.parts");
   const nothing = d.texts.length === 0 && d.pictures.length === 0 && d.reviews.length === 0 && d.parts.length === 0;
-  const rest = d.sites.find((s) => !sameItem(s, ref));
+  const rest = sites.find((s) => !sameItem(s, ref));
+  // A facet of the site that is no field's source: the rest stand above their fields
+  const originals = new Set(source.facets.filter((f) => f.role === "ORIGINAL").map((f) => f.key));
+  const facts = d.allFacets.filter((f) => !f.editable && !originals.has(f.facet));
   return (
     <div className="flex flex-col gap-3 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SiteMarks sites={sites} shown={shown} onShow={onShow} />
+        {d.canRefresh && <RefreshButton item={ref} />}
+      </div>
       <Tabs value={view} onValueChange={(v) => onView(v as View)}>
         <TabsList className="h-auto flex-wrap">
           <TabsTrigger value="work">{t("WorkScreen.work")}</TabsTrigger>
@@ -437,7 +435,7 @@ function LeftPage({
           </TabsTrigger>
           <TabsTrigger value="why">{t("WorkScreen.why")}</TabsTrigger>
           <TabsTrigger value="sites">
-            {t("WorkScreen.sites")} {d.sites.length}
+            {t("WorkScreen.sites")} {sites.length}
           </TabsTrigger>
           {asked && <TabsTrigger value="evidence">{t("WorkScreen.evidence", { name: asked.name })}</TabsTrigger>}
         </TabsList>
@@ -460,10 +458,19 @@ function LeftPage({
             </Part>
           )}
           <Part title={t("ItemDialog.texts")}>
-            <ItemTexts texts={d.texts} source={source} corrections={corrections} editing />
+            <ItemTexts texts={d.texts} source={source} corrections={corrections} />
           </Part>
+          {facts.length > 0 && (
+            <Part title={t("WorkScreen.facts")}>
+              <section className="flex flex-col gap-2">
+                {facts.map((f) => (
+                  <SiteFacet key={f.facet} facet={f} />
+                ))}
+              </section>
+            </Part>
+          )}
           <Part title={t("ItemDialog.numbers")}>
-            <ItemNumbers numbers={d.allNumbers} source={source} corrections={corrections} />
+            <ItemNumbers numbers={d.allNumbers} source={source} />
           </Part>
           <Part title={t("ItemDialog.seriesAndAuthor")}>
             <RelatedWorks type={type} related={d.related} />
@@ -499,7 +506,7 @@ function LeftPage({
       {view === "sites" && (
         <>
           <Part title={t("WorkScreen.sites")}>
-            <SitesTable type={type} sites={d.sites} shown={shown} onShow={onShow} onTakeOut={onTakeOut} corrections={corrections} />
+            <SitesTable type={type} sites={sites} shown={shown} onShow={onShow} onTakeOut={onTakeOut} />
           </Part>
           <Part title={t("ItemDialog.sameWork")}>
             <section className="flex flex-col gap-1">
@@ -510,14 +517,14 @@ function LeftPage({
           <Part title={t("WorkScreen.duplicates")}>
             <section className="flex flex-col gap-1">
               <h4 className="text-sm font-semibold">{t("WorkScreen.duplicates")}</h4>
-              <WorkDuplicates type={type} item={ref} sites={d.sites} corrections={corrections} />
+              <WorkDuplicates type={type} item={ref} sites={sites} corrections={corrections} />
             </section>
           </Part>
           <Part title={t("WorkScreen.relations")}>
             <WorkRelations type={type} item={ref} relations={d.relations} />
           </Part>
           <div>
-            <RemoveItem summary={d.summary} typeId={type.id} ofSeveral={d.sites.length > 1} onRemoved={() => rest && onShow({ source: rest.source, item: rest.item })} />
+            <RemoveItem summary={d.summary} typeId={type.id} ofSeveral={sites.length > 1} onRemoved={() => rest && onMove({ source: rest.source, item: rest.item })} />
           </div>
         </>
       )}

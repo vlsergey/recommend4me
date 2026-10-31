@@ -151,6 +151,9 @@
   /** The other facet of a work's characters: a character is in one of them, never in both. */
   const OTHER_CHARACTERS = { characters: "secondary-characters", "secondary-characters": "characters" };
 
+  /** The two names of a site's word of a pair: `Юто/Агеха`, `Holmes & Watson`. */
+  const PAIR_WORD = /\s*\/\s*|\s+&\s+/;
+
   /** The original characters: many persons, of either facet of characters at once. */
   const ORIGINAL_CHARACTERS = ["oc:female", "oc:male"];
 
@@ -1136,7 +1139,7 @@
 
     /** The hints that have every word typed, each in any of their names ("мадам хуч": "Мадам Трюк", "Роланда Хуч"), in their order. */
     function narrow() {
-      const words = folded(input.value).split(/\s+/).filter(Boolean);
+      const words = folded(input.value).split(/[\s/&]+/).filter(Boolean);
       shown = chosen ? hints.filter((h) => words.every((w) => [h.name, ...(h.names || [])].some((n) => folded(n).includes(w)))) : hints;
       show();
     }
@@ -1253,7 +1256,8 @@
       // of a facet of the dictionary's entries alone, none: the list stays open to choose from
       const typed = input.value.trim();
       const h = active >= 0 ? shown[active] : hints.find((x) => folded(x.name) === folded(typed));
-      if (!h && KEYS_ONLY.includes(facet)) {
+      // A site's word typed by a press is not the user's typing: it adds only what it finds
+      if (!h && (KEYS_ONLY.includes(facet) || typed === form.r4mWord)) {
         input.setAttribute("aria-invalid", "true");
         note.hidden = false;
         narrow();
@@ -1279,15 +1283,73 @@
     return form;
   }
 
+  /** The search of a field with a site's word typed: not the user's typing, so it adds only what it finds. */
+  function pressWord(field, name) {
+    const input = field.querySelector("input");
+    input.value = name;
+    field.r4mWord = name;
+    input.focus();
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  /** A word of a site: as it came to the field, a press looking for it there; a word of a pair in the fields of characters a press for each of its names. */
+  function siteWord(word, facet, field) {
+    const box = el("r4m-word");
+    const known = Array.isArray(word.reaches);
+    const reached = (facet.values || []).filter((v) => known && word.reaches.includes(v.key));
+    const nothing = known && word.reaches.length === 0;
+    const rejected = reached.length > 0 && reached.every((v) => v.corrected === "REMOVED");
+    if (nothing) box.classList.add("r4m-word-nothing");
+    if (rejected) box.classList.add("r4m-word-rejected");
+    box.title = nothing ? t("facet.reachedNothing") : reached.length ? t("facet.reached", { values: reached.map(nameOf).join(", ") }) : "";
+    const names = OTHER_CHARACTERS[facet.facet] ? word.name.split(PAIR_WORD).filter(Boolean) : [word.name];
+    names.forEach((name, i) => {
+      if (i > 0) box.appendChild(document.createTextNode("/"));
+      if (!field || !word.searchable) return box.appendChild(document.createTextNode(name));
+      const b = el("button", "r4m-word-press", name);
+      b.type = "button";
+      b.title = t("facet.find", { name });
+      b.addEventListener("click", () => pressWord(field, name));
+      box.appendChild(b);
+    });
+    return box;
+  }
+
   /**
-   * A facet as a block: its label, the site's own line of it when the panel shows it, its values
-   * with the user's answers, the suggestions, the field to add one.
+   * THE SOURCES OF A FIELD, right above the place of answering on it: a row for every site of the work
+   * with a word on it, those with none on one line, an item never read told apart. A facet placed on
+   * the site's own page, the page showing its own, has those of the other sites alone. Null when there
+   * are none.
+   */
+  function saidBlock(item, facet, inPanel, field) {
+    const s = item.summary;
+    const said = (facet.said || []).filter((x) => inPanel || x.source !== s.source || x.item !== s.item);
+    if (!said.length) return null;
+    const box = el("r4m-said");
+    said.filter((x) => x.words.length).forEach((x) => {
+      const row = el("r4m-said-row");
+      const site = el("a", "r4m-said-site", x.source);
+      site.href = x.url;
+      site.target = "_blank";
+      site.rel = "noreferrer";
+      row.appendChild(site);
+      x.words.forEach((w) => row.appendChild(siteWord(w, facet, field)));
+      box.appendChild(row);
+    });
+    const silent = said.filter((x) => !x.words.length && x.read);
+    if (silent.length) box.appendChild(el("r4m-said-silent", null, t("facet.silent", { sites: silent.map((x) => x.source).join(", ") })));
+    said.filter((x) => !x.words.length && !x.read).forEach((x) => box.appendChild(el("r4m-said-silent", null, t("facet.unread", { site: x.source }))));
+    return box;
+  }
+
+  /**
+   * A facet as a block: its label, what the sites say of it, its values with the user's answers, the
+   * suggestions, the field to add one.
    */
   function facetBlock(item, facet, suggestions, inPanel) {
     const block = el("r4m-facet");
     const label = el("r4m-label", null, labelOf(facet));
     block.appendChild(label);
-    if (inPanel && facet.original) block.appendChild(el("r4m-original", null, t("facet.onSite", { values: facet.original })));
     const line = el("r4m-chips");
     // A facet of the site is its word: shown, never answered on
     const editable = facet.editable !== false;
@@ -1302,9 +1364,14 @@
     }
     // A scale — the age rating — answered on as one
     if (editable && facet.steps && facet.steps.length) {
+      const words = saidBlock(item, facet, inPanel);
+      if (words) block.appendChild(words);
       block.appendChild(scaleBlock(item, facet));
       return block;
     }
+    const field = editable ? addField(item, facet.facet, labelOf(facet), held(facet)) : null;
+    const words = saidBlock(item, facet, inPanel, field);
+    if (words) block.appendChild(words);
     const allNamed = completeButton(item, facet);
     if (allNamed) label.appendChild(allNamed);
     const ordered = stableOrder(item, facet.facet, values);
@@ -1317,7 +1384,7 @@
       ((suggestions && suggestions.suggested) || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
       // A facet of one value that has one offers no other: one chosen in its place replaces it
       if (!facet.complete && !held(facet)) moreOf(item, facet.facet, line, shownKeys(facet, suggestions));
-      line.appendChild(addField(item, facet.facet, labelOf(facet), held(facet)));
+      line.appendChild(field);
     }
     block.appendChild(line);
     const text = byTextBlock(item, facet);
@@ -1329,13 +1396,20 @@
    * A FACET WHOSE VALUES ARE A SCALE — the age rating — as the scale: every step in its order, the
    * work's one chosen, and where it is from — the user's answer, the site's word, the model's chance
    * by the tags; under every other step the model's chance of it; a step the site lets not faded, to
-   * choose all the same where the site is wrong. A step pressed is the work's — the user's answer —
+   * choose all the same where the site is wrong. Sites that disagree choose nothing: every step held
+   * is marked with its sites, and the user decides. A step pressed is the work's — the user's answer —
    * the user's own pressed again taken back.
    */
   function scaleBlock(item, facet) {
     const values = (facet.values || []).filter((v) => v.corrected !== "REMOVED" && !v.offered);
-    const current = values.find((v) => v.corrected === "ADDED" || v.corrected === "CONFIRMED") || values[0];
-    const mine = !!current && (current.corrected === "ADDED" || current.corrected === "CONFIRMED");
+    const answered = values.find((v) => v.corrected === "ADDED" || v.corrected === "CONFIRMED");
+    // Every step a site names, with the sites naming it: one site naming two is no disagreement
+    const said = facet.said || [];
+    const named = new Map(facet.steps.map((s) => [s.key, said.filter((x) => x.words.some((w) => w.key === s.key)).map((x) => x.source)]));
+    const naming = said.filter((x) => x.words.some((w) => named.has(w.key)));
+    const disagree = !answered && (values.length > 1 || (naming.length > 1 && [...named.values()].filter((sites) => sites.length).length > 1));
+    const current = answered || (disagree ? undefined : values[0]);
+    const mine = !!answered;
     const box = el("r4m-scale");
     const steps = el("r4m-steps");
     const abouts = [];
@@ -1351,11 +1425,13 @@
           `r4m-button${chosen ? " r4m-chosen" : s.allowed ? "" : " r4m-disallowed"}`, chosenShown(facet.facet, s), on);
       b.setAttribute("aria-pressed", String(chosen));
       step.appendChild(b);
-      step.appendChild(el("r4m-chance", null, s.chance !== undefined && s.chance !== null ? percent(s.chance) : " "));
+      const of = disagree ? named.get(s.key) : [];
+      step.appendChild(el("r4m-chance", null, of.length ? of.join(", ") : s.chance !== undefined && s.chance !== null ? percent(s.chance) : " "));
       steps.appendChild(step);
     });
     box.appendChild(steps);
-    const origin = !current ? t("scale.none")
+    const origin = disagree ? t("scale.disagree")
+      : !current ? t("scale.none")
       : mine ? t("scale.mine")
       : current.fromSite ? t("scale.site")
       : t("scale.model", { chance: current.chance !== undefined && current.chance !== null ? percent(current.chance) : "—" });
@@ -1410,12 +1486,16 @@
     values.filter((v) => v.corrected === "ADDED" || (v.inferred && v.corrected !== "REMOVED")).forEach((v) => after.appendChild(valueChip(item, decor.facet, v)));
     ((suggestions && suggestions.suggested) || []).forEach((v) => after.appendChild(suggestedChip(item, decor.facet, v)));
     if (!facet.complete && !held(facet)) moreOf(item, decor.facet, after, shownKeys(facet, suggestions));
-    after.appendChild(addField(item, decor.facet, labelOf(facet), held(facet)));
+    const field = addField(item, decor.facet, labelOf(facet), held(facet));
+    after.appendChild(field);
     const allNamed = completeButton(item, facet);
     if (allNamed) after.appendChild(allNamed);
     const last = elements[elements.length - 1];
     (last.nextElementSibling && last.nextElementSibling.tagName === "R4M-TOOLS" ? last.nextElementSibling : last)
       .insertAdjacentElement("afterend", after);
+    // The page shows the site's own words: over the values, the other sites'
+    const words = saidBlock(item, facet, false, field);
+    if (words) after.insertAdjacentElement("beforebegin", words);
     const text = byTextBlock(item, facet);
     if (text) after.insertAdjacentElement("afterend", text);
     return true;

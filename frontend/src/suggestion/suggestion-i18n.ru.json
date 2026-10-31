@@ -1,4 +1,3 @@
 {
-  "SuggestedChip.chance": "Вероятность {{chance}}",
-  "SuggestedValues.title": "Подсказки: похоже, что у работы есть и это"
+  "SuggestedChip.chance": "Вероятность {{chance}}"
 }

@@ -118,7 +118,7 @@ class Ao3 : Source {
                 out += LayerDraft(UniverseFacets.PAIRINGS, UniverseFacets.pairing(characters[0]!!, characters[1]!!), written)
             }
         }
-        return out.distinctBy { it.facet to it.key }
+        return out.distinct()
     }
 
     override val signals = listOf(

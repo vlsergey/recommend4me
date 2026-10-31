@@ -2767,7 +2767,7 @@ components:
           type: boolean
           description: |
             The application works the values out and gives them to the work as its own; the site's
-            line of them (ItemFacet.original) is only what it learns from
+            line of them (ItemFacet.said) is only what it learns from
         editable:
           type: boolean
           description: |
@@ -2886,6 +2886,11 @@ components:
             in the reading view even when only offered (the model doubting the site): the site's word
             is never hidden. The site's values only offered come right after the work's values, before
             the model's own offers
+        sites:
+          type: array
+          description: Of a facet of the layer the model works out, the sites giving the work the value
+          items:
+            type: string
         implied:
           type: boolean
           description: The work's only as a tag above a tag of it (TagInfo.parents); not answered on by itself
@@ -2912,9 +2917,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FacetValueInfo'
-        original:
-          type: string
-          description: The facet's values as the site writes them, shown above the worked out ones
+        said:
+          type: array
+          description: |
+            Of a facet of the layer, the sources of the field: what every site of the work says of it, those
+            saying the most first, shown right above the place of answering; a site with no word on it is
+            listed with none; empty when no site can speak of the field. Given to the screen of a work
+            and the page of a site
+          items:
+            $ref: '#/components/schemas/SiteSaid'
         complete:
           type: boolean
           nullable: true
@@ -2934,6 +2945,45 @@ components:
             work's one among them (values): shown as the scale, one step chosen; none of any other facet
           items:
             $ref: '#/components/schemas/ScaleStep'
+
+    SiteSaid:
+      type: object
+      required: [source, item, url, read, words]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        url:
+          type: string
+        read:
+          type: boolean
+          description: The item's page was read; of one known by its card alone, its silence says nothing
+        words:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteWord'
+
+    SiteWord:
+      type: object
+      required: [key, name, searchable]
+      properties:
+        key:
+          type: string
+          description: The site's own key of the word
+        name:
+          type: string
+          description: The word as the site writes it
+        searchable:
+          type: boolean
+          description: A value of the field may be found by it; not of the direction of pairs, which only tells of them
+        reaches:
+          type: array
+          description: |
+            The values of the field the word reached - the same key, a tag's or a fandom's binding, a draft;
+            empty when it reached none; absent when nothing can tell, as of the names authors write
+          items:
+            type: string
 
     ScaleStep:
       type: object
@@ -3419,6 +3469,9 @@ components:
           type: boolean
         corrected:
           type: boolean
+        siteContent:
+          type: string
+          description: The text as the site has it, the user's correction left aside; none of a text only the user gave
 
     NumberValue:
       type: object
@@ -3436,7 +3489,7 @@ components:
         siteValue:
           type: number
           format: double
-          description: Of a number the user corrected, in what a site says of a work, the site's own
+          description: In what a site says of a work, the number as the site has it, the user's correction left aside
 
     PartInfo:
       type: object
@@ -3563,7 +3616,7 @@ components:
 
     WorkSite:
       type: object
-      required: [source, item, title, titleCorrected, url, authors, descriptionCorrected, numbers, reviewCount, pictureCount, partCount, canRefresh]
+      required: [source, item, title, titleCorrected, siteTitle, url, authors, texts, numbers, reviewCount, pictureCount, partCount, canRefresh]
       properties:
         canRefresh:
           type: boolean
@@ -3578,20 +3631,18 @@ components:
           type: boolean
         siteTitle:
           type: string
-          description: Of a title the user corrected, the site's own
+          description: The title as the site has it, the user's correction left aside
         url:
           type: string
         authors:
           type: array
           items:
             type: string
-        description:
-          type: string
-        descriptionCorrected:
-          type: boolean
-        siteDescription:
-          type: string
-          description: Of a description the user corrected, the site's own, if it has one
+        texts:
+          type: array
+          description: Its texts, the user's corrections included; a facet's own line is not among them
+          items:
+            $ref: '#/components/schemas/TextValue'
         numbers:
           type: array
           description: Its numbers, the user's corrections included
