@@ -82,14 +82,24 @@ Every field of the form, the rare ones too, is one pattern:
 - **The place of the answer:** the chips, every suggestion among them, the search, "…". Nothing stands between the
   sources and the first chip.
 
-The rows are repeated above each of the three fields of characters and pairs: one block over them would leave the
-pairings far from their source (600 px on ficbook/1866947).
+**Fields that read the same words share their rows, once, over their group.** Kind and universe read the same words of
+a site, so do the main characters, the secondary ones and the pairs: repeated over each field, the rows only pushed the
+chips down and left the same text to be read twice (the owner, on a work of two sites: "видишь дублирование?"). The rows
+stand under the heading of the group: "Мир" over the kind and the universe, "Персонажи" over the three fields. Theirs is
+every word of every field of the group: a word reaches what it reached in any of them, the direction of the pairs stands
+in the same row. The price: on a long work the rows of "Персонажи" scroll away before the pairs. The line of fields leads
+to the group from its first field, so the rows are not passed by. The tags keep their own rows: another group, the
+field's own words.
+
+**A press on a word in such rows** goes to the field if only one is open (the universe; the kind has no search). Of the
+characters a line under the row asks which: `Юто → Главные · Второстепенные · Пары`, a field of characters taking the name
+pressed, the pairs the whole word; a closed field is not offered, and none open means no press.
 
 **A word of a site** is one of:
 
 | State | Look | How it is known |
 |---|---|---|
-| Reached the field | plain; its title names the value | the same key (a rating, a language); a tag's binding; a fandom's binding; a draft (`store.drafts`, AO3) |
+| Reached the field, or a field of its group | plain; its title names the value | the same key (a rating, a language); a tag's binding; a fandom's binding; a draft (`store.drafts`, AO3) |
 | Its value answered no | crossed out | the above, and the user's answer |
 | Reached nothing | dotted underline, ◌ | a binding or a draft could have told it, and there is none |
 | Nothing can tell | plain | the names authors write on ficbook and fanfics.me: no binding exists, so no ◌ would mean anything; the eye compares them |
@@ -111,8 +121,8 @@ press would make a character named "Юто/Агеха".
 
 **A fandom bound once for all its works** (D): when the work has a universe and a fandom's word reached nothing, the word
 offers "всем работам фандома: <universe>"; `PUT /api/universes/fandoms`, the write of the screen of the universes. It says the other
-works get it when their drafts are made anew, in the background. A bound fandom shows its universe and takes it back there.
-Web interface only: the extension has no screen of bindings.
+works get it when their drafts are made anew, in the background. A bound fandom shows its universe and takes it back there; a universe
+named as the fandom is not written twice, a mark standing for it. Web interface only: the extension has no screen of bindings.
 
 **A chip's "site"** names the sites in its title and on the finger's sheet: the sources of a long field of tags can scroll
 out of sight on a small screen (over 500 px on 41 of 400 works at 1366×768).
@@ -130,8 +140,10 @@ is made of all the items of the work, the same whichever item it is read through
 ```
 ┌ Вид ✓ · Вселенная ✓ · Гл. персонажи 3 · Второстеп. · Пары 2 · Теги 12 · Возраст 2 · Языки ✓ ┐ sticky
 │ МИР                                                                                         │
+│   rows of the sites                                                                         │
 │   Вид (field)   Вселенная (field)                                                           │
 │ ПЕРСОНАЖИ                                                                                   │
+│   rows of the sites                                                                         │
 │   Главные (field)   Второстепенные (field)   Пары (field)                                   │
 │ СОДЕРЖАНИЕ                                                                                  │
 │   Теги (field)   Возраст (field)   Языки (field)                                            │
@@ -142,14 +154,16 @@ is made of all the items of the work, the same whichever item it is read through
 - **The line of fields** is what B and D need. A field is one of three: **closed** (✓, by the table of section 3),
   **open** (the number left to answer), **nothing left and not closed** (the name alone, muted). A press scrolls to it. One line
   that scrolls sideways on a phone, never three rows of 44 px. It replaces "12 to answer · 3 offers".
-- **Kind** is its four kinds as buttons with their chances, in place of a list one must open, over its own rows. The
-  universe's field is gone while the kind has none; the kind's rows stay, so "Ориджиналы" is seen when it matters.
+- **Kind** is its four kinds as buttons with their chances, in place of a list one must open, under the rows of the group.
+  The universe's field is gone while the kind has none; the rows stay, so "Ориджиналы" is seen when it matters.
 - **Dependencies are told in place:** characters with no universe say so; the picker still takes a name.
 - **Offers and suggestions** stand in their field. The block "suggested" under all fields is gone.
 - **Games and other types** have the groups they have fields for.
 
 The extension's panel is the same pattern. A facet placed on the site's own page has beside it only the rows of **the other
-sites**, the page itself showing its own (E, on ficbook).
+sites**, the page itself showing its own (E, on ficbook). The rows of a group stand over its first field **in the same place**:
+having no headings of groups, the extension puts them there. A field of the group elsewhere (the kind in the panel, the universe on
+the page) keeps its own: the two are not seen together.
 
 ## 6. The rest of the screen
 

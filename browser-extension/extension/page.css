@@ -394,6 +394,14 @@ r4m-said-silent {
   color: var(--r4m-muted);
 }
 
+r4m-said-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  align-items: center;
+  color: var(--r4m-muted);
+}
+
 r4m-word:not(:last-child)::after {
   content: ",";
   color: var(--r4m-muted);

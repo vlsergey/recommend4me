@@ -48,7 +48,7 @@ export function FieldBlock({
   facet?: ItemFacet;
   corrections?: Corrections;
   tools?: ReactNode;
-  /** In place of the sources shown by default, a row of them with its presses. */
+  /** In place of the sources shown by default, a row of them with its presses; null when they stand over the group of the field. */
   sources?: ReactNode;
   children: ReactNode;
 }) {
@@ -69,7 +69,7 @@ export function FieldBlock({
         )}
         {tools}
       </div>
-      {sources ?? (facet && <SiteWords facet={facet} />)}
+      {sources === undefined ? facet && <SiteWords facet={facet} /> : sources}
       {children}
     </section>
   );
@@ -131,7 +131,7 @@ export function FacetLine({
       label={name}
       facet={f}
       corrections={corrections}
-      sources={<SiteWords facet={f} onWord={addable && ((word) => setSearch({ word }))} />}
+      sources={<SiteWords facet={f} targets={addable ? [{ label: name, onWord: (word) => setSearch({ word }) }] : []} />}
       tools={
         // "No other values": the work's values of it all named — the others not offered, rejected for the model; pressed again, taken back
         f.completable && (

@@ -21,7 +21,7 @@ and tell the user to update the extension.
 
 | What | Web interface | Extension (`page.js`) |
 |---|---|---|
-| What every site of the work says of a field (`said`), right above the place of answering on it: a row of words per site, the silent on one line, an item never read told apart; a word by what it reached (plain, crossed out, ◌ none); a press on it opens the field's search with the name typed, each name of a pair apart in the fields of characters, added as a new name only once the user changes it. A facet placed on the site's own page: the other sites' rows alone | `correction/SiteWords.tsx`, `FacetCorrections.tsx` `FieldBlock` | `saidBlock`, `siteWord`, `pressWord` |
+| What every site of the work says of a field (`said`), right above the place of answering on it: a row of words per site, the silent on one line, an item never read told apart; a word by what it reached (plain, crossed out, ◌ none); a press on it opens the field's search with the name typed, each name of a pair apart in the fields of characters, added as a new name only once the user changes it. Fields reading the same words (kind and universe; main, secondary characters and pairs) share their rows once, over the group: a word reaches what it reached in any of them, a press goes to the one open field or a line under the row asks which. A facet placed on the site's own page: the other sites' rows alone | `correction/SiteWords.tsx` (`saidTogether`), `universe/FanficSection.tsx` `FieldGroup`, `FacetCorrections.tsx` `FieldBlock` | `saidBlock`, `sourcesOf`, `saidTogether`, `pressed`, `siteWord`, `pressWord` |
 | A value as a chip, its look by its state | `correction/FacetCorrections.tsx` `FacetValue` | `valueChip` |
 | The order of a facet's values and candidates: the server's (the work's values, then the site's only offered, then the model's offers; likeliest first, a tag above another before it), kept while the work is open | `facet/valueOrder.ts` | `stableOrder` |
 | ✓ ✕ ↺ of a value; none of a tag the work has by a tag under it (`implied`) | `correction/FacetAnswers.tsx` | `answers` |
@@ -44,7 +44,8 @@ and tell the user to update the extension.
 A form of marking starts from who answers, when and from what, taken from what was really done, then an
 inventory of its fields, and the layout last (`docs/work-screen.md`, sections 1–3). **The source data of a
 field stands right next to, above, the place of marking it:** every source, in the field, none in another
-view. The plan is walked on real works before it is built.
+view. **What several fields read stands once, over them:** the same words are never repeated field after
+field. The plan is walked on real works before it is built.
 
 ## A work is a normalized work; a site's item is what a site says of it
 

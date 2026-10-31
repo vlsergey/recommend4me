@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { CHIP_TOUCH, FacetAnswers } from "@/correction/FacetAnswers";
 import { FacetValue, FieldBlock, LaterOffers, MoreCandidates, SearchButton } from "@/correction/FacetCorrections";
-import { SiteWords } from "@/correction/SiteWords";
+import { saidTogether, SiteWords, type WordTarget } from "@/correction/SiteWords";
 import type { Corrections } from "@/correction/useCorrections";
 import { useLaterOffer, useStableOrder } from "@/facet/valueOrder";
 import { percent } from "@/i18n/format";
@@ -78,20 +78,28 @@ const answeredYes = (v: FacetValueInfo | undefined) => v?.corrected === "ADDED" 
 const SELECT =
   "h-8 min-w-0 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring dark:bg-input/30";
 
-/** A group of fields of the form under its heading. */
-export function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * A group of fields of the form under its heading, with [sources] when its fields read the same words
+ * of the sites: they stand once, over the fields. The [first] field's key then leads to the group, the
+ * line of fields coming to the sources and not past them.
+ */
+export function FieldGroup({ title, first, sources, children }: { title: string; first?: string; sources?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-3">
+    <section data-field={first} className="flex scroll-mt-24 flex-col gap-3">
       <h3 className="border-b pb-0.5 text-sm font-semibold">{title}</h3>
+      {sources}
       {children}
     </section>
   );
 }
 
+/** A search of a field opened by a site's word or by its own button; every press is a new search, the same word pressed again too. */
+type FieldSearch = { facet: string; word: string; press: number };
+
 /**
  * Whether the work is fan fiction, of which universes, with which main characters and pairings: the
- * fields of the form in the order their answers depend on each other, each under what every site
- * says of it. For the works of a type with universes only.
+ * fields of the form in the order their answers depend on each other, each group under what every
+ * site says of its fields. For the works of a type with universes only.
  */
 export function FanficSection({
   type,
@@ -119,34 +127,69 @@ export function FanficSection({
   /** A field's facet: every facet of the layer comes, with no value too. */
   const fieldOf = (key: string, fallback: string): ItemFacet => facetOf(key) ?? { facet: key, labelKey: fallback, editable: true, values: [] };
 
+  // The search a site's word opens is in a field, the word in the sources over its group
+  const [search, setSearch] = useState<FieldSearch | null>(null);
+  const open = (facet: string, word: string) => setSearch({ facet, word, press: (search?.press ?? 0) + 1 });
+  const close = () => setSearch(null);
+  const searchOf = (facet: string) => (search?.facet === facet ? search : null);
+  /** A field a site's word goes to, while it is open. */
+  const target = (facet: string, label: string, names: boolean): WordTarget[] => (facetOf(facet)?.complete ? [] : [{ label, names, onWord: (word) => open(facet, word) }]);
+  const mainLabel = labelOf(CHARACTERS, t("Facet.mainCharacters"));
+  const secondaryLabel = labelOf(SECONDARY_CHARACTERS, t("Facet.secondaryCharacters"));
+  const pairingsLabel = labelOf(PAIRINGS, t("Facet.pairings"));
+  const universeLabel = labelOf(UNIVERSE, t("Facet.universe"));
+
   return (
     <>
-      <FieldGroup title={t("Form.world")}>
+      <FieldGroup
+        title={t("Form.world")}
+        first={KIND}
+        sources={
+          <SiteWords
+            facet={saidTogether(original ? [fieldOf(KIND, "")] : [fieldOf(UNIVERSE, ""), fieldOf(KIND, "")])}
+            targets={original ? [] : target(UNIVERSE, universeLabel, false)}
+            bindTo={original ? undefined : valuesOf(UNIVERSE)}
+          />
+        }
+      >
         <KindChoice label={labelOf(KIND, t("Facet.kind"))} facet={fieldOf(KIND, "")} suggested={suggestedOf(KIND)} corrections={corrections} />
         {!original && (
           <Universes
             type={type}
-            label={labelOf(UNIVERSE, t("Facet.universe"))}
+            label={universeLabel}
             facet={fieldOf(UNIVERSE, "")}
             values={valuesOf(UNIVERSE)}
             complete={facetOf(UNIVERSE)?.complete === true}
             suggested={suggestedOf(UNIVERSE)}
+            search={searchOf(UNIVERSE)}
             corrections={corrections}
           />
         )}
       </FieldGroup>
-      <FieldGroup title={t("Form.characters")}>
+      <FieldGroup
+        title={t("Form.characters")}
+        first={CHARACTERS}
+        sources={
+          <SiteWords
+            facet={saidTogether([fieldOf(CHARACTERS, ""), fieldOf(SECONDARY_CHARACTERS, ""), fieldOf(PAIRINGS, "")])}
+            targets={[...target(CHARACTERS, mainLabel, true), ...target(SECONDARY_CHARACTERS, secondaryLabel, true), ...target(PAIRINGS, pairingsLabel, false)]}
+          />
+        }
+      >
         <Characters
           type={type}
           item={ref}
           field={fieldOf(CHARACTERS, "")}
           facet={CHARACTERS}
-          label={labelOf(CHARACTERS, t("Facet.mainCharacters"))}
+          label={mainLabel}
           named="mainCharacters"
           values={valuesOf(CHARACTERS)}
           complete={facetOf(CHARACTERS)?.complete === true}
           elsewhere={valuesOf(SECONDARY_CHARACTERS).filter(has)}
           universes={valuesOf(UNIVERSE).filter(has)}
+          search={searchOf(CHARACTERS)}
+          onSearch={(word) => open(CHARACTERS, word)}
+          onSearchClose={close}
           corrections={corrections}
         />
         <Characters
@@ -154,12 +197,15 @@ export function FanficSection({
           item={ref}
           field={fieldOf(SECONDARY_CHARACTERS, "")}
           facet={SECONDARY_CHARACTERS}
-          label={labelOf(SECONDARY_CHARACTERS, t("Facet.secondaryCharacters"))}
+          label={secondaryLabel}
           named="secondaryCharacters"
           values={valuesOf(SECONDARY_CHARACTERS)}
           complete={facetOf(SECONDARY_CHARACTERS)?.complete === true}
           elsewhere={valuesOf(CHARACTERS).filter(has)}
           universes={valuesOf(UNIVERSE).filter(has)}
+          search={searchOf(SECONDARY_CHARACTERS)}
+          onSearch={(word) => open(SECONDARY_CHARACTERS, word)}
+          onSearchClose={close}
           corrections={corrections}
         />
         <Pairings
@@ -167,10 +213,12 @@ export function FanficSection({
           item={ref}
           field={fieldOf(PAIRINGS, "")}
           universes={valuesOf(UNIVERSE).filter(has)}
-          label={labelOf(PAIRINGS, t("Facet.pairings"))}
+          label={pairingsLabel}
           values={valuesOf(PAIRINGS)}
           complete={facetOf(PAIRINGS)?.complete === true}
           characters={valuesOf(CHARACTERS).filter(has)}
+          search={searchOf(PAIRINGS)}
+          onSearchClose={close}
           corrections={corrections}
         />
       </FieldGroup>
@@ -223,8 +271,8 @@ function Chips({
 
 /**
  * Fan fiction, realism, an alternative history or an original work: four buttons, each with the
- * model's chance of it while the user has not answered, the sites' words over them; one the site or
- * the model gave is marked. Pressing a kind confirms it and says no to the others the work has;
+ * model's chance of it while the user has not answered, under the sites' words over the group; one the
+ * site or the model gave is marked. Pressing a kind confirms it and says no to the others the work has;
  * pressing the chosen one takes the answers back.
  */
 function KindChoice({
@@ -262,7 +310,7 @@ function KindChoice({
   };
 
   return (
-    <FieldBlock field={KIND} label={label} facet={facet}>
+    <FieldBlock field={KIND} label={label} facet={facet} sources={null}>
       <div className="flex flex-wrap gap-1">
         {KINDS.map((k) => {
           const v = valueOf(k.key);
@@ -302,6 +350,7 @@ function Universes({
   values,
   complete,
   suggested,
+  search,
   corrections,
 }: {
   type: ContentTypeInfo;
@@ -310,6 +359,8 @@ function Universes({
   values: FacetValueInfo[];
   complete: boolean;
   suggested: SuggestedValue[];
+  /** The search a site's word opened. */
+  search: FieldSearch | null;
   corrections: Corrections;
 }) {
   const own = values.filter(has);
@@ -317,11 +368,11 @@ function Universes({
   const allNamed = <AllNamed facet={UNIVERSE} named="universes" complete={complete} corrections={corrections} />;
   if (complete)
     return (
-      <FieldBlock field={UNIVERSE} label={label} facet={facet} corrections={corrections} tools={allNamed} sources={<SiteWords facet={facet} bindFandoms />}>
+      <FieldBlock field={UNIVERSE} label={label} facet={facet} corrections={corrections} tools={allNamed} sources={null}>
         <Chips facet={UNIVERSE} values={own} corrections={corrections} />
       </FieldBlock>
     );
-  return <OpenUniverses type={type} label={label} facet={facet} values={values} suggested={suggested} corrections={corrections} allNamed={allNamed} />;
+  return <OpenUniverses type={type} label={label} facet={facet} values={values} suggested={suggested} search={search} corrections={corrections} allNamed={allNamed} />;
 }
 
 /**
@@ -362,6 +413,7 @@ function OpenUniverses({
   facet,
   values,
   suggested,
+  search,
   corrections,
   allNamed,
 }: {
@@ -370,13 +422,14 @@ function OpenUniverses({
   facet: ItemFacet;
   values: FacetValueInfo[];
   suggested: SuggestedValue[];
+  search: FieldSearch | null;
   corrections: Corrections;
   /** The button saying there are no others. */
   allNamed: ReactNode;
 }) {
   const { t } = useTranslation("universe");
   // A site's word pressed: typed into the picker and the catalogue's search both, the dictionary holding few of the fandoms
-  const [word, setWord] = useState<string>();
+  const word = search?.word;
   const dictionary = useUniverses(type.id);
   const linked = (value: string) => values.some((v) => v.key === value && has(v));
   const link = (value: string) => corrections.setFacet(UNIVERSE, { key: value }, true);
@@ -389,11 +442,11 @@ function OpenUniverses({
   }));
 
   return (
-    <FieldBlock field={UNIVERSE} label={label} facet={facet} corrections={corrections} tools={allNamed} sources={<SiteWords facet={facet} onWord={setWord} bindFandoms />}>
+    <FieldBlock field={UNIVERSE} label={label} facet={facet} corrections={corrections} tools={allNamed} sources={null}>
       <Chips facet={UNIVERSE} values={values} suggested={suggested} corrections={corrections} />
       <div className="flex flex-wrap items-start gap-1">
         <Picker
-          key={word}
+          key={search?.press}
           label={t("OpenUniverses.add")}
           word={word}
           placeholder={t("OpenUniverses.placeholder")}
@@ -439,6 +492,9 @@ function Characters({
   complete,
   elsewhere,
   universes,
+  search,
+  onSearch,
+  onSearchClose,
   corrections,
 }: {
   type: ContentTypeInfo;
@@ -454,6 +510,10 @@ function Characters({
   elsewhere: FacetValueInfo[];
   /** The universes the work has. */
   universes: FacetValueInfo[];
+  /** The search of a character by name, open: by a site's word, or by the 🔍 after the work's characters. */
+  search: FieldSearch | null;
+  onSearch: (word: string) => void;
+  onSearchClose: () => void;
   corrections: Corrections;
 }) {
   const own = values.filter(has);
@@ -461,7 +521,7 @@ function Characters({
   const allNamed = <AllNamed facet={facet} named={named} complete={complete} corrections={corrections} />;
   if (complete)
     return (
-      <FieldBlock field={facet} label={label} facet={field} corrections={corrections} tools={allNamed} sources={<SiteWords facet={field} split />}>
+      <FieldBlock field={facet} label={label} facet={field} corrections={corrections} tools={allNamed} sources={null}>
         <Chips facet={facet} values={own} corrections={corrections} />
       </FieldBlock>
     );
@@ -475,6 +535,9 @@ function Characters({
       values={values}
       elsewhere={elsewhere}
       universes={universes}
+      search={search}
+      onSearch={onSearch}
+      onSearchClose={onSearchClose}
       corrections={corrections}
       allNamed={allNamed}
     />
@@ -496,6 +559,9 @@ function OpenCharacters({
   values,
   elsewhere,
   universes,
+  search,
+  onSearch,
+  onSearchClose,
   corrections,
   allNamed,
 }: {
@@ -507,6 +573,9 @@ function OpenCharacters({
   values: FacetValueInfo[];
   elsewhere: FacetValueInfo[];
   universes: FacetValueInfo[];
+  search: FieldSearch | null;
+  onSearch: (word: string) => void;
+  onSearchClose: () => void;
   corrections: Corrections;
   /** The button saying there are no others. */
   allNamed: ReactNode;
@@ -554,11 +623,9 @@ function OpenCharacters({
   ];
   const candidates = useCandidates(item, facet, true);
   const failed = characters.find((q) => q.isError)?.error?.message ?? dictionary.error?.message ?? candidates.error?.message;
-  // The search of a character by name: opened by the 🔍 after the work's characters, or a site's word with it typed
-  const [search, setSearch] = useState<{ word: string } | null>(null);
 
   return (
-    <FieldBlock field={facet} label={label} facet={field} corrections={corrections} tools={allNamed} sources={<SiteWords facet={field} split onWord={(word) => setSearch({ word })} />}>
+    <FieldBlock field={facet} label={label} facet={field} corrections={corrections} tools={allNamed} sources={null}>
       <Named type={type} item={item} facet={facet} candidates={candidates.data} shown={values} universes={universes} corrections={corrections} />
       <Chips
         facet={facet}
@@ -566,12 +633,12 @@ function OpenCharacters({
         item={item}
         corrections={corrections}
         candidates={candidates.data}
-        search={{ onClick: () => setSearch(search ? null : { word: "" }), title: t("OpenCharacters.add") }}
+        search={{ onClick: () => (search ? onSearchClose() : onSearch("")), title: t("OpenCharacters.add") }}
       />
       {universes.length === 0 && <p className="text-xs text-muted-foreground">{t("OpenCharacters.noUniverse")}</p>}
       {search && (
         <Picker
-          key={search.word}
+          key={search.press}
           word={search.word}
           label={t("OpenCharacters.add")}
           placeholder={t("OpenCharacters.placeholder")}
@@ -581,7 +648,7 @@ function OpenCharacters({
           empty={universes.length === 0 ? t("OpenCharacters.noUniverse") : undefined}
           onPick={(key) => corrections.setFacet(facet, { key }, true)}
           onName={(name) => corrections.setFacet(facet, { name }, true)}
-          onClose={() => setSearch(null)}
+          onClose={onSearchClose}
         />
       )}
     </FieldBlock>
@@ -602,6 +669,8 @@ function Pairings({
   values,
   complete,
   characters,
+  search,
+  onSearchClose,
   corrections,
 }: {
   type: ContentTypeInfo;
@@ -614,6 +683,9 @@ function Pairings({
   complete: boolean;
   /** The characters the work has. */
   characters: FacetValueInfo[];
+  /** The search a site's word of a pair opened. */
+  search: FieldSearch | null;
+  onSearchClose: () => void;
   corrections: Corrections;
 }) {
   const own = values.filter(has);
@@ -621,12 +693,24 @@ function Pairings({
   const allNamed = <AllNamed facet={PAIRINGS} named="pairings" complete={complete} corrections={corrections} />;
   if (complete)
     return (
-      <FieldBlock field={PAIRINGS} label={label} facet={field} corrections={corrections} tools={allNamed}>
+      <FieldBlock field={PAIRINGS} label={label} facet={field} corrections={corrections} tools={allNamed} sources={null}>
         <Chips facet={PAIRINGS} values={own} corrections={corrections} />
       </FieldBlock>
     );
   return (
-    <OpenPairings type={type} item={item} field={field} universes={universes} label={label} values={values} characters={characters} corrections={corrections} allNamed={allNamed} />
+    <OpenPairings
+      type={type}
+      item={item}
+      field={field}
+      universes={universes}
+      label={label}
+      values={values}
+      characters={characters}
+      search={search}
+      onSearchClose={onSearchClose}
+      corrections={corrections}
+      allNamed={allNamed}
+    />
   );
 }
 
@@ -639,6 +723,8 @@ function OpenPairings({
   label,
   values,
   characters,
+  search,
+  onSearchClose,
   corrections,
   allNamed,
 }: {
@@ -649,14 +735,20 @@ function OpenPairings({
   label: string;
   values: FacetValueInfo[];
   characters: FacetValueInfo[];
+  search: FieldSearch | null;
+  onSearchClose: () => void;
   corrections: Corrections;
   /** The button saying there are no others. */
   allNamed: ReactNode;
 }) {
   const { t } = useTranslation("universe");
-  const [adding, setAdding] = useState(false);
+  const [composing, setComposing] = useState(false);
   // A site's word of a pair pressed: typed into the choice of pairs; with nothing to choose from, the composing opened
-  const [word, setWord] = useState<string>();
+  const adding = composing || (search !== null && characters.length === 0);
+  const closeComposing = () => {
+    setComposing(false);
+    onSearchClose();
+  };
   const [a, setA] = useState("");
   const [b, setB] = useState("");
   // The work's characters and the original ones: they pair with anyone, listed among the main ones or not
@@ -674,7 +766,7 @@ function OpenPairings({
     await corrections.setFacet(PAIRINGS, { key: pairingKey(a, b) }, true);
     setA("");
     setB("");
-    setAdding(false);
+    closeComposing();
   };
 
   const select = (value: string, onChange: (value: string) => void, other: string) => (
@@ -688,16 +780,14 @@ function OpenPairings({
     </select>
   );
 
-  const onWord = (pressed: string) => (characters.length > 0 ? setWord(pressed) : setAdding(true));
-
   return (
-    <FieldBlock field={PAIRINGS} label={label} facet={field} corrections={corrections} tools={allNamed} sources={<SiteWords facet={field} onWord={onWord} />}>
+    <FieldBlock field={PAIRINGS} label={label} facet={field} corrections={corrections} tools={allNamed} sources={null}>
       <Named type={type} item={item} facet={PAIRINGS} candidates={candidates.data} shown={values} universes={universes} corrections={corrections} />
       <Chips facet={PAIRINGS} values={values} item={item} corrections={corrections} candidates={candidates.data} />
       {characters.length > 0 && (
         <Picker
-          key={word}
-          word={word}
+          key={search?.press}
+          word={search?.word}
           label={t("OpenPairings.choose")}
           placeholder={t("OpenPairings.placeholder")}
           options={ranked(pairs, candidates.data)}
@@ -709,7 +799,7 @@ function OpenPairings({
       )}
       {!adding ? (
         <div className="flex flex-wrap items-start gap-1">
-          <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
+          <Button variant="ghost" size="sm" onClick={() => setComposing(true)}>
             <PlusIcon /> {t("OpenPairings.compose")}
           </Button>
         </div>
@@ -717,7 +807,7 @@ function OpenPairings({
         <div className="flex flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             {t("OpenPairings.composeHint")}
-            <Button variant="ghost" size="icon-xs" onClick={() => setAdding(false)} title={t("OpenPairings.close")}>
+            <Button variant="ghost" size="icon-xs" onClick={closeComposing} title={t("OpenPairings.close")}>
               <XIcon />
             </Button>
           </div>
