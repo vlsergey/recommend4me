@@ -293,11 +293,11 @@ class Recommendations(
             CatalogueReader.inputOf(catalogue.byKey.getValue(key), catalogue.vectorsOf(key), previousForCurrent[key])
         }
         // Of every work: its blocks' as counted when the catalogue was read, the likeness to the marks' counted here
-        val spreads = catalogue.spreads + VectorSpread.of { action ->
+        val spreads = catalogue.averages.vectors + VectorSpread.of { action ->
             likeness.pictures.forEach { _, v -> action(MarkLikeness.PICTURES, v) }
             likeness.reviews.forEach { _, v -> action(MarkLikeness.REVIEWS, v) }
         }
-        val numbers = FeatureLayout.numberSpreads(catalogue.items.map { ItemInput(it.key, emptyMap(), emptySet(), it.numeric) })
+        val numbers = catalogue.averages.numbers
         val layout = FeatureLayout.of(perItem, spreads, numbers)
         val x = layout.matrix(rows)
         val works = LongArray(rows.size) { clusters.work(rows[it].key) }
@@ -442,7 +442,7 @@ class Recommendations(
      * annotation, its cover); this one has not. The score is the one the list sorts the surprises
      * by. None for a work the user has not graded, or when there are too few works for folds.
      *
-     * Read as kept: the fitting takes a second or more, in the queue of the computations, and a
+     * Read as kept: the fitting takes seconds, in the queue of the computations, and a
      * request never waits for it ([io.github.vlsergey.recommend4me.workload.Requests]) — not yet
      * worked out, it is planned, and the request answers so.
      */
@@ -489,13 +489,16 @@ class Recommendations(
     private fun heldOutChanged(source: String, itemId: String) = stores.typeOf(source).models.forgetExplained(ItemKey(source, itemId))
 
     private fun fitHeldOut(asked: ItemKey): HeldOut? {
+        val started = System.currentTimeMillis()
         val type = stores.typeOf(asked.source)
         if (type.source(asked.source)?.ratings?.ofItem(asked.id).isNullOrEmpty()) return null
         val key = works.of(type).representative(asked)
         val model = load(type) ?: return null
         val scorer = plugins.scorers.firstOrNull { it.id == model.meta.scorer } ?: return null
-        // The work's own vectors kept with the graded ones': it is graded, but said so all the same
-        val catalogue = reader.read(type, also = listOf(key))
+        // The rows of the grades are all a fitting reads; the model kept tells what the average work is.
+        // The work's own read with the graded ones': it is graded, but said so all the same
+        val catalogue = reader.gradedWorks(type, model.meta.averages(), also = listOf(key))
+        val read = System.currentTimeMillis()
         val p = prepare(catalogue) ?: return null
         val own = p.used.indices.filter { p.used[it].key == key }.maxByOrNull { p.used[it].ratedAt } ?: return null
         val folds = CrossValidation.folds(p.grades, p.works)
@@ -524,11 +527,13 @@ class Recommendations(
             if (catalogue.likeness.empty) i else i.withVectors(i.vectors - MARK_KEYS + catalogue.likenessOf(key, excluded))
         }
         val grade = p.used[own].grade
-        return HeldOut(
+        val heldOut = HeldOut(
             score = foldModel.scale.ofStandard((all[own] - mean) / sd),
             gradePlace = model.scale.grades()[grade],
             explanation = explain(foldModel, input, type),
         )
+        log.info("{}: what a model that had not seen it says worked out in {} ms: read {}, fitted {}", asked, System.currentTimeMillis() - started, read - started, System.currentTimeMillis() - read)
+        return heldOut
     }
 
     /** Where every grade stands on 0..10 by the current model of the type; null without one. */
@@ -810,13 +815,14 @@ class Recommendations(
         return stored.reviews.matches(key, row, MATCHES_SHOWN)
     }
 
-    /** Share of the catalogue's items with every categorical feature of the [layout]. */
+    /** Share of the catalogue's items with every categorical feature of the [layout]: as the averages say, else counted of the items read. */
     private fun categoricalShare(layout: FeatureLayout, catalogue: Catalogue): FloatArray {
         val index = layout.categorical.withIndex().associate { (i, name) -> name to i }
         val counts = IntArray(layout.categorical.size)
         catalogue.items.forEach { item -> item.categorical.forEach { name -> index[name]?.let { counts[it]++ } } }
         val total = catalogue.items.size
-        return FloatArray(counts.size) { if (total > 0) counts[it].toFloat() / total else 0f }
+        val told = catalogue.averages.shares
+        return FloatArray(counts.size) { told[layout.categorical[it]] ?: if (total > 0) counts[it].toFloat() / total else 0f }
     }
 
     fun summary(typeId: String): ModelSummary {

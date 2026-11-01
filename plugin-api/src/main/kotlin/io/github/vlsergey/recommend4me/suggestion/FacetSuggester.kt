@@ -185,6 +185,14 @@ interface FacetSuggester {
     fun scoring(bytes: ByteArray, task: SuggestionTask): SuggestionScores? = null
 
     /**
+     * THE WORKS THE SUGGESTER MUST READ TO SCORE THE WORKS [asked]: the suggester's own word, the
+     * application reads what it says and asks nothing else of it. Null: every work — what a suggester
+     * made of counts over the works of its task, or of their neighbours, is what it is of every one
+     * of them; one that scores a work of the work's own features answers [asked].
+     */
+    fun reads(asked: Collection<String>): Collection<String>? = null
+
+    /**
      * WHAT THE MODEL TELLS OF EVERY VALUE OVER THE WORKS AS A WHOLE, of the scoring kept by
      * [FittedSuggester.scoring] alone — no work read: a weight of each value, the larger the likelier
      * a work is to have it, as the suggester's mathematics tells it (a bias, a prior, a share) — the

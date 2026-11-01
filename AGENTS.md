@@ -47,6 +47,18 @@ field stands right next to, above, the place of marking it:** every source, in t
 view. **What several fields read stands once, over them:** the same words are never repeated field after
 field. The plan is walked on real works before it is built.
 
+## The core asks no plugin what it is
+
+The core never branches on which plugin, scorer, suggester or model it holds: no `if` on one's id or
+kind, and no flag of a capability the core then checks. **Inversion of control: a plugin or a model
+says itself what it needs, and the core does the same for every one of them.** A word given as data
+goes through one path — `FacetSuggester.reads` names the works a suggester must read, and the core reads
+what it is told, one suggester asking for every work among them or none; `ModelMeta.averages` tells what
+the average work is, and `CatalogueReader.gradedWorks` takes it. A computation that serves one engine
+alone is planned by that engine: it listens to the application's events and puts its work in the queue
+(`Workload.plan`). Branching on data — a null of "every work", an empty list — is not branching on a
+plugin.
+
 ## A work is a normalized work; a site's item is what a site says of it
 
 Every item of every site is bound to a normalized work (`work/WorkRepository.kt`), at first one of its

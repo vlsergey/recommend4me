@@ -32,6 +32,39 @@ object ModelValues {
             .sortedByDescending { it.value }.take((OFFERED - open).coerceAtLeast(0)).map { it.key }.toList()
     }
 
+    /**
+     * Of a work's [chances], by the values' places, those it is shown besides what it has or was
+     * answered on: every value more likely than not and the likeliest others up to [OFFERED] with them;
+     * of the values [allowed] alone (null: of every one), none of those [closed]. The likeliest first
+     * among the others, of equal chances the earlier value.
+     *
+     * IN ONE PASS, THE NUMBER LOOKED AT FIRST: [closed] is asked only of a value that would stay. Of
+     * every work a set asked of every value in five passes, a facet of thousands of characters over
+     * tens of thousands of works took half a minute.
+     */
+    fun open(chances: FloatArray, allowed: IntArray?, closed: Set<Int>): List<Int> {
+        val likely = ArrayList<Int>()
+        val others = IntArray(OFFERED)
+        var kept = 0
+        fun before(v: Int, other: Int) = chances[v] > chances[other] || chances[v] == chances[other] && v < other
+        fun look(v: Int) {
+            if (chances[v] > LIKELY) {
+                if (v !in closed) likely += v
+                return
+            }
+            if (kept == OFFERED && !before(v, others[OFFERED - 1]) || v in closed) return
+            var at = minOf(kept, OFFERED - 1)
+            while (at > 0 && before(v, others[at - 1])) {
+                others[at] = others[at - 1]
+                at--
+            }
+            others[at] = v
+            if (kept < OFFERED) kept++
+        }
+        if (allowed == null) for (v in chances.indices) look(v) else for (v in allowed) look(v)
+        return likely + others.take(minOf(kept, (OFFERED - likely.size).coerceAtLeast(0)))
+    }
+
     fun of(schema: SourceSchema, site: Map<String, List<String>>, chances: Map<String, Map<String, Chance>>?): Map<String, List<String>> {
         if (chances.isNullOrEmpty()) return site
         val worked = schema.facets.filter { it.infer && it.key in chances }

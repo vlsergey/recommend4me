@@ -66,6 +66,13 @@ data class ModelMeta(
         vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
         numbers,
     )
+
+    /** What the model says the average work is, as counted when it was trained: no work read for it. */
+    fun averages() = Averages(
+        vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
+        numbers,
+        categorical.indices.filter { it < categoricalShare.size }.associate { categorical[it] to categoricalShare[it] },
+    )
 }
 
 /**

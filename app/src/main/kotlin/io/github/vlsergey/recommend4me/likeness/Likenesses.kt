@@ -52,6 +52,12 @@ class Likenesses(private val plugins: Plugins, private val phrases: PhraseVector
         return TypeLikeness(pictures, reviews)
     }
 
+    /** The likeness as made last, the rows of the [graded] with it: nothing made again, what the model kept was trained on. */
+    fun asMade(type: TypeStore, graded: Collection<ItemKey>): TypeLikeness = TypeLikeness(
+        type.likeness.load(MarkKind.PICTURE, graded) ?: MarkLikeness.none(0),
+        type.likeness.load(MarkKind.REVIEW, graded) ?: MarkLikeness.none(0),
+    )
+
     /** The stored likeness without the items' rows — what one item is measured with. */
     fun stored(type: TypeStore): TypeLikeness = TypeLikeness(
         type.likeness.loadCalibration(MarkKind.PICTURE) ?: MarkLikeness.none(0),

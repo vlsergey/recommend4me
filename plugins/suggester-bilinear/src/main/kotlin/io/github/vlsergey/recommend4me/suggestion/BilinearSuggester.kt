@@ -222,6 +222,9 @@ class BilinearSuggester internal constructor(
     override fun scoring(bytes: ByteArray, task: SuggestionTask): SuggestionScores? =
         Scoring.read(bytes)?.takeIf { it.valueKeys == task.valueKeys && it.design.readsItems(task) }?.on(task)
 
+    /** A work is scored of its own features by the weights kept: no other work read. */
+    override fun reads(asked: Collection<String>): Collection<String> = asked
+
     /** Every value's share of the works the model was fitted on, kept with the scoring; none of a scoring kept before it was — till the next fitting. */
     override fun weights(bytes: ByteArray): DoubleArray? = Scoring.read(bytes)?.weights()
 

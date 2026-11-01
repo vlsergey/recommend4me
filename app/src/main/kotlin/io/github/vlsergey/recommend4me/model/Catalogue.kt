@@ -39,6 +39,19 @@ class CatalogueItem(
 class TypedRating(val key: ItemKey, val version: String, val grade: Int, val ratedAt: Instant)
 
 /**
+ * WHAT THE AVERAGE WORK OF THE CATALOGUE IS: where the vectors and the numbers of every work lie, and
+ * how often it has a categorical feature. Counted as every work is read, or told by a model kept
+ * ([ModelMeta.averages]), counted when it was trained. [shares]: a feature not among them is
+ * counted of the works read.
+ */
+class Averages(
+    /** The mean and the spread of every block but the likeness to the marks, over the vectors of every work. */
+    val vectors: Map<String, VectorSpread>,
+    val numbers: Map<String, NumberSpread>,
+    val shares: Map<String, Float> = emptyMap(),
+)
+
+/**
  * EVERYTHING THE MODEL READS OF EVERY NORMALIZED WORK OF A CONTENT TYPE, loaded in batch for one
  * operation — one pass over each source of each file: the works with their corrected facets and
  * numbers, the grades — and handed to every step that needs it. Nothing of it outlives the operation.
@@ -50,8 +63,11 @@ class TypedRating(val key: ItemKey, val version: String, val grade: Int, val rat
  *
  * THE VECTORS OF THE WORKS THE TRAINING READS ALONE ([vectors]): the graded, those marked of interest,
  * those linked to them, and any asked for — a few hundred of 27 718 games, each a few thousand
- * numbers. Of every work only what the average work is made of is kept ([spreads]); a work's vectors
+ * numbers. Of every work only what the average work is made of is kept ([averages]); a work's vectors
  * otherwise are read when it is scored, a chunk at a time ([vectorsOfMany]), and let go.
+ *
+ * OF THE GRADED WORKS ALONE ([CatalogueReader.gradedWorks]): the rows of the grades are all a fitting
+ * reads, what the average work is told by the model kept.
  */
 class Catalogue(
     val type: TypeStore,
@@ -63,8 +79,7 @@ class Catalogue(
     val works: WorkClusters,
     /** The user's marks of interest. */
     val interest: Map<ItemKey, InterestMark> = emptyMap(),
-    /** The mean and the spread of every block but the likeness to the marks, over the vectors of every work. */
-    val spreads: Map<String, VectorSpread> = emptyMap(),
+    val averages: Averages = Averages(emptyMap(), emptyMap()),
     /** The vectors of [keys] read now, as [vectors] holds them: of the works whose vectors are not kept. */
     private val read: (keys: List<ItemKey>) -> Map<ItemKey, Map<String, FloatArray>> = { emptyMap() },
 ) {
@@ -153,7 +168,47 @@ class CatalogueReader(
         }
         val read = System.currentTimeMillis()
         val graded = items.map { it.key }.toSet().let { keys -> ratings.map { it.key }.filter { it in keys }.toSet() }
-        // A work of several items becomes one row, named by the first of them
+        val center = centerSum?.takeIf { pictures > 0 }?.let { sum -> FloatArray(sum.size) { (sum[it] / pictures).toFloat() } }
+        val likeness = if (withLikeness) likenesses.forTraining(type, center, graded) else likenesses.stored(type)
+        val numbers = FeatureLayout.numberSpreads(items.filter { clusters.representative(it.key) == it.key }.map { ItemInput(it.key, emptyMap(), emptySet(), it.numeric) })
+        val made = System.currentTimeMillis()
+        return catalogue(type, items, ratings, vectors, likeness, interest, Averages(spreads.spreads(), numbers)).also {
+            log.info(
+                "{}: catalogue of {} works read of {} items in {} ms, the vectors of {} kept, likeness in {} ms",
+                type.id, it.items.size, items.size, read - started, it.vectors.size, made - read,
+            )
+        }
+    }
+
+    /**
+     * THE GRADED WORKS ALONE, each with all its items, and [also]: what a fitting on the rows of the
+     * grades reads, and no other work — their facets and numbers read of them, their chances made
+     * as their suggesters say they read ([io.github.vlsergey.recommend4me.suggestion.FacetSuggester.reads]),
+     * their vectors by their keys. The [averages] are the caller's, of the model it goes by.
+     */
+    fun gradedWorks(type: TypeStore, averages: Averages, also: Collection<ItemKey> = emptyList()): Catalogue {
+        val started = System.currentTimeMillis()
+        val ratings = type.sources.flatMap { s -> s.ratings.all().map { TypedRating(ItemKey(s.id, it.itemId), it.version, it.grade, it.ratedAt) } }
+        val interest = HashMap<ItemKey, InterestMark>()
+        type.sources.forEach { s -> s.interest.all().forEach { (id, mark) -> interest[ItemKey(s.id, id)] = mark } }
+        val clusters = works.of(type)
+        val wanted = (ratings.map { it.key } + also).flatMapTo(HashSet()) { clusters.members(it) }
+        val of = wanted.groupBy({ it.source }, { it.id })
+        val items = type.sources.flatMap { s -> of[s.id]?.let { readItems(s, type.sources.size > 1, it) }.orEmpty() }
+        val vectors = vectorsOfMany(type, wanted.toList())
+        val keys = items.map { it.key }.toSet()
+        val likeness = likenesses.asMade(type, ratings.map { it.key }.filter { it in keys }.toSet())
+        log.info("{}: {} items of the graded works read in {} ms", type.id, items.size, System.currentTimeMillis() - started)
+        return catalogue(type, items, ratings, vectors, likeness, interest, averages)
+    }
+
+    /** What was read as the catalogue of the normalized works: a work of several items one row, named by the first of them. */
+    private fun catalogue(
+        type: TypeStore, items: List<CatalogueItem>, ratings: List<TypedRating>, read: Map<ItemKey, Map<String, FloatArray>>, likeness: TypeLikeness,
+        interest: Map<ItemKey, InterestMark>, averages: Averages,
+    ): Catalogue {
+        val clusters = works.of(type)
+        val vectors = HashMap(read)
         val merged = HashMap<ItemKey, CatalogueItem>()
         val itemOf = items.associateBy { it.key }
         clusters.linkedWorks().forEach { members ->
@@ -163,44 +218,46 @@ class CatalogueReader(
             merged[name] = WorkFeatures.item(name, own)
             val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + setVectors.ofWork(type, members)
             members.forEach(vectors::remove)
-            vectors[name] = HashMap(joined)
+            vectors[name] = joined
         }
         val named = items.filter { clusters.representative(it.key) == it.key }.map { merged[it.key] ?: it }
         val keys = named.map { it.key }.toSet()
-        val center = centerSum?.takeIf { pictures > 0 }?.let { sum -> FloatArray(sum.size) { (sum[it] / pictures).toFloat() } }
-        val likeness = if (withLikeness) likenesses.forTraining(type, center, graded) else likenesses.stored(type)
-        log.info(
-            "{}: catalogue of {} works read of {} items in {} ms, the vectors of {} kept, likeness in {} ms",
-            type.id, named.size, items.size, read - started, vectors.size, System.currentTimeMillis() - read,
-        )
         return Catalogue(
             type, named, ratings.filter { it.key in keys }, vectors, likeness, clusters, interest.filterKeys { it in keys },
-            spreads = spreads.spreads(), read = { wanted -> vectorsOfMany(type, wanted) },
+            averages = averages, read = { wanted -> vectorsOfMany(type, wanted) },
         )
     }
 
     /**
      * The items of one source as the model reads them: their facets and numbers with the user's
-     * corrections, the source when the type has several.
+     * corrections, the source when the type has several. Of the items [ids], when given; of every
+     * item in one pass over each table.
      */
-    private fun readItems(s: SourceStore, severalSources: Boolean): List<CatalogueItem> {
+    private fun readItems(s: SourceStore, severalSources: Boolean, ids: List<String>? = null): List<CatalogueItem> {
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
         val facets = HashMap<String, HashMap<String, MutableList<String>>>()
-        s.items.forEachFacetValue { id, facet, key ->
+        fun facet(id: String, facet: String, key: String) {
             if (facet in facetIds) facets.getOrPut(id) { HashMap() }.getOrPut(facet) { ArrayList() } += key
         }
-        val facetCorrections = s.corrections.allFacets().groupBy { it.itemId }
-        // The values the model gives the items of the facets it works out: made now of every work, in one pass
-        val chances = suggestions.chancesOf(s, null, s.schema.facets.filter { it.infer && it.feature }.map { it.key })
+        if (ids == null) s.items.forEachFacetValue(::facet)
+        else s.items.facetsOf(ids).forEach { (id, own) -> own.forEach { (f, keys) -> keys.forEach { facet(id, f, it) } } }
+        val facetCorrections = if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
+        // The values the model gives the items of the facets it works out: made now of them, in one pass
+        val chances = suggestions.chancesOf(s, ids, s.schema.facets.filter { it.infer && it.feature }.map { it.key })
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numbers = HashMap<String, HashMap<String, Double>>()
-        s.items.forEachNumber { id, key, value -> if (key in numberDefs) numbers.getOrPut(id) { HashMap() }[key] = value }
-        val fields = s.corrections.allFields()
+        fun number(id: String, key: String, value: Double) {
+            if (key in numberDefs) numbers.getOrPut(id) { HashMap() }[key] = value
+        }
+        if (ids == null) s.items.forEachNumber(::number)
+        else s.items.numbersOf(ids).forEach { (id, own) -> own.forEach { (key, value) -> number(id, key, value) } }
+        val fields = if (ids == null) s.corrections.allFields() else s.corrections.fieldsOf(ids)
         // A tag under another gives the work the other too; a tag the user said it has not, none under it
         val hierarchies = s.hierarchies()
         // The tags the user ignores stay with the works, the model reads none of them
         val ignored = s.ignoredTags()
-        return s.items.keys().map { k ->
+        val wanted = ids?.toHashSet()
+        return s.items.keys().filter { wanted == null || it.id in wanted }.map { k ->
             val categorical = LinkedHashSet<String>()
             val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
             TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets).forEach { (facet, keys) ->
