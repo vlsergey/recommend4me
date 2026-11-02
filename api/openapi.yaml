@@ -5297,7 +5297,7 @@ components:
 
     MarkedWork:
       type: object
-      required: [source, item, title, url, tags]
+      required: [source, item, title, url, linked, tags]
       properties:
         source:
           type: string
@@ -5307,6 +5307,11 @@ components:
           type: string
         url:
           type: string
+        linked:
+          type: array
+          description: The other items of the same work, on its other sites or its other pages of one
+          items:
+            $ref: '#/components/schemas/LinkedItem'
         description:
           type: string
           description: The work's description, as the user corrected it

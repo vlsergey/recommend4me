@@ -433,9 +433,22 @@ export function SignalBadges({ source, signals, className }: { source?: SourceIn
  */
 export function SiteBadges({ type, summary, className, badgeClassName }: { type: ContentTypeInfo; summary: ItemSummary; className?: string; badgeClassName?: string }) {
   if (type.sources.length < 2) return null;
+  return <SiteLinks sites={[summary, ...summary.linked]} className={className} badgeClassName={badgeClassName} />;
+}
+
+/** The sites of a work, each a link to the work's page there opened in a new tab: the first as it is, the others fainter. */
+export function SiteLinks({
+  sites,
+  className,
+  badgeClassName,
+}: {
+  sites: { source: string; item: string; title: string; url: string }[];
+  className?: string;
+  badgeClassName?: string;
+}) {
   return (
     <span className={cn("flex flex-wrap gap-1", className)}>
-      {[summary, ...summary.linked].map((site, i) => (
+      {sites.map((site, i) => (
         <Badge
           key={`${site.source}/${site.item}`}
           variant="outline"

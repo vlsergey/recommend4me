@@ -1,10 +1,12 @@
 package io.github.vlsergey.recommend4me.marking
 
+import io.github.vlsergey.recommend4me.api.model.LinkedItem
 import io.github.vlsergey.recommend4me.api.model.MarkVerdict
 import io.github.vlsergey.recommend4me.api.model.MarkedWork
 import io.github.vlsergey.recommend4me.api.model.MarkedWorks
 import io.github.vlsergey.recommend4me.correction.Answering
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemList
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -13,6 +15,7 @@ import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
+import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -29,6 +32,7 @@ class Marking(
     private val suggestions: FacetSuggestions,
     private val list: ItemList,
     private val answering: Answering,
+    private val works: Works,
 ) {
 
     /** The sources whose layer has the [facet] the model works out and the user answers on; refused when none has. */
@@ -83,8 +87,11 @@ class Marking(
         return MarkedWorks(total = rows.size, works = described(page))
     }
 
-    /** The rows as the table shows them: each source's works read in one go. */
+    /** The rows as the table shows them: each source's works read in one go, with the other items of each work. */
     private fun described(rows: List<Row>): List<MarkedWork> {
+        val clusters = rows.map { stores.typeOf(it.store.id) }.distinct().associateWith { works.of(it) }
+        val others = rows.associate { r -> (r.store.id to r.id) to clusters.getValue(stores.typeOf(r.store.id)).members(ItemKey(r.store.id, r.id)).drop(1) }
+        val linked = linkedItems(others.values.flatten())
         val out = HashMap<Pair<String, String>, MarkedWork>()
         rows.groupBy { it.store }.forEach { (s, own) ->
             val ids = own.map { it.id }
@@ -106,6 +113,7 @@ class Marking(
                     item = r.id,
                     title = Corrected.title(head.title, written),
                     url = head.url,
+                    linked = others[s.id to r.id].orEmpty().mapNotNull { linked[it] },
                     tags = siteTags?.let { f -> facets[r.id]?.get(f).orEmpty().map { tagNames[it] ?: it } }.orEmpty(),
                     description = description?.let { shown[it] },
                     line = line?.let { shown[it] },
@@ -115,6 +123,17 @@ class Marking(
             }
         }
         return rows.mapNotNull { out[it.store.id to it.id] }
+    }
+
+    /** The items [keys] as links to their pages: each source's read in one go, the titles as the user corrected them. */
+    private fun linkedItems(keys: List<ItemKey>): Map<ItemKey, LinkedItem> {
+        val out = HashMap<ItemKey, LinkedItem>()
+        keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+            val s = stores.source(source) ?: return@forEach
+            val fields = s.corrections.fieldsOf(ids)
+            s.items.heads(ids).forEach { (id, head) -> out[ItemKey(source, id)] = LinkedItem(source, id, Corrected.title(head.title, fields[id].orEmpty()), head.url) }
+        }
+        return out
     }
 
     /** The work of the source, the facet of its layer; refused or none as [works] refuses them. */

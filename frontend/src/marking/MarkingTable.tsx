@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { percent } from "@/i18n/format";
 import { itemHref } from "@/item/itemHash";
+import { SiteLinks } from "@/item/pieces";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
 import { useRefresh } from "@/lib/useRefresh";
@@ -129,9 +130,10 @@ export function MarkingTable({
 }
 
 /**
- * A work of the table: its title opening the work, the model's chance, the site's line of its
- * pairings and characters, its description folded to three lines till pressed, the site's tags, and
- * the answers — the one given marked, of a work answered on, with the taking back beside.
+ * A work of the table: its title opening the work, its sites each a link to its page there in a new
+ * tab, the model's chance, the site's line of its pairings and characters, its description folded to
+ * three lines till pressed, the site's tags, and the answers — the one given marked, of a work
+ * answered on, with the taking back beside.
  */
 function WorkRow({
   work: w,
@@ -155,7 +157,7 @@ function WorkRow({
         <a href={itemHref({ source: w.source, item: w.item })} className="font-semibold underline-offset-2 hover:underline">
           {w.title}
         </a>
-        <span className="text-xs text-muted-foreground">{w.source}</span>
+        <SiteLinks sites={[w, ...w.linked]} />
         {w.chance != null && <span className="text-xs text-muted-foreground tabular-nums">{percent(w.chance)}</span>}
         <div className="ml-auto flex flex-wrap gap-1.5">
           {VERDICTS.map(({ verdict, icon, word }) => (
