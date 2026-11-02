@@ -856,7 +856,7 @@ paths:
     get:
       tags: [marking]
       operationId: getMarkingWorks
-      summary: The works to confirm a value of the layer on - a tag, a character, a pairing - the likeliest first
+      summary: The works to confirm a value of the layer on - a tag, a character, a pairing - in the order asked
       description: |
         THE CONFIRMING OF THE APPLICATION'S MARKING, value by value: the works that may have the
         value of the facet of the layer (one key across the sources: "tags", "characters",
@@ -864,10 +864,10 @@ paths:
         universe of each of its characters (as the work is shown: the site's, the model's, the
         user's word on top) - an original character is of every universe; of any other value, every
         work of every source with the facet. Without [answered], those the user has not answered on
-        by the value; with it, those answered, with the answer. Ordered by the model's chance that
-        the work has the value, made now (none kept; a work the model does not score for it yet,
-        last). Of each, its title, its description, the site's line of its pairings and characters,
-        and the site's tags.
+        by the value; with it, those answered, with the answer. Ordered as [order] says by the
+        model's chance that the work has the value, made now (none kept; a work the model does not
+        score for it yet, last). Of each, its title, its description, the line of its pairings and
+        characters of each of its sites, and the site's tags.
       parameters:
         - name: facet
           in: query
@@ -886,6 +886,10 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: order
+          in: query
+          schema:
+            $ref: '#/components/schemas/MarkingOrder'
         - name: offset
           in: query
           schema:
@@ -5297,7 +5301,7 @@ components:
 
     MarkedWork:
       type: object
-      required: [source, item, title, url, linked, tags]
+      required: [source, item, title, url, linked, lines, tags]
       properties:
         source:
           type: string
@@ -5315,9 +5319,13 @@ components:
         description:
           type: string
           description: The work's description, as the user corrected it
-        line:
-          type: string
-          description: The site's line of the work's pairings and characters, as the site writes it
+        lines:
+          type: array
+          description: >
+            The line of the work's pairings and characters as each of its sites writes it, of every item of the work
+            whose site has one and says something there: this item's first, then those of [linked] in their order
+          items:
+            $ref: '#/components/schemas/SiteLine'
         tags:
           type: array
           description: The site's tags of the work, by their names
@@ -5329,6 +5337,28 @@ components:
           description: The model's chance that the work has the value; none when it does not score it yet
         answer:
           $ref: '#/components/schemas/MarkVerdict'
+    SiteLine:
+      type: object
+      required: [source, item, line]
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        line:
+          type: string
+          description: The site's line of the work's pairings and characters, as the site writes it and the user corrected it
+    MarkingOrder:
+      type: string
+      enum: [LIKELY, DISPUTED, CONTRADICTORY]
+      default: LIKELY
+      description: >
+        The order of the works to confirm a value on. LIKELY - the likeliest to have it first. DISPUTED - those nearest
+        where the user's answers on the value change from "not" to "has it" first, whose answer teaches the model most:
+        on the scale of the chance's logit, the middle between the mean of the works answered "has it" and of those
+        answered "not" (a half while either kind is missing). CONTRADICTORY - the answered ones the model believes least
+        first: of an answer "has it" the chance it has not, of "not" the chance it has; an answer "unclear" says
+        neither, last
     MarkedWorks:
       type: object
       required: [total, works]

@@ -2,16 +2,18 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, HelpCircleIcon, Undo2Icon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, unwrap, type MarkedWork, type MarkVerdict } from "@/api/client";
+import { api, ensureOk, unwrap, type MarkedWork, type MarkingOrder, type MarkVerdict } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { percent } from "@/i18n/format";
+import { sourceShort, sourceTitle } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { SiteLinks } from "@/item/pieces";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
+import { usePref } from "@/lib/usePref";
 import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +27,12 @@ const PAGE = 50;
 const EVERY_MS = 0;
 
 export const markingKey = (facet: string, value: string) => ["marking", facet, value];
+
+/** The orders of the works without an answer and of the answered ones: the model believing an answer least only of the answered. */
+const ORDERS: Record<"open" | "answered", MarkingOrder[]> = {
+  open: ["LIKELY", "DISPUTED"],
+  answered: ["LIKELY", "DISPUTED", "CONTRADICTORY"],
+};
 
 /** A row of the table: a work. */
 const rowOf = (w: MarkedWork) => `${w.source}/${w.item}`;
@@ -40,7 +48,9 @@ const VERDICTS: { verdict: MarkVerdict; icon: React.ReactNode; word: "yes" | "un
 
 /**
  * THE CONFIRMING OF THE APPLICATION'S MARKING of one value of a facet of the layer — a pairing, a
- * character, a tag: the works that may have it, the likeliest first, each with its title (opening
+ * character, a tag: the works that may have it in the order chosen — the likeliest, the disputed
+ * (whose answer teaches the model most), of the answered the ones the model believes least — the
+ * choice kept in the browser for each tab apart, each with its title (opening
  * the work), its description folded, the site's line of its pairings and characters and the site's
  * tags, and three answers: the work has it (and, of a pairing, its two characters as main ones), it
  * does not say it outright (asked so no more, nothing learnt), it has it not. A row answered on
@@ -61,12 +71,15 @@ export function MarkingTable({
 }) {
   const { t } = useTranslation("marking");
   const [answered, setAnswered] = useState(false);
+  const tab = answered ? "answered" : "open";
+  const [kept, setOrder] = usePref<MarkingOrder>(`marking.order.${tab}`, "LIKELY");
+  const order = ORDERS[tab].includes(kept) ? kept : "LIKELY";
   const [limit, setLimit] = useState(PAGE);
   const [every, setEvery] = useRefresh("marking.refresh", EVERY_MS);
   const queryClient = useQueryClient();
   const list = useQuery({
-    queryKey: [...markingKey(facet, value), answered, limit],
-    queryFn: async () => unwrap(await api.GET("/api/marking/works", { params: { query: { facet, value, answered, offset: 0, limit } } })),
+    queryKey: [...markingKey(facet, value), answered, order, limit],
+    queryFn: async () => unwrap(await api.GET("/api/marking/works", { params: { query: { facet, value, answered, order, offset: 0, limit } } })),
     refetchInterval: every || false,
   });
   const data = list.data;
@@ -94,13 +107,30 @@ export function MarkingTable({
   return (
     <div className={cn("flex min-h-0 flex-col gap-3", className)}>
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={answered ? "answered" : "open"} onValueChange={(v) => (setAnswered(v === "answered"), setLimit(PAGE))}>
+        <Tabs value={tab} onValueChange={(v) => (setAnswered(v === "answered"), setLimit(PAGE))}>
           <TabsList>
             <TabsTrigger value="open">{t("MarkingTable.open")}</TabsTrigger>
             <TabsTrigger value="answered">{t("MarkingTable.answered")}</TabsTrigger>
           </TabsList>
         </Tabs>
         {data && <span className="text-sm text-muted-foreground tabular-nums">{t("MarkingTable.total", { count: data.total })}</span>}
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={t(`MarkingTable.orderHint.${tab}`)}>
+          {t("MarkingTable.order")}
+          <select
+            value={order}
+            onChange={(e) => {
+              setOrder(e.target.value as MarkingOrder);
+              setLimit(PAGE);
+            }}
+            className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
+          >
+            {ORDERS[tab].map((o) => (
+              <option key={o} value={o}>
+                {t(`MarkingTable.orderBy.${o}`)}
+              </option>
+            ))}
+          </select>
+        </label>
         <RefreshSelect every={every} onChange={setEvery} className="ml-auto" />
       </div>
       {list.isLoading && <p className="text-sm text-muted-foreground">{t("MarkingTable.loading")}</p>}
@@ -131,7 +161,8 @@ export function MarkingTable({
 
 /**
  * A work of the table: its title opening the work, its sites each a link to its page there in a new
- * tab, the model's chance, the site's line of its pairings and characters, its description folded to
+ * tab, the model's chance, the line of its pairings and characters of each of its sites that writes
+ * one, by the site's short name, its description folded to
  * three lines till pressed, the site's tags, and the answers — the one given marked, of a work
  * answered on, with the taking back beside.
  */
@@ -180,12 +211,14 @@ function WorkRow({
           )}
         </div>
       </div>
-      {w.line && (
-        <div className="text-sm">
-          <span className="text-muted-foreground">{t("MarkingTable.line")}: </span>
-          {w.line}
+      {w.lines.map((l) => (
+        <div key={`${l.source}/${l.item}`} className="text-sm">
+          <span className="text-muted-foreground" title={sourceTitle(l.source)}>
+            {sourceShort(l.source)}:{" "}
+          </span>
+          {l.line}
         </div>
-      )}
+      ))}
       {w.description && (
         // Text to select and copy: unfolded or folded by a press that selects nothing
         <div

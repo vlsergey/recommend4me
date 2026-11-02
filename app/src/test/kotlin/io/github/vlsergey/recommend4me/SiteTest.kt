@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.api.model.CatalogueEntryRef
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.MarkAnswer
 import io.github.vlsergey.recommend4me.api.model.MarkVerdict
+import io.github.vlsergey.recommend4me.api.model.MarkingOrder
 import io.github.vlsergey.recommend4me.marking.MarkingController
 import io.github.vlsergey.recommend4me.pairing.PairingsController
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
@@ -846,9 +847,9 @@ class SiteTest {
         val made = pairingsApi.getPairing(UniverseFacets.pairing("fake:C2", "fake:C1")).body!!
         assertEquals(UniverseFacets.pairing("fake:C1", "fake:C2"), made.key)
         assertEquals(setOf("Pilot", "Captain"), made.characters.map { it.name }.toSet())
-        fun toMark(answered: Boolean = false) = marking.getMarkingWorks(UniverseFacets.PAIRINGS, made.key, answered, 0, 50).body!!.works
+        fun toMark(answered: Boolean = false, order: MarkingOrder = MarkingOrder.LIKELY) = marking.getMarkingWorks(UniverseFacets.PAIRINGS, made.key, answered, order, 0, 50).body!!.works
         assertTrue(toMark().map { it.item }.containsAll(listOf("g1", "g2")), "to mark: ${toMark().map { it.item }}")
-        assertEquals("Space Pilot & Captain", toMark().first { it.item == "g1" }.line)
+        assertEquals(listOf("Space Pilot & Captain"), toMark().first { it.item == "g1" }.lines.map { it.line })
         // Yes: the pairing the work's, its two characters its main ones; not clear: nothing written, asked no more
         fun counted() = pairingsApi.getPairing(made.key).body!!.let { Triple(it.yes, it.no, it.unknown) }
         val before = counted()
@@ -864,6 +865,11 @@ class SiteTest {
         marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, made.key, MarkVerdict.NO))
         assertEquals(listOf(false), stores.source("site")!!.corrections.facetsOf("g2").filter { it.facet == UniverseFacets.PAIRINGS }.map { it.added })
         assertTrue(stores.source("site")!!.corrections.facetsOf("g2").none { it.facet == UniverseFacets.CHARACTERS })
+        // Every order shows the same works, each as it was answered on
+        MarkingOrder.entries.forEach { order ->
+            assertEquals(toMark().map { it.item }.toSet(), toMark(order = order).map { it.item }.toSet(), "open, $order")
+            assertEquals(mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.NO), toMark(true, order).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer }, "answered, $order")
+        }
         // Taken back: the works to mark again, as they were before
         listOf("g1", "g2").forEach { marking.unanswerMarking("site", it, UniverseFacets.PAIRINGS, made.key) }
         listOf("fake:C1", "fake:C2").forEach { corrections.uncorrectFacet("site", "g1", UniverseFacets.CHARACTERS, it) }

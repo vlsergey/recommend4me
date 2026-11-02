@@ -24,6 +24,7 @@ export type TagByText = Schemas["TagByText"];
 export type TagByTextVerdict = Schemas["TagByTextAnswer"]["verdict"];
 export type MarkedWork = Schemas["MarkedWork"];
 export type MarkVerdict = Schemas["MarkVerdict"];
+export type MarkingOrder = Schemas["MarkingOrder"];
 export type Pairing = Schemas["Pairing"];
 export type SiteFandom = Schemas["SiteFandom"];
 export type DuplicatePage = Schemas["DuplicatePage"];
