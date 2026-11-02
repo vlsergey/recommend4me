@@ -59,8 +59,16 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
 
     fun facetsOf(itemId: String): List<FacetCorrection> = facetsOf(listOf(itemId))[itemId].orEmpty()
 
-    fun facetsOf(ids: Collection<String>): Map<String, List<FacetCorrection>> =
-        ids.distinct().chunked(BATCH).flatMap { seenFacets(SITE_WORK.ITEM.`in`(it)) }.groupBy { it.itemId }
+    /**
+     * The corrections of the items [ids]: by their ids up to a [BATCH] of them; of more, every
+     * correction of the source read once and picked from. They are few, and a query of a thousand ids
+     * walks all the source's works, 0.3-0.8 s for each thousand of 75 000 works.
+     */
+    fun facetsOf(ids: Collection<String>): Map<String, List<FacetCorrection>> {
+        val asked = ids.toHashSet()
+        val read = if (asked.size > BATCH) allFacets().filter { it.itemId in asked } else seenFacets(SITE_WORK.ITEM.`in`(asked))
+        return read.groupBy { it.itemId }
+    }
 
     /**
      * The user's answers on the values [from] of a facet made answers on [to] — the values merged
@@ -136,9 +144,11 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
             .groupBy({ it.value1()!! }, { it.value2()!! }).mapValues { it.value.toSet() }
     }
 
-    /** The facets whose values the user said are all named, of each of the items [ids] that has any. */
-    fun completeOf(ids: Collection<String>): Map<String, Set<String>> =
-        ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk -> out.apply { putAll(seenComplete(SITE_WORK.ITEM.`in`(chunk))) } }
+    /** The facets whose values the user said are all named, of each of the items [ids] that has any: read as [facetsOf] reads. */
+    fun completeOf(ids: Collection<String>): Map<String, Set<String>> {
+        val asked = ids.toHashSet()
+        return if (asked.size > BATCH) allComplete().filterKeys { it in asked } else seenComplete(SITE_WORK.ITEM.`in`(asked))
+    }
 
     fun completeOf(itemId: String): Set<String> = completeOf(listOf(itemId))[itemId].orEmpty()
 

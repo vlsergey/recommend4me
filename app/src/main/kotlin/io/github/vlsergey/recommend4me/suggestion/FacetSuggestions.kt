@@ -352,7 +352,7 @@ class FacetSuggestions(
 
     /** The chain over the works of [read]: what the facets read alike read once, for all of them. */
     private fun chain(store: SourceStore, encoder: TextEncoder, read: FacetData.WorksRead, upTo: Int): MadeChances {
-        val made = seeded(store, read.only)
+        val made = seeded(store, read.only, read.drafts)
         facetsOf(store).take(upTo).forEach { facet ->
             val suggester = plugins.suggester(store.id, facet.key) ?: return@forEach
             val scored = scored(store, facet, suggester, encoder, read, made) ?: return@forEach
@@ -409,9 +409,11 @@ class FacetSuggestions(
     }
 
     /** The drafts of the layer of the works [ids] (every work when null) as their chances: 1, marked so, till the model gives its own. */
-    private fun seeded(store: SourceStore, ids: Collection<String>?): MadeChances {
+    private fun seeded(
+        store: SourceStore, ids: Collection<String>?, drafts: Map<String, List<LayerDraft>> = if (ids == null) store.drafts.all() else store.drafts.ofItems(ids),
+    ): MadeChances {
         val made = MadeChances()
-        (if (ids == null) store.drafts.all() else store.drafts.ofItems(ids)).forEach { (id, list) ->
+        drafts.forEach { (id, list) ->
             list.groupBy { it.facet }.forEach { (facet, drafts) ->
                 made.getOrPut(id) { HashMap() }[facet] = drafts.associate { d -> d.key to Chance(id, facet, d.key, had = false, chance = 1.0, draftedFrom = d.from) }
             }

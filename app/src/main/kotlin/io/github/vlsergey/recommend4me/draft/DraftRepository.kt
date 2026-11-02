@@ -11,14 +11,17 @@ import org.jooq.DSLContext
  */
 class DraftRepository(private val db: DSLContext, private val source: String) {
 
-    /** The drafts of the items [ids]: item to its drafts. */
+    /**
+     * The drafts of the items [ids]: item to its drafts. By their ids up to a [BATCH] of them; of more,
+     * every draft of the source read once and picked from: a query of a thousand ids walks them all anyway.
+     */
     fun ofItems(ids: Collection<String>): Map<String, List<LayerDraft>> {
+        val asked = ids.toHashSet()
+        if (asked.size > BATCH) return all().filterKeys { it in asked }
         val out = HashMap<String, MutableList<LayerDraft>>()
-        ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(LAYER_DRAFT.ITEM_ID, LAYER_DRAFT.FACET, LAYER_DRAFT.VALUE_KEY, LAYER_DRAFT.SITE_VALUE).from(LAYER_DRAFT)
-                .where(LAYER_DRAFT.SOURCE.eq(source), LAYER_DRAFT.ITEM_ID.`in`(chunk))
-                .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += LayerDraft(it.value2()!!, it.value3()!!, it.value4()!!) }
-        }
+        db.select(LAYER_DRAFT.ITEM_ID, LAYER_DRAFT.FACET, LAYER_DRAFT.VALUE_KEY, LAYER_DRAFT.SITE_VALUE).from(LAYER_DRAFT)
+            .where(LAYER_DRAFT.SOURCE.eq(source), LAYER_DRAFT.ITEM_ID.`in`(asked))
+            .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += LayerDraft(it.value2()!!, it.value3()!!, it.value4()!!) }
         return out
     }
 
