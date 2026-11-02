@@ -26,6 +26,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.universe.Quote
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.search.ModelsRefreshing
+import io.github.vlsergey.recommend4me.search.NamesAsked
 import io.github.vlsergey.recommend4me.search.SearchProvider
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
@@ -611,12 +612,15 @@ class FacetSuggestions(
                 val groups = IdentityHashMap<Map<String, List<String>>, MutableList<String>>()
                 wanted.forEach { id -> of(id)?.let { groups.getOrPut(it) { ArrayList() } += id } }
                 val counted = HashMap<String, Map<String, Int>>()
-                groups.forEach { (named, works) ->
-                    // Every work of the source when all of them are: the index read whole, not a work at a time
-                    val keys = if (ids == null && groups.size == 1) null else works.map { ItemKey(store.id, it) }
-                    if (paired) provider.together(typeId, keys, named).forEach { (key, pairs) ->
+                // Every map of names with its works, asked of the index at once: one reading of it for them all.
+                // Every work of the source when all of them are: the index read whole, not a work at a time
+                val asked = groups.map { (named, works) -> NamesAsked(if (ids == null && groups.size == 1) null else works.map { ItemKey(store.id, it) }, named) }
+                if (paired) provider.together(typeId, asked).forEach { byItem ->
+                    byItem.forEach { (key, pairs) ->
                         if (key.source == store.id) counted[key.id] = pairs.mapKeys { (pair, _) -> UniverseFacet.pairing(pair.first, pair.second) }
-                    } else provider.mentions(typeId, keys, named).forEach { (key, byName) ->
+                    }
+                } else provider.mentions(typeId, asked).forEach { byItem ->
+                    byItem.forEach { (key, byName) ->
                         if (key.source != store.id) return@forEach
                         val byValue = HashMap<String, Int>()
                         byName.forEach { (name, n) -> valuesOf(name).forEach { byValue.merge(it, n, Int::plus) } }

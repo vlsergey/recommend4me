@@ -93,6 +93,28 @@ class MentionsTest {
     }
 
     @Test
+    fun `several askings at once count as each asked apart, every work by its own names`() {
+        val docs = listOf(
+            doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
+            doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри."),
+            doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
+        ) + documents
+        // Without Harry "Поттер" is James's alone: the names of an asking are its own, a word of them not shared with another
+        val asked = listOf(
+            NamesAsked(listOf(ItemKey("test", "a"), ItemKey("test", "c")), potter),
+            NamesAsked(listOf(ItemKey("test", "b"), ItemKey("test", "a")), potter - "harry"),
+            NamesAsked(null, names),
+            NamesAsked(listOf(ItemKey("test", "b")), emptyMap()),
+        )
+        LuceneSearch(Files.createTempDirectory("search")).use { search ->
+            search.rebuild("books", docs.asSequence())
+            assertEquals(asked.map { search.mentions("books", it.items, it.names) }, search.mentions("books", asked))
+            assertEquals(asked.map { search.together("books", it.items, it.names) }, search.together("books", asked))
+            assertEquals(mapOf("james" to 2), search.mentions("books", asked)[1][ItemKey("test", "b")])
+        }
+    }
+
+    @Test
     fun `two named in one paragraph are together, counted of the index as quoted of the texts`() {
         val text = "Гарри поцеловал Гермиону.\n\nРон ел.\nГермиона и Рон спорили. И снова Гермиона и Рон."
         val docs = listOf(doc("p", "ru", text), doc("q", "ru", "Гермиона.", "Рон."))

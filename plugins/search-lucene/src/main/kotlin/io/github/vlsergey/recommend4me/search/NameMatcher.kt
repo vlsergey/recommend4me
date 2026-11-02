@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.search
 
+import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.CharArraySet
 import org.apache.lucene.analysis.en.EnglishAnalyzer
 
@@ -25,7 +26,7 @@ internal class Found(val value: String, val first: NamedWord, val last: NamedWor
  * A name is read as every language of the [languages]: a work whose description is in Russian and
  * whose long chapter is in English is read as both, each word of it stemmed as one of them.
  */
-internal class NameMatcher(names: Map<String, List<String>>, languages: Collection<String>) {
+internal class NameMatcher(names: Map<String, List<String>>, languages: Collection<String>, read: NameStems = NameStems()) {
 
     /** A name as its stems, and the value it is of. */
     private data class Pattern(val stems: List<String>, val value: String)
@@ -33,16 +34,14 @@ internal class NameMatcher(names: Map<String, List<String>>, languages: Collecti
     /** Every name by its first stem. */
     private val patterns: Map<String, List<Pattern>>
 
-    /** Every stem a name has: the words looked up in the index. */
+    /** Every stem a name has: the words looked up in the index, in their order — a word of the index read of them in it. */
     val stems: Set<String>
 
     init {
         val all = languages.ifEmpty { listOf(Stemmers.DEFAULT) }.distinct().flatMap { language ->
-            // One analyzer for every name: thousands of names of a dictionary
-            val analyzer = Stemmers.analyzer(language)
-            val whole = names.flatMap { (value, own) -> own.map { Pattern(LuceneIndex.tokens(it, analyzer), value) } }.filter { it.stems.isNotEmpty() }.distinct()
+            val whole = names.flatMap { (value, own) -> own.map { Pattern(read.of(it, language), value) } }.filter { it.stems.isNotEmpty() }.distinct()
             val common = CharArraySet(EnglishAnalyzer.ENGLISH_STOP_WORDS_SET, true).apply { addAll(Stemmers.stopWords(language)) }
-                .flatMap { LuceneIndex.tokens(String(it as CharArray), analyzer) }.toSet()
+                .flatMap { read.of(String(it as CharArray), language) }.toSet()
             val owners = HashMap<String, MutableSet<String>>()
             whole.forEach { p -> p.stems.forEach { owners.getOrPut(it) { HashSet() } += p.value } }
             val single = owners.filter { (stem, of) -> of.size == 1 && stem !in common }.map { (stem, of) -> Pattern(listOf(stem), of.first()) }
@@ -70,4 +69,17 @@ internal class NameMatcher(names: Map<String, List<String>>, languages: Collecti
         }
         return out
     }
+}
+
+/**
+ * The stems of names as the analyzer of each language reads them, each name read once for every
+ * matcher made with them: one reading of the index makes hundreds of matchers of the same thousands
+ * of names. Held for that reading alone.
+ */
+internal class NameStems {
+    private val analyzers = HashMap<String, Analyzer>()
+    private val read = HashMap<Pair<String, String>, List<String>>()
+
+    fun of(text: String, language: String): List<String> =
+        read.getOrPut(language to text) { LuceneIndex.tokens(text, analyzers.getOrPut(language) { Stemmers.analyzer(language) }) }
 }
