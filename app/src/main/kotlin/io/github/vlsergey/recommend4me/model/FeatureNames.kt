@@ -59,12 +59,14 @@ object FeatureNames {
         val wanted = features.mapNotNull(::parseFacet).groupBy({ it.first }, { it.second })
         val names = HashMap<Pair<String, String>, String>()
         val nameKeys = HashMap<Pair<String, String>, String>()
+        // The names the user gave values, each source's corrections read once: facet to its named corrections
+        val named = if (wanted.isEmpty()) emptyMap() else sources.associateWith { s -> s.corrections.allFacets().filter { it.name != null }.groupBy { it.facet } }
         wanted.forEach { (facetId, keys) ->
             sources.forEach { s ->
                 s.schema.facets.filter { facetId(s.source, it) == facetId }.forEach { def ->
                     s.names(def.key, keys).forEach { (key, name) -> names.putIfAbsent(facetId to key, name) }
                     keys.forEach { key -> s.nameKey(def.key, key)?.let { nameKeys.putIfAbsent(facetId to key, it) } }
-                    s.corrections.allFacets().filter { it.facet == def.key && it.name != null }.forEach { names.putIfAbsent(facetId to it.key, it.name!!) }
+                    named.getValue(s)[def.key].orEmpty().forEach { names.putIfAbsent(facetId to it.key, it.name!!) }
                 }
             }
         }
