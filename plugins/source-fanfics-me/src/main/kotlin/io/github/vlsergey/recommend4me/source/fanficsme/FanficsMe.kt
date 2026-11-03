@@ -97,6 +97,9 @@ class FanficsMe : Source {
     /** A chapter in the reader, by its number from 0 — the site's own of it. */
     override fun partUrl(itemId: String, partId: String) = "$BASE/read.php?id=$itemId&chapter=$partId"
 
+    /** An author's own page, by the id of the member; the writer of an original is a name alone and has none. */
+    override fun valueUrl(facet: String, key: String, name: String) = if (facet == AUTHOR) "$BASE/user$key" else null
+
     override fun itemIdOf(url: String): String? =
         (WORK_ADDRESS.find(url) ?: READER_ADDRESS.find(url))?.groupValues?.get(1)
 

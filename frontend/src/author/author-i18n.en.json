@@ -66,5 +66,7 @@
   "Offers.total_other": "{{count, number}} pairs",
   "Rest.more_one": "The other works: {{count, number}}",
   "Rest.more_other": "The other works: {{count, number}}",
-  "WorkLink.onSite": "Open the work on its site"
+  "SiteName.page": "The author's page on the site",
+  "WorkLink.onSite": "Open the work on its site",
+  "WorkLink.othersHint": "The work's other authors"
 }

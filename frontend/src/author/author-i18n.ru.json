@@ -80,5 +80,7 @@
   "Rest.more_many": "Остальные работы: {{count, number}}",
   "Rest.more_one": "Остальные работы: {{count, number}}",
   "Rest.more_other": "Остальные работы: {{count, number}}",
-  "WorkLink.onSite": "Открыть работу на сайте"
+  "SiteName.page": "Страница автора на сайте",
+  "WorkLink.onSite": "Открыть работу на сайте",
+  "WorkLink.othersHint": "Другие авторы работы"
 }

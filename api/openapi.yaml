@@ -5218,10 +5218,13 @@ components:
           type: string
         works:
           type: integer
+        url:
+          type: string
+          description: Their own page on the site, else the site's search of the works by them; none when the site has neither
 
     AuthorWork:
       type: object
-      required: [source, item, title, url]
+      required: [source, item, title, url, others]
       properties:
         source:
           type: string
@@ -5232,6 +5235,28 @@ components:
         url:
           type: string
           description: The work's page on its site
+        others:
+          type: array
+          description: The other authors of the work on its site, besides the one it is shown of
+          items:
+            $ref: '#/components/schemas/WorkAuthor'
+
+    WorkAuthor:
+      type: object
+      required: [id, author, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The normalized author they are bound to
+        author:
+          type: string
+          description: The site's own key of them
+        name:
+          type: string
+        url:
+          type: string
+          description: Their own page on the site, else the site's search of the works by them
 
     SiteAuthorKey:
       type: object

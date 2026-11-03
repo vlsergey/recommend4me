@@ -13,6 +13,7 @@ import io.github.vlsergey.recommend4me.api.model.AuthorWorkPair
 import io.github.vlsergey.recommend4me.api.model.FoundAuthorEntry
 import io.github.vlsergey.recommend4me.api.model.SiteAuthor
 import io.github.vlsergey.recommend4me.api.model.TagEntryInfo
+import io.github.vlsergey.recommend4me.api.model.WorkAuthor
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.duplicate.DuplicateAnswer
 import io.github.vlsergey.recommend4me.duplicate.DuplicateModel
@@ -98,21 +99,26 @@ class Authors(
     /** Two works of two authors, what is known of them: the user's word they match by, the chance they are one. */
     private class WorkPair(val first: ItemKey, val second: ItemKey, val answer: DuplicateAnswer?, val chance: Double?)
 
-    /** The works and the authors of a type, read for one request: of every work its normalized authors, of every author their works. */
-    private class Library(val authorsOf: Map<ItemKey, Set<Long>>) {
+    /**
+     * The works and the authors of a type, read for one request: of every work its authors on its site
+     * by their keys, each with the normalized author bound to it; its normalized authors; of every author
+     * their works.
+     */
+    private class Library(val writersOf: Map<ItemKey, Map<String, Long>>) {
+        val authorsOf: Map<ItemKey, Set<Long>> = writersOf.mapValues { it.value.values.toSet() }
         val worksOf: Map<Long, List<ItemKey>> = HashMap<Long, MutableList<ItemKey>>().also { out ->
             authorsOf.forEach { (work, authors) -> authors.forEach { out.getOrPut(it) { ArrayList() } += work } }
         }
     }
 
     private fun library(type: TypeStore): Library {
-        val authorsOf = HashMap<ItemKey, Set<Long>>()
+        val writersOf = HashMap<ItemKey, Map<String, Long>>()
         type.sources.forEach { s ->
             val facet = facetOf(s) ?: return@forEach
             val bound = s.authors.bindingsOf(s.id)
-            s.items.forEachFacet(facet) { id, keys -> authorsOf[ItemKey(s.id, id)] = keys.mapNotNullTo(HashSet()) { bound[it] } }
+            s.items.forEachFacet(facet) { id, keys -> writersOf[ItemKey(s.id, id)] = keys.mapNotNull { k -> bound[k]?.let { k to it } }.toMap() }
         }
-        return Library(authorsOf)
+        return Library(writersOf)
     }
 
     /**
@@ -201,11 +207,10 @@ class Authors(
             }
         }
         val ids = page.flatMap { listOf(it.first, it.second) }
-        val titles = titles(type, ids.flatMap { library.worksOf[it].orEmpty() } + ofOffer.values.flatten().flatMap { listOf(it.first, it.second) })
+        val shown = ShownWorks(type, library, ids.flatMap { library.worksOf[it].orEmpty() } + ofOffer.values.flatten().flatMap { listOf(it.first, it.second) })
         val sites = sites(type, ids)
         val entries = entryInfos(type, bound.filterKeys { it in ids })
-        fun work(key: ItemKey) = work(type, titles, key)
-        fun side(id: Long, inPairs: Set<ItemKey>) = side(id, sites, entries, library, library.worksOf[id].orEmpty().filter { it !in inPairs }.map(::work))
+        fun side(id: Long, inPairs: Set<ItemKey>) = side(id, sites, entries, library, library.worksOf[id].orEmpty().filter { it !in inPairs }.map { shown.of(it, id) })
         return AuthorOfferPage(
             total = rows.size,
             offers = page.map { authors ->
@@ -216,7 +221,7 @@ class Authors(
                     matching = tallies[authors]?.matching ?: 0,
                     expected = (tallies[authors]?.expected ?: 0.0).toBigDecimal(),
                     pairs = own.map { p ->
-                        AuthorWorkPair(work(p.first), work(p.second), p.answer?.let { AuthorWorkPair.Answer.valueOf(it.name) }, p.chance?.toBigDecimal())
+                        AuthorWorkPair(shown.of(p.first, authors.first), shown.of(p.second, authors.second), p.answer?.let { AuthorWorkPair.Answer.valueOf(it.name) }, p.chance?.toBigDecimal())
                     },
                     oneEntry = authors in oneEntry,
                     said = told[authors]?.let { partly -> if (partly) AuthorOffer.Said.PARTIAL else AuthorOffer.Said.DIFFERENT },
@@ -269,13 +274,39 @@ class Authors(
         if (!type.authors.exists(id)) return null
         val library = library(type)
         val own = library.worksOf[id].orEmpty()
-        val titles = titles(type, own)
+        val shown = ShownWorks(type, library, own)
         val entries = entryInfos(type, type.authors.entries().filterKeys { it == id })
-        return side(id, sites(type, listOf(id)), entries, library, own.map { work(type, titles, it) })
+        return side(id, sites(type, listOf(id)), entries, library, own.map { shown.of(it, id) })
     }
 
-    private fun work(type: TypeStore, titles: Map<ItemKey, String>, key: ItemKey) =
-        AuthorWork(key.source, key.id, titles[key] ?: key.id, type.source(key.source)?.source?.itemUrl(key.id).orEmpty())
+    /**
+     * What the works [keys] are shown by, read in one go: their titles, and the authors of those of
+     * several, by their names and pages on their sites.
+     */
+    private inner class ShownWorks(private val type: TypeStore, library: Library, keys: Collection<ItemKey>) {
+        private val titles = titles(type, keys)
+        private val writers = HashMap<ItemKey, List<WorkAuthor>>()
+
+        init {
+            keys.distinct().filter { (library.writersOf[it]?.size ?: 0) > 1 }.groupBy { it.source }.forEach { (source, own) ->
+                val s = type.source(source) ?: return@forEach
+                val facet = facetOf(s) ?: return@forEach
+                val names = s.names(facet, own.flatMap { library.writersOf[it].orEmpty().keys }.toSet())
+                own.forEach { key ->
+                    writers[key] = library.writersOf[key].orEmpty().map { (author, id) ->
+                        val name = names[author] ?: author
+                        WorkAuthor(id, author, name, s.source.valueUrl(facet, author, name))
+                    }
+                }
+            }
+        }
+
+        /** The work [key] as shown of the normalized [author]: the others of its authors beside it. */
+        fun of(key: ItemKey, author: Long) = AuthorWork(
+            key.source, key.id, titles[key] ?: key.id, type.source(key.source)?.source?.itemUrl(key.id).orEmpty(),
+            writers[key].orEmpty().filter { it.id != author },
+        )
+    }
 
     private fun side(id: Long, sites: Map<Long, List<SiteAuthor>>, entries: Map<Long, List<TagEntryInfo>>, library: Library, rest: List<AuthorWork>) =
         AuthorSide(id = id, sites = sites[id].orEmpty(), works = library.worksOf[id].orEmpty().size, rest = rest, propertyEntries = entries[id].orEmpty())
@@ -302,7 +333,10 @@ class Authors(
             val facet = facetOf(s) ?: return@forEach
             val names = s.names(facet, own.map { it.author })
             val uses = s.items.valueUses(facet)
-            own.forEach { shown[it] = SiteAuthor(source, it.author, names[it.author] ?: it.author, uses[it.author] ?: 0) }
+            own.forEach {
+                val name = names[it.author] ?: it.author
+                shown[it] = SiteAuthor(source, it.author, name, uses[it.author] ?: 0, s.source.valueUrl(facet, it.author, name))
+            }
         }
         return refs.mapValues { (_, list) -> list.mapNotNull { shown[it] } }
     }

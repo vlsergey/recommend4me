@@ -134,6 +134,9 @@ class Ao3 : Source {
     /** A chapter's own page, by its id; the text of a work of one chapter is on the work's page. */
     override fun partUrl(itemId: String, partId: String) = if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/works/$itemId/chapters/$partId"
 
+    /** An author's own page, by their login. */
+    override fun valueUrl(facet: String, key: String, name: String) = if (facet == AUTHOR) "$BASE/users/$key" else null
+
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val pageDecor = PageDecor(

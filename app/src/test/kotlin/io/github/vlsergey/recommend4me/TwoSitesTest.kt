@@ -186,6 +186,7 @@ class TwoSitesTest {
         override val modes = setOf(SourceMode.SCRAPE_ALL, SourceMode.UPDATES, SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://beta\\.example/work/.*"))
         override fun itemUrl(itemId: String) = "https://beta.example/work/$itemId"
+        override fun valueUrl(facet: String, key: String, name: String) = if (facet == Books.AUTHOR.key) "https://beta.example/author/$key" else null
         override val settings = listOf(SettingDef("cookie", secret = true), SettingDef("delay", default = "5"))
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
@@ -433,6 +434,16 @@ class TwoSitesTest {
         assertEquals(1, offer.matching)
         assertEquals(listOf("w1" to "w2"), offer.pairs.map { it.first.item to it.second.item })
         assertEquals(listOf("w3"), offer.first.rest.map { it.item })
+        // An author is shown with their page on the site, when it has one; a work with its other authors
+        assertEquals("https://beta.example/author/anna-b", offer.second.sites.single().url)
+        assertEquals(null, offer.first.sites.single().url)
+        betaItems.setFacet("w2", Books.AUTHOR.key, listOf(FacetValue("anna-b", "Anna B"), FacetValue("bob", "Bob")))
+        val bob = waitForValue { dictionary.bindingsOf("beta")["bob"] }
+        val written = of(ann, annaB)!!.pairs.single().second
+        assertEquals(listOf(bob to "Bob"), written.others.map { it.id to it.name })
+        assertEquals("https://beta.example/author/bob", written.others.single().url)
+        assertEquals(emptyList(), of(ann, annaB)!!.pairs.single().first.others)
+        betaItems.setFacet("w2", Books.AUTHOR.key, listOf(FacetValue("anna-b", "Anna B")))
 
         // An answer names the authors of the sites
         val alphaAnn = SiteAuthorKey("alpha", "ann")

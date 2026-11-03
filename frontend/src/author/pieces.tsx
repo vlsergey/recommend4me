@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { AuthorSide, AuthorWork } from "@/api/client";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
+import { cn } from "@/lib/utils";
 
 export const authorsKey = (type: string) => ["authors", type];
 
@@ -30,14 +31,14 @@ export function EntryLinks({ author }: { author: AuthorSide }) {
   ));
 }
 
-/** The accounts of an author on the sites, each with its works. */
+/** The accounts of an author on the sites, each with its works; the name opens their page on the site, when it has one. */
 export function Accounts({ author }: { author: AuthorSide }) {
   const { t } = useTranslation("author");
   return (
     <span className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
       {author.sites.map((s) => (
         <span key={`${s.source}/${s.author}`} title={sourceTitle(s.source)}>
-          {sourceShort(s.source)} <span className="text-foreground">{s.name}</span>{" "}
+          {sourceShort(s.source)} <SiteName name={s.name} url={s.url} className="text-foreground" />{" "}
           <span className="tabular-nums" title={t("Accounts.worksHint")}>
             {s.works}
           </span>
@@ -63,7 +64,18 @@ export function AuthorHead({ author, onOpen }: { author: AuthorSide; onOpen: (id
   );
 }
 
-/** A work: its title opens its card here, the icon its page on the site. */
+/** A name of an author on a site: a link to their page there, when the site has one. */
+function SiteName({ name, url, className }: { name: string; url?: string; className?: string }) {
+  const { t } = useTranslation("author");
+  if (!url) return <span className={className}>{name}</span>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" title={t("SiteName.page")} className={cn(className, "underline-offset-2 hover:underline")}>
+      {name}
+    </a>
+  );
+}
+
+/** A work: its title opens its card here, the icon its page on the site; its other authors after it, in brackets. */
 export function WorkLink({ work: w }: { work: AuthorWork }) {
   const { t } = useTranslation("author");
   return (
@@ -78,6 +90,18 @@ export function WorkLink({ work: w }: { work: AuthorWork }) {
         <a href={w.url} target="_blank" rel="noreferrer" title={t("WorkLink.onSite")} aria-label={t("WorkLink.onSite")} className="ml-1 inline-flex align-baseline text-muted-foreground hover:text-foreground">
           <ExternalLinkIcon className="size-3" />
         </a>
+      )}
+      {w.others.length > 0 && (
+        <span className="ml-1 text-xs text-muted-foreground" title={t("WorkLink.othersHint")}>
+          (
+          {w.others.map((o, k) => (
+            <span key={o.author}>
+              {k > 0 && ", "}
+              <SiteName name={o.name} url={o.url} />
+            </span>
+          ))}
+          )
+        </span>
       )}
     </span>
   );

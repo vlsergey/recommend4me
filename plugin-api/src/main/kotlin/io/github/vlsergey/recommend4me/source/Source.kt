@@ -71,6 +71,13 @@ interface Source {
     fun partUrl(itemId: String, partId: String): String = itemUrl(itemId)
 
     /**
+     * The page of a value of the source's [facet] on the site, [key] and [name] as the source wrote
+     * them ([FacetValue]): of an author, the author's own page, else the site's search of the works
+     * by them; null when the site has neither.
+     */
+    fun valueUrl(facet: String, key: String, name: String): String? = null
+
+    /**
      * The item a page of the site is about — a work's page, a chapter of it, its reviews — or null
      * when the address is not one item's. The extension shows the item's panel on such a page, and
      * a card linking to it gets the item's prediction.

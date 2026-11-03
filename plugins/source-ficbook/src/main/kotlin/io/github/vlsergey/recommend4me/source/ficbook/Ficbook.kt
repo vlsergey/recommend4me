@@ -101,6 +101,9 @@ class Ficbook : Source {
     /** A part's own page, by the id of its address; the text of a work of one part is on the work's page. */
     override fun partUrl(itemId: String, partId: String) = if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/readfic/$itemId/$partId"
 
+    /** An author's own page, by the id of its address. */
+    override fun valueUrl(facet: String, key: String, name: String) = if (facet == AUTHOR) "$BASE/authors/$key" else null
+
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val pageDecor = PageDecor(

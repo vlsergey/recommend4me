@@ -73,5 +73,7 @@
   "Rest.more_few": "Ostala dela: {{count, number}}",
   "Rest.more_one": "Ostala dela: {{count, number}}",
   "Rest.more_other": "Ostala dela: {{count, number}}",
-  "WorkLink.onSite": "Otvori delo na sajtu"
+  "SiteName.page": "Stranica autora na sajtu",
+  "WorkLink.onSite": "Otvori delo na sajtu",
+  "WorkLink.othersHint": "Ostali autori dela"
 }
