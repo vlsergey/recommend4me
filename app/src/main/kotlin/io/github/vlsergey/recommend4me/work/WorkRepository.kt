@@ -180,6 +180,13 @@ class WorkRepository(private val db: DSLContext) {
         db.deleteFrom(r).where(r.FIRST_WORK.eq(first), r.OTHER_WORK.eq(second)).execute()
     }
 
+    /** The word on the two works; none when there is none. */
+    fun word(a: Long, b: Long): String? {
+        val (first, second) = pair(a, b)
+        val r = NORMALIZED_WORK_RELATION
+        return db.select(r.KIND).from(r).where(r.FIRST_WORK.eq(first), r.OTHER_WORK.eq(second)).fetchOne()?.value1()
+    }
+
     /** Every word on two works, the smaller id first. */
     fun words(): Map<Pair<Long, Long>, String> {
         val r = NORMALIZED_WORK_RELATION

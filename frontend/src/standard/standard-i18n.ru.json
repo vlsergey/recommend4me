@@ -22,6 +22,7 @@
   "error.noSuchWork": "Такой работы нет",
   "error.noUniverses": "Ни у одного сайта нет вселенных",
   "error.noValue": "Не указано значение",
+  "error.notUndoable": "Этот ответ уже не действует: для пары есть более новый",
   "error.notInCatalogue": "В справочнике нет «{{universe}}»",
   "error.notInDictionary": "«{{value}}» нет в словаре: выберите из списка",
   "error.refreshFailed": "Источник не смог скачать страницу работы",

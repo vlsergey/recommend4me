@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.CorrectionRepository
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
+import io.github.vlsergey.recommend4me.work.WorkPairJournal
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import io.github.vlsergey.recommend4me.correction.UnknownRepository
 import io.github.vlsergey.recommend4me.database.Databases
@@ -208,7 +209,8 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val id: String get() = type.id
 
     val links = TypeLinkRepository(
-        WorkRepository(databases.dictionaries.dsl), sources.map { it.id }, sources.flatMapTo(HashSet()) { it.singleFacets },
+        WorkRepository(databases.dictionaries.dsl), WorkPairJournal(databases.dictionaries.dsl), sources.map { it.id },
+        sources.flatMapTo(HashSet()) { it.singleFacets },
     )
     val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })

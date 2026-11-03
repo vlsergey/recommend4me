@@ -15,6 +15,7 @@ import { itemHref } from "@/item/itemHash";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
 import { usePref } from "@/lib/usePref";
+import { PairJournal } from "./PairJournal";
 import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
 
@@ -65,12 +66,14 @@ const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.f
  * one work (linked, its grade and interest shared, as the work's window links them), different works,
  * or — behind a drop-down — related ones: a translation, a part (not linked, each its own grade); never
  * offered again. The answers of one work and different works teach the model of the chances, fitted
- * again a few seconds after them. The answered ones apart, their word changed or taken back there. The pairs are looked for in
+ * again a few seconds after them. The answered ones apart, their word changed or taken back there; every
+ * word said and taken back in the journal, the newest undone there ([PairJournal]). The pairs are looked for in
  * the background, on the first start and when asked anew here.
  */
 export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const { t } = useTranslation("duplicate");
-  const [answered, setAnswered] = useState(false);
+  const [tab, setTab] = useState<"open" | "answered" | "journal">("open");
+  const answered = tab === "answered";
   const [limit, setLimit] = useState(PAGE);
   const [every, setEvery] = useRefresh("duplicates.refresh", EVERY_MS);
   const [sort, setSort] = usePref<DuplicateSort>("duplicates.sort", "FORMULA");
@@ -78,6 +81,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const queryClient = useQueryClient();
   const list = useQuery({
     queryKey: [...duplicatesKey(type.id), answered, limit, sort],
+    enabled: tab !== "journal",
     queryFn: async (): Promise<DuplicatePage> => {
       const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { answered, offset: 0, limit, sort } } });
       if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
@@ -141,68 +145,81 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
         <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.description")}</p>
       </header>
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={answered ? "answered" : "open"} onValueChange={(v) => (setAnswered(v === "answered"), setLimit(PAGE))}>
+        <Tabs value={tab} onValueChange={(v) => (setTab(v as typeof tab), setLimit(PAGE))}>
           <TabsList>
             <TabsTrigger value="open">{t("DuplicatesScreen.open")}</TabsTrigger>
             <TabsTrigger value="answered">{t("DuplicatesScreen.answered")}</TabsTrigger>
+            <TabsTrigger value="journal" title={t("DuplicatesScreen.journalHint")}>
+              {t("DuplicatesScreen.journal")}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
-        {data && <span className="text-sm text-muted-foreground tabular-nums">{t("DuplicatesScreen.total", { count: data.total })}</span>}
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={t("DuplicatesScreen.sortHint")}>
-          {t("DuplicatesScreen.sort")}
-          <select
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value as DuplicateSort);
-              setLimit(PAGE);
-            }}
-            className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
-          >
-            {SORTS.map((s) => (
-              <option key={s} value={s}>
-                {t(`DuplicatesScreen.sortBy.${s}`)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {data?.pending ? (
-            <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Loader2Icon className="size-4 animate-spin" /> {t("DuplicatesScreen.pending")}
-            </span>
-          ) : (
-            data?.searchedAt && (
-              <span className="text-xs text-muted-foreground" title={formatDate(data.searchedAt)}>
-                {t("DuplicatesScreen.searchedAt", { ago: ago(data.searchedAt), works: data.works ?? 0 })}
-                {" · "}
-                <span title={t(data.learnt ? "DuplicatesScreen.learntHint" : "DuplicatesScreen.notLearntHint")}>
-                  {t(data.learnt ? "DuplicatesScreen.learnt" : "DuplicatesScreen.notLearnt")}
+        {tab !== "journal" && (
+          <>
+            {data && <span className="text-sm text-muted-foreground tabular-nums">{t("DuplicatesScreen.total", { count: data.total })}</span>}
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={t("DuplicatesScreen.sortHint")}>
+              {t("DuplicatesScreen.sort")}
+              <select
+                value={sort}
+                onChange={(e) => {
+                  setSort(e.target.value as DuplicateSort);
+                  setLimit(PAGE);
+                }}
+                className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
+              >
+                {SORTS.map((s) => (
+                  <option key={s} value={s}>
+                    {t(`DuplicatesScreen.sortBy.${s}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {data?.pending ? (
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Loader2Icon className="size-4 animate-spin" /> {t("DuplicatesScreen.pending")}
                 </span>
-              </span>
-            )
-          )}
-          <AsyncButton size="sm" variant="outline" icon={<RefreshCwIcon />} disabled={data?.pending} title={t("DuplicatesScreen.searchHint")} onClick={search}>
-            {t("DuplicatesScreen.search")}
-          </AsyncButton>
-          <RefreshSelect every={every} onChange={setEvery} />
-        </div>
+              ) : (
+                data?.searchedAt && (
+                  <span className="text-xs text-muted-foreground" title={formatDate(data.searchedAt)}>
+                    {t("DuplicatesScreen.searchedAt", { ago: ago(data.searchedAt), works: data.works ?? 0 })}
+                    {" · "}
+                    <span title={t(data.learnt ? "DuplicatesScreen.learntHint" : "DuplicatesScreen.notLearntHint")}>
+                      {t(data.learnt ? "DuplicatesScreen.learnt" : "DuplicatesScreen.notLearnt")}
+                    </span>
+                  </span>
+                )
+              )}
+              <AsyncButton size="sm" variant="outline" icon={<RefreshCwIcon />} disabled={data?.pending} title={t("DuplicatesScreen.searchHint")} onClick={search}>
+                {t("DuplicatesScreen.search")}
+              </AsyncButton>
+              <RefreshSelect every={every} onChange={setEvery} />
+            </div>
+          </>
+        )}
       </div>
-      {list.isLoading && <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.loading")}</p>}
-      {list.isError && <p className="text-sm text-destructive">{t("DuplicatesScreen.failed", { error: list.error.message })}</p>}
-      {data && shown.length === 0 && !data.pending && (
-        <p className="text-sm text-muted-foreground">{t(answered ? "DuplicatesScreen.noneAnswered" : data.searchedAt ? "DuplicatesScreen.none" : "DuplicatesScreen.neverSearched")}</p>
-      )}
-      {shown.length > 0 && (
-        <ul className={cn("flex flex-col gap-2", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>
-          {shown.map((p) => (
-            <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked} pair={p} sort={sort} answer={(verdict) => answer(p, verdict)} unanswer={() => unanswer(p)} />
-          ))}
-        </ul>
-      )}
-      {data && data.total > shown.length && (
-        <Button variant="outline" size="sm" className="self-start" onClick={() => setLimit(limit + PAGE)}>
-          {t("DuplicatesScreen.more", { count: Math.min(PAGE, data.total - shown.length) })}
-        </Button>
+      {tab === "journal" ? (
+        <PairJournal type={type} />
+      ) : (
+        <>
+          {list.isLoading && <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.loading")}</p>}
+          {list.isError && <p className="text-sm text-destructive">{t("DuplicatesScreen.failed", { error: list.error.message })}</p>}
+          {data && shown.length === 0 && !data.pending && (
+            <p className="text-sm text-muted-foreground">{t(answered ? "DuplicatesScreen.noneAnswered" : data.searchedAt ? "DuplicatesScreen.none" : "DuplicatesScreen.neverSearched")}</p>
+          )}
+          {shown.length > 0 && (
+            <ul className={cn("flex flex-col gap-2", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>
+              {shown.map((p) => (
+                <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked} pair={p} sort={sort} answer={(verdict) => answer(p, verdict)} unanswer={() => unanswer(p)} />
+              ))}
+            </ul>
+          )}
+          {data && data.total > shown.length && (
+            <Button variant="outline" size="sm" className="self-start" onClick={() => setLimit(limit + PAGE)}>
+              {t("DuplicatesScreen.more", { count: Math.min(PAGE, data.total - shown.length) })}
+            </Button>
+          )}
+        </>
       )}
     </div>
   );

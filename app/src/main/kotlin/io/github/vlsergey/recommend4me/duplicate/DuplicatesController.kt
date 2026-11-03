@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.DuplicatesApi
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
+import io.github.vlsergey.recommend4me.api.model.WorkPairJournalPage
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.Stores
@@ -43,6 +44,14 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
 
     override fun unanswerDuplicate(type: String, source: String, item: String, otherSource: String, otherItem: String): ResponseEntity<Unit> {
         duplicates.unanswer(type, ItemKey(source, item), ItemKey(otherSource, otherItem))
+        return ResponseEntity.noContent().build()
+    }
+
+    override fun getDuplicateJournal(type: String, offset: Int, limit: Int): ResponseEntity<WorkPairJournalPage> =
+        duplicates.journal(type, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+
+    override fun undoDuplicateWord(type: String, id: Long): ResponseEntity<Unit> {
+        if (!duplicates.undo(type, id)) throw Refusal.NOT_UNDOABLE.refuse(HttpStatus.CONFLICT, "Word $id of $type is no word of it, or no longer what its pair has")
         return ResponseEntity.noContent().build()
     }
 }

@@ -852,6 +852,58 @@ paths:
         '204':
           description: Taken back
 
+  /api/types/{type}/duplicates/journal:
+    get:
+      tags: [duplicates]
+      operationId: getDuplicateJournal
+      summary: The journal of the user's words on pairs of works of the type - one work, different, related, taken back - the newest first
+      description: |
+        Every word said on two items being one work or not, on the screen of the duplicates or of a work,
+        and every word taken back, with the word the pair had before. The words said before the journal
+        was are restored of what was kept: their time the kept one, the pair one item of each work, the
+        word before unknown. A word can be undone while it is the newest on its pair and what the pair
+        has now.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: The words
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkPairJournalPage'
+        '404':
+          description: No such type
+
+  /api/types/{type}/duplicates/journal/{id}/undo:
+    post:
+      tags: [duplicates]
+      operationId: undoDuplicateWord
+      summary: A word of the journal undone - the pair given back the word it had before (none, one work, different, related), itself a word of the journal
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Undone
+        '409':
+          description: No such word of the type, or no longer what the pair has - a newer word on it
+
   /api/marking/works:
     get:
       tags: [marking]
@@ -5260,6 +5312,47 @@ components:
           $ref: '#/components/schemas/SizeNumber'
         chars:
           $ref: '#/components/schemas/SizeNumber'
+
+    WorkPairJournalPage:
+      type: object
+      required: [total, words]
+      properties:
+        total:
+          type: integer
+          description: The words of the journal of the type, every page
+        words:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkPairJournalEntry'
+
+    WorkPairJournalEntry:
+      type: object
+      required: [id, saidAt, first, second, restored, undoable]
+      properties:
+        id:
+          type: integer
+          format: int64
+        saidAt:
+          type: string
+          format: date-time
+        first:
+          $ref: '#/components/schemas/DuplicateWork'
+        second:
+          $ref: '#/components/schemas/DuplicateWork'
+        answer:
+          type: string
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
+          description: The word said; none - the word taken back
+        before:
+          type: string
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
+          description: The word the pair had before; none - no word (of a restored one, unknown)
+        restored:
+          type: boolean
+          description: Written of what was kept before the journal was - its time the kept one, the pair one item of each work, the word before unknown
+        undoable:
+          type: boolean
+          description: The newest word on its pair and what the pair has now - undone, the pair has the word before
 
     DuplicateStatus:
       type: object

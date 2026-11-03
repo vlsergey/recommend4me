@@ -56,6 +56,9 @@ enum class Refusal(val code: String, val params: List<String> = emptyList()) {
 
     /** Two authors said to be different or partly one who are one normalized author by now. */
     AUTHORS_ONE("authorsOne"),
+
+    /** A word of the journal of the pairs of works that is no longer what its pair has: a newer word on it. */
+    NOT_UNDOABLE("notUndoable"),
     NO_SETTING("noSetting", listOf("setting")),
     NO_SCORER("noScorer", listOf("scorer")),
     ACCESS_REFUSED("accessRefused"),

@@ -22,6 +22,7 @@
   "error.noSuchWork": "There is no such work",
   "error.noUniverses": "No site has universes",
   "error.noValue": "No value given",
+  "error.notUndoable": "This word is no longer what the pair has: a newer word was said on it",
   "error.notInCatalogue": "The catalogue has no “{{universe}}”",
   "error.notInDictionary": "“{{value}}” is not in the dictionary: choose one of the list",
   "error.refreshFailed": "The source could not download the work's page",

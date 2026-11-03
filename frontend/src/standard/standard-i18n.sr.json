@@ -22,6 +22,7 @@
   "error.noSuchWork": "Takvo delo ne postoji",
   "error.noUniverses": "Nijedan sajt nema univerzume",
   "error.noValue": "Vrednost nije navedena",
+  "error.notUndoable": "Ovaj odgovor više ne važi: za par postoji noviji",
   "error.notInCatalogue": "Katalog nema „{{universe}}”",
   "error.notInDictionary": "„{{value}}” nije u rečniku: izaberite sa liste",
   "error.refreshFailed": "Izvor nije mogao da preuzme stranicu dela",

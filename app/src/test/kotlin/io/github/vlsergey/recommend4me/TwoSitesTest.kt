@@ -73,6 +73,7 @@ import java.net.InetSocketAddress
 import java.time.Instant
 import java.util.Collections
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -371,6 +372,37 @@ class TwoSitesTest {
         assertEquals(null, relation(m1, m3))
 
         for ((a, b) in listOf(m1 to m2, m2 to m3, m4 to m1, m4 to m3)) duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
+    }
+
+    @Test
+    fun `every word on a pair is in the journal, a word undone gives the pair the word before`() {
+        alpha("j1|The Well|water|A well of water||")
+        beta("j2|The Well|water|A well of water")
+        val links = stores.type("books")!!.links
+        val (j1, j2) = ItemKey("alpha", "j1") to ItemKey("beta", "j2")
+        fun answer(verdict: io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict) =
+            duplicates.answerDuplicate("books", io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(ItemRef(j1.source, j1.id), ItemRef(j2.source, j2.id), verdict))
+        fun journal() = duplicates.getDuplicateJournal("books", 0, 200).body!!.words.filter { it.first.item == "j1" && it.second.item == "j2" }
+        fun word() = links.word(j1, j2, Instant.now())
+
+        answer(io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
+        answer(io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT)
+        assertEquals(listOf("DIFFERENT" to "SAME", "SAME" to null), journal().map { it.answer?.name to it.before?.name })
+        assertEquals(listOf(true, false), journal().map { it.undoable })
+        assertEquals("The Well", journal().first().first.title)
+
+        // Undone, the pair is one work again — a word of the journal itself; an older word is not undone
+        val older = journal().last().id
+        duplicates.undoDuplicateWord("books", journal().first().id)
+        assertEquals("SAME", word())
+        assertEquals("SAME" to "DIFFERENT", journal().first().let { it.answer?.name to it.before?.name })
+        assertFailsWith<Refused> { duplicates.undoDuplicateWord("books", older) }
+        // Taken back and undone: the word before stands again
+        duplicates.unanswerDuplicate("books", j1.source, j1.id, j2.source, j2.id)
+        assertEquals(null, word())
+        duplicates.undoDuplicateWord("books", journal().first().id)
+        assertEquals("SAME", word())
+        duplicates.unanswerDuplicate("books", j1.source, j1.id, j2.source, j2.id)
     }
 
     @Test

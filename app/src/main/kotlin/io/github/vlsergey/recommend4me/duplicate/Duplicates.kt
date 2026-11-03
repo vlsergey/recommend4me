@@ -9,6 +9,8 @@ import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.DuplicateStatus
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
+import io.github.vlsergey.recommend4me.api.model.WorkPairJournalEntry
+import io.github.vlsergey.recommend4me.api.model.WorkPairJournalPage
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.Interest
@@ -746,6 +748,51 @@ class Duplicates(
         val pair = type.links.ordered(a, b)
         if (pair in type.links.relations() || pair in type.links.distincts()) type.links.takeBack(a, b, now) else type.links.unlink(a, b, now)
         answered(type)
+    }
+
+    /**
+     * A page of the journal of the words on pairs of the type, the newest first: each word, the word
+     * before it, the two works as the pairs show them (a work no longer there by its key) and whether
+     * it can be undone — the newest word on its pair and what the pair has now. Null of no such type.
+     */
+    fun journal(typeId: String, offset: Int, limit: Int): WorkPairJournalPage? {
+        val type = stores.type(typeId) ?: return null
+        val all = type.links.journal()
+        // The newest word of every pair: the first met, the journal the newest first
+        val newest = HashSet<Long>()
+        all.distinctBy { type.links.ordered(it.first, it.second) }.forEach { newest += it.id }
+        val page = all.drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE))
+        val now = type.links.words(page.map { it.first to it.second })
+        val described = describe(type, page.flatMap { listOf(it.first, it.second) })
+        fun shown(key: ItemKey) = described[key]?.work ?: DuplicateWork(source = key.source, item = key.id, title = key.id, url = "", authors = emptyList(), fandoms = emptyList())
+        return WorkPairJournalPage(
+            total = all.size,
+            words = page.map { w ->
+                WorkPairJournalEntry(
+                    id = w.id, saidAt = w.saidAt.atOffset(ZoneOffset.UTC), first = shown(w.first), second = shown(w.second),
+                    answer = w.answer?.let { WorkPairJournalEntry.Answer.valueOf(it) }, before = w.before?.let { WorkPairJournalEntry.Before.valueOf(it) },
+                    restored = w.restored, undoable = w.id in newest && w.answer != w.before && now[w.first to w.second] == w.answer,
+                )
+            },
+        )
+    }
+
+    /**
+     * The word [id] of the journal undone: the pair given back the word it had before — none, one work,
+     * different, related —, itself a word of the journal. False when it is no word of the type, or no
+     * longer what the pair has: a newer word on it, or on another pair of their works.
+     */
+    fun undo(typeId: String, id: Long): Boolean {
+        val type = stores.type(typeId) ?: return false
+        val all = type.links.journal()
+        val word = all.firstOrNull { it.id == id } ?: return false
+        val pair = type.links.ordered(word.first, word.second)
+        if (all.first { type.links.ordered(it.first, it.second) == pair }.id != id) return false
+        if (type.links.word(word.first, word.second, Instant.now()) != word.answer || word.answer == word.before) return false
+        val before = word.before
+        if (before == null) unanswer(typeId, word.first, word.second)
+        else return answer(typeId, word.first, word.second, DuplicateAnswer.valueOf(before))
+        return true
     }
 
     @PreDestroy
