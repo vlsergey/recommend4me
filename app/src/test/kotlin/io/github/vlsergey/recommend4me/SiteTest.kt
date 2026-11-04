@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.workload.inBackground
+import io.github.vlsergey.recommend4me.draft.LayerDrafts
 import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.CardsRequest
 import io.github.vlsergey.recommend4me.api.model.CatalogueEntryRef
@@ -285,6 +286,7 @@ class SiteTest {
     @Autowired lateinit var textTags: TextTags
     @Autowired lateinit var pairingsApi: PairingsController
     @Autowired lateinit var marking: MarkingController
+    @Autowired lateinit var layerDrafts: LayerDrafts
 
     private fun capture(body: String) = captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
 
@@ -827,6 +829,8 @@ class SiteTest {
         // The universe added: its pilot is stated to be the site's "Space Pilot" — drafted a main character
         // of the work captured before, and of one captured now; the universe with it, the pilot's alone
         universes.addUniverse(UniverseRef("fake", "U2"))
+        // The works of the source drafted again in the background, the work captured now at once
+        inBackground { layerDrafts.redraftPlanned() }
         capture("g2|Wingmen again|space|The friends fly once more|Space Pilot & Captain")
         listOf("g1", "g2").forEach { id ->
             val pilot = assertNotNull(valueOf(id, "characters", "fake:C1"), "characters of $id: ${facetsOf(id)}")
@@ -897,6 +901,7 @@ class SiteTest {
 
         // The universe gone, the drafts of it go too — what the model learnt of it is the model's to work out again
         universes.removeUniverse("fake", "U2")
+        inBackground { layerDrafts.redraftPlanned() }
         assertNull(valueOf("g2", "universe", "fake:U2")?.draftedFrom)
         assertTrue(stores.source("site")!!.drafts.ofItems(listOf("g1", "g2")).values.all { it.isEmpty() })
     }
