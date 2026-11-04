@@ -26,6 +26,7 @@
 | `normalized_work` | a work of the user's, whatever sites have it |
 | `site_work` | an item of a site bound to a normalized work: at first of its own, merged when the user says two are one work; several of one site may be one |
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
+| `work_pair_journal` | every word the user said on two items being one work or not — one work, different, a translation, a part — and every word taken back (`answer` none), with the word the pair had before (`answer_before`), by the two items as pressed, the newest last: what a word is undone by; `restored`: written of what was kept before the journal was, the word before unknown |
 | `work_rating` | the grade of a work, and the item and version it was given through: one current of a work, the rest grades of releases before |
 | `work_interest` | the user's word on whether a work is interesting at all |
 | `work_facet_correction` | the user's word on a value of a facet of a work: added (true) or taken away (false) |
@@ -276,6 +277,17 @@ erDiagram
         BIGINT work PK, FK
         BOOLEAN interesting
         TIMESTAMPTZ marked_at
+    }
+    work_pair_journal {
+        BIGINT id PK
+        TIMESTAMPTZ said_at
+        VARCHAR source
+        VARCHAR item
+        VARCHAR other_source
+        VARCHAR other_item
+        VARCHAR answer "null"
+        VARCHAR answer_before "null"
+        BOOLEAN restored
     }
     work_rating {
         BIGINT work PK, FK
