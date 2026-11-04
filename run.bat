@@ -28,6 +28,8 @@ if /i "%~1"=="gpu" (
 )
 set DATA=%LOCALAPPDATA%\recommend4me
 if not exist "%DATA%" mkdir "%DATA%"
-rem A death leaves something behind: the crash file and the heap at the moment it ran out
-set JAVA_OPTS=-Drecommend4me.plugin-dirs="%PLUGINS%" -Drecommend4me.gpu=%GPU% -XX:ErrorFile="%DATA%\hs_err_pid%%p.log" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath="%DATA%"
+rem A death leaves something behind: the crash file and the heap at the moment it ran out.
+rem ZGC, not G1: G1 crashed four times (30.10–4.11.2026) with an access violation in a GC thread
+rem scanning a request's virtual thread in Recommendations.explain, compiled on the stack
+set JAVA_OPTS=-Drecommend4me.plugin-dirs="%PLUGINS%" -Drecommend4me.gpu=%GPU% -XX:+UseZGC -XX:ErrorFile="%DATA%\hs_err_pid%%p.log" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath="%DATA%"
 call build\run\bin\recommend4me.bat %*
