@@ -42,6 +42,15 @@ interface Scorer {
      */
     fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer
 
+    /**
+     * Learns from the rows [rows] of [task] once with every value of [parameters]: a fit each, in
+     * their order — what the cross-validation asks of every fold. Every value fitted apart by
+     * default, side by side; a scorer whose fit of one value is the beginning of another's — the
+     * first trees of a longer forest — makes them all of one fit.
+     */
+    fun fitEach(task: RankingTask, rows: IntArray, parameters: List<Double>): List<FittedScorer> =
+        parameters.parallelStream().map { fit(task, rows, it) }.toList()
+
     /** A model kept by [FittedScorer.pack]. */
     fun unpack(bytes: ByteArray): FittedScorer
 }

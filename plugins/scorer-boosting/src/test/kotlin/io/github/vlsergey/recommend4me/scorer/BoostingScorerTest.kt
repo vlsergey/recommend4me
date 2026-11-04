@@ -63,6 +63,39 @@ class BoostingScorerTest {
         println("400 trees on $n rows × $d features in $took ms")
     }
 
+    @Test
+    fun `the fits of every number of trees at once are the fits of each alone`() {
+        val random = Random(3)
+        val n = 60
+        val d = 10
+        val x = Matrix(n, d)
+        for (k in 0 until n * d) x.held[k] = random.nextFloat()
+        val grades = IntArray(n) { 1 + random.nextInt(5) }
+        val ids = LongArray(n) { it.toLong() }
+        val task = RankingTask(x, grades, ids, ids)
+        val rows = IntArray(45) { it }
+        val counts = listOf(5.0, 20.0, 10.0, 40.0)
+        val together = BoostingScorer().fitEach(task, rows, counts)
+        counts.forEachIndexed { i, trees ->
+            assertEquals(BoostingScorer().fit(task, rows, trees).scores(x).toList(), together[i].scores(x).toList(), "$trees trees")
+        }
+    }
+
+    @Test
+    fun `every feature's rows in the order of its values, of equal values the first first`() {
+        val random = Random(7)
+        val n = 50
+        val d = 4
+        val x = Matrix(n, d)
+        val some = floatArrayOf(-2.5f, -0f, 0f, 1f, 3.25f, -1e-30f, Float.MAX_VALUE, -Float.MAX_VALUE)
+        for (k in 0 until n * d) x.held[k] = some[random.nextInt(some.size)]
+        val learnt = IntArray(n) { (it * 7) % n }
+        val grower = Grower(x, learnt)
+        for (f in 0 until d) {
+            assertEquals(learnt.indices.sortedBy { x.held[learnt[it] * d + f] }, grower.sorted[f].toList(), "feature $f")
+        }
+    }
+
     /** The share of the pairs of [rows] of different grades that [scores] put in their grades' order. */
     private fun concordance(scores: FloatArray, grades: IntArray, rows: List<Int>): Double {
         var right = 0

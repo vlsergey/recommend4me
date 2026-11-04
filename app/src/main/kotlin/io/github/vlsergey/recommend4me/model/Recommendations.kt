@@ -304,15 +304,14 @@ class Recommendations(
         val items = LongArray(rows.size) { Vectors.keyOf(rows[it].key.toString()) }
         val keysOfWork = rows.indices.groupBy({ works[it] }, { rows[it].key })
         // The likeness of a graded item to the marks of the works under test would tell the fold what it is tested on
-        val ofFold = HashMap<Set<Long>, Matrix>()
+        // Made once a fold for every measuring of the training, the folds' made side by side
+        val ofFold = java.util.concurrent.ConcurrentHashMap<Set<Long>, Matrix>()
         val xFor = if (likeness.empty) null else { underTest: Set<Long> ->
-            synchronized(ofFold) {
-                ofFold.getOrPut(underTest) {
-                    val excluded = underTest.flatMap { keysOfWork[it].orEmpty() }.flatMap(clusters::members).toSet()
-                    layout.matrix(rows.map { input ->
-                        input.withVectors(input.vectors - MARK_KEYS + catalogue.likenessOf(input.key, excluded))
-                    })
-                }
+            ofFold.computeIfAbsent(underTest) {
+                val excluded = underTest.flatMap { keysOfWork[it].orEmpty() }.flatMap(clusters::members).toSet()
+                layout.matrix(rows.map { input ->
+                    input.withVectors(input.vectors - MARK_KEYS + catalogue.likenessOf(input.key, excluded))
+                })
             }
         }
         return Prepared(used, grades, works, items, perItem, layout, x, rows, keysOfWork, spreads, numbers, xFor)
@@ -693,12 +692,13 @@ class Recommendations(
         return groups.mapIndexed { g, group -> group.feature to full - model.scale.score(raw[g + 1].toDouble()) }
     }
 
-    /** Mean contribution of every feature over the graded works that have it, strongest positive first. */
+    /** Mean contribution of every feature over the graded works that have it, strongest positive first: the works' occlusions side by side, summed in their order. */
     private fun importance(model: TrainedModel, perItem: List<ItemInput>): List<Contribution> {
         val sums = HashMap<String, Double>()
         val counts = HashMap<String, Int>()
-        perItem.take(MAX_IMPORTANCE_ITEMS).forEach { input ->
-            occlusion(model, input).forEach { (feature, c) ->
+        val occluded = perItem.take(MAX_IMPORTANCE_ITEMS).parallelStream().map { occlusion(model, it) }.toList()
+        occluded.forEach { contributions ->
+            contributions.forEach { (feature, c) ->
                 sums.merge(feature, c, Double::plus)
                 counts.merge(feature, 1, Int::plus)
             }

@@ -82,48 +82,55 @@ object CrossValidation {
     }
 
     /**
-     * Cross-validates [scorer] with [parameter] on the rows [xFor] gives (the works under test given,
-     * for features that depend on them; [task]'s own when they do not). A fold's scores are
-     * standardised by the fold's model on its own training rows, so all folds share one scale; the
-     * concordance is counted within every fold and averaged.
+     * Cross-validates [scorer] with every one of its candidate parameters on the rows [xFor] gives
+     * (the works under test given, for features that depend on them; [task]'s own when they do not),
+     * in the scorer's order. The folds in parallel, every fold fitting every parameter at once
+     * ([Scorer.fitEach]). A fold's scores are standardised by the fold's model on its own training
+     * rows, so all folds share one scale; the concordance is counted within every fold and averaged.
      */
-    fun measure(task: RankingTask, scorer: Scorer, parameter: Double, xFor: ((Set<Long>) -> Matrix)? = null): RankingCandidate? {
+    fun measureAll(task: RankingTask, scorer: Scorer, xFor: ((Set<Long>) -> Matrix)? = null): List<RankingCandidate> {
         val grades = task.grades
         val works = task.works
         val folds = folds(grades, works)
         val k = (folds.maxOrNull() ?: 0) + 1
-        if (k < 2) return null
-        val scores = DoubleArray(grades.size)
-        val perFold = (0 until k).mapNotNull { fold ->
+        if (k < 2) return emptyList()
+        val parameters = scorer.candidates
+        val tests = Array(k) { fold -> grades.indices.filter { folds[it] == fold }.toIntArray() }
+        // Of every fold, of every parameter, the standardised scores of its rows under test
+        val perFold: List<List<DoubleArray>> = (0 until k).toList().parallelStream().map { fold ->
             val train = grades.indices.filter { folds[it] != fold }.toIntArray()
-            val test = grades.indices.filter { folds[it] == fold }.toIntArray()
+            val test = tests[fold]
             val rows = xFor?.invoke(test.map { works[it] }.toSet()) ?: task.x
-            val all = scorer.fit(RankingTask(rows, grades, works, task.items), train, parameter).scores(rows)
-            val (mean, sd) = standardisation(train.map { all[it].toDouble() })
-            test.forEach { scores[it] = (all[it] - mean) / sd }
-            concordance(grades, works, test, scores)
-        }
-        if (perFold.isEmpty()) return null
-        val mean = perFold.average()
-        val se = if (perFold.size > 1) sqrt(perFold.sumOf { (it - mean).pow(2) } / (perFold.size - 1) / perFold.size) else 0.0
+            scorer.fitEach(RankingTask(rows, grades, works, task.items), train, parameters).map { fitted ->
+                val all = fitted.scores(rows)
+                val (mean, sd) = standardisation(train.map { all[it].toDouble() })
+                DoubleArray(test.size) { (all[test[it]] - mean) / sd }
+            }
+        }.toList()
         val decided = grades.indices.filter { grades[it] != Grades.MIDDLE }
-        return RankingCandidate(
-            parameter,
-            RankingMetrics(
-                folds = k,
-                concordance = mean,
-                concordanceSe = se,
-                spearman = spearman(scores.toList(), grades.map { it.toDouble() }),
-                auc = auc(decided.map { grades[it] > Grades.MIDDLE }, decided.map { scores[it] }),
-            ),
-            scores,
-        )
+        return parameters.indices.mapNotNull { p ->
+            val scores = DoubleArray(grades.size)
+            val concordances = (0 until k).mapNotNull { fold ->
+                val test = tests[fold]
+                test.forEachIndexed { i, row -> scores[row] = perFold[fold][p][i] }
+                concordance(grades, works, test, scores)
+            }
+            if (concordances.isEmpty()) return@mapNotNull null
+            val mean = concordances.average()
+            val se = if (concordances.size > 1) sqrt(concordances.sumOf { (it - mean).pow(2) } / (concordances.size - 1) / concordances.size) else 0.0
+            RankingCandidate(
+                parameters[p],
+                RankingMetrics(
+                    folds = k,
+                    concordance = mean,
+                    concordanceSe = se,
+                    spearman = spearman(scores.toList(), grades.map { it.toDouble() }),
+                    auc = auc(decided.map { grades[it] > Grades.MIDDLE }, decided.map { scores[it] }),
+                ),
+                scores,
+            )
+        }
     }
-
-    /** Every candidate parameter of the scorer, measured in parallel, in the scorer's order. */
-    fun measureAll(task: RankingTask, scorer: Scorer, xFor: ((Set<Long>) -> Matrix)? = null): List<RankingCandidate> =
-        scorer.candidates.parallelStream().map { measure(task, scorer, it, xFor) }.toList().filterNotNull()
-            .sortedBy { scorer.candidates.indexOf(it.parameter) }
 
     /** The first — most cautious — candidate within one standard error of the best concordance. */
     fun choose(candidates: List<RankingCandidate>): RankingCandidate? {

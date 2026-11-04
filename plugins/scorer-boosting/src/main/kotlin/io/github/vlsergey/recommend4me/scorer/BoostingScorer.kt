@@ -28,6 +28,13 @@ class BoostingScorer : Scorer {
     override fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer =
         fit(task.x, rows.distinct().toIntArray(), RankingPairs.of(task, rows), parameter.toInt())
 
+    /** The most trees grown once; a fit of fewer is its first trees — the same trees a fit of them alone grows. */
+    override fun fitEach(task: RankingTask, rows: IntArray, parameters: List<Double>): List<FittedScorer> {
+        if (parameters.isEmpty()) return emptyList()
+        val forest = fit(task.x, rows.distinct().toIntArray(), RankingPairs.of(task, rows), parameters.maxOf { it.toInt() })
+        return parameters.map { Forest(forest.features, forest.trees.subList(0, it.toInt())) }
+    }
+
     override fun unpack(bytes: ByteArray): FittedScorer = Forest.unpack(bytes)
 
     companion object {
@@ -81,15 +88,27 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
     private val d = x.cols
     private val m = learnt.size
 
-    /** For every feature, the positions in [learnt] in the order of its value. */
-    private val sorted: Array<IntArray> = Array(d) { f ->
-        learnt.indices.sortedBy { x.held[x.row(learnt[it]) + f] }.toIntArray()
-    }
-
     private val node = IntArray(m)
 
     /** The rows' features, a row of [learnt] a row: read straight, not through the matrix's segment. */
     private val values: Array<FloatArray> = Array(m) { k -> FloatArray(d).also { x.held.take(it, 0, x.row(learnt[k]), d) } }
+
+    /**
+     * For every feature, the positions in [learnt] in the order of its value, of equal values the
+     * first first: every position and its value one number sorted — the value's bits made to order
+     * as the floats do, above the position — not a list of boxed numbers a feature.
+     */
+    internal val sorted: Array<IntArray> = run {
+        val keyed = LongArray(m)
+        Array(d) { f ->
+            for (k in 0 until m) {
+                val bits = java.lang.Float.floatToIntBits(values[k][f])
+                keyed[k] = ((bits xor ((bits shr 31) and Int.MAX_VALUE)).toLong() shl 32) or k.toLong()
+            }
+            keyed.sort()
+            IntArray(m) { keyed[it].toInt() }
+        }
+    }
 
     fun grow(g: DoubleArray, h: DoubleArray, random: Random): Tree {
         val features = (0 until d).filter { random.nextDouble() < BoostingScorer.SHARE }.ifEmpty { listOf(random.nextInt(d)) }
