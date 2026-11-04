@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.database.Databases
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -51,12 +52,19 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
     /** What is known of a work's rating: the ratings its site lets it have, its own the site states, the user's answers on it. */
     private class Told(val allowed: List<String>, val stated: List<String>, val answers: List<FacetCorrection>)
 
-    /** What is known of the ratings of the works [ids] of the source — every work when null — by item. */
-    private fun told(s: SourceStore, ids: Collection<String>?): Map<String, Told> {
-        val facets = if (ids == null) HashMap<String, Map<String, List<String>>>().also { out ->
+    /** The user's answers on the works [ids] of the source — every work when null: read once, for [told] and [featuresOf] both. */
+    private fun answersOf(s: SourceStore, ids: Collection<String>?): List<FacetCorrection> =
+        if (ids == null) s.corrections.allFacets() else s.corrections.facetsOf(ids).values.flatten()
+
+    /**
+     * What is known of the ratings of the works [ids] of the source — every work when null — by item;
+     * [corrections]: the user's answers on them; [site]: of every work, the site's values read already.
+     */
+    private fun told(s: SourceStore, ids: Collection<String>?, corrections: List<FacetCorrection>, site: Map<String, Map<String, List<String>>>? = null): Map<String, Told> {
+        val facets = site ?: if (ids == null) HashMap<String, Map<String, List<String>>>().also { out ->
             listOf(AgeRating.SITE_KEY, AgeRating.KEY).forEach { f -> s.items.forEachFacet(f) { id, keys -> out[id] = out[id].orEmpty() + (f to keys) } }
         } else s.items.facetsOf(ids)
-        val answers = (if (ids == null) s.corrections.allFacets() else s.corrections.facetsOf(ids).values.flatten()).filter { it.facet == AgeRating.KEY }.groupBy { it.itemId }
+        val answers = corrections.filter { it.facet == AgeRating.KEY }.groupBy { it.itemId }
         val all = ids ?: s.items.keys().map { it.id }
         return all.associateWith { id ->
             val own = facets[id].orEmpty()
@@ -68,10 +76,11 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
      * What the model reads of the works [ids] of the source — every work when null: the site it is of
      * (a site's works may all be stronger or milder whatever their tags: every game of F95zone is for
      * adults), and its normalized tags — the site's tags bound to them, the user's word on the layer's
-     * tags over them; no tag the model works out.
+     * tags over them; no tag the model works out. [corrections]: the user's answers on them; [site]: of
+     * every work, the site's values read already.
      */
-    private fun featuresOf(s: SourceStore, ids: Collection<String>?): Map<String, List<String>> {
-        val tags = s.normalizedTags(ids, if (ids == null) s.corrections.allFacets() else s.corrections.facetsOf(ids).values.flatten())
+    private fun featuresOf(s: SourceStore, ids: Collection<String>?, corrections: List<FacetCorrection>, site: Map<String, Map<String, List<String>>>? = null): Map<String, List<String>> {
+        val tags = s.normalizedTags(ids, corrections, site)
         val source = AgeRatingRepository.source(s.id)
         return (ids ?: s.items.keys().map { it.id }).associateWith { id -> listOf(source) + tags[id].orEmpty().map(AgeRatingRepository::tag) }
     }
@@ -87,11 +96,13 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
         return (steps.min()..steps.max()).takeIf { it != keys.indices }
     }
 
-    override fun chances(store: SourceStore, ids: Collection<String>?): Map<String, Map<String, Chance>> {
+    override fun chances(store: SourceStore, ids: Collection<String>?, every: EveryItemFacets?): Map<String, Map<String, Chance>> {
         if (store.schema.facet(AgeRating.KEY) == null) return emptyMap()
         val model = models.read() ?: return emptyMap()
-        val features = featuresOf(store, ids)
-        return told(store, ids).mapValues { (id, t) ->
+        val given = every?.takeIf { ids == null }
+        val answers = given?.allCorrections ?: answersOf(store, ids)
+        val features = featuresOf(store, ids, answers, given?.site)
+        return told(store, ids, answers, given?.site).mapValues { (id, t) ->
             // Of the ratings the site lets the work have alone, their chances made one in all
             val allowed = t.allowed.map { keys.indexOf(it) }.filter { it >= 0 }.ifEmpty { keys.indices.toList() }
             val p = model.chances(features[id].orEmpty())
@@ -135,8 +146,9 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
     fun fit() {
         val started = System.currentTimeMillis()
         val examples = sources().flatMap { s ->
-            val features = featuresOf(s, null)
-            told(s, null).mapNotNull { (id, t) -> spanOf(t)?.let { span -> RatingExample(features[id].orEmpty(), span.first, span.last) } }
+            val answers = answersOf(s, null)
+            val features = featuresOf(s, null, answers)
+            told(s, null, answers).mapNotNull { (id, t) -> spanOf(t)?.let { span -> RatingExample(features[id].orEmpty(), span.first, span.last) } }
         }
         val model = AgeRatingModel.fit(examples, keys.size)
         val works = HashMap<String, Int>()

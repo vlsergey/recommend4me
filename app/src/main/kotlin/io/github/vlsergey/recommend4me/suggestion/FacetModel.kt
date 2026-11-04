@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.source.SourceStore
 
 /**
@@ -12,6 +13,10 @@ interface FacetModel {
     /** The key of the facet of the layer it works out. */
     val facet: String
 
-    /** The chances of the [facet] of the works [ids] of the source — every work when null — by item, then by value; none of a work it tells nothing of. */
-    fun chances(store: SourceStore, ids: Collection<String>?): Map<String, Map<String, Chance>>
+    /**
+     * The chances of the [facet] of the works [ids] of the source — every work when null — by item, then
+     * by value; none of a work it tells nothing of. [every]: of every work, their facets and answers
+     * read already by the reading it serves; null — read them.
+     */
+    fun chances(store: SourceStore, ids: Collection<String>?, every: EveryItemFacets? = null): Map<String, Map<String, Chance>>
 }

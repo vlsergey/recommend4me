@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.interest.InterestMark
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.likeness.Likenesses
@@ -245,17 +246,15 @@ class CatalogueReader(
      */
     private fun readItems(s: SourceStore, severalSources: Boolean, ids: List<String>? = null, laps: Laps = Laps()): List<CatalogueItem> {
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
-        val facets = HashMap<String, HashMap<String, MutableList<String>>>()
-        fun facet(id: String, facet: String, key: String) {
-            if (facet in facetIds) facets.getOrPut(id) { HashMap() }.getOrPut(facet) { ArrayList() } += key
-        }
-        if (ids == null) s.items.forEachFacetValue(::facet)
-        else s.items.facetsOf(ids).forEach { (id, own) -> own.forEach { (f, keys) -> keys.forEach { facet(id, f, it) } } }
+        // Of every work, every facet and every answer read once, and handed to the chances made of them:
+        // a facet not of the model gives no feature below
+        val every = if (ids == null) EveryItemFacets.read(s) else null
+        val facets: Map<String, Map<String, List<String>>> = every?.site ?: s.items.facetsOf(ids!!)
         laps.lap("facets", facets.size)
-        val facetCorrections = if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
+        val facetCorrections = every?.corrections ?: s.corrections.facetsOf(ids!!)
         laps.lap("corrections", facetCorrections.size)
         // The values the model gives the items of the facets it works out: made now of them, in one pass
-        val chances = suggestions.chancesOf(s, ids, s.schema.facets.filter { it.infer && it.feature }.map { it.key }, laps.within("chances:"))
+        val chances = suggestions.chancesOf(s, ids, s.schema.facets.filter { it.infer && it.feature }.map { it.key }, laps.within("chances:"), every)
         laps.restart()
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numbers = HashMap<String, HashMap<String, Double>>()
