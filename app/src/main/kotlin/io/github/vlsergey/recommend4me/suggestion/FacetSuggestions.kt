@@ -32,6 +32,7 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
+import io.github.vlsergey.recommend4me.laps.Laps
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -297,10 +298,10 @@ class FacetSuggestions(
      * Nothing is written, nothing waited for: never in the queue of the computations — the marking
      * of a work waits for nothing (user, 2026-10-15).
      */
-    fun chances(store: SourceStore, ids: Collection<String>?, through: String? = null): WorkChances {
+    fun chances(store: SourceStore, ids: Collection<String>?, through: String? = null, laps: Laps = Laps()): WorkChances {
         val facets = facetsOf(store)
         val upTo = if (through == null) facets.size else facets.indexOfFirst { it.key == through } + 1
-        return chain(store, ids, upTo)
+        return chain(store, ids, upTo, laps)
     }
 
     /**
@@ -340,24 +341,31 @@ class FacetSuggestions(
         return kept.values.indices.associate { kept.values[it] to weights[it] }
     }
 
-    /** [chances] of the [wanted] facets alone — those on a card, those the model of the grades reads: the chain down to the last of them. */
-    fun chancesOf(store: SourceStore, ids: Collection<String>?, wanted: Collection<String>): WorkChances =
-        facetsOf(store).lastOrNull { it.key in wanted }?.let { chances(store, ids, it.key) } ?: seeded(store, ids)
+    /**
+     * [chances] of the [wanted] facets alone — those on a card, those the model of the grades reads: the
+     * chain down to the last of them. [laps]: the time of every step of it.
+     */
+    fun chancesOf(store: SourceStore, ids: Collection<String>?, wanted: Collection<String>, laps: Laps = Laps()): WorkChances =
+        facetsOf(store).lastOrNull { it.key in wanted }?.let { chances(store, ids, it.key, laps) } ?: seeded(store, ids)
 
     /** The chances of the works [ids] (every work when null) of the first [upTo] facets of the chain. */
-    private fun chain(store: SourceStore, ids: Collection<String>?, upTo: Int): MadeChances {
+    private fun chain(store: SourceStore, ids: Collection<String>?, upTo: Int, laps: Laps = Laps()): MadeChances {
         val encoder = plugins.textEncoder() ?: return seeded(store, ids)
         if (ids != null && ids.isEmpty()) return seeded(store, ids)
-        return chain(store, encoder, worksRead(store, encoder, reading(store, ids, upTo)), upTo)
+        return chain(store, encoder, worksRead(store, encoder, reading(store, ids, upTo)), upTo, laps)
     }
 
     /** The chain over the works of [read]: what the facets read alike read once, for all of them. */
-    private fun chain(store: SourceStore, encoder: TextEncoder, read: FacetData.WorksRead, upTo: Int): MadeChances {
+    private fun chain(store: SourceStore, encoder: TextEncoder, read: FacetData.WorksRead, upTo: Int, laps: Laps = Laps()): MadeChances {
         val made = seeded(store, read.only, read.drafts)
+        laps.lap("drafts and own models", made.size)
         facetsOf(store).take(upTo).forEach { facet ->
             val suggester = plugins.suggester(store.id, facet.key) ?: return@forEach
-            val scored = scored(store, facet, suggester, encoder, read, made) ?: return@forEach
+            val own = laps.within(facet.key)
+            val scored = scored(store, facet, suggester, encoder, read, made, own) ?: return@forEach
             keep(made, facet, scored.data, scored.scores)
+            own.lap("kept", scored.data.ids.size)
+            laps.restart()
         }
         return made
     }
@@ -388,25 +396,32 @@ class FacetSuggestions(
      * out. Else — of a suggester without one, of a model fitted before scorings were kept, till the
      * next refresh keeps it — on the whole task. Null when the facet was never fitted.
      */
-    private fun scored(store: SourceStore, facet: FacetDef, suggester: FacetSuggester, encoder: TextEncoder, read: FacetData.WorksRead, made: WorkChances): Scored? {
+    private fun scored(
+        store: SourceStore, facet: FacetDef, suggester: FacetSuggester, encoder: TextEncoder, read: FacetData.WorksRead, made: WorkChances,
+        laps: Laps = Laps(),
+    ): Scored? {
         val ids = read.only
         store.suggestions.scoring(facet.key)?.takeIf { it.suggester == suggester.id }?.let { kept ->
+            laps.lap("scoring kept read", kept.bytes.size / 1024)
             val vocabulary = vocabularyOf(store, facet, ids, made, light = true)
+            laps.lap("vocabulary")
             // The names counted of the index, as the fitting counted them
             val mentions = vocabulary?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)
+            laps.lap("mentions")
             val data = FacetData.load(
                 store, facet, encoder, read, modelled = made, mentions = mentions, allowed = vocabulary?.allowed, barred = vocabulary?.barred,
-                examples = vocabulary?.examples, kept = kept.values,
+                examples = vocabulary?.examples, kept = kept.values, laps = laps,
             )
             if (data.values.isEmpty()) return null
-            return suggester.scoring(kept.bytes, data.task)?.let { Scored(data, it, vocabulary) }
+            return suggester.scoring(kept.bytes, data.task)?.let { Scored(data, it, vocabulary) }.also { laps.lap("scored", data.values.size) }
         }
         val stored = store.suggestions.suggester(facet.key)?.takeIf { it.suggester == suggester.id } ?: return null
         val vocabulary = vocabularyOf(store, facet, ids, made)
         val data = load(store, facet, encoder, vocabulary, ids, made, stored.values, read)
         if (data.values.isEmpty()) return null
+        laps.lap("whole task read, no scoring kept")
         val fitted = suggester.unpack(stored.content, data.task) ?: return null
-        return Scored(data, fitted.on(data.task), vocabulary)
+        return Scored(data, fitted.on(data.task), vocabulary).also { laps.lap("scored", data.values.size) }
     }
 
     /** The drafts of the layer of the works [ids] (every work when null) as their chances: 1, marked so, till the model gives its own. */
@@ -1184,6 +1199,7 @@ internal class FacetData(
             hintNames: Map<String, List<String>> = emptyMap(),
             hintAmong: (String) -> Collection<String> = { emptyList() },
             kept: List<String>? = null,
+            laps: Laps = Laps(),
         ): FacetData {
             val schema = store.schema
             // The rows of the task: every work, or the works [WorksRead.only]; their values alone read
@@ -1192,6 +1208,7 @@ internal class FacetData(
             val ids = every
             val site = read.site
             val corrections = read.corrections
+            laps.lap("works' values")
             // Of a facet of tags, the user's answers with what they say of the tags above and under them
             val hierarchy = store.hierarchies()[facet.key]
             val answers = if (hierarchy == null) corrections else corrections.mapValues { hierarchy.expand(facet.key, it.value) }
@@ -1210,6 +1227,7 @@ internal class FacetData(
                 }
             }
             val corrected = every.associateWith { id -> TagHierarchy.corrected(learnt[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets) }
+            laps.lap("corrected")
 
             // Every value of the facet the site or the user gave any work read, the values the model kept
             // chooses from, and every value known besides
@@ -1252,6 +1270,7 @@ internal class FacetData(
             val context = contextOf.map { keys ->
                 keys.filter { shared == null || shared.getValue(it) > 1 }.map { contextIndex.getOrPut(it) { contextIndex.size } }.toIntArray()
             }
+            laps.lap("context", contextIndex.size)
 
             val d = encoder.dim
             // A facet the site gives values of has them as its labels: its own line on the site is
@@ -1260,6 +1279,7 @@ internal class FacetData(
             val siteGives = if (only == null) site.values.any { facet.key in it } else store.items.valueUses(facet.key).isNotEmpty()
             val ownLine = facet.original?.takeIf { siteGives }?.let { TextVectors.blocks(store.id, schema)[it]?.first }
             val inputs = read.inputs.filter { it.name != ownLine }
+            laps.lap("inputs", inputs.size)
 
             // Of the scoring kept, no names: it knows every value's coordinates
             val names = Matrix(values.size, if (kept != null) 0 else d)
@@ -1317,6 +1337,7 @@ internal class FacetData(
             val held = if (examples == null && drafted.isEmpty()) task.assigned else ids.map { id ->
                 indices(TagHierarchy.corrected(site[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets)[facet.key].orEmpty())
             }
+            laps.lap("task")
             // The task of some works, or of the scoring kept, tells nothing of what the weights were fitted on
             if (only != null || kept != null) return FacetData(ids, values, task, held, allNamed, NO_BASIS)
             val hashes = HashMap<String, MutableList<String>>()

@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.model
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.interest.InterestMark
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -24,20 +25,6 @@ import kotlin.math.ln1p
 import kotlin.math.max
 
 private val log = LoggerFactory.getLogger(CatalogueReader::class.java)
-
-/** The time of every step of a reading, in the order taken: what a slow reading is made of, in the log. */
-private class Laps {
-    private var last = System.currentTimeMillis()
-    private val laps = ArrayList<String>()
-
-    fun lap(step: String, count: Int? = null) {
-        val now = System.currentTimeMillis()
-        laps += if (count == null) "$step ${now - last}" else "$step ${now - last} ($count)"
-        last = now
-    }
-
-    override fun toString() = laps.joinToString(", ")
-}
 
 /** What the model reads of an item beside its vectors: no texts, no addresses. */
 class CatalogueItem(
@@ -268,8 +255,8 @@ class CatalogueReader(
         val facetCorrections = if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
         laps.lap("corrections", facetCorrections.size)
         // The values the model gives the items of the facets it works out: made now of them, in one pass
-        val chances = suggestions.chancesOf(s, ids, s.schema.facets.filter { it.infer && it.feature }.map { it.key })
-        laps.lap("chances", chances.size)
+        val chances = suggestions.chancesOf(s, ids, s.schema.facets.filter { it.infer && it.feature }.map { it.key }, laps.within("chances:"))
+        laps.restart()
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numbers = HashMap<String, HashMap<String, Double>>()
         fun number(id: String, key: String, value: Double) {
