@@ -25,6 +25,20 @@ import kotlin.math.max
 
 private val log = LoggerFactory.getLogger(CatalogueReader::class.java)
 
+/** The time of every step of a reading, in the order taken: what a slow reading is made of, in the log. */
+private class Laps {
+    private var last = System.currentTimeMillis()
+    private val laps = ArrayList<String>()
+
+    fun lap(step: String, count: Int? = null) {
+        val now = System.currentTimeMillis()
+        laps += if (count == null) "$step ${now - last}" else "$step ${now - last} ($count)"
+        last = now
+    }
+
+    override fun toString() = laps.joinToString(", ")
+}
+
 /** What the model reads of an item beside its vectors: no texts, no addresses. */
 class CatalogueItem(
     val key: ItemKey,
@@ -144,8 +158,11 @@ class CatalogueReader(
         }
 
         type.sources.forEach { s ->
-            items += readItems(s, severalSources)
+            val laps = Laps()
+            items += readItems(s, severalSources, laps = laps)
+            var count = 0
             fun put(id: String, block: String, v: FloatArray) {
+                count++
                 spreads.add(block, v)
                 val key = ItemKey(s.id, id)
                 if (key in kept) vectors.getOrPut(key) { HashMap() }[block] = v
@@ -154,8 +171,10 @@ class CatalogueReader(
                 // The title and the site's lines too: every text that has vectors
                 val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
                 s.textVectors.forEach(textEncoder.id, blocks.keys) { id, key, v -> put(id, blocks.getValue(key), v) }
+                laps.lap("text vectors", count)
             }
             if (imageEncoder != null) {
+                count = 0
                 s.pictures.forEachItemVector(imageEncoder.id) { id, block, v ->
                     put(id, block, v)
                     if (v.size == centerSum!!.size) {
@@ -163,8 +182,12 @@ class CatalogueReader(
                         pictures++
                     }
                 }
+                laps.lap("picture vectors", count)
             }
+            count = 0
             s.setVectors.forEach(embeddings) { id, key, v -> put(id, key, v) }
+            laps.lap("set vectors", count)
+            log.info("{}/{}: catalogue read in ms: {}", type.id, s.id, laps)
         }
         val read = System.currentTimeMillis()
         val graded = items.map { it.key }.toSet().let { keys -> ratings.map { it.key }.filter { it in keys }.toSet() }
@@ -233,7 +256,7 @@ class CatalogueReader(
      * corrections, the source when the type has several. Of the items [ids], when given; of every
      * item in one pass over each table.
      */
-    private fun readItems(s: SourceStore, severalSources: Boolean, ids: List<String>? = null): List<CatalogueItem> {
+    private fun readItems(s: SourceStore, severalSources: Boolean, ids: List<String>? = null, laps: Laps = Laps()): List<CatalogueItem> {
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
         val facets = HashMap<String, HashMap<String, MutableList<String>>>()
         fun facet(id: String, facet: String, key: String) {
@@ -241,9 +264,12 @@ class CatalogueReader(
         }
         if (ids == null) s.items.forEachFacetValue(::facet)
         else s.items.facetsOf(ids).forEach { (id, own) -> own.forEach { (f, keys) -> keys.forEach { facet(id, f, it) } } }
+        laps.lap("facets", facets.size)
         val facetCorrections = if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
+        laps.lap("corrections", facetCorrections.size)
         // The values the model gives the items of the facets it works out: made now of them, in one pass
         val chances = suggestions.chancesOf(s, ids, s.schema.facets.filter { it.infer && it.feature }.map { it.key })
+        laps.lap("chances", chances.size)
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numbers = HashMap<String, HashMap<String, Double>>()
         fun number(id: String, key: String, value: Double) {
@@ -251,13 +277,15 @@ class CatalogueReader(
         }
         if (ids == null) s.items.forEachNumber(::number)
         else s.items.numbersOf(ids).forEach { (id, own) -> own.forEach { (key, value) -> number(id, key, value) } }
+        laps.lap("numbers", numbers.size)
         val fields = if (ids == null) s.corrections.allFields() else s.corrections.fieldsOf(ids)
         // A tag under another gives the work the other too; a tag the user said it has not, none under it
         val hierarchies = s.hierarchies()
         // The tags the user ignores stay with the works, the model reads none of them
         val ignored = s.ignoredTags()
+        laps.lap("fields and tag trees")
         val wanted = ids?.toHashSet()
-        return s.items.keys().filter { wanted == null || it.id in wanted }.map { k ->
+        val made = s.items.keys().filter { wanted == null || it.id in wanted }.map { k ->
             val categorical = LinkedHashSet<String>()
             val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
             TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets).forEach { (facet, keys) ->
@@ -272,6 +300,8 @@ class CatalogueReader(
             }.toMap()
             CatalogueItem(ItemKey(s.id, k.id), k.version, k.updatedAt, categorical, numeric)
         }
+        laps.lap("items", made.size)
+        return made
     }
 
     /** One item as the model reads it, without its vectors; null when there is no such item. */
