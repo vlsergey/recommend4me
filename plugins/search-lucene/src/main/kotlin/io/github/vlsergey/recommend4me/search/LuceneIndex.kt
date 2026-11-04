@@ -12,11 +12,11 @@ import org.apache.lucene.document.TextField
 import org.apache.lucene.search.TermQuery
 import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.FieldInfos
-import org.apache.lucene.index.MultiBits
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
 import org.apache.lucene.index.Term
 import org.apache.lucene.index.VectorSimilarityFunction
+import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
@@ -71,13 +71,22 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             try {
                 if (reader.indexCommit.userData[FORMAT_KEY] != FORMAT.toString() || reader.numDocs() == 0) null
                 else {
-                    val stored = reader.storedFields()
-                    val live = MultiBits.getLiveDocs(reader)
+                    // Of the items' documents alone, found by their kind: not every passage's read too
+                    val wanted = setOf(ID, FINGERPRINT)
                     HashMap<String, Long>().also { out ->
-                        for (doc in 0 until reader.maxDoc()) {
-                            if (live != null && !live.get(doc)) continue
-                            val d = stored.document(doc, setOf(ID, FINGERPRINT))
-                            d.getField(FINGERPRINT)?.numericValue()?.toLong()?.let { out[d.get(ID)] = it }
+                        for (leaf in reader.leaves()) {
+                            val r = leaf.reader()
+                            val live = r.liveDocs
+                            val stored = r.storedFields()
+                            val items = r.postings(ITEM_TERM) ?: continue
+                            var doc = items.nextDoc()
+                            while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+                                if (live == null || live.get(doc)) {
+                                    val d = stored.document(doc, wanted)
+                                    d.getField(FINGERPRINT)?.numericValue()?.toLong()?.let { out[d.get(ID)] = it }
+                                }
+                                doc = items.nextDoc()
+                            }
                         }
                     }
                 }

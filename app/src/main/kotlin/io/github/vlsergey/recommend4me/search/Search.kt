@@ -146,13 +146,15 @@ class Search(
 
     /**
      * Every document of a type, streamed: the items read a chunk at a time; the values the model
-     * gives them made of every work of a source in one pass first, held while its chunks are read.
+     * gives them made of every work of a source in one pass first, and its tree of tags read once,
+     * held while its chunks are read.
      */
     private fun documentsOf(type: TypeStore): Sequence<SearchDocument> = sequence {
         for (s in type.sources) {
             val ids = s.items.keys().map { it.id }
             val chances = suggestions.chances(s, null)
-            for (chunk in ids.chunked(CHUNK)) yieldAll(documents(s, chunk, chances = chances).values)
+            val hierarchies = s.hierarchies()
+            for (chunk in ids.chunked(CHUNK)) yieldAll(documents(s, chunk, chances = chances, hierarchies = hierarchies).values)
         }
     }
 
@@ -161,7 +163,7 @@ class Search(
      * chapters read among them — and, with [passages], the passages of the texts searched by meaning
      * and of the chapters: every window of a text longer than one with its own vector, a shorter one
      * whole with the text's. The values the model gives them of their [chances], made now of them
-     * when not given.
+     * when not given; the source's tree of tags [hierarchies] read now when not given.
      *
      * THE WORK'S OWN WORDS ([SearchField.counted]) — every text of it, every chapter, every value its
      * site gives it — are all in it, those not searched of weight 0: a name written in them is the
@@ -169,16 +171,18 @@ class Search(
      * field of their own beside the site's, searched, never counted: the model would count its own
      * guesses. And the language its description is written in ([descriptionLanguage]).
      */
-    fun documents(s: SourceStore, ids: List<String>, passages: Boolean = true, chances: WorkChances? = null): Map<ItemKey, SearchDocument> {
+    fun documents(
+        s: SourceStore, ids: List<String>, passages: Boolean = true, chances: WorkChances? = null,
+        hierarchies: Map<String, TagHierarchy> = s.hierarchies(),
+    ): Map<ItemKey, SearchDocument> {
         val schema = s.schema
         val heads = s.items.heads(ids)
         val chances = chances ?: suggestions.chances(s, ids)
-        val facets = s.items.facetsOf(ids).mapValues { (id, site) -> ModelValues.of(schema, site, chances[id]) }
+        val site = s.items.facetsOf(ids)
+        val facets = site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
         val facetCorrections = s.corrections.facetsOf(ids)
-        val hierarchies = s.hierarchies()
         val fields = s.corrections.fieldsOf(ids)
         val texts = s.items.textsOf(ids)
-        val site = s.items.facetsOf(ids)
         // The values of every item as the user says, the user's own among them: what is indexed — and named
         val corrected = ids.associateWith { id -> TagHierarchy.corrected(facets[id].orEmpty(), facetCorrections[id].orEmpty(), hierarchies, s.singleFacets) }
         val names = schema.facets.associate { def ->

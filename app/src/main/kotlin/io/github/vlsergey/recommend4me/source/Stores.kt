@@ -195,7 +195,12 @@ class SourceStore(
     val tagFacets = schema.facets.filter { it.editable && it.examplesFrom != null }.map { it.key }.toSet()
 
     /** The tags under other tags of every facet of tags that has any, read now: facet to its hierarchy. */
-    fun hierarchies(): Map<String, TagHierarchy> = tagFacets.associateWith { TagHierarchy(tags.parents()) }.filterValues { !it.empty }
+    fun hierarchies(): Map<String, TagHierarchy> {
+        if (tagFacets.isEmpty()) return emptyMap()
+        // One tree of tags for every facet of tags: read once
+        val tree = TagHierarchy(tags.parents())
+        return if (tree.empty) emptyMap() else tagFacets.associateWith { tree }
+    }
 
     /** The tags the user ignores of every facet of tags that has any, read now: facet to their keys. */
     fun ignoredTags(): Map<String, Set<String>> = tags.ignored().takeIf { it.isNotEmpty() }?.let { ignored -> tagFacets.associateWith { ignored } }.orEmpty()
