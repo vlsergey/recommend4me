@@ -4,6 +4,12 @@ import org.bytedeco.javacpp.FloatPointer
 import org.bytedeco.openblas.global.openblas
 import org.bytedeco.openblas.global.openblas_full
 import org.slf4j.LoggerFactory
+import java.lang.foreign.Arena
+import java.lang.foreign.FunctionDescriptor
+import java.lang.foreign.Linker
+import java.lang.foreign.SymbolLookup
+import java.lang.foreign.ValueLayout
+import java.util.concurrent.Semaphore
 import java.util.stream.IntStream
 
 private val log = LoggerFactory.getLogger(Blas::class.java)
@@ -17,6 +23,14 @@ private val log = LoggerFactory.getLogger(Blas::class.java)
  *
  * Absent (an operating system nobody built the natives for), the plain loops answer instead —
  * slower, never wrong — and the log says once which path is in force.
+ *
+ * ITS MEMORY: the library gives every product in progress a buffer of 128 MB of its own —
+ * committed, never given back — and keeps as many as were ever in progress at once, and one for
+ * every thread it starts. Loaded as it comes, with a thread a core, it took 46 of them, 5.9 GB,
+ * before its first product; the cross-validation's thirty threads twenty more (2026-11-04). So it
+ * is loaded with one thread ([on]) — it starts the threads of [wide] when asked, a buffer each —
+ * and at most [PARTS] products are in it at once ([calling]): 22 buffers of a machine of 24 cores at
+ * the most, not 70.
  */
 object Blas {
 
@@ -33,6 +47,7 @@ object Blas {
      * `blas_set_num_threads` silently does nothing (found out in local-ai-chroma-enf-lora).
      */
     val on: Boolean = try {
+        presetEnvironment("OPENBLAS_NUM_THREADS", THREADS.toString())
         openblas_full.openblas_set_num_threads(THREADS)
         log.info(
             "matrix products go through OpenBLAS {} ({}), {} thread(s)",
@@ -64,11 +79,13 @@ object Blas {
             return
         }
         split(m, parts) { from, upTo ->
-            openblas_full.cblas_sgemm(
-                openblas_full.CblasRowMajor, openblas_full.CblasNoTrans, openblas_full.CblasNoTrans,
-                upTo - from, n, k, 1.0f, FloatPointer(pa).position(from.toLong() * lda), lda, pb, n,
-                0.0f, FloatPointer(pc).position(from.toLong() * n), n,
-            )
+            calling {
+                openblas_full.cblas_sgemm(
+                    openblas_full.CblasRowMajor, openblas_full.CblasNoTrans, openblas_full.CblasNoTrans,
+                    upTo - from, n, k, 1.0f, FloatPointer(pa).position(from.toLong() * lda), lda, pb, n,
+                    0.0f, FloatPointer(pc).position(from.toLong() * n), n,
+                )
+            }
         }
     }
 
@@ -91,11 +108,13 @@ object Blas {
         }
         // Shared out by the rows of the gradient, so the parts write where they do not meet
         split(k, parts) { from, upTo ->
-            openblas_full.cblas_sgemm(
-                openblas_full.CblasRowMajor, openblas_full.CblasTrans, openblas_full.CblasNoTrans,
-                upTo - from, n, m, 1.0f, FloatPointer(pa).position(from.toLong()), lda, pb, n,
-                0.0f, FloatPointer(pc).position(from.toLong() * n), n,
-            )
+            calling {
+                openblas_full.cblas_sgemm(
+                    openblas_full.CblasRowMajor, openblas_full.CblasTrans, openblas_full.CblasNoTrans,
+                    upTo - from, n, m, 1.0f, FloatPointer(pa).position(from.toLong()), lda, pb, n,
+                    0.0f, FloatPointer(pc).position(from.toLong() * n), n,
+                )
+            }
         }
     }
 
@@ -109,11 +128,13 @@ object Blas {
             return
         }
         split(m, parts) { from, upTo ->
-            openblas_full.cblas_sgemv(
-                openblas_full.CblasRowMajor, openblas_full.CblasNoTrans, upTo - from, k,
-                1.0f, FloatPointer(pa).position(from.toLong() * lda), lda, px, 1,
-                0.0f, FloatPointer(py).position(from.toLong()), 1,
-            )
+            calling {
+                openblas_full.cblas_sgemv(
+                    openblas_full.CblasRowMajor, openblas_full.CblasNoTrans, upTo - from, k,
+                    1.0f, FloatPointer(pa).position(from.toLong() * lda), lda, px, 1,
+                    0.0f, FloatPointer(py).position(from.toLong()), 1,
+                )
+            }
         }
     }
 
@@ -130,10 +151,12 @@ object Blas {
             }
             return
         }
-        openblas_full.cblas_sgemv(
-            openblas_full.CblasRowMajor, openblas_full.CblasTrans, m, k,
-            1.0f, pa, lda, pr, 1, 0.0f, py, 1,
-        )
+        calling {
+            openblas_full.cblas_sgemv(
+                openblas_full.CblasRowMajor, openblas_full.CblasTrans, m, k,
+                1.0f, pa, lda, pr, 1, 0.0f, py, 1,
+            )
+        }
     }
 
     /**
@@ -162,12 +185,14 @@ object Blas {
             }
             return
         }
-        openblas_full.cblas_sgemm(
-            openblas_full.CblasRowMajor, if (transA) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
-            if (transB) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
-            m, n, k, alpha, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(pb).position(bAt.toLong()), ldb,
-            beta, FloatPointer(pc).position(cAt.toLong()), ldc,
-        )
+        calling {
+            openblas_full.cblas_sgemm(
+                openblas_full.CblasRowMajor, if (transA) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
+                if (transB) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
+                m, n, k, alpha, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(pb).position(bAt.toLong()), ldb,
+                beta, FloatPointer(pc).position(cAt.toLong()), ldc,
+            )
+        }
     }
 
     /**
@@ -189,11 +214,52 @@ object Blas {
             }
             return
         }
-        openblas_full.cblas_sgemv(
-            openblas_full.CblasRowMajor, if (trans) openblas_full.CblasTrans else openblas_full.CblasNoTrans, m, n,
-            1.0f, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(px).position(xAt.toLong()), 1,
-            beta, FloatPointer(py).position(yAt.toLong()), 1,
-        )
+        calling {
+            openblas_full.cblas_sgemv(
+                openblas_full.CblasRowMajor, if (trans) openblas_full.CblasTrans else openblas_full.CblasNoTrans, m, n,
+                1.0f, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(px).position(xAt.toLong()), 1,
+                beta, FloatPointer(py).position(yAt.toLong()), 1,
+            )
+        }
+    }
+
+    /** The products in the library now: at most [PARTS], a buffer of its own each. */
+    private val calls = Semaphore(PARTS)
+
+    /** [body] — one call of the library — once fewer than [PARTS] products are in it. */
+    private inline fun <T> calling(body: () -> T): T {
+        calls.acquireUninterruptibly()
+        try {
+            return body()
+        } finally {
+            calls.release()
+        }
+    }
+
+    /**
+     * The [name] of the environment set to [value] for the native libraries loaded after, unless it
+     * is set already: OpenBLAS reads its number of threads once, as it is loaded, of the environment
+     * of its own C runtime — on Windows msvcrt's, which the process's alone does not reach.
+     */
+    private fun presetEnvironment(name: String, value: String) {
+        if (System.getenv(name) != null) return
+        try {
+            val linker = Linker.nativeLinker()
+            Arena.ofConfined().use { arena ->
+                val windows = System.getProperty("os.name").startsWith("Windows")
+                if (windows) {
+                    val putenv = SymbolLookup.libraryLookup("msvcrt", arena).find("_putenv_s").orElseThrow()
+                    linker.downcallHandle(putenv, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+                        .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value))
+                } else {
+                    val setenv = linker.defaultLookup().find("setenv").orElseThrow()
+                    linker.downcallHandle(setenv, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+                        .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value), 0)
+                }
+            }
+        } catch (e: Throwable) {
+            log.warn("{} not set for the native libraries ({}): OpenBLAS takes a thread and a buffer a core", name, e.toString())
+        }
     }
 
     /** The callers inside [wide] now; the library's threads go back to one when the last leaves. */
