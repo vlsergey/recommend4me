@@ -124,6 +124,7 @@ class PagesController(
             reviews = reviews?.let { ReviewDecorInfo(it.selector, it.idAttribute, it.idPrefix) },
             pictures = pictures?.selector,
             cards = cards?.let { CardDecorInfo(it.selector, it.link) },
+            nextPage = nextPage,
         )
     }
 }

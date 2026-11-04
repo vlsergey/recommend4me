@@ -121,6 +121,8 @@ class Ficbook : Source {
         // The cover of the work's header; the covers of the cards are of other works
         pictures = PictureDecor("section.fanfic-hat .fanfic-hat-cover img"),
         cards = CardDecor("article.fanfic-inline", ".fanfic-inline-title a[href^='/readfic/']"),
+        // The arrow to the right of the pages of a list; on its last page a span, not a link
+        nextPage = "nav.pagination a.arrow:has(svg.arrow-right)",
     )
 
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)

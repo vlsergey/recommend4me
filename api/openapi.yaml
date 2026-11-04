@@ -4784,6 +4784,9 @@ components:
           description: The selector of the work's images on its page
         cards:
           $ref: '#/components/schemas/CardDecorInfo'
+        nextPage:
+          type: string
+          description: The selector of a list's link to its next page; none matched on its last page
 
     PagePicture:
       type: object

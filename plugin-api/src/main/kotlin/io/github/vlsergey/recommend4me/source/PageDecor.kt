@@ -4,7 +4,8 @@ package io.github.vlsergey.recommend4me.source
  * How the browser extension turns the site's own pages into the application's interface: where on
  * a work's page its panel goes — the prediction, the grade, the tags with the suggested ones — and
  * which of the site's own elements it marks up in place: the values of facets, the reviews, the
- * pictures, the cards of the works in a list.
+ * pictures, the cards of the works in a list; and where a list's link to its next page is, by which
+ * the extension pages through the whole list by itself.
  *
  * Everything is CSS selectors over the page as the user sees it. An element of the site is matched
  * to what the application knows by what both see: a facet value by its name (or key), a review by
@@ -17,6 +18,12 @@ class PageDecor(
     val reviews: ReviewDecor? = null,
     val pictures: PictureDecor? = null,
     val cards: CardDecor? = null,
+    /**
+     * On a list of several pages: the link to the next page; none on its last page. The extension
+     * puts a button by it that has the browser open every next page by itself, each once it is
+     * sent to the application and every card on it shows its prediction.
+     */
+    val nextPage: String? = null,
 )
 
 /**

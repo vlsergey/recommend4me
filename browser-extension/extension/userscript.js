@@ -77,6 +77,9 @@ async function fetchWanted(wanted) {
   }
 }
 
+/** The pages this page sent, newest first. */
+const sentPages = [];
+
 /** The stand-in of the extension's API that watch.js and page.js call. */
 const browser = {
   runtime: {
@@ -88,8 +91,12 @@ const browser = {
         if (!callable(message.method, message.path)) return { ok: false, status: 0, error: "not allowed" };
         return request(message.method || "GET", message.path, message.body);
       }
+      // The pages sent, as the extension's background script tells them: page.js may start listening after the first is sent
+      if (message.type === "recent") return sentPages;
       if (message.type === "capture") {
+        const at = Date.now();
         const sent = await request("POST", "/api/capture", { url: message.url, html: message.html });
+        if (sent.ok) sentPages.unshift({ url: message.url, at, error: null });
         // The page shows the work as the application knows it now
         if (sent.ok) listeners.forEach((listener) => listener({ type: "captured", url: message.url }));
         if (sent.ok && sent.data && sent.data.wanted && sent.data.wanted.length) fetchWanted(sent.data.wanted);

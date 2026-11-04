@@ -209,6 +209,20 @@ r4m-panel .r4m-down {
   color: var(--r4m-yes);
 }
 
+/* "Page through all" by a list's link to its next page: filled while the list is paged through */
+[data-r4m].r4m-button.r4m-paging {
+  margin-left: 8px;
+  width: auto;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+[data-r4m].r4m-button.r4m-paging.r4m-current {
+  background: var(--r4m-mine-bg);
+  border-color: var(--r4m-yes);
+  color: var(--r4m-yes);
+}
+
 /* --- Scores, red to green --- */
 
 r4m-score {
