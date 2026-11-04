@@ -232,8 +232,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             return ByteBuffer.wrap(digest.digest(), 0, Long.SIZE_BYTES).long
         }
 
-        /** What an item's document is: the query of the documents of items alone, not of their passages. */
-        val ITEMS = TermQuery(Term(KIND, ITEM))
+        /** What an item's document is: the term of the documents of items alone, not of their passages, and their query. */
+        val ITEM_TERM = Term(KIND, ITEM)
+        val ITEMS = TermQuery(ITEM_TERM)
 
         /** The languages the own words of [doc] are stemmed as ([TextLanguages]), in order. */
         fun languagesOf(doc: SearchDocument): List<String> =

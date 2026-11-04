@@ -113,10 +113,26 @@ class Design(
         // The task's context keys as columns of this layout
         val base = 1 + blocks.sumOf { 1 + it.dim }
         val columns = IntArray(task.contextCount) { contextIndex[task.contextKeys[it]]?.let { c -> base + c } ?: -1 }
+        // The constant, the marks of the blocks the item has, its values of the other facets each once: in
+        // an array of its own, no list of boxed numbers made of every item
         val ones = Array(rows.size) { r ->
             val i = rows[r]
-            val marks = blocks.indices.filter { presence[it]?.get(i) == true }.map { blockOffsets[it] }
-            (listOf(0) + marks + task.context[i].map { columns[it] }.filter { it >= 0 }.distinct()).toIntArray()
+            val context = task.context[i]
+            val own = IntArray(1 + blocks.size + context.size)
+            var at = 1
+            for (k in blocks.indices) if (presence[k]?.get(i) == true) own[at++] = blockOffsets[k]
+            val marks = at
+            for (c in context) {
+                val column = columns[c]
+                if (column < 0) continue
+                var seen = false
+                for (q in marks until at) if (own[q] == column) {
+                    seen = true
+                    break
+                }
+                if (!seen) own[at++] = column
+            }
+            if (at == own.size) own else own.copyOf(at)
         }
         return ItemFeatures(rows.size, itemWidth, dense, ones)
     }

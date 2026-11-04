@@ -252,4 +252,23 @@ fun interface SuggestionScores {
      * marks a value the site gives it that does not fit.
      */
     fun of(rows: IntArray): List<FloatArray>
+
+    /**
+     * THE SCORES THE CHANCES ARE MADE OF, of each of [rows] of its values [columns] alone — in their
+     * order; null: every value. A score orders a value among the others as its chance does — the
+     * higher, the likelier — and [chance] makes of it the chance [of] gives. What reads a few values
+     * of thousands, or their order alone, reads these: a value an item may not have is never scored,
+     * the chance of the others made of the few that are read. One array of [columns] given to
+     * several rows is one set of values for them all: scored together.
+     *
+     * Of a suggester that tells no other: the chances themselves.
+     */
+    fun scores(rows: IntArray, columns: List<IntArray?>): List<FloatArray> =
+        of(rows).mapIndexed { r, row -> columns[r]?.let { c -> FloatArray(c.size) { row[c[it]] } } ?: row }
+
+    /** The chance of a [score] of [scores]: never lower of a higher score. */
+    fun chance(score: Float): Float = score
+
+    /** A score whose chance is one half, or the highest of those whose chance is one half or lower: no score at or under it is likely. */
+    val half: Float get() = 0.5f
 }

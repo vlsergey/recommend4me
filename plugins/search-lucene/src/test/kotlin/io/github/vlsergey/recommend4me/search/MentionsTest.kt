@@ -115,6 +115,28 @@ class MentionsTest {
     }
 
     @Test
+    fun `an asking of names but some values counts as one of those names alone, the names read once for every asking of them`() {
+        val docs = listOf(
+            doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
+            doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри. Джинни и Рон."),
+            doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
+        ) + documents
+        val keys = listOf("a", "b", "c", "1", "2", "3").map { ItemKey("test", it) }
+        // One map of names, every asking leaving out its own: as many askings as works, each of its own few
+        val withouts = listOf(emptySet(), setOf("harry"), setOf("ron", "ginny"), setOf("hermione", "james"), potter.keys - "ron", potter.keys)
+        val asked = withouts.mapIndexed { i, out -> NamesAsked(listOf(keys[i], keys[(i + 1) % keys.size]), potter, out) }
+        val apart = withouts.mapIndexed { i, out -> NamesAsked(listOf(keys[i], keys[(i + 1) % keys.size]), potter - out) }
+        LuceneSearch(Files.createTempDirectory("search")).use { search ->
+            search.rebuild("books", docs.asSequence())
+            assertEquals(search.mentions("books", apart), search.mentions("books", asked))
+            assertEquals(search.together("books", apart), search.together("books", asked))
+            assertEquals(apart.map { search.mentions("books", it.items, it.names) }, search.mentions("books", asked))
+            // Without Harry "Поттер" is James's alone
+            assertEquals(mapOf("james" to 2, "ron" to 1, "ginny" to 1), search.mentions("books", asked)[1][ItemKey("test", "b")])
+        }
+    }
+
+    @Test
     fun `two named in one paragraph are together, counted of the index as quoted of the texts`() {
         val text = "Гарри поцеловал Гермиону.\n\nРон ел.\nГермиона и Рон спорили. И снова Гермиона и Рон."
         val docs = listOf(doc("p", "ru", text), doc("q", "ru", "Гермиона.", "Рон."))

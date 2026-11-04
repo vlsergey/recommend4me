@@ -32,37 +32,44 @@ object ModelValues {
             .sortedByDescending { it.value }.take((OFFERED - open).coerceAtLeast(0)).map { it.key }.toList()
     }
 
+    /** Scores that are the chances themselves ([SuggestionScores]'s own). */
+    val CHANCES = SuggestionScores { error("Of chances alone") }
+
     /**
-     * Of a work's [chances], by the values' places, those it is shown besides what it has or was
-     * answered on: every value more likely than not and the likeliest others up to [OFFERED] with them;
-     * of the values [allowed] alone (null: of every one), none of those [closed]. The likeliest first
-     * among the others, of equal chances the earlier value.
+     * Of a work's [scores] ([SuggestionScores.scores]) — of the values [allowed], in their order (null:
+     * of every value, by its place) — the places of those it is shown besides what it has or was
+     * answered on: every value more likely than not and the likeliest others up to [OFFERED] with them,
+     * none of those [closed] (values, sorted). The likeliest first among the others, by their scores —
+     * of equal scores the earlier value. The chance of a score made ([SuggestionScores.chance]) only
+     * of one above the [half][SuggestionScores.half]: no other is likely.
      *
      * IN ONE PASS, THE NUMBER LOOKED AT FIRST: [closed] is asked only of a value that would stay. Of
      * every work a set asked of every value in five passes, a facet of thousands of characters over
      * tens of thousands of works took half a minute.
      */
-    fun open(chances: FloatArray, allowed: IntArray?, closed: Set<Int>): List<Int> {
+    fun open(scores: FloatArray, allowed: IntArray?, closed: IntArray, of: SuggestionScores = CHANCES): IntArray {
         val likely = ArrayList<Int>()
         val others = IntArray(OFFERED)
         var kept = 0
-        fun before(v: Int, other: Int) = chances[v] > chances[other] || chances[v] == chances[other] && v < other
-        fun look(v: Int) {
-            if (chances[v] > LIKELY) {
-                if (v !in closed) likely += v
-                return
+        val half = of.half
+        fun value(p: Int) = allowed?.get(p) ?: p
+        fun shut(p: Int) = closed.binarySearch(value(p)) >= 0
+        fun before(p: Int, other: Int) = scores[p] > scores[other] || scores[p] == scores[other] && value(p) < value(other)
+        for (p in scores.indices) {
+            if (scores[p] > half && of.chance(scores[p]) > LIKELY) {
+                if (!shut(p)) likely += p
+                continue
             }
-            if (kept == OFFERED && !before(v, others[OFFERED - 1]) || v in closed) return
+            if (kept == OFFERED && !before(p, others[OFFERED - 1]) || shut(p)) continue
             var at = minOf(kept, OFFERED - 1)
-            while (at > 0 && before(v, others[at - 1])) {
+            while (at > 0 && before(p, others[at - 1])) {
                 others[at] = others[at - 1]
                 at--
             }
-            others[at] = v
+            others[at] = p
             if (kept < OFFERED) kept++
         }
-        if (allowed == null) for (v in chances.indices) look(v) else for (v in allowed) look(v)
-        return likely + others.take(minOf(kept, (OFFERED - likely.size).coerceAtLeast(0)))
+        return (likely + others.take(minOf(kept, (OFFERED - likely.size).coerceAtLeast(0)))).toIntArray()
     }
 
     fun of(schema: SourceSchema, site: Map<String, List<String>>, chances: Map<String, Map<String, Chance>>?): Map<String, List<String>> {

@@ -27,6 +27,7 @@ import org.apache.lucene.search.uhighlight.PassageFormatter
 import org.apache.lucene.search.uhighlight.UnifiedHighlighter
 import org.slf4j.LoggerFactory
 import java.nio.file.Path
+import java.util.IdentityHashMap
 import java.util.concurrent.ConcurrentHashMap
 
 private val log = LoggerFactory.getLogger(LuceneSearch::class.java)
@@ -332,63 +333,114 @@ class LuceneSearch(private val dataDir: Path) : SearchProvider, AutoCloseable {
     private fun named(contentType: String, asked: List<NamesAsked>): List<Map<ItemKey, List<FoundIn>>> {
         val index = index(contentType)
         return index.search { searcher ->
+            val reader = searcher.indexReader
             val stored = searcher.storedFields()
-            // The documents of every asking's items: their ids in the index
-            val every by lazy { searcher.search(LuceneIndex.ITEMS, searcher.indexReader.maxDoc().coerceAtLeast(1)).scoreDocs.map { it.doc } }
-            val docsOf = asked.map { a ->
-                if (a.names.isEmpty()) emptyList()
-                else a.items?.mapNotNull { key ->
-                    val one = BooleanQuery.Builder()
-                        .add(TermQuery(Term(LuceneIndex.ID, key.toString())), BooleanClause.Occur.FILTER)
-                        .add(LuceneIndex.ITEMS, BooleanClause.Occur.FILTER).build()
-                    searcher.search(one, 1).scoreDocs.firstOrNull()?.doc
-                } ?: every
-            }
-            // Of every document, its key and the languages it was stemmed as
-            val keys = HashMap<Int, ItemKey>()
-            val languages = HashMap<Int, List<String>>()
-            docsOf.forEach { docs ->
-                docs.forEach { doc ->
-                    if (doc in keys) return@forEach
-                    val d = stored.document(doc, setOf(LuceneIndex.ID, LuceneIndex.LANGUAGES))
-                    keys[doc] = ItemKey.parse(d.get(LuceneIndex.ID))
-                    languages[doc] = d.get(LuceneIndex.LANGUAGES)?.split(',')?.filter { it.isNotEmpty() }.orEmpty()
+            // Of every segment, its documents of items alive: what a work's id is looked for among
+            val items = FixedBitSet(reader.maxDoc().coerceAtLeast(1))
+            reader.leaves().forEach { leaf ->
+                val live = leaf.reader().liveDocs
+                val docs = leaf.reader().postings(LuceneIndex.ITEM_TERM) ?: return@forEach
+                var doc = docs.nextDoc()
+                while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+                    if (live == null || live.get(doc)) items.set(leaf.docBase + doc)
+                    doc = docs.nextDoc()
                 }
             }
+            // The document of every work asked, of the ids' terms of every segment gone through once in
+            // their order — not a search a work
+            val docOf = HashMap<ItemKey, Int>()
+            val wanted = asked.flatMap { it.items.orEmpty() }.distinct().sortedBy { it.toString() }
+            if (wanted.isNotEmpty()) reader.leaves().forEach { leaf ->
+                val ids = leaf.reader().terms(LuceneIndex.ID)?.iterator() ?: return@forEach
+                var postings: PostingsEnum? = null
+                val term = BytesRefBuilder()
+                wanted.forEach { key ->
+                    if (key in docOf) return@forEach
+                    term.copyChars(key.toString())
+                    if (!ids.seekExact(term.get())) return@forEach
+                    val docs = ids.postings(postings, PostingsEnum.NONE.toInt()).also { postings = it }
+                    var doc = docs.nextDoc()
+                    while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+                        if (items.get(leaf.docBase + doc)) {
+                            docOf[key] = leaf.docBase + doc
+                            break
+                        }
+                        doc = docs.nextDoc()
+                    }
+                }
+            }
+            val every by lazy {
+                val out = ArrayList<Int>()
+                var doc = if (items.length() == 0) DocIdSetIterator.NO_MORE_DOCS else items.nextSetBit(0)
+                while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+                    out += doc
+                    doc = if (doc + 1 >= items.length()) DocIdSetIterator.NO_MORE_DOCS else items.nextSetBit(doc + 1)
+                }
+                out.toIntArray()
+            }
+            val docsOf = asked.map { a ->
+                if (a.names.isEmpty()) IntArray(0)
+                else a.items?.mapNotNull { docOf[it] }?.toIntArray() ?: every
+            }
+            // Every document asked of a place of its own among them, in the order of the index
+            val slotOf = IntArray(reader.maxDoc()) { -1 }
+            val docs = docsOf.flatMap { it.asIterable() }.distinct().sorted().toIntArray()
+            docs.forEachIndexed { k, doc -> slotOf[doc] = k }
+            // Of every document, its key and the languages it was stemmed as — one list of every set of them
+            val keyOf = arrayOfNulls<ItemKey>(docs.size)
+            docOf.forEach { (key, doc) -> slotOf[doc].takeIf { it >= 0 }?.let { keyOf[it] = key } }
+            val languageLists = HashMap<String, List<String>>()
+            val languages = Array(docs.size) { k ->
+                val fields = if (keyOf[k] == null) setOf(LuceneIndex.ID, LuceneIndex.LANGUAGES) else setOf(LuceneIndex.LANGUAGES)
+                val d = stored.document(docs[k], fields)
+                if (keyOf[k] == null) keyOf[k] = ItemKey.parse(d.get(LuceneIndex.ID))
+                val own = d.get(LuceneIndex.LANGUAGES).orEmpty()
+                languageLists.getOrPut(own) { own.split(',').filter { it.isNotEmpty() } }
+            }
             val counted = index.fields(searcher).text.filter { it.counted }.map { it.name }
-            // A matcher of every asking and set of languages, the names stemmed once for them all; the matchers each document is read by
+            // A matcher of every asking and set of languages: of one map of names and set of languages one
+            // base, the names stemmed once for them all, every asking's values left out laid over it
             val stems = NameStems()
-            val readers = HashMap<Int, MutableList<Reader>>()
-            docsOf.forEachIndexed { i, docs ->
-                docs.groupBy { languages.getValue(it) }.forEach { (langs, own) ->
-                    val reader = Reader(i, NameMatcher(asked[i].names, langs, stems))
-                    own.forEach { readers.getOrPut(it) { ArrayList() } += reader }
+            val bases = IdentityHashMap<Map<String, List<String>>, HashMap<List<String>, NameMatcher.Base>>()
+            val readers = arrayOfNulls<MutableList<Reader>>(docs.size)
+            docsOf.forEachIndexed { i, own ->
+                own.groupBy { languages[slotOf[it]] }.forEach { (langs, docsOfThem) ->
+                    val base = bases.getOrPut(asked[i].names) { HashMap() }.getOrPut(langs) { NameMatcher.Base(asked[i].names, langs, stems) }
+                    val reader = Reader(i, base.without(asked[i].without))
+                    docsOfThem.forEach { (readers[slotOf[it]] ?: ArrayList<Reader>().also { r -> readers[slotOf[it]] = r }) += reader }
                 }
             }
             // Every stem at its places, of every field of every document: the words the rules read; and where its paragraphs begin
-            val words = HashMap<Pair<Int, String>, MutableList<NamedWord>>()
-            val marks = HashMap<Pair<Int, String>, IntArray>()
-            val sorted = readers.keys.sorted()
-            searcher.indexReader.leaves().forEach { leaf ->
-                val inLeaf = sorted.filter { it >= leaf.docBase && it < leaf.docBase + leaf.reader().maxDoc() }.map { it - leaf.docBase }
-                if (inLeaf.isEmpty()) return@forEach
+            val words = Array(counted.size) { arrayOfNulls<MutableList<NamedWord>>(docs.size) }
+            val marks = Array(counted.size) { arrayOfNulls<IntArray>(docs.size) }
+            var from = 0
+            reader.leaves().forEach { leaf ->
+                val upTo = leaf.docBase + leaf.reader().maxDoc()
+                var until = from
+                while (until < docs.size && docs[until] < upTo) until++
+                if (until == from) return@forEach
+                val inLeaf = IntArray(until - from) { docs[from + it] - leaf.docBase }
+                val first = from
+                from = until
                 val asked = FixedBitSet(leaf.reader().maxDoc()).apply { inLeaf.forEach { set(it) } }
                 // The stems of the matchers of the documents here, in the order of the terms: each looked up once
-                val looked = inLeaf.flatMap { readers.getValue(leaf.docBase + it) }.distinct().flatMapTo(HashSet()) { it.matcher.stems }
-                    .plus(ParagraphMarks.MARK)
+                val looked = HashSet<String>()
+                val seen = IdentityHashMap<Set<String>, Boolean>()
+                for (k in first until until) readers[k]?.forEach { r -> if (seen.put(r.matcher.stems, true) == null) looked += r.matcher.stems }
+                looked += ParagraphMarks.MARK
                 val inOrder = looked.sorted()
-                counted.forEach { field ->
-                    val fieldTerms = leaf.reader().terms(field) ?: return@forEach
+                counted.forEachIndexed { f, field ->
+                    val fieldTerms = leaf.reader().terms(field) ?: return@forEachIndexed
                     val terms = fieldTerms.iterator()
                     // One enumeration of the places, reused for every stem: thousands of stems of the names
                     var postings: PostingsEnum? = null
                     fun read(stem: String) {
                         val places = terms.postings(postings, PostingsEnum.PAYLOADS.toInt()).also { postings = it }
                         fun take(doc: Int) {
-                            val at = leaf.docBase + doc to field
-                            if (stem == ParagraphMarks.MARK) marks[at] = IntArray(places.freq()) { places.nextPosition() }
+                            val slot = slotOf[leaf.docBase + doc]
+                            if (stem == ParagraphMarks.MARK) marks[f][slot] = IntArray(places.freq()) { places.nextPosition() }
                             else {
-                                val list = words.getOrPut(at) { ArrayList() }
+                                val list = words[f][slot] ?: ArrayList<NamedWord>().also { words[f][slot] = it }
                                 repeat(places.freq()) { list += NamedWord(stem, places.nextPosition(), places.payload == Stemmers.CAPITAL) }
                             }
                         }
@@ -423,16 +475,21 @@ class LuceneSearch(private val dataDir: Path) : SearchProvider, AutoCloseable {
                 }
             }
             val out = List(asked.size) { HashMap<ItemKey, MutableList<FoundIn>>() }
-            words.forEach { (at, list) ->
-                val begins = marks[at]?.also { it.sort() } ?: IntArray(0)
-                readers.getValue(at.first).forEach { reader ->
-                    // The words of its own names alone, in the order of its stems: as a reading of them alone has them
-                    val own = list.filter { it.stem in reader.matcher.stems }.sortedBy { reader.order.getValue(it.stem) }
-                    val found = out[reader.asking].getOrPut(keys.getValue(at.first)) { ArrayList() }
-                    reader.matcher.found(own).forEach { f ->
-                        // Of the paragraph the name stands in: how many marks are before it
-                        val paragraph = begins.binarySearch(f.first.position).let { if (it >= 0) it + 1 else -it - 1 }
-                        found += FoundIn(f.value, at.second, paragraph)
+            for (slot in docs.indices) {
+                val own = readers[slot] ?: continue
+                counted.forEachIndexed { f, field ->
+                    val list = words[f][slot] ?: return@forEachIndexed
+                    val begins = marks[f][slot]?.also { it.sort() } ?: IntArray(0)
+                    own.forEach { reader ->
+                        // The words of its own names alone: as a reading of them alone has them
+                        val stemsOf = reader.matcher.stems
+                        val mine = list.filter { it.stem in stemsOf }
+                        val into = out[reader.asking].getOrPut(keyOf[slot]!!) { ArrayList() }
+                        reader.matcher.found(mine).forEach { name ->
+                            // Of the paragraph the name stands in: how many marks are before it
+                            val paragraph = begins.binarySearch(name.first.position).let { if (it >= 0) it + 1 else -it - 1 }
+                            into += FoundIn(name.value, field, paragraph)
+                        }
                     }
                 }
             }

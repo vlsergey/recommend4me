@@ -137,17 +137,22 @@ interface SearchProvider {
      * one universe, of a work and its characters — answered in their order: what one reading of the
      * index serves, every name stemmed once.
      */
-    fun mentions(contentType: String, asked: List<NamesAsked>): List<Map<ItemKey, Map<String, Int>>> = asked.map { mentions(contentType, it.items, it.names) }
+    fun mentions(contentType: String, asked: List<NamesAsked>): List<Map<ItemKey, Map<String, Int>>> = asked.map { mentions(contentType, it.items, it.names - it.without) }
 
     /** [together] of several askings at once, as [mentions] of them. */
-    fun together(contentType: String, asked: List<NamesAsked>): List<Map<ItemKey, Map<Pair<String, String>, Int>>> = asked.map { together(contentType, it.items, it.names) }
+    fun together(contentType: String, asked: List<NamesAsked>): List<Map<ItemKey, Map<Pair<String, String>, Int>>> = asked.map { together(contentType, it.items, it.names - it.without) }
 
     /** Where the [document]'s own words name the values [a] and [b] in one paragraph, as [together] counts them: the names of both there. */
     fun placesTogether(document: SearchDocument, names: Map<String, List<String>>, a: String, b: String): List<NamePlace> = emptyList()
 }
 
-/** One asking of [SearchProvider.mentions]: the works [items] — every item indexed when null — and the [names] looked for in them. */
-class NamesAsked(val items: Collection<ItemKey>?, val names: Map<String, List<String>>)
+/**
+ * One asking of [SearchProvider.mentions]: the works [items] — every item indexed when null — and the
+ * [names] looked for in them but those of the values [without], as if they were not among them: of
+ * the characters of one universe one map for every asking, each leaving out a work's own few — the
+ * names read once for them all.
+ */
+class NamesAsked(val items: Collection<ItemKey>?, val names: Map<String, List<String>>, val without: Set<String> = emptySet())
 
 /** A value of a field of a document ([SearchField.key], its [text]) where a value is named, at the characters [ranges]. */
 class NamePlace(val field: String, val text: String, val ranges: List<IntRange>)

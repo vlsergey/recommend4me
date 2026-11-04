@@ -441,37 +441,63 @@ class FacetSuggestions(
         val made = MadeChances()
         drafts.forEach { (id, list) ->
             list.groupBy { it.facet }.forEach { (facet, drafts) ->
-                made.getOrPut(id) { HashMap() }[facet] = drafts.associate { d -> d.key to Chance(id, facet, d.key, had = false, chance = 1.0, draftedFrom = d.from) }
+                made.getOrPut(id) { HashMap() }[facet] =
+                    FewChances(drafts.associateBy { it.key }.values.map { d -> Chance(id, facet, d.key, had = false, chance = 1.0, draftedFrom = d.from) }.toTypedArray())
             }
         }
         // The facets worked out by models of their own: their chances as theirs, before the chain
         ownModels.filter { store.schema.facet(it.facet) != null }.forEach { model ->
-            model.chances(store, ids, every).forEach { (id, chances) -> made.getOrPut(id) { HashMap() }[model.facet] = chances }
+            model.chances(store, ids, every).forEach { (id, chances) -> made.getOrPut(id) { HashMap() }[model.facet] = FewChances(chances.values.toTypedArray()) }
         }
         return made
     }
 
     /**
      * The chances of the [facet] of every work of [data] put among [made] — over the drafts, which
-     * keep the model's chance — and the values the model alone gives each (no draft among them):
-     * what a refit compares.
+     * keep the model's chance — and, when [compare], the values the model alone gives each (no draft
+     * among them): what a refit compares; none made of the chain, which compares nothing.
+     *
+     * OF EVERY WORK THE SCORES OF THE VALUES IT IS SHOWN WITH ALONE ([SuggestionScores.scores]): of
+     * those it is told of — its own, the site's examples, the rejected — and of the others of those it
+     * may have ([SuggestionTask.allowed], one array for every work of the same universes), their
+     * chances made of the few chosen. Every chance of every character of a facet of seven thousand,
+     * of every one of tens of thousands of works, was six seconds of a reading.
      */
-    private fun keep(made: MadeChances, facet: FacetDef, data: FacetData, scores: SuggestionScores): Map<String, Set<String>> {
+    private fun keep(made: MadeChances, facet: FacetDef, data: FacetData, scores: SuggestionScores, compare: Boolean = false): Map<String, Set<String>> {
         val given = HashMap<String, Set<String>>()
-        data.ids.indices.chunked(CHUNK).forEach { chunk ->
-            val chances = scores.of(chunk.toIntArray())
-            chunk.forEachIndexed { j, i ->
+        val task = data.task
+        var from = 0
+        while (from < data.ids.size) {
+            val rows = IntArray(minOf(CHUNK, data.ids.size - from)) { from + it }
+            from += rows.size
+            val told = Array(rows.size) { toldOf(data, rows[it]) }
+            val open = scores.scores(rows, rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] })
+            val own = scores.scores(rows, told.asList())
+            rows.forEachIndexed { r, i ->
                 val id = data.ids[i]
-                val own = chancesOf(id, facet.key, chances[j], data, i).associateBy { it.key }
-                if (facet.infer) given[id] = ModelValues.given(own).toSet()
+                val chances = chancesOf(id, facet.key, scores, open[r], told[r], own[r], data, i)
+                if (compare && facet.infer) given[id] = ModelValues.given(chances).toSet()
                 val byFacet = made.getOrPut(id) { HashMap() }
-                val drafts = byFacet[facet.key].orEmpty().values.filter { it.drafted }
-                byFacet[facet.key] = if (drafts.isEmpty()) own else HashMap(own).also { out ->
+                val drafts = byFacet[facet.key]?.values?.filter { it.drafted }.orEmpty()
+                byFacet[facet.key] = if (drafts.isEmpty()) chances else {
+                    val out = LinkedHashMap(chances)
                     drafts.forEach { d -> out[d.key] = out[d.key]?.copy(draftedFrom = d.draftedFrom) ?: d }
+                    FewChances(out.values.toTypedArray())
                 }
             }
         }
         return given
+    }
+
+    /**
+     * The values item [i] is told of, each once, in their order: of an item all named by the user's word
+     * its own alone; else its own, the site's examples, the values the user rejected.
+     */
+    private fun toldOf(data: FacetData, i: Int): IntArray {
+        val own = data.held[i]
+        val out = if (data.complete[i]) own.copyOf() else own + data.task.examples[i] + data.task.rejected[i]
+        out.sort()
+        return out.distinct().toIntArray()
     }
 
     /**
@@ -552,11 +578,11 @@ class FacetSuggestions(
             fresh
         }
         val fittedAt = System.currentTimeMillis() - started
-        val after = keep(made, facet, data, fitted.on(data.task))
+        val after = keep(made, facet, data, fitted.on(data.task), compare = true)
         val scored = System.currentTimeMillis() - started
         // What the model before the refit gave alone: scored again, nothing of it kept
         val changedIds = if (current || !facet.infer) emptyList() else {
-            val before = kept?.let { k0 -> keep(MadeChances(), facet, data, k0.on(data.task)) }
+            val before = kept?.let { k0 -> keep(MadeChances(), facet, data, k0.on(data.task), compare = true) }
             data.ids.filter { id -> before == null || before[id].orEmpty() != after[id].orEmpty() }
         }
         log.info(
@@ -575,36 +601,63 @@ class FacetSuggestions(
      * values a work may have ([allowed]: a work's characters are of its universes, its pairings of
      * its characters) of those alone. Not every value it may have: of a work of a large universe
      * thousands of characters — the user choosing among them gets every one at the asking ([candidates]).
+     *
+     * Of the [scores]: [told] — the values it is told of ([toldOf]) — scored [own]; [open] the scores of
+     * the values it may have ([SuggestionTask.allowed], every value when it says none).
      */
-    private fun chancesOf(id: String, facet: String, chances: FloatArray, data: FacetData, i: Int): List<Chance> {
-        val has = data.held[i].toHashSet()
+    private fun chancesOf(
+        id: String, facet: String, scores: SuggestionScores, open: FloatArray, told: IntArray, own: FloatArray, data: FacetData, i: Int,
+    ): FewChances {
+        val has = data.held[i]
         val named = data.task.mentions[i]
-        fun chance(v: Int, had: Boolean) = Chance(id, facet, data.values[v], had, chances[v].toDouble(), named?.let { it[v] ?: 0 })
-        // All named by the user's word: the item has its own values and is offered no other
-        if (data.complete[i]) return has.map { chance(it, true) }
+        fun chance(v: Int, score: Float) = Chance(id, facet, data.values[v], v in has, scores.chance(score).toDouble(), named?.let { it[v] ?: 0 })
+        // All named by the user's word: the item has its own values and is offered no other.
         // The site's own are shown to answer on, unlikely as they may be; a value the user rejected keeps its
         // chance: it is shown crossed out, in its place by it
-        val told = has + data.task.examples[i].asIterable() + data.task.rejected[i].asIterable()
+        if (data.complete[i]) return FewChances(Array(told.size) { chance(told[it], own[it]) })
         // The likeliest of the rest too, likely or not, to offer the work at least so many the site does not
         // give ([ModelValues.offered]): chosen of the values by their places, not of a map of thousands of
         // characters made for every work and sorted whole
-        val open = ModelValues.open(chances, data.task.allowed[i], told + data.task.barred[i].asIterable())
-        return (told + open).sorted().map { chance(it, it in has) }
+        val allowed = data.task.allowed[i]
+        val closed = (told + data.task.barred[i]).also { it.sort() }
+        val places = ModelValues.open(open, allowed, closed, scores)
+        // In the order of the values: those told, then the open ones among them
+        val values = IntArray(told.size + places.size)
+        val of = FloatArray(values.size)
+        told.forEachIndexed { k, v ->
+            values[k] = v
+            of[k] = own[k]
+        }
+        places.forEachIndexed { k, p ->
+            values[told.size + k] = allowed?.get(p) ?: p
+            of[told.size + k] = open[p]
+        }
+        val order = values.indices.sortedBy { values[it] }
+        return FewChances(Array(values.size) { chance(values[order[it]], of[order[it]]) })
     }
 
     /**
      * The values of a facet of the universes besides the items' own, with the text their names are
      * encoded from, and the values each item may be given; null for any other facet.
      */
+    /**
+     * The names a work's own words are looked for by: [names] — value to the names it goes by, one map
+     * for every work of the same universes — but those of the values [without], the work's own few
+     * left out ([NamesAsked.without]). One for every work of the same.
+     */
+    private class Named(val names: Map<String, List<String>>, val without: Set<String>) {
+        /** The names looked for, those left out gone: of one work alone. */
+        val whole: Map<String, List<String>> get() = if (without.isEmpty()) names else names - without
+    }
+
     private class Vocabulary(
         val values: Map<String, String>,
         val allowed: ((String) -> Set<String>)?,
         /**
-         * The names every work's own words are looked for by in the index ([SearchProvider.mentions]):
-         * value to the names it goes by — one map for every work of the same, the works of one
-         * universe sharing it; null for a work not counted. [valuesOf]: the values a name found is of.
+         * The names every work's own words are looked for by in the index ([SearchProvider.mentions])
+         * ([Named]): null for a work not counted. [valuesOf]: the values a name found is of.
          */
-        val names: ((String) -> Map<String, List<String>>?)? = null,
+        val names: ((String) -> Named?)? = null,
         val valuesOf: (String) -> Collection<String> = { listOf(it) },
         /** Of the pairings: the [names] are of characters, a value two of them named in one paragraph ([SearchProvider.together]). */
         val paired: Boolean = false,
@@ -637,12 +690,14 @@ class FacetSuggestions(
             names?.let { of ->
                 val provider = search ?: return null
                 val wanted = ids ?: store.items.keys().map { it.id }
-                val groups = IdentityHashMap<Map<String, List<String>>, MutableList<String>>()
+                val groups = IdentityHashMap<Named, MutableList<String>>()
                 wanted.forEach { id -> of(id)?.let { groups.getOrPut(it) { ArrayList() } += id } }
                 val counted = HashMap<String, Map<String, Int>>()
                 // Every map of names with its works, asked of the index at once: one reading of it for them all.
                 // Every work of the source when all of them are: the index read whole, not a work at a time
-                val asked = groups.map { (named, works) -> NamesAsked(if (ids == null && groups.size == 1) null else works.map { ItemKey(store.id, it) }, named) }
+                val asked = groups.map { (named, works) ->
+                    NamesAsked(if (ids == null && groups.size == 1) null else works.map { ItemKey(store.id, it) }, named.names, named.without)
+                }
                 if (paired) provider.together(typeId, asked).forEach { byItem ->
                     byItem.forEach { (key, pairs) ->
                         if (key.source == store.id) counted[key.id] = pairs.mapKeys { (pair, _) -> UniverseFacet.pairing(pair.first, pair.second) }
@@ -798,18 +853,16 @@ class FacetSuggestions(
                 }
                 val out = leftOut(store, facet.key, ids, made)
                 // The characters of a work's universes, looked for in its words: a work of none is not counted.
-                // One map of names for every work of the same universes and the same characters left out, made
-                // once for them all — not a set of a universe's thousands of characters made and compared a
-                // work, twice — the index read once for them all
-                val ofUniverses = HashMap<Set<String>, Set<String>>()
-                val nameSets = HashMap<Pair<Set<String>, Set<String>>, Map<String, List<String>>>()
+                // One map of names for every work of the same universes, made once for them all, the work's
+                // characters left out told apart — not a map of a universe's thousands of characters made and
+                // compared a work — the index reading the names once for every work of the universes
+                val ofUniverses = HashMap<Set<String>, Map<String, List<String>>>()
+                val nameSets = HashMap<Pair<Set<String>, Set<String>>, Named>()
                 val named = { id: String ->
                     val us = universes[id].orEmpty().toSet()
-                    val left = out(id)
-                    nameSets.getOrPut(us to left) {
-                        val own = ofUniverses.getOrPut(us) { us.flatMap { ofUniverse[it].orEmpty() }.toSet() }
-                        (if (left.isEmpty()) own else own - left).associateWith { names[it].orEmpty() }
-                    }.takeIf { it.isNotEmpty() }
+                    val own = ofUniverses.getOrPut(us) { us.flatMap { ofUniverse[it].orEmpty() }.toSet().associateWith { names[it].orEmpty() } }
+                    val left = out(id).filterTo(HashSet()) { it in own }
+                    if (left.size == own.size) null else nameSets.getOrPut(us to left) { Named(own, left) }
                 }
                 // What a work may have: one set for every work of the same universes — of a large universe
                 // thousands of characters, not a copy a work — its own characters of the other facet barred
@@ -901,7 +954,7 @@ class FacetSuggestions(
      * work when null — a map for every work of two characters and more besides the original ones, one
      * map for every work of the same: what two of them named in one paragraph are looked for by.
      */
-    private fun pairedNames(store: SourceStore, ids: Collection<String>?, made: WorkChances, characters: Map<String, List<String>>): (String) -> Map<String, List<String>>? {
+    private fun pairedNames(store: SourceStore, ids: Collection<String>?, made: WorkChances, characters: Map<String, List<String>>): (String) -> Named? {
         val type = stores.typeOf(store.id)
         val universes = workUniverses(store, ids, made)
         val own = universes.values.flatten().toSet()
@@ -911,10 +964,10 @@ class FacetSuggestions(
         }
         val missing = characters.values.flatten().toSet().filter { it !in known && it !in UniverseFacet.ORIGINAL_CHARACTERS }
         val shown = store.names(UniverseFacets.CHARACTERS, missing)
-        val sets = HashMap<Set<String>, Map<String, List<String>>>()
+        val sets = HashMap<Set<String>, Named>()
         return { id ->
             val named = characters[id].orEmpty().toSet() - UniverseFacet.ORIGINAL_CHARACTERS.keys
-            if (named.size < 2) null else sets.getOrPut(named) { named.associateWith { known[it] ?: listOfNotNull(shown[it]) } }
+            if (named.size < 2) null else sets.getOrPut(named) { Named(named.associateWith { known[it] ?: listOfNotNull(shown[it]) }, emptySet()) }
         }
     }
 
@@ -998,7 +1051,7 @@ class FacetSuggestions(
         val ids = listOf(itemId)
         val vocabulary = universeVocabulary(store, facets[k], ids, chain(store, ids, k)) ?: return null
         val of = vocabulary.names ?: return null
-        val names = of(itemId) ?: return Quoting.None
+        val names = of(itemId)?.whole ?: return Quoting.None
         if (vocabulary.paired) {
             val (a, b) = UniverseFacet.members(value) ?: return Quoting.None
             return Quoting.Together(names, a, b)
@@ -1116,6 +1169,9 @@ class FacetSuggestions(
 
         /** Items scored at once: memory, not meaning. */
         private const val CHUNK = 2_000
+
+        /** No value asked: of an item all named, the scores of none but its own. */
+        private val NONE = IntArray(0)
     }
 }
 
@@ -1161,11 +1217,27 @@ internal class FacetData(
         val drafts: Map<String, List<LayerDraft>> by lazy { if (only == null) store.drafts.all() else store.drafts.ofItems(ids) }
         val inputs: List<InputBlock> by lazy { inputs(store, ids, encoder, imageEncoder, sets, only) }
 
-        /** Of every work, by facet, its values as the context of another facet reads them ("facet\u0001key"); made at the first need. */
-        private var context: HashMap<String, LinkedHashMap<String, List<String>>>? = null
+        /**
+         * THE CONTEXT OF THE WORKS OF A PASS AS NUMBERS: every value of every facet a number of the
+         * pass, its name "facet\u0001key" ([names]); of every work, in the order of [ids], of every
+         * facet of the source by its place in the schema ([places]), its values' numbers ([of]).
+         */
+        class Context(val names: List<String>, val places: Map<String, Int>, val of: Array<Array<IntArray?>?>)
+
+        private var context: Context? = null
 
         /** The model's values the [context] was made of: the chain's own, given more of as it goes ([given]). */
         private var contextOf: WorkChances? = null
+
+        /** Of every facet, the number of each of its values in the [context]. */
+        private val numbers = HashMap<String, HashMap<String, Int>>()
+        private val names = ArrayList<String>()
+
+        private fun numbersOf(facet: String, keys: List<String>): IntArray? {
+            if (keys.isEmpty()) return null
+            val own = numbers.getOrPut(facet) { HashMap() }
+            return keys.distinct().map { key -> own.getOrPut(key) { names.add("$facet\u0001$key"); names.size - 1 } }.toIntArray()
+        }
 
         /**
          * THE CONTEXT OF EVERY WORK, MADE ONCE OF THE PASS: of every facet of the source, by work, its
@@ -1175,24 +1247,27 @@ internal class FacetData(
          * others kept: the context of six facets of tens of thousands of works was made whole six times.
          * [modelled] is the chain's one map of the pass, whatever it holds by then.
          */
-        fun context(store: SourceStore, modelled: WorkChances): Map<String, Map<String, List<String>>> {
+        fun context(store: SourceStore, modelled: WorkChances): Context {
             context?.let {
                 check(modelled === contextOf) { "${store.id}: the context of a pass asked of other chances than it was made of" }
                 return it
             }
             val schema = store.schema
             val hierarchies = store.hierarchies()
-            val facets = schema.facets.map { it.key }.toSet()
-            val out = HashMap<String, LinkedHashMap<String, List<String>>>()
-            ids.forEach { id ->
-                val own = LinkedHashMap<String, List<String>>()
+            val places = schema.facets.withIndex().associate { (k, f) -> f.key to k }
+            val of = arrayOfNulls<Array<IntArray?>>(ids.size)
+            ids.forEachIndexed { i, id ->
                 TagHierarchy.corrected(ModelValues.of(schema, site[id].orEmpty(), modelled[id]), corrections[id].orEmpty(), hierarchies, store.singleFacets)
-                    .forEach { (f, keys) -> if (f in facets && keys.isNotEmpty()) own[f] = keys.distinct().map { "$f\u0001$it" } }
-                if (own.isNotEmpty()) out[id] = own
+                    .forEach { (f, keys) ->
+                        val place = places[f] ?: return@forEach
+                        val own = numbersOf(f, keys) ?: return@forEach
+                        (of[i] ?: arrayOfNulls<IntArray>(places.size).also { of[i] = it })[place] = own
+                    }
             }
-            context = out
-            contextOf = modelled
-            return out
+            return Context(names, places, of).also {
+                context = it
+                contextOf = modelled
+            }
         }
 
         /**
@@ -1203,19 +1278,17 @@ internal class FacetData(
         fun given(store: SourceStore, facet: String, modelled: WorkChances) {
             val made = context ?: return
             check(modelled === contextOf) { "${store.id}: the context of a pass given other chances than it was made of" }
-            if (store.schema.facet(facet) == null) return
+            val place = made.places[facet] ?: return
             val schema = store.schema
             val hierarchies = store.hierarchies()
-            ids.forEach { id ->
+            ids.forEachIndexed { i, id ->
                 val values = site[id]?.get(facet)?.let { mapOf(facet to it) }.orEmpty()
                 val chances = modelled[id]?.get(facet)?.let { mapOf(facet to it) }
                 val answers = corrections[id].orEmpty().filter { it.facet == facet }
-                val keys = TagHierarchy.corrected(ModelValues.of(schema, values, chances), answers, hierarchies, store.singleFacets)[facet].orEmpty()
-                if (keys.isEmpty()) {
-                    made[id]?.remove(facet)
-                    return@forEach
-                }
-                made.getOrPut(id) { LinkedHashMap() }[facet] = keys.distinct().map { "$facet\u0001$it" }
+                val own = numbersOf(facet, TagHierarchy.corrected(ModelValues.of(schema, values, chances), answers, hierarchies, store.singleFacets)[facet].orEmpty())
+                val work = made.of[i]
+                if (own == null) work?.set(place, null)
+                else (work ?: arrayOfNulls<IntArray>(made.places.size).also { made.of[i] = it })[place] = own
             }
         }
     }
@@ -1352,22 +1425,43 @@ internal class FacetData(
             val hierarchies = store.hierarchies()
             val facets = schema.facets.map { it.key }.toSet()
             val made = read.context(store, modelled)
-            val contextOf = ids.map { id ->
-                val own = made[id] ?: return@map emptyList<String>()
-                val out = ArrayList<String>()
-                own.forEach { (f, keys) -> if (f != facet.key) out.addAll(keys) }
+            val own = made.places[facet.key]
+            // Every work's values of the other facets by their numbers of the pass, each facet's apart from the others'
+            val contextOf = ids.indices.map { i ->
+                val work = made.of[i] ?: return@map IntArray(0)
+                var n = 0
+                work.forEachIndexed { k, part -> if (k != own && part != null) n += part.size }
+                val out = IntArray(n)
+                var at = 0
+                work.forEachIndexed { k, part ->
+                    if (k == own || part == null) return@forEachIndexed
+                    part.copyInto(out, at)
+                    at += part.size
+                }
                 out
             }
             // A value of the context only one item of the fitting has teaches nothing of the others: no
             // column of it — of a catalogue of games, the developers of one game each, the operating
             // systems and languages written by hand once. An item judged alone ([only]) is read by the
             // columns of the layout fitted last: every value of its own kept
-            val shared = if (only != null) null else HashMap<String, Int>().also { n -> contextOf.forEach { keys -> keys.forEach { n.merge(it, 1, Int::plus) } } }
-            val contextIndex = HashMap<String, Int>()
+            val shared = if (only != null) null else IntArray(made.names.size).also { n -> contextOf.forEach { keys -> keys.forEach { n[it]++ } } }
+            // The columns of the task by the values' numbers, in the order the works first have them
+            val column = IntArray(made.names.size) { -1 }
+            val contextKeys = ArrayList<String>()
             val context = contextOf.map { keys ->
-                keys.filter { shared == null || shared.getValue(it) > 1 }.map { contextIndex.getOrPut(it) { contextIndex.size } }.toIntArray()
+                var n = 0
+                val out = IntArray(keys.size)
+                keys.forEach { key ->
+                    if (shared != null && shared[key] <= 1) return@forEach
+                    if (column[key] < 0) {
+                        column[key] = contextKeys.size
+                        contextKeys += made.names[key]
+                    }
+                    out[n++] = column[key]
+                }
+                if (n == out.size) out else out.copyOf(n)
             }
-            laps.lap("context", contextIndex.size)
+            laps.lap("context", contextKeys.size)
 
             val d = encoder.dim
             // A facet the site gives values of has them as its labels: its own line on the site is
@@ -1405,8 +1499,8 @@ internal class FacetData(
                     else indices(answers[id].orEmpty().filter { it.facet == facet.key && !it.added }.map { it.key })
                 },
                 context = context,
-                contextKeys = contextIndex.entries.sortedBy { it.value }.map { it.key },
-                mentions = ids.map { id -> mentions?.invoke(id)?.mapNotNull { (key, n) -> index[key]?.let { it to n } }?.toMap() },
+                contextKeys = contextKeys,
+                mentions = ids.map { id -> mentions?.invoke(id)?.let { NameCounts.of(it, index) } },
                 // One array for every work of the same: of a universe's thousands of characters, made once
                 allowed = IdentityHashMap<Set<String>, IntArray>().let { made -> ids.map { id -> allowed?.invoke(id)?.let { a -> made.getOrPut(a) { indices(a) } } } },
                 barred = ids.map { id -> barred?.invoke(id)?.let(::indices) ?: IntArray(0) },

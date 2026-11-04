@@ -271,15 +271,19 @@ class CatalogueReader(
         val ignored = s.ignoredTags()
         laps.lap("fields and tag trees")
         val wanted = ids?.toHashSet()
+        // Every feature's name one string of the reading, made once however many works have it
+        val names = HashMap<String, HashMap<String, String>>()
+        fun feature(facetId: String, key: String) = names.getOrPut(facetId) { HashMap() }.getOrPut(key) { FeatureNames.facet(facetId, key) }
+        val source = "source:${s.id}"
         val made = s.items.keys().filter { wanted == null || it.id in wanted }.map { k ->
             val categorical = LinkedHashSet<String>()
             val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
             TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets).forEach { (facet, keys) ->
                 val facetId = facetIds[facet] ?: return@forEach
                 val unread = ignored[facet]
-                keys.forEach { if (unread == null || it !in unread) categorical += FeatureNames.facet(facetId, it) }
+                keys.forEach { if (unread == null || it !in unread) categorical += feature(facetId, it) }
             }
-            if (severalSources) categorical += "source:${s.id}"
+            if (severalSources) categorical += source
             val numeric = Corrected.numbers(numbers[k.id].orEmpty(), fields[k.id].orEmpty()).mapNotNull { (key, value) ->
                 val def = numberDefs[key] ?: return@mapNotNull null
                 FeatureNames.number(FeatureNames.numberId(s.source, def)) to transform(def.scale, value)

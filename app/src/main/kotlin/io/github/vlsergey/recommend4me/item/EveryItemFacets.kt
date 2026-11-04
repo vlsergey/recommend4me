@@ -21,11 +21,11 @@ class EveryItemFacets(
         /** Every value of every facet of every item of the [store], and every answer on them: one pass over each table. */
         fun read(store: SourceStore): EveryItemFacets = EveryItemFacets(siteOf(store), store.corrections.allFacets().groupBy { it.itemId })
 
-        /** Every value of every facet of every item of the [store], by item and facet: one pass over its table. */
+        /** Every value of every facet of every item of the [store], by item and facet: one pass over its table, a work's facets in arrays ([WorkFacets]). */
         fun siteOf(store: SourceStore): Map<String, Map<String, List<String>>> {
-            val site = HashMap<String, HashMap<String, MutableList<String>>>()
-            store.items.forEachFacetValue { id, facet, key -> site.getOrPut(id) { HashMap() }.getOrPut(facet) { ArrayList() } += key }
-            return site
+            val reading = WorkFacets.Reading()
+            store.items.forEachFacetValue(reading::add)
+            return reading.done()
         }
     }
 }
