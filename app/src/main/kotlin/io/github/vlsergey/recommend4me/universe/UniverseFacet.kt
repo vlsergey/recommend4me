@@ -132,10 +132,10 @@ object UniverseFacet {
     val ORIGINAL_SEXES = mapOf("oc:female" to CharacterSex.FEMALE, "oc:male" to CharacterSex.MALE)
 
     /** The sex of every character of the dictionary of a type, and of the original characters: value to sex. */
-    fun sexes(universes: UniverseRepository): Map<String, CharacterSex> {
+    fun sexes(universes: UniverseRepository, read: CharactersRead = CharactersRead(universes)): Map<String, CharacterSex> {
         val out = HashMap<String, CharacterSex>(ORIGINAL_SEXES)
-        universes.all().forEach { u ->
-            universes.characters(u.catalogue, u.id).forEach { c -> c.sex?.let { out[valueOf(u.catalogue, c.id)] = it } }
+        universes.keys().forEach { u ->
+            read.of(u).forEach { c -> c.sex?.let { out[valueOf(u.catalogue, c.id)] = it } }
         }
         return out
     }
@@ -143,9 +143,10 @@ object UniverseFacet {
     /** The page in its catalogue of every universe of the dictionary of a type and of every character of them: value to address. */
     fun pages(universes: UniverseRepository): Map<String, String> {
         val out = HashMap<String, String>()
-        universes.all().forEach { u ->
+        val read = CharactersRead(universes)
+        universes.all(read).forEach { u ->
             out[u.value] = u.url
-            universes.characters(u.catalogue, u.id).forEach { c -> out[valueOf(u.catalogue, c.id)] = c.url }
+            read.of(UniverseKey(u.catalogue, u.id)).forEach { c -> out[valueOf(u.catalogue, c.id)] = c.url }
         }
         return out
     }

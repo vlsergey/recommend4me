@@ -79,10 +79,11 @@ class UniverseRepository(
     /** Every universe of the dictionary by its key alone, its characters not read: what the chances of a work read want of it. */
     fun keys(): List<UniverseKey> = db.select(UNIVERSE.CATALOGUE, UNIVERSE.UNIVERSE_ID).from(UNIVERSE).fetch { UniverseKey(it.value1()!!, it.value2()!!) }
 
-    fun all(): List<StoredUniverse> {
-        val local = localNames()
+    /** Every universe of the dictionary with its counts; its entries of [read], read once for the operation that reads their characters too. */
+    fun all(read: CharactersRead = CharactersRead(this)): List<StoredUniverse> {
+        val local = read.local
         return db.selectFrom(UNIVERSE).fetch().map { u ->
-            val entries = entries(u.catalogue!!, u.universeId!!, local)
+            val entries = read.entries(UniverseKey(u.catalogue!!, u.universeId!!))
             StoredUniverse(
                 // Of a universe saved before the texts were kept by language, the ones shown then
                 u.catalogue!!, u.universeId!!,
@@ -219,8 +220,9 @@ class UniverseRepository(
         return true
     }
 
-    /** The entries of the universe kept as characters. */
-    fun characters(catalogue: String, id: String): List<UniverseCharacter> = entries(catalogue, id).filter { it.included }.map { it.character }
+    /** The entries of the universe kept as characters; the names the user gave first ([local], read once for a reading of many universes). */
+    fun characters(catalogue: String, id: String, local: Map<String, String> = localNames()): List<UniverseCharacter> =
+        entries(catalogue, id, local).filter { it.included }.map { it.character }
 
     /** Every entry of the universe, kept or not, by name; the names the user gave first ([local], read once for a reading of many universes). */
     fun entries(catalogue: String, id: String, local: Map<String, String> = localNames()): List<KeptEntry> {

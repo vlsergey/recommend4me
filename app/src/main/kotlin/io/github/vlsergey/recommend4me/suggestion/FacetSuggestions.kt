@@ -20,7 +20,9 @@ import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
 import io.github.vlsergey.recommend4me.universe.CharacterSex
+import io.github.vlsergey.recommend4me.universe.CharactersRead
 import io.github.vlsergey.recommend4me.universe.LayerDraft
+import io.github.vlsergey.recommend4me.universe.UniverseKey
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.universe.Quote
@@ -277,8 +279,9 @@ class FacetSuggestions(
         val facets = facetsOf(store)
         val k = facets.indexOfFirst { it.key == facetKey }.takeIf { it >= 0 } ?: return null
         val encoder = plugins.textEncoder() ?: return null
-        val made = chain(store, null, k)
-        return load(store, facets[k], encoder, vocabularyOf(store, facets[k], null, made), null, made, null).task
+        val read = worksRead(store, encoder, null)
+        val made = chain(store, encoder, read, k)
+        return load(store, facets[k], encoder, vocabularyOf(store, facets[k], null, made, read.characters), null, made, null, read).task
     }
 
     /** The facets being fitted anew now ([searchAnew]), by "source/facet": the work under way, nothing of the data. */
@@ -390,8 +393,12 @@ class FacetSuggestions(
             if (asked == null || suggester == null) asked else suggester.reads(asked)
         }
 
-    private fun worksRead(store: SourceStore, encoder: TextEncoder, ids: Collection<String>?, every: EveryItemFacets? = null) =
-        FacetData.WorksRead(store, encoder, plugins.imageEncoder()?.id, stores.typeOf(store.id).embeddings.ids(), ids, every?.takeIf { ids == null })
+    private fun worksRead(
+        store: SourceStore, encoder: TextEncoder, ids: Collection<String>?, every: EveryItemFacets? = null, characters: CharactersRead = charactersRead(store),
+    ) = FacetData.WorksRead(store, encoder, plugins.imageEncoder()?.id, stores.typeOf(store.id).embeddings.ids(), ids, characters, every?.takeIf { ids == null })
+
+    /** The characters of the dictionary of the [store]'s type, for one operation to read once ([CharactersRead]). */
+    private fun charactersRead(store: SourceStore) = CharactersRead(stores.typeOf(store.id).universes)
 
     /** The chances of a facet's works as the model scores them: the task they are of, its scores, the vocabulary read. */
     private class Scored(val data: FacetData, val scores: SuggestionScores, val vocabulary: Vocabulary?)
@@ -412,7 +419,7 @@ class FacetSuggestions(
         val ids = read.only
         store.suggestions.scoring(facet.key)?.takeIf { it.suggester == suggester.id }?.let { kept ->
             laps.lap("scoring kept read", kept.bytes.size / 1024)
-            val vocabulary = vocabularyOf(store, facet, ids, made, light = true, site = read.site)
+            val vocabulary = vocabularyOf(store, facet, ids, made, read.characters, light = true, site = read.site)
             laps.lap("vocabulary")
             // The names counted of the index, as the fitting counted them
             val mentions = vocabulary?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)
@@ -425,7 +432,7 @@ class FacetSuggestions(
             return suggester.scoring(kept.bytes, data.task)?.let { Scored(data, it, vocabulary) }.also { laps.lap("scored", data.values.size) }
         }
         val stored = store.suggestions.suggester(facet.key)?.takeIf { it.suggester == suggester.id } ?: return null
-        val vocabulary = vocabularyOf(store, facet, ids, made)
+        val vocabulary = vocabularyOf(store, facet, ids, made, read.characters)
         val data = load(store, facet, encoder, vocabulary, ids, made, stored.values, read)
         if (data.values.isEmpty()) return null
         laps.lap("whole task read, no scoring kept")
@@ -504,12 +511,14 @@ class FacetSuggestions(
      * The vocabulary of the facet: of the universes, or of a facet learnt from the sites' facet; null
      * of any other. [light]: what scoring the works by the scoring kept needs alone — the values each
      * may have, the site's examples — no name of any value, no group: the scoring knows them. [site]: the
-     * site's values of the works ([ids], every work when null) read already: not read again.
+     * site's values of the works ([ids], every work when null) read already: not read again. [characters]:
+     * the dictionary's characters as the operation reads them, every universe once.
      */
     private fun vocabularyOf(
-        store: SourceStore, facet: FacetDef, ids: Collection<String>?, made: WorkChances, light: Boolean = false, site: Map<String, Map<String, List<String>>>? = null,
+        store: SourceStore, facet: FacetDef, ids: Collection<String>?, made: WorkChances, characters: CharactersRead, light: Boolean = false,
+        site: Map<String, Map<String, List<String>>>? = null,
     ): Vocabulary? =
-        universeVocabulary(store, facet, ids, made, light) ?: examplesVocabulary(store, facet, ids, light, site)
+        universeVocabulary(store, facet, ids, made, characters, light) ?: examplesVocabulary(store, facet, ids, light, site)
 
     /**
      * What the model of the facet reads — of the works [ids] alone, when given, judged among the
@@ -546,10 +555,11 @@ class FacetSuggestions(
             if (stop()) throw CancellationException("${store.id}: ${facet.key} given up for newer changes")
         }
         val started = System.currentTimeMillis()
-        val vocabulary = vocabularyOf(store, facet, null, made)
+        val works = worksRead(store, encoder, null)
+        val vocabulary = vocabularyOf(store, facet, null, made, works.characters)
         val vocabularyMillis = System.currentTimeMillis() - started
         checkpoint()
-        val data = load(store, facet, encoder, vocabulary, null, made, null)
+        val data = load(store, facet, encoder, vocabulary, null, made, null, works)
         val read = System.currentTimeMillis() - started
         checkpoint()
         // The whole task kept in a file when asked for: its fitting made again and measured apart from the application
@@ -778,9 +788,12 @@ class FacetSuggestions(
      * The vocabulary of a facet of the universes; of the works [ids], when given, what depends on the
      * works read of them alone — their universes, the characters of their other facet, their pairs —
      * not of every work: of a work of a large universe the chances of thousands of characters each.
-     * The values the model gave of the facets before it are [made] in the chain.
+     * The values the model gave of the facets before it are [made] in the chain; the dictionary's
+     * characters of [characters], every universe read once for the operation.
      */
-    private fun universeVocabulary(store: SourceStore, facet: FacetDef, ids: Collection<String>?, made: WorkChances, light: Boolean = false): Vocabulary? {
+    private fun universeVocabulary(
+        store: SourceStore, facet: FacetDef, ids: Collection<String>?, made: WorkChances, characters: CharactersRead, light: Boolean = false,
+    ): Vocabulary? {
         val type = stores.typeOf(store.id)
         if (!type.type.universes) return null
         return when (facet.key) {
@@ -803,14 +816,14 @@ class FacetSuggestions(
                     val keys = type.universes.keys().map { it.value }.toSet()
                     return Vocabulary(emptyMap(), allowed = { id -> if (original(id)) emptySet() else keys })
                 }
-                val universes = type.universes.all()
+                val universes = type.universes.all(characters)
                 val all = universes.associate { it.value to it.name }
                 // A universe is named by its characters ("Гарри", "Хогвартс") and by its own name
                 val ofCharacter = HashMap<String, MutableSet<String>>()
                 val names = HashMap<String, List<String>>()
                 universes.forEach { u ->
                     names[u.value] = u.names
-                    type.universes.characters(u.catalogue, u.id).forEach { c ->
+                    characters.of(UniverseKey(u.catalogue, u.id)).forEach { c ->
                         val value = UniverseFacet.valueOf(u.catalogue, c.id)
                         names[value] = c.names
                         ofCharacter.getOrPut(value) { HashSet() } += u.value
@@ -842,9 +855,9 @@ class FacetSuggestions(
                 // Their sexes of the same reading: a universe's characters read once
                 val sexes = HashMap<String, CharacterSex>(UniverseFacet.ORIGINAL_SEXES)
                 read.forEach { u ->
-                    val characters = type.universes.characters(u.catalogue, u.id)
-                    ofUniverse[u.value] = characters.map { UniverseFacet.valueOf(u.catalogue, it.id) }.toSet()
-                    characters.forEach { c ->
+                    val own = characters.of(u)
+                    ofUniverse[u.value] = own.map { UniverseFacet.valueOf(u.catalogue, it.id) }.toSet()
+                    own.forEach { c ->
                         val value = UniverseFacet.valueOf(u.catalogue, c.id)
                         values[value] = c.names.joinToString(" / ")
                         names[value] = c.names
@@ -891,21 +904,21 @@ class FacetSuggestions(
             }
             UniverseFacets.PAIRINGS -> {
                 // Every pair of a work's characters: the confirmed ones and those the model gives it
-                val characters = linked(store, UniverseFacets.CHARACTERS, ids).toMutableMap()
+                val linkedCharacters = linked(store, UniverseFacets.CHARACTERS, ids).toMutableMap()
                 made.forEach { (id, chances) ->
                     val given = ModelValues.given(chances[UniverseFacets.CHARACTERS].orEmpty())
-                    if (given.isNotEmpty()) characters[id] = characters[id].orEmpty() + given
+                    if (given.isNotEmpty()) linkedCharacters[id] = linkedCharacters[id].orEmpty() + given
                 }
                 val rejected = answersOf(store, ids).filter { it.facet == UniverseFacets.CHARACTERS && !it.added }
                     .groupBy({ it.itemId }, { it.key })
                 // The original characters pair with anyone: a work need not list them among its main ones
-                val pairs = characters.mapValues { (id, own) ->
+                val pairs = linkedCharacters.mapValues { (id, own) ->
                     val kept = (own + UniverseFacet.ORIGINAL_CHARACTERS.keys - rejected[id].orEmpty().toSet()).distinct().sorted()
                     kept.flatMapIndexed { k, a -> kept.drop(k + 1).map { b -> UniverseFacet.pairing(a, b) } }.toSet()
                 }
                 // The names of the characters of the works' universes, looked for in their words: two named in one
                 // paragraph. The original characters have no names to count; one map for every work of the same characters
-                val named = pairedNames(store, ids, made, characters)
+                val named = pairedNames(store, ids, made, characters, linkedCharacters)
                 if (light) return Vocabulary(emptyMap(), allowed = { id -> pairs[id].orEmpty() }, names = named, paired = true)
                 val names = UniverseFacet.ORIGINAL_CHARACTERS +
                     store.names(UniverseFacets.CHARACTERS, pairs.values.flatten().flatMap { p -> UniverseFacet.members(p)?.toList().orEmpty() })
@@ -913,7 +926,7 @@ class FacetSuggestions(
                     UniverseFacet.members(p)!!.let { (a, b) -> "${names[a] ?: a} / ${names[b] ?: b}" }
                 }
                 // Their names alone are what the model reads; shown with the sign of their characters' sexes ([UniverseNames])
-                val sexes = UniverseFacet.sexes(type.universes)
+                val sexes = UniverseFacet.sexes(type.universes, characters)
                 // The sexes of a pairing's two characters, and whether they are one sex: two groupings
                 val kinds = CharacterSex.entries.flatMap { x -> CharacterSex.entries.filter { it >= x }.map { x to it } }
                 // A pairing of two characters of the dictionary is named "A / B"; it names no other pairing of either of them
@@ -954,13 +967,15 @@ class FacetSuggestions(
      * work when null — a map for every work of two characters and more besides the original ones, one
      * map for every work of the same: what two of them named in one paragraph are looked for by.
      */
-    private fun pairedNames(store: SourceStore, ids: Collection<String>?, made: WorkChances, characters: Map<String, List<String>>): (String) -> Named? {
+    private fun pairedNames(
+        store: SourceStore, ids: Collection<String>?, made: WorkChances, read: CharactersRead, characters: Map<String, List<String>>,
+    ): (String) -> Named? {
         val type = stores.typeOf(store.id)
         val universes = workUniverses(store, ids, made)
         val own = universes.values.flatten().toSet()
         val known = HashMap<String, List<String>>()
         type.universes.keys().filter { it.value in own }.forEach { u ->
-            type.universes.characters(u.catalogue, u.id).forEach { known[UniverseFacet.valueOf(u.catalogue, it.id)] = it.names }
+            read.of(u).forEach { known[UniverseFacet.valueOf(u.catalogue, it.id)] = it.names }
         }
         val missing = characters.values.flatten().toSet().filter { it !in known && it !in UniverseFacet.ORIGINAL_CHARACTERS }
         val shown = store.names(UniverseFacets.CHARACTERS, missing)
@@ -1049,7 +1064,7 @@ class FacetSuggestions(
         val facets = facetsOf(store)
         val k = facets.indexOfFirst { it.key == facet }.takeIf { it >= 0 } ?: return null
         val ids = listOf(itemId)
-        val vocabulary = universeVocabulary(store, facets[k], ids, chain(store, ids, k)) ?: return null
+        val vocabulary = universeVocabulary(store, facets[k], ids, chain(store, ids, k), charactersRead(store)) ?: return null
         val of = vocabulary.names ?: return null
         val names = of(itemId)?.whole ?: return Quoting.None
         if (vocabulary.paired) {
@@ -1091,8 +1106,10 @@ class FacetSuggestions(
         val corrections = store.corrections.facetsOf(itemId)
         val site = store.items.facets(itemId)
         // Every value made, not those shown alone — of a work's universes, characters and pairings, those it may have
-        val ofModel = scoredOne(store, def, itemId, made)
-        val vocabulary = ofModel?.vocabulary ?: vocabularyOf(store, def, ids, made, light = true)
+        // The dictionary's characters read once for every reading of them below
+        val characters = charactersRead(store)
+        val ofModel = scoredOne(store, def, itemId, made, characters)
+        val vocabulary = ofModel?.vocabulary ?: vocabularyOf(store, def, ids, made, characters, light = true)
         // Of the one work: what it may have but its barred, a set of its own
         val may = vocabulary?.allowed?.invoke(itemId)?.let { it - vocabulary.barred?.invoke(itemId).orEmpty() }
         val every = ofModel?.let { everyChance(def, itemId, it, made) }
@@ -1119,7 +1136,7 @@ class FacetSuggestions(
             val unknown = may.orEmpty().filter { it !in answered && it !in current && it !in out && it !in chanced }
             // Counted now, of the work's universes' characters alone
             val named = if (unknown.isEmpty()) null else
-                vocabularyOf(store, def, ids, made, light = true)?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)?.invoke(itemId)
+                vocabularyOf(store, def, ids, made, characters, light = true)?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)?.invoke(itemId)
             unknown.map { FacetCandidate(it, null, named?.let { n -> n[it] ?: 0 }) }
         }
         val candidates = (scored + unscored)
@@ -1131,10 +1148,10 @@ class FacetSuggestions(
     }
 
     /** The [facet]'s chances of the item by the model kept ([scored]); null when the facet was never fitted. */
-    private fun scoredOne(store: SourceStore, facet: FacetDef, itemId: String, made: MadeChances): Scored? {
+    private fun scoredOne(store: SourceStore, facet: FacetDef, itemId: String, made: MadeChances, characters: CharactersRead): Scored? {
         val suggester = plugins.suggester(store.id, facet.key) ?: return null
         val encoder = plugins.textEncoder() ?: return null
-        val read = worksRead(store, encoder, reading(store, listOf(itemId), facetsOf(store).indexOf(facet) + 1))
+        val read = worksRead(store, encoder, reading(store, listOf(itemId), facetsOf(store).indexOf(facet) + 1), characters = characters)
         return scored(store, facet, suggester, encoder, read, made)
     }
 
@@ -1199,6 +1216,8 @@ internal class FacetData(
      */
     class WorksRead(
         store: SourceStore, encoder: TextEncoder, imageEncoder: String?, sets: Map<SetKind, Long>, val only: Collection<String>?,
+        /** The characters of the dictionary's universes, every universe's read once for every facet of the pass. */
+        val characters: CharactersRead,
         /** Of every work ([only] null), their facets and answers read already by the reading the pass serves. */
         val every: EveryItemFacets? = null,
     ) {
