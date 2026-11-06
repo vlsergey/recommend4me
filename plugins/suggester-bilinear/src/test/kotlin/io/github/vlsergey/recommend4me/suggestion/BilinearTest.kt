@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 
 class BilinearTest {
 
-    /** A small task with every kind of input: two text blocks, a context, examples, mentions, names of the values as hints. */
+    /** A small task with every kind of input: two text blocks, a context, examples, names of the values as hints. */
     private fun task(): SuggestionTask {
         val random = Random(5)
         val n = 12
@@ -37,7 +37,6 @@ class BilinearTest {
             rejected = List(n) { i -> if (i == 3) intArrayOf(1) else IntArray(0) },
             context = List(n) { i -> intArrayOf(i % 2) },
             contextKeys = listOf("f\u0001a", "f\u0001b"),
-            mentions = List(n) { i -> if (i % 3 == 0) mapOf(i % m to 2) else null },
             lackWeight = 0.5,
             examples = List(n) { i -> if (i % 2 == 0) intArrayOf(i % m) else IntArray(0) },
             hints = IntArray(m) { it }.let { all -> List(6) { k -> NameHint(k % m, all) } },
@@ -104,7 +103,7 @@ class BilinearTest {
         val t = task()
         val task = SuggestionTask(
             t.itemIds, t.inputs, t.values, t.valueKeys, t.assigned, t.confirmed, t.rejected, t.context, t.contextKeys,
-            t.mentions, t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
+            t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
         )
         compareTogether(task)
     }
@@ -167,7 +166,7 @@ class BilinearTest {
         fitTogether(
             SuggestionTask(
                 t.itemIds, t.inputs, t.values, t.valueKeys, t.assigned, t.confirmed, t.rejected, t.context, t.contextKeys,
-                t.mentions, t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
+                t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
             ),
             cublas,
         )

@@ -46,7 +46,6 @@ class ScoringTest {
             rejected = List(n) { IntArray(0) },
             context = List(n) { IntArray(0) },
             contextKeys = emptyList(),
-            mentions = List(n) { i -> if (i % 3 == 0) mapOf(i % m to 2, (i * 7) % m to 1, 40 to 3) else null },
             examples = List(n) { i -> if (i % 4 == 0) intArrayOf((i * 3) % m, 41) else IntArray(0) },
         )
     }

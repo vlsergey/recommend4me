@@ -16,10 +16,11 @@ import java.util.zip.GZIPOutputStream
  */
 object SuggestionTaskFile {
     /**
-     * 5: the arrays of the allowed once each, the barred at the end; 4: the drafts and their weight at
-     * the end; 3: the names' texts a matrix, their arrays of values once each; 2 and 1 read too.
+     * 6: no counts of the values' names in the items' texts; 5: the arrays of the allowed once each,
+     * the barred at the end; 4: the drafts and their weight at the end; 3: the names' texts a matrix,
+     * their arrays of values once each; 2 and 1 read too, their counts passed over.
      */
-    private const val FORMAT = 5
+    private const val FORMAT = 6
 
     fun write(task: SuggestionTask, file: Path) {
         Files.createDirectories(file.parent)
@@ -37,11 +38,6 @@ object SuggestionTaskFile {
             strings(out, task.valueKeys)
             listOf(task.assigned, task.confirmed, task.rejected, task.context, task.examples).forEach { lists(out, it) }
             strings(out, task.contextKeys)
-            out.writeInt(task.mentions.size)
-            task.mentions.forEach { named ->
-                out.writeInt(named?.size ?: -1)
-                named?.forEach { (v, count) -> out.writeInt(v); out.writeInt(count) }
-            }
             // Every array of the allowed once, each item by its number: one of thousands of characters for every work of a universe
             val allowed = IdentityHashMap<IntArray, Int>()
             task.allowed.forEach { a -> if (a != null) allowed.putIfAbsent(a, allowed.size) }
@@ -86,9 +82,10 @@ object SuggestionTaskFile {
         val valueKeys = strings(input)
         val (assigned, confirmed, rejected, context, examples) = List(5) { lists(input) }
         val contextKeys = strings(input)
-        val mentions = List(input.readInt()) {
+        // The formats before 6: the counts of the values' names in the items' texts, which no model reads now
+        if (format < 6) repeat(input.readInt()) {
             val size = input.readInt()
-            if (size < 0) null else HashMap<Int, Int>(size).also { m -> repeat(size) { m[input.readInt()] = input.readInt() } }
+            repeat(maxOf(size, 0) * 2) { input.readInt() }
         }
         val allowed = if (format >= 5) {
             val arrays = List(input.readInt()) { ints(input) }
@@ -117,7 +114,7 @@ object SuggestionTaskFile {
         val draftWeight = if (format >= 4) input.readDouble() else 1.0
         val barred = if (format >= 5) lists(input) else List(itemIds.size) { IntArray(0) }
         SuggestionTask(
-            itemIds, inputs, values, valueKeys, assigned, confirmed, rejected, context, contextKeys, mentions, allowed, groupings, lackWeight, examples, hints, hintTexts,
+            itemIds, inputs, values, valueKeys, assigned, confirmed, rejected, context, contextKeys, allowed, groupings, lackWeight, examples, hints, hintTexts,
             drafts, draftWeight, barred,
         )
     }

@@ -5,7 +5,6 @@ import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Simd
 import java.util.concurrent.CancellationException
-import kotlin.math.ln
 
 /**
  * EVERY MODEL OF A FITTING IN ONE PRODUCT ([Bilinear], the same model and the same loss): the folds
@@ -326,17 +325,16 @@ internal class Ensemble(
         if (h > 0) namesCoordinates(k)
         restNanos += System.nanoTime() - at
         at = System.nanoTime()
-        val named = ln(2.0).toFloat()
         if (onPairs != null) {
             val c = onCard!!
-            onPairs.evaluate(k, slotModel, heldOut, totals, named, c.uT, c.duT, pair, vT, bias, uhT, gE, gBias, duhT, gPair, losses)
+            onPairs.evaluate(k, slotModel, heldOut, totals, c.uT, c.duT, pair, vT, bias, uhT, gE, gBias, duhT, gPair, losses)
             for (slot in 0 until k) losses[slot] = losses[slot] / totals[slotModel[slot]]
         } else for (slot in 0 until k) {
             val model = slotModel[slot]
             val scale = 1 / totals[model]
-            val common = pair[slot * Bilinear.PAIR + 2]
+            val common = pair[slot * Bilinear.PAIR + 1]
             var loss = pairs(slot, model, scale, common)
-            if (h > 0) loss += names(slot, scale, common, named)
+            if (h > 0) loss += names(slot, scale, common)
             losses[slot] = loss * scale
         }
         pairsNanos += System.nanoTime() - at
@@ -357,7 +355,7 @@ internal class Ensemble(
         // too, but the common bias, the base rate of every value. Of A on the card when it is there
         for (slot in 0 until k) {
             val lambda = lambdas[slotModel[slot]]
-            val common = pair[slot * Bilinear.PAIR + 2]
+            val common = pair[slot * Bilinear.PAIR + 1]
             val theta = points[slot]
             val gradient = grads[slot]
             var penalty = 0f
@@ -372,7 +370,7 @@ internal class Ensemble(
                 penalty += Simd.dot(theta.floats[q], theta.at[q], theta.floats[q], theta.at[q], theta.count[q])
                 Simd.axpy(2 * lambda, theta.floats[q], theta.at[q], gradient.floats[q], gradient.at[q], theta.count[q])
             }
-            gPair[slot * Bilinear.PAIR + 2] = gPair[slot * Bilinear.PAIR + 2] - 2 * lambda * common
+            gPair[slot * Bilinear.PAIR + 1] = gPair[slot * Bilinear.PAIR + 1] - 2 * lambda * common
             losses[slot] += lambda * (penalty - common * common)
         }
         restNanos += System.nanoTime() - at
@@ -390,11 +388,9 @@ internal class Ensemble(
         val biasAt = slot * m
         val pairAt = slot * Bilinear.PAIR
         val example = pair[pairAt]
-        val mention = pair[pairAt + 1]
         var loss = 0f
         var gCommon = 0f
         var gExample = 0f
-        var gMention = 0f
         var from = 0
         while (from < n) {
             val rows = minOf(blockRows, n - from)
@@ -410,7 +406,7 @@ internal class Ensemble(
                 }
                 val values = pairRow.values
                 for (j in 0 until len) {
-                    z[j] = scores[at + values[j]] + example * pairRow.examples[j] + mention * pairRow.mentions[j]
+                    z[j] = scores[at + values[j]] + example * pairRow.examples[j]
                     shift[j] = bias[biasAt + values[j]] + common
                 }
                 sums[0] = 0f
@@ -418,10 +414,7 @@ internal class Ensemble(
                 Simd.weightedLogisticRow(z, shift, pairRow.weights, pairRow.labels, len, scale, slopes, sums)
                 loss += sums[0]
                 gCommon += sums[1]
-                for (j in 0 until len) {
-                    gExample += slopes[j] * pairRow.examples[j]
-                    gMention += slopes[j] * pairRow.mentions[j]
-                }
+                for (j in 0 until len) gExample += slopes[j] * pairRow.examples[j]
                 scores.clear(at, m)
                 for (j in 0 until len) scores[at + values[j]] = slopes[j]
             }
@@ -433,8 +426,7 @@ internal class Ensemble(
             from += rows
         }
         gPair[pairAt] = gExample
-        gPair[pairAt + 1] = gMention
-        gPair[pairAt + 2] = gCommon
+        gPair[pairAt + 1] = gCommon
         return loss
     }
 
@@ -466,15 +458,13 @@ internal class Ensemble(
      * its rivals, weight 1 a pair, a group of them at a time: the group's names' and values'
      * coordinates gathered, their scores by one product, the slopes back by two; the loss summed.
      */
-    private fun names(slot: Int, scale: Float, common: Float, named: Float): Float {
+    private fun names(slot: Int, scale: Float, common: Float): Float {
         val uhAt = slot * r * h
         val vAt = slot * r * m
         val biasAt = slot * m
         val pairAt = slot * Bilinear.PAIR
-        val mention = pair[pairAt + 1]
         var loss = 0f
         var gCommon = 0f
-        var gMention = 0f
         p.hintGroups.forEach { group ->
             val kRows = group.rows.size
             val c = group.values.size
@@ -486,7 +476,7 @@ internal class Ensemble(
             // The scores of the group's every name against its every value
             Blas.gemm(true, false, kRows, c, r, gu, 0, kRows, gv, 0, c, gs, 0, c)
             // Every value of a row against the label nought at once; the name's own value then set
-            // right: its label is one, and the text names it
+            // right: its label is one
             for (row in 0 until kRows) {
                 val own = group.positive[row]
                 val at = row * c
@@ -495,12 +485,11 @@ internal class Ensemble(
                 sums[1] = 0f
                 Simd.logisticRow(gs, at, shift, c, scale, sums)
                 if (own in 0 until c) {
-                    val zOwn = before + mention * named
-                    val d = (Bilinear.sigmoid(zOwn) - 1) * scale
-                    sums[0] += Bilinear.softplus(zOwn) - zOwn - Bilinear.softplus(before)
+                    // softplus(z) − z for the label one in place of softplus(z) for nought
+                    val d = (Bilinear.sigmoid(before) - 1) * scale
+                    sums[0] -= before
                     sums[1] += d - Bilinear.sigmoid(before) * scale
                     gs[at + own] = d
-                    gMention += d * named
                 }
                 loss += sums[0]
                 gCommon += sums[1]
@@ -522,8 +511,7 @@ internal class Ensemble(
                 }
             }
         }
-        gPair[pairAt + 1] = gPair[pairAt + 1] + gMention
-        gPair[pairAt + 2] = gPair[pairAt + 2] + gCommon
+        gPair[pairAt + 1] = gPair[pairAt + 1] + gCommon
         return loss
     }
 
@@ -565,14 +553,13 @@ internal class Ensemble(
             val uAt = model * r * n
             val vAt = model * r * m
             val example = pair[model * Bilinear.PAIR]
-            val mention = pair[model * Bilinear.PAIR + 1]
-            val common = pair[model * Bilinear.PAIR + 2]
+            val common = pair[model * Bilinear.PAIR + 1]
             for (i in 0 until n) {
                 if (p.foldOf[i] != fold) continue
                 val len = p.pairsOf(i, pairRow)
                 for (j in 0 until len) {
                     val v = pairRow.values[j]
-                    var dot = bias[model * m + v] + common + example * pairRow.examples[j] + mention * pairRow.mentions[j]
+                    var dot = bias[model * m + v] + common + example * pairRow.examples[j]
                     for (q in 0 until r) dot += uT[uAt + q * n + i] * vT[vAt + q * m + v]
                     val l = (Bilinear.softplus(dot) - pairRow.labels[j] * dot).toDouble()
                     into[model].add(pairRow.weights[j].toDouble(), l)

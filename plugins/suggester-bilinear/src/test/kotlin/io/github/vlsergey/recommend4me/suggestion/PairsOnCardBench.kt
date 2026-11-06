@@ -25,7 +25,7 @@ class PairsOnCardBench {
         val t = SuggestionTaskFile.read(Path.of(file!!))
         val bare = SuggestionTask(
             t.itemIds, t.inputs, t.values, t.valueKeys, t.assigned, t.confirmed, t.rejected, t.context, t.contextKeys,
-            t.mentions, t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
+            t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
         )
         for ((what, task) in listOf("with names" to t, "pairs alone" to bare)) {
             val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)

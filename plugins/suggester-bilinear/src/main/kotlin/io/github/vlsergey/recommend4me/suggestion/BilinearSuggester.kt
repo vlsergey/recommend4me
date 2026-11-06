@@ -206,15 +206,14 @@ class BilinearSuggester internal constructor(
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? = runCatching {
         // Buffered: the stream is read in many small pieces — the numbers in blocks, the keys one by one
         DataInputStream(GZIPInputStream(ByteArrayInputStream(bytes), BUFFER).buffered(BUFFER)).use { input ->
-            // Of the formats before it, the same without what came later: the penalties beside the chosen one (6), the card's verdict (7)
-            val format = input.readInt()
-            if (format !in FORMAT - 2..FORMAT) return null
+            // A state of another format is not read: fitted anew
+            if (input.readInt() != FORMAT) return null
             val design = Design.read(input)
             val rank = input.readInt()
             val lambda = input.readDouble()
             val weights = List(input.readInt()) { Weights.read(input) }
-            val nearby = if (format < 6) emptyMap() else List(input.readInt()) { input.readDouble() to List(input.readInt()) { Weights.read(input) } }.toMap()
-            val slowerAt = if (format < 7) null else input.readInt().takeIf { it >= 0 }
+            val nearby = List(input.readInt()) { input.readDouble() to List(input.readInt()) { Weights.read(input) } }.toMap()
+            val slowerAt = input.readInt().takeIf { it >= 0 }
             if (weights.size != FOLDS || !design.reads(task)) null else Fitted(design, rank, lambda, weights, nearby, slowerAt)
         }
     }.getOrNull()
@@ -299,10 +298,11 @@ class BilinearSuggester internal constructor(
 
         /**
          * The version of what [pack] writes; 5: fitted in single precision, every facet fitted again;
-         * 6: the weights at the penalties beside the chosen one too — a state of 5 is read as one without;
-         * 7: the card's verdict, how many groups of names it was slower at — a state of 6 is read as one of none.
+         * 6: the weights at the penalties beside the chosen one too; 7: the card's verdict, how many
+         * groups of names it was slower at; 8: no weight of the counts of the values' names in the
+         * texts ([Bilinear.PAIR]) — a state of another is not read, every facet fitted anew.
          */
-        private const val FORMAT = 7
+        private const val FORMAT = 8
 
         /** The buffer of the compressed state read and written: the numbers go in blocks of many kilobytes. */
         private const val BUFFER = 1 shl 16

@@ -52,14 +52,14 @@ internal class StepOnCard private constructor(
     /** What the forward run gives: the values' coordinates, and the names' loss with its gradient. */
     class Forward(
         val v: FloatArray,
-        val loss: Float, val slope: Float, val own: Float,
+        val loss: Float, val slope: Float,
         /** The names' slopes carried to the values' coordinates (m × rank) and to their biases (m). */
         val dv: FloatArray, val dBias: FloatArray,
         /** To the text blocks' weights: Hᵀ dUh (hintDim × rank), and to the constant's and the marks': Σ dUh (rank). */
         val dSum: FloatArray, val dBase: FloatArray,
     )
 
-    fun forward(theta: FloatArray, size: Int, named: Float, scale: Float): Forward = lock.withLock {
+    fun forward(theta: FloatArray, size: Int, scale: Float): Forward = lock.withLock {
         open()
         val bAt = dx * rank
         val eAt = bAt + dz * rank
@@ -73,7 +73,6 @@ internal class StepOnCard private constructor(
             "E" to part(eAt, m * rank, m.toLong(), rank.toLong()),
             "bias" to part(biasAt, m, m.toLong()),
             "common" to scalar(theta[size - 1]),
-            "named" to scalar(named),
             "scale" to scalar(scale),
         )
         try {
@@ -94,7 +93,7 @@ internal class StepOnCard private constructor(
                 Forward(
                     floats("V"),
                     // Σ D: the sum of its columns' sums
-                    (r.get("loss").get() as OnnxTensor).doubleBuffer.get(0).toFloat(), columns.sum(), floats("own_slope")[0],
+                    (r.get("loss").get() as OnnxTensor).doubleBuffer.get(0).toFloat(), columns.sum(),
                     dv, dBias, floats("dSum"), floats("dBase"),
                 )
             }
@@ -177,7 +176,7 @@ internal class StepOnCard private constructor(
             val g = OnnxGraph("suggester-step-forward")
                 .input("A", f, dx, rank.toLong()).input("B", f, p.design.valueWidth.toLong(), rank.toLong())
                 .input("E", f, p.m.toLong(), rank.toLong()).input("bias", f, p.m.toLong())
-                .input("common", f).input("named", f).input("scale", f)
+                .input("common", f).input("scale", f)
                 .supplied("Z", p.m.toLong(), p.design.valueWidth.toLong())
                 .supplied("H", p.hints.size.toLong(), p.hintDim.toLong())
                 .constant("one", floatArrayOf(1f))
@@ -205,7 +204,6 @@ internal class StepOnCard private constructor(
                 .node("Add", listOf("HA", "base"), listOf("Uh"))
             // Every group of names against its values
             val losses = ArrayList<String>()
-            val owns = ArrayList<String>()
             val columns = ArrayList<String>()
             val dUs = ArrayList<String>()
             val dVs = ArrayList<String>()
@@ -220,8 +218,8 @@ internal class StepOnCard private constructor(
                     .node("Gather", listOf("V", x("values")), listOf(x("Vg")), mapOf("axis" to 0))
                     .node("Gather", listOf("bias", x("values")), listOf(x("biasG")), mapOf("axis" to 0))
                     .node("Add", listOf(x("biasG"), "common"), listOf(x("shift")))
-                NamesLoss.add(g, prefix, x("Ug"), x("Vg"), x("shift"), x("own"), "named", "scale")
-                losses += x("loss"); owns += x("own_slope"); columns += x("columns"); dUs += x("dU"); dVs += x("dV")
+                NamesLoss.add(g, prefix, x("Ug"), x("Vg"), x("shift"), x("own"), "scale")
+                losses += x("loss"); columns += x("columns"); dUs += x("dU"); dVs += x("dV")
             }
             // The names' rows of every group back in the order of the names
             val order = p.hintGroups.flatMap { it.rows.asIterable() }
@@ -232,11 +230,10 @@ internal class StepOnCard private constructor(
                 .node("Gemm", listOf("H", "dUh"), listOf("dSum"), mapOf("transA" to 1))
                 .node("ReduceSum", listOf("dUh", "first"), listOf("dBase"), mapOf("keepdims" to 0))
                 .node("Sum", losses, listOf("loss"))
-                .node("Sum", owns, listOf("own_slope"))
                 .node("Concat", columns, listOf("columns"), mapOf("axis" to 0))
                 .node("Concat", dVs, listOf("dVg"), mapOf("axis" to 0))
                 .output("V", f, p.m.toLong(), rank.toLong())
-                .output("loss", OnnxGraph.DOUBLE).output("own_slope", f)
+                .output("loss", OnnxGraph.DOUBLE)
                 .output("columns", f, "groupValues").output("dVg", f, "groupValues", rank.toLong())
                 .output("dSum", f, p.hintDim.toLong(), rank.toLong()).output("dBase", f, rank.toLong())
                 .bytes(OPSET)
@@ -258,43 +255,37 @@ internal class StepOnCard private constructor(
  * The loss of a group of names against its values, as nodes of a graph: of the names' coordinates
  * U (k × rank) and the values' V (c × rank), the values' shift and every name's own value,
  *
- *     S = U Vᵀ + shift,  every name's own score S_own + named
- *     loss = Σ softplus(S) − Σ softplus(S_own) + Σ softplus(S_own + named) − Σ (S_own + named)
- *     D = σ(S)·scale, every name's own slope (σ(S_own + named) − 1)·scale
+ *     S = U Vᵀ + shift,  every name's own score S_own
+ *     loss = Σ softplus(S) − Σ S_own
+ *     D = σ(S)·scale, every name's own slope (σ(S_own) − 1)·scale
  *
- * and out, under the [prefix]: the loss (in double), Σ D_own, the sums of D's columns (Σ D their sum), D V and
+ * and out, under the [prefix]: the loss (in double), the sums of D's columns (Σ D their sum), D V and
  * Dᵀ U. A name's own value is one of its row: it is set right apart, a column of k numbers, and the
  * millions of the rest go through the card once a pass — not a one-hot of them all times the scores.
  */
 internal object NamesLoss {
-    fun add(g: OnnxGraph, prefix: String, u: String, v: String, shift: String, own: String, named: String, scale: String) {
+    fun add(g: OnnxGraph, prefix: String, u: String, v: String, shift: String, own: String, scale: String) {
         fun x(name: String) = "$prefix$name"
         g.node("Gemm", listOf(u, v), listOf(x("UV")), mapOf("transB" to 1))
             .node("Add", listOf(x("UV"), shift), listOf(x("S")))
-            // Every name's own score, and as its text names it
+            // Every name's own score
             .node("Unsqueeze", listOf(own, "second"), listOf(x("ownColumn")))
             .node("GatherElements", listOf(x("S"), x("ownColumn")), listOf(x("Sown")), mapOf("axis" to 1))
-            .node("Add", listOf(x("Sown"), named), listOf(x("Snamed")))
             // The loss: the rows of softplus(S) summed in single precision, then the rows in double —
             // millions of terms in an order of the card's own, every run another: a float sum of them
             // all would shake by more than the fall the optimizer waits to see settle
             .node("Softplus", listOf(x("S")), listOf(x("soft")))
             .node("ReduceSum", listOf(x("soft"), "second"), listOf(x("rowSoft")), mapOf("keepdims" to 1))
-            .node("Softplus", listOf(x("Sown")), listOf(x("softOwn")))
-            .node("Softplus", listOf(x("Snamed")), listOf(x("softNamed")))
-            .node("Sub", listOf(x("rowSoft"), x("softOwn")), listOf(x("rowLess")))
-            .node("Add", listOf(x("rowLess"), x("softNamed")), listOf(x("rowMore")))
-            .node("Sub", listOf(x("rowMore"), x("Snamed")), listOf(x("rowLoss")))
+            .node("Sub", listOf(x("rowSoft"), x("Sown")), listOf(x("rowLoss")))
             .node("Cast", listOf(x("rowLoss")), listOf(x("rowLoss64")), mapOf("to" to OnnxGraph.DOUBLE))
             .node("ReduceSum", listOf(x("rowLoss64")), listOf(x("loss")), mapOf("keepdims" to 0))
             // The slopes: σ(S)·scale, every name's own put right
             .node("Sigmoid", listOf(x("S")), listOf(x("sigma")))
             .node("Mul", listOf(x("sigma"), scale), listOf(x("D0")))
-            .node("Sigmoid", listOf(x("Snamed")), listOf(x("sigmaNamed")))
-            .node("Sub", listOf(x("sigmaNamed"), "one"), listOf(x("ownLess")))
+            .node("GatherElements", listOf(x("sigma"), x("ownColumn")), listOf(x("sigmaOwn")), mapOf("axis" to 1))
+            .node("Sub", listOf(x("sigmaOwn"), "one"), listOf(x("ownLess")))
             .node("Mul", listOf(x("ownLess"), scale), listOf(x("Down")))
             .node("ScatterElements", listOf(x("D0"), x("ownColumn"), x("Down")), listOf(x("D")), mapOf("axis" to 1))
-            .node("ReduceSum", listOf(x("Down")), listOf(x("own_slope")), mapOf("keepdims" to 0))
             .node("ReduceSum", listOf(x("D"), "first"), listOf(x("columns")), mapOf("keepdims" to 0))
             // Carried back to the coordinates of the names and of the values
             .node("MatMul", listOf(x("D"), v), listOf(x("dU")))

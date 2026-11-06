@@ -70,12 +70,6 @@ class SuggestionTask(
     /** Every value of the other facets, as "<facet>\u0001<value>": what is learnt of one is kept by it. */
     val contextKeys: List<String>,
     /**
-     * How many times the item's own texts name each value — a character mentioned in the chapters,
-     * two named in one paragraph: value index to count, the values not named left out; null for an
-     * item whose texts were not counted, an empty map for one that names none.
-     */
-    val mentions: List<Map<Int, Int>?> = List(assigned.size) { null },
-    /**
      * The values each item may have at all — a work's characters are of its universes — null for
      * an item that may have any. A value outside them is no example of the item: not one it lacks,
      * one it cannot have; its chance is still worked out. ONE ARRAY FOR EVERY ITEM OF THE SAME —
@@ -133,9 +127,9 @@ class SuggestionTask(
         require(valueKeys.size == valueCount) { "${valueKeys.size} keys of $valueCount values" }
         require(context.all { c -> c.all { it in 0 until contextCount } }) { "A context out of the $contextCount keys" }
         require(
-            confirmed.size == itemCount && rejected.size == itemCount && context.size == itemCount && mentions.size == itemCount && allowed.size == itemCount,
+            confirmed.size == itemCount && rejected.size == itemCount && context.size == itemCount && allowed.size == itemCount,
         ) {
-            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${mentions.size} mentions, ${allowed.size} allowed"
+            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${allowed.size} allowed"
         }
         require(groupings.all { g -> g.of.size == valueCount && g.of.all { groups -> groups.all { it in g.groups.indices } } }) { "A grouping not of the $valueCount values" }
         require(lackWeight > 0 && lackWeight <= 1) { "A lacking value weighs $lackWeight" }
@@ -178,7 +172,7 @@ interface FacetSuggester {
 
     /**
      * The scoring kept by [FittedSuggester.scoring] readied for the items of [task]: their inputs,
-     * their context, their mentions and examples are read; its values are the values the scoring was
+     * their context and examples are read; its values are the values the scoring was
      * made of, in its order, without their names, groups or texts — the scoring knows what each is.
      * Null when the bytes are not of this suggester's making, or not of the task's values.
      */

@@ -7,13 +7,12 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.util.IdentityHashMap
-import kotlin.math.ln1p
 
 /**
  * THE SCORING OF THE ITEMS, APART FROM THE TASK — of every fold of the model ([BilinearSuggester.FOLDS]):
  * what carries an item's features to the [rank] coordinates ([a], itemWidth × rank, by the [design]),
- * the weights of a pair's own features ([pair]: the site gives the value as an example, the texts
- * name it, the common bias), and every value's coordinates ([vt], rank × m, transposed for the
+ * the weights of a pair's own feature and bias ([pair]: the site gives the value as an example, the
+ * common bias), and every value's coordinates ([vt], rank × m, transposed for the
  * product: its names and groups carried by B, its own coordinates added) and bias, of the values
  * [valueKeys] in their order.
  *
@@ -173,10 +172,9 @@ internal class Scoring(
                 val i = rows[members[r]]
                 val row = s.copyOfRange(r * k, r * k + k)
                 task.examples[i].forEach { v -> place(v).let { if (it >= 0) row[it] += w[0] } }
-                task.mentions[i]?.forEach { (v, count) -> if (v in 0 until m) place(v).let { if (it >= 0) row[it] += w[1] * ln1p(count.toDouble()).toFloat() } }
                 for (c in 0 until k) {
                     val j = cols?.get(c) ?: c
-                    val score = row[c] + b[j] + w[2]
+                    val score = row[c] + b[j] + w[1]
                     row[c] = if (chances) Bilinear.sigmoid(score) else score
                 }
                 out[members[r]] = row
@@ -203,10 +201,10 @@ internal class Scoring(
 
     companion object {
         /**
-         * The version of what [pack] writes: 2 with the values' shares ([shares]), 3 with the shares
-         * of the items that may have each alone — those of 2 read as none, kept anew at the next refresh.
+         * The version of what [pack] writes: 4 — the pair's own weights without the counts of the
+         * values' names in the texts. One of another is not read: the next refresh keeps it anew.
          */
-        private const val FORMAT = 3
+        private const val FORMAT = 4
 
         private const val BUFFER = 1 shl 16
 
@@ -219,16 +217,15 @@ internal class Scoring(
         /** Values asked up to which a value's place among them is looked for by going through them. */
         private const val FEW = 32
 
-        /** A scoring kept by [pack] — of the version before it, without the shares; null of another version or of other bytes. */
+        /** A scoring kept by [pack]; null of another version or of other bytes. */
         fun read(bytes: ByteArray): Scoring? = runCatching {
             DataInputStream(ByteArrayInputStream(bytes).buffered(BUFFER)).use { input ->
-                val format = input.readInt()
-                if (format !in 1..FORMAT) return null
+                if (input.readInt() != FORMAT) return null
                 val design = Design.read(input)
                 val rank = input.readInt()
                 val keys = Design.readStrings(input)
                 val parts = List(BilinearSuggester.FOLDS) { List(4) { Design.readFloats(input) } }
-                val shares = if (format < 2) null else Design.readFloats(input).takeIf { format >= 3 && it.size == keys.size }
+                val shares = Design.readFloats(input).takeIf { it.size == keys.size }
                 Scoring(design, rank, keys, parts.map { it[0] }, parts.map { it[1] }, parts.map { it[2] }, parts.map { it[3] }, shares)
             }
         }.getOrNull()

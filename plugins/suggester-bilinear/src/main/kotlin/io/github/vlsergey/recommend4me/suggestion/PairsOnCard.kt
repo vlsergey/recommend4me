@@ -56,7 +56,7 @@ internal class PairsOnCard private constructor(
     private val gBias = floats(count.toLong() * m)
     private val ones = floats(blockRows.toLong()).also { o -> o.upload(Floats(blockRows).also { f -> for (i in 0 until blockRows) f[i] = 1f }, 0, 0, blockRows) }
 
-    /** Of every model, its four sums: the loss, the slopes of the common bias, of the example, of the mention. */
+    /** Of every model, its three sums: the loss, the slopes of the common bias and of the example. */
     private val sums = bytes(count.toLong() * SUMS * Double.SIZE_BYTES)
 
     // Of every item, the weight of a value it merely lacks, and which of the arrays of values it may have is its
@@ -69,8 +69,8 @@ internal class PairsOnCard private constructor(
 
     /**
      * Every pair of an item not merely lacked, an entry each — one it has, one the user rejected, a
-     * draft, one barred (weighing nought), one the site gives as an example or its texts name — by
-     * the items in order: its item, value, weight, label, example, mention; where each item's begin.
+     * draft, one barred (weighing nought), one the site gives as an example — by the items in order:
+     * its item, value, weight, label, example; where each item's begin.
      */
     private val firstEntry = LongArray(n + 1)
     private val ownOf = Array(n) { i -> ownEntries(i).also { firstEntry[i + 1] = firstEntry[i] + it.size } }
@@ -80,7 +80,6 @@ internal class PairsOnCard private constructor(
     private val weight = bytes(entries * Float.SIZE_BYTES)
     private val label = bytes(entries * Float.SIZE_BYTES)
     private val exampleOf = bytes(entries * Float.SIZE_BYTES)
-    private val mentionOf = bytes(entries * Float.SIZE_BYTES)
     private val foldOf = bytes(n.toLong() * Int.SIZE_BYTES).also { it.upload(p.foldOf) }
 
     // The names: their coordinates of every model and their slopes; a group's names against its values, one group after another
@@ -119,8 +118,8 @@ internal class PairsOnCard private constructor(
     private val gu = if (h > 0) floats(names.toLong() * r) else null
     private val gv = if (h > 0) floats(columns.toLong() * r) else null
 
-    /** The item's own entries, its values ascending, with their weight, label, example and mention. */
-    private class Own(val values: IntArray, val weights: FloatArray, val labels: FloatArray, val examples: FloatArray, val mentions: FloatArray) {
+    /** The item's own entries, its values ascending, with their weight, label and example. */
+    private class Own(val values: IntArray, val weights: FloatArray, val labels: FloatArray, val examples: FloatArray) {
         val size: Int get() = values.size
     }
 
@@ -128,9 +127,8 @@ internal class PairsOnCard private constructor(
         val pairs = p.pairs
         val own = pairs.own[i]
         val examples = p.exampleValues[i]
-        val named = p.namedValues[i]
         // A pair that weighs nothing, with nothing to take back of one lacked: no entry
-        val values = (own.asList() + examples.asList() + named.asList()).distinct().sorted().filter { v ->
+        val values = (own.asList() + examples.asList()).distinct().sorted().filter { v ->
             val k = own.binarySearch(v)
             (if (k >= 0) pairs.ownWeight[i][k] else pairs.lacking(i, v)) != 0f || pairs.lacking(i, v) != 0f
         }
@@ -140,7 +138,6 @@ internal class PairsOnCard private constructor(
             FloatArray(values.size) { at[it].let { k -> if (k >= 0) pairs.ownWeight[i][k] else pairs.lacking(i, values[it]) } },
             FloatArray(values.size) { at[it].let { k -> if (k >= 0) pairs.ownLabel[i][k] else 0f } },
             FloatArray(values.size) { if (examples.binarySearch(values[it]) >= 0) 1f else 0f },
-            FloatArray(values.size) { named.binarySearch(values[it]).let { k -> if (k >= 0) p.namedCounts[i][k] else 0f } },
         )
     }
 
@@ -156,7 +153,6 @@ internal class PairsOnCard private constructor(
         val weights = FloatArray(count)
         val labels = FloatArray(count)
         val examples = FloatArray(count)
-        val mentions = FloatArray(count)
         for (i in 0 until n) {
             val at = firstEntry[i].toInt()
             val own = ownOf[i]
@@ -166,7 +162,6 @@ internal class PairsOnCard private constructor(
                 weights[at + j] = own.weights[j]
                 labels[at + j] = own.labels[j]
                 examples[at + j] = own.examples[j]
-                mentions[at + j] = own.mentions[j]
             }
         }
         item.upload(items)
@@ -174,7 +169,6 @@ internal class PairsOnCard private constructor(
         weight.upload(weights)
         label.upload(labels)
         exampleOf.upload(examples)
-        mentionOf.upload(mentions)
         if (h > 0) {
             var pairAt = 0L
             var rowAt = 0
@@ -223,7 +217,7 @@ internal class PairsOnCard private constructor(
      * the main memory; every model's loss, summed and not scaled, into [losses].
      */
     fun evaluate(
-        k: Int, slotModel: IntArray, heldOut: IntArray, totals: FloatArray, named: Float,
+        k: Int, slotModel: IntArray, heldOut: IntArray, totals: FloatArray,
         uT: Cublas.DeviceFloats, duT: Cublas.DeviceFloats, pair: Floats,
         vTHost: Floats, biasHost: Floats, uhTHost: Floats, gEHost: Floats, gBiasHost: Floats, duhTHost: Floats, gPair: Floats, losses: FloatArray,
     ) {
@@ -240,8 +234,7 @@ internal class PairsOnCard private constructor(
             val scale = 1 / totals[model]
             val pairAt = slot * Bilinear.PAIR
             val example = pair[pairAt]
-            val mention = pair[pairAt + 1]
-            val common = pair[pairAt + 2]
+            val common = pair[pairAt + 1]
             val uAt = slot.toLong() * r * n
             val vAt = slot.toLong() * r * m
             val biasAt = slot.toLong() * m
@@ -262,8 +255,8 @@ internal class PairsOnCard private constructor(
                 kernels.launch(
                     "owns", own, own.toInt(), m, from, s, g,
                     item.at(first * Int.SIZE_BYTES), value.at(first * Int.SIZE_BYTES), weight.at(first * Float.SIZE_BYTES),
-                    label.at(first * Float.SIZE_BYTES), exampleOf.at(first * Float.SIZE_BYTES), mentionOf.at(first * Float.SIZE_BYTES),
-                    lack, group, masks, words, foldOf, heldOut[model], bias.at(biasAt), common, example, mention, scale, sumsAt,
+                    label.at(first * Float.SIZE_BYTES), exampleOf.at(first * Float.SIZE_BYTES),
+                    lack, group, masks, words, foldOf, heldOut[model], bias.at(biasAt), common, example, scale, sumsAt,
                 )
                 // dUᵀ of the block's rows = Vᵀ Gᵀ; dVᵀ += Uᵀ of them · G; the biases' slopes += 1ᵀ G
                 val beta = if (from == 0) 0f else 1f
@@ -288,7 +281,7 @@ internal class PairsOnCard private constructor(
                 kernels.launch(
                     if (r == 16) "names_tile_16" else "names_tile", tileList.size / 3L * CudaKernels.BLOCK,
                     tiles!!, firstPair, firstRow, firstValue, width, height!!, values, positive!!, gu, gv, m, r,
-                    bias.at(biasAt), common, mention, named, scale, sn, gE.at(vAt), gBias.at(biasAt), sumsAt,
+                    bias.at(biasAt), common, scale, sn, gE.at(vAt), gBias.at(biasAt), sumsAt,
                 )
                 // A warp a name
                 kernels.launch(
@@ -305,15 +298,14 @@ internal class PairsOnCard private constructor(
             val at = slot * SUMS
             losses[slot] = got[at].toFloat()
             gPair[slot * Bilinear.PAIR] = got[at + 2].toFloat()
-            gPair[slot * Bilinear.PAIR + 1] = got[at + 3].toFloat()
-            gPair[slot * Bilinear.PAIR + 2] = got[at + 1].toFloat()
+            gPair[slot * Bilinear.PAIR + 1] = got[at + 1].toFloat()
         }
     }
 
     override fun close() = made.forEach { it.close() }
 
     companion object {
-        private const val SUMS = 4
+        private const val SUMS = 3
 
         /** The threads of a warp, which `names_rows` gives a name. */
         private const val WARP = 32

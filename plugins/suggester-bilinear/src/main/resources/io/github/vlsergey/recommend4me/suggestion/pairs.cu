@@ -2,7 +2,7 @@
 // the processor between their products, the products themselves left to cuBLAS. Every model's
 // numbers as there: its items' coordinates Uᵀ (rank × items), its values' Vᵀ (rank × values), its
 // names' Uhᵀ (rank × names), row after row. The sums of a launch — the loss, the slopes of the
-// common bias, of the example and of the mention — gathered by a block and added in double.
+// common bias and of the example — gathered by a block and added in double.
 
 // The logistic loss of z against the label y, weighed by w, and its slope scaled: softplus and the
 // sigmoid of one exponent, as the processor's (Simd.logistic)
@@ -19,21 +19,19 @@ __device__ __forceinline__ void logistic(float z, float y, float w, float scale,
 // The names of a group a block of names_tile takes
 #define TILE_ROWS 32
 
-// The block's four sums added into sums[0..3]
-__device__ void block_sums(double a, double b, double c, double d, double* sums) {
-    __shared__ double s[4][BLOCK];
+// The block's three sums added into sums[0..2]
+__device__ void block_sums(double a, double b, double c, double* sums) {
+    __shared__ double s[3][BLOCK];
     int t = threadIdx.x;
     s[0][t] = a;
     s[1][t] = b;
     s[2][t] = c;
-    s[3][t] = d;
     __syncthreads();
     for (int half = BLOCK / 2; half > 0; half >>= 1) {
         if (t < half) {
             s[0][t] += s[0][t + half];
             s[1][t] += s[1][t + half];
             s[2][t] += s[2][t + half];
-            s[3][t] += s[3][t + half];
         }
         __syncthreads();
     }
@@ -41,7 +39,6 @@ __device__ void block_sums(double a, double b, double c, double d, double* sums)
         atomicAdd(sums, s[0][0]);
         atomicAdd(sums + 1, s[1][0]);
         atomicAdd(sums + 2, s[2][0]);
-        atomicAdd(sums + 3, s[3][0]);
     }
 }
 
@@ -75,22 +72,22 @@ extern "C" __global__ void lacks(
             dCommon = slope;
         }
     }
-    block_sums(l, dCommon, 0.0, 0.0, sums);
+    block_sums(l, dCommon, 0.0, sums);
 }
 
 // Every pair of the block's items not merely lacked — an entry: its item, its value, weight (nought:
-// no pair), label, whether the site gives it as an example, how much the item's texts name it —
-// of the items outside the held-out fold: what lacks took it for, if anything, taken back — the same
-// score, the same numbers — and the pair as it is, with the example and the mention; its slope
-// written into G over the lacking one, its loss and slopes summed
+// no pair), label, whether the site gives it as an example — of the items outside the held-out
+// fold: what lacks took it for, if anything, taken back — the same score, the same numbers — and the
+// pair as it is, with the example; its slope written into G over the lacking one, its loss and
+// slopes summed
 extern "C" __global__ void owns(
     int count, int m, int from, const float* S, float* G,
-    const int* item, const int* value, const float* weight, const float* label, const float* exampleOf, const float* mentionOf,
+    const int* item, const int* value, const float* weight, const float* label, const float* exampleOf,
     const float* lack, const int* group, const unsigned int* masks, int words,
-    const int* foldOf, int heldOut, const float* bias, float common, float example, float mention, float scale, double* sums
+    const int* foldOf, int heldOut, const float* bias, float common, float example, float scale, double* sums
 ) {
     int k = blockIdx.x * blockDim.x + threadIdx.x;
-    double l = 0.0, dCommon = 0.0, dExample = 0.0, dMention = 0.0;
+    double l = 0.0, dCommon = 0.0, dExample = 0.0;
     if (k < count) {
         int i = item[k];
         if (foldOf[i] != heldOut) {
@@ -108,17 +105,15 @@ extern "C" __global__ void owns(
             slope = 0.0f;
             if (w > 0.0f) {
                 float ex = exampleOf[k];
-                float me = mentionOf[k];
-                logistic(z + example * ex + mention * me, label[k], w, scale, &loss, &slope);
+                logistic(z + example * ex, label[k], w, scale, &loss, &slope);
                 l += loss;
                 dCommon += slope;
                 dExample = slope * ex;
-                dMention = slope * me;
             }
             G[at] = slope;
         }
     }
-    block_sums(l, dCommon, dExample, dMention, sums);
+    block_sums(l, dCommon, dExample, sums);
 }
 
 // The coordinates of every name and of every value of every group gathered where the groups read
@@ -135,8 +130,7 @@ extern "C" __global__ void gather(int count, const int* index, const float* from
 #define MAX_RANK 64
 
 // A tile of a group, a block each: up to TILE_ROWS of its names against up to BLOCK of its values,
-// a thread a value. Of every pair, the label nought but of the name's own value, which the text
-// names: the score Uh·V with the bias and the common bias, the slope written into Sn (the group's
+// a thread a value. Of every pair, the label nought but of the name's own value: the score Uh·V with the bias and the common bias, the slope written into Sn (the group's
 // names × its values, row after row, one group after another); the loss and slopes summed, and the
 // value's slopes over the tile's names carried at once to its coordinates (dVᵀ += Uhᵀ Sn) and its bias
 // R the rank when the compiler knows it, the numbers of a value and of its slopes held in registers;
@@ -145,7 +139,7 @@ template <int R>
 __device__ void names_tile_of(
     const int* tiles, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width, const int* height,
     const int* values, const int* positive, const float* gu, const float* gv, int m, int r,
-    const float* bias, float common, float mention, float named, float scale, float* Sn, float* gE, float* gBias, double* sums
+    const float* bias, float common, float scale, float* Sn, float* gE, float* gBias, double* sums
 ) {
     if (R > 0) r = R;
     const int* tile = tiles + 3 * blockIdx.x;
@@ -154,7 +148,7 @@ __device__ void names_tile_of(
     int col = tile[2] + threadIdx.x;
     int c = width[g];
     int rowTo = min(rowFrom + TILE_ROWS, height[g]);
-    double l = 0.0, dCommon = 0.0, dMention = 0.0;
+    double l = 0.0, dCommon = 0.0;
     if (col < c) {
         int at = firstValue[g] + col;
         int val = values[at];
@@ -171,12 +165,7 @@ __device__ void names_tile_of(
             float z = base;
             for (int q = 0; q < r; q++) z += a[q] * b[q];
             float loss, slope;
-            if (positive[name] == col) {
-                logistic(z + mention * named, 1.0f, 1.0f, scale, &loss, &slope);
-                dMention += slope * named;
-            } else {
-                logistic(z, 0.0f, 1.0f, scale, &loss, &slope);
-            }
+            logistic(z, positive[name] == col ? 1.0f : 0.0f, 1.0f, scale, &loss, &slope);
             s[(size_t) row * c] = slope;
             l += loss;
             dCommon += slope;
@@ -186,11 +175,11 @@ __device__ void names_tile_of(
         for (int q = 0; q < r; q++) atomicAdd(gE + (size_t) q * m + val, acc[q]);
         atomicAdd(gBias + val, sum);
     }
-    block_sums(l, dCommon, 0.0, dMention, sums);
+    block_sums(l, dCommon, 0.0, sums);
 }
 
-#define NAMES_TILE_PARAMETERS     const int* tiles, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width, const int* height,     const int* values, const int* positive, const float* gu, const float* gv, int m, int r,     const float* bias, float common, float mention, float named, float scale, float* Sn, float* gE, float* gBias, double* sums
-#define NAMES_TILE_ARGUMENTS tiles, firstPair, firstRow, firstValue, width, height, values, positive, gu, gv, m, r,     bias, common, mention, named, scale, Sn, gE, gBias, sums
+#define NAMES_TILE_PARAMETERS     const int* tiles, const long long* firstPair, const int* firstRow, const int* firstValue, const int* width, const int* height,     const int* values, const int* positive, const float* gu, const float* gv, int m, int r,     const float* bias, float common, float scale, float* Sn, float* gE, float* gBias, double* sums
+#define NAMES_TILE_ARGUMENTS tiles, firstPair, firstRow, firstValue, width, height, values, positive, gu, gv, m, r,     bias, common, scale, Sn, gE, gBias, sums
 
 extern "C" __global__ void names_tile(NAMES_TILE_PARAMETERS) { names_tile_of<0>(NAMES_TILE_ARGUMENTS); }
 extern "C" __global__ void names_tile_16(NAMES_TILE_PARAMETERS) { names_tile_of<16>(NAMES_TILE_ARGUMENTS); }
