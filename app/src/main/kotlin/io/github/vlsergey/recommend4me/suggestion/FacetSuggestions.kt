@@ -473,8 +473,11 @@ class FacetSuggestions(
     ): Map<String, Set<String>> {
         val given = HashMap<String, Set<String>>()
         val task = data.task
-        // The time of its three parts, each summed over the chunks: the scores, the choice, the putting
+        // The time of its parts, each summed over the chunks: what each work is told of, the scores of what it
+        // may have and of what it is told of, the choice, the putting
+        var telling = 0L
         var scoring = 0L
+        var scoringOwn = 0L
         var choosing = 0L
         var putting = 0L
         var from = 0
@@ -483,9 +486,13 @@ class FacetSuggestions(
             val rows = IntArray(minOf(CHUNK, data.ids.size - from)) { from + it }
             from += rows.size
             val told = Array(rows.size) { toldOf(data, rows[it]) }
+            telling += System.nanoTime() - at
+            at = System.nanoTime()
             val open = scores.scores(rows, rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] })
-            val own = scores.scores(rows, told.asList())
             scoring += System.nanoTime() - at
+            at = System.nanoTime()
+            val own = scores.scores(rows, told.asList())
+            scoringOwn += System.nanoTime() - at
             at = System.nanoTime()
             // What each work is shown with, the works side by side on every core — of the tags a pass over
             // thousands of values a work; put among the chances after, one work after another
@@ -510,7 +517,9 @@ class FacetSuggestions(
             }
             putting += System.nanoTime() - at
         }
+        laps?.took("told", telling / 1_000_000)
         laps?.took("scores", scoring / 1_000_000)
+        laps?.took("scores of the told", scoringOwn / 1_000_000)
         laps?.took("chosen", choosing / 1_000_000)
         laps?.took("put", putting / 1_000_000)
         return given

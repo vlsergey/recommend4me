@@ -9,6 +9,9 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.util.IdentityHashMap
 import java.util.stream.IntStream
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(Scoring::class.java)
 
 /**
  * THE SCORING OF THE ITEMS, APART FROM THE TASK — of every fold of the model ([BilinearSuggester.FOLDS]):
@@ -99,13 +102,19 @@ internal class Scoring(
 
         /** Every item's coordinates by every fold's model: a row an item, the folds' [rank] each side by side. */
         private val coordinates: Floats by lazy {
+            val started = System.nanoTime()
             val stacked = FloatArray(design.itemWidth * width)
             for (f in 0 until folds) for (c in 0 until design.itemWidth) for (q in 0 until rank) stacked[c * width + f * rank + q] = a[f][c * rank + q]
             // One product of the whole task, the library's threads on every physical core ([Blas.wide]): on its one
             // thread the features of the 75 630 works of fanfics.me took half a second a facet
             Floats(task.itemCount * width).also { out ->
                 val features = design.features(task, IntArray(task.itemCount) { it })
+                val laid = System.nanoTime()
                 Blas.wide { features.times(Floats.of(stacked), width, out) }
+                log.info(
+                    "the coordinates of {} items of {} values, {} features, {} folds of rank {}: the weights and features laid out in {} ms, multiplied in {} ms",
+                    task.itemCount, m, design.itemWidth, folds, rank, (laid - started) / 1_000_000, (System.nanoTime() - laid) / 1_000_000,
+                )
             }
         }
 
