@@ -178,8 +178,11 @@ the pictures), its values with the user's corrections, the values of its other f
 own among them — and every value with the vector of its name as a query. One model scores every
 pair of a work and a value: σ((xA)·(zB + e) + b + w·p) — the work's inputs and the value's name
 and groups carried to a few coordinates where they meet, the value's own coordinates and bias,
-and the pair's own features (the site gives the value as an example, the texts name it, the
-common bias). It is learnt by the weighted logistic loss over every pair: a value the work has
+and the pair's own features (the site gives the value as an example, the common bias). How often
+the work's texts name a character or two of them in one paragraph is NO FEATURE: no model reads the
+search index, which the ranking of the works never waits for. The texts are counted of one work
+when its candidates are asked for — "…" of the characters and the pairings offers the two likeliest
+and the two the texts name most, three times at least. It is learnt by the weighted logistic loss over every pair: a value the work has
 weighs 1, one the user rejected 1, one it merely lacks less (the rule of succession over the
 user's answers), one it may not have at all and every value of a work with none of the facet
 nought. Every work is judged by a model that did not learn from it (five folds by the work's id),

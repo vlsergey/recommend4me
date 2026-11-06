@@ -27,7 +27,6 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.universe.Quote
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.search.ModelsRefreshing
 import io.github.vlsergey.recommend4me.search.NamesAsked
 import io.github.vlsergey.recommend4me.search.SearchProvider
 import io.github.vlsergey.recommend4me.vector.Vectors
@@ -69,8 +68,11 @@ private typealias MadeChances = HashMap<String, HashMap<String, Map<String, Chan
 /** The values of a facet an item lacks and more likely has than not, as the interface shows them. */
 class ItemFacetSuggestions(val facet: FacetDef, val suggested: List<Chance>, val names: Map<String, String>)
 
-/** A value a work may be given: the model's chance of it when it has one, how often the work's texts name it when counted. */
-class FacetCandidate(val key: String, val chance: Double?, val mentions: Int?)
+/**
+ * A value a work may be given: the model's chance of it when it has one, how often the work's texts
+ * name it when counted; [named] — offered for that count, not among the likeliest ([FacetSuggestions.candidates]).
+ */
+class FacetCandidate(val key: String, val chance: Double?, val mentions: Int?, val named: Boolean = false)
 
 /** The values the user may yet give a work of one facet, the likeliest first, with their names. */
 class ItemFacetCandidates(val facet: FacetDef, val candidates: List<FacetCandidate>, val names: Map<String, String>)
@@ -212,8 +214,6 @@ class FacetSuggestions(
      */
     private fun refresh(store: SourceStore, givenUp: Boolean, reasons: Map<String, Int>?) {
         val encoder = plugins.textEncoder() ?: return
-        // What the models count of the index — the names the works' words name — of the works as they are now
-        events.publishEvent(ModelsRefreshing(store.id))
         val generation = generationOf(store.id).get()
         val stop = if (givenUp) ({ generationOf(store.id).get() != generation }) else ({ false })
         val facets = facetsOf(store)
@@ -405,8 +405,7 @@ class FacetSuggestions(
 
     /**
      * THE FACET'S CHANCES OF THE WORKS OF [read], by the model kept. By its scoring
-     * kept apart ([KeptScoring]) where there is one: the works' own features read, their texts' counts
-     * of the values' names as the fitting counted them ([SuggestionRepository.mentions]), the values
+     * kept apart ([KeptScoring]) where there is one: the works' own features read, the values
      * those of the scoring — no dictionary, no name of any value (user, 2026-10-16): a page of twenty
      * works read every character's name and the model whole, and a few of them at once ran the heap
      * out. Else — of a suggester without one, of a model fitted before scorings were kept, till the
@@ -421,11 +420,8 @@ class FacetSuggestions(
             laps.lap("scoring kept read", kept.bytes.size / 1024)
             val vocabulary = vocabularyOf(store, facet, ids, made, read.characters, light = true, site = read.site)
             laps.lap("vocabulary")
-            // The names counted of the index, as the fitting counted them
-            val mentions = vocabulary?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)
-            laps.lap("mentions")
             val data = FacetData.load(
-                store, facet, encoder, read, modelled = made, mentions = mentions, allowed = vocabulary?.allowed, barred = vocabulary?.barred,
+                store, facet, encoder, read, modelled = made, allowed = vocabulary?.allowed, barred = vocabulary?.barred,
                 examples = vocabulary?.examples, kept = kept.values, laps = laps,
             )
             if (data.values.isEmpty()) return null
@@ -531,8 +527,6 @@ class FacetSuggestions(
     ) = FacetData.load(
         store, facet, encoder, read, vocabulary?.values.orEmpty(),
         modelled = made, valueKeys = valueKeys,
-        // Counted in the texts of the works [ids] alone: no other work's chances are made
-        mentions = vocabulary?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search),
         allowed = vocabulary?.allowed, barred = vocabulary?.barred, groupings = vocabulary?.groupings, examples = vocabulary?.examples,
         lackWeight = vocabulary?.lackWeight ?: 1.0,
         hintNames = vocabulary?.hintNames.orEmpty(), hintAmong = vocabulary?.hintAmong ?: { emptyList() },
@@ -619,8 +613,7 @@ class FacetSuggestions(
         id: String, facet: String, scores: SuggestionScores, open: FloatArray, told: IntArray, own: FloatArray, data: FacetData, i: Int,
     ): FewChances {
         val has = data.held[i]
-        val named = data.task.mentions[i]
-        fun chance(v: Int, score: Float) = Chance(id, facet, data.values[v], v in has, scores.chance(score).toDouble(), named?.let { it[v] ?: 0 })
+        fun chance(v: Int, score: Float) = Chance(id, facet, data.values[v], v in has, scores.chance(score).toDouble())
         // All named by the user's word: the item has its own values and is offered no other.
         // The site's own are shown to answer on, unlikely as they may be; a value the user rejected keeps its
         // chance: it is shown crossed out, in its place by it
@@ -664,8 +657,9 @@ class FacetSuggestions(
         val values: Map<String, String>,
         val allowed: ((String) -> Set<String>)?,
         /**
-         * The names every work's own words are looked for by in the index ([SearchProvider.mentions])
-         * ([Named]): null for a work not counted. [valuesOf]: the values a name found is of.
+         * The names a work's own words are looked for by in the index ([SearchProvider.mentions])
+         * ([Named]): null for a work not counted. [valuesOf]: the values a name found is of. Of the
+         * candidates of one work and of the passages naming a value alone: no model reads them.
          */
         val names: ((String) -> Named?)? = null,
         val valuesOf: (String) -> Collection<String> = { listOf(it) },
@@ -1093,8 +1087,14 @@ class FacetSuggestions(
      * chance of — none answered on to learn from, or given the work after the fitting: a pairing of
      * two characters added since — all the same, without a chance, the most named first.
      * Null for an item or a facet the model does not work on. [limit]: the first so many alone.
+     *
+     * THE WORK'S TEXTS ARE A SOURCE OF THE CANDIDATES, NOT OF THE MODEL (user, 2026-11-06): no model
+     * reads how often a work's texts name a character or a pair of them — the index is not read when
+     * the works are ranked. They are counted here, of this one work, when its candidates are asked for:
+     * with [limit], [named] more besides the likeliest — the most named of the rest, each named at
+     * least [NAMED_AT_LEAST] times, marked [FacetCandidate.named].
      */
-    fun candidates(store: SourceStore, itemId: String, facet: String, limit: Int? = null): ItemFacetCandidates? {
+    fun candidates(store: SourceStore, itemId: String, facet: String, limit: Int? = null, named: Int? = null): ItemFacetCandidates? {
         val facets = facetsOf(store)
         val k = facets.indexOfFirst { it.key == facet }.takeIf { it >= 0 } ?: return null
         val def = facets[k]
@@ -1126,24 +1126,33 @@ class FacetSuggestions(
             store.ignoredTags()[facet].orEmpty()
         // All named by the user's word: the work has its own values and is offered no other, as on its card
         val complete = facet in store.corrections.completeOf(itemId)
+        // How often the work's own texts name each value — a character, two in one paragraph — read of
+        // the index now, of this work and of the characters of its universes alone; null of a facet not counted
+        val counted = if (complete) null else vocabulary?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)?.invoke(itemId)
+        fun mentionsOf(key: String) = counted?.let { it[key] ?: 0 }
         // A value the model gives the work is the work's already
         val scored = if (complete) emptyList() else chances.filter { !it.had && it.key !in answered && it.key !in current && it.key !in out && !(def.infer && it.chance > ModelValues.LIKELY) }
-            .map { FacetCandidate(it.key, it.chance, it.mentions) }
+            .map { FacetCandidate(it.key, it.chance, mentionsOf(it.key)) }
         // Of the values the work may have, those the model has no chance of — a character of a universe
         // or a pairing of characters given the work after the model was fitted: offered all the same, without a chance
         val unscored = if (facet !in UniverseFacet.CHARACTER_FACETS + UniverseFacets.PAIRINGS || complete) emptyList() else {
             val chanced = chances.map { it.key }.toHashSet()
-            val unknown = may.orEmpty().filter { it !in answered && it !in current && it !in out && it !in chanced }
-            // Counted now, of the work's universes' characters alone
-            val named = if (unknown.isEmpty()) null else
-                vocabularyOf(store, def, ids, made, characters, light = true)?.mentions(store, ids, stores.typeOf(store.id).id, plugins.search)?.invoke(itemId)
-            unknown.map { FacetCandidate(it, null, named?.let { n -> n[it] ?: 0 }) }
+            may.orEmpty().filter { it !in answered && it !in current && it !in out && it !in chanced }.map { FacetCandidate(it, null, mentionsOf(it)) }
         }
-        val candidates = (scored + unscored)
+        val ordered = (scored + unscored)
             .sortedWith(compareByDescending<FacetCandidate> { it.chance ?: -1.0 }.thenByDescending { it.mentions ?: 0 })
             // A tag above another before it, whatever its chance
             .let { list -> hierarchy?.parentsFirst(list) { it.key } ?: list }
-            .let { list -> if (limit == null) list else list.take(limit) }
+        val likeliest = if (limit == null) ordered else ordered.take(limit)
+        // Besides the likeliest, the most named by the work's texts: each once, none of the likeliest again
+        val byText = if (limit == null || named == null || counted == null) emptyList() else {
+            val taken = likeliest.mapTo(HashSet()) { it.key }
+            ordered.filter { it.key !in taken && (it.mentions ?: 0) >= NAMED_AT_LEAST }
+                .sortedWith(compareByDescending<FacetCandidate> { it.mentions ?: 0 }.thenByDescending { it.chance ?: -1.0 })
+                .take(named)
+                .map { FacetCandidate(it.key, it.chance, it.mentions, named = true) }
+        }
+        val candidates = likeliest + byText
         return ItemFacetCandidates(def, candidates, store.names(facet, candidates.map { it.key }))
     }
 
@@ -1167,8 +1176,7 @@ class FacetSuggestions(
         keep(made, facet, data, scores)
         val chances = scores.of(intArrayOf(i)).single()
         val has = data.held[i].toHashSet()
-        val named = data.task.mentions[i]
-        return chances.indices.map { v -> Chance(itemId, facet.key, data.values[v], v in has, chances[v].toDouble(), named?.let { it[v] ?: 0 }) }
+        return chances.indices.map { v -> Chance(itemId, facet.key, data.values[v], v in has, chances[v].toDouble()) }
     }
 
 
@@ -1186,6 +1194,9 @@ class FacetSuggestions(
 
         /** Items scored at once: memory, not meaning. */
         private const val CHUNK = 2_000
+
+        /** How many times a work's texts name a value at least for it to be offered for that count alone ([candidates]): the user's word, 2026-11-06. */
+        const val NAMED_AT_LEAST = 3
 
         /** No value asked: of an item all named, the scores of none but its own. */
         private val NONE = IntArray(0)
@@ -1318,9 +1329,10 @@ internal class FacetData(
          * others offered besides the likely ones; 3 — the rejected ones too; 4 — the site's examples
          * too; 5 — of a facet of limited values, not every value the work may have: the likely and
          * the offered alone; 6 — the chain: a facet reads the values the model gives of the facets
-         * before it alone, made in the same pass.
+         * before it alone, made in the same pass; 7 — no counts of the values' names in the works'
+         * texts: the models of the characters and the pairings fitted again without them.
          */
-        private const val KEPT = 6
+        private const val KEPT = 7
 
         /**
          * How much a drafted value the user has not confirmed weighs in what the model learns, against
@@ -1375,7 +1387,6 @@ internal class FacetData(
         fun load(
             store: SourceStore, facet: FacetDef, encoder: TextEncoder, read: WorksRead, known: Map<String, String> = emptyMap(),
             modelled: WorkChances = emptyMap(), valueKeys: List<String>? = null,
-            mentions: ((String) -> Map<String, Int>?)? = null,
             allowed: ((String) -> Set<String>)? = null,
             barred: ((String) -> Set<String>)? = null,
             groupings: ((List<String>) -> List<ValueGrouping>)? = null,
@@ -1519,7 +1530,6 @@ internal class FacetData(
                 },
                 context = context,
                 contextKeys = contextKeys,
-                mentions = ids.map { id -> mentions?.invoke(id)?.let { NameCounts.of(it, index) } },
                 // One array for every work of the same: of a universe's thousands of characters, made once
                 allowed = IdentityHashMap<Set<String>, IntArray>().let { made -> ids.map { id -> allowed?.invoke(id)?.let { a -> made.getOrPut(a) { indices(a) } } } },
                 barred = ids.map { id -> barred?.invoke(id)?.let(::indices) ?: IntArray(0) },

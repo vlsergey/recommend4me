@@ -435,7 +435,7 @@ class SiteTest {
         assertEquals(3, given.count { it.corrected == null }, "given $given")
         // Asked for more: every other value of the facet, the likeliest first — the offered ones
         // among them, beyond them those whose chances are not kept
-        val more = suggestionsApi.getCandidates("site", "x1", "tags", null).body!!
+        val more = suggestionsApi.getCandidates("site", "x1", "tags", null, null).body!!
         val offeredKeys = given.filter { it.offered == true }.map { it.key }.toSet()
         assertTrue(more.map { it.key }.containsAll(offeredKeys) && more.size > offeredKeys.size, "more $more, offered $offeredKeys")
         assertTrue(more.none { c -> given.any { it.key == c.key && it.offered != true } }, "none the work is given: $more")
@@ -683,7 +683,7 @@ class SiteTest {
             .any { it.key == "fake:U2" && it.inferred == true }
         if (givenUniverse) {
             val chosen = outside().single { it.facet == "characters" }.propertyValues.map { it.key } +
-                suggestionsApi.getCandidates("site", "q9", "characters", null).body!!.map { it.key }
+                suggestionsApi.getCandidates("site", "q9", "characters", null, null).body!!.map { it.key }
             assertTrue(chosen.any { it.startsWith("fake:C") }, "characters of q9 $chosen")
         }
         // Said to have no universe, a work has no characters of one: only its site's line, and the original characters offered
@@ -699,11 +699,11 @@ class SiteTest {
         capture("n1|The captain|space|The Captain commands. The Captain waits. The Captain sleeps, the captain of the guard does not|")
         corrections.correctFacet("site", "n1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
         refresh(store)
-        // How often its texts name every character is counted by the fitting after the quiet — here at once
+        // The models fitted after the quiet — here at once; how often its texts name every character is counted for its candidates alone
         inBackground { suggestions.refresh(store) }
         // The candidates wait for nothing: they offer what the weights say now, the work's kept chances
         // are made in the queue of the computations; a value the card gives is never offered beside it
-        val offered = suggestionsApi.getCandidates("site", "n1", "characters", null).body!!
+        val offered = suggestionsApi.getCandidates("site", "n1", "characters", null, null).body!!
         val given = items.getItem("site", "n1").body!!.allFacets.find { it.facet == "characters" }?.propertyValues.orEmpty().filter { it.offered != true }.map { it.key }
         assertEquals(setOf("fake:C1", "fake:C2", "oc:female", "oc:male"), (offered.map { it.key } + given).toSet(), "offered $offered, given $given")
         assertTrue(offered.none { it.key in given }, "offered $offered, given $given")
@@ -712,16 +712,21 @@ class SiteTest {
         // Given or offered as the model's chance falls (above): when offered, no text of the work names it
         offered.find { it.key == "oc:male" }?.let { assertEquals(0, it.mentions) }
         assertEquals("Captain", offered.find { it.key == "fake:C2" }?.name ?: "Captain")
+        // "…": the likeliest so many, then so many more of the rest the texts name three times at least, the most named first, each once
+        val more = suggestionsApi.getCandidates("site", "n1", "characters", 1, 2).body!!
+        val byText = offered.drop(1).filter { (it.mentions ?: 0) >= 3 }.sortedByDescending { it.mentions }.take(2).map { it.key }
+        assertEquals(offered.take(1).map { it.key } + byText, more.map { it.key }, "more $more of $offered")
+        assertEquals(listOf(false) + byText.map { true }, more.map { it.named == true }, "more $more")
         // The passages naming a character, each by where it is: the annotation by the key of its label
         val quotes = suggestionsApi.getMentions("site", "n1", "characters", "fake:C2").body!!
         assertTrue(quotes.isNotEmpty() && quotes.all { it.labelKey == "site:text.annotation" && it.title == null && it.part == null }, "quotes $quotes")
-        assertEquals(404, suggestionsApi.getCandidates("site", "n1", "nope", null).statusCode.value())
+        assertEquals(404, suggestionsApi.getCandidates("site", "n1", "nope", null, null).statusCode.value())
 
         // A character is a work's main one or its secondary one: never shown, given or offered in both
         fun keysOf(facet: String) = items.getItem("site", "n1").body!!.allFacets.find { it.facet == facet }?.propertyValues.orEmpty().map { it.key }
-        fun candidatesOf(facet: String) = suggestionsApi.getCandidates("site", "n1", facet, null).body!!.map { it.key }
+        fun candidatesOf(facet: String) = suggestionsApi.getCandidates("site", "n1", facet, null, null).body!!.map { it.key }
         // No work has a secondary character yet: nothing to learn from, every character of the universe offered all the same
-        val untaught = suggestionsApi.getCandidates("site", "n1", "secondary-characters", null).body!!
+        val untaught = suggestionsApi.getCandidates("site", "n1", "secondary-characters", null, null).body!!
         assertTrue(untaught.isNotEmpty() && untaught.all { it.chance == null }, "secondary $untaught")
         // Each with every name it goes by, the shown one first: a search finds it by any of them
         assertEquals(listOf("Pilot", "The Pilot"), untaught.first { it.key == "fake:C1" }.names)
@@ -757,7 +762,7 @@ class SiteTest {
         refresh(store)
         inBackground { suggestions.refresh(store) }
         val universes = items.getItem("site", "f1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.map { it.key }
-        val offeredUniverses = suggestionsApi.getCandidates("site", "f1", "universe", null).body!!.map { it.key }
+        val offeredUniverses = suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.map { it.key }
         assertEquals("fake:U2", (universes + offeredUniverses).first(), "given $universes, offered $offeredUniverses")
 
         // Its universes all named: no other is offered, the work has its own alone
@@ -768,7 +773,7 @@ class SiteTest {
         // The other universe: given by the model or offered among the candidates
         fun other(details: io.github.vlsergey.recommend4me.api.model.ItemDetails) =
             details.allFacets.single { it.facet == "universe" }.propertyValues.any { it.key == "fake:U1" } ||
-                suggestionsApi.getCandidates("site", "f1", "universe", null).body!!.any { it.key == "fake:U1" }
+                suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.any { it.key == "fake:U1" }
         // An answer is kept at once, the chances it changes made apart: the page reads the work again once they are made
         fun settled(item: String) = suggestionsApi.settleSuggestions("site", item).let { items.getItem("site", item).body!! }
         corrections.correctFacet("site", "f1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
@@ -777,7 +782,7 @@ class SiteTest {
         val named = settled("f1").allFacets.single { it.facet == "universe" }
         assertEquals(true, named.complete)
         assertEquals(listOf("fake:U2"), named.propertyValues.filter { it.corrected != FacetValueInfo.Corrected.REMOVED }.map { it.key }, "values ${named.propertyValues}")
-        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "f1", "universe", null).body!!.map { it.key })
+        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.map { it.key })
         // Taken back, the others are offered again
         corrections.uncompleteFacet("site", "f1", "universe")
         val reopened = settled("f1")
@@ -795,8 +800,8 @@ class SiteTest {
         assertEquals("standard:facet.kind.value.alternative-history", kind.nameKey)
         assertTrue(items.listFilterValues("books", "kind").body!!.propertyValues.any { it.nameKey == "standard:facet.kind.value.realism" })
         inBackground { suggestions.refresh(store) }
-        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "o1", "universe", null).body!!.map { it.key })
-        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "o2", "universe", null).body!!.map { it.key })
+        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "o1", "universe", null, null).body!!.map { it.key })
+        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "o2", "universe", null, null).body!!.map { it.key })
 
         // The user's own name of a character and of a universe over the catalogue's: shown everywhere in its place
         fun characterName() = items.getItem("site", "p9").body!!.allFacets.single { it.facet == "characters" }.propertyValues.single { it.key == "fake:C1" }.name
@@ -1030,7 +1035,7 @@ class SiteTest {
         assertTrue(feature !in catalogueReader.item(stores.type("books")!!, t3Key)!!.categorical)
         assertTrue(items.getItem("site", "t3").body!!.allFacets.single { it.facet == "tags" }.propertyValues.any { it.key == hulls })
         // Never offered to mark: not among the candidates, not found to add
-        assertTrue(suggestionsApi.getCandidates("site", "t2", "tags", null).body!!.none { it.key == hulls })
+        assertTrue(suggestionsApi.getCandidates("site", "t2", "tags", null, null).body!!.none { it.key == hulls })
         assertTrue(items.listFacetValues("site", "tags", "hull", 10).body!!.none { it.key == hulls })
         assertTrue(items.listFacetValues("site", "tags", null, 500).body!!.none { it.key == hulls })
         assertTrue(!tagsApi.ignoreTag(TagIgnoredRequest(hulls, false)).body!!.ignored)
@@ -1191,7 +1196,7 @@ class SiteTest {
         assertTrue(tagsOf("t2").none { it.key == other }, "tags ${tagsOf("t2")}")
         assertEquals(io.github.vlsergey.recommend4me.api.model.FacetValueInfo.Corrected.REMOVED, tagsOf("t2").single { it.key == hulls }.corrected)
         // Nor offered among the candidates
-        val candidates = suggestionsApi.getCandidates("site", "t2", "tags", null).body!!.map { it.key }
+        val candidates = suggestionsApi.getCandidates("site", "t2", "tags", null, null).body!!.map { it.key }
         assertTrue(other !in candidates, "candidates of t2 $candidates")
         // The other way round: above it
         assertEquals(listOf(other), tagsApi.relateTags(TagRelationRequest(hulls, other, TagRelation.PARENT)).body!!.parents.map { it.key })

@@ -72,6 +72,7 @@ var R4M_WORDS = {
 
     "candidate.title": "Candidate: {{mentions}}",
     "candidate.more": "Show {{count}} more candidates",
+    "candidate.moreByText": "Show more candidates: the {{likeliest}} likeliest and the {{named}} the work's texts name most (3 times at least)",
     "byText.toggle": "By the text",
     "byText.title": "Tags by the text of the work",
     "byText.close": "Close",
@@ -243,6 +244,7 @@ var R4M_WORDS = {
 
     "candidate.title": "Кандидат: {{mentions}}",
     "candidate.more": "Показать ещё {{count}} кандидатов",
+    "candidate.moreByText": "Показать ещё кандидатов: {{likeliest}} самых вероятных и {{named}} чаще всего упомянутых в текстах работы (не меньше 3 раз)",
     "byText.toggle": "По тексту",
     "byText.title": "Теги по тексту работы",
     "byText.close": "Закрыть",
@@ -414,6 +416,7 @@ var R4M_WORDS = {
 
     "candidate.title": "Kandidat: {{mentions}}",
     "candidate.more": "Prikaži još {{count}} kandidata",
+    "candidate.moreByText": "Prikaži još kandidata: {{likeliest}} najverovatnija i {{named}} najčešće pomenuta u tekstovima dela (bar 3 puta)",
     "byText.toggle": "Po tekstu",
     "byText.title": "Oznake po tekstu dela",
     "byText.close": "Zatvori",

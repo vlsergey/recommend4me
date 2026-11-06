@@ -46,6 +46,7 @@
   "LinkSearch.nothingFound": "Ništa nije pronađeno",
   "LinkSearch.placeholder": "Naslov ili adresa stranice dela",
   "LinkSearch.sitePage": "Stranica na sajtu",
+  "MoreCandidates.showMoreByText": "Prikaži još kandidata: {{likeliest, number}} najverovatnija i {{named, number}} najčešće pomenuta u tekstovima dela (bar 3 puta)",
   "MoreCandidates.showMore_few": "Prikaži još {{count, number}} kandidata",
   "MoreCandidates.showMore_one": "Prikaži još {{count, number}} kandidata",
   "MoreCandidates.showMore_other": "Prikaži još {{count, number}} kandidata",

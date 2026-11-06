@@ -29,6 +29,13 @@ const OFFERED = 30;
 const MORE_STEP = 5;
 
 /**
+ * Of a facet whose values the work's texts name ([MoreCandidates] byText): how many more of the
+ * likeliest a press of "…" shows, and how many more of those the texts name most (3 times at least).
+ */
+const MORE_LIKELIEST = 2;
+const MORE_NAMED = 2;
+
+/**
  * A FIELD OF THE FORM, in the one pattern every field has: its label with its state's tools, the
  * sources right above the place of answering, then that place — [children]. [corrections] with a
  * [facet] give "✓ all" for every value of it the user has not answered on.
@@ -194,6 +201,10 @@ export function SearchButton({ onClick, title }: { onClick: () => void; title: s
  * until there are none. How many stays while the work is open. Only so many read as are shown —
  * the line's values and those asked for — not every candidate: of the tags, some 8 600, 2.4 MB, read
  * again after every answer, hung an iPad.
+ *
+ * [byText] — of the characters and the pairings, which the work's texts name: a press shows the next
+ * [MORE_LIKELIEST] likeliest and the next [MORE_NAMED] the texts name most of the rest — 3 times at
+ * least, with how many — each candidate once. The texts are counted for this alone: no model reads them.
  */
 export function MoreCandidates({
   item,
@@ -201,6 +212,7 @@ export function MoreCandidates({
   shown,
   corrections,
   tagLink,
+  byText,
 }: {
   item: ItemRef;
   facet: string;
@@ -208,41 +220,59 @@ export function MoreCandidates({
   corrections: Corrections;
   /** The values are normalized tags: their names link to their pages. */
   tagLink?: boolean;
+  /** The work's texts name the facet's values: the most named offered beside the likeliest. */
+  byText?: boolean;
 }) {
   const { t } = useTranslation("correction");
   const queryClient = useQueryClient();
-  const [asked, setAsked] = useState(0);
-  // The line's values may be among the likeliest candidates: read so many more
+  const [presses, setPresses] = useState(0);
+  const likeliestStep = byText ? MORE_LIKELIEST : MORE_STEP;
+  const namedStep = byText ? MORE_NAMED : 0;
+  // The line's values may be among the candidates: read so many more
   const wanted = (n: number) => shown.length + n;
-  const candidates = useCandidates(item, facet, asked > 0, wanted(asked));
+  const asked = (p: number) => ({ limit: wanted(likeliestStep * p), named: byText ? wanted(namedStep * p) : undefined });
+  const now = asked(presses);
+  const candidates = useCandidates(item, facet, presses > 0, now.limit, now.named);
   const keys = new Set(shown.map((v) => v.key));
-  const rest = (candidates.data ?? []).filter((c) => !keys.has(c.key));
+  const read = candidates.data ?? [];
+  const likeliest = read.filter((c) => c.named !== true);
+  const named = read.filter((c) => c.named === true);
+  const rest = likeliest.filter((c) => !keys.has(c.key));
+  const restNamed = named.filter((c) => !keys.has(c.key));
   if (candidates.isError) return null;
   // Fewer read than asked for: there are no more
-  const done = candidates.data !== undefined && !candidates.isPlaceholderData && candidates.data.length < wanted(asked) && rest.length <= asked;
+  const settled = candidates.data !== undefined && !candidates.isPlaceholderData;
+  const done =
+    settled &&
+    likeliest.length < now.limit &&
+    rest.length <= likeliestStep * presses &&
+    (!byText || (named.length < now.named! && restNamed.length <= namedStep * presses));
   // The press reads the next ones and shows them once they are there: the button is at work while
   // ITS press is ([AsyncButton]) — never while the candidates are read anew after answers, which
   // waits for the work's chances
   const more = async () => {
-    await queryClient.fetchQuery(candidatesQuery(item, facet, wanted(asked + MORE_STEP)));
-    setAsked(asked + MORE_STEP);
+    const next = asked(presses + 1);
+    await queryClient.fetchQuery(candidatesQuery(item, facet, next.limit, next.named));
+    setPresses(presses + 1);
   };
+  const title = byText ? t("MoreCandidates.showMoreByText", { likeliest: MORE_LIKELIEST, named: MORE_NAMED }) : t("MoreCandidates.showMore", { count: MORE_STEP });
   return (
     <>
-      {rest.slice(0, asked).map((c) => (
+      {rest.slice(0, likeliestStep * presses).map((c) => (
         <FacetValue key={c.key} facet={facet} value={{ key: c.key, name: c.name, nameKey: c.nameKey, chance: c.chance ?? undefined, offered: true }} corrections={corrections} tagLink={tagLink} />
       ))}
-      {!done && (
-        <AsyncButton
-          variant="outline"
-          size="xs"
-          className={SMALL_BUTTON}
-          onClick={more}
-          title={t("MoreCandidates.showMore", { count: MORE_STEP })}
-          aria-label={t("MoreCandidates.showMore", { count: MORE_STEP })}
-          icon="…"
+      {/* The most named by the work's texts: with how many times, the chance after the name as of any */}
+      {restNamed.slice(0, namedStep * presses).map((c) => (
+        <FacetValue
+          key={c.key}
+          facet={facet}
+          value={{ key: c.key, name: c.name, nameKey: c.nameKey, chance: c.chance ?? undefined, offered: true }}
+          corrections={corrections}
+          tagLink={tagLink}
+          mentions={c.mentions}
         />
-      )}
+      ))}
+      {!done && <AsyncButton variant="outline" size="xs" className={SMALL_BUTTON} onClick={more} title={title} aria-label={title} icon="…" />}
     </>
   );
 }

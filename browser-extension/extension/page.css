@@ -385,6 +385,13 @@ r4m-chance.r4m-unlikely {
   font-weight: 700;
 }
 
+/* How many times the work's texts name a candidate offered for it, after its chance */
+r4m-mentions {
+  color: var(--r4m-muted);
+  font: 10px/20px system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
 /* What the sites say of a field, right above the place of answering on it */
 r4m-said {
   display: block;

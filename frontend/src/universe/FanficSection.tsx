@@ -35,6 +35,9 @@ export const FANFIC_FACETS: readonly string[] = [KIND, UNIVERSE, CHARACTERS, SEC
 /** The fields closed by "No other …". */
 export const NAMED_FACETS: readonly string[] = [UNIVERSE, CHARACTERS, SECONDARY_CHARACTERS, PAIRINGS];
 
+/** The fields whose values the work's texts name — a character, two in one paragraph: "…" offers the most named beside the likeliest. */
+const BY_TEXT: readonly string[] = [CHARACTERS, SECONDARY_CHARACTERS, PAIRINGS];
+
 const FANFICTION = "fanfiction";
 const REALISM = "realism";
 const ALTERNATIVE_HISTORY = "alternative-history";
@@ -263,7 +266,7 @@ function Chips({
       {suggested.map((v) => (
         <SuggestedChip key={v.key} facet={facet} value={v} corrections={corrections} />
       ))}
-      {item && <MoreCandidates item={item} facet={facet} shown={[...values, ...suggested]} corrections={corrections} />}
+      {item && <MoreCandidates item={item} facet={facet} shown={[...values, ...suggested]} corrections={corrections} byText={BY_TEXT.includes(facet)} />}
       {search && <SearchButton onClick={search.onClick} title={search.title} />}
     </div>
   );

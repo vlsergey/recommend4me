@@ -431,6 +431,17 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: named
+          in: query
+          required: false
+          description: |
+            With limit, so many more after the likeliest: the most named by the work's own texts of
+            the rest - each named 3 times at least - marked named. The texts are counted for the
+            candidates of this one work alone: no model reads them. Of a facet whose values are not
+            counted in the texts (all but the characters and the pairings), none
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: The candidates
@@ -5525,6 +5536,9 @@ components:
           type: integer
           nullable: true
           description: How many times the work's texts name it (in how many paragraphs, of a pairing); none when not counted
+        named:
+          type: boolean
+          description: Offered for how often the work's texts name it, not among the likeliest (the parameter named)
         url:
           type: string
           nullable: true

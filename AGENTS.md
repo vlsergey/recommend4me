@@ -27,7 +27,7 @@ and tell the user to update the extension.
 | ✓ ✕ ↺ of a value; none of a tag the work has by a tag under it (`implied`) | `correction/FacetAnswers.tsx` | `answers` |
 | The mark beside a value: chance, "site" (`fromSite`), "by tag" (`draftedFrom`), ↑ (`implied`) | `facet/FacetValueMarks.tsx` | `answers` |
 | "✓ all" — the unanswered values, not offered, not implied | `FacetCorrections.tsx` `FacetLine` | `facetBlock` |
-| "…" — more candidates; busy only while its own press is | `FacetCorrections.tsx` `MoreCandidates` (`AsyncButton`) | `moreOf` |
+| "…" — more candidates; busy only while its own press is; of the characters and the pairings 2 likeliest and 2 most named by the work's texts (3 times at least, with the count) a press, each once | `FacetCorrections.tsx` `MoreCandidates` (`AsyncButton`) | `moreOf` |
 | A value found by its name and added | `FacetCorrections.tsx` `SearchButton` + `AddFacetValue`; characters `universe/FanficSection.tsx` `Picker` | `addField` |
 | "No other …" — shown with no value too; the unconfirmed go | `universe/FanficSection.tsx` `AllNamed` | `completeButton` |
 | An answer: only written; shown once kept, never before; read anew after 2 s of quiet, the work once its chances are made | `correction/useCorrections.ts`, `suggestion/useSuggestions.ts` `suggestionsLater` | `act`, `loadLater`, `settledLater` |

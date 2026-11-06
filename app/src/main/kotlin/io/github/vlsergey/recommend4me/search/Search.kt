@@ -115,8 +115,7 @@ class Search(
     }
 
     /**
-     * The index of the start made, in the queue of the computations, unless it is made already: by
-     * the start, or by a refresh of the models that needed it first ([current]).
+     * The index of the start made, in the queue of the computations, unless it is made already.
      */
     private fun made(type: TypeStore, reasons: Map<String, Int>) {
         val provider = plugins.search ?: return
@@ -129,19 +128,6 @@ class Search(
         } finally {
             latch.countDown()
         }
-    }
-
-    /**
-     * THE INDEX AS THE WORKS ARE NOW, before the models of a source are fitted on what it counts —
-     * the names its works' words name ([io.github.vlsergey.recommend4me.search.SearchProvider.mentions]):
-     * made, if the start has not made it yet, and the works written since indexed — in the work of
-     * the queue that asks, not after a quiet.
-     */
-    @EventListener
-    fun current(event: ModelsRefreshing) {
-        val type = stores.typeOf(event.source)
-        made(type, mapOf("models" to 1))
-        catchUp(type)
     }
 
     /**

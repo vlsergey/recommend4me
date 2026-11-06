@@ -46,6 +46,7 @@
   "LinkSearch.nothingFound": "Ничего не найдено",
   "LinkSearch.placeholder": "Название или адрес страницы работы",
   "LinkSearch.sitePage": "Страница на сайте",
+  "MoreCandidates.showMoreByText": "Показать ещё кандидатов: {{likeliest, number}} самых вероятных и {{named, number}} чаще всего упомянутых в текстах работы (не меньше 3 раз)",
   "MoreCandidates.showMore_few": "Показать ещё {{count, number}} кандидата",
   "MoreCandidates.showMore_many": "Показать ещё {{count, number}} кандидатов",
   "MoreCandidates.showMore_one": "Показать ещё {{count, number}} кандидата",

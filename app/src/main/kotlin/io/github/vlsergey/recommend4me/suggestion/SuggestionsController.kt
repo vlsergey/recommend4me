@@ -39,9 +39,9 @@ class SuggestionsController(private val stores: Stores, private val suggestions:
         return ResponseEntity.noContent().build()
     }
 
-    override fun getCandidates(source: String, item: String, facet: String, limit: Int?): ResponseEntity<List<Candidate>> {
+    override fun getCandidates(source: String, item: String, facet: String, limit: Int?, named: Int?): ResponseEntity<List<Candidate>> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
-        val found = suggestions.candidates(store, item, facet, limit) ?: return ResponseEntity.notFound().build()
+        val found = suggestions.candidates(store, item, facet, limit, named) ?: return ResponseEntity.notFound().build()
         // A universe and a character are entries of a catalogue: their pages there, as the dictionary keeps them
         val type = stores.typeOf(source)
         val pages = if (type.type.universes && facet in PAGED) UniverseFacet.pages(type.universes) else emptyMap()
@@ -54,7 +54,7 @@ class SuggestionsController(private val stores: Stores, private val suggestions:
                 val name = found.names[it.key] ?: it.key
                 Candidate(
                     key = it.key, name = name, nameKey = store.nameKey(facet, it.key),
-                    chance = it.chance, mentions = it.mentions, url = pages[it.key], description = described[it.key],
+                    chance = it.chance, mentions = it.mentions, named = it.named.takeIf { n -> n }, url = pages[it.key], description = described[it.key],
                     names = named[it.key]?.let { all -> (listOf(name) + all).distinct() },
                 )
             },

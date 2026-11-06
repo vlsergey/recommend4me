@@ -26,13 +26,13 @@ class SuggesterStatus(val facet: String, val suggester: String, val fittedAt: In
 
 /**
  * The chance of a value of an item's facet: one the item had when worked out ([had]), or one it
- * lacked; and how many times the item's texts name it, when they were counted. [draftedFrom]: the
+ * lacked. [draftedFrom]: the
  * value is a draft of the layer ([LayerDraft][io.github.vlsergey.recommend4me.universe.LayerDraft]),
  * read from this value of the site — the work is given it whatever the model's chance (1 when the
  * model has none). Made when the work is read, never kept ([FacetSuggestions.chances]).
  */
 data class Chance(
-    val itemId: String, val facet: String, val key: String, val had: Boolean, val chance: Double, val mentions: Int? = null,
+    val itemId: String, val facet: String, val key: String, val had: Boolean, val chance: Double,
     val draftedFrom: String? = null,
 ) {
     val drafted: Boolean get() = draftedFrom != null
