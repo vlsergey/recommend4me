@@ -77,8 +77,9 @@ Every field of the form, the rare ones too, is one pattern:
   with no word stand on **one line**: "author.today, fanfics.me: не указывают". A site whose item was never read (it has
   no texts, parts, pictures or reviews, only a card) says so apart: "ficbook: не прочитан", with its refresh: silence must
   not pass for "the site has none". A field no site can speak of has no line at all.
-- **The texts' row,** under the sites': what the work's own text names and **no chip of the field holds**, with counts
-  and ✓ ✕, and "…" for more. A candidate that is a chip carries its count on the chip. Of the tags, the button By text.
+- **The work's own texts** are no row of their own: "…" of the characters and the pairings offers, beside the two
+  likeliest, the two the texts name most (3 times at least), each with its count — a row repeating them was the same
+  candidates twice (user, 2026-11-06). A chip's menu opens where the texts name it. Of the tags, the button By text.
 - **The place of the answer:** the chips, every suggestion among them, the search, "…". Nothing stands between the
   sources and the first chip.
 
@@ -261,7 +262,7 @@ pressing it makes it the user's word.
 
 ## 12. What `AGENTS.md` gains
 
-Rows of the table: a field's sources; a word's press; the texts' row; the kind's buttons; the line of fields (web only, the panel being
+Rows of the table: a field's sources; a word's press; "…" with the most named by the texts; the kind's buttons; the line of fields (web only, the panel being
 short); a scale whose sites disagree. A fandom's binding is named as web only.
 
 ## 13. How it is checked

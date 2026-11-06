@@ -4,11 +4,9 @@ import { CheckIcon, Loader2Icon, PlusIcon, SearchIcon, XIcon } from "lucide-reac
 import { useTranslation } from "react-i18next";
 import type { Candidate, ContentTypeInfo, FacetValueInfo, ItemDetails, ItemFacet, ItemRef, SourceInfo, SuggestedValue, UniverseInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { CHIP_TOUCH, FacetAnswers } from "@/correction/FacetAnswers";
 import { FacetValue, FieldBlock, LaterOffers, MoreCandidates, SearchButton } from "@/correction/FacetCorrections";
 import { saidTogether, SiteWords, type WordTarget } from "@/correction/SiteWords";
 import type { Corrections } from "@/correction/useCorrections";
@@ -19,7 +17,6 @@ import { label as labelOfKey, valueName } from "@/i18n/label";
 import { cn } from "@/lib/utils";
 import { SuggestedChip } from "@/suggestion/Suggestions";
 import { useCandidates, useSuggestions } from "@/suggestion/useSuggestions";
-import { MentionsDialog } from "./MentionsDialog";
 import { CatalogueSearch, charactersQuery, useUniverses } from "./Universes";
 
 /** The facets the application gives every work of a type with universes (the backend's UniverseFacets). */
@@ -212,10 +209,8 @@ export function FanficSection({
           corrections={corrections}
         />
         <Pairings
-          type={type}
           item={ref}
           field={fieldOf(PAIRINGS, "")}
-          universes={valuesOf(UNIVERSE).filter(has)}
           label={pairingsLabel}
           values={valuesOf(PAIRINGS)}
           complete={facetOf(PAIRINGS)?.complete === true}
@@ -629,7 +624,6 @@ function OpenCharacters({
 
   return (
     <FieldBlock field={facet} label={label} facet={field} corrections={corrections} tools={allNamed} sources={null}>
-      <Named type={type} item={item} facet={facet} candidates={candidates.data} shown={values} universes={universes} corrections={corrections} />
       <Chips
         facet={facet}
         values={values}
@@ -664,10 +658,8 @@ function OpenCharacters({
  * is offered.
  */
 function Pairings({
-  type,
   item,
   field,
-  universes,
   label,
   values,
   complete,
@@ -676,11 +668,8 @@ function Pairings({
   onSearchClose,
   corrections,
 }: {
-  type: ContentTypeInfo;
   item: ItemRef;
   field: ItemFacet;
-  /** The universes the work has. */
-  universes: FacetValueInfo[];
   label: string;
   values: FacetValueInfo[];
   complete: boolean;
@@ -702,10 +691,8 @@ function Pairings({
     );
   return (
     <OpenPairings
-      type={type}
       item={item}
       field={field}
-      universes={universes}
       label={label}
       values={values}
       characters={characters}
@@ -717,12 +704,10 @@ function Pairings({
   );
 }
 
-/** The work's pairings while others may be: every value, the candidates the texts name, the picker and a pair of one's own. */
+/** The work's pairings while others may be: every value, the picker and a pair of one's own. */
 function OpenPairings({
-  type,
   item,
   field,
-  universes,
   label,
   values,
   characters,
@@ -731,10 +716,8 @@ function OpenPairings({
   corrections,
   allNamed,
 }: {
-  type: ContentTypeInfo;
   item: ItemRef;
   field: ItemFacet;
-  universes: FacetValueInfo[];
   label: string;
   values: FacetValueInfo[];
   characters: FacetValueInfo[];
@@ -785,7 +768,6 @@ function OpenPairings({
 
   return (
     <FieldBlock field={PAIRINGS} label={label} facet={field} corrections={corrections} tools={allNamed} sources={null}>
-      <Named type={type} item={item} facet={PAIRINGS} candidates={candidates.data} shown={values} universes={universes} corrections={corrections} />
       <Chips facet={PAIRINGS} values={values} item={item} corrections={corrections} candidates={candidates.data} />
       {characters.length > 0 && (
         <Picker
@@ -860,59 +842,6 @@ function ranked(options: Option[], candidates: Candidate[] | undefined): Option[
       const c = byKey.get(o.key);
       return c ? { ...o, mark: candidateMark(c) } : o;
     });
-}
-
-/** How many more of the candidates the texts name a press shows. */
-const NAMED_STEP = 7;
-
-/**
- * THE TEXTS' ROW OF A FIELD'S SOURCES: the candidates the work's texts name and no chip of the field
- * holds ([shown]), to confirm or refute — a character the chapters name, two characters named in one
- * paragraph — the likeliest first, more by "…"; the name opens where the texts name it and why the
- * dictionary has it. Nothing when the texts name none.
- */
-function Named({
-  type,
-  item,
-  facet,
-  candidates,
-  shown,
-  universes,
-  corrections,
-}: {
-  type: ContentTypeInfo;
-  item: ItemRef;
-  facet: string;
-  candidates: Candidate[] | undefined;
-  shown: FacetValueInfo[];
-  /** The universes the work has. */
-  universes: FacetValueInfo[];
-  corrections: Corrections;
-}) {
-  const { t } = useTranslation("universe");
-  const [asked, setAsked] = useState(NAMED_STEP);
-  const chips = new Set(shown.map((v) => v.key));
-  const named = (candidates ?? []).filter((c) => (c.mentions ?? 0) > 0 && !chips.has(c.key));
-  if (named.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-1 text-sm">
-      <span className="text-xs text-muted-foreground">{t("Named.heading")}</span>
-      {named.slice(0, asked).map((c) => (
-          <Badge key={c.key} variant="outline" className={cn("border-dashed pr-0.5 font-normal", CHIP_TOUCH)}>
-            <MentionsDialog type={type} item={item} facet={facet} value={c.key} name={valueName(c)} url={c.url} summary={mentionsText(c)} universes={universes}>
-              {valueName(c)}
-              <span className="text-muted-foreground tabular-nums">({candidateMark(c)})</span>
-            </MentionsDialog>
-            <FacetAnswers facet={facet} value={{ key: c.key }} corrections={corrections} />
-          </Badge>
-        ))}
-      {named.length > asked && (
-        <Button variant="outline" size="xs" className="h-5 px-1.5 pointer-coarse:h-11" title={t("Named.more", { n: named.length - asked })} aria-label={t("Named.more", { n: named.length - asked })} onClick={() => setAsked(asked + NAMED_STEP)}>
-          …
-        </Button>
-      )}
-    </div>
-  );
 }
 
 /**
