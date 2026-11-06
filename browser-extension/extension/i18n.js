@@ -148,7 +148,7 @@ var R4M_WORDS = {
     "card.notSaved": "recommend4me: the mark is not saved — {{error}}",
 
     "paging.start": "▶ Page through all",
-    "paging.startTitle": "recommend4me: open every next page of the list by itself — each once it is sent to the application and every work on it has its prediction",
+    "paging.startTitle": "recommend4me: open every next page of the list by itself — each once it is sent to the application and every work on it is saved there, not waiting for the predictions",
     "paging.stop": "⏸ Stop paging",
     "paging.stopWaiting": "⏸ Stop paging · {{what}}",
     "paging.stopTitle": "recommend4me: the list is being paged through; press to stop",
@@ -319,7 +319,7 @@ var R4M_WORDS = {
     "card.notSaved": "recommend4me: отметка не сохранена — {{error}}",
 
     "paging.start": "▶ Листать все страницы",
-    "paging.startTitle": "recommend4me: самому открывать следующие страницы списка — каждую, когда она отправлена в приложение и у всех работ на ней есть прогноз",
+    "paging.startTitle": "recommend4me: самому открывать следующие страницы списка — каждую, когда она отправлена в приложение и все работы на ней в нём записаны, не дожидаясь прогнозов",
     "paging.stop": "⏸ Остановить листание",
     "paging.stopWaiting": "⏸ Остановить листание · {{what}}",
     "paging.stopTitle": "recommend4me: список листается; нажмите, чтобы остановить",
@@ -490,7 +490,7 @@ var R4M_WORDS = {
     "card.notSaved": "recommend4me: oznaka nije sačuvana — {{error}}",
 
     "paging.start": "▶ Listaj sve strane",
-    "paging.startTitle": "recommend4me: sam otvarati sledeće strane spiska — svaku kad je poslata aplikaciji i sva dela na njoj imaju predviđanje",
+    "paging.startTitle": "recommend4me: sam otvarati sledeće strane spiska — svaku kad je poslata aplikaciji i sva dela na njoj su u njoj zapisana, ne čekajući predviđanja",
     "paging.stop": "⏸ Zaustavi listanje",
     "paging.stopWaiting": "⏸ Zaustavi listanje · {{what}}",
     "paging.stopTitle": "recommend4me: spisak se lista; pritisnite da zaustavite",

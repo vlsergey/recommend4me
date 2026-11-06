@@ -1980,7 +1980,8 @@
    * The prediction and the grade on every card of a work the application knows, all the cards in
    * one call. A badge is filled in place, never taken off: a work whose prediction is still worked
    * out shows "…" and is asked for again every few seconds — for the patience of a page, or for as
-   * long as the list is paged through, which waits for it — the others are not asked again.
+   * long as the list is paged through, which waits for its work to be saved — the others are not
+   * asked again.
    */
   async function fillCards() {
     const decor = view && view.decor.cards;
@@ -2022,8 +2023,8 @@
   /**
    * PAGING THROUGH A LIST BY ITSELF: a button by the site's link to the next page
    * ([decor.nextPage]) has the browser go through every page of the list. On each page it waits
-   * until the page is sent to the application, every card shows its prediction and no change of the
-   * user's is on its way, then opens the next page. The press is kept in the tab's sessionStorage,
+   * until the page is sent to the application, every work of its cards is saved there and no change
+   * of the user's is on its way, then opens the next page — not for the predictions, made after. The press is kept in the tab's sessionStorage,
    * so the next page goes on with it; the last page — no link onward — ends it, as a press does.
    * What it waits for stands on the button.
    */
@@ -2057,7 +2058,11 @@
     return [...document.querySelectorAll(selector)].filter((a) => !a.closest("[data-r4m]") && a.getAttribute("href"));
   }
 
-  /** How many cards still wait: with no badge yet, or a badge still "…" — not saved, or its prediction not made. */
+  /**
+   * How many cards still wait to be known to the application: with no badge yet, or a badge of a work
+   * not saved yet. A work saved whose prediction is still worked out does not hold the paging: its
+   * badge is filled on the page it is on, or seen on the list in the application.
+   */
   function cardsWaiting() {
     const decor = view && view.decor.cards;
     if (!decor) return 0;
@@ -2067,7 +2072,7 @@
       const link = card.querySelector(decor.link);
       if (!link || !link.getAttribute("href")) return;
       const badge = card.querySelector("r4m-badge");
-      if (!badge || badge.classList.contains("r4m-pending")) waiting++;
+      if (!badge || badge.classList.contains("r4m-unsaved")) waiting++;
     });
     return waiting;
   }
@@ -2128,7 +2133,7 @@
     const score = el("r4m-score", "r4m-pending-score", "…");
     score.title = t("card.saving");
     badge.appendChild(score);
-    badge.classList.add("r4m-pending");
+    badge.classList.add("r4m-pending", "r4m-unsaved");
     return true;
   }
 
@@ -2151,6 +2156,7 @@
     const error = [true, false].map((value) => failed.get(`card|${k.source}/${k.item}|${value}`)).find(Boolean);
     badge.title = error ? t("card.notSaved", { error }) : "";
     badge.classList.toggle("r4m-pending", waiting);
+    badge.classList.remove("r4m-unsaved");
     return waiting;
   }
 
