@@ -2,11 +2,13 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
+import io.github.vlsergey.recommend4me.matrix.Simd
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.util.IdentityHashMap
+import java.util.stream.IntStream
 
 /**
  * THE SCORING OF THE ITEMS, APART FROM THE TASK — of every fold of the model ([BilinearSuggester.FOLDS]):
@@ -99,7 +101,12 @@ internal class Scoring(
         private val coordinates: Floats by lazy {
             val stacked = FloatArray(design.itemWidth * width)
             for (f in 0 until folds) for (c in 0 until design.itemWidth) for (q in 0 until rank) stacked[c * width + f * rank + q] = a[f][c * rank + q]
-            Floats(task.itemCount * width).also { design.features(task, IntArray(task.itemCount) { it }).times(Floats.of(stacked), width, it) }
+            // One product of the whole task, the library's threads on every physical core ([Blas.wide]): on its one
+            // thread the features of the 75 630 works of fanfics.me took half a second a facet
+            Floats(task.itemCount * width).also { out ->
+                val features = design.features(task, IntArray(task.itemCount) { it })
+                Blas.wide { features.times(Floats.of(stacked), width, out) }
+            }
         }
 
         override fun of(rows: IntArray): List<FloatArray> = scored(rows, null, chances = true)
@@ -138,27 +145,28 @@ internal class Scoring(
                 members.forEach { out[it] = FloatArray(0) }
                 return
             }
-            val s = FloatArray(n * k)
+            // The products of the rows: in the native memory of the product, each row taken out of it once,
+            // into the array it is answered in — not copied whole to the heap and then a row at a time
+            val product: Floats
             if (cols == null) {
-                val product = Floats(n * m)
+                product = Floats(n * m)
                 Blas.product(u, rank, n, rank, sides[f], m, product)
-                product.take(s, 0, 0, n * m)
             } else if (n.toLong() * k * rank <= DIRECT) {
                 // A few rows of a few values: summed here, no product to set up
                 val side = vt[f]
                 val coords = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
+                product = Floats(n * k)
                 for (r in 0 until n) for (c in 0 until k) {
                     var sum = 0f
                     for (q in 0 until rank) sum += coords[r * rank + q] * side[q * m + cols[c]]
-                    s[r * k + c] = sum
+                    product[r * k + c] = sum
                 }
             } else {
                 val side = vt[f]
                 val sub = FloatArray(rank * k)
                 for (q in 0 until rank) for (c in 0 until k) sub[q * k + c] = side[q * m + cols[c]]
-                val product = Floats(n * k)
+                product = Floats(n * k)
                 Blas.product(u, rank, n, rank, Floats.of(sub), k, product)
-                product.take(s, 0, 0, n * k)
             }
             // A value's place among those asked
             val place: (Int) -> Int = when {
@@ -167,18 +175,19 @@ internal class Scoring(
                 else -> IntArray(m) { -1 }.also { at -> cols.forEachIndexed { c, v -> at[v] = c } }.let { at -> { v: Int -> at[v] } }
             }
             val w = pair[f]
-            val b = bias[f]
-            for (r in 0 until n) {
+            // Every value's bias with the common one, of the values asked: added to a row at once, in the wide registers
+            val shift = FloatArray(k) { c -> bias[f][cols?.get(c) ?: c] + w[1] }
+            // The rows side by side on every core: of the tags, tens of thousands of works of thousands of values each
+            val each = { r: Int ->
                 val i = rows[members[r]]
-                val row = s.copyOfRange(r * k, r * k + k)
+                val row = FloatArray(k)
+                product.take(row, 0, r * k, k)
+                Simd.axpy(1f, shift, row)
                 task.examples[i].forEach { v -> place(v).let { if (it >= 0) row[it] += w[0] } }
-                for (c in 0 until k) {
-                    val j = cols?.get(c) ?: c
-                    val score = row[c] + b[j] + w[1]
-                    row[c] = if (chances) Bilinear.sigmoid(score) else score
-                }
+                if (chances) for (c in 0 until k) row[c] = Bilinear.sigmoid(row[c])
                 out[members[r]] = row
             }
+            if (n.toLong() * k <= DIRECT) for (r in 0 until n) each(r) else IntStream.range(0, n).parallel().forEach { each(it) }
         }
     }
 

@@ -15,6 +15,11 @@ class Laps private constructor(private val prefix: String, private val laps: Arr
         last = now
     }
 
+    /** A part of the next lap timed apart — summed of its pieces done in turns with others: told before the lap, which it is within. */
+    fun took(step: String, millis: Long) {
+        laps += "$prefix$step $millis"
+    }
+
     /** The laps of a part, written among these, its steps named "[part] step"; time it from now. */
     fun within(part: String) = Laps("$prefix$part ", laps)
 

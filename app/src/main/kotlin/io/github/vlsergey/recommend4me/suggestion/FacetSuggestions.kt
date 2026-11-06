@@ -52,6 +52,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
+import java.util.stream.IntStream
 import kotlin.concurrent.withLock
 
 private val log = LoggerFactory.getLogger(FacetSuggestions::class.java)
@@ -374,9 +375,10 @@ class FacetSuggestions(
             val suggester = plugins.suggester(store.id, facet.key) ?: return@forEach
             val own = laps.within(facet.key)
             val scored = scored(store, facet, suggester, encoder, read, made, own) ?: return@forEach
-            keep(made, facet, scored.data, scored.scores)
-            read.given(store, facet.key, made)
+            keep(made, facet, scored.data, scored.scores, laps = own)
             own.lap("kept", scored.data.ids.size)
+            read.given(store, facet.key, made)
+            own.lap("context")
             laps.restart()
         }
         return made
@@ -466,19 +468,37 @@ class FacetSuggestions(
      * chances made of the few chosen. Every chance of every character of a facet of seven thousand,
      * of every one of tens of thousands of works, was six seconds of a reading.
      */
-    private fun keep(made: MadeChances, facet: FacetDef, data: FacetData, scores: SuggestionScores, compare: Boolean = false): Map<String, Set<String>> {
+    private fun keep(
+        made: MadeChances, facet: FacetDef, data: FacetData, scores: SuggestionScores, compare: Boolean = false, laps: Laps? = null,
+    ): Map<String, Set<String>> {
         val given = HashMap<String, Set<String>>()
         val task = data.task
+        // The time of its three parts, each summed over the chunks: the scores, the choice, the putting
+        var scoring = 0L
+        var choosing = 0L
+        var putting = 0L
         var from = 0
         while (from < data.ids.size) {
+            var at = System.nanoTime()
             val rows = IntArray(minOf(CHUNK, data.ids.size - from)) { from + it }
             from += rows.size
             val told = Array(rows.size) { toldOf(data, rows[it]) }
             val open = scores.scores(rows, rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] })
             val own = scores.scores(rows, told.asList())
+            scoring += System.nanoTime() - at
+            at = System.nanoTime()
+            // What each work is shown with, the works side by side on every core — of the tags a pass over
+            // thousands of values a work; put among the chances after, one work after another
+            val of = arrayOfNulls<FewChances>(rows.size)
+            IntStream.range(0, rows.size).parallel().forEach { r ->
+                val i = rows[r]
+                of[r] = chancesOf(data.ids[i], facet.key, scores, open[r], told[r], own[r], data, i)
+            }
+            choosing += System.nanoTime() - at
+            at = System.nanoTime()
             rows.forEachIndexed { r, i ->
                 val id = data.ids[i]
-                val chances = chancesOf(id, facet.key, scores, open[r], told[r], own[r], data, i)
+                val chances = of[r]!!
                 if (compare && facet.infer) given[id] = ModelValues.given(chances).toSet()
                 val byFacet = made.getOrPut(id) { HashMap() }
                 val drafts = byFacet[facet.key]?.values?.filter { it.drafted }.orEmpty()
@@ -488,7 +508,11 @@ class FacetSuggestions(
                     FewChances(out.values.toTypedArray())
                 }
             }
+            putting += System.nanoTime() - at
         }
+        laps?.took("scores", scoring / 1_000_000)
+        laps?.took("chosen", choosing / 1_000_000)
+        laps?.took("put", putting / 1_000_000)
         return given
     }
 
@@ -1293,8 +1317,14 @@ internal class FacetData(
             val hierarchies = store.hierarchies()
             val places = schema.facets.withIndex().associate { (k, f) -> f.key to k }
             val of = arrayOfNulls<Array<IntArray?>>(ids.size)
-            ids.forEachIndexed { i, id ->
-                TagHierarchy.corrected(ModelValues.of(schema, site[id].orEmpty(), modelled[id]), corrections[id].orEmpty(), hierarchies, store.singleFacets)
+            // Every work's values made side by side on every core; numbered after, a work after another, as they were
+            val valuesOf = arrayOfNulls<Map<String, List<String>>>(ids.size)
+            IntStream.range(0, ids.size).parallel().forEach { i ->
+                val id = ids[i]
+                valuesOf[i] = TagHierarchy.corrected(ModelValues.of(schema, site[id].orEmpty(), modelled[id]), corrections[id].orEmpty(), hierarchies, store.singleFacets)
+            }
+            ids.indices.forEach { i ->
+                valuesOf[i]!!
                     .forEach { (f, keys) ->
                         val place = places[f] ?: return@forEach
                         val own = numbersOf(f, keys) ?: return@forEach
@@ -1318,11 +1348,17 @@ internal class FacetData(
             val place = made.places[facet] ?: return
             val schema = store.schema
             val hierarchies = store.hierarchies()
-            ids.forEachIndexed { i, id ->
+            // Every work's values of it made side by side on every core; numbered after, a work after another, as they were
+            val keysOf = arrayOfNulls<List<String>>(ids.size)
+            IntStream.range(0, ids.size).parallel().forEach { i ->
+                val id = ids[i]
                 val values = site[id]?.get(facet)?.let { mapOf(facet to it) }.orEmpty()
                 val chances = modelled[id]?.get(facet)?.let { mapOf(facet to it) }
                 val answers = corrections[id].orEmpty().filter { it.facet == facet }
-                val own = numbersOf(facet, TagHierarchy.corrected(ModelValues.of(schema, values, chances), answers, hierarchies, store.singleFacets)[facet].orEmpty())
+                keysOf[i] = TagHierarchy.corrected(ModelValues.of(schema, values, chances), answers, hierarchies, store.singleFacets)[facet].orEmpty()
+            }
+            ids.indices.forEach { i ->
+                val own = numbersOf(facet, keysOf[i]!!)
                 val work = made.of[i]
                 if (own == null) work?.set(place, null)
                 else (work ?: arrayOfNulls<IntArray>(made.places.size).also { made.of[i] = it })[place] = own
