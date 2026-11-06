@@ -202,7 +202,8 @@ internal class Scoring(
     companion object {
         /**
          * The version of what [pack] writes: 4 — the pair's own weights without the counts of the
-         * values' names in the texts. One of another is not read: the next refresh keeps it anew.
+         * values' names in the texts; one of 3 read without them. One of another is not read: the next
+         * refresh keeps it anew.
          */
         private const val FORMAT = 4
 
@@ -220,13 +221,16 @@ internal class Scoring(
         /** A scoring kept by [pack]; null of another version or of other bytes. */
         fun read(bytes: ByteArray): Scoring? = runCatching {
             DataInputStream(ByteArrayInputStream(bytes).buffered(BUFFER)).use { input ->
-                if (input.readInt() != FORMAT) return null
+                // One of 3 read with the weight of the counts of names left out, as a state of the suggester ([Weights.withoutCounts])
+                val format = input.readInt()
+                if (format != FORMAT && format != FORMAT - 1) return null
                 val design = Design.read(input)
                 val rank = input.readInt()
                 val keys = Design.readStrings(input)
                 val parts = List(BilinearSuggester.FOLDS) { List(4) { Design.readFloats(input) } }
                 val shares = Design.readFloats(input).takeIf { it.size == keys.size }
-                Scoring(design, rank, keys, parts.map { it[0] }, parts.map { it[1] }, parts.map { it[2] }, parts.map { it[3] }, shares)
+                val pair = parts.map { p -> p[1].let { w -> if (w.size == Bilinear.PAIR) w else floatArrayOf(w[0], w[w.size - 1]) } }
+                Scoring(design, rank, keys, parts.map { it[0] }, pair, parts.map { it[2] }, parts.map { it[3] }, shares)
             }
         }.getOrNull()
     }

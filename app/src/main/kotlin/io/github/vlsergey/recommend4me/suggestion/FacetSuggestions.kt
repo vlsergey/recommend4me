@@ -589,10 +589,14 @@ class FacetSuggestions(
             val before = kept?.let { k0 -> keep(MadeChances(), facet, data, k0.on(data.task), compare = true) }
             data.ids.filter { id -> before == null || before[id].orEmpty() != after[id].orEmpty() }
         }
+        // How many values the model gives the works: a model that gives one work dozens tells of itself
+        val most = after.maxByOrNull { it.value.size }
         log.info(
-            "{}: chances of {} of {} items made in memory in {} ms — the dictionary {}, reading {}, the weights {}, fitting {}, scoring {}; {} works given other values",
+            "{}: chances of {} of {} items made in memory in {} ms — the dictionary {}, reading {}, the weights {}, fitting {}, scoring {}; {} works given other values; " +
+                "{} values given in all, {} works given more than {}, the most {} to {}",
             store.id, facet.key, data.ids.size, System.currentTimeMillis() - started,
             vocabularyMillis, read - vocabularyMillis, unpacked - read, fittedAt - unpacked, scored - fittedAt, changedIds.size,
+            after.values.sumOf { it.size }, after.values.count { it.size > MANY_GIVEN }, MANY_GIVEN, most?.value?.size ?: 0, most?.key,
         )
         return changedIds
     }
@@ -1194,6 +1198,9 @@ class FacetSuggestions(
 
         /** Items scored at once: memory, not meaning. */
         private const val CHUNK = 2_000
+
+        /** How many values given to one work the log of a refit counts the works above: a sign of a model gone wide, not a rule. */
+        private const val MANY_GIVEN = 10
 
         /** How many times a work's texts name a value at least for it to be offered for that count alone ([candidates]): the user's word, 2026-11-06. */
         const val NAMED_AT_LEAST = 3

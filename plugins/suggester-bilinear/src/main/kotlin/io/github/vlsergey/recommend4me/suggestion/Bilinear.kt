@@ -23,6 +23,12 @@ import kotlin.math.sqrt
  * the pair's own feature — the site gives the value as an example — and the common bias.
  */
 class Weights(val rank: Int, val a: FloatArray, val b: FloatArray, val e: FloatArray, val bias: FloatArray, val pair: FloatArray) {
+    /**
+     * The weights of a state of the suggester's format 7, whose pair's own weights were the example's,
+     * the counts of the names' and the common bias: the middle one left out ([BilinearSuggester]).
+     */
+    fun withoutCounts(): Weights = if (pair.size == Bilinear.PAIR) this else Weights(rank, a, b, e, bias, floatArrayOf(pair[0], pair[pair.size - 1]))
+
     fun write(out: DataOutputStream) {
         out.writeInt(rank)
         listOf(a, b, e, bias, pair).forEach { Design.writeFloats(out, it) }
