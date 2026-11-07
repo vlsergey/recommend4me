@@ -2241,6 +2241,45 @@ paths:
                 items:
                   $ref: '#/components/schemas/QueuedWork'
 
+  /api/workload/work:
+    get:
+      tags: [workload]
+      operationId: getWork
+      summary: >
+        One work of the queue as it stands, named as the queue names it ("what" and what it is of): running, waiting or
+        planned, else the last run of it done - read again while it is not done, what it makes read once it is
+      parameters:
+        - name: what
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: facet
+          in: query
+          schema:
+            type: string
+        - name: item
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The work
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueuedWork'
+        '404':
+          description: Neither to come nor among the last works done
+
   /api/types/{type}/models/facets/{source}/{facet}/search:
     post:
       tags: [models]

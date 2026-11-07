@@ -106,11 +106,10 @@ export function WorkDuplicates({ type, item, sites, corrections }: { type: Conte
                   {t(`PairRow.${word}`)}
                 </AsyncButton>
               ))}
-              {p.answer && (
-                <AsyncButton size="xs" variant="ghost" icon={<Undo2Icon />} title={t("PairRow.unanswerHint")} onClick={() => unanswer(p)}>
-                  {t("PairRow.unanswer")}
-                </AsyncButton>
-              )}
+              {/* Always in its place, of no answer disabled: a word given moves no button */}
+              <AsyncButton size="xs" variant="ghost" icon={<Undo2Icon />} disabled={!p.answer} title={t("PairRow.unanswerHint")} onClick={() => unanswer(p)}>
+                {t("PairRow.unanswer")}
+              </AsyncButton>
             </div>
           </li>
         );

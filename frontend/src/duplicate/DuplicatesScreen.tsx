@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, CopyIcon, EqualIcon, EqualNotIcon, ExternalLinkIcon, LanguagesIcon, LibraryBigIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +19,7 @@ import { usePref } from "@/lib/usePref";
 import { PairJournal } from "./PairJournal";
 import { afterWord, sharing } from "./pairWorks";
 import { useRefresh } from "@/lib/useRefresh";
+import { useWork } from "@/workload/useWork";
 import { cn } from "@/lib/utils";
 
 /** How many pairs a page shows, and how many more each "more" adds. */
@@ -27,8 +28,6 @@ const PAGE = 30;
 /** How often the pairs are read again till the user chooses ([RefreshSelect]): never — they change by the user's answers and searches. */
 const EVERY_MS = 0;
 
-/** While a search the user pressed here runs, or one with no pairs to mark yet, the pairs are asked for again so often: what it made comes when it is done. Nothing else reads by itself but the choice in the heading. */
-const PENDING_MS = 3000;
 
 const duplicatesKey = (type: string) => ["duplicates", type];
 
@@ -99,8 +98,11 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const [chosen, setChosen] = usePref<Shown[]>("duplicates.shown", ["NONE"]);
   const open = chosen.includes("NONE");
   const answers = chosen.filter((c): c is Verdict => c !== "NONE");
-  const [searchPressed, setSearchPressed] = useState(false);
   const queryClient = useQueryClient();
+  // The search, a work of the queue: its state read again while it is to come, the pairs read once it has ended —
+  // never while it runs (user, 2026-11-07)
+  const search = useWork({ what: "duplicates", type: type.id }, () => queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) }));
+  const searching = search.busy;
   /** When the last word was kept ([settle]): a list read that began before it may not have it. */
   const wordKept = useRef(0);
   const list = useQuery({
@@ -117,15 +119,9 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
         if (wordKept.current < began) return result.data;
       }
     },
-    refetchInterval: (query) => {
-      const page = query.state.data;
-      return page?.pending && (searchPressed || page.pairs.length === 0) ? PENDING_MS : every || false;
-    },
+    refetchInterval: every || false,
   });
   const data = list.data;
-  useEffect(() => {
-    if (data && !data.pending) setSearchPressed(false);
-  }, [data]);
   const calm = useCalmUpdates(data?.pairs, rowOf, sameRow);
   const shown = calm.shown ?? [];
   /** What else shows the links of the works of the [pairs] marked out of date, read when next opened: nothing is read now. */
@@ -165,10 +161,9 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
     );
     settle(p, undefined);
   };
-  const search = async () => {
+  const searchAnew = async () => {
     ensureOk(await api.POST("/api/types/{type}/duplicates/search", { params: { path: { type: type.id } } }));
-    setSearchPressed(true);
-    await queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) });
+    search.asked();
   };
 
   return (
@@ -215,7 +210,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
               </select>
             </label>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              {data?.pending ? (
+              {searching ? (
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Loader2Icon className="size-4 animate-spin" /> {t("DuplicatesScreen.pending")}
                 </span>
@@ -230,7 +225,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
                   </span>
                 )
               )}
-              <AsyncButton size="sm" variant="outline" icon={<RefreshCwIcon />} disabled={data?.pending} title={t("DuplicatesScreen.searchHint")} onClick={search}>
+              <AsyncButton size="sm" variant="outline" icon={<RefreshCwIcon />} disabled={searching} title={t("DuplicatesScreen.searchHint")} onClick={searchAnew}>
                 {t("DuplicatesScreen.search")}
               </AsyncButton>
               <RefreshSelect every={every} onChange={setEvery} />
@@ -263,7 +258,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
         <>
           {list.isLoading && <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.loading")}</p>}
           {list.isError && <p className="text-sm text-destructive">{t("DuplicatesScreen.failed", { error: list.error.message })}</p>}
-          {data && shown.length === 0 && !data.pending && (
+          {data && shown.length === 0 && !searching && (
             <p className="text-sm text-muted-foreground">{t(!data.searchedAt ? "DuplicatesScreen.neverSearched" : chosen.length === 1 && open ? "DuplicatesScreen.none" : "DuplicatesScreen.noneChosen")}</p>
           )}
           {shown.length > 0 && (
@@ -357,11 +352,10 @@ function PairRow({
             </AsyncButton>
           ))}
           <Related answered={p.answer} locked={locked} answer={answer} />
-          {p.answer && (
-            <AsyncButton size="sm" variant="ghost" icon={<Undo2Icon />} disabled={locked} title={t("PairRow.unanswerHint")} onClick={unanswer}>
-              {t("PairRow.unanswer")}
-            </AsyncButton>
-          )}
+          {/* Always in its place, of no answer disabled: a word given moves no button */}
+          <AsyncButton size="sm" variant="ghost" icon={<Undo2Icon />} disabled={locked || !p.answer} title={t("PairRow.unanswerHint")} onClick={unanswer}>
+            {t("PairRow.unanswer")}
+          </AsyncButton>
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2">

@@ -12,25 +12,45 @@ import org.springframework.web.bind.annotation.RestController
 
 /**
  * THE QUEUE OF THE BACKGROUND WORKS, for the page of the models: what runs, what waits — in the order it will run, the
- * works the user asked for first — what is planned, and why.
+ * works the user asked for first — what is planned, and why; and one work as it stands, for a screen waiting on it.
  */
 @RestController
 class WorkloadController(private val workload: Workload, private val stores: Stores) : WorkloadApi {
 
     override fun listWorkload(): ResponseEntity<List<QueuedWork>> {
-        val finished =
-            workload.finished().map { f ->
-                queued(f.work, QueuedWork.State.FINISHED, f.began, f.reasons)
-                    .copy(ended = f.ended.atOffset(ZoneOffset.UTC), failed = f.failed, givenUp = f.givenUp)
-            }
+        val finished = workload.finished().map { it.toApi() }
         val running = listOfNotNull(workload.running()).map { it.toApi(QueuedWork.State.RUNNING) }
         val waiting = workload.waiting().map { it.toApi(QueuedWork.State.WAITING) }
-        val planned =
-            workload.planned().map { p ->
-                queued(p.work, QueuedWork.State.PLANNED, p.since, p.reasons).copy(due = p.due.atOffset(ZoneOffset.UTC))
-            }
+        val planned = workload.planned().map { it.toApi() }
         return ResponseEntity.ok(finished + running + waiting + planned)
     }
+
+    /**
+     * The work as it stands: running, waiting, planned — a run to come before the last done —, else the last run of it
+     * done; none of a work neither to come nor among the last done.
+     */
+    override fun getWork(
+        what: String,
+        type: String?,
+        source: String?,
+        facet: String?,
+        item: String?,
+    ): ResponseEntity<QueuedWork> {
+        val work = Work(what, type, source, facet, item)
+        val found =
+            workload.running()?.takeIf { it.work == work }?.toApi(QueuedWork.State.RUNNING)
+                ?: workload.waiting().firstOrNull { it.work == work }?.toApi(QueuedWork.State.WAITING)
+                ?: workload.planned().firstOrNull { it.work == work }?.toApi()
+                ?: workload.finished().lastOrNull { it.work == work }?.toApi()
+        return found?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+    }
+
+    private fun FinishedWork.toApi() =
+        queued(work, QueuedWork.State.FINISHED, began, reasons)
+            .copy(ended = ended.atOffset(ZoneOffset.UTC), failed = failed, givenUp = givenUp)
+
+    private fun PlannedWork.toApi() =
+        queued(work, QueuedWork.State.PLANNED, since, reasons).copy(due = due.atOffset(ZoneOffset.UTC))
 
     private fun HeavyWork.toApi(state: QueuedWork.State) =
         queued(work, state, since, reasons).copy(asked = asked.takeIf { it })
