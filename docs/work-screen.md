@@ -258,7 +258,7 @@ pressing it makes it the user's word.
 6. `WorkSite.texts` in place of `description`: every text of the item, the corrected and the site's own; `read`.
 7. The search of a value of a facet (`/api/sources/{source}/facets/{facet}/values`) stays of the source the work is read through; a field's
    search is of the form's item, so it does not change with the left page either.
-8. `ItemFacet.original` goes, replaced by `said`; `PagesController` gives `said` to the extension. `SiteTest` and `page.js` follow.
+8. `ItemFacet.original` goes, replaced by `said`; `PagesController` gives `said` to the extension. `SiteTest` and the extension's `page-site-words.js` follow.
 
 ## 12. What `AGENTS.md` gains
 

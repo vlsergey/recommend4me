@@ -5,8 +5,13 @@
 The user answers on a work's values in two places with the same behaviour:
 
 - the web interface — `frontend/src`;
-- the browser extension, on the site's own page — `browser-extension/extension/page.js` (plain
-  JavaScript, its words in `i18n.js`).
+- the browser extension, on the site's own page — `browser-extension/extension/page.js` and its parts
+  `page-*.js`, one per thing: the values and answers in `page-values.js`, "…" in `page-candidates.js`,
+  the field to add a value in `page-add-field.js`, the sites' words in `page-site-words.js`, the facet's
+  block in `page-facets.js`, the scale in `page-scale.js`, the changes in `page-changes.js`, the panel in
+  `page-panel.js`, the tags by text in `page-tags-by-text.js`, reviews and pictures in `page-marks.js`,
+  the cards of a list in `page-cards.js` (plain JavaScript, its words in `i18n.js`; how the parts share
+  one namespace is said at the top of `page.js`).
 
 **Every change of how answering looks or behaves is made in both, in the same commit**, and the
 commit message says so. A change only one of them can have (the extension has no screen of tags,
@@ -19,7 +24,7 @@ finishing such a change, go through the table below and check each row in both p
 **After a change of the extension, bump `version` in `browser-extension/extension/manifest.json`**
 and tell the user to update the extension.
 
-| What | Web interface | Extension (`page.js`) |
+| What | Web interface | Extension (`page-*.js`) |
 |---|---|---|
 | What every site of the work says of a field (`said`), right above the place of answering on it: a row of words per site, the silent on one line, an item never read told apart; a word by what it reached (plain, crossed out, ◌ none); a press on it opens the field's search with the name typed, each name of a pair apart in the fields of characters, added as a new name only once the user changes it. Fields reading the same words (kind and universe; main, secondary characters and pairs) share their rows once, over the group: a word reaches what it reached in any of them, a press goes to the one open field or a line under the row asks which. A facet placed on the site's own page: the other sites' rows alone | `correction/SiteWords.tsx` (`saidTogether`), `universe/FanficSection.tsx` `FieldGroup`, `FacetCorrections.tsx` `FieldBlock` | `saidBlock`, `sourcesOf`, `saidTogether`, `pressed`, `siteWord`, `pressWord` |
 | A value as a chip, its look by its state | `correction/FacetCorrections.tsx` `FacetValue` | `valueChip` |

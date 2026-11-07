@@ -2,11 +2,12 @@
  * THE USERSCRIPT FOR SAFARI ON THE IPAD, run by the Userscripts app: what the background script
  * of the Firefox extension does, done in the page itself. Not a part of the Firefox extension — its
  * manifest does not name it; the application puts it together with i18n.js, watch.js and page.js
- * into recommend4me.user.js (GET /userscript/recommend4me.user.js), with these given:
+ * (its parts, page-*.js, and page.js last) into recommend4me.user.js
+ * (GET /userscript/recommend4me.user.js), with these given:
  *
  *   R4M_SERVER — where the application was asked for the script, the address the iPad reaches it at;
  *   R4M_CSS    — page.css;
- *   runPage()  — page.js.
+ *   runPage()  — the parts of page.js and page.js, in the order the background script gives them.
  *
  * The calls to the application go through GM.xmlHttpRequest: the userscript's own requests, not
  * bound by the page's origin, as the extension's background script is not. The requests of the
@@ -29,7 +30,7 @@ function request(method, path, body) {
         let data = null;
         try {
           data = response.responseText ? JSON.parse(response.responseText) : null;
-        } catch (e) {
+        } catch {
           data = null;
         }
         const ok = response.status >= 200 && response.status < 300;
@@ -62,14 +63,16 @@ const fetching = new Set();
  */
 async function fetchWanted(wanted) {
   const fresh = wanted.filter((w) => !fetching.has(w.url));
-  fresh.forEach((w) => fetching.add(w.url));
+  fresh.forEach((w) => {
+    fetching.add(w.url);
+  });
   for (const w of fresh) {
     try {
       const response = await fetch(w.url, w.form
         ? { method: "POST", body: new URLSearchParams(w.form), headers: { "X-Requested-With": "XMLHttpRequest" } }
         : {});
       if (response.ok) await request("POST", "/api/capture", { url: w.url, html: await response.text() });
-    } catch (e) {
+    } catch {
       // Not answered: asked again with a later page
     }
     fetching.delete(w.url);
@@ -80,7 +83,8 @@ async function fetchWanted(wanted) {
 /** The pages this page sent, newest first. */
 const sentPages = [];
 
-/** The stand-in of the extension's API that watch.js and page.js call. */
+/** The stand-in of the extension's API that watch.js and the parts of page.js call. */
+// biome-ignore lint/correctness/noUnusedVariables: called by watch.js and the parts of page.js, put together with this file by UserScriptController
 const browser = {
   runtime: {
     sendMessage: async (message) => {
@@ -98,7 +102,11 @@ const browser = {
         const sent = await request("POST", "/api/capture", { url: message.url, html: message.html });
         if (sent.ok) sentPages.unshift({ url: message.url, at, error: null });
         // The page shows the work as the application knows it now
-        if (sent.ok) listeners.forEach((listener) => listener({ type: "captured", url: message.url }));
+        if (sent.ok) {
+          listeners.forEach((listener) => {
+            listener({ type: "captured", url: message.url });
+          });
+        }
         if (sent.ok && sent.data?.wanted?.length) fetchWanted(sent.data.wanted);
         return sent;
       }

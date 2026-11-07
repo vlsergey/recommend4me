@@ -1,11 +1,12 @@
 /*
  * THE EXTENSION'S OWN WORDS, in English, Russian and Serbian (Latin script), shared by the content
- * script (page.js), the popup, the options page and the userscript for Safari, which the
+ * script (page.js and its parts), the popup, the options page and the userscript for Safari, which the
  * application puts together of these files.
  *
  * Keys are flat, "area.purpose", every language the same keys; a word of a count has a key of every
  * plural form, "_one", "_few", "_many", "_other", and is asked with { count }. Params are written
- * {{name}}, as in the server's words (/i18n/<namespace>/<language>.json), which page.js reads apart.
+ * {{name}}, as in the server's words (/i18n/<namespace>/<language>.json), which page-application.js
+ * reads apart.
  *
  * Declared with var and function, not const: a page may be given the file more than once (a site
  * changing its address without loading a page), and a declaration repeated must not fail.
@@ -543,6 +544,7 @@ function browserLanguage() {
 var r4mLanguage = browserLanguage();
 
 /** Speaks [chosen] — one of R4M_LANGUAGES; anything else ("" — not chosen) is the browser's language. */
+// biome-ignore lint/correctness/noUnusedVariables: called by page-application.js, popup.js and options.js, loaded after this file
 function setLanguage(chosen) {
   r4mLanguage = R4M_LANGUAGES.includes(chosen) ? chosen : browserLanguage();
 }
@@ -572,6 +574,7 @@ function t(key, params) {
 }
 
 /** The words of an extension's page put in: the text of every [data-i18n] element, its key the attribute's value. */
+// biome-ignore lint/correctness/noUnusedVariables: called by popup.js and options.js, loaded after this file
 function translatePage() {
   document.documentElement.lang = r4mLanguage;
   document.querySelectorAll("[data-i18n]").forEach((e) => {

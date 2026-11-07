@@ -8,8 +8,8 @@ import kotlin.test.assertTrue
 /**
  * THE FIELDS THE EXTENSION PUTS INTO A SITE'S PAGE ARE READ WHATEVER THE SITE'S SKIN: a site's rules for fields — a
  * dark skin's light text over our light field, Safari's fill of the text — win over ours unless ours are !important.
- * Every kind of field page.js makes (an input, a text area, a select) has a rule of page.css that sets its background,
- * its text, the fill of its text and its caret so, and its hint too.
+ * Every kind of field page.js and its parts make (an input, a text area, a select) has a rule of page.css that sets its
+ * background, its text, the fill of its text and its caret so, and its hint too.
  */
 class ExtensionFieldsTest {
 
@@ -27,10 +27,10 @@ class ExtensionFieldsTest {
 
     @Test
     fun `every kind of field the extension makes is in its own colours whatever the site says`() {
-        val script = Files.readString(folder.resolve("page.js"))
+        val script = UserScriptController.PAGE_PARTS.joinToString("\n") { Files.readString(folder.resolve(it)) }
         val css = rules(Files.readString(folder.resolve("page.css")))
         val kinds = Regex("""el\("(input|textarea|select)"""").findAll(script).map { it.groupValues[1] }.toSet()
-        assertTrue(kinds.isNotEmpty(), "page.js makes no field: the test reads it wrong")
+        assertTrue(kinds.isNotEmpty(), "page.js and its parts make no field: the test reads them wrong")
         kinds.forEach { kind ->
             fun ruled(property: String, pseudo: String = "") = css.any { (selector, declarations) ->
                 selector

@@ -23,8 +23,8 @@ private const val DESCRIPTION =
 /**
  * THE USERSCRIPT FOR SAFARI ON THE IPAD — the browser tracking and the site as the application's interface where an
  * extension of the browser cannot be installed without the App Store: a file the Userscripts app runs on the pages of
- * the sources. It is put together of the extension's own scripts (watch.js, page.js, page.css and userscript.js in
- * place of the background script), so the two never part.
+ * the sources. It is put together of the extension's own scripts (watch.js, page.js with its parts, page.css and
+ * userscript.js in place of the background script), so the two never part.
  *
  * The script calls the application at the address it was asked for at: the iPad's address of it — through `tailscale
  * serve`, the name and the https of the proxy (X-Forwarded-Host and -Proto). Not a part of the JSON API: a script,
@@ -75,6 +75,30 @@ class UserScriptController(
     companion object {
         private val SCRIPT = MediaType.parseMediaType("application/javascript;charset=utf-8")
 
+        /**
+         * The parts of the site as the application's interface, in the order the extension's background script gives
+         * them to a page (its PAGE_SCRIPTS, after i18n.js): each takes what those before it give, page.js — which
+         * starts it — last.
+         */
+        val PAGE_PARTS =
+            listOf(
+                "page-application.js",
+                "page-view.js",
+                "page-changes.js",
+                "page-values.js",
+                "page-candidates.js",
+                "page-scale.js",
+                "page-add-field.js",
+                "page-site-words.js",
+                "page-tags-by-text.js",
+                "page-facets.js",
+                "page-panel.js",
+                "page-marks.js",
+                "page-cards.js",
+                "page-paging.js",
+                "page.js",
+            )
+
         /** The script of the extension's [folder] calling the application at [server], run on the pages of [hosts]. */
         fun assemble(folder: Path, server: String, hosts: List<String>, json: JsonMapper): String {
             fun read(name: String) = Files.readString(folder.resolve(name))
@@ -100,10 +124,10 @@ class UserScriptController(
                 appendLine("(() => {")
                 appendLine("const R4M_SERVER = ${json.writeValueAsString(server)};")
                 appendLine("const R4M_CSS = ${json.writeValueAsString(read("page.css"))};")
-                // The extension's words and t(): page.js calls them
+                // The extension's words and t(): the parts of page.js call them
                 appendLine(read("i18n.js"))
                 appendLine("function runPage() {")
-                appendLine(read("page.js"))
+                PAGE_PARTS.forEach { appendLine(read(it)) }
                 appendLine("}")
                 appendLine(read("watch.js"))
                 appendLine(read("userscript.js"))

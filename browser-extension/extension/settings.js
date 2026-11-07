@@ -5,11 +5,13 @@
  */
 const DEFAULT_SERVER = "http://127.0.0.1:8095";
 
+// biome-ignore lint/correctness/noUnusedVariables: called by background.js, popup.js and options.js, loaded after this file
 async function loadSettings() {
   const stored = await browser.storage.local.get({ server: DEFAULT_SERVER, enabled: true, decorate: true, language: "" });
   return { server: stored.server.replace(/\/+$/, ""), enabled: stored.enabled, decorate: stored.decorate, language: stored.language };
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: called by popup.js and options.js, loaded after this file
 async function saveSettings(settings) {
   await browser.storage.local.set(settings);
 }
