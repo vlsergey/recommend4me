@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CorrectedMark, EditButton, FieldEditor } from "@/correction/FieldEditor";
 import { textField, type Corrections } from "@/correction/useCorrections";
 import { label } from "@/i18n/label";
+import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
 
 /** A text longer than this is cut to a few lines until opened: the length of a screen's paragraph, not meaning. */
@@ -86,7 +87,7 @@ function ItemText({ text, folded, corrections, editing }: { text: TextValue; fol
     <section className="group/text">
       <div className={cn("flex items-center gap-1", (open || editingText) && "mb-1")}>
         {foldable ? (
-          <button className="inline-flex items-center gap-1 text-sm font-semibold hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <button type="button" className="inline-flex items-center gap-1 text-sm font-semibold hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
             <ChevronDownIcon className={open ? "size-4" : "size-4 -rotate-90"} />
             {label(text.labelKey)}
             {text.spoiler && <span className="font-normal text-muted-foreground">· {t("ItemText.spoiler")}</span>}
@@ -115,8 +116,11 @@ function ItemText({ text, folded, corrections, editing }: { text: TextValue; fol
       ) : (
         open && (
           <p
+            role={long ? "button" : undefined}
+            tabIndex={long ? 0 : undefined}
             className={cn("text-sm leading-relaxed whitespace-pre-line text-foreground/90", long && !whole && "line-clamp-6 cursor-pointer")}
             onClick={() => long && setWhole(!whole)}
+            onKeyDown={long ? pressKeys(() => setWhole(!whole)) : undefined}
             title={long && !whole ? t("ItemText.showWhole") : undefined}
           >
             {text.content}

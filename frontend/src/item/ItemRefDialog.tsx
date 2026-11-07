@@ -18,7 +18,8 @@ export function ItemRefDialog({ item, onClose }: { item: ItemRef | null; onClose
   const details = useQuery({
     queryKey: item ? itemKey(item) : ["item", "none"],
     enabled: item !== null,
-    queryFn: async () => unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: { source: item!.source, item: item!.item } } })),
+    // Run only with an item ([enabled]): no item reads none
+    queryFn: async () => (item ? unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: { source: item.source, item: item.item } } })) : null),
   });
   const rate = useRateItem();
   const onRate = useCallback((summary: ItemSummary, grade: Grade | null) => rate.mutateAsync({ summary, grade }).catch(() => undefined), [rate]);

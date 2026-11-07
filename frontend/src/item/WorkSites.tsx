@@ -71,8 +71,8 @@ export function SitesTable({
         </thead>
         <tbody>
           {rows.map((r) => {
-            const said = sites.map(r.plain).filter((v) => v !== undefined);
-            const differ = new Set(said.map((v) => v!.trim())).size > 1;
+            const said = sites.map(r.plain).filter((v): v is string => v !== undefined);
+            const differ = new Set(said.map((v) => v.trim())).size > 1;
             return (
               <tr key={r.label} className="border-t align-top">
                 <th className="py-1 pr-2 text-left text-xs font-normal whitespace-nowrap text-muted-foreground">

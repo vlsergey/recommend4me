@@ -128,7 +128,7 @@ function CaptureDetails({ onOpenItem }: { onOpenItem: (ref: ItemRef) => void }) 
         {recent.data && recent.data.length === 0 && <p className="text-muted-foreground">{t("CaptureDetails.recentNone")}</p>}
         {recent.isError && <p className="text-destructive">{t("CaptureDetails.recentFailed")}</p>}
         <ul className="flex flex-col divide-y rounded-lg border">
-          {(recent.data ?? []).map((p) => (
+          {(recent.data ?? []).map(({ item, ...p }) => (
             <li key={`${p.url}-${p.capturedAt}`} className="flex items-center gap-2 px-3 py-1.5">
               <span className="w-24 shrink-0 text-xs text-muted-foreground" title={formatDate(p.capturedAt)}>
                 {ago(p.capturedAt)}
@@ -136,13 +136,14 @@ function CaptureDetails({ onOpenItem }: { onOpenItem: (ref: ItemRef) => void }) 
               <span className="shrink-0 text-xs text-muted-foreground" title={sourceTitle(p.source)}>
                 {sourceShort(p.source)}
               </span>
-              {p.item ? (
+              {item ? (
                 <button
+                  type="button"
                   className="min-w-0 flex-1 truncate text-left underline-offset-2 hover:underline"
-                  onClick={() => onOpenItem({ source: p.source, item: p.item! })}
+                  onClick={() => onOpenItem({ source: p.source, item })}
                   title={t("CaptureDetails.openWork")}
                 >
-                  {p.title ?? p.item}
+                  {p.title ?? item}
                 </button>
               ) : (
                 <span className="min-w-0 flex-1 truncate text-muted-foreground" title={p.url}>
@@ -186,7 +187,10 @@ function SafariSteps() {
           <Trans
             t={t}
             i18nKey="SafariSteps.step2"
-            components={{ link: <a href={USERSCRIPTS} target="_blank" rel="noreferrer" className="underline underline-offset-2" /> }}
+            components={{
+              // biome-ignore lint/a11y/useAnchorContent: Trans fills the link with the step's own words
+              link: <a href={USERSCRIPTS} target="_blank" rel="noreferrer" className="underline underline-offset-2" />,
+            }}
           />
         </li>
         <li>

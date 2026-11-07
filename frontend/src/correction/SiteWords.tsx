@@ -78,9 +78,10 @@ export function SiteRow({ source, url, children }: { source: string; url: string
 
 /** What a word of a site came to in the field. */
 function stateOf(word: SiteWord, values: FacetValueInfo[]) {
-  if (word.reaches === undefined || word.reaches === null) return "unknown";
-  if (word.reaches.length === 0) return "nothing";
-  const reached = values.filter((v) => word.reaches!.includes(v.key));
+  const reaches = word.reaches;
+  if (reaches === undefined || reaches === null) return "unknown";
+  if (reaches.length === 0) return "nothing";
+  const reached = values.filter((v) => reaches.includes(v.key));
   return reached.length > 0 && reached.every((v) => v.corrected === "REMOVED") ? "rejected" : "reached";
 }
 
@@ -128,7 +129,7 @@ function Word({
   return (
     <span className="inline-flex items-center gap-0.5">
       {state === "nothing" && <CircleDashedIcon className="size-3 shrink-0 text-maybe" aria-label={t("SiteWords.reachedNothing")} />}
-      {names.flatMap((n, i) => (i === 0 ? [press(n)] : [<span key={`/${i}`} className="text-muted-foreground">/</span>, press(n)]))}
+      {names.flatMap((n, i) => (i === 0 ? [press(n)] : [<span key={`/${n}`} className="text-muted-foreground">/</span>, press(n)]))}
     </span>
   );
 }

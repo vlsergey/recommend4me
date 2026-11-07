@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: a shadcn wrapper; its control is bound by the caller, through htmlFor or by nesting
     <label
       data-slot="label"
       className={cn(

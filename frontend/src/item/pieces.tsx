@@ -488,28 +488,29 @@ export function NumberLine({ type, summary, limit = 3 }: { type: ContentTypeInfo
  */
 export function SearchMatchLine({ match, className }: { match: SearchMatch; className?: string }) {
   const { t } = useTranslation("item");
-  const parts: { text: string; found: boolean }[] = [];
+  // Each piece by where it starts in the text: the pieces follow each other, no two start alike
+  const parts: { start: number; text: string; found: boolean }[] = [];
   let at = 0;
   [...match.highlights]
     .sort((a, b) => a.start - b.start)
     .forEach(({ start, end }) => {
       if (start < at) return;
-      if (start > at) parts.push({ text: match.text.slice(at, start), found: false });
-      parts.push({ text: match.text.slice(start, end), found: true });
+      if (start > at) parts.push({ start: at, text: match.text.slice(at, start), found: false });
+      parts.push({ start, text: match.text.slice(start, end), found: true });
       at = end;
     });
-  if (at < match.text.length) parts.push({ text: match.text.slice(at), found: false });
+  if (at < match.text.length) parts.push({ start: at, text: match.text.slice(at), found: false });
   const field = placeName(match);
   return (
     <p className={cn("text-xs leading-snug text-muted-foreground", className)}>
       <span className="font-medium text-foreground/70">{match.byMeaning ? t("SearchMatchLine.byMeaning", { field }) : field}: </span>
-      {parts.map((p, i) =>
+      {parts.map((p) =>
         p.found ? (
-          <mark key={i} className="rounded-sm bg-maybe/35 px-0.5 text-foreground">
+          <mark key={p.start} className="rounded-sm bg-maybe/35 px-0.5 text-foreground">
             {p.text}
           </mark>
         ) : (
-          <span key={i}>{p.text}</span>
+          <span key={p.start}>{p.text}</span>
         ),
       )}
     </p>

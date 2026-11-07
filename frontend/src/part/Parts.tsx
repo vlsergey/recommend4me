@@ -30,7 +30,7 @@ export function Parts({ item, label, parts, unfolded = false }: { item: ItemRef;
   const down = parts.filter((p) => p.influence != null && p.influence < 0).length;
   return (
     <section>
-      <button className="inline-flex flex-wrap items-center gap-x-1 text-left text-sm hover:underline" onClick={() => setListed(!listed)} aria-expanded={listed}>
+      <button type="button" className="inline-flex flex-wrap items-center gap-x-1 text-left text-sm hover:underline" onClick={() => setListed(!listed)} aria-expanded={listed}>
         <ChevronDownIcon className={cn("size-4 shrink-0", !listed && "-rotate-90")} />
         <span className="font-semibold">{label}</span>
         <span className="text-muted-foreground">
@@ -55,6 +55,7 @@ export function Parts({ item, label, parts, unfolded = false }: { item: ItemRef;
         {shown.map((p) => (
           <li key={p.partId} className="text-sm">
             <button
+              type="button"
               className={cn("flex w-full items-center gap-2 px-3 py-1.5 text-left", p.hasText ? "hover:bg-muted/50" : "cursor-default")}
               onClick={() => p.hasText && setOpen(open === p.partId ? null : p.partId)}
               disabled={!p.hasText}

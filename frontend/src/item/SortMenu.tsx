@@ -20,7 +20,7 @@ import { ORDERS, sortNumbers, type SortChoice } from "./sort";
 const RELEVANCE = "RELEVANCE";
 
 /** The value of the menu of an order: an order of its own by its name, a number as "NUMBER:<id>". */
-function valueOf(choice: SortChoice): string {
+function menuValue(choice: SortChoice): string {
   return choice.sort === "NUMBER" ? `NUMBER:${choice.number}` : choice.sort;
 }
 
@@ -95,7 +95,7 @@ export function SortMenu({
         <ChevronDownIcon className="opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-auto min-w-56">
-        <DropdownMenuRadioGroup value={searching ? RELEVANCE : valueOf(value)} onValueChange={(v) => v !== RELEVANCE && onChange(choiceOf(String(v)))}>
+        <DropdownMenuRadioGroup value={searching ? RELEVANCE : menuValue(value)} onValueChange={(v) => v !== RELEVANCE && onChange(choiceOf(String(v)))}>
           {searching && (
             <DropdownMenuRadioItem value={RELEVANCE} title={t("SortMenu.searching")}>
               <SearchIcon /> {t("SortMenu.relevance")}

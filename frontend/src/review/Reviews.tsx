@@ -108,6 +108,7 @@ function ReviewCard({ item, review }: { item: ItemRef; review: ReviewInfo }) {
           )}
         />
       </div>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: a long review unfolds by a press alone; the reviews are of the marking of a work (AGENTS.md), and keys for it are a change of how it behaves, to be made on purpose */}
       <p
         className={cn("leading-relaxed whitespace-pre-line text-foreground/90", long && !open && "line-clamp-4 cursor-pointer")}
         onClick={() => long && setOpen(!open)}

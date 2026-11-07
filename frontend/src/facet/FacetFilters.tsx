@@ -78,12 +78,12 @@ export function validSelection(s: unknown): FacetSelection {
   if (s && typeof s === "object" && Array.isArray((s as { hidden?: unknown }).hidden)) {
     const old = s as { hidden: string[]; hiddenWithout?: string[] };
     const out: FacetSelection = {};
-    old.hidden.forEach((ref) => {
+    for (const ref of old.hidden) {
       const at = ref.indexOf("=");
       const facet = ref.slice(0, Math.max(0, at));
-      if (at > 0 && current(facet)) (out[facet] ??= { hidden: [] }).hidden!.push(ref.slice(at + 1));
-    });
-    (old.hiddenWithout ?? []).filter(current).forEach((facet) => ((out[facet] ??= { hidden: [] }).withoutHidden = true));
+      if (at > 0 && current(facet)) out[facet] = { ...out[facet], hidden: [...(out[facet]?.hidden ?? []), ref.slice(at + 1)] };
+    }
+    for (const facet of (old.hiddenWithout ?? []).filter(current)) out[facet] = { hidden: [], ...out[facet], withoutHidden: true };
     return out;
   }
   return (s as FacetSelection | null) ?? NOTHING_HIDDEN;
@@ -219,8 +219,9 @@ function FacetDropdown({ type, facet, value, onChange }: { type: string; facet: 
   const { t } = useTranslation("facet");
   const [find, setFind] = useState("");
   const [open, setOpen] = useState(false);
-  const hasWithout = facet.noneLabelKey !== undefined && facet.noneLabelKey !== "";
-  const withoutLabel = hasWithout ? label(facet.noneLabelKey!) : "";
+  const noneLabelKey = facet.noneLabelKey;
+  const hasWithout = noneLabelKey !== undefined && noneLabelKey !== "";
+  const withoutLabel = hasWithout ? label(noneLabelKey) : "";
   const choice = value[facet.id];
   // Read when opened, or when chosen by: its summary names what is shown
   const read = useFilterValues(type, facet.id, open || choice !== undefined);

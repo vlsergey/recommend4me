@@ -62,7 +62,7 @@ export function number(n: number): string {
 
 /** A duration in seconds as people say it: "2 h 15 min", "40 min", "less than a minute". */
 export function duration(seconds: number): string {
-  if (!isFinite(seconds) || seconds <= 0) return "";
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
   if (seconds < 60) return i18n.t("Duration.underMinute");
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return i18n.t("Duration.minutes", { minutes });

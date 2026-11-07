@@ -136,6 +136,8 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
     if (selected >= items.length && items.length > 0) setSelected(items.length - 1);
   }, [items.length, selected]);
 
+  // Another list asked for: the selection back to its first work, no work opened
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a reset run on a change of the list's conditions alone, which it does not read
   useEffect(() => {
     setSelected(0);
     setOpened(null);
@@ -207,6 +209,7 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
     return (
       <div className="grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-4">
         {Array.from({ length: 8 }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: eight alike placeholders while the list loads, never reordered
           <Skeleton key={i} className="aspect-[4/3] rounded-xl" />
         ))}
       </div>

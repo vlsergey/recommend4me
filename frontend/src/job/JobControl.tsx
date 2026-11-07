@@ -101,6 +101,7 @@ export function JobControl({ type, dialog, onDialog: setDialog, onNeedSettings }
       <div className="flex min-w-0 items-center gap-1 sm:gap-3">
         <Loader2Icon className="hidden size-4 shrink-0 animate-spin text-muted-foreground sm:block" />
         <button
+          type="button"
           className="flex min-w-0 flex-1 flex-col gap-1 text-left sm:w-64 sm:flex-none"
           onClick={() => setDialog(s.source)}
           title={s.catalogue && s.mode === "SCRAPE_ALL" ? catalogueLabel(s.catalogue) : t("JobControl.details")}
@@ -195,7 +196,9 @@ export function UpdateSubmenu({ type, onDialog }: { type: ContentTypeInfo; onDia
     return job && isActive(job);
   });
   const withUpdates = sources.filter((s) => s.modes.includes("UPDATES"));
-  const updateAll = () => withUpdates.forEach((s) => start.mutate({ source: s.id, mode: "UPDATES" }));
+  const updateAll = () => {
+    for (const s of withUpdates) start.mutate({ source: s.id, mode: "UPDATES" });
+  };
   return (
     <DropdownMenuSub>
       {/* Opened by a press alone: on a touch screen there is no hover, and a hover opening it first makes the press close it */}

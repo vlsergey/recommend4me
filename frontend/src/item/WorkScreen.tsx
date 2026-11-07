@@ -128,6 +128,7 @@ export function WorkScreen({
     if (revealed) document.querySelector(`[data-value="${CSS.escape(revealed)}"]`)?.scrollIntoView({ block: "center" });
   }, [revealed]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: [corrections] is made anew at every drawing and acts by [ref]
   const actions = useMemo(
     () => ({
       item: ref,
@@ -140,7 +141,6 @@ export function WorkScreen({
       },
       evidenceBody: (value: AskedValue) => <EvidenceBody type={type} item={ref} asked={value} facets={d?.allFacets ?? []} corrections={corrections} />,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- [corrections] is made anew at every drawing and acts by [ref]
     [ref, revealed, type, d?.allFacets, d?.sites],
   );
 

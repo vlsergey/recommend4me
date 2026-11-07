@@ -32,6 +32,7 @@ const SHOWN_FACET_VALUES = 8;
 /** A work in the grid: the cover first, as the sites show their banners, with the answer under it. */
 export const ItemCard = forwardRef<HTMLElement, ItemViewProps>(function ItemCard({ type, summary, selected, onOpen, onSelect, onRate, onJudge }, ref) {
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the board's own keys open the selected work, Enter or Space (ItemBoard)
     <article
       ref={ref}
       onClick={onOpen}

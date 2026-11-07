@@ -59,7 +59,10 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
                   t={t}
                   i18nKey="JobDialog.description"
                   values={{ source: sourceTitle(source.id) }}
-                  components={{ link: <a href={source.homepage} target="_blank" rel="noreferrer" className="underline underline-offset-2" /> }}
+                  components={{
+                    // biome-ignore lint/a11y/useAnchorContent: Trans fills the link with the description's own words
+                    link: <a href={source.homepage} target="_blank" rel="noreferrer" className="underline underline-offset-2" />,
+                  }}
                 />
               </DialogDescription>
             </DialogHeader>
@@ -138,7 +141,7 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
                   <Trans
                     t={t}
                     i18nKey="JobDialog.notLoggedIn"
-                    components={{ settings: <button className="underline underline-offset-2" onClick={onNeedSettings} /> }}
+                    components={{ settings: <button type="button" className="underline underline-offset-2" onClick={onNeedSettings} /> }}
                   />
                 </div>
               </div>

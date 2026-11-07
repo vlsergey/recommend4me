@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 /** Buttons joined into one control: shared borders, the inner corners square. */
 function ButtonGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a fieldset brings the browser's own border, padding and min-width, which this shadcn layout does not have
     <div
       role="group"
       data-slot="button-group"

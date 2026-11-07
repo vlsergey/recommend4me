@@ -41,8 +41,8 @@ export function ModelsScreen({ type }: { type: ContentTypeInfo }) {
   usePluginNamespaces([...new Set(list.flatMap((m) => [...(m.methods ?? []), ...(m.source ? [m.source] : [])]))]);
   const grade = list.find((m) => m.kind === "GRADE");
   const interest = list.find((m) => m.kind === "INTEREST");
-  const facets = list.filter((m) => m.kind === "FACET");
-  const sources = [...new Set(facets.map((m) => m.source!))];
+  const facets = list.filter(isFacetModel);
+  const sources = [...new Set(facets.map((m) => m.source))];
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6">
@@ -165,15 +165,22 @@ function InterestCard({ type, m }: { type: ContentTypeInfo; m: ModelState }) {
   );
 }
 
+/** The model of a facet of a source: it names both, as every facet's model does. */
+type FacetModelState = ModelState & { source: string; facet: string };
+
+function isFacetModel(m: ModelState): m is FacetModelState {
+  return m.kind === "FACET" && m.source !== undefined && m.facet !== undefined;
+}
+
 /** The model of a facet of a source: its suggester, fitted on its own; searched anew from scratch on asking. */
-function FacetCard({ type, m }: { type: ContentTypeInfo; m: ModelState }) {
+function FacetCard({ type, m }: { type: ContentTypeInfo; m: FacetModelState }) {
   const { t } = useTranslation("model");
   const queryClient = useQueryClient();
   const choose = useMutation({
     mutationFn: async (method: string) => {
       ensureOk(
         await api.PUT("/api/types/{type}/models/facets/{source}/{facet}/method", {
-          params: { path: { type: type.id, source: m.source!, facet: m.facet! } },
+          params: { path: { type: type.id, source: m.source, facet: m.facet } },
           body: { method },
         }),
       );
@@ -183,14 +190,14 @@ function FacetCard({ type, m }: { type: ContentTypeInfo; m: ModelState }) {
   const search = async () => {
     ensureOk(
       await api.POST("/api/types/{type}/models/facets/{source}/{facet}/search", {
-        params: { path: { type: type.id, source: m.source!, facet: m.facet! } },
+        params: { path: { type: type.id, source: m.source, facet: m.facet } },
       }),
     );
     await queryClient.invalidateQueries({ queryKey: modelsKey(type.id) });
   };
   return (
     <ModelCard
-      title={m.labelKey ? label(m.labelKey) : m.facet!}
+      title={m.labelKey ? label(m.labelKey) : m.facet}
       m={m}
       method={m.method ? scorerTitle(m.method) : undefined}
       examples={
@@ -202,9 +209,9 @@ function FacetCard({ type, m }: { type: ContentTypeInfo; m: ModelState }) {
           {(m.methods ?? []).length > 1 && (
             <FacetComparisonDialog
               type={type}
-              source={m.source!}
-              facet={m.facet!}
-              title={m.labelKey ? label(m.labelKey) : m.facet!}
+              source={m.source}
+              facet={m.facet}
+              title={m.labelKey ? label(m.labelKey) : m.facet}
               current={m.method}
               onChoose={(method) => choose.mutate(method)}
               busy={m.running || choose.isPending}
@@ -340,6 +347,7 @@ function Tried({ m }: { m: ModelState }) {
           </thead>
           <tbody>
             {m.tried.map((r, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: the search's trials in the order made, never reordered; a walk on from the last fit may try one setting again
               <tr key={i} className={cn("border-t", chosen(r) && "bg-yes/10 font-medium")}>
                 <td className="px-3 py-1 tabular-nums">{settingsText(r.settings, t("ModelsScreen.parameter"))}</td>
                 <td className="px-3 py-1 text-right tabular-nums">{loss ? qualityNumber(r.value, r.error, 4) : qualityPercent(r.value, r.error)}</td>
