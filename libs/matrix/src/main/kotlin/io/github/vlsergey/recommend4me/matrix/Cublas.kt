@@ -49,6 +49,45 @@ class Cublas private constructor(
     /** The scalars a call hands over and takes back — α, β, a dot's result: one place for them, made once; one thread at a time. */
     private val scalars: MemorySegment = Arena.global().allocate(ValueLayout.JAVA_FLOAT, 4)
 
+    private val cudaMallocHost: MethodHandle by lazy {
+        Linker.nativeLinker().downcallHandle(runtime.find("cudaMallocHost").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG))
+    }
+    private val cudaFreeHost: MethodHandle by lazy {
+        Linker.nativeLinker().downcallHandle(runtime.find("cudaFreeHost").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+    }
+
+    /**
+     * BYTES OF THE MAIN MEMORY THE CARD COPIES FROM AND INTO AT ITS OWN SPEED: page-locked
+     * (`cudaMallocHost`) — a copy of the ordinary memory goes through a buffer of the driver first.
+     * Of what a kernel is handed and gives back, laid out here and sent at once. Freed by [close].
+     */
+    inner class Pinned(val bytes: Long) : AutoCloseable {
+        val segment: MemorySegment = Arena.ofConfined().use { a ->
+            val out = a.allocate(ValueLayout.ADDRESS)
+            check((cudaMallocHost.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) { "no page-locked memory of $bytes bytes" }
+            out.get(ValueLayout.ADDRESS, 0).reinterpret(bytes.coerceAtLeast(1))
+        }
+        private var closed = false
+
+        /** [from] written [at] bytes on. */
+        fun put(at: Long, from: IntArray) = MemorySegment.copy(from, 0, segment, ValueLayout.JAVA_INT, at, from.size)
+
+        /** [n] ints [at] bytes on. */
+        fun ints(at: Long, n: Int): IntArray = IntArray(n).also { if (n > 0) MemorySegment.copy(segment, ValueLayout.JAVA_INT, at, it, 0, n) }
+
+        /** [n] floats [at] bytes on. */
+        fun floats(at: Long, n: Int): FloatArray = FloatArray(n).also { if (n > 0) MemorySegment.copy(segment, ValueLayout.JAVA_FLOAT, at, it, 0, n) }
+
+        override fun close() {
+            if (closed) return
+            closed = true
+            cudaFreeHost.invokeExact(segment) as Int
+        }
+    }
+
+    /** Page-locked room of [bytes]; null when there is none. */
+    fun pinned(bytes: Long): Pinned? = runCatching { Pinned(bytes) }.getOrNull()
+
     /** Floats in the card's memory: [count] of them. Freed by [close]. */
     inner class DeviceFloats(val count: Long) : AutoCloseable {
         val address: MemorySegment = Arena.ofConfined().use { a ->
@@ -118,6 +157,16 @@ class Cublas private constructor(
         /** The rows [fromRow] to [fromRow] + [count] of [from], half precision as they are, written [at] bytes on. */
         fun upload(from: HalfMatrix, fromRow: Int, count: Int, at: Long = 0) {
             if (count > 0) copyBytes(at(at), from.slice(fromRow, count), count.toLong() * from.cols * 2, HOST_TO_DEVICE)
+        }
+
+        /** The first [bytes] of [from] written [at] bytes on. */
+        fun upload(from: Pinned, bytes: Long, at: Long = 0) {
+            if (bytes > 0) copyBytes(at(at), from.segment, bytes, HOST_TO_DEVICE)
+        }
+
+        /** [bytes] from [at] bytes on written into [into] from its start. */
+        fun download(into: Pinned, bytes: Long, at: Long = 0) {
+            if (bytes > 0) copyBytes(into.segment, at(at), bytes, DEVICE_TO_HOST)
         }
 
         /** The first [n] ints. */

@@ -109,130 +109,190 @@ __device__ __forceinline__ bool before(float s, int v, float t, int u) {
 
 #define SHOWN_PARAMETERS     const int* item, const int* foldOf, const float* U, int width, int rank,     const float* vt, const float* shifts, const float* examples, int m,     const int* colAt, const int* colLen, const int* cols, const int* closedAt, const int* closed, const int* exAt, const int* ex, float half
 
-// Pass one: of every row, how many are likely, and the `least` highest of the rest (their places among
-// the row's values, their scores) — the highest first — with how many there are
-extern "C" __global__ void shown_count(SHOWN_PARAMETERS, int least, int* likely, int* topPlace, float* topScore, int* topCount) {
+// The likely of a row kept in its own stripe of `cap` by the one pass; a row of more is written again whole (shown_likely)
+#define WARPS (BLOCK / 32)
+
+// Of two lists of the highest, each the highest first, the `least` highest of both into the first
+__device__ void merge_highest(float* as, int* ap, int* av, int& an, const float* bs, const int* bp, const int* bv, int bn, int least) {
+    float rs[MAX_LEAST];
+    int rp[MAX_LEAST], rv[MAX_LEAST];
+    int i = 0, j = 0, k = 0;
+    while (k < least && (i < an || j < bn)) {
+        bool first = j >= bn || i < an && before(as[i], av[i], bs[j], bv[j]);
+        if (first) {
+            rs[k] = as[i]; rp[k] = ap[i]; rv[k] = av[i]; i++;
+        } else {
+            rs[k] = bs[j]; rp[k] = bp[j]; rv[k] = bv[j]; j++;
+        }
+        k++;
+    }
+    for (int q = 0; q < k; q++) {
+        as[q] = rs[q]; ap[q] = rp[q]; av[q] = rv[q];
+    }
+    an = k;
+}
+
+// ONE PASS OVER A ROW, a block a row, a value a thread at a time: of every value its score; the likely
+// written into the row's stripe in the order of their places — a warp's by its ballot, the warps' one
+// after another — `cap` at most, their number in likely[r] however many; of the rest every thread's
+// `least` highest, merged a warp at a time by its lanes' registers, then the warps' by one thread:
+// topPlace, topScore, topCount
+extern "C" __global__ void shown_one(
+    SHOWN_PARAMETERS, int least, int cap, int* likely, int* topCount, int* topPlace, float* topScore, int* stripePlace, float* stripeScore
+) {
     __shared__ float u[MAX_RANK];
-    __shared__ int counted;
-    __shared__ float candScore[BLOCK * MAX_LEAST];
-    __shared__ int candPlace[BLOCK * MAX_LEAST];
-    __shared__ int candValue[BLOCK * MAX_LEAST];
-    __shared__ int candCount[BLOCK];
+    __shared__ int warpCount[WARPS];
+    __shared__ int warpBase[WARPS];
+    __shared__ int written;
+    __shared__ float wScore[WARPS * MAX_LEAST];
+    __shared__ int wPlace[WARPS * MAX_LEAST];
+    __shared__ int wValue[WARPS * MAX_LEAST];
+    __shared__ int wKept[WARPS];
     int r = blockIdx.x;
+    int lane = threadIdx.x & 31;
+    int warp = threadIdx.x >> 5;
     Row w = row_of(r, item, foldOf, colAt, colLen, closedAt, exAt);
     if (threadIdx.x < rank) u[threadIdx.x] = U[(size_t) w.item * width + w.fold * rank + threadIdx.x];
-    if (threadIdx.x == 0) counted = 0;
+    if (threadIdx.x == 0) written = 0;
     __syncthreads();
     const float* side = vt + (size_t) w.fold * rank * m;
     const float* shift = shifts + (size_t) w.fold * m;
     float example = examples[w.fold];
     int len = w.colAt < 0 ? m : w.colLen;
-    int count = 0;
     int kept = 0;
     float ks[MAX_LEAST];
     int kp[MAX_LEAST], kv[MAX_LEAST];
-    for (int p = threadIdx.x; p < len; p += blockDim.x) {
-        int v = w.colAt < 0 ? p : cols[w.colAt + p];
-        if (shut(v, closed, w.closedFrom, w.closedTo)) continue;
-        float s = score_of(v, u, rank, side, m, shift, w, ex, example);
-        if (s > half) {
-            count++;
-            continue;
-        }
-        if (least == 0 || kept == least && !before(s, v, ks[least - 1], kv[least - 1])) continue;
-        int at = kept < least ? kept : least - 1;
-        while (at > 0 && before(s, v, ks[at - 1], kv[at - 1])) {
-            ks[at] = ks[at - 1];
-            kp[at] = kp[at - 1];
-            kv[at] = kv[at - 1];
-            at--;
-        }
-        ks[at] = s;
-        kp[at] = p;
-        kv[at] = v;
-        if (kept < least) kept++;
-    }
-    atomicAdd(&counted, count);
-    int base = threadIdx.x * MAX_LEAST;
-    for (int k = 0; k < kept; k++) {
-        candScore[base + k] = ks[k];
-        candPlace[base + k] = kp[k];
-        candValue[base + k] = kv[k];
-    }
-    candCount[threadIdx.x] = kept;
-    __syncthreads();
-    if (threadIdx.x != 0) return;
-    // The highest of every thread's highest, by the same order
-    int taken = 0;
-    float bs[MAX_LEAST];
-    int bp[MAX_LEAST], bv[MAX_LEAST];
-    for (int t = 0; t < blockDim.x; t++) {
-        for (int k = 0; k < candCount[t]; k++) {
-            float s = candScore[t * MAX_LEAST + k];
-            int v = candValue[t * MAX_LEAST + k];
-            if (taken == least && !before(s, v, bs[least - 1], bv[least - 1])) break;
-            int at = taken < least ? taken : least - 1;
-            while (at > 0 && before(s, v, bs[at - 1], bv[at - 1])) {
-                bs[at] = bs[at - 1];
-                bp[at] = bp[at - 1];
-                bv[at] = bv[at - 1];
-                at--;
-            }
-            bs[at] = s;
-            bp[at] = candPlace[t * MAX_LEAST + k];
-            bv[at] = v;
-            if (taken < least) taken++;
-        }
-    }
-    likely[r] = counted;
-    topCount[r] = taken;
-    for (int k = 0; k < taken; k++) {
-        topPlace[(size_t) r * least + k] = bp[k];
-        topScore[(size_t) r * least + k] = bs[k];
-    }
-}
-
-// Pass two: the likely of every row, in the order of their places, from outAt[r] on: a stride of the
-// block's values after another, each thread's likely placed after those of the threads before it
-extern "C" __global__ void shown_likely(SHOWN_PARAMETERS, const int* outAt, int* outPlace, float* outScore) {
-    __shared__ float u[MAX_RANK];
-    __shared__ int flags[BLOCK];
-    int r = blockIdx.x;
-    Row w = row_of(r, item, foldOf, colAt, colLen, closedAt, exAt);
-    if (threadIdx.x < rank) u[threadIdx.x] = U[(size_t) w.item * width + w.fold * rank + threadIdx.x];
-    __syncthreads();
-    const float* side = vt + (size_t) w.fold * rank * m;
-    const float* shift = shifts + (size_t) w.fold * m;
-    float example = examples[w.fold];
-    int len = w.colAt < 0 ? m : w.colLen;
-    int written = outAt[r];
     for (int from = 0; from < len; from += blockDim.x) {
         int p = from + threadIdx.x;
+        bool flag = false;
         float s = 0.0f;
-        int flag = 0;
         if (p < len) {
             int v = w.colAt < 0 ? p : cols[w.colAt + p];
             if (!shut(v, closed, w.closedFrom, w.closedTo)) {
                 s = score_of(v, u, rank, side, m, shift, w, ex, example);
-                flag = s > half ? 1 : 0;
+                if (s > half) flag = true;
+                else if (least > 0 && (kept < least || before(s, v, ks[least - 1], kv[least - 1]))) {
+                    int at = kept < least ? kept : least - 1;
+                    while (at > 0 && before(s, v, ks[at - 1], kv[at - 1])) {
+                        ks[at] = ks[at - 1]; kp[at] = kp[at - 1]; kv[at] = kv[at - 1];
+                        at--;
+                    }
+                    ks[at] = s; kp[at] = p; kv[at] = v;
+                    if (kept < least) kept++;
+                }
             }
         }
-        // An inclusive sum of the flags over the block's threads
-        flags[threadIdx.x] = flag;
+        unsigned mask = __ballot_sync(0xffffffffu, flag);
+        if (lane == 0) warpCount[warp] = __popc(mask);
         __syncthreads();
-        for (int step = 1; step < blockDim.x; step <<= 1) {
-            int add = threadIdx.x >= step ? flags[threadIdx.x - step] : 0;
-            __syncthreads();
-            flags[threadIdx.x] += add;
-            __syncthreads();
+        if (threadIdx.x == 0) {
+            int b = written;
+            for (int k = 0; k < WARPS; k++) {
+                warpBase[k] = b;
+                b += warpCount[k];
+            }
+            written = b;
         }
+        __syncthreads();
         if (flag) {
-            int at = written + flags[threadIdx.x] - 1;
+            int at = warpBase[warp] + __popc(mask & ((1u << lane) - 1u));
+            if (at < cap) {
+                stripePlace[(size_t) r * cap + at] = p;
+                stripeScore[(size_t) r * cap + at] = s;
+            }
+        }
+    }
+    // The highest of the rest: a warp's lanes' lists merged by halves, through their registers
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        int bn = __shfl_down_sync(0xffffffffu, kept, offset);
+        float bs[MAX_LEAST];
+        int bp[MAX_LEAST], bv[MAX_LEAST];
+        for (int k = 0; k < MAX_LEAST; k++) {
+            bs[k] = __shfl_down_sync(0xffffffffu, ks[k], offset);
+            bp[k] = __shfl_down_sync(0xffffffffu, kp[k], offset);
+            bv[k] = __shfl_down_sync(0xffffffffu, kv[k], offset);
+        }
+        if (lane < offset) merge_highest(ks, kp, kv, kept, bs, bp, bv, bn, least);
+    }
+    if (lane == 0) {
+        wKept[warp] = kept;
+        for (int k = 0; k < kept; k++) {
+            wScore[warp * MAX_LEAST + k] = ks[k];
+            wPlace[warp * MAX_LEAST + k] = kp[k];
+            wValue[warp * MAX_LEAST + k] = kv[k];
+        }
+    }
+    __syncthreads();
+    if (threadIdx.x != 0) return;
+    // The warps' lists merged by one thread: a few dozen of them
+    for (int k = 1; k < WARPS; k++) merge_highest(ks, kp, kv, kept, wScore + k * MAX_LEAST, wPlace + k * MAX_LEAST, wValue + k * MAX_LEAST, wKept[k], least);
+    likely[r] = written;
+    topCount[r] = kept;
+    for (int k = 0; k < kept; k++) {
+        topPlace[(size_t) r * least + k] = kp[k];
+        topScore[(size_t) r * least + k] = ks[k];
+    }
+}
+
+// The stripes' likely packed one row after another, from outAt[r] on: a thread a place of a stripe
+extern "C" __global__ void shown_pack(
+    int count, int cap, const int* likely, const int* outAt, const int* stripePlace, const float* stripeScore, int* outPlace, float* outScore
+) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= (long long) count * cap) return;
+    int r = (int) (t / cap);
+    int k = (int) (t % cap);
+    if (k >= min(likely[r], cap)) return;
+    outPlace[outAt[r] + k] = stripePlace[t];
+    outScore[outAt[r] + k] = stripeScore[t];
+}
+
+// THE LIKELY OF THE ROWS OF MORE THAN A STRIPE HOLDS, whole: of the rows `which` (a block each), in the
+// order of their places, from outAt[k] on — a stride of the block's values after another, each
+// thread's likely placed after those of the threads before it
+extern "C" __global__ void shown_likely(SHOWN_PARAMETERS, const int* which, const int* outAt, int* outPlace, float* outScore) {
+    __shared__ float u[MAX_RANK];
+    __shared__ int warpCount[WARPS];
+    __shared__ int warpBase[WARPS];
+    __shared__ int written;
+    int r = which[blockIdx.x];
+    int lane = threadIdx.x & 31;
+    int warp = threadIdx.x >> 5;
+    Row w = row_of(r, item, foldOf, colAt, colLen, closedAt, exAt);
+    if (threadIdx.x < rank) u[threadIdx.x] = U[(size_t) w.item * width + w.fold * rank + threadIdx.x];
+    if (threadIdx.x == 0) written = outAt[blockIdx.x];
+    __syncthreads();
+    const float* side = vt + (size_t) w.fold * rank * m;
+    const float* shift = shifts + (size_t) w.fold * m;
+    float example = examples[w.fold];
+    int len = w.colAt < 0 ? m : w.colLen;
+    for (int from = 0; from < len; from += blockDim.x) {
+        int p = from + threadIdx.x;
+        float s = 0.0f;
+        bool flag = false;
+        if (p < len) {
+            int v = w.colAt < 0 ? p : cols[w.colAt + p];
+            if (!shut(v, closed, w.closedFrom, w.closedTo)) {
+                s = score_of(v, u, rank, side, m, shift, w, ex, example);
+                flag = s > half;
+            }
+        }
+        unsigned mask = __ballot_sync(0xffffffffu, flag);
+        if (lane == 0) warpCount[warp] = __popc(mask);
+        __syncthreads();
+        if (threadIdx.x == 0) {
+            int b = written;
+            for (int k = 0; k < WARPS; k++) {
+                warpBase[k] = b;
+                b += warpCount[k];
+            }
+            written = b;
+        }
+        __syncthreads();
+        if (flag) {
+            int at = warpBase[warp] + __popc(mask & ((1u << lane) - 1u));
             outPlace[at] = p;
             outScore[at] = s;
         }
-        int total = flags[blockDim.x - 1];
-        __syncthreads();
-        written += total;
     }
 }

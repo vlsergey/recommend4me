@@ -179,15 +179,18 @@ class ScoringTest {
             }
             val random = Random(3)
             val closed = List(rows.size) { IntArray(random.nextInt(4)) { random.nextInt(values) }.distinct().sorted().toIntArray() }
-            for (least in listOf(0, 3)) {
+            // The stripe of the one pass as it is, and of one: nearly every row of more likely than it holds, written again whole
+            for (stripe in listOf(FeatureKernels.STRIPE, 1)) for (least in listOf(0, 3, FeatureKernels.MAX_LEAST)) {
+                (card as Scoring.Scored).stripe = stripe
                 val expected = main.shown(rows, columns, closed, least)
                 val got = card.shown(rows, columns, closed, least)
-                assertTrue((card as Scoring.Scored).onTheCard, "chosen on the card")
+                assertTrue(card.onTheCard, "chosen on the card")
                 rows.indices.forEach { r ->
                     // The coordinates of the card's product and of the processor's differ in their last digits: the scores near
-                    assertEquals(expected[r].places.toList(), got[r].places.toList(), "row $r, least $least")
+                    assertEquals(expected[r].places.toList(), got[r].places.toList(), "row $r, least $least, stripe $stripe")
                     expected[r].scores.indices.forEach { k -> assertRelative(expected[r].scores[k], got[r].scores[k], "row $r, place ${expected[r].places[k]}") }
                 }
+                if (stripe == 1) assertTrue(expected.any { e -> e.scores.count { it > card.half } > 1 }, "some row of more likely than the stripe")
             }
             // The coordinates made on the card, brought over: the chances of every value as the main memory's
             val asked = intArrayOf(0, 3, items - 1, items / 2)

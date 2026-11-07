@@ -488,57 +488,50 @@ class FacetSuggestions(
     ): Map<String, Set<String>> {
         val given = HashMap<String, Set<String>>()
         val task = data.task
-        // The time of its parts, each summed over the chunks: what each work is told of, what it is shown with
-        // besides — chosen by the suggester of what it may have — the scores of what it is told of, the
-        // chances made, the putting
-        var telling = 0L
-        var choosing = 0L
-        var scoringOwn = 0L
-        var making = 0L
-        var putting = 0L
-        var from = 0
-        while (from < data.ids.size) {
-            var at = System.nanoTime()
-            val rows = IntArray(minOf(CHUNK, data.ids.size - from)) { from + it }
-            from += rows.size
-            val told = Array(rows.size) { toldOf(data, rows[it]) }
-            // Neither what it is told of nor what it may not have after all is offered besides
-            val closed = rows.mapIndexed { r, i -> (told[r] + task.barred[i]).also { it.sort() } }
-            telling += System.nanoTime() - at
-            at = System.nanoTime()
-            // What each work is shown with besides, chosen of its row as the suggester hands it over — a row of
-            // every value of every work never kept, of the tags thousands of values a work: the likely, and the
-            // likeliest of the rest, likely or not, to offer the work at least so many the site does not give
-            // ([ModelValues.offered]), chosen of the values by their places. Of a work all named by the user's word, none
-            val columns = rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] }
-            val open = scores.shown(rows, columns, closed, ModelValues.OFFERED)
-            choosing += System.nanoTime() - at
-            at = System.nanoTime()
-            val own = scores.scores(rows, told.asList())
-            scoringOwn += System.nanoTime() - at
-            at = System.nanoTime()
-            // The chances of each work made side by side on every core; put among the chances after, one work after another
-            val of = arrayOfNulls<FewChances>(rows.size)
-            IntStream.range(0, rows.size).parallel().forEach { r ->
-                val i = rows[r]
-                of[r] = chancesOf(data.ids[i], facet.key, scores, open[r], told[r], own[r], data, i)
-            }
-            making += System.nanoTime() - at
-            at = System.nanoTime()
-            rows.forEachIndexed { r, i ->
-                val id = data.ids[i]
-                val chances = of[r]!!
-                if (compare && facet.infer) given[id] = ModelValues.given(chances).toSet()
-                val byFacet = made.getOrPut(id) { HashMap() }
-                val drafts = byFacet[facet.key]?.values?.filter { it.drafted }.orEmpty()
-                byFacet[facet.key] = if (drafts.isEmpty()) chances else {
-                    val out = LinkedHashMap(chances)
-                    drafts.forEach { d -> out[d.key] = out[d.key]?.copy(draftedFrom = d.draftedFrom) ?: d }
-                    FewChances(out.values.toTypedArray())
-                }
-            }
-            putting += System.nanoTime() - at
+        // The time of its parts: what each work is told of, what it is shown with besides — chosen by the
+        // suggester of what it may have — the scores of what it is told of, the chances made, the putting.
+        // EVERY WORK AT ONCE: what grows with the works and the values — a row of every value — is the
+        // suggester's, a row at a time or on the card; a call of it a chunk of works was 38 of fanfics.me
+        // a facet, each sending and taking back
+        var at = System.nanoTime()
+        val rows = IntArray(data.ids.size) { it }
+        val told = Array(rows.size) { toldOf(data, rows[it]) }
+        // Neither what it is told of nor what it may not have after all is offered besides
+        val closed = rows.mapIndexed { r, i -> (told[r] + task.barred[i]).also { it.sort() } }
+        val telling = System.nanoTime() - at
+        at = System.nanoTime()
+        // What each work is shown with besides, chosen of its row as the suggester hands it over — a row of
+        // every value of every work never kept, of the tags thousands of values a work: the likely, and the
+        // likeliest of the rest, likely or not, to offer the work at least so many the site does not give
+        // ([ModelValues.offered]), chosen of the values by their places. Of a work all named by the user's word, none
+        val columns = rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] }
+        val open = scores.shown(rows, columns, closed, ModelValues.OFFERED)
+        val choosing = System.nanoTime() - at
+        at = System.nanoTime()
+        val own = scores.scores(rows, told.asList())
+        val scoringOwn = System.nanoTime() - at
+        at = System.nanoTime()
+        // The chances of each work made side by side on every core; put among the chances after, one work after another
+        val of = arrayOfNulls<FewChances>(rows.size)
+        IntStream.range(0, rows.size).parallel().forEach { r ->
+            val i = rows[r]
+            of[r] = chancesOf(data.ids[i], facet.key, scores, open[r], told[r], own[r], data, i)
         }
+        val making = System.nanoTime() - at
+        at = System.nanoTime()
+        rows.forEachIndexed { r, i ->
+            val id = data.ids[i]
+            val chances = of[r]!!
+            if (compare && facet.infer) given[id] = ModelValues.given(chances).toSet()
+            val byFacet = made.getOrPut(id) { HashMap() }
+            val drafts = byFacet[facet.key]?.values?.filter { it.drafted }.orEmpty()
+            byFacet[facet.key] = if (drafts.isEmpty()) chances else {
+                val out = LinkedHashMap(chances)
+                drafts.forEach { d -> out[d.key] = out[d.key]?.copy(draftedFrom = d.draftedFrom) ?: d }
+                FewChances(out.values.toTypedArray())
+            }
+        }
+        val putting = System.nanoTime() - at
         laps?.took("told", telling / 1_000_000)
         laps?.took("chosen", choosing / 1_000_000)
         laps?.took("scores of the told", scoringOwn / 1_000_000)

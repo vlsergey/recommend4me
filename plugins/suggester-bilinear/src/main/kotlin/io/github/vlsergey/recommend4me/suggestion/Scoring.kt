@@ -167,6 +167,9 @@ internal class Scoring(
         /** Whether the scores are made on the card. */
         internal val onTheCard: Boolean get() = card != null
 
+        /** The likely of a row the one pass on the card keeps in its stripe ([FeatureKernels.STRIPE]): a test makes it small, for rows of more to be written again. */
+        internal var stripe: Int = FeatureKernels.STRIPE
+
         /** The card given up — no room on it, a kernel that failed — and freed: the main memory's from now on. */
         private fun dropCard() {
             card?.close()
@@ -328,6 +331,7 @@ internal class Scoring(
         private inner class OnCard(val cublas: Cublas, val kernels: CudaKernels) : AutoCloseable {
             private val made = ArrayList<AutoCloseable>()
             private val rooms = HashMap<String, Cublas.DeviceBytes>()
+            private val pins = HashMap<String, Cublas.Pinned>()
             private var closed = false
 
             private fun floats(count: Long): Cublas.DeviceFloats = (cublas.allocate(maxOf(1L, count)) ?: throw NoRoom()).also { made += it }
@@ -349,12 +353,6 @@ internal class Scoring(
             }
             private val examples = room("examples", folds.toLong() * Float.SIZE_BYTES).also { it.upload(FloatArray(folds) { f -> pair[f][0] }) }
             private val folded = (cublas.allocateBytes(task.itemCount.toLong() * Int.SIZE_BYTES) ?: throw NoRoom()).also { made += it; it.upload(foldOf) }
-
-            // The time of the choosing, summed over its calls: told once every item was shown
-            private var sending = 0L
-            private var choosing = 0L
-            private var taking = 0L
-            private var shownRows = 0
 
             /**
              * Every item's coordinates made in [u] — the ones summed of the stacked weights, every block's rows
@@ -395,7 +393,34 @@ internal class Scoring(
                 return longArrayOf((sent - started) / 1_000_000, (multiplied - sent) / 1_000_000)
             }
 
-            /** [SuggestionScores.shown] on the card ([FeatureKernels], `shown_count` and `shown_likely`). */
+            /** The page-locked room [name] of the main memory, of [bytes] at least: kept for the next choosing, grown to twice when it is not enough. */
+            private fun pinned(name: String, bytes: Long): Cublas.Pinned {
+                val have = pins[name]
+                if (have != null && have.bytes >= bytes) return have
+                have?.close()
+                return (cublas.pinned(maxOf(bytes, 2 * (have?.bytes ?: 0), 64)) ?: throw NoRoom()).also { pins[name] = it }
+            }
+
+            /** Of [lists] one after another, laid out in [into] from int [at] on: where each begins among them, of their number + 1, then all of them; the ints written. */
+            private fun laid(into: IntArray, at: Int, count: Int, lists: (Int) -> IntArray): Int {
+                val values = at + count + 1
+                var n = 0
+                for (r in 0 until count) {
+                    into[at + r] = n
+                    val list = lists(r)
+                    list.copyInto(into, values + n)
+                    n += list.size
+                }
+                into[at + count] = n
+                return count + 1 + n
+            }
+
+            /**
+             * [SuggestionScores.shown] on the card, of every row at once: what the kernels read sent in one copy,
+             * from page-locked memory; ONE PASS over a row (`shown_one`) — its likely into its stripe, the highest
+             * of the rest merged by the warps' registers; the stripes packed (`shown_pack`); a row of more likely
+             * than a stripe holds written again whole (`shown_likely`); what is chosen brought back in one copy.
+             */
             fun shown(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>, least: Int): List<Shown> {
                 check(!this.closed) { "the scores on the card are freed" }
                 val started = System.nanoTime()
@@ -412,62 +437,103 @@ internal class Scoring(
                         colLen[r] = cols.size
                     }
                 }
-                val cols = IntArray(total).also { flat -> arrays.forEach { (a, at) -> a.copyInto(flat, at) } }
-                fun flat(lists: (Int) -> IntArray): Pair<IntArray, IntArray> {
-                    val at = IntArray(count + 1)
-                    for (r in 0 until count) at[r + 1] = at[r] + lists(r).size
-                    val all = IntArray(at[count])
-                    for (r in 0 until count) lists(r).copyInto(all, at[r])
-                    return at to all
-                }
-                val (closedAt, closedAll) = flat { closed[it] }
-                val (exAt, exAll) = flat { task.examples[rows[it]] }
+                // What the kernels read, ints one after another: the items, where each row's values begin and how
+                // many, the values, the closed and the examples by where each row's begin
+                val closedSize = (0 until count).sumOf { closed[it].size }
+                val exSize = (0 until count).sumOf { task.examples[rows[it]].size }
+                val ins = IntArray(3 * count + total + 2 * (count + 1) + closedSize + exSize)
+                rows.copyInto(ins, 0)
+                colAt.copyInto(ins, count)
+                colLen.copyInto(ins, 2 * count)
+                val colsAt = 3 * count
+                arrays.forEach { (a, at) -> a.copyInto(ins, colsAt + at) }
+                val closedFrom = colsAt + total
+                val closedInts = laid(ins, closedFrom, count) { closed[it] }
+                val exFrom = closedFrom + closedInts
+                laid(ins, exFrom, count) { task.examples[rows[it]] }
+                val inBytes = ins.size.toLong() * Int.SIZE_BYTES
+                val staging = pinned("in", inBytes)
+                staging.put(0, ins)
+                val input = room("in", inBytes)
+                input.upload(staging, inBytes)
+                fun at(int: Int) = input.at(int.toLong() * Int.SIZE_BYTES)
                 val args = arrayOf<Any>(
-                    ints("item", rows), folded, u, width, rank, vts, shifts, examples, m,
-                    ints("colAt", colAt), ints("colLen", colLen), ints("cols", cols), ints("closedAt", closedAt), ints("closed", closedAll),
-                    ints("exAt", exAt), ints("ex", exAll), half,
+                    at(0), folded, u, width, rank, vts, shifts, examples, m,
+                    at(count), at(2 * count), at(colsAt), at(closedFrom), at(closedFrom + count + 1), at(exFrom), at(exFrom + count + 1), half,
                 )
-                val likely = room("likely", count.toLong() * Int.SIZE_BYTES)
-                val topPlace = room("topPlace", count.toLong() * maxOf(least, 1) * Int.SIZE_BYTES)
-                val topScore = room("topScore", count.toLong() * maxOf(least, 1) * Float.SIZE_BYTES)
-                val topCount = room("topCount", count.toLong() * Int.SIZE_BYTES)
+                // What it gives: of every row how many are likely and how many of the highest besides, their places and scores
+                val l = maxOf(least, 0)
+                val outInts = 2L * count + 2L * count * l
+                val output = room("out", outInts * Int.SIZE_BYTES)
+                fun out(int: Long) = output.at(int * Int.SIZE_BYTES)
+                val stripePlace = room("stripePlace", count.toLong() * stripe * Int.SIZE_BYTES)
+                val stripeScore = room("stripeScore", count.toLong() * stripe * Float.SIZE_BYTES)
                 val sent = System.nanoTime()
                 // A block of the kernel's threads a row
-                kernels.launch("shown_count", count.toLong() * CudaKernels.BLOCK, *args, least, likely, topPlace, topScore, topCount)
-                val likelyOf = likely.ints(count)
-                val outAt = IntArray(count)
-                for (r in 1 until count) outAt[r] = outAt[r - 1] + likelyOf[r - 1]
-                val allLikely = outAt[count - 1] + likelyOf[count - 1]
-                val outPlace = room("outPlace", allLikely.toLong() * Int.SIZE_BYTES)
-                val outScore = room("outScore", allLikely.toLong() * Float.SIZE_BYTES)
-                if (allLikely > 0) kernels.launch("shown_likely", count.toLong() * CudaKernels.BLOCK, *args, ints("outAt", outAt), outPlace, outScore)
+                kernels.launch(
+                    "shown_one", count.toLong() * CudaKernels.BLOCK, *args, least, stripe,
+                    out(0), out(count.toLong()), out(2L * count), out(2L * count + count.toLong() * l), stripePlace, stripeScore,
+                )
+                val back = pinned("out", outInts * Int.SIZE_BYTES)
+                output.download(back, outInts * Int.SIZE_BYTES)
+                val likelyOf = back.ints(0, count)
+                val takenOf = back.ints(count.toLong() * Int.SIZE_BYTES, count)
+                val tops = back.ints(2L * count * Int.SIZE_BYTES, count * l)
+                val topScores = back.floats((2L * count + count.toLong() * l) * Int.SIZE_BYTES, count * l)
                 val chosen = System.nanoTime()
-                val places = outPlace.ints(allLikely)
-                val scores = outScore.floats(allLikely)
-                val takenOf = topCount.ints(count)
-                val tops = topPlace.ints(count * least)
-                val topScores = topScore.floats(count * least)
-                val out = List(count) { r ->
+                // The stripes packed; the rows of more likely than a stripe holds written again whole after them
+                val packedAt = IntArray(count)
+                var packed = 0
+                val over = ArrayList<Int>()
+                for (r in 0 until count) {
+                    packedAt[r] = packed
+                    packed += minOf(likelyOf[r], stripe)
+                    if (likelyOf[r] > stripe) over += r
+                }
+                val overAt = IntArray(over.size)
+                var all = packed
+                over.forEachIndexed { k, r ->
+                    overAt[k] = all
+                    all += likelyOf[r]
+                }
+                val after = packedAt + over.toIntArray() + overAt
+                val afterBytes = after.size.toLong() * Int.SIZE_BYTES
+                val stagingAfter = pinned("after", afterBytes)
+                stagingAfter.put(0, after)
+                val afterRoom = room("after", afterBytes)
+                afterRoom.upload(stagingAfter, afterBytes)
+                val likely = room("likely", 2L * all * Int.SIZE_BYTES)
+                val places = likely.at(0)
+                val scores = likely.at(all.toLong() * Int.SIZE_BYTES)
+                if (packed > 0) kernels.launch("shown_pack", count.toLong() * stripe, count, stripe, out(0), afterRoom, stripePlace, stripeScore, places, scores)
+                if (over.isNotEmpty()) kernels.launch(
+                    "shown_likely", over.size.toLong() * CudaKernels.BLOCK, *args,
+                    afterRoom.at(count.toLong() * Int.SIZE_BYTES), afterRoom.at((count.toLong() + over.size) * Int.SIZE_BYTES), places, scores,
+                )
+                val got = pinned("likely", 2L * all * Int.SIZE_BYTES)
+                likely.download(got, 2L * all * Int.SIZE_BYTES)
+                val placesOf = got.ints(0, all)
+                val scoresOf = got.floats(all.toLong() * Int.SIZE_BYTES, all)
+                val overOf = HashMap<Int, Int>().also { m -> over.forEachIndexed { k, r -> m[r] = overAt[k] } }
+                val result = List(count) { r ->
                     val many = likelyOf[r]
+                    val from = overOf[r] ?: packedAt[r]
                     val others = minOf(takenOf[r], (least - many).coerceAtLeast(0))
                     val p = IntArray(many + others)
                     val s = FloatArray(many + others)
-                    places.copyInto(p, 0, outAt[r], outAt[r] + many)
-                    scores.copyInto(s, 0, outAt[r], outAt[r] + many)
-                    tops.copyInto(p, many, r * least, r * least + others)
-                    topScores.copyInto(s, many, r * least, r * least + others)
+                    placesOf.copyInto(p, 0, from, from + many)
+                    scoresOf.copyInto(s, 0, from, from + many)
+                    tops.copyInto(p, many, r * l, r * l + others)
+                    topScores.copyInto(s, many, r * l, r * l + others)
                     Shown(p, s)
                 }
                 val taken = System.nanoTime()
-                sending += sent - started
-                choosing += chosen - sent
-                taking += taken - chosen
-                shownRows += count
-                if (shownRows == task.itemCount && task.itemCount >= LOGGED) log.info(
-                    "what {} items of {} values are shown with, chosen on the card: sent in {} ms, chosen in {} ms, brought back in {} ms",
-                    task.itemCount, m, sending / 1_000_000, choosing / 1_000_000, taking / 1_000_000,
+                if (count >= LOGGED) log.info(
+                    "what {} items of {} values are shown with, chosen on the card: laid out and sent in {} ms, chosen and brought back in {} ms, " +
+                        "the likely packed — {} rows of more than {} written again — and brought back in {} ms",
+                    count, m, (sent - started) / 1_000_000, (chosen - sent) / 1_000_000, over.size, stripe, (taken - chosen) / 1_000_000,
                 )
-                return out
+                return result
             }
 
             override fun close() {
@@ -475,6 +541,7 @@ internal class Scoring(
                 closed = true
                 made.forEach { it.close() }
                 rooms.values.forEach { it.close() }
+                pins.values.forEach { it.close() }
             }
         }
     }
