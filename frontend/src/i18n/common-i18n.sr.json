@@ -26,6 +26,8 @@
   "App.hotkeys": "Prečice na tastaturi",
   "App.layout.grid": "Kartice",
   "App.layout.list": "Spisak",
+  "App.listPending": "Učitavam spisak radova…",
+  "App.listTotal": "Radova na spisku: {{count}}",
   "App.noSources": "Nema nijednog izvora: instalirajte dodatak sajta i ponovo pokrenite aplikaciju.",
   "App.notResponding": "Aplikacija ne odgovara: {{error}}",
   "App.resort": "Predviđanja su ažurirana — ponovo sortiraj",

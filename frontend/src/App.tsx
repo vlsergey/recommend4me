@@ -13,7 +13,7 @@ import { pluginNamespacesOf, useTypes } from "@/contenttype/types";
 import { FacetFilters, NOTHING_HIDDEN, validSelection, type FacetSelection } from "@/facet/FacetFilters";
 import { usePluginNamespaces } from "@/i18n/usePluginNamespaces";
 import { NumberFilters, validRanges, type NumberRanges } from "@/number/NumberFilters";
-import { ItemBoard, type Layout } from "@/item/ItemBoard";
+import { ItemBoard, type Layout, type ListState } from "@/item/ItemBoard";
 import { HashItemDialog } from "@/item/ItemRefDialog";
 import { ITEMS } from "@/item/lists";
 import { BY_SCORE, validSort, type SortChoice } from "@/item/sort";
@@ -107,7 +107,9 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
   const ranges = useMemo(() => validRanges(type, storedRanges), [type, storedRanges]);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [total, setTotal] = useState<number | undefined>();
+  // What the list tells of itself: its number, and whether a new list is being asked for — by the search or another change
+  const [listed, setListed] = useState<ListState>({ pending: false, searching: false });
+  const total = listed.total;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const jobs = useJobs();
   // The dictionary of universes, of the type that has one
@@ -155,7 +157,7 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
     queryClient.invalidateQueries({ queryKey: [ITEMS, type.id] });
   };
 
-  const onTotal = useCallback((t: number | undefined) => setTotal(t), []);
+  const onListState = useCallback((state: ListState) => setListed(state), []);
 
   // "/" jumps to the search from anywhere but a text field
   const searchRef = useRef<HTMLInputElement>(null);
@@ -244,19 +246,34 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
       {screen.kind === "works" && (
       <div className="mx-auto max-w-[1800px] px-4">
         <div className="flex flex-wrap items-center gap-2 py-4">
+          {/* Told to a screen reader: the list asked for, then how many works it holds */}
+          <span role="status" className="sr-only">
+            {listed.pending ? t("App.listPending") : total !== undefined ? t("App.listTotal", { count: total }) : ""}
+          </span>
           <Tabs value={view} onValueChange={(v) => setView(v as ItemView)}>
             <TabsList>
               {VIEWS.map((v) => (
                 <TabsTrigger key={v} value={v} className="px-3">
                   {t(`App.view.${v}`)}
-                  {view === v && total !== undefined && <span className="ml-1 text-xs tabular-nums text-muted-foreground">{total}</span>}
+                  {/* The number of the list shown is the old list's while a new one is asked for: a wait in its place */}
+                  {view === v &&
+                    (listed.pending ? (
+                      <Loader2Icon className="ml-1 size-3 animate-spin text-muted-foreground" aria-hidden />
+                    ) : (
+                      total !== undefined && <span className="ml-1 text-xs tabular-nums text-muted-foreground">{total}</span>
+                    ))}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
 
           <div className="relative w-full sm:w-96">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            {/* Where the search was typed, its wait: the line searched, its works not come yet */}
+            {listed.searching ? (
+              <Loader2Icon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-hidden />
+            ) : (
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            )}
             <Input
               ref={searchRef}
               value={searchInput}
@@ -331,7 +348,7 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
         <main className="pb-10">
           {/* Drawn anew when what it lists changes: another type, view, sorting, search or filter */}
           <ErrorBoundary resetKey={JSON.stringify([type.id, view, sort, search, facets, sources, layout])} title={t("App.failed.list")}>
-            <ItemBoard type={type} view={view} sort={sort} search={search} facets={facets} sources={sources} ranges={ranges} layout={layout} onTotal={onTotal} />
+            <ItemBoard type={type} view={view} sort={sort} search={search} facets={facets} sources={sources} ranges={ranges} layout={layout} onState={onListState} />
           </ErrorBoundary>
         </main>
       </div>

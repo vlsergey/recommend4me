@@ -4,6 +4,8 @@ import { InboxIcon, Loader2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, refKey, unwrap, type ContentTypeInfo, type Grade, type ItemSummary, type ItemView } from "@/api/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useShownLate } from "@/lib/useShownLate";
+import { cn } from "@/lib/utils";
 import { facetQuery, isFiltered, type FacetSelection } from "@/facet/FacetFilters";
 import { rangeParams, type NumberRanges } from "@/number/NumberFilters";
 import { ItemCard } from "./ItemCard";
@@ -19,6 +21,13 @@ const PAGE_SIZE = 48;
 
 export type Layout = "grid" | "list";
 
+/**
+ * What the board tells of its list: how many works it holds, whether what is shown is still the list of
+ * the conditions before — a new search, filter, source, range, order or view asked for, its list not come
+ * ([pending], marked only after a moment) — and whether the search is among what changed ([searching]).
+ */
+export type ListState = { total?: number; pending: boolean; searching: boolean };
+
 type Props = {
   type: ContentTypeInfo;
   view: ItemView;
@@ -30,10 +39,16 @@ type Props = {
   /** The ranges of numbers the list is limited to. */
   ranges: NumberRanges;
   layout: Layout;
-  onTotal: (total: number | undefined) => void;
+  onState: (state: ListState) => void;
 };
 
-export function ItemBoard({ type, view, sort, search, facets, sources, ranges, layout, onTotal }: Props) {
+/**
+ * THE LIST OF THE WORKS, a page at a time. A change of what it lists keeps the list before till the new
+ * one comes, MARKED AS THE OLD ONE while it waits — the usual way of a list read anew (React's stale
+ * content, TanStack's placeholder data): dimmed, still to open and grade, a thin bar running over it,
+ * busy to a screen reader; nothing marked for a list back in a moment ([useShownLate]).
+ */
+export function ItemBoard({ type, view, sort, search, facets, sources, ranges, layout, onState }: Props) {
   const { t } = useTranslation("item");
   const [selected, setSelected] = useState(0);
   const [opened, setOpened] = useState<number | null>(null);
@@ -84,7 +99,15 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
     });
   }, [list.data]);
   const total = list.data?.pages[0]?.total;
-  useEffect(() => onTotal(total), [total, onTotal]);
+  // The list shown is of the conditions before while the new one is asked for
+  const waiting = list.isPlaceholderData;
+  const stale = useShownLate(waiting);
+  // The search the list shown was found by: the search is among what changed while it is another
+  const shownSearch = useRef(search);
+  useEffect(() => {
+    if (!waiting) shownSearch.current = search;
+    onState({ total, pending: stale, searching: stale && shownSearch.current !== search });
+  }, [total, waiting, stale, search, onState]);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = list;
   const more = useCallback(() => {
@@ -187,23 +210,30 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
     );
   }
   if (list.isError) return <div className="py-20 text-center text-destructive">{t("ItemBoard.loadFailed", { message: list.error.message })}</div>;
+  /** The old list's look while the new one is asked for: dimmed, still to press. */
+  const dimmed = cn("transition-opacity duration-200", stale && "opacity-50");
   if (items.length === 0) {
     const allRated = view === "UNRATED" && !search && !isFiltered(facets) && sources.length === 0 && Object.keys(ranges).length === 0;
     return (
-      <div className="flex flex-col items-center gap-3 py-24 text-muted-foreground">
-        <InboxIcon className="size-12 opacity-50" />
-        <div className="text-lg">{allRated ? t("ItemBoard.allRated") : t("ItemBoard.nothingFound")}</div>
-        {allRated && <div className="text-sm">{t("ItemBoard.allRatedHint")}</div>}
-      </div>
+      <>
+        <Busy shown={stale} />
+        <div className={cn("flex flex-col items-center gap-3 py-24 text-muted-foreground", dimmed)} aria-busy={waiting}>
+          <InboxIcon className="size-12 opacity-50" />
+          <div className="text-lg">{allRated ? t("ItemBoard.allRated") : t("ItemBoard.nothingFound")}</div>
+          {allRated && <div className="text-sm">{t("ItemBoard.allRatedHint")}</div>}
+        </div>
+      </>
     );
   }
 
   const View = layout === "grid" ? ItemCard : ItemRow;
   return (
     <>
+      <Busy shown={stale} />
       <div
         ref={grid}
-        className={layout === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-4" : "flex flex-col gap-2"}
+        aria-busy={waiting}
+        className={cn(layout === "grid" ? "grid grid-cols-[repeat(auto-fill,minmax(20rem,1fr))] gap-4" : "flex flex-col gap-2", dimmed)}
       >
         {items.map((summary, i) => {
           const key = refKey(summary);
@@ -244,5 +274,18 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
         onJudge={judge}
       />
     </>
+  );
+}
+
+/**
+ * The thin bar running over the list while its new list is asked for: under the sticky header, so it is
+ * seen wherever the list is scrolled; still, of the width of the list, when motion is to be reduced. It
+ * takes no room: the list does not move as it comes and goes.
+ */
+function Busy({ shown }: { shown: boolean }) {
+  return (
+    <div className="sticky top-14 z-30 -mb-0.5 h-0.5 overflow-hidden" aria-hidden>
+      {shown && <div className="h-full w-1/3 animate-[list-busy_1.1s_ease-in-out_infinite] bg-primary motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-60" />}
+    </div>
   );
 }

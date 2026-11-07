@@ -119,3 +119,13 @@
     color-scheme: dark;
   }
 }
+
+/* The bar over a list asked for anew (ItemBoard's Busy): a third of the width crossing it */
+@keyframes list-busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
