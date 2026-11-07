@@ -52,7 +52,7 @@ const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | 
 ];
 
 /** What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default. */
-const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "CHANCE", "UNCERTAIN"];
+const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE", "UNCERTAIN"];
 
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
@@ -268,8 +268,9 @@ function PairRow({
           </span>
         )}
         {sort !== "UNCERTAIN" && p.priority != null && p.priority > 0 && (
-          <span className="tabular-nums" title={t("PairRow.priorityHint")}>
-            {t("PairRow.priority", { value: p.priority.toFixed(2) })}
+          // Of the sort by size the priority is words: a whole number, not a score of two digits
+          <span className="tabular-nums" title={t(sort === "SIZE" ? "PairRow.prioritySizeHint" : "PairRow.priorityHint")}>
+            {t("PairRow.priority", { value: sort === "SIZE" ? number(Math.round(p.priority)) : p.priority.toFixed(2) })}
           </span>
         )}
         {p.sameAuthor && (

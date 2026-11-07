@@ -5304,14 +5304,16 @@ components:
 
     DuplicateSort:
       type: string
-      enum: [FORMULA, CHANCE, INTEREST, GRADE, UNCERTAIN]
+      enum: [FORMULA, CHANCE, INTEREST, GRADE, SIZE, UNCERTAIN]
       default: FORMULA
       description: >
         What the chance a pair is one work is multiplied by, of the work the pair was found for (of both, the larger):
         FORMULA - its score by the formula of the list, the predicted grade (not below nought) times the chance of
         interest; INTEREST - the chance of interest alone; GRADE - the predicted grade alone; CHANCE - nothing, the
-        likeliest pairs first. UNCERTAIN - no such product: the pairs nearest where the user's answers change from
-        different to one work first, whose answer teaches the model most
+        likeliest pairs first. SIZE - of the pair, not of one work: the mean size of its two works in words, stated by
+        their sites or worked out of their characters (of one known, its own; of neither, nought). UNCERTAIN - no
+        such product: the pairs nearest where the user's answers change from different to one work first, whose
+        answer teaches the model most
 
     DuplicateFacet:
       type: object

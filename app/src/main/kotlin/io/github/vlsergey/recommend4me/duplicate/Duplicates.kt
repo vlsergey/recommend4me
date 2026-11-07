@@ -562,7 +562,8 @@ class Duplicates(
      * ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list (the
      * prediction times the chance of interest: a work the user would read first), its chance of
      * interest, its predicted grade, or nothing — a work of a high score, the likeliest of many works
-     * of another site, does not lift every pair of them; equal, the likelier pair first. Or, of the
+     * of another site, does not lift every pair of them; equal, the likelier pair first. Or times the
+     * pair's own mean size ([DuplicateSort.SIZE]): the long works first. Or, of the
      * pairs in doubt ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change
      * ([DuplicateModel.boundary]): what an answer teaches the model most.
      * Every pair read for the request and let go. Null of no such type.
@@ -576,7 +577,7 @@ class Duplicates(
         // What the sort says of every work: of the prediction (not below nought) and the chance of interest
         // (the user's mark over the model's; without a model of interest, as likely as not to tell nothing: 1)
         val worth = HashMap<ItemKey, Double>()
-        if (sort != DuplicateSort.CHANCE && sort != DuplicateSort.UNCERTAIN) type.sources.forEach { s ->
+        if (sort == DuplicateSort.FORMULA || sort == DuplicateSort.INTEREST || sort == DuplicateSort.GRADE) type.sources.forEach { s ->
             val marks = s.interest.all()
             type.models.predicted(s.id).forEach { (id, p) ->
                 val grade = p.score.coerceAtLeast(0.0)
@@ -585,15 +586,22 @@ class Duplicates(
                     DuplicateSort.FORMULA -> grade * interest
                     DuplicateSort.INTEREST -> interest
                     DuplicateSort.GRADE -> grade
-                    DuplicateSort.CHANCE, DuplicateSort.UNCERTAIN -> 1.0
+                    DuplicateSort.CHANCE, DuplicateSort.SIZE, DuplicateSort.UNCERTAIN -> 1.0
                 }
             }
         }
+        // The size of every work of the pairs, in words: of the sort by the pair's size alone
+        val words = if (sort != DuplicateSort.SIZE) emptyMap() else wordsOf(type, (kept.map { it.pair } + said.keys).flatMap { listOf(it.first, it.second) }.toSet())
         val boundary = if (sort == DuplicateSort.UNCERTAIN) model.boundary(kept) { c -> said[c.pair]?.takeIf { !it.related }?.let { it == DuplicateAnswer.SAME } } else 0.0
         fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
             val chance = layers?.let(model::chance)
             if (sort == DuplicateSort.CHANCE) return Ranked(pair, layers, chance, chance ?: 0.0)
             if (sort == DuplicateSort.UNCERTAIN) return Ranked(pair, layers, chance, layers?.let { 1 / (1 + abs(model.logit(it) - boundary)) } ?: 0.0)
+            if (sort == DuplicateSort.SIZE) {
+                // The mean of the two works' sizes, of those known: of a work of no size known, the other's alone
+                val known = listOfNotNull(words[pair.first], words[pair.second])
+                return Ranked(pair, layers, chance, (if (known.isEmpty()) 0.0 else known.average()) * (chance ?: 0.0))
+            }
             // What the sort says of the work the pair was found for — of both, the larger; of neither (an answered pair not kept), the larger too
             val first = worth[pair.first] ?: 0.0
             val second = worth[pair.second] ?: 0.0
@@ -632,6 +640,22 @@ class Duplicates(
             // Found by several items of the work, the other is one: the likeliest pair of them, an answer going across the work
             .distinctBy { if (it.pair.first in own) it.pair.second else it.pair.first }
         return pairs(type, said(type), found)
+    }
+
+    /**
+     * The size in words of every work of [keys]: stated by its site, or worked out of its characters
+     * ([WorkSizes.ofItems]); none of a work of neither. Every source's read in one go.
+     */
+    private fun wordsOf(type: TypeStore, keys: Collection<ItemKey>): Map<ItemKey, Double> {
+        val out = HashMap<ItemKey, Double>()
+        keys.groupBy { it.source }.forEach { (source, own) ->
+            val s = type.source(source) ?: return@forEach
+            val ids = own.map { it.id }
+            sizes.ofItems(type, s, ids, s.items.numbersOf(ids), s.corrections.fieldsOf(ids)).forEach { (id, size) ->
+                size.words?.let { out[ItemKey(source, id)] = it.value }
+            }
+        }
+        return out
     }
 
     /** A pair with what ranks it: its layers, none of an answered pair not kept. */
