@@ -254,7 +254,7 @@ class FacetSuggestions(
             try {
                 // The suggester named when it runs: one chosen meanwhile is the one fitted
                 val suggester = plugins.suggester(store.id, facet.key) ?: return@execute
-                val changedIds = workload.run(Work("suggesterAnew", source = store.id, facet = facet.key), mapOf("asked" to 1)) {
+                val changedIds = workload.run(Work("suggesterAnew", source = store.id, facet = facet.key), mapOf("asked" to 1), asked = true) {
                     lockOf(store, facet).withLock { fitFacet(store, facets, k, suggester, encoder, chain(store, null, k), { false }, anew = true) }
                 }
                 if (changedIds.isNotEmpty()) events.publishEvent(FacetChancesChanged(store.id, changedIds))

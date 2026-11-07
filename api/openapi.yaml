@@ -4176,6 +4176,12 @@ components:
         givenUp:
           type: boolean
           description: Of a work done, whether it was given up - newer data came while it ran, and it is done again on them; no error
+        asked:
+          type: boolean
+          description: >
+            Of a work running or waiting, whether the user's action in the interface asked for it - the search of the
+            duplicates, a grade, what a model that had not seen a work says, a comparison pressed: it waits ahead of
+            every work of the background
         expectedMillis:
           type: integer
           format: int64

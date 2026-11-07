@@ -58,6 +58,8 @@
   "What.workChances": "A work's chances after your answers",
   "What.workSizes": "The sizes of the works in words and characters",
   "What.worth": "Worth of the parts",
+  "WorkQueue.asked": "by your action",
+  "WorkQueue.asked.hint": "Asked for by your action in the interface: it goes ahead of the background's computations, never stopping the one running",
   "WorkQueue.because": "because:",
   "WorkQueue.began": "began at {{time}} ({{span}} ago)",
   "WorkQueue.due": "due {{when}}",
@@ -81,7 +83,7 @@
   "WorkQueue.state.RUNNING": "computing",
   "WorkQueue.state.RUNNING.hint": "The computation running now",
   "WorkQueue.state.WAITING": "waiting",
-  "WorkQueue.state.WAITING.hint": "Waits for the computations asked before it",
+  "WorkQueue.state.WAITING.hint": "Waits its turn: first those your actions asked for, then the rest — each in the order asked",
   "WorkQueue.title": "Queue of computations",
   "WorkQueue.waiting": "asked {{when}}"
 }

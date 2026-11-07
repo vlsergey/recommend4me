@@ -29,7 +29,7 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
 
     override fun searchDuplicates(type: String): ResponseEntity<Unit> {
         val store = stores.type(type) ?: return ResponseEntity.notFound().build()
-        duplicates.plan(store, "asked")
+        duplicates.plan(store, "asked", asked = true)
         return ResponseEntity.accepted().build()
     }
 

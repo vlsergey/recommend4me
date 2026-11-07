@@ -58,6 +58,8 @@
   "What.workChances": "Verovatnoće dela posle vaših odgovora",
   "What.workSizes": "Obim dela u rečima i znakovima",
   "What.worth": "Doprinos delova",
+  "WorkQueue.asked": "po vašoj radnji",
+  "WorkQueue.asked.hint": "Zatraženo vašom radnjom u interfejsu: ide pre pozadinskih izračunavanja, ali ne prekida ono koje radi",
   "WorkQueue.because": "zašto:",
   "WorkQueue.began": "počelo u {{time}} (pre {{span}})",
   "WorkQueue.due": "počinje {{when}}",
@@ -81,7 +83,7 @@
   "WorkQueue.state.RUNNING": "računa se",
   "WorkQueue.state.RUNNING.hint": "Računanje koje teče sada",
   "WorkQueue.state.WAITING": "čeka",
-  "WorkQueue.state.WAITING.hint": "Čeka računanja tražena ranije",
+  "WorkQueue.state.WAITING.hint": "Čeka svoj red: prvo ona tražena vašim radnjama, zatim ostala — i jedna i druga redom traženja",
   "WorkQueue.title": "Red računanja",
   "WorkQueue.waiting": "traženo {{when}}"
 }

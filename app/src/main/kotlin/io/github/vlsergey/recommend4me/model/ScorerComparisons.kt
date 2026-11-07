@@ -48,7 +48,7 @@ class ScorerComparisons(private val recommendations: Recommendations, private va
     fun start(typeId: String, interest: Boolean = false): ScorerComparison = comparisons.compute(keyOf(typeId, interest)) { _, running ->
         if (running != null && running.finishedAt == null) return@compute running
         ScorerComparison(Instant.now(), plugins.scorers.map { ScorerMeasure(it.id) }).also { c ->
-            executor.submit { workload.run(Work(if (interest) "interestScorersCompared" else "scorersCompared", type = typeId), mapOf("asked" to 1)) { run(typeId, interest, c) } }
+            executor.submit { workload.run(Work(if (interest) "interestScorersCompared" else "scorersCompared", type = typeId), mapOf("asked" to 1), asked = true) { run(typeId, interest, c) } }
         }
     }!!
 

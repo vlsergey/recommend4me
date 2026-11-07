@@ -45,7 +45,7 @@ class FacetComparisons(private val suggestions: FacetSuggestions, private val pl
     fun start(store: SourceStore, facet: String): FacetComparison = comparisons.compute(keyOf(store, facet)) { _, running ->
         if (running != null && running.finishedAt == null) return@compute running
         FacetComparison(Instant.now(), plugins.suggesters.map { MethodMeasure(it.id) }).also { c ->
-            executor.submit { workload.run(Work("methodsCompared", source = store.id, facet = facet), mapOf("asked" to 1)) { run(store, facet, c) } }
+            executor.submit { workload.run(Work("methodsCompared", source = store.id, facet = facet), mapOf("asked" to 1), asked = true) { run(store, facet, c) } }
         }
     }!!
 

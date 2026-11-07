@@ -123,7 +123,8 @@ class Recommendations(
             workload.plan(trainingWork(type), Instant.ofEpochMilli(due), reason)
             val future = scheduler.schedule({
                 try {
-                    retrainAndScore(type)
+                    // A training a change of the user's asked for waits ahead of the background's works
+                    retrainAndScore(type, asked = byUser)
                 } catch (e: Exception) {
                     log.error("{}: background training failed", type, e)
                 }
@@ -185,7 +186,7 @@ class Recommendations(
         }
     }
 
-    fun retrainAndScore(typeId: String): ModelSummary = workload.run(trainingWork(typeId)) {
+    fun retrainAndScore(typeId: String, asked: Boolean = false): ModelSummary = workload.run(trainingWork(typeId), asked = asked) {
         val type = type(typeId)
         trainingNow += typeId
         try {
@@ -461,8 +462,9 @@ class Recommendations(
     }
 
     /**
-     * The model that had not seen the graded work fitted in the queue of the computations, and what
-     * it says kept ([ModelRepository.keepExplained]); the request that asked does not wait for it.
+     * The model that had not seen the graded work fitted in the queue of the computations — ahead of the
+     * background's works: a page the user opened asked for it — and what it says kept
+     * ([ModelRepository.keepExplained]); the request that asked does not wait for it.
      * Asked again before it is worked out, it is worked out once.
      */
     private fun planHeldOut(type: TypeStore, key: ItemKey) {
@@ -474,7 +476,7 @@ class Recommendations(
                     workload.take(work)
                     return@execute
                 }
-                workload.run(work) {
+                workload.run(work, asked = true) {
                     val h = fitHeldOut(key)
                     type.models.keepExplained(key, h?.score, h?.gradePlace, h?.let { json.writeValueAsString(it.explanation) })
                 }
@@ -854,7 +856,7 @@ class Recommendations(
      * of the model of [interest] — read under the type's lock; the measuring itself needs no lock —
      * it reads nothing more. Null when there are too few.
      */
-    fun measuringInput(typeId: String, interest: Boolean = false): MeasuringInput? = workload.run(Work("scorersInput", type = typeId), mapOf("asked" to 1), joinAlike = false) {
+    fun measuringInput(typeId: String, interest: Boolean = false): MeasuringInput? = workload.run(Work("scorersInput", type = typeId), mapOf("asked" to 1), asked = true, joinAlike = false) {
         val catalogue = reader.read(type(typeId))
         val p = (if (interest) prepareInterest(catalogue) else prepare(catalogue)) ?: return@run null
         MeasuringInput(p.task, p.xFor, p.grades.size)
@@ -878,7 +880,7 @@ class Recommendations(
      * everything, by the same cross-validation and the same choice of the parameter. A part whose
      * removal costs nothing, or improves the quality, adds nothing the grades confirm. Nothing is kept.
      */
-    fun worth(typeId: String): ModelWorth? = workload.run(Work("worth", type = typeId), mapOf("asked" to 1)) {
+    fun worth(typeId: String): ModelWorth? = workload.run(Work("worth", type = typeId), mapOf("asked" to 1), asked = true) {
         val type = type(typeId)
         val scorer = plugins.scorer(typeId) ?: return@run null
         val p = prepare(reader.read(type)) ?: return@run null
@@ -918,7 +920,7 @@ class Recommendations(
      * way — and the weights chosen on every grade. The rows are read under the type's lock, the
      * trainings — hundreds of them — run without it. Nothing is kept. [cautious]: [GroupWeights.tune].
      */
-    fun weighing(typeId: String, cautious: Boolean = true): Weighing? = workload.run(Work("weighing", type = typeId), mapOf("asked" to 1), joinAlike = false) { weighed(typeId, cautious) }
+    fun weighing(typeId: String, cautious: Boolean = true): Weighing? = workload.run(Work("weighing", type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) { weighed(typeId, cautious) }
 
     private fun weighed(typeId: String, cautious: Boolean): Weighing? {
         val type = type(typeId)

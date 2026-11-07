@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, ClockIcon, ListOrderedIcon, Loader2Icon, PauseIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, ListOrderedIcon, Loader2Icon, PauseIcon, RotateCcwIcon, UserIcon, XIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type QueuedWork } from "@/api/client";
@@ -74,6 +74,12 @@ function WorkRow({ w }: { w: QueuedWork }) {
   return (
     <li className={cn("flex flex-wrap items-baseline gap-x-3 gap-y-1 py-1.5", w.state === "FINISHED" && "opacity-70")}>
       <State w={w} />
+      {w.asked && (
+        // Asked for by the user's action in the interface: it goes ahead of the background's works
+        <span className="flex items-center gap-1 text-xs text-foreground" title={t("WorkQueue.asked.hint")}>
+          <UserIcon className="size-3.5" /> {t("WorkQueue.asked")}
+        </span>
+      )}
       <span className="font-medium">{label(`workload:What.${w.what}`)}</span>
       {of.length > 0 && <span className="text-muted-foreground">{of.join(" · ")}</span>}
       {w.reasons.length > 0 && (

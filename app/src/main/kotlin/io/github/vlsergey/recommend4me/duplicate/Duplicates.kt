@@ -117,14 +117,17 @@ class Duplicates(
         stores.types.filter { it.sources.size > 1 && it.duplicates.search() == null }.forEach { plan(it, "start") }
     }
 
-    /** The search of the type planned, in the background; false when one is planned or running already. */
-    fun plan(type: TypeStore, reason: String): Boolean {
+    /**
+     * The search of the type planned, in the background — ahead of the background's works when the user
+     * pressed for it ([asked]); false when one is planned or running already.
+     */
+    fun plan(type: TypeStore, reason: String, asked: Boolean = false): Boolean {
         if (!searching.add(type.id)) return false
         val work = searchWork(type)
         workload.plan(work, Instant.now(), reason)
         worker.execute {
             try {
-                workload.run(work) { search(type) }
+                workload.run(work, asked = asked) { search(type) }
             } catch (e: Exception) {
                 log.warn("{}: the duplicates were not looked for: {}", type.id, e.message, e)
             } finally {
@@ -520,8 +523,8 @@ class Duplicates(
 
     /**
      * The model of the answers fitted again a few seconds after the last answer, of the pairs kept
-     * as they are: in the background, in the queue of the computations; the pairs are shown by it
-     * as soon as it is kept.
+     * as they are: in the queue of the computations, ahead of the background's works — the user's
+     * answer asked for it, and the pairs are shown in its order as soon as it is kept.
      */
     private fun answered(type: TypeStore) {
         val work = fittingWork(type)
@@ -530,7 +533,7 @@ class Duplicates(
             before?.cancel(false)
             worker.schedule({
                 try {
-                    workload.run(work) {
+                    workload.run(work, asked = true) {
                         val started = System.currentTimeMillis()
                         val said = said(type)
                         val pairs = type.duplicates.all()

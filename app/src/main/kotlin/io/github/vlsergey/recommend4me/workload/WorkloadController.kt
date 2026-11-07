@@ -10,7 +10,10 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.Instant
 import java.time.ZoneOffset
 
-/** THE QUEUE OF THE BACKGROUND WORKS, for the page of the models: what runs, what waits, what is planned, and why. */
+/**
+ * THE QUEUE OF THE BACKGROUND WORKS, for the page of the models: what runs, what waits — in the order it
+ * will run, the works the user asked for first — what is planned, and why.
+ */
 @RestController
 class WorkloadController(private val workload: Workload, private val stores: Stores) : WorkloadApi {
 
@@ -24,7 +27,7 @@ class WorkloadController(private val workload: Workload, private val stores: Sto
         return ResponseEntity.ok(finished + running + waiting + planned)
     }
 
-    private fun HeavyWork.toApi(state: QueuedWork.State) = queued(work, state, since, reasons)
+    private fun HeavyWork.toApi(state: QueuedWork.State) = queued(work, state, since, reasons).copy(asked = asked.takeIf { it })
 
     /** A work as the page shows it; one not done with how long it is expected to take. */
     private fun queued(work: Work, state: QueuedWork.State, since: Instant, reasons: Map<String, Int>): QueuedWork {

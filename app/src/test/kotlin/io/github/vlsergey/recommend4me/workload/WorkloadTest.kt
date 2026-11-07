@@ -116,6 +116,59 @@ class WorkloadTest {
     }
 
     @Test
+    fun `a work the user asked for waits ahead of the background, the running one not stopped, each kind in the order asked`() {
+        val workload = Workload()
+        val release = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val order = java.util.Collections.synchronizedList(ArrayList<String>())
+        val blocker = thread { workload.run(Work("train", type = "t"), emptyMap()) { started.countDown(); release.await(); order += "train" } }
+        started.await()
+        val callers = Executors.newFixedThreadPool(4)
+        try {
+            fun ask(what: String, asked: Boolean, waiting: Int): CompletableFuture<Unit> =
+                CompletableFuture.supplyAsync({ workload.run(Work(what), emptyMap(), asked = asked) { order += what } }, callers)
+                    .also { while (workload.waiting().size < waiting) Thread.sleep(5) }
+            val all = listOf(ask("background1", false, 1), ask("background2", false, 2), ask("search", true, 3), ask("heldOut", true, 4))
+            // The page of the queue tells the order they will run in, the asked ones marked
+            assertEquals(listOf("search", "heldOut", "background1", "background2"), workload.waiting().map { it.work.what })
+            assertEquals(listOf(true, true, false, false), workload.waiting().map { it.asked })
+            assertTrue(workload.running()!!.work.what == "train" && !workload.running()!!.asked)
+            release.countDown()
+            all.forEach { it.get(5, TimeUnit.SECONDS) }
+            blocker.join()
+            assertEquals(listOf("train", "search", "heldOut", "background1", "background2"), order)
+        } finally {
+            callers.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `a work alike the user asks for while it waits is put ahead with it`() {
+        val workload = Workload()
+        val release = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val order = java.util.Collections.synchronizedList(ArrayList<String>())
+        val blocker = thread { workload.run(Work("train", type = "t"), emptyMap()) { started.countDown(); release.await() } }
+        started.await()
+        val callers = Executors.newFixedThreadPool(4)
+        try {
+            val first = CompletableFuture.supplyAsync({ workload.run(Work("other"), emptyMap()) { order += "other" } }, callers)
+            while (workload.waiting().size < 1) Thread.sleep(5)
+            val duplicates = Work("duplicates", type = "t")
+            val background = CompletableFuture.supplyAsync({ workload.run(duplicates, mapOf("start" to 1)) { order += "duplicates" } }, callers)
+            while (workload.waiting().size < 2) Thread.sleep(5)
+            val pressed = CompletableFuture.supplyAsync({ workload.run(duplicates, mapOf("asked" to 1), asked = true) { order += "duplicates" } }, callers)
+            while (workload.waiting().firstOrNull()?.work != duplicates) Thread.sleep(5)
+            release.countDown()
+            listOf(first, background, pressed).forEach { it.get(5, TimeUnit.SECONDS) }
+            blocker.join()
+            assertEquals(listOf("duplicates", "other"), order)
+        } finally {
+            callers.shutdownNow()
+        }
+    }
+
+    @Test
     fun `a work inside another goes on and is not told apart`() {
         val workload = Workload()
         workload.run(Work("train", type = "books"), emptyMap()) {
