@@ -113,8 +113,9 @@ the model, its loss, what it reads and the rule it chooses by are chosen for wha
 `gradlew spotlessApply` before committing Kotlin; `spotlessCheck` fails what is not formatted so.
 **Its rules are detekt's default profile as it is**: a class of 600 lines at most, methods short and
 simple, numbers named, no exception caught but the one meant. Both run before every module's tests.
-What broke the profile when it was turned on is in `config/detekt/<module>.xml` for a while, being
-fixed; nothing is added there — a finding is fixed.
+No baseline, no rule turned off: a finding is fixed. The one exception is a boundary that must
+outlive whatever fails — a background loop, a step of the start, a call of a plugin: there
+`@Suppress("TooGenericExceptionCaught")`, with a comment saying why it is a boundary.
 
 **The scripts — the web interface and the extension — are linted by Biome**, its recommended rules
 (`biome.jsonc`; `npm run lint` in `frontend`, `gradlew :app:lintScripts`): a file of 600 lines at most.

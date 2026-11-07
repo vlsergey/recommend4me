@@ -1,8 +1,0 @@
-<?xml version="1.0" ?>
-<SmellBaseline>
-  <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>MagicNumber:FactorizationScorer.kt:FactorizationModel.Companion$0.5f</ID>
-    <ID>MagicNumber:FactorizationScorer.kt:FactorizationObjective$0.5</ID>
-  </CurrentIssues>
-</SmellBaseline>

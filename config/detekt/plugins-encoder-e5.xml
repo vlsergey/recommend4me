@@ -1,7 +1,0 @@
-<?xml version="1.0" ?>
-<SmellBaseline>
-  <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>MagicNumber:E5Encoder.kt:E5Encoder$1e-9</ID>
-  </CurrentIssues>
-</SmellBaseline>

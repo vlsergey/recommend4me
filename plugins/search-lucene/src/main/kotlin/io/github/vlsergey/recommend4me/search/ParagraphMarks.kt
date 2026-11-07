@@ -10,7 +10,7 @@ import org.apache.lucene.util.AttributeSource
 /**
  * EVERY PARAGRAPH OF A TEXT BEGUN BY A MARK — the word [MARK] at a place of its own before its first word, the text's
  * first paragraph too: in the index, the names named in one paragraph are told by the marks before them
- * ([LuceneSearch.together]). A paragraph ends at a line break, as the texts are written. No word of a text is ever the
+ * ([LuceneNames.together]). A paragraph ends at a line break, as the texts are written. No word of a text is ever the
  * mark: the tokenizer keeps no '¶'.
  */
 internal class ParagraphMarks(input: TokenStream, private val text: String) : TokenFilter(input) {

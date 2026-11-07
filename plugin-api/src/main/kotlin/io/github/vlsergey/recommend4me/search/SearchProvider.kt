@@ -94,36 +94,10 @@ interface SearchContext {
 }
 
 /**
- * A search over the items of a content type. The index is the provider's: made from every document on start ([rebuild],
- * in the background), kept in step by [update].
+ * The names of values — characters, universes — the works' own words say, counted of a search's index: how often, which
+ * two together, and where in a document. A provider that keeps no such index counts none.
  */
-interface SearchProvider {
-    val id: String
-
-    fun rebuild(contentType: String, documents: Sequence<SearchDocument>)
-
-    /**
-     * The index brought to [documents], every item of the type, on a start: of a provider that keeps its index between
-     * the runs, only what changed written again; of any other, made anew.
-     */
-    fun sync(contentType: String, documents: Sequence<SearchDocument>) = rebuild(contentType, documents)
-
-    fun update(contentType: String, documents: List<SearchDocument>, removed: Collection<ItemKey>)
-
-    /**
-     * The items matching [line], read as a text of the [language] (ISO 639-1) — the interface's, the one it is typed
-     * in.
-     */
-    fun search(contentType: String, line: String, language: String, context: SearchContext): SearchResult
-
-    /** What to show of each of [keys] found by [result]. */
-    fun matches(
-        contentType: String,
-        result: SearchResult,
-        keys: Collection<ItemKey>,
-        context: SearchContext,
-    ): Map<ItemKey, SearchMatch>
-
+interface NameCounting {
     /**
      * HOW MANY TIMES THE WORKS' OWN WORDS ([SearchField.counted]) NAME EVERY VALUE of [names] — a value to the names it
      * goes by — read of the index as their texts were stemmed: of the items [items], of every item indexed when null;
@@ -180,6 +154,38 @@ interface SearchProvider {
         a: String,
         b: String,
     ): List<NamePlace> = emptyList()
+}
+
+/**
+ * A search over the items of a content type. The index is the provider's: made from every document on start ([rebuild],
+ * in the background), kept in step by [update]; the names the works' own words say are counted of it ([NameCounting]).
+ */
+interface SearchProvider : NameCounting {
+    val id: String
+
+    fun rebuild(contentType: String, documents: Sequence<SearchDocument>)
+
+    /**
+     * The index brought to [documents], every item of the type, on a start: of a provider that keeps its index between
+     * the runs, only what changed written again; of any other, made anew.
+     */
+    fun sync(contentType: String, documents: Sequence<SearchDocument>) = rebuild(contentType, documents)
+
+    fun update(contentType: String, documents: List<SearchDocument>, removed: Collection<ItemKey>)
+
+    /**
+     * The items matching [line], read as a text of the [language] (ISO 639-1) — the interface's, the one it is typed
+     * in.
+     */
+    fun search(contentType: String, line: String, language: String, context: SearchContext): SearchResult
+
+    /** What to show of each of [keys] found by [result]. */
+    fun matches(
+        contentType: String,
+        result: SearchResult,
+        keys: Collection<ItemKey>,
+        context: SearchContext,
+    ): Map<ItemKey, SearchMatch>
 }
 
 /**

@@ -1,7 +1,5 @@
 package io.github.vlsergey.recommend4me.backup
 
-import java.io.IOException
-import java.io.UncheckedIOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -30,13 +28,16 @@ import org.springframework.context.ApplicationListener
  */
 class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
 
+    // A BOUNDARY: whatever fails in the backup — a file locked, a walk of the files, anything else — is logged, and the
+    // application starts all the same; the archive is made on a thread of its own, its failure logged likewise
+    @Suppress("TooGenericExceptionCaught")
     override fun onApplicationEvent(event: ApplicationEnvironmentPreparedEvent) {
         val env = event.environment
         val dataDir = Path.of(env.getRequiredProperty("recommend4me.data-dir"))
         val keep = env.getProperty("recommend4me.backup.keep", Int::class.java, 10)
         try {
             copy(dataDir, LocalDateTime.now())
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             // A failed backup must not prevent the application from starting
             log.error("Unable to back up the databases in {}", dataDir.toAbsolutePath(), e)
         }
@@ -46,10 +47,7 @@ class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
                 {
                     try {
                         compress(backupDir, keep)
-                    } catch (e: IOException) {
-                        log.error("Unable to zip the backups in {}", backupDir.toAbsolutePath(), e)
-                    } catch (e: UncheckedIOException) {
-                        // A walk of the files fails so
+                    } catch (e: Exception) {
                         log.error("Unable to zip the backups in {}", backupDir.toAbsolutePath(), e)
                     }
                 },

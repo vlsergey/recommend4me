@@ -1,8 +1,0 @@
-<?xml version="1.0" ?>
-<SmellBaseline>
-  <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>MagicNumber:BgeReranker.kt:BgeReranker$4</ID>
-    <ID>MaxLineLength:BgeRerankerTest.kt:BgeRerankerTest$"A boy reborn into a world of sorcery is mocked at the mage school as talentless, then trains until he surpasses everyone."</ID>
-  </CurrentIssues>
-</SmellBaseline>

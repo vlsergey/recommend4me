@@ -1,7 +1,0 @@
-<?xml version="1.0" ?>
-<SmellBaseline>
-  <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>MagicNumber:KnnScorer.kt:KnnScorer.Companion$1e-9f</ID>
-  </CurrentIssues>
-</SmellBaseline>

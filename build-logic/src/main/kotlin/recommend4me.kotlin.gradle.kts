@@ -45,9 +45,6 @@ spotless {
 // the tests, with the form: every test run checks both
 detekt {
     buildUponDefaultConfig = true
-    // FOR A WHILE: what broke the default profile when it was turned on (2026-11-07), being fixed a rule after
-    // another; a module's file goes once nothing is left in it
-    baseline = rootProject.file("config/detekt/${project.path.removePrefix(":").replace(':', '-')}.xml")
     parallel = true
 }
 tasks.withType<Test>().configureEach { dependsOn(tasks.named("detekt"), tasks.named("spotlessCheck")) }
