@@ -65,9 +65,9 @@ class SuggestionsController(private val stores: Stores, private val suggestions:
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (store.items.find(item) == null) return ResponseEntity.notFound().build()
         val quotes = when (val quoting = suggestions.quoting(store, item, facet, value) ?: return ResponseEntity.notFound().build()) {
-            is FacetSuggestions.Quoting.InIndex -> search.quotes(store, item, quoting.names, quoting.of)
-            is FacetSuggestions.Quoting.Together -> search.quotesTogether(store, item, quoting.names, quoting.a, quoting.b)
-            FacetSuggestions.Quoting.None -> emptyList()
+            is Quoting.InIndex -> search.quotes(store, item, quoting.names, quoting.of)
+            is Quoting.Together -> search.quotesTogether(store, item, quoting.names, quoting.a, quoting.b)
+            Quoting.None -> emptyList()
         }
         return ResponseEntity.ok(
             quotes.map { q ->
