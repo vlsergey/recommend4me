@@ -25,3 +25,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # From v6 its cache is a proprietary component under the Gradle Terms of Use, not accepted here (2026-11-07):
+      # setup-gradle stays on v5, MIT-licensed with its cache
+      - dependency-name: gradle/actions*
+        update-types: ["version-update:semver-major"]
