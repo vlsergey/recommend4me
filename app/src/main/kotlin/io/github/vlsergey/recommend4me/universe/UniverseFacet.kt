@@ -134,6 +134,7 @@ object UniverseFacet {
     /** The sex of every character of the dictionary of a type, and of the original characters: value to sex. */
     fun sexes(universes: UniverseRepository, read: CharactersRead = CharactersRead(universes)): Map<String, CharacterSex> {
         val out = HashMap<String, CharacterSex>(ORIGINAL_SEXES)
+        read.every()
         universes.keys().forEach { u ->
             read.of(u).forEach { c -> c.sex?.let { out[valueOf(u.catalogue, c.id)] = it } }
         }

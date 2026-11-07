@@ -10,8 +10,11 @@ import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.U
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.UNIVERSE_CLASS_CHOICE
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.UNIVERSE_PROPERTY
 import io.github.vlsergey.recommend4me.preferences.CatalogueEntity
+import io.github.vlsergey.recommend4me.database.dictionaries.tables.records.UniverseClassRecord
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
+import org.jooq.Condition
 import org.jooq.DSLContext
+import org.jooq.Field
 import org.jooq.impl.DSL
 import java.time.Instant
 
@@ -82,6 +85,7 @@ class UniverseRepository(
     /** Every universe of the dictionary with its counts; its entries of [read], read once for the operation that reads their characters too. */
     fun all(read: CharactersRead = CharactersRead(this)): List<StoredUniverse> {
         val local = read.local
+        read.every()
         return db.selectFrom(UNIVERSE).fetch().map { u ->
             val entries = read.entries(UniverseKey(u.catalogue!!, u.universeId!!))
             StoredUniverse(
@@ -225,44 +229,58 @@ class UniverseRepository(
         entries(catalogue, id, local).filter { it.included }.map { it.character }
 
     /** Every entry of the universe, kept or not, by name; the names the user gave first ([local], read once for a reading of many universes). */
-    fun entries(catalogue: String, id: String, local: Map<String, String> = localNames()): List<KeptEntry> {
-        val classes = classesOf(catalogue, id)
-        val ofEntry = HashMap<String, MutableList<String>>()
-        db.select(UNIVERSE_CHARACTER_CLASS.CHARACTER_ID, UNIVERSE_CHARACTER_CLASS.CLASS_ID).from(UNIVERSE_CHARACTER_CLASS)
-            .where(UNIVERSE_CHARACTER_CLASS.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER_CLASS.UNIVERSE_ID.eq(id))
-            .fetch { ofEntry.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! }
-        val choices = db.select(UNIVERSE_CHARACTER_CHOICE.CHARACTER_ID, UNIVERSE_CHARACTER_CHOICE.INCLUDED).from(UNIVERSE_CHARACTER_CHOICE)
-            .where(UNIVERSE_CHARACTER_CHOICE.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER_CHOICE.UNIVERSE_ID.eq(id))
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
-        val kept = classes.mapValues { (_, c) -> c.included }
-        val statements = HashMap<String, MutableMap<String, MutableList<String>>>()
-        db.select(UNIVERSE_CHARACTER_PROPERTY.CHARACTER_ID, UNIVERSE_CHARACTER_PROPERTY.PROPERTY, UNIVERSE_CHARACTER_PROPERTY.PROPERTY_VALUE)
-            .from(UNIVERSE_CHARACTER_PROPERTY)
-            .where(UNIVERSE_CHARACTER_PROPERTY.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER_PROPERTY.UNIVERSE_ID.eq(id))
-            .fetch { statements.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } += it.value3()!! }
-        return db.selectFrom(UNIVERSE_CHARACTER).where(UNIVERSE_CHARACTER.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER.UNIVERSE_ID.eq(id))
-            .fetch { r ->
-                val own = ofEntry[r.characterId!!].orEmpty()
-                val sex = r.sex?.let(CharacterSex::valueOf)
-                val stated = statements[r.characterId!!].orEmpty()
-                // The name the user gave it, as a label of a language of its own before the user's: its first name, and one more it goes by
-                val given = local[UniverseFacet.valueOf(catalogue, r.characterId!!)]
-                val localLabel = listOfNotNull(given?.let { LOCAL to it }).toMap()
-                val localFirst = if (given == null) emptyList() else listOf(LOCAL)
-                val character = if (r.labels != null) {
-                    UniverseCharacter(r.characterId!!, localLabel + decode(r.labels), decodeAll(r.aliases), decode(r.descriptions), r.url!!, localFirst + languages, own, sex, stated)
-                } else {
-                    // Saved before the texts were kept by language: its texts as they were shown then
-                    val names = r.names!!.split('\n')
-                    UniverseCharacter(
-                        r.characterId!!, localLabel + (SHOWN to names.first()), mapOf(SHOWN to names.drop(1)), listOfNotNull(r.description?.let { SHOWN to it }).toMap(),
-                        r.url!!, localFirst + languages + SHOWN, own, sex, stated,
-                    )
-                }
-                val choice = choices[r.characterId!!]
-                KeptEntry(character, choice ?: (own.isEmpty() || own.any { kept[it] == true }), choice, given)
+    fun entries(catalogue: String, id: String, local: Map<String, String> = localNames()): List<KeptEntry> =
+        UniverseKey(catalogue, id).let { key -> entriesOf(listOf(key), local)[key].orEmpty() }
+
+    /**
+     * EVERY ENTRY OF EACH OF THE [universes] — of every universe of the dictionary when null — kept or
+     * not, by name, the names the user gave first ([local]): every table read once for them all. A
+     * universe at a time was seven queries a universe, and a reading of a catalogue's chances read
+     * every universe of the dictionary so — most of the time of the facets' dictionaries.
+     */
+    fun entriesOf(universes: Collection<UniverseKey>?, local: Map<String, String> = localNames()): Map<UniverseKey, List<KeptEntry>> {
+        if (universes != null && universes.isEmpty()) return emptyMap()
+        val classes = classesOf(universes)
+        val cc = UNIVERSE_CHARACTER_CLASS
+        val ofEntry = HashMap<UniverseKey, HashMap<String, MutableList<String>>>()
+        db.select(cc.CATALOGUE, cc.UNIVERSE_ID, cc.CHARACTER_ID, cc.CLASS_ID).from(cc).where(within(universes, cc.CATALOGUE, cc.UNIVERSE_ID))
+            .fetch { ofEntry.getOrPut(UniverseKey(it.value1()!!, it.value2()!!)) { HashMap() }.getOrPut(it.value3()!!) { ArrayList() } += it.value4()!! }
+        val ch = UNIVERSE_CHARACTER_CHOICE
+        val choices = HashMap<UniverseKey, HashMap<String, Boolean>>()
+        db.select(ch.CATALOGUE, ch.UNIVERSE_ID, ch.CHARACTER_ID, ch.INCLUDED).from(ch).where(within(universes, ch.CATALOGUE, ch.UNIVERSE_ID))
+            .fetch { choices.getOrPut(UniverseKey(it.value1()!!, it.value2()!!)) { HashMap() }[it.value3()!!] = it.value4()!! }
+        val p = UNIVERSE_CHARACTER_PROPERTY
+        val statements = HashMap<UniverseKey, HashMap<String, MutableMap<String, MutableList<String>>>>()
+        db.select(p.CATALOGUE, p.UNIVERSE_ID, p.CHARACTER_ID, p.PROPERTY, p.PROPERTY_VALUE).from(p).where(within(universes, p.CATALOGUE, p.UNIVERSE_ID))
+            .fetch {
+                statements.getOrPut(UniverseKey(it.value1()!!, it.value2()!!)) { HashMap() }.getOrPut(it.value3()!!) { HashMap() }
+                    .getOrPut(it.value4()!!) { ArrayList() } += it.value5()!!
             }
-            .sortedBy { it.character.names.first().lowercase() }
+        val out = HashMap<UniverseKey, MutableList<KeptEntry>>()
+        db.selectFrom(UNIVERSE_CHARACTER).where(within(universes, UNIVERSE_CHARACTER.CATALOGUE, UNIVERSE_CHARACTER.UNIVERSE_ID)).fetch().forEach { r ->
+            val key = UniverseKey(r.catalogue!!, r.universeId!!)
+            val own = ofEntry[key]?.get(r.characterId!!).orEmpty()
+            val sex = r.sex?.let(CharacterSex::valueOf)
+            val stated = statements[key]?.get(r.characterId!!).orEmpty()
+            // The name the user gave it, as a label of a language of its own before the user's: its first name, and one more it goes by
+            val given = local[UniverseFacet.valueOf(key.catalogue, r.characterId!!)]
+            val localLabel = listOfNotNull(given?.let { LOCAL to it }).toMap()
+            val localFirst = if (given == null) emptyList() else listOf(LOCAL)
+            val character = if (r.labels != null) {
+                UniverseCharacter(r.characterId!!, localLabel + decode(r.labels), decodeAll(r.aliases), decode(r.descriptions), r.url!!, localFirst + languages, own, sex, stated)
+            } else {
+                // Saved before the texts were kept by language: its texts as they were shown then
+                val names = r.names!!.split('\n')
+                UniverseCharacter(
+                    r.characterId!!, localLabel + (SHOWN to names.first()), mapOf(SHOWN to names.drop(1)), listOfNotNull(r.description?.let { SHOWN to it }).toMap(),
+                    r.url!!, localFirst + languages + SHOWN, own, sex, stated,
+                )
+            }
+            val choice = choices[key]?.get(r.characterId!!)
+            val kept = classes[key]
+            out.getOrPut(key) { ArrayList() } += KeptEntry(character, choice ?: (own.isEmpty() || own.any { kept?.get(it)?.included == true }), choice, given)
+        }
+        return out.mapValues { (_, entries) -> entries.sortedBy { it.character.names.first().lowercase() } }
     }
 
     /** The name of every universe of [values] ("<catalogue>:<id>") in the dictionary, in the user's languages; of every universe when null. */
@@ -364,26 +382,41 @@ class UniverseRepository(
         values.mapNotNull(UniverseFacet::parse).groupBy({ it.first }, { it.second }).mapValues { it.value.distinct() }
 
     /** Every class the entries of the universe are of, the most entries first. */
-    fun classes(catalogue: String, id: String): List<ClassInUniverse> = classesOf(catalogue, id).values.sortedByDescending { it.entries }
+    fun classes(catalogue: String, id: String): List<ClassInUniverse> =
+        UniverseKey(catalogue, id).let { key -> classesOf(listOf(key))[key].orEmpty().values.sortedByDescending { it.entries } }
 
-    private fun classesOf(catalogue: String, id: String): Map<String, ClassInUniverse> {
-        val counts = db.select(UNIVERSE_CHARACTER_CLASS.CLASS_ID, DSL.count()).from(UNIVERSE_CHARACTER_CLASS)
-            .where(UNIVERSE_CHARACTER_CLASS.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER_CLASS.UNIVERSE_ID.eq(id))
-            .groupBy(UNIVERSE_CHARACTER_CLASS.CLASS_ID)
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
+    /** Of each of the [universes] — of every universe when null — the classes its entries are of: every table read once for them all. */
+    private fun classesOf(universes: Collection<UniverseKey>?): Map<UniverseKey, Map<String, ClassInUniverse>> {
+        val cc = UNIVERSE_CHARACTER_CLASS
+        val counts = HashMap<UniverseKey, HashMap<String, Int>>()
+        db.select(cc.CATALOGUE, cc.UNIVERSE_ID, cc.CLASS_ID, DSL.count()).from(cc).where(within(universes, cc.CATALOGUE, cc.UNIVERSE_ID))
+            .groupBy(cc.CATALOGUE, cc.UNIVERSE_ID, cc.CLASS_ID)
+            .fetch { counts.getOrPut(UniverseKey(it.value1()!!, it.value2()!!)) { HashMap() }[it.value3()!!] = it.value4()!! }
         if (counts.isEmpty()) return emptyMap()
-        val known = db.selectFrom(UNIVERSE_CLASS).where(UNIVERSE_CLASS.CATALOGUE.eq(catalogue), UNIVERSE_CLASS.CLASS_ID.`in`(counts.keys))
-            .fetchMap({ it.classId!! }, { it })
-        val choices = db.select(UNIVERSE_CLASS_CHOICE.CLASS_ID, UNIVERSE_CLASS_CHOICE.INCLUDED).from(UNIVERSE_CLASS_CHOICE)
-            .where(UNIVERSE_CLASS_CHOICE.CATALOGUE.eq(catalogue), UNIVERSE_CLASS_CHOICE.UNIVERSE_ID.eq(id))
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
-        return counts.mapValues { (cls, n) ->
-            val character = known[cls]?.isCharacter ?: false
-            val choice = choices[cls]
-            val name = known[cls]?.let { if (it.labels != null) shown(it.labels) else it.name } ?: cls
-            ClassInUniverse(cls, name, character, n, choice ?: character, choice)
+        val wanted = HashMap<String, MutableSet<String>>()
+        counts.forEach { (key, of) -> wanted.getOrPut(key.catalogue) { HashSet() } += of.keys }
+        val known = HashMap<Pair<String, String>, UniverseClassRecord>()
+        db.selectFrom(UNIVERSE_CLASS).where(DSL.or(wanted.map { (catalogue, ids) -> UNIVERSE_CLASS.CATALOGUE.eq(catalogue).and(UNIVERSE_CLASS.CLASS_ID.`in`(ids)) }))
+            .fetch().forEach { known[it.catalogue!! to it.classId!!] = it }
+        val ch = UNIVERSE_CLASS_CHOICE
+        val choices = HashMap<UniverseKey, HashMap<String, Boolean>>()
+        db.select(ch.CATALOGUE, ch.UNIVERSE_ID, ch.CLASS_ID, ch.INCLUDED).from(ch).where(within(universes, ch.CATALOGUE, ch.UNIVERSE_ID))
+            .fetch { choices.getOrPut(UniverseKey(it.value1()!!, it.value2()!!)) { HashMap() }[it.value3()!!] = it.value4()!! }
+        return counts.mapValues { (key, of) ->
+            of.mapValues { (cls, n) ->
+                val k = known[key.catalogue to cls]
+                val character = k?.isCharacter ?: false
+                val choice = choices[key]?.get(cls)
+                val name = k?.let { if (it.labels != null) shown(it.labels) else it.name } ?: cls
+                ClassInUniverse(cls, name, character, n, choice ?: character, choice)
+            }
         }
     }
+
+    /** The rows of the [universes] alone, by a table's [catalogue] and [universe] fields; every row when null. */
+    private fun within(universes: Collection<UniverseKey>?, catalogue: Field<String?>, universe: Field<String?>): Condition =
+        if (universes == null) DSL.noCondition()
+        else DSL.or(universes.groupBy({ it.catalogue }, { it.id }).map { (c, ids) -> catalogue.eq(c).and(universe.`in`(ids.distinct())) })
 
     /** The user's word on a class within the universe: its entries kept, or left out; null takes it back. */
     fun chooseClass(catalogue: String, id: String, cls: String, included: Boolean?) {
