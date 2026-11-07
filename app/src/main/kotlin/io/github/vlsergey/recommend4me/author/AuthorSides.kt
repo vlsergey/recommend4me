@@ -40,7 +40,7 @@ class AuthorSides(
 
     /** The entries [bound] as kept, by the author. */
     fun entryInfos(type: TypeStore, bound: Map<Long, List<TagEntryRef>>): Map<Long, List<TagEntryInfo>> {
-        val kept = type.tags.keptEntries(bound.values.flatten().toSet())
+        val kept = type.tags.entries.keptEntries(bound.values.flatten().toSet())
         return bound.mapValues { (_, refs) ->
             refs.mapNotNull { ref ->
                 kept[ref]?.let { e ->

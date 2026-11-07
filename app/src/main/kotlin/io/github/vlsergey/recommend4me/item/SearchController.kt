@@ -13,6 +13,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.tag.FoundEntry
 import io.github.vlsergey.recommend4me.tag.NamedTag
+import io.github.vlsergey.recommend4me.tag.TagFinding
 import io.github.vlsergey.recommend4me.tag.Tags
 import java.time.Instant
 import org.springframework.beans.factory.annotation.Value
@@ -29,6 +30,7 @@ class SearchController(
     private val stores: Stores,
     private val searchQuality: io.github.vlsergey.recommend4me.search.SearchQuality,
     private val tags: Tags,
+    private val tagFinding: TagFinding,
     /** The user's languages: of an entry of a catalogue, its label and description in the first that has them. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) : SearchApi {
@@ -57,23 +59,22 @@ class SearchController(
         val piece = query?.trim()?.lowercase().orEmpty()
         val wanted = limit.coerceIn(1, MAX_VALUES)
         val values =
-            if (facet in store.tagFacets) tagValues(store, facet, piece, wanted)
-            else siteValues(store, facet, piece, wanted)
+            if (facet in store.tagFacets) tagValues(store, piece, wanted) else siteValues(store, facet, piece, wanted)
         return values?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
     }
 
     /**
-     * Of a facet of tags: the normalized tags, found by the names on this site, on any, then by meaning ([Tags.find]);
-     * when none goes by the name typed, the entries of the catalogues after them — a new tag each ([Tags.findOrNew]).
-     * Null when there are no tags to find.
+     * Of a facet of tags: the normalized tags, found by the names on this site, on any, then by meaning
+     * ([TagFinding.find]); when none goes by the name typed, the entries of the catalogues after them — a new tag each
+     * ([TagFinding.findOrNew]). Null when there are no tags to find.
      */
-    private fun tagValues(store: SourceStore, facet: String, piece: String, wanted: Int): List<FacetValueUse>? {
+    private fun tagValues(store: SourceStore, piece: String, wanted: Int): List<FacetValueUse>? {
         val scope = tags.scope() ?: return null
         fun use(t: NamedTag) = FacetValueUse(t.stats.key, t.name.name, t.stats.counts.works, null)
         // A tag the user ignores is not offered to add
-        return if (piece.isEmpty()) tags.list(scope, facet, null, ignored = false).take(wanted).map(::use)
+        return if (piece.isEmpty()) tags.list(scope, null, ignored = false).take(wanted).map(::use)
         else
-            tags.findOrNew(scope, facet, store.id, piece, wanted).mapNotNull { f ->
+            tagFinding.findOrNew(scope, store.id, piece, wanted).mapNotNull { f ->
                 f.tag?.let(::use) ?: f.entry?.let(::newTag)
             }
     }

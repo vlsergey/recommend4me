@@ -16,7 +16,7 @@ class CapturedPageRepository(private val db: DSLContext) {
     fun keep(url: String, html: String, itemId: String?, now: Instant, parserVersion: Int) {
         val packed = gzip(html)
         db.insertInto(CAPTURED_PAGE)
-            .set(CAPTURED_PAGE.URL, url.take(2000))
+            .set(CAPTURED_PAGE.URL, url.take(URL_WIDTH))
             .set(CAPTURED_PAGE.ITEM_ID, itemId)
             .set(CAPTURED_PAGE.CAPTURED_AT, now)
             .set(CAPTURED_PAGE.PARSER_VERSION, parserVersion)
@@ -56,6 +56,9 @@ class CapturedPageRepository(private val db: DSLContext) {
             .fetch { KeptPage(it.value1()!!, it.value2(), it.value3()!!, it.value4()!!) }
 
     companion object {
+        /** The longest address of a page kept: the width of its column. */
+        private const val URL_WIDTH = 2000
+
         fun gzip(text: String): ByteArray {
             val bytes = ByteArrayOutputStream()
             GZIPOutputStream(bytes).use { it.write(text.toByteArray(Charsets.UTF_8)) }

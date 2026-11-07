@@ -70,15 +70,11 @@ internal class NameMatcher private constructor(private val base: Base, private v
              * function word.
              */
             fun single(stem: String, without: Set<String>): Pattern? {
-                if (stem in common) return null
-                val of = owners[stem] ?: return null
-                var one: String? = null
-                for (v in of) {
-                    if (v in without) continue
-                    if (one != null) return null
-                    one = v
-                }
-                return one?.let { Pattern(listOf(stem), it) }
+                // Two values kept are enough to tell the word is of more than one
+                val kept =
+                    if (stem in common) emptyList()
+                    else owners[stem].orEmpty().asSequence().filter { it !in without }.take(2).toList()
+                return kept.singleOrNull()?.let { Pattern(listOf(stem), it) }
             }
         }
 
@@ -157,48 +153,79 @@ internal class NameMatcher private constructor(private val base: Base, private v
      * not overlapping.
      */
     fun found(words: List<NamedWord>): List<Found> {
-        val sorted = words.sortedWith(compareBy<NamedWord> { it.position }.thenBy { it.stem })
-        val positions = IntArray(sorted.size) { sorted[it].position }
-        /** The word of the [stem] at the place [at], of the places sorted. */
-        fun wordAt(at: Int, stem: String): NamedWord? {
-            var k = positions.binarySearch(at)
-            if (k < 0) return null
-            while (k > 0 && positions[k - 1] == at) k--
-            while (k < positions.size && positions[k] == at) {
-                if (sorted[k].stem == stem) return sorted[k]
-                k++
-            }
-            return null
-        }
+        val text = PlacedWords(words)
         val out = ArrayList<Found>()
         var next = Int.MIN_VALUE
         var k = 0
-        while (k < sorted.size) {
-            val at = sorted[k].position
-            var end = k
-            while (end < sorted.size && sorted[end].position == at) end++
-            if (at >= next) {
-                var best: Pattern? = null
-                var first: NamedWord? = null
-                for (w in k until end) {
-                    val word = sorted[w]
-                    patternsOf(word.stem)?.forEach { p ->
-                        if (p.stems.size == 1 && !word.capital) return@forEach
-                        if (best != null && p.stems.size <= best!!.stems.size) return@forEach
-                        if ((1 until p.stems.size).all { wordAt(at + it, p.stems[it]) != null }) {
-                            best = p
-                            first = word
-                        }
-                    }
-                }
-                best?.let { p ->
-                    out += Found(p.value, first!!, wordAt(at + p.stems.size - 1, p.stems.last())!!)
-                    next = at + p.stems.size
-                }
+        while (k < text.size) {
+            val at = text.words[k].position
+            val end = text.endOfPlace(k)
+            val longest = if (at >= next) longestAt(text, k, end) else null
+            if (longest != null) {
+                val (p, first) = longest
+                out += Found(p.value, first, text.wordAt(at + p.stems.size - 1, p.stems.last())!!)
+                next = at + p.stems.size
             }
             k = end
         }
         return out
+    }
+
+    /**
+     * The longest name beginning at the place of the words [from] until [end] of [text]: its pattern and its first
+     * word; null of none.
+     */
+    private fun longestAt(text: PlacedWords, from: Int, end: Int): Pair<Pattern, NamedWord>? {
+        val at = text.words[from].position
+        var best: Pattern? = null
+        var first: NamedWord? = null
+        for (w in from until end) {
+            val word = text.words[w]
+            patternsOf(word.stem)?.forEach { p ->
+                if (longer(p, word, best) && (1 until p.stems.size).all { text.wordAt(at + it, p.stems[it]) != null }) {
+                    best = p
+                    first = word
+                }
+            }
+        }
+        return best?.let { it to first!! }
+    }
+
+    /**
+     * Whether the name [p] beginning with [word] may count over the [best] found at its place: a name of one word only
+     * where written with a capital, and only a longer one than the best.
+     */
+    private fun longer(p: Pattern, word: NamedWord, best: Pattern?): Boolean =
+        (p.stems.size != 1 || word.capital) && (best == null || p.stems.size > best.stems.size)
+}
+
+/** The words of one text in the order of their places, then of their stems. */
+private class PlacedWords(words: List<NamedWord>) {
+    val words = words.sortedWith(compareBy<NamedWord> { it.position }.thenBy { it.stem })
+    private val positions = IntArray(this.words.size) { this.words[it].position }
+
+    val size: Int
+        get() = words.size
+
+    /** The end of the place of the word [k]: the first word after it at another place. */
+    fun endOfPlace(k: Int): Int {
+        var end = k
+        while (end < words.size && words[end].position == words[k].position) end++
+        return end
+    }
+
+    /** The word of the [stem] at the place [at]; null of none. */
+    fun wordAt(at: Int, stem: String): NamedWord? {
+        var k = positions.binarySearch(at)
+        var found: NamedWord? = null
+        if (k >= 0) {
+            while (k > 0 && positions[k - 1] == at) k--
+            while (found == null && k < positions.size && positions[k] == at) {
+                if (words[k].stem == stem) found = words[k]
+                k++
+            }
+        }
+        return found
     }
 }
 

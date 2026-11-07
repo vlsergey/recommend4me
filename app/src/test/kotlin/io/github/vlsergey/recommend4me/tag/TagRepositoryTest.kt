@@ -21,10 +21,10 @@ class TagRepositoryTest {
             val gone = tags.create()
             // Counted with both; the second merged away before the write
             db.dsl.deleteFrom(NORMALIZED_TAG).where(NORMALIZED_TAG.ID.eq(gone)).execute()
-            tags.replaceCalculated(
+            tags.stats.replaceCalculated(
                 mapOf(kept to ShownName("Hulls", NameRule.ALL), gone to ShownName("Sails", NameRule.ALL))
             )
-            tags.keepStats(
+            tags.stats.keepStats(
                 emptyMap(),
                 mapOf(
                     kept to TagCount(Counts(3, 2, 1), listOf("site")),
@@ -32,7 +32,7 @@ class TagRepositoryTest {
                 ),
             )
             assertEquals(listOf(kept), db.dsl.select(TAG_STAT.TAG).from(TAG_STAT).fetch(TAG_STAT.TAG))
-            assertEquals(mapOf(kept to TagCount(Counts(3, 2, 1), listOf("site"))), tags.counts())
+            assertEquals(mapOf(kept to TagCount(Counts(3, 2, 1), listOf("site"))), tags.stats.counts())
             assertEquals(
                 "Hulls",
                 db.dsl.select(TAG_STAT.CALCULATED_NAME).from(TAG_STAT).fetchOne(TAG_STAT.CALCULATED_NAME),

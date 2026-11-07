@@ -423,7 +423,7 @@ class TwoSitesTest : TwoSitesTestBase() {
                     ?.item == "q3"
             },
             "document ${
-                searchService
+                searchDocuments
                     .documents(stores.source("alpha")!!, listOf("q3"), passages = false)
                     .values
                     .single()

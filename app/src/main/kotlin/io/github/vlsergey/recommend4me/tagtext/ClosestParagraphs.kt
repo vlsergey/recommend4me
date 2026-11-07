@@ -2,7 +2,7 @@ package io.github.vlsergey.recommend4me.tagtext
 
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
-import io.github.vlsergey.recommend4me.part.PartRepository
+import io.github.vlsergey.recommend4me.part.Paragraph
 
 /**
  * OF EVERY TAG ITS [TOP] PARAGRAPHS OF A WORK CLOSEST TO IT, by its closest name, a paragraph answered on for the tag
@@ -45,7 +45,7 @@ private constructor(
     }
 
     /** The [paragraphs] held against every name, a block of them at a time. */
-    private fun hold(paragraphs: List<PartRepository.Paragraph>) {
+    private fun hold(paragraphs: List<Paragraph>) {
         val block = minOf(paragraphs.size, BLOCK)
         val p = Floats(block * dim)
         val s = Floats(block * owners.size)
@@ -101,7 +101,7 @@ private constructor(
          * empty), a paragraph [answered] on for it left out.
          */
         fun of(
-            paragraphs: List<PartRepository.Paragraph>,
+            paragraphs: List<Paragraph>,
             tagIds: LongArray,
             vectors: Collection<List<FloatArray>>,
             answered: Set<Pair<Long, String>>,

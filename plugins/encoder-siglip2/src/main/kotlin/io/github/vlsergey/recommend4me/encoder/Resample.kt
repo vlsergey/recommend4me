@@ -48,11 +48,11 @@ object Resample {
         return Weights(bounds, k)
     }
 
-    /** PIL's normalize_coeffs_8bpc: the weights as fixed-point integers. */
+    /** PIL's normalize_coeffs_8bpc: the weights as fixed-point integers, rounded half away from nought. */
     private fun fixed(w: DoubleArray): IntArray =
         IntArray(w.size) { x ->
             val v = w[x] * (1 shl PRECISION)
-            if (w[x] < 0) (v - 0.5).toInt() else (v + 0.5).toInt()
+            if (w[x] < 0) (v - HALF).toInt() else (v + HALF).toInt()
         }
 
     /**
@@ -60,88 +60,105 @@ object Resample {
      * horizontal pass, then the vertical, each rounded to bytes.
      */
     fun u8(src: ByteArray, w: Int, h: Int, ch: Int, outW: Int, outH: Int): ByteArray {
-        var cur = src
-        var cw = w
-        if (outW != w) {
-            val ws = weights(w, outW)
-            val out = ByteArray(outW * h * ch)
-            val ks = Array(outW) { fixed(ws.k[it]) }
-            for (y in 0 until h) {
-                val row = y * w * ch
-                for (xx in 0 until outW) {
-                    val xmin = ws.bounds[xx * 2]
-                    val xmax = ws.bounds[xx * 2 + 1]
-                    val k = ks[xx]
-                    for (c in 0 until ch) {
-                        var ss = 1L shl (PRECISION - 1)
-                        for (x in 0 until xmax) ss += (cur[row + (x + xmin) * ch + c].toInt() and 0xff).toLong() * k[x]
-                        out[(y * outW + xx) * ch + c] = clip8(ss shr PRECISION)
-                    }
-                }
-            }
-            cur = out
-            cw = outW
-        }
-        if (outH != h) {
-            val ws = weights(h, outH)
-            val out = ByteArray(cw * outH * ch)
-            val ks = Array(outH) { fixed(ws.k[it]) }
-            for (yy in 0 until outH) {
-                val ymin = ws.bounds[yy * 2]
-                val ymax = ws.bounds[yy * 2 + 1]
-                val k = ks[yy]
-                for (x in 0 until cw) for (c in 0 until ch) {
-                    var ss = 1L shl (PRECISION - 1)
-                    for (y in 0 until ymax) ss += (cur[((y + ymin) * cw + x) * ch + c].toInt() and 0xff).toLong() * k[y]
-                    out[(yy * cw + x) * ch + c] = clip8(ss shr PRECISION)
-                }
-            }
-            cur = out
-        }
-        return cur
+        val wide = if (outW != w) across8(src, w, h, ch, outW) else src
+        return if (outH != h) down8(wide, if (outW != w) outW else w, h, ch, outH) else wide
     }
 
-    private fun clip8(v: Long): Byte = (if (v >= 255) 255 else if (v <= 0) 0 else v.toInt()).toByte()
+    /** The horizontal pass of [u8]: every row of the picture [src] of w×h resized to [outW], rounded to bytes. */
+    private fun across8(src: ByteArray, w: Int, h: Int, ch: Int, outW: Int): ByteArray {
+        val ws = weights(w, outW)
+        val out = ByteArray(outW * h * ch)
+        val ks = Array(outW) { fixed(ws.k[it]) }
+        for (y in 0 until h) {
+            val row = y * w * ch
+            for (xx in 0 until outW) {
+                val xmin = ws.bounds[xx * 2]
+                val xmax = ws.bounds[xx * 2 + 1]
+                for (c in 0 until ch) out[(y * outW + xx) * ch + c] =
+                    clip8(sum8(src, row + xmin * ch + c, ch, xmax, ks[xx]) shr PRECISION)
+            }
+        }
+        return out
+    }
+
+    /** The vertical pass of [u8]: every column of the picture [src] of cw×h resized to [outH], rounded to bytes. */
+    private fun down8(src: ByteArray, cw: Int, h: Int, ch: Int, outH: Int): ByteArray {
+        val ws = weights(h, outH)
+        val out = ByteArray(cw * outH * ch)
+        val ks = Array(outH) { fixed(ws.k[it]) }
+        for (yy in 0 until outH) {
+            val ymin = ws.bounds[yy * 2]
+            val ymax = ws.bounds[yy * 2 + 1]
+            for (x in 0 until cw) for (c in 0 until ch) {
+                out[(yy * cw + x) * ch + c] =
+                    clip8(sum8(src, (ymin * cw + x) * ch + c, cw * ch, ymax, ks[yy]) shr PRECISION)
+            }
+        }
+        return out
+    }
+
+    /**
+     * The fixed-point weighted sum of [count] bytes of [src], the first at [from], each [step] after the one before, by
+     * the weights [k]; half a unit added, for the shift to round.
+     */
+    private fun sum8(src: ByteArray, from: Int, step: Int, count: Int, k: IntArray): Long {
+        var ss = 1L shl (PRECISION - 1)
+        for (x in 0 until count) ss += (src[from + x * step].toInt() and UNSIGNED_BYTE).toLong() * k[x]
+        return ss
+    }
+
+    private fun clip8(v: Long): Byte = (if (v >= BYTE_MAX) BYTE_MAX else if (v <= 0) 0 else v.toInt()).toByte()
 
     /**
      * Float planes (`ch` planes of h×w) resized to outW×outH as torch's antialiased bilinear interpolation does it —
      * the same weights, float arithmetic, no rounding between the passes.
      */
     fun f32(src: FloatArray, w: Int, h: Int, ch: Int, outW: Int, outH: Int): FloatArray {
-        var cur = src
-        var cw = w
-        if (outW != w) {
-            val ws = weights(w, outW)
-            val out = FloatArray(ch * h * outW)
-            for (c in 0 until ch) for (y in 0 until h) {
-                val row = c * h * w + y * w
-                for (xx in 0 until outW) {
-                    val xmin = ws.bounds[xx * 2]
-                    val xmax = ws.bounds[xx * 2 + 1]
-                    val k = ws.k[xx]
-                    var s = 0.0
-                    for (x in 0 until xmax) s += cur[row + x + xmin] * k[x]
-                    out[c * h * outW + y * outW + xx] = s.toFloat()
-                }
-            }
-            cur = out
-            cw = outW
-        }
-        if (outH != h) {
-            val ws = weights(h, outH)
-            val out = FloatArray(ch * outH * cw)
-            for (c in 0 until ch) for (yy in 0 until outH) {
-                val ymin = ws.bounds[yy * 2]
-                val ymax = ws.bounds[yy * 2 + 1]
-                val k = ws.k[yy]
-                for (x in 0 until cw) {
-                    var s = 0.0
-                    for (y in 0 until ymax) s += cur[c * h * cw + (y + ymin) * cw + x] * k[y]
-                    out[c * outH * cw + yy * cw + x] = s.toFloat()
-                }
-            }
-            cur = out
-        }
-        return cur
+        val wide = if (outW != w) across32(src, w, h, ch, outW) else src
+        return if (outH != h) down32(wide, if (outW != w) outW else w, h, ch, outH) else wide
     }
+
+    /** The horizontal pass of [f32]: every row of every plane of w×h of [src] resized to [outW]. */
+    private fun across32(src: FloatArray, w: Int, h: Int, ch: Int, outW: Int): FloatArray {
+        val ws = weights(w, outW)
+        val out = FloatArray(ch * h * outW)
+        for (c in 0 until ch) for (y in 0 until h) {
+            val row = c * h * w + y * w
+            for (xx in 0 until outW) {
+                val xmin = ws.bounds[xx * 2]
+                val xmax = ws.bounds[xx * 2 + 1]
+                out[c * h * outW + y * outW + xx] = sum32(src, row + xmin, 1, xmax, ws.k[xx]).toFloat()
+            }
+        }
+        return out
+    }
+
+    /** The vertical pass of [f32]: every column of every plane of cw×h of [src] resized to [outH]. */
+    private fun down32(src: FloatArray, cw: Int, h: Int, ch: Int, outH: Int): FloatArray {
+        val ws = weights(h, outH)
+        val out = FloatArray(ch * outH * cw)
+        for (c in 0 until ch) for (yy in 0 until outH) {
+            val ymin = ws.bounds[yy * 2]
+            val ymax = ws.bounds[yy * 2 + 1]
+            for (x in 0 until cw) out[c * outH * cw + yy * cw + x] =
+                sum32(src, c * h * cw + ymin * cw + x, cw, ymax, ws.k[yy]).toFloat()
+        }
+        return out
+    }
+
+    /** The weighted sum of [count] floats of [src], the first at [from], each [step] after the one before, by [k]. */
+    private fun sum32(src: FloatArray, from: Int, step: Int, count: Int, k: DoubleArray): Double {
+        var s = 0.0
+        for (x in 0 until count) s += src[from + x * step] * k[x]
+        return s
+    }
+
+    /** Half a unit: the rounding of a weight to the nearest fixed-point integer. */
+    private const val HALF = 0.5
+
+    /** A byte's bits read as a number of 0..255, not of its sign. */
+    private const val UNSIGNED_BYTE = 0xff
+
+    /** The largest value of an 8-bit channel. */
+    private const val BYTE_MAX = 255
 }

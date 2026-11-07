@@ -16,6 +16,7 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
+import io.github.vlsergey.recommend4me.tag.TagEntries
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.work.WorkEvents
 import java.time.Instant
@@ -53,7 +54,7 @@ private fun editableFacet(store: SourceStore, facet: String): FacetDef {
  * The tag an entry of a catalogue ([c] offered it as a new tag) is bound to, made of it when there is none; null when
  * the answer names no entry, or its facet is not of tags.
  */
-private fun tagOfEntry(tags: Tags, store: SourceStore, c: ApiFacetCorrection): String? =
+private fun tagOfEntry(tags: Tags, tagEntries: TagEntries, store: SourceStore, c: ApiFacetCorrection): String? =
     c.entry
         ?.takeIf { c.facet in store.tagFacets }
         ?.let { e ->
@@ -64,7 +65,7 @@ private fun tagOfEntry(tags: Tags, store: SourceStore, c: ApiFacetCorrection): S
                         "No tags to make one of ${e.catalogue}:${e.entry}",
                     )
             try {
-                tags.tagOfEntry(scope, c.facet, e.catalogue, e.entry)
+                tagEntries.tagOfEntry(scope, c.facet, e.catalogue, e.entry)
             } catch (x: NoSuchElementException) {
                 throw Refusal.NO_VALUE.refuse(HttpStatus.BAD_REQUEST, x.message ?: "No entry ${e.catalogue}:${e.entry}")
                     .apply { initCause(x) }
@@ -112,6 +113,7 @@ class CorrectionsController(
     private val events: ApplicationEventPublisher,
     private val workEvents: WorkEvents,
     private val tags: Tags,
+    private val tagEntries: TagEntries,
     private val answering: Answering,
 ) : CorrectionsApi {
 
@@ -132,7 +134,7 @@ class CorrectionsController(
         editableFacet(store, c.facet)
         val name = c.name?.trim()?.takeIf { it.isNotEmpty() }
         // An entry of a catalogue offered as a new tag: the tag bound to it, made of it when there is none
-        val ofEntry = tagOfEntry(tags, store, c)
+        val ofEntry = tagOfEntry(tags, tagEntries, store, c)
         val key =
             ofEntry
                 ?: c.key?.trim()?.takeIf { it.isNotEmpty() }

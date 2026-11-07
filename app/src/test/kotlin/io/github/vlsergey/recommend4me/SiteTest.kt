@@ -81,9 +81,9 @@ class SiteTest : SiteTestBase() {
     /** The paragraphs of the work's parts encoded, as the background encodes them. */
     private fun encodeParagraphs(store: SourceStore) {
         val encoder = SitePlugins.WordsEncoder()
-        store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
+        store.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
             val texts = Paragraphs.of(part.content)
-            store.parts.saveParagraphVectors(
+            store.parts.paragraphs.saveParagraphVectors(
                 part.itemId,
                 part.partId,
                 Paragraphs.keyOf(encoder.id),
@@ -405,7 +405,7 @@ class SiteTest : SiteTestBase() {
         )
         // As it was: the entry is the other tests'
         corrections.uncorrectFacet("site", "x1", "tags", made.key)
-        tagsApi.bindTagEntry(TagEntryRequest(made.key, "fake", "E2", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(made.key, "fake", "E2", false))
     }
 
     /**

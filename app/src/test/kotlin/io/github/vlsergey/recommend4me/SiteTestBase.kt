@@ -24,6 +24,8 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
+import io.github.vlsergey.recommend4me.tag.TagCataloguesController
+import io.github.vlsergey.recommend4me.tag.TagRenaming
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.TagVectors
 import io.github.vlsergey.recommend4me.tag.Tags
@@ -89,6 +91,8 @@ abstract class SiteTestBase {
     @Autowired lateinit var tagsApi: TagsController
     @Autowired lateinit var catalogueReader: CatalogueReader
     @Autowired lateinit var tagService: Tags
+    @Autowired lateinit var tagRenaming: TagRenaming
+    @Autowired lateinit var tagCataloguesApi: TagCataloguesController
     @Autowired lateinit var tagVectors: TagVectors
     @Autowired lateinit var tagsByText: TagsByTextController
     @Autowired lateinit var textTags: TextTags
@@ -101,18 +105,18 @@ abstract class SiteTestBase {
 
     /**
      * The texts' vectors made, and what the background makes of the tags made now: their works counted and kept
-     * ([Tags.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
+     * ([TagRenaming.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
      */
     protected fun refresh(store: SourceStore) = inBackground {
         textVectors.refresh(store, "asked")
-        tagService.scope()?.let { tagService.rename(it, it.facet) }
+        tagService.scope()?.let { tagRenaming.rename(it, it.facet) }
         tagVectors.fill()
     }
 
     /** The offers of the tags' graph as worked out with the names of the tags, after the quiet — here at once. */
     protected fun offers(): List<HierarchyOffer> {
-        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
-        return tagsApi.listHierarchyOffers().body!!.offers
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
+        return tagCataloguesApi.listHierarchyOffers().body!!.offers
     }
 
     /**

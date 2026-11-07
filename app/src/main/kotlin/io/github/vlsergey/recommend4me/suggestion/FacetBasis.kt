@@ -99,7 +99,7 @@ internal object FacetBasis {
         val ids = read.ids
         val hashes = HashMap<String, MutableList<String>>()
         store.textVectors.hashes(encoder.id).forEach { (k, hash) -> hashes.getOrPut(k.first) { ArrayList() } += hash }
-        val windowCounts = store.parts.windowCounts(encoder.id)
+        val windowCounts = store.parts.windows.windowCounts(encoder.id)
         return LongArray(ids.size) { i ->
             val id = ids[i]
             fingerprint(

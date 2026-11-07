@@ -23,19 +23,38 @@ internal class ParagraphMarks(input: TokenStream, private val text: String) : To
     private var lastEnd = -1
 
     override fun incrementToken(): Boolean {
-        held?.let {
-            restoreState(it)
-            held = null
-            step.positionIncrement = 1
-            lastEnd = offset.endOffset()
-            return true
+        val word = held
+        return when {
+            word != null -> {
+                given(word)
+                true
+            }
+            !input.incrementToken() -> false
+            else -> {
+                markedOrPassed()
+                true
+            }
         }
-        if (!input.incrementToken()) return false
+    }
+
+    /** The word held after a mark given now. */
+    private fun given(word: AttributeSource.State) {
+        restoreState(word)
+        held = null
+        step.positionIncrement = 1
+        lastEnd = offset.endOffset()
+    }
+
+    /**
+     * The word just read passed as it is — or, the first of a paragraph, held, and the mark given in its place, at its
+     * start.
+     */
+    private fun markedOrPassed() {
         val start = offset.startOffset()
         val begins = lastEnd < 0 || text.indexOf('\n', lastEnd).let { it in lastEnd until start }
         if (!begins) {
             lastEnd = offset.endOffset()
-            return true
+            return
         }
         held = captureState()
         val increment = step.positionIncrement
@@ -43,7 +62,6 @@ internal class ParagraphMarks(input: TokenStream, private val text: String) : To
         term.setEmpty().append(MARK)
         step.positionIncrement = increment
         offset.setOffset(start, start)
-        return true
     }
 
     override fun reset() {

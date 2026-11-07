@@ -38,7 +38,7 @@ object Vectors {
     fun keyOf(text: String): Long {
         val digest = MessageDigest.getInstance("SHA-1").digest(text.toByteArray())
         var h = 0L
-        for (i in 0 until 8) h = (h shl 8) or (digest[i].toLong() and 0xFF)
+        for (i in 0 until Long.SIZE_BYTES) h = (h shl Byte.SIZE_BITS) or (digest[i].toLong() and UNSIGNED_BYTE)
         return h
     }
 
@@ -50,7 +50,7 @@ object Vectors {
         var n = 0.0
         for (x in v) n += x.toDouble() * x
         n = sqrt(n)
-        return if (n > 1e-9) FloatArray(v.size) { (v[it] / n).toFloat() } else v
+        return if (n > LEAST_NORM) FloatArray(v.size) { (v[it] / n).toFloat() } else v
     }
 
     /** The mean direction of [vectors], unit again; null for none. */
@@ -61,6 +61,12 @@ object Vectors {
         var n = 0.0
         for (x in sum) n += x.toDouble() * x
         n = sqrt(n)
-        return if (n > 1e-9) FloatArray(sum.size) { (sum[it] / n).toFloat() } else null
+        return if (n > LEAST_NORM) FloatArray(sum.size) { (sum[it] / n).toFloat() } else null
     }
+
+    /** A byte's bits read as a number of 0..255, not of its sign. */
+    private const val UNSIGNED_BYTE = 0xFFL
+
+    /** The least length a vector is made of unit length from: a shorter one has no direction to keep. */
+    private const val LEAST_NORM = 1e-9
 }

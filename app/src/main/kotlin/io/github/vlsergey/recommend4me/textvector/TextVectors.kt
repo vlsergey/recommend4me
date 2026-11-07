@@ -1,13 +1,12 @@
 package io.github.vlsergey.recommend4me.textvector
 
-import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
@@ -45,6 +44,7 @@ class TextVectors(
     private val plugins: Plugins,
     private val events: ApplicationEventPublisher,
     private val workload: Workload,
+    private val windows: TextWindows,
 ) {
     private val whole = ConcurrentHashMap<String, AtomicBoolean>()
     private val queued = ConcurrentHashMap<String, MutableSet<String>>()
@@ -63,6 +63,8 @@ class TextVectors(
         if (scheduled.compareAndSet(false, true)) worker.schedule(::drain, DELAY_SECONDS, TimeUnit.SECONDS)
     }
 
+    // The worker's loop: a source that fails any way is told in the log and leaves the others to be encoded
+    @Suppress("TooGenericExceptionCaught")
     private fun drain() {
         scheduled.set(false)
         queued.keys.forEach { source ->
@@ -78,14 +80,16 @@ class TextVectors(
         }
     }
 
-    @Order(3)
+    @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
+    // The worker's pass on start: a source that fails any way is told in the log and leaves the others to be encoded
+    @Suppress("TooGenericExceptionCaught")
     fun start() {
         worker.execute {
             stores.sources.forEach { s ->
                 try {
                     refresh(s, "start")
-                    fillWindows(s)
+                    windows.fillWindows(s)
                 } catch (e: Exception) {
                     log.error("{}: text vectors were not refreshed on start", s.id, e)
                 }
@@ -120,76 +124,16 @@ class TextVectors(
         progress: (done: Int, total: Int) -> Unit,
         cancelled: () -> Boolean,
     ): Int {
-        val encoder = plugins.textEncoder() ?: return 0
+        val encoder = plugins.textEncoder()
         val flag = whole.computeIfAbsent(store.id) { AtomicBoolean(false) }
-        if (only == null && !flag.compareAndSet(false, true)) return 0
+        if (encoder == null || (only == null && !flag.compareAndSet(false, true))) return 0
         running = true
         try {
-            val keys = store.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
-            val stored =
-                if (only == null) store.textVectors.hashes(encoder.id)
-                else only.flatMap { store.textVectors.hashes(encoder.id, it).entries }.associate { it.toPair() }
-            val known =
-                if (only == null) store.textVectors.keys() else only.flatMap { store.textVectors.keys(it) }.toSet()
-            val fields = if (only == null) store.corrections.allFields() else store.corrections.fieldsOf(only)
-            // The title of every item, as the user corrected it: a text the models read like any other
-            val titles =
-                if (only == null) store.items.titles() else store.items.heads(only).mapValues { it.value.title }
-
-            class Todo(val itemId: String, val key: String, val text: String, val hash: String)
-            val todo = ArrayList<Todo>()
-            val present = HashSet<Pair<String, String>>()
-            fun consider(itemId: String, site: Map<String, String>) {
-                val own = fields[itemId].orEmpty()
-                val texts =
-                    Corrected.texts(site, own) +
-                        listOfNotNull(titles[itemId]?.let { TITLE to Corrected.title(it, own) })
-                (keys + TITLE).forEach { key ->
-                    val text = texts[key]?.takeIf { it.isNotBlank() } ?: return@forEach
-                    present += itemId to key
-                    val hash = Vectors.hash(text)
-                    if (stored[itemId to key] != hash) todo += Todo(itemId, key, text, hash)
-                }
-            }
-            val considered = HashSet<String>()
-            if (only == null) {
-                if (keys.isNotEmpty())
-                    store.items.forEachTexts(keys) { id, texts ->
-                        considered += id
-                        consider(id, texts)
-                    }
-                // The items with a title and no other text
-                titles.keys.filter { it !in considered }.forEach { consider(it, emptyMap()) }
-            } else store.items.textsOf(only, keys).let { all -> only.forEach { id -> consider(id, all[id].orEmpty()) } }
-            val gone = known.filter { it !in present && (only == null || it.first in only) }
+            val scan = TextScan(store, only, encoder.id)
+            val gone = scan.gone()
             gone.forEach { (id, key) -> store.textVectors.delete(id, key) }
             if (gone.isNotEmpty()) events.publishEvent(TextVectorsChanged(store.id, gone.map { it.first }.distinct()))
-            if (todo.isEmpty()) return 0
-
-            // The graded items first: the model learns from them, and an hour of re-encoding should
-            // not leave it without texts until the end
-            val graded = store.ratings.gradedItems()
-            todo.sortByDescending { it.itemId in graded }
-            if (todo.size > BATCH) log.info("{}: encoding {} texts by {}", store.id, todo.size, encoder.id)
-            val started = System.currentTimeMillis()
-            var done = 0
-            for (batch in todo.chunked(BATCH)) {
-                if (cancelled()) break
-                val vectors = encoder.encode(batch.map { it.text })
-                batch.forEachIndexed { i, t ->
-                    vectors[i]?.let { store.textVectors.save(t.itemId, t.key, encoder.id, t.hash, it) }
-                }
-                keepWindows(
-                    store,
-                    batch.filterIndexed { i, _ -> vectors[i] != null }.map { Triple(it.itemId, it.key, it.text) },
-                )
-                events.publishEvent(TextVectorsChanged(store.id, batch.map { it.itemId }.distinct()))
-                done += batch.size
-                progress(done, todo.size)
-            }
-            if (todo.size > BATCH)
-                log.info("{}: {} texts encoded in {} ms", store.id, done, System.currentTimeMillis() - started)
-            return done
+            return encoded(store, encoder, scan.todo, progress, cancelled)
         } finally {
             if (only == null) flag.set(false)
             running = false
@@ -197,55 +141,39 @@ class TextVectors(
     }
 
     /**
-     * The windows of texts just encoded: how many each has, and of a text of more than one the vector of every window —
-     * what the search finds a piece of a long text by.
+     * The texts [todo] encoded by [encoder] and kept, with their windows, a batch at a time while not [cancelled]: the
+     * graded items first — the model learns from them, and an hour of re-encoding should not leave it without texts
+     * until the end. How many were encoded.
      */
-    private fun keepWindows(store: SourceStore, texts: List<Triple<String, String, String>>) {
-        val encoder = plugins.textEncoder() ?: return
-        val counts = texts.map { encoder.windowSpans(it.third).size }
-        val long = texts.indices.filter { counts[it] > 1 }
-        val windows = if (long.isEmpty()) emptyList() else encoder.encodeWindows(long.map { texts[it].third })
-        val of = long.withIndex().associate { (k, i) -> i to windows[k] }
-        texts.forEachIndexed { i, (id, key, _) -> store.textVectors.saveWindows(id, key, counts[i], of[i].orEmpty()) }
-    }
-
-    /**
-     * The windows of the texts encoded before their windows were kept, made now, a batch at a time: of the texts as
-     * they are now — a text changed since is encoded again by [refresh], its windows with it. Answers how many texts
-     * were gone through.
-     */
-    fun fillWindows(store: SourceStore, cancelled: () -> Boolean = { false }): Int =
-        workload.run(Work("textWindows", source = store.id), mapOf("start" to 1)) {
-            windowsFilled(store, cancelled)
-        }
-
-    private fun windowsFilled(store: SourceStore, cancelled: () -> Boolean): Int {
-        val encoder = plugins.textEncoder() ?: return 0
-        val keys = store.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
-        var done = 0
+    private fun encoded(
+        store: SourceStore,
+        encoder: TextEncoder,
+        todo: List<TextToEncode>,
+        progress: (done: Int, total: Int) -> Unit,
+        cancelled: () -> Boolean,
+    ): Int {
+        if (todo.isEmpty()) return 0
+        val graded = store.ratings.gradedItems()
+        val ordered = todo.sortedByDescending { it.itemId in graded }
+        if (ordered.size > BATCH) log.info("{}: encoding {} texts by {}", store.id, ordered.size, encoder.id)
         val started = System.currentTimeMillis()
-        while (!cancelled()) {
-            val todo = store.textVectors.withoutWindows(encoder.id, keys + TITLE, BATCH)
-            if (todo.isEmpty()) break
-            val ids = todo.map { it.first }.distinct()
-            val fields = store.corrections.fieldsOf(ids)
-            val site = store.items.textsOf(ids, keys)
-            val titles = store.items.heads(ids).mapValues { it.value.title }
-            val texts = todo.map { (id, key) ->
-                val own = fields[id].orEmpty()
-                val all =
-                    Corrected.texts(site[id].orEmpty(), own) +
-                        listOfNotNull(titles[id]?.let { TITLE to Corrected.title(it, own) })
-                // A text gone since: no windows, and the next refresh drops its vector
-                Triple(id, key, all[key].orEmpty())
+        var done = 0
+        for (batch in ordered.chunked(BATCH)) {
+            if (cancelled()) break
+            val vectors = encoder.encode(batch.map { it.text })
+            batch.forEachIndexed { i, t ->
+                vectors[i]?.let { store.textVectors.save(t.itemId, t.key, encoder.id, t.hash, it) }
             }
-            keepWindows(store, texts)
-            // The works searched by the meaning of the windows just kept: indexed again with them
-            events.publishEvent(TextVectorsChanged(store.id, ids))
-            done += texts.size
+            windows.keepWindows(
+                store,
+                batch.filterIndexed { i, _ -> vectors[i] != null }.map { Triple(it.itemId, it.key, it.text) },
+            )
+            events.publishEvent(TextVectorsChanged(store.id, batch.map { it.itemId }.distinct()))
+            done += batch.size
+            progress(done, ordered.size)
         }
-        if (done > 0)
-            log.info("{}: windows of {} texts counted in {} ms", store.id, done, System.currentTimeMillis() - started)
+        if (ordered.size > BATCH)
+            log.info("{}: {} texts encoded in {} ms", store.id, done, System.currentTimeMillis() - started)
         return done
     }
 
@@ -279,5 +207,8 @@ class TextVectors(
         /** Texts per encoder call; their windows share batches of the graph. */
         private const val BATCH = 32
         private const val DELAY_SECONDS = 5L
+
+        /** Its step of the start: after the kept pages are read again (1), before the pictures' vectors (4). */
+        private const val START_ORDER = 3
     }
 }

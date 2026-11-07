@@ -53,7 +53,7 @@ class Answering(private val events: ApplicationEventPublisher) {
                 throw Refusal.TAG_IMPLIED.refuse(
                     HttpStatus.CONFLICT,
                     "$key is above ${held.key}, which the user confirmed of $item",
-                    "tag" to (store.tags.shown(listOf(held.key))[held.key] ?: held.key),
+                    "tag" to (store.tags.stats.shown(listOf(held.key))[held.key] ?: held.key),
                 )
             }
     }

@@ -33,9 +33,8 @@ object LineLanguages {
      */
     fun of(line: String, `interface`: String): String {
         val own = Stemmers.of(`interface`)
-        val script = scriptOf(line) ?: return own
-        if (script in scriptsOf(`interface`)) return own
-        return Stemmers.of(OF_SCRIPT[script] ?: return own)
+        val other = scriptOf(line)?.takeIf { it !in scriptsOf(`interface`) }?.let { OF_SCRIPT[it] }
+        return other?.let(Stemmers::of) ?: own
     }
 
     /** The script most of the letters of [text] are of; null of a text of no letters. */

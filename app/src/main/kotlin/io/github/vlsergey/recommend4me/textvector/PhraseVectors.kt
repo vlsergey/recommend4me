@@ -37,7 +37,7 @@ class PhraseVectors(private val plugins: Plugins) {
     ): Map<String, FloatArray> {
         encoder ?: return emptyMap()
         val keyed = texts.distinct().associateBy(Vectors::keyOf)
-        val vectors = store.textVectors.phrases(keyed.keys, encoder.id)
+        val vectors = store.textVectors.phrases.phrases(keyed.keys, encoder.id)
         return keyed.mapNotNull { (key, text) -> vectors[key]?.let { text to it } }.toMap()
     }
 
@@ -47,7 +47,7 @@ class PhraseVectors(private val plugins: Plugins) {
         texts.chunked(PART).forEach { list ->
             val vectors = encoder.encode(list)
             val rows = list.mapIndexed { i, text -> text to (vectors[i] ?: FloatArray(encoder.dim)) }
-            store.textVectors.savePhrases(rows.map { (text, v) -> Vectors.keyOf(text) to v }, encoder.id)
+            store.textVectors.phrases.savePhrases(rows.map { (text, v) -> Vectors.keyOf(text) to v }, encoder.id)
             rows.forEach { (text, v) -> out[text] = Vectors.fromHalf(Vectors.half(v)) }
         }
         if (texts.size > PART)
@@ -55,12 +55,15 @@ class PhraseVectors(private val plugins: Plugins) {
                 "{}: {} short texts encoded in {} s",
                 store.id,
                 texts.size,
-                (System.currentTimeMillis() - started) / 1000,
+                (System.currentTimeMillis() - started) / MILLIS_PER_SECOND,
             )
         return out
     }
 
     companion object {
         private const val PART = 2048
+
+        /** Milliseconds in a second: the log tells seconds. */
+        private const val MILLIS_PER_SECOND = 1000
     }
 }

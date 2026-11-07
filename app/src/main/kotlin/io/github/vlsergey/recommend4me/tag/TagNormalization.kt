@@ -29,6 +29,9 @@ class TagScope(val sources: List<SourceStore>, val tags: TagRepository, val face
 
     fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
 
+    /** The id of the tag [key]; null of a key that is no tag, or of a tag that is no more. */
+    fun existing(key: String): Long? = TagRepository.idOf(key)?.takeIf(tags::exists)
+
     /** The works of several items of the sources, read for the operation. */
     fun works(): WorkClusters = WorkClusters.of(sources.first().works.groups(sources.map { it.id }).values.toList())
 }
@@ -69,20 +72,21 @@ class TagNormalization(private val stores: Stores) {
      * The site's tags of the works [event] names bound at once, before anything reads the works: a work captured is
      * read with its tags.
      */
-    @Order(-100)
+    @Order(FIRST)
     @EventListener
     fun itemsChanged(event: ItemsChanged) {
         val scope = scope() ?: return
-        val source = scope.source(event.source) ?: return
-        val f = siteFacetOf(source, scope.facet) ?: return
+        val source = scope.source(event.source)
+        val f = source?.let { siteFacetOf(it, scope.facet) }
+        if (source == null || f == null) return
         val keys = source.items.facetsOf(event.ids).values.flatMap { it[f].orEmpty() }.toSet()
         if (keys.isNotEmpty()) bind(scope) { s, _ -> if (s.id == source.id) keys else emptySet() }
     }
 
     /** The synonyms a site named bound at once: the tags' names and vectors made of them next. */
-    @Order(-100)
-    @EventListener
-    fun synonymsSet(event: SynonymsSet) {
+    @Order(FIRST)
+    @EventListener(SynonymsSet::class)
+    fun synonymsSet() {
         val scope = scope() ?: return
         bind(scope) { _, _ -> emptySet() }
     }
@@ -102,59 +106,105 @@ class TagNormalization(private val stores: Stores) {
                 .filterValues { it.isNotEmpty() }
         val synonyms = sites.associate { (s, f) -> s.id to s.items.facetSynonyms(f) }
         if (fresh.isEmpty() && synonyms.values.all { of -> of.isEmpty() }) return 0
-        val now = Instant.now()
-        val namesOf = sites.associate { (s, f) -> s.id to s.names(f) }
-        // The normalized tags every name is bound to, of every site
-        val byName = HashMap<String, MutableSet<Long>>()
-        bound.forEach { (ref, id) ->
-            byName.getOrPut(LayerValues.keyOf(namesOf[ref.source]?.get(ref.tag) ?: ref.tag)) { HashSet() } += id
-        }
-        var made = 0
-        val boundNow = HashMap<SiteTagRef, Long>()
-        fun idOf(ref: SiteTagRef) = bound[ref] ?: boundNow[ref]
-        fresh.forEach { (source, keys) ->
-            val names = namesOf.getValue(source)
-            val of = synonyms[source].orEmpty()
-            keys.forEach { key ->
-                val written = (names[key] ?: key).trim()
-                val name = LayerValues.keyOf(written)
-                // A synonym of a tag bound already is that tag; else as any tag, by its name
-                val id =
-                    of[key]?.let { idOf(SiteTagRef(source, it)) }
-                        ?: byName[name]?.singleOrNull()
-                        ?: scope.tags.create().also {
-                            byName.getOrPut(name) { HashSet() } += it
-                            scope.tags.showAs(it, ShownName(written, NameRule.ALL))
-                        }
-                scope.tags.bind(SiteTagRef(source, key), id, now)
-                boundNow[SiteTagRef(source, key)] = id
-                made++
-            }
-        }
-        // The synonyms of the site's tags bound — of no work, maybe — bound with them; of a site's tag
-        // not bound yet, none: bound once a work has it
-        synonyms.forEach { (source, of) ->
-            of.forEach { (synonym, key) ->
-                val ref = SiteTagRef(source, synonym)
-                if (idOf(ref) != null) return@forEach
-                val id = idOf(SiteTagRef(source, key)) ?: return@forEach
-                scope.tags.bind(ref, id, now)
-                boundNow[ref] = id
-                made++
-            }
-        }
+        val binding = Binding(scope, bound, sites.associate { (s, f) -> s.id to s.names(f) }, synonyms)
+        val made = binding.fresh(fresh) + binding.synonyms()
         if (made > 0) log.info("{} tags of the sites bound to normalized tags", made)
         return made
     }
 
+    /**
+     * One binding of the sites' tags not bound yet: the tags [bound] before it, the names of the sites' tags of every
+     * source ([namesOf]) and the synonyms every source names ([synonyms]: synonym to the site's tag).
+     */
+    private class Binding(
+        private val scope: TagScope,
+        private val bound: Map<SiteTagRef, Long>,
+        private val namesOf: Map<String, Map<String, String>>,
+        private val synonyms: Map<String, Map<String, String>>,
+    ) {
+        private val now = Instant.now()
+
+        /** The normalized tags every name is bound to, of every site. */
+        private val byName = HashMap<String, MutableSet<Long>>()
+        private val boundNow = HashMap<SiteTagRef, Long>()
+
+        init {
+            bound.forEach { (ref, id) ->
+                byName.getOrPut(LayerValues.keyOf(namesOf[ref.source]?.get(ref.tag) ?: ref.tag)) { HashSet() } += id
+            }
+        }
+
+        private fun idOf(ref: SiteTagRef) = bound[ref] ?: boundNow[ref]
+
+        private fun bind(ref: SiteTagRef, id: Long) {
+            scope.tags.bind(ref, id, now)
+            boundNow[ref] = id
+        }
+
+        /** The sites' tags [fresh] of every source bound; how many. */
+        fun fresh(fresh: Map<String, List<String>>): Int {
+            fresh.forEach { (source, keys) ->
+                keys.forEach { key -> bind(SiteTagRef(source, key), tagOf(source, key)) }
+            }
+            return fresh.values.sumOf { it.size }
+        }
+
+        /**
+         * The tag the site's tag [key] of [source] is bound to: a synonym of a tag bound already is that tag; else as
+         * any tag, by its name — the one tag of its name, or a new one.
+         */
+        private fun tagOf(source: String, key: String): Long {
+            val written = (namesOf.getValue(source)[key] ?: key).trim()
+            val name = LayerValues.keyOf(written)
+            return synonyms[source]?.get(key)?.let { idOf(SiteTagRef(source, it)) }
+                ?: byName[name]?.singleOrNull()
+                ?: scope.tags.create().also {
+                    byName.getOrPut(name) { HashSet() } += it
+                    scope.tags.stats.showAs(it, ShownName(written, NameRule.ALL))
+                }
+        }
+
+        /**
+         * The synonyms of the site's tags bound — of no work, maybe — bound with them; of a site's tag not bound yet,
+         * none: bound once a work has it. How many.
+         */
+        fun synonyms(): Int {
+            var made = 0
+            synonyms.forEach { (source, of) ->
+                of.forEach { (synonym, key) ->
+                    val ref = SiteTagRef(source, synonym)
+                    val id = idOf(SiteTagRef(source, key)).takeIf { idOf(ref) == null }
+                    if (id != null) {
+                        bind(ref, id)
+                        made++
+                    }
+                }
+            }
+            return made
+        }
+    }
+
     /** Before anything reads the tags: every site's tag not bound yet bound. */
-    @Order(-10)
+    @Order(BEFORE_READING)
     @EventListener(ApplicationReadyEvent::class)
+    // The start of the application: whatever fails is told in the log, and the tags are bound as works come
+    @Suppress("TooGenericExceptionCaught")
     fun start() {
         try {
             bindNew()
         } catch (e: Exception) {
             log.error("The tags were not normalized", e)
         }
+    }
+
+    companion object {
+        /** Before every other listener of the works: their sites' tags are bound before anything reads them. */
+        const val FIRST = -100
+
+        /** Of the start, before anything reads the tags ([TagRenaming.start] after it). */
+        const val BEFORE_READING = -10
+
+        /** Of the start, right after the tags are normalized ([start]). */
+        const val AFTER_NORMALIZATION = -5
     }
 }

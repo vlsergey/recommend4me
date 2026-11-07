@@ -3,8 +3,8 @@ package io.github.vlsergey.recommend4me.tagtext
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.part.Paragraph
 import io.github.vlsergey.recommend4me.part.Paragraphs
-import io.github.vlsergey.recommend4me.part.PartRepository
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -55,7 +55,7 @@ private class TextTagFound(
     val key: String,
     val closeness: Double,
     val chance: Double?,
-    val paragraph: PartRepository.Paragraph,
+    val paragraph: Paragraph,
 )
 
 /** The first words of a paragraph its address on the site scrolls to. */
@@ -125,14 +125,14 @@ class TextTags(
      */
     private fun offered(store: SourceStore, facet: String, itemId: String, encoder: TextEncoder): TextTagList {
         val model = models.read()
-        val paragraphs = store.parts.paragraphVectors(itemId, Paragraphs.keyOf(encoder.id))
-        val waiting = store.parts.paragraphsPending(itemId, Paragraphs.keyOf(encoder.id))
+        val paragraphs = store.parts.paragraphs.paragraphVectors(itemId, Paragraphs.keyOf(encoder.id))
+        val waiting = store.parts.paragraphs.paragraphsPending(itemId, Paragraphs.keyOf(encoder.id))
         val started = System.currentTimeMillis()
         val vectors =
             if (paragraphs.isEmpty()) emptyMap()
             else {
                 val left = leftOut(store, facet, itemId)
-                store.tags.vectors(plugins.pluginOf(encoder), encoder.id).filterKeys { it !in left }
+                store.tags.vectors.vectors(plugins.pluginOf(encoder), encoder.id).filterKeys { it !in left }
             }
         val tags = if (vectors.isEmpty()) emptyList() else closest(store, itemId, paragraphs, vectors, model, started)
         return TextTagList(waiting, model != null, tags)
@@ -146,7 +146,7 @@ class TextTags(
     private fun closest(
         store: SourceStore,
         itemId: String,
-        paragraphs: List<PartRepository.Paragraph>,
+        paragraphs: List<Paragraph>,
         vectors: Map<String, List<FloatArray>>,
         model: TagTextModel?,
         started: Long,
@@ -282,10 +282,10 @@ class TextTags(
         tag: Long,
         partId: String,
         paragraph: Int,
-    ): Pair<PartRepository.Paragraph, Double>? {
+    ): Pair<Paragraph, Double>? {
         val encoder = plugins.textEncoder() ?: return null
-        val found = store.parts.paragraph(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id))
-        val names = found?.let { store.tags.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id) }.orEmpty()
+        val found = store.parts.paragraphs.paragraph(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id))
+        val names = found?.let { store.tags.vectors.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id) }.orEmpty()
         return if (found == null || names.isEmpty()) null
         else found to names.maxOf { name -> name.indices.sumOf { (name[it] * found.vector[it]).toDouble() } }
     }

@@ -28,7 +28,7 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
         alpha("r2|Reefs again|reefs of the south|Reefs to the south||")
         beta("r3|Reefs|reefs|Reefs")
         // The tags named and counted after the quiet — here at once
-        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
         val found = searchController.listFacetValues("alpha", "tags", "reefs", 1).body!!
         assertEquals(listOf(tagOf("beta", "reefs")), found.map { it.key })
     }
@@ -42,7 +42,7 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
         corrections.linkItem("alpha", "h1", ItemRef("alpha", "h2"))
         corrections.linkItem("alpha", "h1", ItemRef("beta", "h3"))
         gradesController.rateItem("beta", "h3", RatingRequest(5))
-        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
         val tag = tags.getTag(tagOf("alpha", "harbours")).body!!
         assertEquals(Triple(2, 1, 1), Triple(tag.works, tag.graded, tag.liked))
         val bySite = tag.variants.associateBy { it.source }
@@ -65,7 +65,7 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
 
         tags.relateTags(TagRelationRequest(waves, breakers, TagRelation.MERGED))
         // The names and the counts worked out in the queue after the quiet — here at once
-        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
         val merged = tags.getTag(waves).body!!
         assertEquals(
             setOf(SiteTagRef("alpha", "waves"), SiteTagRef("beta", "breakers")),
@@ -139,18 +139,18 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
         corrections.correctFacet("beta", "t5", FacetCorrection(facet = "tags", added = true, key = moorings))
         // Merged, and stopped before the answers were moved
         val type = stores.type("books")!!
-        type.tags.merge(TagRepository.idOf(moorings)!!, TagRepository.idOf(anchors)!!, Instant.now())
+        type.tags.relations.merge(TagRepository.idOf(moorings)!!, TagRepository.idOf(anchors)!!, Instant.now())
         assertEquals(
             listOf(moorings to true),
             stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added },
         )
 
-        tagService.start()
+        tagRenaming.start()
         assertEquals(
             listOf(anchors to true),
             stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added },
         )
-        assertEquals(emptyList(), type.tags.pendingMerges())
+        assertEquals(emptyList(), type.tags.relations.pendingMerges())
     }
 
     @Test

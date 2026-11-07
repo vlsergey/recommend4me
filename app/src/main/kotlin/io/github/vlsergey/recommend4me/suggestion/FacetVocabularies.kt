@@ -120,7 +120,7 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
                 }
             }
         }
-        store.tags.shown(values.keys).forEach { (key, name) -> values[key] = name }
+        store.tags.stats.shown(values.keys).forEach { (key, name) -> values[key] = name }
         return values
     }
 }

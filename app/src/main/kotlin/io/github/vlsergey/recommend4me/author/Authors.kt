@@ -77,7 +77,7 @@ class Authors(
             val names = s.names(facet, ofKey.keys)
             ofKey.forEach { (key, id) -> if ((names[key] ?: key).lowercase().contains(needle)) out += id }
         }
-        val kept = type.tags.keptEntries(bound.values.flatten().toSet())
+        val kept = type.tags.entries.keptEntries(bound.values.flatten().toSet())
         bound.forEach { (id, refs) ->
             if (
                 refs.any { ref ->
@@ -175,7 +175,7 @@ class Authors(
         val read =
             plugins.tagCatalogues.firstOrNull { it.id == catalogue }?.entries(listOf(entry), languages)?.firstOrNull()
         if (read != null) {
-            type.tags.keepEntry(catalogue, read, now)
+            type.tags.entries.keepEntry(catalogue, read, now)
             type.authors.entries.bind(id, TagEntryRef(catalogue, read.id), true, now)
             log.info("author {} bound to {}:{} ({})", id, catalogue, read.id, sides.firstOf(read.labels))
         }

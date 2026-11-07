@@ -276,7 +276,8 @@ class Explanations(
             type.embeddings.find(SetKind.PARTS)?.takeIf { it.encoder == e.id }?.embedding
         }
         val byPart =
-            if (embedding == null) emptyMap() else type.source(key.source)!!.parts.windowsByPart(key.id, encoder.id)
+            if (embedding == null) emptyMap()
+            else type.source(key.source)!!.parts.windows.windowsByPart(key.id, encoder.id)
         if (embedding == null || byPart.isEmpty()) return emptyMap()
         val parts = byPart.keys.toList()
         val windows = parts.flatMap { byPart.getValue(it) }

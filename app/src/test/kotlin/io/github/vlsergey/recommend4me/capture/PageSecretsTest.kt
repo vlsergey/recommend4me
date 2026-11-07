@@ -11,8 +11,10 @@ class PageSecretsTest {
     @Test
     fun `scripts and session tokens are taken out, the rest written as it was`() {
         val html =
-            """<html><head><meta name="csrf-token" content="e63F5Lf0"><meta property="og:image" content="/content/c.jpg">""" +
-                """<script>var token = "x";</script></head><body><form><input type="hidden" name="authenticity_token" value="RN_82R">""" +
+            """<html><head><meta name="csrf-token" content="e63F5Lf0">""" +
+                """<meta property="og:image" content="/content/c.jpg">""" +
+                """<script>var token = "x";</script></head><body><form>""" +
+                """<input type="hidden" name="authenticity_token" value="RN_82R">""" +
                 """<input type="hidden" name="__RequestVerificationToken" value="ho-Jk4"><input name="q"></form>""" +
                 "<div id=\"content\">The first line\n\n   the second  one</div></body></html>"
         val stripped = PageSecrets.stripped(html)

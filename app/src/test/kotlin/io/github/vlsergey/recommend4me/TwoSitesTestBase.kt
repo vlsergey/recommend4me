@@ -22,6 +22,7 @@ import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
+import io.github.vlsergey.recommend4me.tag.TagRenaming
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.tag.TagsController
@@ -104,8 +105,9 @@ abstract class TwoSitesTestBase {
     @Autowired lateinit var settings: Settings
     @Autowired lateinit var model: ModelController
     @Autowired lateinit var tagService: Tags
+    @Autowired lateinit var tagRenaming: TagRenaming
     @Autowired lateinit var contexts: SourceContexts
-    @Autowired lateinit var searchService: io.github.vlsergey.recommend4me.search.Search
+    @Autowired lateinit var searchDocuments: io.github.vlsergey.recommend4me.search.SearchDocuments
     @Autowired lateinit var workSizes: WorkSizes
 
     protected fun alpha(body: String) =
