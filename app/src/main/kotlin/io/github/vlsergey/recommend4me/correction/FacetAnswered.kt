@@ -5,6 +5,6 @@ package io.github.vlsergey.recommend4me.correction
  * the work is searched by and what the model of the grades reads changed. Not
  * [ItemsChanged][io.github.vlsergey.recommend4me.item.ItemsChanged]: the site's data is as it was, and the work's
  * chances are made apart, at once
- * ([FacetSuggestions.answered][io.github.vlsergey.recommend4me.suggestion.FacetSuggestions.answered]).
+ * ([FacetRefitEvents.answered][io.github.vlsergey.recommend4me.suggestion.FacetRefitEvents.answered]).
  */
 data class FacetAnswered(val type: String, val source: String, val itemId: String, val facet: String)

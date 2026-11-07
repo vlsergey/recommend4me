@@ -9,7 +9,7 @@ import java.time.Instant
  * Which items of the sources of one content type are one work, and the user's word on those that are not — different
  * works, or related of another kind (a translation, a part) — by the items, kept by their normalized works
  * ([WorkRepository]): a word on two items is a word on their works. Every word said and taken back is written to the
- * [journal], with the word the pair had before.
+ * [journal], with the word the pair had before; the word as it stands is read as [PairWords] read it.
  */
 class TypeLinkRepository(
     private val works: WorkRepository,
@@ -21,7 +21,7 @@ class TypeLinkRepository(
      * merged, one stands.
      */
     private val single: Set<String> = emptySet(),
-) {
+) : PairWords by WorkPairWords(works, journal, sources) {
 
     /** Every work of several items: its items. */
     fun groups(): List<List<ItemKey>> = works.groups(sources).values.toList()
@@ -69,55 +69,6 @@ class TypeLinkRepository(
         works.takeBack(works.of(a, now), works.of(b, now))
         journal.write(a, b, null, before, now)
     }
-
-    /** The word on the two items now: one work ([SAME]), the word on their two works, or none. */
-    fun word(a: ItemKey, b: ItemKey, now: Instant): String? {
-        val x = works.of(a, now)
-        val y = works.of(b, now)
-        return if (x == y) SAME else works.word(x, y)
-    }
-
-    /** The word on every pair of items now, as [word] tells it, read in one go: of an item bound to no work, none. */
-    fun words(pairs: Collection<Pair<ItemKey, ItemKey>>): Map<Pair<ItemKey, ItemKey>, String?> {
-        val bound =
-            pairs
-                .flatMap { it.toList() }
-                .distinct()
-                .groupBy { it.source }
-                .flatMap { (source, keys) ->
-                    works.ofItems(source, keys.map { it.id }).map { (id, work) -> ItemKey(source, id) to work }
-                }
-                .toMap()
-        val words = works.words()
-        return pairs.associateWith { (a, b) ->
-            val x = bound[a] ?: return@associateWith null
-            val y = bound[b] ?: return@associateWith null
-            if (x == y) SAME else words[WorkRepository.pair(x, y)]
-        }
-    }
-
-    /** Every word on two items of the type, the newest first. */
-    fun journal() = journal.all(sources)
-
-    /** Every pair of items of different works said to be different works, the smaller key first. */
-    fun distincts(): Set<Pair<ItemKey, ItemKey>> = said().filterValues { it == DIFFERENT }.keys
-
-    /** Every pair of items of works said to be related, the smaller key first, with the kind. */
-    fun relations(): Map<Pair<ItemKey, ItemKey>, String> = said().filterValues { it != DIFFERENT }
-
-    /** Every word on two works as said of every pair of their items. */
-    private fun said(): Map<Pair<ItemKey, ItemKey>, String> {
-        val words = works.words()
-        val items = works.itemsOf(words.keys.flatMap { it.toList() }, sources)
-        val out = HashMap<Pair<ItemKey, ItemKey>, String>()
-        words.forEach { (pair, kind) ->
-            for (x in items[pair.first].orEmpty()) for (y in items[pair.second].orEmpty()) out[ordered(x, y)] = kind
-        }
-        return out
-    }
-
-    /** The two keys, the smaller first: the order a pair is kept in. */
-    fun ordered(a: ItemKey, b: ItemKey): Pair<ItemKey, ItemKey> = if (a.toString() < b.toString()) a to b else b to a
 
     /** The item removed from the library. */
     fun forget(key: ItemKey) = works.forget(key)

@@ -59,7 +59,9 @@ class DraftRepository(private val db: DSLContext, private val source: String) {
             t.deleteFrom(LAYER_DRAFT).where(LAYER_DRAFT.SOURCE.eq(source), LAYER_DRAFT.ITEM_ID.`in`(chunk)).execute()
         }
         drafts
-            .flatMap { (id, list) -> list.distinctBy { Triple(it.facet, it.key, it.from.take(1000)) }.map { id to it } }
+            .flatMap { (id, list) ->
+                list.distinctBy { Triple(it.facet, it.key, it.from.take(SITE_VALUE_WIDTH)) }.map { id to it }
+            }
             .chunked(BATCH)
             .forEach { chunk ->
                 t.batch(
@@ -68,8 +70,8 @@ class DraftRepository(private val db: DSLContext, private val source: String) {
                                 .set(LAYER_DRAFT.SOURCE, source)
                                 .set(LAYER_DRAFT.ITEM_ID, id)
                                 .set(LAYER_DRAFT.FACET, d.facet)
-                                .set(LAYER_DRAFT.VALUE_KEY, d.key.take(500))
-                                .set(LAYER_DRAFT.SITE_VALUE, d.from.take(1000))
+                                .set(LAYER_DRAFT.VALUE_KEY, d.key.take(KEY_WIDTH))
+                                .set(LAYER_DRAFT.SITE_VALUE, d.from.take(SITE_VALUE_WIDTH))
                         }
                     )
                     .execute()
@@ -83,5 +85,11 @@ class DraftRepository(private val db: DSLContext, private val source: String) {
 
     companion object {
         private const val BATCH = 1000
+
+        /** The width of the column of a draft's key (VARCHAR(500)): a longer one is cut. */
+        private const val KEY_WIDTH = 500
+
+        /** The width of the column of the site's value a draft is made of (VARCHAR(1000)): a longer one is cut. */
+        private const val SITE_VALUE_WIDTH = 1000
     }
 }

@@ -68,8 +68,9 @@ class BilinearSuggesterTest {
         assertTrue(chances[5][task.assigned[5].single()] < 0.5f, "${chances[5].toList()}")
     }
 
+    /** No work read: the weights are those kept with the scoring. */
     @Test
-    fun `the scoring kept tells every value's weight over the works as a whole, no work read - the common value above the rare`() {
+    fun `the scoring kept tells every value's weight over the works as a whole - the common above the rare`() {
         val random = Random(11)
         val n = 300
         val texts = Matrix(n, d)
@@ -218,14 +219,7 @@ class BilinearSuggesterTest {
      */
     @Test
     fun `a work with nothing but its text, among works the site tagged, is judged by its text`() {
-        val random = Random(11)
         val words = 64
-        fun text(kind: Int) =
-            FloatArray(words) { q ->
-                    if ((q < words / 2) == (kind == 0)) 1f + 0.3f * random.nextGaussian().toFloat()
-                    else 0.1f * random.nextFloat()
-                }
-                .normalized()
         val contextKeys =
             listOf(
                 "tag\u0001space",
@@ -235,33 +229,11 @@ class BilinearSuggesterTest {
                 "pairing\u0001pc",
                 "pairing\u0001kp",
             )
-        val rows = ArrayList<FloatArray>()
-        val assigned = ArrayList<IntArray>()
-        val examples = ArrayList<IntArray>()
-        val context = ArrayList<IntArray>()
-        repeat(20) { k ->
-            listOf(0, 1).forEach { kind ->
-                rows += text(kind)
-                val own = if (kind == 0) intArrayOf(3, 2) else intArrayOf(0, 1)
-                val site =
-                    when {
-                        k % 5 == 0 -> IntArray(0)
-                        k % 3 == 0 -> intArrayOf(own[0])
-                        else -> own
-                    }
-                examples += site
-                val user = if (k % 5 == 0 && k > 0) own else IntArray(0)
-                assigned += (site + user).distinct().toIntArray()
-                val tagContext = site.map { v -> mapOf(3 to 0, 2 to 1, 0 to 2, 1 to 3).getValue(v) }
-                val pairing = if (k % 4 == 0) emptyList() else listOf(if (kind == 0) 4 else 5)
-                context += (tagContext + pairing).toIntArray()
-            }
-        }
-        // The work with its text alone
-        rows += text(0)
-        assigned += IntArray(0)
-        examples += IntArray(0)
-        context += IntArray(0)
+        val catalogue = siteCatalogue(words)
+        val rows = catalogue.rows
+        val assigned = catalogue.assigned
+        val examples = catalogue.examples
+        val context = catalogue.context
         val n = rows.size
         val texts = Matrix(n, words)
         rows.forEachIndexed { i, v -> texts.held.put(v, 0, texts.row(i), words) }
@@ -304,6 +276,57 @@ class BilinearSuggesterTest {
             lost[3] > 0.5f && lost[2] > 0.5f && lost[0] < 0.5f && lost[1] < 0.5f,
             "a space work by its text: ${lost.toList()}",
         )
+    }
+
+    /** The works of a site's catalogue: their texts, their values, the site's examples and their other facets. */
+    private class Catalogue(
+        val rows: List<FloatArray>,
+        val assigned: List<IntArray>,
+        val examples: List<IntArray>,
+        val context: List<IntArray>,
+    )
+
+    /**
+     * Forty works of two kinds, texts of [words] words each: the values of the space kind 3 and 2, of the dragons' 0
+     * and 1, given by the site in full, in part or not at all, some by the user; tags and pairings in their context as
+     * the site writes them. The last work with its text alone.
+     */
+    private fun siteCatalogue(words: Int): Catalogue {
+        val random = Random(11)
+        fun text(kind: Int) =
+            FloatArray(words) { q ->
+                    if ((q < words / 2) == (kind == 0)) 1f + 0.3f * random.nextGaussian().toFloat()
+                    else 0.1f * random.nextFloat()
+                }
+                .normalized()
+        val rows = ArrayList<FloatArray>()
+        val assigned = ArrayList<IntArray>()
+        val examples = ArrayList<IntArray>()
+        val context = ArrayList<IntArray>()
+        repeat(20) { k ->
+            listOf(0, 1).forEach { kind ->
+                rows += text(kind)
+                val own = if (kind == 0) intArrayOf(3, 2) else intArrayOf(0, 1)
+                val site =
+                    when {
+                        k % 5 == 0 -> IntArray(0)
+                        k % 3 == 0 -> intArrayOf(own[0])
+                        else -> own
+                    }
+                examples += site
+                val user = if (k % 5 == 0 && k > 0) own else IntArray(0)
+                assigned += (site + user).distinct().toIntArray()
+                val tagContext = site.map { v -> mapOf(3 to 0, 2 to 1, 0 to 2, 1 to 3).getValue(v) }
+                val pairing = if (k % 4 == 0) emptyList() else listOf(if (kind == 0) 4 else 5)
+                context += (tagContext + pairing).toIntArray()
+            }
+        }
+        // The work with its text alone
+        rows += text(0)
+        assigned += IntArray(0)
+        examples += IntArray(0)
+        context += IntArray(0)
+        return Catalogue(rows, assigned, examples, context)
     }
 
     @Test

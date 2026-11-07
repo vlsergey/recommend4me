@@ -28,6 +28,12 @@ class TagTextModel(val slope: Double, val intercept: Double, val bias: Map<Long,
 
         private const val ROUNDS = 100
 
+        /** A determinant of the Hessian no larger is of a singular one: no step of the slope and the intercept. */
+        private const val SINGULAR = 1e-12
+
+        /** The least chance a loss takes the logarithm of: an answer the model is sure against costs finitely. */
+        private const val LEAST_CHANCE = 1e-12
+
         /**
          * Fitted of the [answers] that teach ([TagTextVerdict.YES] and [TagTextVerdict.WRONG]) by Newton's steps: of
          * the slope and the intercept together, of every tag's bias apart. Null while there are not answers of both
@@ -69,7 +75,7 @@ class TagTextModel(val slope: Double, val intercept: Double, val bias: Map<Long,
                     hcc += w
                 }
                 val det = hss * hcc - hsc * hsc
-                if (abs(det) > 1e-12) {
+                if (abs(det) > SINGULAR) {
                     s -= (hcc * gs - hsc * gc) / det
                     c -= (hss * gc - hsc * gs) / det
                 }
@@ -94,7 +100,7 @@ class TagTextModel(val slope: Double, val intercept: Double, val bias: Map<Long,
                 .filter { it.verdict != TagTextVerdict.ENOUGH_NOT }
                 .sumOf { a ->
                     val p = model.chance(a.tag, a.closeness.toDouble())
-                    -ln(max(1e-12, if (a.verdict == TagTextVerdict.YES) p else 1 - p))
+                    -ln(max(LEAST_CHANCE, if (a.verdict == TagTextVerdict.YES) p else 1 - p))
                 }
     }
 }

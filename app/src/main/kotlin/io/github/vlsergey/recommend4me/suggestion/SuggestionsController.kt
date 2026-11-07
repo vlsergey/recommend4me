@@ -38,20 +38,21 @@ class SuggestionsController(
     private val stores: Stores,
     private val suggestions: FacetSuggestions,
     private val search: Search,
+    private val candidates: WorkCandidates,
 ) : SuggestionsApi {
 
+    /** The source of the [source] id when it has the [item]; null when either is unknown. */
+    private fun storeWith(source: String, item: String): SourceStore? =
+        stores.source(source)?.takeIf { it.items.find(item) != null }
+
     override fun getSuggestions(source: String, item: String): ResponseEntity<List<ApiFacetSuggestions>> {
-        val store = stores.source(source) ?: return ResponseEntity.notFound().build()
-        if (store.items.find(item) == null) return ResponseEntity.notFound().build()
+        val store = storeWith(source, item) ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(suggestions.ofItem(store, item).map { it.toApi(store) })
     }
 
-    override fun settleSuggestions(source: String, item: String): ResponseEntity<Unit> {
-        val store = stores.source(source) ?: return ResponseEntity.notFound().build()
-        if (store.items.find(item) == null) return ResponseEntity.notFound().build()
+    override fun settleSuggestions(source: String, item: String): ResponseEntity<Unit> =
         // Nothing to wait for: a work's chances are made when it is read, of its answers as they are
-        return ResponseEntity.noContent().build()
-    }
+        if (storeWith(source, item) == null) ResponseEntity.notFound().build() else ResponseEntity.noContent().build()
 
     override fun getCandidates(
         source: String,
@@ -61,7 +62,18 @@ class SuggestionsController(
         named: Int?,
     ): ResponseEntity<List<Candidate>> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
-        val found = suggestions.candidates(store, item, facet, limit, named) ?: return ResponseEntity.notFound().build()
+        return candidates.candidates(store, item, facet, limit, named)?.let {
+            ResponseEntity.ok(candidatesOf(store, source, facet, it))
+        } ?: ResponseEntity.notFound().build()
+    }
+
+    /** The [found] candidates of the [facet] as the interface shows them: with their pages, descriptions and names. */
+    private fun candidatesOf(
+        store: SourceStore,
+        source: String,
+        facet: String,
+        found: ItemFacetCandidates,
+    ): List<Candidate> {
         // A universe and a character are entries of a catalogue: their pages there, as the dictionary keeps them
         val type = stores.typeOf(source)
         val pages = if (type.type.universes && facet in PAGED) UniverseFacet.pages(type.universes) else emptyMap()
@@ -69,22 +81,20 @@ class SuggestionsController(
         val described = store.descriptions(facet, found.candidates.map { it.key })
         // And every name it goes by: found by any of them, as the work may name it
         val named = store.allNames(facet, found.candidates.map { it.key })
-        return ResponseEntity.ok(
-            found.candidates.map {
-                val name = found.names[it.key] ?: it.key
-                Candidate(
-                    key = it.key,
-                    name = name,
-                    nameKey = store.nameKey(facet, it.key),
-                    chance = it.chance,
-                    mentions = it.mentions,
-                    named = it.named.takeIf { n -> n },
-                    url = pages[it.key],
-                    description = described[it.key],
-                    names = named[it.key]?.let { all -> (listOf(name) + all).distinct() },
-                )
-            }
-        )
+        return found.candidates.map {
+            val name = found.names[it.key] ?: it.key
+            Candidate(
+                key = it.key,
+                name = name,
+                nameKey = store.nameKey(facet, it.key),
+                chance = it.chance,
+                mentions = it.mentions,
+                named = it.named.takeIf { n -> n },
+                url = pages[it.key],
+                description = described[it.key],
+                names = named[it.key]?.let { all -> (listOf(name) + all).distinct() },
+            )
+        }
     }
 
     override fun getMentions(
@@ -93,27 +103,28 @@ class SuggestionsController(
         facet: String,
         value: String,
     ): ResponseEntity<List<MentionQuote>> {
-        val store = stores.source(source) ?: return ResponseEntity.notFound().build()
-        if (store.items.find(item) == null) return ResponseEntity.notFound().build()
+        val store = storeWith(source, item) ?: return ResponseEntity.notFound().build()
+        return candidates.quoting(store, item, facet, value)?.let { ResponseEntity.ok(quotesOf(store, item, it)) }
+            ?: ResponseEntity.notFound().build()
+    }
+
+    /** The passages of the item that name a value, found by its [quoting], as the interface shows them. */
+    private fun quotesOf(store: SourceStore, item: String, quoting: Quoting): List<MentionQuote> {
         val quotes =
-            when (
-                val quoting = suggestions.quoting(store, item, facet, value) ?: return ResponseEntity.notFound().build()
-            ) {
+            when (quoting) {
                 is Quoting.InIndex -> search.quotes(store, item, quoting.names, quoting.of)
                 is Quoting.Together -> search.quotesTogether(store, item, quoting.names, quoting.a, quoting.b)
                 Quoting.None -> emptyList()
             }
-        return ResponseEntity.ok(
-            quotes.map { q ->
-                MentionQuote(
-                    text = q.text,
-                    highlights = q.highlights.map { TextRange(it.first, it.last + 1) },
-                    labelKey = q.place.labelKey,
-                    title = q.place.title,
-                    part = q.place.part,
-                )
-            }
-        )
+        return quotes.map { q ->
+            MentionQuote(
+                text = q.text,
+                highlights = q.highlights.map { TextRange(it.first, it.last + 1) },
+                labelKey = q.place.labelKey,
+                title = q.place.title,
+                part = q.place.part,
+            )
+        }
     }
 
     companion object {

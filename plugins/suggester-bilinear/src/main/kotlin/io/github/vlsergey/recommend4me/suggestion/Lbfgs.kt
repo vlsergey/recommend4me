@@ -26,6 +26,9 @@ object Lbfgs {
     /** The least relative difference of two floats: a fall below it of the value is no fall a float can tell. */
     private val RESOLUTION = Math.ulp(1f)
 
+    /** Backtracking by halves: ρ = ½ of Nocedal & Wright, algorithm 3.1. */
+    internal const val BACKTRACK = 0.5f
+
     /** [stop]: asked before every step; once it says yes the search is given up with a [CancellationException]. */
     fun minimize(
         start: FloatArray,
@@ -33,20 +36,58 @@ object Lbfgs {
         stop: () -> Boolean = { false },
         f: (FloatArray, FloatArray) -> Float,
     ): FloatArray {
-        val n = start.size
-        val x = start.copyOf()
-        val g = FloatArray(n)
-        var fx = f(x, g)
-        val steps = ArrayDeque<FloatArray>()
-        val changes = ArrayDeque<FloatArray>()
-        val rhos = ArrayDeque<Float>()
-        val next = FloatArray(n)
-        val gNext = FloatArray(n)
-        repeat(maxSteps) { step ->
+        val descent = Descent(start, f)
+        var step = 0
+        var settled = false
+        while (!settled && step < maxSteps) {
             if (stop()) throw CancellationException("the search is given up")
+            settled = descent.step(first = step == 0)
+            step++
+        }
+        return descent.x
+    }
+
+    /**
+     * One search's numbers in the main memory: the point [x] reached, its value and gradient, the remembered steps and
+     * changes of the gradient. [step] moves the point once.
+     */
+    private class Descent(start: FloatArray, private val f: (FloatArray, FloatArray) -> Float) {
+        val x = start.copyOf()
+        private val n = x.size
+        private val g = FloatArray(n)
+        private var fx = f(x, g)
+        private val steps = ArrayDeque<FloatArray>()
+        private val changes = ArrayDeque<FloatArray>()
+        private val rhos = ArrayDeque<Float>()
+        private val next = FloatArray(n)
+        private val gNext = FloatArray(n)
+
+        /** The slope of the function along the last direction: the gradient times it. */
+        private var slope = 0f
+
+        /**
+         * One step: along the direction as far as the value falls enough, the step remembered. Whether the search has
+         * settled: the gradient nought (the point not moved), or — after the [first] step — the value fallen by less
+         * than a float can tell.
+         */
+        fun step(first: Boolean): Boolean {
             val gNorm = norm(g)
-            if (gNorm == 0f) return x
-            // The direction: minus the gradient times the inverse Hessian the history stands for
+            if (gNorm == 0f) return true
+            val d = direction(gNorm)
+            val fNext = searchAlong(d)
+            remember()
+            val fell = fx - fNext
+            next.copyInto(x)
+            gNext.copyInto(g)
+            fx = fNext
+            return !first && abs(fell) <= RESOLUTION * max(1f, abs(fx))
+        }
+
+        /**
+         * The direction: minus the gradient times the inverse Hessian the history stands for (two loops, algorithm
+         * 7.4); the gradient alone, the history forgotten, when that is no descent. Its [slope] kept.
+         */
+        private fun direction(gNorm: Float): FloatArray {
             val d = g.copyOf()
             val alphas = FloatArray(steps.size)
             for (k in steps.indices.reversed()) {
@@ -62,7 +103,7 @@ object Lbfgs {
                 axpy(alphas[k] - beta, steps[k], d)
             }
             for (i in 0 until n) d[i] = -d[i]
-            var slope = dot(g, d)
+            slope = dot(g, d)
             if (slope >= 0) {
                 // Not a descent: the history is forgotten, the gradient followed
                 steps.clear()
@@ -71,6 +112,14 @@ object Lbfgs {
                 for (i in 0 until n) d[i] = -g[i] / gNorm
                 slope = dot(g, d)
             }
+            return d
+        }
+
+        /**
+         * The step along [d] searched back from the full one until the value falls enough (Armijo): the point in
+         * [next], its gradient in [gNext], its value answered.
+         */
+        private fun searchAlong(d: FloatArray): Float {
             var t = 1f
             var fNext: Float
             while (true) {
@@ -78,9 +127,13 @@ object Lbfgs {
                 fNext = f(next, gNext)
                 // A step too short to move the point by what a float can tell is the last one tried
                 if (fNext <= fx + ARMIJO * t * slope || t < RESOLUTION) break
-                // Backtracking by halves: ρ = ½ of Nocedal & Wright, algorithm 3.1
-                t *= 0.5f
+                t *= BACKTRACK
             }
+            return fNext
+        }
+
+        /** The step from [x] to [next] and the change of the gradient remembered, the oldest beyond [HISTORY] gone. */
+        private fun remember() {
             val s = FloatArray(n) { next[it] - x[it] }
             val y = FloatArray(n) { gNext[it] - g[it] }
             // Only a step of positive curvature stands for the Hessian
@@ -95,13 +148,7 @@ object Lbfgs {
                     rhos.removeFirst()
                 }
             }
-            val fell = fx - fNext
-            next.copyInto(x)
-            gNext.copyInto(g)
-            fx = fNext
-            if (step > 0 && abs(fell) <= RESOLUTION * max(1f, abs(fx))) return x
         }
-        return x
     }
 
     // Hundreds of thousands of weights, dozens of times a step: in the wide registers
@@ -257,8 +304,7 @@ internal class Search<V>(private val space: Space<V>, private val size: Int, pri
         }
         // A step too short to move the point by what a float can tell is the last one tried
         if (!(loss <= fx + Lbfgs.SUFFICIENT * t * slope || t < Lbfgs.FLOAT_RESOLUTION)) {
-            // Backtracking by halves: ρ = ½ of Nocedal & Wright, algorithm 3.1
-            t *= 0.5f
+            t *= Lbfgs.BACKTRACK
             return
         }
         // The step taken and the change of the gradient, into the ring's next place: only a step of

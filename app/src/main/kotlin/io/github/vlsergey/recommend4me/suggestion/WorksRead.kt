@@ -196,99 +196,132 @@ private fun inputs(
     only: Collection<String>?,
     card: Cublas?,
 ): List<InputBlock> {
-    val row = ids.withIndex().associate { (i, id) -> id to i }
-    val blocks = LinkedHashMap<String, Gathered>()
-    fun put(id: String, block: String, v: FloatArray) {
-        val i = row[id] ?: return
-        blocks.getOrPut(block) { Gathered(ids.size, v.size) }.put(i, v)
-    }
-    // The texts' and the pictures' vectors as the database keeps them, half precision: their bytes copied as they are
-    fun halves(id: String, block: String, bytes: ByteArray) {
-        val i = row[id] ?: return
-        blocks.getOrPut(block) { Gathered(ids.size, bytes.size / 2) }.putHalves(i, bytes)
-    }
     val texts = TextVectors.blocks(store.id, store.schema).mapValues { it.value.first }
     // Where the time goes, of a pass over every work: every kind of vector read, the blocks laid out, put on the card
-    val started = System.nanoTime()
-    var read = 0
-    fun counted(before: Int) = read - before
-    val readTexts: Int
-    val readPictures: Int
-    val readSets: Int
-    val afterTexts: Long
-    val afterPictures: Long
-    if (only == null) {
-        store.textVectors.forEachHalves(encoder.id, texts.keys) { id, key, v ->
-            read++
-            halves(id, texts.getValue(key), v)
-        }
-        readTexts = counted(0)
-        afterTexts = System.nanoTime()
-        imageEncoder?.let { e ->
-            store.pictures.forEachItemHalves(e) { id, block, v ->
-                read++
-                halves(id, block, v)
-            }
-        }
-        readPictures = counted(readTexts)
-        afterPictures = System.nanoTime()
-        store.setVectors.forEach(sets) { id, block, v ->
-            read++
-            put(id, block, v)
-        }
-    } else {
-        store.textVectors.halvesOf(ids, encoder.id).forEach { (id, own) ->
-            own.forEach { (key, v) ->
-                texts[key]?.let {
-                    read++
-                    halves(id, it, v)
-                }
-            }
-        }
-        readTexts = counted(0)
-        afterTexts = System.nanoTime()
-        imageEncoder?.let { e ->
-            store.pictures.itemHalvesOf(ids, e).forEach { (id, own) ->
-                own.forEach { (block, v) ->
-                    read++
-                    halves(id, block, v)
-                }
-            }
-        }
-        readPictures = counted(readTexts)
-        afterPictures = System.nanoTime()
-        store.setVectors.ofMany(ids, sets).forEach { (id, own) ->
-            own.forEach { (block, v) ->
-                read++
-                put(id, block, v)
-            }
-        }
-    }
-    readSets = counted(readTexts + readPictures)
-    val afterSets = System.nanoTime()
-    val laid = blocks.map { (name, gathered) -> name to gathered.laidOut() }
-    val afterLaying = System.nanoTime()
+    val gathered = InputsGathered(ids)
+    if (only == null) readEvery(store, encoder, texts, imageEncoder, sets, gathered)
+    else readOf(store, ids, encoder, texts, imageEncoder, sets, gathered)
+    val laid = gathered.blocks.map { (name, g) -> name to g.laidOut() }
+    gathered.mark()
     val out = laid.map { (name, l) ->
         InputBlock(name, l.first, l.second, card?.let { Gathered.onCard(it, name, l.first, l.second) })
     }
-    if (ids.size >= LOGGED_INPUTS)
-        log.info(
-            "{}: the inputs of {} works, {} MB: the texts' {} vectors read in {} ms, the pictures' {} in {} ms, the sets' {} in {} ms; " +
-                "the {} blocks laid out in {} ms{}",
-            store.id,
-            ids.size,
-            out.sumOf { it.vectors.rows.toLong() * it.dim * 2 } / (1 shl 20),
-            readTexts,
-            (afterTexts - started) / 1_000_000,
-            readPictures,
-            (afterPictures - afterTexts) / 1_000_000,
-            readSets,
-            (afterSets - afterPictures) / 1_000_000,
-            out.size,
-            (afterLaying - afterSets) / 1_000_000,
-            if (card == null) "" else ", put on the card in ${(System.nanoTime() - afterLaying) / 1_000_000} ms",
-        )
+    if (ids.size >= LOGGED_INPUTS) logInputs(store, ids, out, gathered, card != null)
     return out
+}
+
+/**
+ * The vectors of the works [ids] gathered into the rows of their blocks as they are read ([Gathered]), and where the
+ * time goes: how many were read when each kind of them was done ([mark]).
+ */
+private class InputsGathered(private val ids: List<String>) {
+    private val row = ids.withIndex().associate { (i, id) -> id to i }
+    val blocks = LinkedHashMap<String, Gathered>()
+    private var read = 0
+
+    /** How many vectors were read, and the time in nanoseconds, at the start and at every [mark]. */
+    val marks = arrayListOf(0 to System.nanoTime())
+
+    /** A vector of the work [id] read, of the [block]. */
+    fun put(id: String, block: String, v: FloatArray) {
+        read++
+        val i = row[id] ?: return
+        blocks.getOrPut(block) { Gathered(ids.size, v.size) }.put(i, v)
+    }
+
+    /**
+     * A vector of the texts or the pictures read as the database keeps it, half precision: its bytes copied as they
+     * are.
+     */
+    fun halves(id: String, block: String, bytes: ByteArray) {
+        read++
+        val i = row[id] ?: return
+        blocks.getOrPut(block) { Gathered(ids.size, bytes.size / HALF_BYTES) }.putHalves(i, bytes)
+    }
+
+    /** A kind of vector read, or a stage done: how many were read by now, and when. */
+    fun mark() {
+        marks += read to System.nanoTime()
+    }
+}
+
+/** Every work's vectors streamed, a kind after another: the texts', the pictures' by the [imageEncoder], the sets'. */
+private fun readEvery(
+    store: SourceStore,
+    encoder: TextEncoder,
+    texts: Map<String, String>,
+    imageEncoder: String?,
+    sets: Map<SetKind, Long>,
+    gathered: InputsGathered,
+) {
+    store.textVectors.forEachHalves(encoder.id, texts.keys) { id, key, v ->
+        gathered.halves(id, texts.getValue(key), v)
+    }
+    gathered.mark()
+    imageEncoder?.let { e -> store.pictures.forEachItemHalves(e) { id, block, v -> gathered.halves(id, block, v) } }
+    gathered.mark()
+    store.setVectors.forEach(sets) { id, block, v -> gathered.put(id, block, v) }
+    gathered.mark()
+}
+
+/**
+ * The vectors of the works [ids] alone read by their keys, a kind after another: the texts', the pictures' by the
+ * [imageEncoder], the sets'.
+ */
+private fun readOf(
+    store: SourceStore,
+    ids: List<String>,
+    encoder: TextEncoder,
+    texts: Map<String, String>,
+    imageEncoder: String?,
+    sets: Map<SetKind, Long>,
+    gathered: InputsGathered,
+) {
+    store.textVectors.halvesOf(ids, encoder.id).forEach { (id, own) ->
+        own.forEach { (key, v) -> texts[key]?.let { gathered.halves(id, it, v) } }
+    }
+    gathered.mark()
+    imageEncoder?.let { e ->
+        store.pictures.itemHalvesOf(ids, e).forEach { (id, own) ->
+            own.forEach { (block, v) -> gathered.halves(id, block, v) }
+        }
+    }
+    gathered.mark()
+    store.setVectors.ofMany(ids, sets).forEach { (id, own) -> own.forEach { (block, v) -> gathered.put(id, block, v) } }
+    gathered.mark()
+}
+
+/**
+ * The time of reading the inputs of a pass in the log: of every kind of vector, how many were read and in how long; the
+ * blocks laid out; put on the card, when [onCard].
+ */
+private fun logInputs(
+    store: SourceStore,
+    ids: List<String>,
+    out: List<InputBlock>,
+    gathered: InputsGathered,
+    onCard: Boolean,
+) {
+    val marks = gathered.marks
+    fun count(k: Int) = marks[k].first - marks[k - 1].first
+    fun millis(k: Int) = (marks[k].second - marks[k - 1].second) / NANOS_IN_MILLI
+    val laidOut = marks.last().second
+    log.info(
+        "{}: the inputs of {} works, {} MB: the texts' {} vectors read in {} ms, the pictures' {} in {} ms, " +
+            "the sets' {} in {} ms; the {} blocks laid out in {} ms{}",
+        store.id,
+        ids.size,
+        out.sumOf { it.vectors.rows.toLong() * it.dim * HALF_BYTES } / BYTES_IN_MB,
+        count(TEXTS),
+        millis(TEXTS),
+        count(PICTURES),
+        millis(PICTURES),
+        count(SETS),
+        millis(SETS),
+        out.size,
+        millis(LAID_OUT),
+        if (onCard) ", put on the card in ${(System.nanoTime() - laidOut) / NANOS_IN_MILLI} ms" else "",
+    )
 }
 
 /**
@@ -296,3 +329,24 @@ private fun inputs(
  * page.
  */
 private const val LOGGED_INPUTS = 1000
+
+/** The bytes of a number in half precision, as the vectors are kept. */
+private const val HALF_BYTES = 2
+
+/** Bytes in a megabyte: the size of the inputs, as the log tells it. */
+private const val BYTES_IN_MB = 1 shl 20
+
+/** Nanoseconds in a millisecond: the times of the log are told in milliseconds. */
+private const val NANOS_IN_MILLI = 1_000_000
+
+/** The mark of the reading ([InputsGathered.marks]) after the texts. */
+private const val TEXTS = 1
+
+/** The mark of the reading after the pictures. */
+private const val PICTURES = 2
+
+/** The mark of the reading after the sets. */
+private const val SETS = 3
+
+/** The mark of the reading after the blocks were laid out. */
+private const val LAID_OUT = 4

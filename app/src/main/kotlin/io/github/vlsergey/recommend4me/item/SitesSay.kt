@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.universe.UniverseFacetDefs
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
@@ -44,12 +45,13 @@ class SitesSay(private val works: Works, private val plugins: Plugins) {
         val bound = bySource.associate { it.id to it.tags.bindingsOf(it.id) }
         val fandoms = bySource.associate {
             it.id to
-                if (UniverseFacet.fandomFacet(it.schema) == null) emptyMap() else type.universes.fandomUniverses(it.id)
+                if (UniverseFacet.fandomFacet(it.schema) == null) emptyMap()
+                else type.universes.fandoms.universesOf(it.id)
         }
         return fields.associate { field ->
             val speaking = read.any { m ->
                 defOf(m.store, field).let {
-                    it.original != null || UniverseFacet.saidBy(it, m.store.schema).isNotEmpty()
+                    it.original != null || UniverseFacetDefs.saidBy(it, m.store.schema).isNotEmpty()
                 }
             }
             field.key to
@@ -57,7 +59,7 @@ class SitesSay(private val works: Works, private val plugins: Plugins) {
                 else
                     read.map { m ->
                         val def = defOf(m.store, field)
-                        val speakers = UniverseFacet.saidBy(def, m.store.schema)
+                        val speakers = UniverseFacetDefs.saidBy(def, m.store.schema)
                         val words = speakers.flatMap { facet ->
                             val values = m.facets[facet].orEmpty()
                             val names = m.store.names(facet, values)
@@ -127,7 +129,7 @@ class SitesSay(private val works: Works, private val plugins: Plugins) {
             def.key in m.store.tagFacets -> listOfNotNull(bound[key]?.let(TagRepository::key))
             // Only a source that drafts of the words knows what they reached; others' are the author's own, to compare
             // by eye
-            facet == UniverseFacet.pairingsFacet(schema) ->
+            facet == UniverseFacetDefs.pairingsFacet(schema) ->
                 drafted.takeIf { m.store.source.catalogueProperties.isNotEmpty() }
             facet == def.originalFacet -> listOf(key)
             else -> null

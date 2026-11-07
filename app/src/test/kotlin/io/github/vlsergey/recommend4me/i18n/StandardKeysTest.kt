@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.universe.UniverseFacetDefs
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -42,7 +43,7 @@ class StandardKeysTest {
             }
         }
         // The application's layer over a source of a type with universes, and its standard tags
-        (UniverseFacet.defs(SourceSchema()) + Books.TYPE.layer.map { it.asLayerFacet(null) }).forEach { def ->
+        (UniverseFacetDefs.defs(SourceSchema()) + Books.TYPE.layer.map { it.asLayerFacet(null) }).forEach { def ->
             add(I18nKeys.facetLabel(SOURCE, def))
             def.standard?.values.orEmpty().forEach { v -> add(I18nKeys.standardValue(def, v.key)!!) }
         }

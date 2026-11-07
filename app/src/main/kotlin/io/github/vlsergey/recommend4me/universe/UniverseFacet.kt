@@ -1,8 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
-import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceSchema
 
 /**
@@ -18,7 +16,8 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
  *   secondary ones the same way, the pairings of pairs of the work's main characters — given to the work at once. A
  *   character is a work's main one or its secondary one, never both ([leftOut]).
  *
- * All five are of the application's layer over the source: the user corrects them.
+ * All five are of the application's layer over the source: the user corrects them. Their definitions in a source's
+ * schema: [UniverseFacetDefs].
  */
 object UniverseFacet {
     const val KEY = UniverseFacets.UNIVERSE
@@ -27,82 +26,11 @@ object UniverseFacet {
     val KINDS = UniverseFacets.KIND_FACET.values!!.associate { it.key to it.modelName }
 
     /**
-     * The facets of a source of a type with universes, each with the site's own word on it shown right above it: the
-     * site's fandoms above the universes, its line of pairings and characters above the characters (the pairings come
-     * right after them).
-     */
-    fun defs(schema: SourceSchema): List<FacetDef> {
-        fun keyOf(standard: Any) = schema.facets.firstOrNull { it.standard === standard }?.key
-        return listOf(
-            // The site may say it, but it is the layer's: the user's answer is the work's kind. The
-            // site's facet it is told by is shown above it
-            UniverseFacets.KIND_FACET.asLayerFacet(examplesFrom = null, originalFacet = schema.kindFrom),
-            FacetDef(
-                KEY,
-                filter = true,
-                // One facet across the sources of the type: a universe is one whichever site a work is from
-                shared = KEY,
-                searchWeight = 0.9f,
-                onCard = true,
-                infer = true,
-                editable = true,
-                originalFacet = fandomFacet(schema),
-            ),
-            FacetDef(
-                UniverseFacets.CHARACTERS,
-                shared = UniverseFacets.CHARACTERS,
-                searchWeight = 0.8f,
-                infer = true,
-                original = schema.universeLine,
-                editable = true,
-                originalFacet = keyOf(UniverseFacets.PAIRINGS_FACET),
-            ),
-            // After the main ones: what the work has of those is left out of these
-            FacetDef(
-                UniverseFacets.SECONDARY_CHARACTERS,
-                shared = UniverseFacets.SECONDARY_CHARACTERS,
-                searchWeight = 0.6f,
-                infer = true,
-                original = schema.universeLine,
-                editable = true,
-            ),
-            FacetDef(
-                UniverseFacets.PAIRINGS,
-                shared = UniverseFacets.PAIRINGS,
-                searchWeight = 0.7f,
-                infer = true,
-                original = schema.universeLine,
-                editable = true,
-            ),
-        )
-    }
-
-    /**
-     * The source's facet of the site's fandoms, the works' universes told by them
-     * ([UniverseRepository.fandomUniverses]); null when it has none.
+     * The source's facet of the site's fandoms, the works' universes told by them ([FandomBindings.universesOf]); null
+     * when it has none.
      */
     fun fandomFacet(schema: SourceSchema): String? =
         schema.facets.firstOrNull { it.standard === UniverseFacets.FANDOM_FACET }?.key
-
-    /**
-     * The site's facets that speak of a field ([def], a facet of the layer), shown above it: its
-     * [FacetDef.originalFacet]; of the universes, a site with no fandoms the facet it tells the kind by, a fandom being
-     * among author.today's tags; of the secondary characters and the pairings the line of the characters too, each
-     * field having it in sight; of the pairings their direction.
-     */
-    fun saidBy(def: FacetDef, schema: SourceSchema): List<String> =
-        when (def.key) {
-            KEY -> listOfNotNull(fandomFacet(schema) ?: schema.kindFrom)
-            UniverseFacets.CHARACTERS,
-            UniverseFacets.SECONDARY_CHARACTERS -> listOfNotNull(pairingsFacet(schema))
-            UniverseFacets.PAIRINGS ->
-                listOfNotNull(pairingsFacet(schema), schema.facets.firstOrNull { it.standard === Books.DIRECTION }?.key)
-            else -> listOfNotNull(def.originalFacet)
-        }
-
-    /** The source's facet of the site's line of characters and pairings, word by word; null when it has none. */
-    fun pairingsFacet(schema: SourceSchema): String? =
-        schema.facets.firstOrNull { it.standard === UniverseFacets.PAIRINGS_FACET }?.key
 
     /** The value of a universe or a character of a catalogue: "wikidata:Q8337". */
     fun valueOf(catalogue: String, id: String) = "$catalogue:$id"
@@ -196,20 +124,13 @@ object UniverseFacet {
      * sex is not known.
      */
     fun sexesOf(pairing: String, sexes: Map<String, CharacterSex>): Pair<CharacterSex, CharacterSex>? {
-        val (a, b) = members(pairing) ?: return null
-        val x = sexes[a] ?: return null
-        val y = sexes[b] ?: return null
-        return if (x <= y) x to y else y to x
-    }
-
-    /** The sign of a pairing by its characters' sexes: ⚣ two men, ⚢ two women, ⚤ a man and a woman, ⚧ anyone else. */
-    fun sign(sexes: Pair<CharacterSex, CharacterSex>): String =
-        when (sexes) {
-            CharacterSex.MALE to CharacterSex.MALE -> "⚣"
-            CharacterSex.FEMALE to CharacterSex.FEMALE -> "⚢"
-            CharacterSex.MALE to CharacterSex.FEMALE -> "⚤"
-            else -> "⚧"
+        val (x, y) = members(pairing)?.let { (a, b) -> sexes[a] to sexes[b] } ?: return null
+        return when {
+            x == null || y == null -> null
+            x <= y -> x to y
+            else -> y to x
         }
+    }
 
     /** A pairing of two characters: one whatever their order. */
     fun pairing(a: String, b: String): String = UniverseFacets.pairing(a, b)

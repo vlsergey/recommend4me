@@ -19,15 +19,23 @@ class BilinearBench {
         val task = SuggestionTaskFile.read(Path.of(file!!))
         val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
         println(
-            "BENCH ${task.itemCount} items × ${task.valueCount} values, ${problem.pairs.count.sumOf { it.toLong() }} pairs that weigh anything, ${problem.hintPairs} pairs of names in ${problem.hintGroups.size} groups"
+            "BENCH ${task.itemCount} items × ${task.valueCount} values, " +
+                "${problem.pairs.count.sumOf { it.toLong() }} pairs that weigh anything, " +
+                "${problem.hintPairs} pairs of names in ${problem.hintGroups.size} groups"
         )
         // On the card when there is one, as the application fits
         val onnx = Onnx(defaultModelsDir(), gpu = true)
-        var started = System.nanoTime()
+        val started = System.nanoTime()
         val card = StepOnCard.open(onnx, problem, BilinearSuggester.RANKS.first())
         println("BENCH the task on the card: ${card != null}, in ${(System.nanoTime() - started) / 1_000_000} ms")
-        val suggester = BilinearSuggester(onnx)
-        // One loss and gradient, and one fold's fitting from scratch, on the processor and on the card
+        stepsAndFolds(problem, card)
+        card?.close()
+        ensembleStep(problem)
+        if (System.getenv("BENCH_WHOLE") != null) fittedAndRefitted(BilinearSuggester(onnx), task)
+    }
+
+    /** One loss and gradient, and one fold's fitting from scratch, on the processor and on the [card]. */
+    private fun stepsAndFolds(problem: Problem, card: StepOnCard?) {
         val where = listOf("processor" to Bilinear(problem, 16), "card" to Bilinear(problem, 16, card))
         for ((where, model) in
             where.filter { (w, _) -> System.getenv("BENCH_ON") == null || w == System.getenv("BENCH_ON") }) {
@@ -45,11 +53,14 @@ class BilinearBench {
                 model.lossAndGradient(x, g, 1e-4f, trains)
             }
             println(
-                "BENCH on the $where: one loss $one ms; a fold from scratch $calls losses in ${(System.nanoTime() - t) / 1_000_000} ms"
+                "BENCH on the $where: one loss $one ms; a fold from scratch $calls losses in " +
+                    "${(System.nanoTime() - t) / 1_000_000} ms"
             )
         }
-        card?.close()
-        // One step of two penalties' five folds each in one product, as a refit takes them
+    }
+
+    /** One step of two penalties' five folds each in one product, as a refit takes them. */
+    private fun ensembleStep(problem: Problem) {
         val alone = Bilinear(problem, 16)
         val count = 2 * BilinearSuggester.FOLDS
         val ensemble =
@@ -64,36 +75,42 @@ class BilinearBench {
         val t = System.nanoTime()
         repeat(5) { ensemble.lossesAndGradients(thetas) }
         println("BENCH ten models in one product: one step of them all ${(System.nanoTime() - t) / 5 / 1_000_000} ms")
-        if (System.getenv("BENCH_WHOLE") == null) return
-        started = System.nanoTime()
+    }
+
+    /** The whole fitting from scratch, then the refit after one answer more, gone on from it. */
+    private fun fittedAndRefitted(suggester: BilinearSuggester, task: SuggestionTask) {
+        var started = System.nanoTime()
         val scratch = suggester.fit(task)!!
         println("BENCH from scratch: ${(System.nanoTime() - started) / 1_000_000} ms")
-        // One answer more: a value the user gives a work of a universe that it had not
-        val item = task.assigned.indices.first { task.assigned[it].isNotEmpty() && task.allowed[it] != null }
-        val value = task.allowed[item]!!.first { it !in task.assigned[item] }
-        val assigned = task.assigned.toMutableList().also { it[item] = it[item] + value }
-        val changed =
-            SuggestionTask(
-                task.itemIds,
-                task.inputs,
-                task.values,
-                task.valueKeys,
-                assigned,
-                task.confirmed,
-                task.rejected,
-                task.context,
-                task.contextKeys,
-                task.allowed,
-                task.groupings,
-                task.lackWeight,
-                task.examples,
-                task.hints,
-                task.hintTexts,
-                task.drafts,
-                task.draftWeight,
-            )
+        val changed = withOneAnswerMore(task)
         started = System.nanoTime()
         suggester.fit(changed, suggester.unpack(scratch.pack(), changed))
         println("BENCH after one answer more, from the last state: ${(System.nanoTime() - started) / 1_000_000} ms")
+    }
+
+    /** The [task] with one answer more: a value the user gives a work of a universe that it had not. */
+    private fun withOneAnswerMore(task: SuggestionTask): SuggestionTask {
+        val item = task.assigned.indices.first { task.assigned[it].isNotEmpty() && task.allowed[it] != null }
+        val value = task.allowed[item]!!.first { it !in task.assigned[item] }
+        val assigned = task.assigned.toMutableList().also { it[item] = it[item] + value }
+        return SuggestionTask(
+            task.itemIds,
+            task.inputs,
+            task.values,
+            task.valueKeys,
+            assigned,
+            task.confirmed,
+            task.rejected,
+            task.context,
+            task.contextKeys,
+            task.allowed,
+            task.groupings,
+            task.lackWeight,
+            task.examples,
+            task.hints,
+            task.hintTexts,
+            task.drafts,
+            task.draftWeight,
+        )
     }
 }

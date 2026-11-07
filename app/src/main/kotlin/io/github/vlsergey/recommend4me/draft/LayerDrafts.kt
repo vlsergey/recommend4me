@@ -32,7 +32,7 @@ private val log = LoggerFactory.getLogger(LayerDrafts::class.java)
  * ([Source.draft][io.github.vlsergey.recommend4me.source.Source.draft]) — and the universe of every character drafted
  * that is in one universe of the dictionary alone; and of every work of a source with fandoms, the universes the user
  * bound its fandoms to
- * ([UniverseRepository.fandomUniverses][io.github.vlsergey.recommend4me.universe.UniverseRepository.fandomUniverses]).
+ * ([FandomBindings.universesOf][io.github.vlsergey.recommend4me.universe.FandomBindings.universesOf]).
  *
  * Made again when the work is captured or refreshed — before anything reads it — and, of every work of the type, when
  * the dictionary changes and on start, of every work of a source when the user binds its fandoms anew ([fandomsBound])
@@ -66,7 +66,7 @@ class LayerDrafts(
      * before the model reads the works: the works written drafted at once — a few, before anything reads them. Every
      * work of the source — the dictionary changed — drafted in the background.
      */
-    @Order(-50)
+    @Order(ORDER)
     @EventListener
     fun itemsChanged(event: ItemsChanged) {
         val store = stores.source(event.source)?.takeIf(::drafts) ?: return
@@ -115,6 +115,7 @@ class LayerDrafts(
      * Every work of the sources planned drafted again now, in the queue of the computations: what the background does
      * after the quiet.
      */
+    @Suppress("TooGenericExceptionCaught")
     fun redraftPlanned() {
         val sources = synchronized(redrafted) { redrafted.toList().also { redrafted.clear() } }
         val changed =
@@ -125,12 +126,16 @@ class LayerDrafts(
                         try {
                             source to redraftWhole(store)
                         } catch (e: Exception) {
+                            // A BOUNDARY: a source's drafting runs its plugin's code (Source.draft), which may fail
+                            // in any way; the failure is logged and the other sources drafted
                             log.error("{}: the drafts of the works were not made", source, e)
                             null
                         }
                     }
                 }
             } catch (e: Exception) {
+                // A BOUNDARY: this runs on the background thread, where nothing would hear of a failure of the queue
+                // or of a work alike joined; it is logged
                 log.error("The drafts of {} were not made", sources, e)
                 return
             }
@@ -177,7 +182,7 @@ class LayerDrafts(
         val started = System.currentTimeMillis()
         // The universes the user bound the source's fandoms to, read once for every work
         val fandom = UniverseFacet.fandomFacet(store.schema)
-        val bound = if (fandom == null) emptyMap() else stores.typeOf(store.id).universes.fandomUniverses(store.id)
+        val bound = if (fandom == null) emptyMap() else stores.typeOf(store.id).universes.fandoms.universesOf(store.id)
         val made = HashMap<String, List<LayerDraft>>()
         ids.forEach { id ->
             val values =
@@ -228,6 +233,13 @@ class LayerDrafts(
         val DRAFTING = Work("layerDrafts")
 
         private const val BATCH = 1000
+
+        /**
+         * The place of the drafting among the listeners of a change of works: after the sites' tags are bound
+         * ([TagNormalization][io.github.vlsergey.recommend4me.tag.TagNormalization], -100), before whatever reads the
+         * works.
+         */
+        private const val ORDER = -50
 
         /** The quiet after the last asking before a whole source is drafted again. */
         private const val QUIET_SECONDS = 2L

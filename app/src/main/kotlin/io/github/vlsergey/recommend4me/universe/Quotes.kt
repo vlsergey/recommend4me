@@ -18,6 +18,9 @@ object Quotes {
     /** Around the names of a long paragraph, so much of it on each side. */
     private const val AROUND = 160
 
+    /** A paragraph so long at most is quoted whole: three times [AROUND]. */
+    private const val WHOLE = 3 * AROUND
+
     /**
      * The [text] of the [place] as quotes of the [names] in it, ranges of it: the paragraphs that hold them, cut around
      * them when long.
@@ -47,9 +50,15 @@ object Quotes {
      * The [paragraph] as passages that hold the [names]: whole when short, else a passage around each group of names
      * near one another, cut at spaces; the names as ranges of its passage.
      */
-    private fun excerpts(paragraph: String, names: List<IntRange>): List<Pair<String, List<IntRange>>> {
-        if (names.isEmpty()) return emptyList()
-        if (paragraph.length <= 3 * AROUND) return listOf(paragraph to names)
+    private fun excerpts(paragraph: String, names: List<IntRange>): List<Pair<String, List<IntRange>>> =
+        when {
+            names.isEmpty() -> emptyList()
+            paragraph.length <= WHOLE -> listOf(paragraph to names)
+            else -> groups(names).map { excerpt(paragraph, it) }
+        }
+
+    /** The [names] in groups of names near one another, in their order: a name within twice [AROUND] of the last. */
+    private fun groups(names: List<IntRange>): List<List<IntRange>> {
         val groups = ArrayList<MutableList<IntRange>>()
         names
             .sortedBy { it.first }
@@ -57,17 +66,22 @@ object Quotes {
                 val last = groups.lastOrNull()
                 if (last != null && r.first - last.last().last <= 2 * AROUND) last += r else groups += mutableListOf(r)
             }
-        return groups.map { group ->
-            var start = (group.first().first - AROUND).coerceAtLeast(0)
-            var end = (group.last().last + 1 + AROUND).coerceAtMost(paragraph.length)
-            if (start > 0)
-                paragraph.indexOf(' ', start).takeIf { it in start until group.first().first }?.let { start = it + 1 }
-            if (end < paragraph.length)
-                paragraph.lastIndexOf(' ', end).takeIf { it > group.last().last }?.let { end = it }
-            val prefix = if (start > 0) "… " else ""
-            val suffix = if (end < paragraph.length) " …" else ""
-            val shift = prefix.length - start
-            prefix + paragraph.substring(start, end) + suffix to group.map { (it.first + shift)..(it.last + shift) }
-        }
+        return groups
+    }
+
+    /**
+     * The passage of the [paragraph] around a [group] of names, cut at spaces and marked "…" where cut; the names as
+     * ranges of it.
+     */
+    private fun excerpt(paragraph: String, group: List<IntRange>): Pair<String, List<IntRange>> {
+        var start = (group.first().first - AROUND).coerceAtLeast(0)
+        var end = (group.last().last + 1 + AROUND).coerceAtMost(paragraph.length)
+        if (start > 0)
+            paragraph.indexOf(' ', start).takeIf { it in start until group.first().first }?.let { start = it + 1 }
+        if (end < paragraph.length) paragraph.lastIndexOf(' ', end).takeIf { it > group.last().last }?.let { end = it }
+        val prefix = if (start > 0) "… " else ""
+        val suffix = if (end < paragraph.length) " …" else ""
+        val shift = prefix.length - start
+        return prefix + paragraph.substring(start, end) + suffix to group.map { (it.first + shift)..(it.last + shift) }
     }
 }

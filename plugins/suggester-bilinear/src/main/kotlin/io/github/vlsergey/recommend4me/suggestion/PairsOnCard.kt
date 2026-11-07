@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
+import java.lang.foreign.MemorySegment
 import java.util.IdentityHashMap
 import org.slf4j.LoggerFactory
 
@@ -35,12 +36,14 @@ private constructor(
     private val m = p.m
     private val h = p.hints.size
 
-    private fun floats(count: Long) = (cublas.allocate(count) ?: throw NoRoom()).also { made += it }
+    private fun floats(count: Long) =
+        (cublas.allocate(count) ?: throw NoRoom("no room for $count floats")).also { made += it }
 
-    private fun bytes(count: Long) = (cublas.allocateBytes(count) ?: throw NoRoom()).also { made += it }
+    private fun bytes(count: Long) =
+        (cublas.allocateBytes(count) ?: throw NoRoom("no room for $count bytes")).also { made += it }
 
     /** The card had no room for the task's pairs: they stay on the processor. */
-    private class NoRoom : RuntimeException()
+    private class NoRoom(what: String) : RuntimeException(what)
 
     /** The rows of items a block takes: a block of them against every value, held at once. */
     private val blockRows = minOf(n, maxOf(1, BLOCK / maxOf(1, m)))
@@ -70,7 +73,7 @@ private constructor(
         IdentityHashMap<IntArray, Int>().also { made ->
             p.pairs.may.forEach { a -> if (a != null) made.putIfAbsent(a, made.size) }
         }
-    private val words = (m + 31) / 32
+    private val words = (m + Int.SIZE_BITS - 1) / Int.SIZE_BITS
     private val masks = bytes(groupOf.size.toLong() * words * Int.SIZE_BYTES)
 
     /**
@@ -161,7 +164,10 @@ private constructor(
         group.upload(IntArray(n) { i -> p.pairs.may[i]?.let(groupOf::getValue) ?: -1 })
         val bits = IntArray(groupOf.size * words)
         groupOf.forEach { (values, k) ->
-            values.forEach { v -> bits[k * words + v / 32] = bits[k * words + v / 32] or (1 shl (v % 32)) }
+            values.forEach { v ->
+                val at = k * words + v / Int.SIZE_BITS
+                bits[at] = bits[at] or (1 shl (v % Int.SIZE_BITS))
+            }
         }
         masks.upload(bits)
         val count = entries.toInt()
@@ -263,124 +269,9 @@ private constructor(
             val pairAt = slot * Bilinear.PAIR
             val example = pair[pairAt]
             val common = pair[pairAt + 1]
-            val uAt = slot.toLong() * r * n
-            val vAt = slot.toLong() * r * m
-            val biasAt = slot.toLong() * m
             val sumsAt = sums.at(slot.toLong() * SUMS * Double.SIZE_BYTES)
-            var from = 0
-            while (from < n) {
-                val rows = minOf(blockRows, n - from)
-                // S = U Vᵀ of the block's rows: Uᵀ's columns of them against Vᵀ
-                cublas.gemm(true, false, rows, m, r, uT, uAt + from, n, vT, vAt, m, s, 0, m)
-                g.zero(0, rows.toLong() * m)
-                // Every value an item merely lacks, then its own pairs: what was taken as lacked taken back
-                kernels.launch(
-                    "lacks",
-                    rows.toLong() * m,
-                    rows,
-                    m,
-                    from,
-                    s,
-                    g,
-                    lack,
-                    group,
-                    masks,
-                    words,
-                    foldOf,
-                    heldOut[model],
-                    bias.at(biasAt),
-                    common,
-                    scale,
-                    sumsAt,
-                )
-                val first = firstEntry[from]
-                val own = firstEntry[from + rows] - first
-                kernels.launch(
-                    "owns",
-                    own,
-                    own.toInt(),
-                    m,
-                    from,
-                    s,
-                    g,
-                    item.at(first * Int.SIZE_BYTES),
-                    value.at(first * Int.SIZE_BYTES),
-                    weight.at(first * Float.SIZE_BYTES),
-                    label.at(first * Float.SIZE_BYTES),
-                    exampleOf.at(first * Float.SIZE_BYTES),
-                    lack,
-                    group,
-                    masks,
-                    words,
-                    foldOf,
-                    heldOut[model],
-                    bias.at(biasAt),
-                    common,
-                    example,
-                    scale,
-                    sumsAt,
-                )
-                // dUᵀ of the block's rows = Vᵀ Gᵀ; dVᵀ += Uᵀ of them · G; the biases' slopes += 1ᵀ G
-                val beta = if (from == 0) 0f else 1f
-                cublas.gemm(false, true, r, rows, m, vT, vAt, m, g, 0, m, duT, uAt + from, n)
-                cublas.gemm(false, false, r, m, rows, uT, uAt + from, n, g, 0, m, gE, vAt, m, beta)
-                cublas.gemm(false, false, 1, m, rows, ones, 0, rows, g, 0, m, gBias, biasAt, m, beta)
-                from += rows
-            }
-            if (h > 0) {
-                val rows = rows!!
-                val values = values!!
-                val gu = gu!!
-                val gv = gv!!
-                val sn = sn!!
-                val firstPair = firstPair!!
-                val firstRow = firstRow!!
-                val firstValue = firstValue!!
-                val width = width!!
-                kernels.launch("gather", names.toLong() * r, names, rows, uh!!.at(slot.toLong() * r * h), h, r, gu)
-                kernels.launch("gather", columns.toLong() * r, columns, values, vT.at(vAt), m, r, gv)
-                // The rank of the application's fittings compiled as known: its numbers in registers
-                kernels.launch(
-                    if (r == 16) "names_tile_16" else "names_tile",
-                    tileList.size / 3L * CudaKernels.BLOCK,
-                    tiles!!,
-                    firstPair,
-                    firstRow,
-                    firstValue,
-                    width,
-                    height!!,
-                    values,
-                    positive!!,
-                    gu,
-                    gv,
-                    m,
-                    r,
-                    bias.at(biasAt),
-                    common,
-                    scale,
-                    sn,
-                    gE.at(vAt),
-                    gBias.at(biasAt),
-                    sumsAt,
-                )
-                // A warp a name
-                kernels.launch(
-                    if (r == 16) "names_rows_16" else "names_rows",
-                    names.toLong() * WARP,
-                    names,
-                    groupOfRow!!,
-                    firstPair,
-                    firstRow,
-                    firstValue,
-                    width,
-                    rows,
-                    sn,
-                    gv,
-                    h,
-                    r,
-                    duh!!.at(slot.toLong() * r * h),
-                )
-            }
+            pairsOf(slot, heldOut[model], scale, example, common, sumsAt, uT, duT)
+            if (h > 0) namesOf(slot, scale, common, sumsAt)
         }
         gE.download(gEHost, 0, 0, kr * m)
         gBias.download(gBiasHost, 0, 0, k * m)
@@ -394,6 +285,164 @@ private constructor(
         }
     }
 
+    /**
+     * The pairs of the model in [slot], a block of the items' rows at a time: its scores S = U Vᵀ of the items' [uT];
+     * the loss and slope of every pair that weighs anything, its sums into [sumsAt]; the items' slopes into [duT], the
+     * values' and the biases' slopes into [gE] and [gBias].
+     */
+    private fun pairsOf(
+        slot: Int,
+        heldOut: Int,
+        scale: Float,
+        example: Float,
+        common: Float,
+        sumsAt: MemorySegment,
+        uT: Cublas.DeviceFloats,
+        duT: Cublas.DeviceFloats,
+    ) {
+        val uAt = slot.toLong() * r * n
+        val vAt = slot.toLong() * r * m
+        val biasAt = slot.toLong() * m
+        var from = 0
+        while (from < n) {
+            val rows = minOf(blockRows, n - from)
+            // S = U Vᵀ of the block's rows: Uᵀ's columns of them against Vᵀ
+            cublas.gemm(true, false, rows, m, r, uT, uAt + from, n, vT, vAt, m, s, 0, m)
+            g.zero(0, rows.toLong() * m)
+            blockSlopes(from, rows, heldOut, bias.at(biasAt), scale, example, common, sumsAt)
+            // dUᵀ of the block's rows = Vᵀ Gᵀ; dVᵀ += Uᵀ of them · G; the biases' slopes += 1ᵀ G
+            val beta = if (from == 0) 0f else 1f
+            cublas.gemm(false, true, r, rows, m, vT, vAt, m, g, 0, m, duT, uAt + from, n)
+            cublas.gemm(false, false, r, m, rows, uT, uAt + from, n, g, 0, m, gE, vAt, m, beta)
+            cublas.gemm(false, false, 1, m, rows, ones, 0, rows, g, 0, m, gBias, biasAt, m, beta)
+            from += rows
+        }
+    }
+
+    /**
+     * The losses and slopes of a block of [rows] items from [from], of their scores [s] into [g], by the kernels: every
+     * value an item merely lacks, then its own pairs — what was taken as lacked taken back.
+     */
+    private fun blockSlopes(
+        from: Int,
+        rows: Int,
+        heldOut: Int,
+        biasAt: MemorySegment,
+        scale: Float,
+        example: Float,
+        common: Float,
+        sumsAt: MemorySegment,
+    ) {
+        kernels.launch(
+            "lacks",
+            rows.toLong() * m,
+            rows,
+            m,
+            from,
+            s,
+            g,
+            lack,
+            group,
+            masks,
+            words,
+            foldOf,
+            heldOut,
+            biasAt,
+            common,
+            scale,
+            sumsAt,
+        )
+        val first = firstEntry[from]
+        val own = firstEntry[from + rows] - first
+        kernels.launch(
+            "owns",
+            own,
+            own.toInt(),
+            m,
+            from,
+            s,
+            g,
+            item.at(first * Int.SIZE_BYTES),
+            value.at(first * Int.SIZE_BYTES),
+            weight.at(first * Float.SIZE_BYTES),
+            label.at(first * Float.SIZE_BYTES),
+            exampleOf.at(first * Float.SIZE_BYTES),
+            lack,
+            group,
+            masks,
+            words,
+            foldOf,
+            heldOut,
+            biasAt,
+            common,
+            example,
+            scale,
+            sumsAt,
+        )
+    }
+
+    /**
+     * The names of the model in [slot]: its names' and values' coordinates gathered by the groups, every tile's scores,
+     * losses and slopes — the values' and the biases' slopes carried back at once, the sums into [sumsAt] — and a
+     * name's slopes by a warp.
+     */
+    private fun namesOf(slot: Int, scale: Float, common: Float, sumsAt: MemorySegment) {
+        val vAt = slot.toLong() * r * m
+        val biasAt = slot.toLong() * m
+        val rows = rows!!
+        val values = values!!
+        val gu = gu!!
+        val gv = gv!!
+        val sn = sn!!
+        val firstPair = firstPair!!
+        val firstRow = firstRow!!
+        val firstValue = firstValue!!
+        val width = width!!
+        kernels.launch("gather", names.toLong() * r, names, rows, uh!!.at(slot.toLong() * r * h), h, r, gu)
+        kernels.launch("gather", columns.toLong() * r, columns, values, vT.at(vAt), m, r, gv)
+        // The rank of the application's fittings compiled as known: its numbers in registers
+        kernels.launch(
+            if (r == KNOWN_RANK) "names_tile_16" else "names_tile",
+            tileList.size / TILE_NUMBERS.toLong() * CudaKernels.BLOCK,
+            tiles!!,
+            firstPair,
+            firstRow,
+            firstValue,
+            width,
+            height!!,
+            values,
+            positive!!,
+            gu,
+            gv,
+            m,
+            r,
+            bias.at(biasAt),
+            common,
+            scale,
+            sn,
+            gE.at(vAt),
+            gBias.at(biasAt),
+            sumsAt,
+        )
+        // A warp a name
+        kernels.launch(
+            if (r == KNOWN_RANK) "names_rows_16" else "names_rows",
+            names.toLong() * WARP,
+            names,
+            groupOfRow!!,
+            firstPair,
+            firstRow,
+            firstValue,
+            width,
+            rows,
+            sn,
+            gv,
+            h,
+            r,
+            duh!!.at(slot.toLong() * r * h),
+        )
+    }
+
     override fun close() = made.forEach { it.close() }
 
     companion object {
@@ -401,6 +450,12 @@ private constructor(
 
         /** The threads of a warp, which `names_rows` gives a name. */
         private const val WARP = 32
+
+        /** The rank of the application's fittings, which `names_tile_16` and `names_rows_16` are compiled for. */
+        private const val KNOWN_RANK = 16
+
+        /** The numbers of a tile in [tileList]: its group, its first name, its first value. */
+        private const val TILE_NUMBERS = 3
 
         /** The rank a kernel's sums are made for (`MAX_RANK` of `pairs.cu`). */
         private const val MAX_RANK = 64
@@ -435,18 +490,24 @@ private constructor(
          * be — the kernels not made, no room — the processor's then.
          */
         fun open(p: Problem, cublas: Cublas, count: Int, rank: Int): PairsOnCard? {
-            if (rank > MAX_RANK) return null
-            val kernels = kernels(cublas) ?: return null
+            val kernels = if (rank > MAX_RANK) null else kernels(cublas)
+            return kernels?.let { opened(p, cublas, it, count, rank) }
+        }
+
+        /** The pairs and the names of [p] put on the card by the [kernels]; null when the card has no room for them. */
+        private fun opened(p: Problem, cublas: Cublas, kernels: CudaKernels, count: Int, rank: Int): PairsOnCard? {
             val made = ArrayList<AutoCloseable>()
             return try {
                 PairsOnCard(p, cublas, kernels, count, rank, made)
             } catch (e: NoRoom) {
                 made.forEach { it.close() }
                 log.info(
-                    "no room on the card for the pairs of {} items × {} values and {} names: they stay on the processor",
+                    "no room on the card for the pairs of {} items × {} values and {} names: they stay on the " +
+                        "processor ({})",
                     p.n,
                     p.m,
                     p.hints.size,
+                    e.message,
                 )
                 null
             }

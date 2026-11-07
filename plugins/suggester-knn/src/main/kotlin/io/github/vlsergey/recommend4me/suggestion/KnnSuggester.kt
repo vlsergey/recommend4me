@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtException
+import ai.onnxruntime.OrtSession
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.onnx.Onnx
@@ -211,33 +213,8 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                     )
                 val session = onnx.onCard(graph, mapOf("Y" to all)) ?: return null.also { all.close() }
                 return try {
-                    val rows = Array(n) { IntArray(0) }
-                    val likeness = Array(n) { FloatArray(0) }
-                    val chunk = FloatArray(CHUNK * DIMENSIONS)
-                    var from = 0
-                    while (from < n) {
-                        val count = minOf(CHUNK, n - from)
-                        y.take(chunk, 0, from * DIMENSIONS, count * DIMENSIONS)
-                        val buffer =
-                            ByteBuffer.allocateDirect(count * DIMENSIONS * Float.SIZE_BYTES)
-                                .order(ByteOrder.nativeOrder())
-                                .asFloatBuffer()
-                        buffer.put(chunk, 0, count * DIMENSIONS).flip()
-                        OnnxTensor.createTensor(onnx.env, buffer, longArrayOf(count.toLong(), DIMENSIONS.toLong()))
-                            .use { q ->
-                                session.run(mapOf("Q" to q)).use { result ->
-                                    @Suppress("UNCHECKED_CAST") val values = result.get(0).value as Array<FloatArray>
-                                    @Suppress("UNCHECKED_CAST") val indices = result.get(1).value as Array<LongArray>
-                                    for (r in 0 until count) {
-                                        likeness[from + r] = values[r]
-                                        rows[from + r] = IntArray(indices[r].size) { indices[r][it].toInt() }
-                                    }
-                                }
-                            }
-                        from += count
-                    }
-                    rows to likeness
-                } catch (e: Exception) {
+                    byChunksOnCard(onnx, session, y, n)
+                } catch (e: OrtException) {
                     log.warn(
                         "the nearest works could not be found on the card, the processor finds them: {}",
                         e.message,
@@ -247,6 +224,44 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                     session.close()
                     all.close()
                 }
+            }
+
+            /**
+             * Every work's nearest by the graph of [session] on the card, [CHUNK] works asked for at once: their rows
+             * and likenesses, the nearest first.
+             */
+            private fun byChunksOnCard(
+                onnx: Onnx,
+                session: OrtSession,
+                y: Floats,
+                n: Int,
+            ): Pair<Array<IntArray>, Array<FloatArray>> {
+                val rows = Array(n) { IntArray(0) }
+                val likeness = Array(n) { FloatArray(0) }
+                val chunk = FloatArray(CHUNK * DIMENSIONS)
+                var from = 0
+                while (from < n) {
+                    val count = minOf(CHUNK, n - from)
+                    y.take(chunk, 0, from * DIMENSIONS, count * DIMENSIONS)
+                    val buffer =
+                        ByteBuffer.allocateDirect(count * DIMENSIONS * Float.SIZE_BYTES)
+                            .order(ByteOrder.nativeOrder())
+                            .asFloatBuffer()
+                    buffer.put(chunk, 0, count * DIMENSIONS).flip()
+                    OnnxTensor.createTensor(onnx.env, buffer, longArrayOf(count.toLong(), DIMENSIONS.toLong())).use { q
+                        ->
+                        session.run(mapOf("Q" to q)).use { result ->
+                            @Suppress("UNCHECKED_CAST") val values = result.get(0).value as Array<FloatArray>
+                            @Suppress("UNCHECKED_CAST") val indices = result.get(1).value as Array<LongArray>
+                            for (r in 0 until count) {
+                                likeness[from + r] = values[r]
+                                rows[from + r] = IntArray(indices[r].size) { indices[r][it].toInt() }
+                            }
+                        }
+                    }
+                    from += count
+                }
+                return rows to likeness
             }
 
             /**
@@ -323,18 +338,21 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
             val all = DoubleArray(pairs.m)
             var taken = 0
             val rows = near.rows[i]
-            for (t in rows.indices) {
-                if (taken == k) break
+            var t = 0
+            while (t < rows.size && taken < k) {
                 val j = rows[t]
-                if (!usable(j)) continue
-                taken++
-                val s = near.likeness[i][t].coerceAtLeast(0f).toDouble()
-                if (s == 0.0) continue
-                pairs.forEach(j) { v, weight, y ->
-                    val w = s * weight
-                    all[v] += w
-                    one[v] += w * y
+                if (usable(j)) {
+                    taken++
+                    val s = near.likeness[i][t].coerceAtLeast(0f).toDouble()
+                    if (s != 0.0) {
+                        pairs.forEach(j) { v, weight, y ->
+                            val w = s * weight
+                            all[v] += w
+                            one[v] += w * y
+                        }
+                    }
                 }
+                t++
             }
             return FloatArray(pairs.m) { v -> ((one[v] + PRIOR * prior.share[v]) / (all[v] + PRIOR)).toFloat() }
         }

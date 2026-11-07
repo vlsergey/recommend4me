@@ -154,6 +154,9 @@ private constructor(
          */
         private const val OPSET = 17
 
+        /** The bytes of a kilobyte: the unit the log tells the graphs' size in. */
+        private const val KB = 1 shl 10
+
         /** The step of [p]'s fitting at [rank] on the card; null without a card, or for a task without names. */
         fun open(onnx: Onnx, p: Problem, rank: Int): StepOnCard? {
             if (p.hints.isEmpty()) return null
@@ -168,21 +171,36 @@ private constructor(
                     "Z" to tensor(onnx, p.z.held.buffer(0, p.m * p.design.valueWidth), p.m, p.design.valueWidth),
                     "H" to tensor(onnx, p.hintText.held.buffer(0, p.hints.size * p.hintDim), p.hints.size, p.hintDim),
                 )
-            // Kept open as long as the sessions, as the runtime asks of what it is handed
-            val forward = onnx.onCard(forwardBytes, data) ?: return null.also { data.values.forEach(OnnxTensor::close) }
-            val backward =
-                onnx.onCard(backwardBytes, data.filterKeys { it != "H" })
-                    ?: return null.also {
-                        forward.close()
-                        data.values.forEach(OnnxTensor::close)
-                    }
-            log.info(
-                "the task on the card: graphs of {} KB made in {} ms, opened in {} ms",
-                (forwardBytes.size + backwardBytes.size) / (1 shl 10),
-                made - started,
-                System.currentTimeMillis() - made,
-            )
-            return StepOnCard(onnx, forward, backward, data.values.toList(), p, rank)
+            return sessions(onnx, forwardBytes, backwardBytes, data)?.let { (forward, backward) ->
+                log.info(
+                    "the task on the card: graphs of {} KB made in {} ms, opened in {} ms",
+                    (forwardBytes.size + backwardBytes.size) / KB,
+                    made - started,
+                    System.currentTimeMillis() - made,
+                )
+                StepOnCard(onnx, forward, backward, data.values.toList(), p, rank)
+            }
+        }
+
+        /**
+         * The forward and the backward sessions on the card, handed the task's [data] — kept open as long as the
+         * sessions, as the runtime asks of what it is handed; null when the card takes either not, what was opened
+         * closed and the data too.
+         */
+        private fun sessions(
+            onnx: Onnx,
+            forwardBytes: ByteArray,
+            backwardBytes: ByteArray,
+            data: Map<String, OnnxTensor>,
+        ): Pair<OrtSession, OrtSession>? {
+            val forward = onnx.onCard(forwardBytes, data)
+            val backward = forward?.let { onnx.onCard(backwardBytes, data.filterKeys { it != "H" }) }
+            return if (forward != null && backward != null) forward to backward
+            else {
+                forward?.close()
+                data.values.forEach(OnnxTensor::close)
+                null
+            }
         }
 
         /** A tensor over [data] where it lies — a direct buffer is not copied by the runtime. */
@@ -207,25 +225,7 @@ private constructor(
                     .constant("second", longArrayOf(1), 1)
             // The coordinates of the values
             g.node("MatMul", listOf("Z", "B"), listOf("ZB")).node("Add", listOf("ZB", "E"), listOf("V"))
-            // Of the names, read as a work's every text block: the blocks' weights summed by their scales,
-            // the constant's and the blocks' marks added
-            val marks = longArrayOf(0) + p.hintBlocks.map { p.design.blockOffsets[it].toLong() }
-            g.constant("marks", marks, marks.size.toLong())
-                .node("Gather", listOf("A", "marks"), listOf("markRows"), mapOf("axis" to 0))
-                .node("ReduceSum", listOf("markRows", "first"), listOf("base"), mapOf("keepdims" to 0))
-            val scaled =
-                p.hintBlocks.mapIndexed { k, b ->
-                    val from = p.design.blockOffsets[b] + 1L
-                    g.constant("from$k", longArrayOf(from), 1)
-                        .constant("to$k", longArrayOf(from + p.hintDim), 1)
-                        .constant("scale$k", floatArrayOf(p.design.blocks[b].scale))
-                        .node("Slice", listOf("A", "from$k", "to$k", "first"), listOf("block$k"))
-                        .node("Mul", listOf("block$k", "scale$k"), listOf("scaled$k"))
-                    "scaled$k"
-                }
-            g.node("Sum", scaled, listOf("aSum"))
-                .node("MatMul", listOf("H", "aSum"), listOf("HA"))
-                .node("Add", listOf("HA", "base"), listOf("Uh"))
+            addNameCoordinates(g, p)
             // Every group of names against its values
             val losses = ArrayList<String>()
             val columns = ArrayList<String>()
@@ -235,21 +235,7 @@ private constructor(
                 // Every name of the group's nodes under one prefix of its own
                 val prefix = "group${k}_"
                 fun x(name: String) = prefix + name
-                g.constant(x("rows"), LongArray(group.rows.size) { group.rows[it].toLong() }, group.rows.size.toLong())
-                    .constant(
-                        x("values"),
-                        LongArray(group.values.size) { group.values[it].toLong() },
-                        group.values.size.toLong(),
-                    )
-                    .constant(
-                        x("own"),
-                        LongArray(group.positive.size) { group.positive[it].toLong() },
-                        group.positive.size.toLong(),
-                    )
-                    .node("Gather", listOf("Uh", x("rows")), listOf(x("Ug")), mapOf("axis" to 0))
-                    .node("Gather", listOf("V", x("values")), listOf(x("Vg")), mapOf("axis" to 0))
-                    .node("Gather", listOf("bias", x("values")), listOf(x("biasG")), mapOf("axis" to 0))
-                    .node("Add", listOf(x("biasG"), "common"), listOf(x("shift")))
+                addGroupGathered(g, prefix, group)
                 NamesLoss.add(g, prefix, x("Ug"), x("Vg"), x("shift"), x("own"), "scale")
                 losses += x("loss")
                 columns += x("columns")
@@ -274,6 +260,53 @@ private constructor(
                 .output("dSum", f, p.hintDim.toLong(), rank.toLong())
                 .output("dBase", f, rank.toLong())
                 .bytes(OPSET)
+        }
+
+        /**
+         * The nodes of the names' coordinates Uh, read as a work's every text block: the blocks' weights summed by
+         * their scales, the constant's and the blocks' marks added.
+         */
+        private fun addNameCoordinates(g: OnnxGraph, p: Problem) {
+            val marks = longArrayOf(0) + p.hintBlocks.map { p.design.blockOffsets[it].toLong() }
+            g.constant("marks", marks, marks.size.toLong())
+                .node("Gather", listOf("A", "marks"), listOf("markRows"), mapOf("axis" to 0))
+                .node("ReduceSum", listOf("markRows", "first"), listOf("base"), mapOf("keepdims" to 0))
+            val scaled =
+                p.hintBlocks.mapIndexed { k, b ->
+                    val from = p.design.blockOffsets[b] + 1L
+                    g.constant("from$k", longArrayOf(from), 1)
+                        .constant("to$k", longArrayOf(from + p.hintDim), 1)
+                        .constant("scale$k", floatArrayOf(p.design.blocks[b].scale))
+                        .node("Slice", listOf("A", "from$k", "to$k", "first"), listOf("block$k"))
+                        .node("Mul", listOf("block$k", "scale$k"), listOf("scaled$k"))
+                    "scaled$k"
+                }
+            g.node("Sum", scaled, listOf("aSum"))
+                .node("MatMul", listOf("H", "aSum"), listOf("HA"))
+                .node("Add", listOf("HA", "base"), listOf("Uh"))
+        }
+
+        /**
+         * The nodes of one [group] of names under its [prefix]: its rows, values and every name's own value as
+         * constants, its names' coordinates, its values' and their biases gathered, the common bias added to them.
+         */
+        private fun addGroupGathered(g: OnnxGraph, prefix: String, group: Problem.HintGroup) {
+            fun x(name: String) = prefix + name
+            g.constant(x("rows"), LongArray(group.rows.size) { group.rows[it].toLong() }, group.rows.size.toLong())
+                .constant(
+                    x("values"),
+                    LongArray(group.values.size) { group.values[it].toLong() },
+                    group.values.size.toLong(),
+                )
+                .constant(
+                    x("own"),
+                    LongArray(group.positive.size) { group.positive[it].toLong() },
+                    group.positive.size.toLong(),
+                )
+                .node("Gather", listOf("Uh", x("rows")), listOf(x("Ug")), mapOf("axis" to 0))
+                .node("Gather", listOf("V", x("values")), listOf(x("Vg")), mapOf("axis" to 0))
+                .node("Gather", listOf("bias", x("values")), listOf(x("biasG")), mapOf("axis" to 0))
+                .node("Add", listOf(x("biasG"), "common"), listOf(x("shift")))
         }
 
         private fun backwardGraph(p: Problem): ByteArray {

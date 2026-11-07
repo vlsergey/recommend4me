@@ -69,6 +69,11 @@ class FacetComparisons(
 
     private fun keyOf(store: SourceStore, facet: String) = "${store.id}/$facet"
 
+    /**
+     * Every suggester fitted on the facet's task, one after another. A boundary of the background: whatever fails — the
+     * task not read — is told on every method not measured yet, and in the log.
+     */
+    @Suppress("TooGenericExceptionCaught")
     private fun run(store: SourceStore, facet: String, comparison: FacetComparison) {
         try {
             val task = suggestions.task(store, facet)
@@ -83,28 +88,7 @@ class FacetComparisons(
                     // Measured in the background, outside any request: told in English
                     measure.error = "The method is gone"
                     measure.state = MeasuringState.FAILED
-                    return@forEach
-                }
-                measure.state = MeasuringState.MEASURING
-                val started = System.currentTimeMillis()
-                try {
-                    measure.report = suggester.fit(task, null)?.report
-                    measure.state = MeasuringState.DONE
-                } catch (e: Exception) {
-                    log.warn("{}: {} could not be fitted on {}", store.id, suggester.id, facet, e)
-                    measure.error = e.message ?: e.javaClass.simpleName
-                    measure.state = MeasuringState.FAILED
-                }
-                measure.millis = System.currentTimeMillis() - started
-                log.info(
-                    "{}: {} fitted on {} of {} items in {} ms: {}",
-                    store.id,
-                    suggester.id,
-                    facet,
-                    task.itemCount,
-                    measure.millis,
-                    measure.report?.loss,
-                )
+                } else measure(store, facet, task, suggester, measure)
             }
         } catch (e: Exception) {
             log.warn("{}: the methods of {} could not be compared", store.id, facet, e)
@@ -117,6 +101,41 @@ class FacetComparisons(
         } finally {
             comparison.finishedAt = Instant.now()
         }
+    }
+
+    /**
+     * The [suggester] fitted on the [task] from scratch, its [measure] told what it tried and chose, or why it failed.
+     * A boundary of a plugin: whatever its fitting throws is the measure's failure, and the other methods are measured
+     * all the same.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private fun measure(
+        store: SourceStore,
+        facet: String,
+        task: SuggestionTask,
+        suggester: FacetSuggester,
+        measure: MethodMeasure,
+    ) {
+        measure.state = MeasuringState.MEASURING
+        val started = System.currentTimeMillis()
+        try {
+            measure.report = suggester.fit(task, null)?.report
+            measure.state = MeasuringState.DONE
+        } catch (e: Exception) {
+            log.warn("{}: {} could not be fitted on {}", store.id, suggester.id, facet, e)
+            measure.error = e.message ?: e.javaClass.simpleName
+            measure.state = MeasuringState.FAILED
+        }
+        measure.millis = System.currentTimeMillis() - started
+        log.info(
+            "{}: {} fitted on {} of {} items in {} ms: {}",
+            store.id,
+            suggester.id,
+            facet,
+            task.itemCount,
+            measure.millis,
+            measure.report?.loss,
+        )
     }
 
     @PreDestroy

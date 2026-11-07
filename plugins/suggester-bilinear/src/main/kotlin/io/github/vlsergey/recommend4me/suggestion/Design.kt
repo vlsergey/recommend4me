@@ -122,21 +122,29 @@ class Design(
         dense.forEach { b -> b.items.forEach { i -> ones[i][filled[i]++] = b.mark } }
         for (i in 0 until n) {
             val own = ones[i]
-            var at = filled[i]
-            val marks = at
-            for (c in task.context[i]) {
-                val column = columns[c]
-                if (column < 0) continue
-                var seen = false
-                for (q in marks until at) if (own[q] == column) {
-                    seen = true
-                    break
-                }
-                if (!seen) own[at++] = column
-            }
+            val at = withContext(own, filled[i], task.context[i], columns)
             if (at < own.size) ones[i] = own.copyOf(at)
         }
         return ItemFeatures(n, itemWidth, dense, ones)
+    }
+
+    /**
+     * The columns of an item's values of the other facets ([context], by the layout's [columns]) written into [own]
+     * after its first [marks] — each once, one this layout does not know left out; answers how many [own] then holds.
+     */
+    private fun withContext(own: IntArray, marks: Int, context: IntArray, columns: IntArray): Int {
+        var at = marks
+        for (c in context) {
+            val column = columns[c]
+            if (column < 0) continue
+            var seen = false
+            for (q in marks until at) if (own[q] == column) {
+                seen = true
+                break
+            }
+            if (!seen) own[at++] = column
+        }
+        return at
     }
 
     /** The features of every value of the task, in its order. */

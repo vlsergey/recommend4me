@@ -213,6 +213,15 @@ class ValueNameRepository(private val db: DSLContext) {
     private companion object {
         /** Keys asked for in one query. */
         const val KEYS = 1000
+
+        /** The rows of the vectors streamed at a time ([forEach]): memory, not meaning. */
+        const val FETCH = 2000
+
+        /** The rows written in one batch ([save]): memory, not meaning. */
+        const val BATCH = 1000
+
+        /** The longest value key the table holds (`facet_value_vector.value_key VARCHAR(500)`). */
+        const val KEY_LENGTH = 500
     }
 
     /**
@@ -223,7 +232,7 @@ class ValueNameRepository(private val db: DSLContext) {
         db.select(FACET_VALUE_VECTOR.VALUE_KEY, FACET_VALUE_VECTOR.NAME_HASH, FACET_VALUE_VECTOR.VEC)
             .from(FACET_VALUE_VECTOR)
             .where(FACET_VALUE_VECTOR.FACET.eq(facet), FACET_VALUE_VECTOR.ENCODER.eq(encoder))
-            .fetchSize(2000)
+            .fetchSize(FETCH)
             .fetchLazy()
             .use { cursor -> cursor.forEach { action(it.value1()!!, it.value2()!!, Vectors.fromHalf(it.value3()!!)) } }
 
@@ -233,13 +242,13 @@ class ValueNameRepository(private val db: DSLContext) {
      */
     @Synchronized
     fun save(facet: String, encoder: String, rows: List<Triple<String, String, FloatArray>>) {
-        rows.chunked(1000).forEach { chunk ->
+        rows.chunked(BATCH).forEach { chunk ->
             db.batch(
                     chunk.map { (key, hash, vector) ->
                         val packed = Vectors.half(vector)
                         db.insertInto(FACET_VALUE_VECTOR)
                             .set(FACET_VALUE_VECTOR.FACET, facet)
-                            .set(FACET_VALUE_VECTOR.VALUE_KEY, key.take(500))
+                            .set(FACET_VALUE_VECTOR.VALUE_KEY, key.take(KEY_LENGTH))
                             .set(FACET_VALUE_VECTOR.ENCODER, encoder)
                             .set(FACET_VALUE_VECTOR.NAME_HASH, hash)
                             .set(FACET_VALUE_VECTOR.VEC, packed)

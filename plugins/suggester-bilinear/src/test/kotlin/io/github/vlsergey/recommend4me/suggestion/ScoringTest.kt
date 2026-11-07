@@ -88,7 +88,7 @@ class ScoringTest {
         assertTrue(abs(expected - actual) <= 2e-4f + 1e-5f * abs(expected), "$what: $expected, scored $actual")
 
     @Test
-    fun `the scores of every value, of a set shared by many rows and of a few of a row's own are the chances of those values`() {
+    fun `the scores of every value, of a shared set and of a few of a row's own are the chances of those values`() {
         val task = task()
         val scores = assertNotNull(BilinearSuggester().fit(task)).on(task)
         val rows = IntArray(n) { it }
@@ -223,22 +223,7 @@ class ScoringTest {
                 val expected = main.shown(rows, columns, closed, least)
                 val got = card.shown(rows, columns, closed, least)
                 assertTrue(card.onTheCard, "chosen on the card")
-                rows.indices.forEach { r ->
-                    // The coordinates of the card's product and of the processor's differ in their last digits: the
-                    // scores near
-                    assertEquals(
-                        expected[r].places.toList(),
-                        got[r].places.toList(),
-                        "row $r, least $least, stripe $stripe",
-                    )
-                    expected[r].scores.indices.forEach { k ->
-                        assertRelative(
-                            expected[r].scores[k],
-                            got[r].scores[k],
-                            "row $r, place ${expected[r].places[k]}",
-                        )
-                    }
-                }
+                assertShownAlike(expected, got, "least $least, stripe $stripe")
                 if (stripe == 1)
                     assertTrue(
                         expected.any { e -> e.scores.count { it > card.half } > 1 },
@@ -254,6 +239,19 @@ class ScoringTest {
             main.close()
         } finally {
             there.inputs.forEach { it.onCard?.close() }
+        }
+    }
+
+    /**
+     * What every row is shown with on the card, [got], as in the main memory, [expected]: the same places, the scores
+     * near — the coordinates of the card's product and of the processor's differ in their last digits.
+     */
+    private fun assertShownAlike(expected: List<Shown>, got: List<Shown>, what: String) {
+        expected.indices.forEach { r ->
+            assertEquals(expected[r].places.toList(), got[r].places.toList(), "row $r, $what")
+            expected[r].scores.indices.forEach { k ->
+                assertRelative(expected[r].scores[k], got[r].scores[k], "row $r, place ${expected[r].places[k]}")
+            }
         }
     }
 }

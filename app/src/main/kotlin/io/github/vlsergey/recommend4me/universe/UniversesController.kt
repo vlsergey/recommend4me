@@ -2,18 +2,15 @@ package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.UniversesApi
 import io.github.vlsergey.recommend4me.api.model.CharacterInfo
-import io.github.vlsergey.recommend4me.api.model.FandomBinding
 import io.github.vlsergey.recommend4me.api.model.FoundUniverse as ApiFoundUniverse
 import io.github.vlsergey.recommend4me.api.model.Inclusion
 import io.github.vlsergey.recommend4me.api.model.LocalName
-import io.github.vlsergey.recommend4me.api.model.SiteFandom
 import io.github.vlsergey.recommend4me.api.model.UniverseClassInfo
 import io.github.vlsergey.recommend4me.api.model.UniverseInfo
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
-import io.github.vlsergey.recommend4me.draft.LayerDrafts
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.Stores
-import java.time.Instant
+import io.github.vlsergey.recommend4me.source.TypeStore
 import java.time.ZoneOffset
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -21,28 +18,51 @@ import org.springframework.web.bind.annotation.RestController
 
 private fun catalogueSilent(e: Exception) =
     Refusal.CATALOGUE_SILENT.refuse(
-        HttpStatus.BAD_GATEWAY,
-        "The catalogue did not answer: ${e.message}",
-        "error" to (e.message ?: e.javaClass.simpleName),
+            HttpStatus.BAD_GATEWAY,
+            "The catalogue did not answer: ${e.message}",
+            "error" to (e.message ?: e.javaClass.simpleName),
+        )
+        .apply { initCause(e) }
+
+/** The types that have universes — one dictionary of them all; 404 when none has. */
+internal fun Stores.withUniverses(): List<TypeStore> =
+    types.filter { it.type.universes }.takeIf { it.isNotEmpty() }
+        ?: throw Refusal.NO_UNIVERSES.refuse(HttpStatus.NOT_FOUND, "No type has universes")
+
+/** The user's word on a class or an entry of a universe ([choose]) answered; 404 when there is no such universe. */
+private fun chosen(choose: () -> Unit): ResponseEntity<Unit> {
+    try {
+        choose()
+    } catch (e: NoSuchElementException) {
+        throw Refusal.NO_SUCH_UNIVERSE.refuse(HttpStatus.NOT_FOUND, "No such universe in the dictionary: ${e.message}")
+            .apply { initCause(e) }
+    }
+    return ResponseEntity.noContent().build()
+}
+
+private fun StoredUniverse.toApi(works: Int) =
+    UniverseInfo(
+        catalogue = catalogue,
+        universe = id,
+        value = value,
+        name = name,
+        catalogueName = catalogueName,
+        localName = localName,
+        url = url,
+        characters = characters,
+        total = entries,
+        works = works,
+        addedAt = addedAt.atOffset(ZoneOffset.UTC),
+        refreshedAt = refreshedAt.atOffset(ZoneOffset.UTC),
+        description = description,
     )
 
+/** The dictionary of universes: its universes, their entries and classes, and the user's words on them. */
 @RestController
-class UniversesController(
-    private val stores: Stores,
-    private val universes: Universes,
-    private val drafts: LayerDrafts,
-) : UniversesApi {
-
-    /** The types that have universes — one dictionary of them all; 404 when none has. */
-    private fun withUniverses() =
-        stores.types.filter { it.type.universes }.takeIf { it.isNotEmpty() }
-            ?: throw Refusal.NO_UNIVERSES.refuse(HttpStatus.NOT_FOUND, "No type has universes")
-
-    /** The one dictionary of universes. */
-    private fun dictionary() = withUniverses().first().universes
+class UniversesController(private val stores: Stores, private val universes: Universes) : UniversesApi {
 
     override fun listUniverses(): ResponseEntity<List<UniverseInfo>> {
-        val types = withUniverses()
+        val types = stores.withUniverses()
         // How many works the user linked to each universe, over every source of every type
         val works = HashMap<String, Int>()
         types
@@ -56,25 +76,32 @@ class UniversesController(
         return ResponseEntity.ok(types.first().universes.all().map { it.toApi(works[it.value] ?: 0) })
     }
 
+    // A BOUNDARY: the catalogue is a plugin calling its service, which may fail in any way; whatever it throws is
+    // answered as the catalogue silent (502)
+    @Suppress("TooGenericExceptionCaught")
     override fun addUniverse(universeRef: UniverseRef): ResponseEntity<UniverseInfo> {
-        withUniverses()
+        stores.withUniverses()
         val added =
             try {
                 universes.add(universeRef.catalogue, universeRef.universe)
             } catch (e: NoSuchElementException) {
                 throw Refusal.NOT_IN_CATALOGUE.refuse(
-                    HttpStatus.NOT_FOUND,
-                    "The catalogue ${universeRef.catalogue} has no '${universeRef.universe}'",
-                    "universe" to universeRef.universe,
-                )
+                        HttpStatus.NOT_FOUND,
+                        "The catalogue ${universeRef.catalogue} has no '${universeRef.universe}'",
+                        "universe" to universeRef.universe,
+                    )
+                    .apply { initCause(e) }
             } catch (e: Exception) {
                 throw catalogueSilent(e)
             }
         return ResponseEntity.ok(added.toApi(0))
     }
 
+    // A BOUNDARY: the catalogues are plugins calling their services, which may fail in any way; whatever they throw
+    // is answered as the catalogue silent (502)
+    @Suppress("TooGenericExceptionCaught")
     override fun searchUniverses(query: String): ResponseEntity<List<ApiFoundUniverse>> {
-        withUniverses()
+        stores.withUniverses()
         val found =
             try {
                 universes.search(query.trim())
@@ -89,14 +116,14 @@ class UniversesController(
     }
 
     override fun removeUniverse(catalogue: String, universe: String): ResponseEntity<Unit> {
-        withUniverses()
+        stores.withUniverses()
         universes.remove(catalogue, universe)
         return ResponseEntity.noContent().build()
     }
 
     override fun listCharacters(catalogue: String, universe: String): ResponseEntity<List<CharacterInfo>> =
         ResponseEntity.ok(
-            dictionary().entries(catalogue, universe).map { e ->
+            stores.withUniverses().first().universes.entries.of(catalogue, universe).map { e ->
                 val c = e.character
                 CharacterInfo(
                     character = c.id,
@@ -113,14 +140,14 @@ class UniversesController(
         )
 
     override fun nameUniverseEntry(catalogue: String, entry: String, localName: LocalName): ResponseEntity<Unit> {
-        withUniverses()
+        stores.withUniverses()
         universes.setLocalName(catalogue, entry, localName.name)
         return ResponseEntity.noContent().build()
     }
 
     override fun listUniverseClasses(catalogue: String, universe: String): ResponseEntity<List<UniverseClassInfo>> =
         ResponseEntity.ok(
-            dictionary().classes(catalogue, universe).map {
+            stores.withUniverses().first().universes.entries.classes(catalogue, universe).map {
                 UniverseClassInfo(
                     propertyClass = it.id,
                     name = it.name,
@@ -155,69 +182,4 @@ class UniversesController(
         chosen {
             universes.chooseEntry(catalogue, universe, character, null)
         }
-
-    override fun listSiteFandoms(): ResponseEntity<List<SiteFandom>> {
-        val dictionary = dictionary()
-        val fandoms =
-            withUniverses()
-                .flatMap { it.sources }
-                .flatMap { s ->
-                    val facet = UniverseFacet.fandomFacet(s.schema) ?: return@flatMap emptyList()
-                    val bound = dictionary.fandomUniverses(s.id)
-                    val names = s.items.facetNames(facet)
-                    s.items.valueUses(facet).map { (key, works) ->
-                        SiteFandom(s.id, key, names[key] ?: key, works, bound[key].orEmpty().sorted())
-                    }
-                }
-        return ResponseEntity.ok(fandoms.sortedWith(compareByDescending<SiteFandom> { it.works }.thenBy { it.name }))
-    }
-
-    override fun bindSiteFandom(fandomBinding: FandomBinding): ResponseEntity<Unit> {
-        val b = fandomBinding
-        val store =
-            withUniverses()
-                .flatMap { it.sources }
-                .firstOrNull { it.id == b.source }
-                ?.takeIf { UniverseFacet.fandomFacet(it.schema) != null }
-                ?: throw Refusal.NO_FANDOMS.refuse(HttpStatus.NOT_FOUND, "No source ${b.source} with fandoms")
-        val universe = UniverseFacet.parse(b.universe)?.let { (catalogue, id) -> UniverseKey(catalogue, id) }
-        if (universe == null || !dictionary().bindFandom(store.id, b.fandom, universe, b.bound, Instant.now())) {
-            throw Refusal.NO_SUCH_UNIVERSE.refuse(
-                HttpStatus.NOT_FOUND,
-                "No such universe in the dictionary: ${b.universe}",
-            )
-        }
-        // The works of the fandom drafted with the universe, or no longer, in the background
-        drafts.fandomsBound(store.id)
-        return ResponseEntity.noContent().build()
-    }
-
-    private fun chosen(choose: () -> Unit): ResponseEntity<Unit> {
-        try {
-            choose()
-        } catch (e: NoSuchElementException) {
-            throw Refusal.NO_SUCH_UNIVERSE.refuse(
-                HttpStatus.NOT_FOUND,
-                "No such universe in the dictionary: ${e.message}",
-            )
-        }
-        return ResponseEntity.noContent().build()
-    }
-
-    private fun StoredUniverse.toApi(works: Int) =
-        UniverseInfo(
-            catalogue = catalogue,
-            universe = id,
-            value = value,
-            name = name,
-            catalogueName = catalogueName,
-            localName = localName,
-            url = url,
-            characters = characters,
-            total = entries,
-            works = works,
-            addedAt = addedAt.atOffset(ZoneOffset.UTC),
-            refreshedAt = refreshedAt.atOffset(ZoneOffset.UTC),
-            description = description,
-        )
 }

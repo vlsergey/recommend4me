@@ -23,6 +23,7 @@ tags:
   - name: pages
   - name: suggestions
   - name: universes
+  - name: siteFandoms
   - name: tags
   - name: tagsByText
   - name: pairings
@@ -1562,7 +1563,7 @@ paths:
 
   /api/universes/fandoms:
     get:
-      tags: [universes]
+      tags: [siteFandoms]
       operationId: listSiteFandoms
       summary: Every fandom of every site of the types with universes, with its works and the universes the user bound it to
       description: |
@@ -1578,7 +1579,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/SiteFandom'
     put:
-      tags: [universes]
+      tags: [siteFandoms]
       operationId: bindSiteFandom
       summary: Binds a fandom of a site to a universe of the dictionary, or takes the binding back
       description: The works of the source are drafted again in the background, after a quiet of 2 s.

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceSchema
 
 /**
@@ -49,9 +50,17 @@ object ModelValues {
         site: Map<String, List<String>>,
         chances: Map<String, Map<String, Chance>>?,
     ): Map<String, List<String>> {
-        if (chances.isNullOrEmpty()) return site
-        val worked = schema.facets.filter { it.infer && it.key in chances }
-        if (worked.isEmpty()) return site
+        val worked =
+            if (chances.isNullOrEmpty()) emptyList() else schema.facets.filter { it.infer && it.key in chances }
+        return if (worked.isEmpty()) site else withGiven(site, chances.orEmpty(), worked)
+    }
+
+    /** The [site]'s values with those the model gives of every facet it works out ([worked]) of the [chances]. */
+    private fun withGiven(
+        site: Map<String, List<String>>,
+        chances: Map<String, Map<String, Chance>>,
+        worked: List<FacetDef>,
+    ): Map<String, List<String>> {
         val out = LinkedHashMap(site)
         worked.forEach { def ->
             val own = site[def.key].orEmpty()
