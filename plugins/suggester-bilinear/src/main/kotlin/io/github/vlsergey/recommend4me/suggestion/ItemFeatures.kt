@@ -32,6 +32,12 @@ internal class ItemFeatures(
 
     /** U = X A: [a] width × [rank], into [out] rows × rank. */
     fun times(a: Floats, rank: Int, out: Floats) {
+        onesTimes(a, rank, out)
+        blocksTimes(a, rank, out)
+    }
+
+    /** Of the ones alone, U = X A written into [out]: the blocks' part is added to it after ([blocksTimes]). */
+    fun onesTimes(a: Floats, rank: Int, out: Floats) {
         IntStream.range(0, rows).parallel().forEach { i ->
             val at = i * rank
             for (q in 0 until rank) {
@@ -40,6 +46,10 @@ internal class ItemFeatures(
                 out[at + q] = s
             }
         }
+    }
+
+    /** Of the blocks' vectors, X A added to [out]: a product a block, of every row, a row of an item without the block nought. */
+    fun blocksTimes(a: Floats, rank: Int, out: Floats) {
         blocks.forEach { b ->
             Blas.gemm(false, false, rows, rank, b.dim, b.vectors.held, 0, b.dim, a, b.column * rank, rank, out, 0, rank, beta = 1f, alpha = b.scale)
         }

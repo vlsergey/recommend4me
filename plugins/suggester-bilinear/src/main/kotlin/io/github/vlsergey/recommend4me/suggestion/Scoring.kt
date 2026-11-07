@@ -109,12 +109,22 @@ internal class Scoring(
             // thread the features of the 75 630 works of fanfics.me took half a second a facet
             Floats(task.itemCount * width).also { out ->
                 val features = design.features(task, IntArray(task.itemCount) { it })
+                val weights = Floats.of(stacked)
                 val laid = System.nanoTime()
-                Blas.wide { features.times(Floats.of(stacked), width, out) }
-                if (task.itemCount >= LOGGED) log.info(
-                    "the coordinates of {} items of {} values, {} features, {} folds of rank {}: the weights and features laid out in {} ms, multiplied in {} ms",
-                    task.itemCount, m, design.itemWidth, folds, rank, (laid - started) / 1_000_000, (System.nanoTime() - laid) / 1_000_000,
-                )
+                features.onesTimes(weights, width, out)
+                val summed = System.nanoTime()
+                Blas.wide { features.blocksTimes(weights, width, out) }
+                if (task.itemCount >= LOGGED) {
+                    val present = task.inputs.associate { it.name to it.present.count { p -> p } }
+                    log.info(
+                        "the coordinates of {} items of {} values, {} features, {} folds of rank {}: the weights and features laid out in {} ms; " +
+                            "the ones, {} an item, summed in {} ms; the blocks {} multiplied in {} ms",
+                        task.itemCount, m, design.itemWidth, folds, rank, (laid - started) / 1_000_000,
+                        "%.1f".format(features.ones.sumOf { it.size }.toDouble() / task.itemCount), (summed - laid) / 1_000_000,
+                        design.blocks.joinToString(", ", "[", "]") { "${it.name} ${it.dim} of ${present[it.name] ?: 0}" },
+                        (System.nanoTime() - summed) / 1_000_000,
+                    )
+                }
             }
         }
 
