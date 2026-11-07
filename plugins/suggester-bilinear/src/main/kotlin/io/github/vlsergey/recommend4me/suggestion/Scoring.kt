@@ -111,7 +111,7 @@ internal class Scoring(
                 val features = design.features(task, IntArray(task.itemCount) { it })
                 val laid = System.nanoTime()
                 Blas.wide { features.times(Floats.of(stacked), width, out) }
-                log.info(
+                if (task.itemCount >= LOGGED) log.info(
                     "the coordinates of {} items of {} values, {} features, {} folds of rank {}: the weights and features laid out in {} ms, multiplied in {} ms",
                     task.itemCount, m, design.itemWidth, folds, rank, (laid - started) / 1_000_000, (System.nanoTime() - laid) / 1_000_000,
                 )
@@ -126,17 +126,35 @@ internal class Scoring(
         private val making = AtomicLong()
         private val wholeRows = AtomicInteger()
 
-        override fun of(rows: IntArray): List<FloatArray> = scored(rows, null, chances = true)
+        override fun of(rows: IntArray): List<FloatArray> = arrayOfNulls<FloatArray>(rows.size).also { out ->
+            scored(rows, null, chances = true, scratch = false) { k, row -> out[k] = row }
+        }.map { it!! }
 
-        override fun scores(rows: IntArray, columns: List<IntArray?>): List<FloatArray> = scored(rows, columns, chances = false)
+        override fun scores(rows: IntArray, columns: List<IntArray?>): List<FloatArray> = arrayOfNulls<FloatArray>(rows.size).also { out ->
+            scored(rows, columns, chances = false, scratch = false) { k, row -> out[k] = row }
+        }.map { it!! }
+
+        /**
+         * Every row made in a buffer of the block of rows it is of, handed over and made over by the next:
+         * no array of every value for every work — of the tags of fanfics.me, 75 630 works of 8 894
+         * values, 2.7 GB of them a pass.
+         */
+        override fun scores(rows: IntArray, columns: List<IntArray?>, each: (Int, FloatArray) -> Unit) {
+            require(columns.size == rows.size) { "${columns.size} sets of values of ${rows.size} rows" }
+            scored(rows, columns, chances = false, scratch = true, put = each)
+        }
 
         override fun chance(score: Float): Float = Bilinear.sigmoid(score)
 
         /** σ(0) is one half, and σ never falls. */
         override val half: Float get() = 0f
 
-        private fun scored(rows: IntArray, columns: List<IntArray?>?, chances: Boolean): List<FloatArray> {
-            val out = arrayOfNulls<FloatArray>(rows.size)
+        /**
+         * Every row of [rows] scored of its values of [columns] (null: every value), or its chances, handed
+         * to [put] with its place among [rows]: in an array of its own, or — [scratch] — in a buffer of the
+         * block of rows it is of, made over by the next row of the block.
+         */
+        private fun scored(rows: IntArray, columns: List<IntArray?>?, chances: Boolean, scratch: Boolean, put: (Int, FloatArray) -> Unit) {
             val all = coordinates
             val fold = IntArray(rows.size) { foldOf[rows[it]] }
             for (f in 0 until folds) {
@@ -150,24 +168,25 @@ internal class Scoring(
                     val u = Floats(members.size * rank)
                     members.forEachIndexed { r, k -> u.copy(all, rows[k] * width + f * rank, r * rank, rank) }
                     if (cols == null) gathering.addAndGet(System.nanoTime() - started)
-                    score(f, rows, members.toIntArray(), u, cols, chances, out)
+                    score(f, rows, members.toIntArray(), u, cols, chances, scratch, put)
                 }
             }
             if (columns == null || columns.all { it == null }) {
-                if (wholeRows.addAndGet(rows.size) == task.itemCount) log.info(
+                if (wholeRows.addAndGet(rows.size) == task.itemCount && task.itemCount >= LOGGED) log.info(
                     "the scores of every value of {} items of {} values: their coordinates gathered in {} ms, the rows made in {} ms",
                     task.itemCount, m, gathering.get() / 1_000_000, making.get() / 1_000_000,
                 )
             }
-            return out.map { it!! }
         }
 
-        /** The rows [members] (places in [rows]) of the fold [f], their coordinates [u]: their scores of the values [cols] (null: every value), or their chances. */
-        private fun score(f: Int, rows: IntArray, members: IntArray, u: Floats, cols: IntArray?, chances: Boolean, out: Array<FloatArray?>) {
+        /** The rows [members] (places in [rows]) of the fold [f], their coordinates [u]: their scores of the values [cols] (null: every value), or their chances, to [put]. */
+        private fun score(
+            f: Int, rows: IntArray, members: IntArray, u: Floats, cols: IntArray?, chances: Boolean, scratch: Boolean, put: (Int, FloatArray) -> Unit,
+        ) {
             val n = members.size
             val k = cols?.size ?: m
             if (k == 0) {
-                members.forEach { out[it] = FloatArray(0) }
+                members.forEach { put(it, FloatArray(0)) }
                 return
             }
             // Of the rows of every value, each row made where it is answered, of the coordinates and the side
@@ -207,10 +226,11 @@ internal class Scoring(
             val w = pair[f]
             // Every value's bias with the common one, of the values asked: added to a row at once, in the wide registers
             val shift = FloatArray(k) { c -> bias[f][cols?.get(c) ?: c] + w[1] }
-            // The rows side by side on every core: of the tags, tens of thousands of works of thousands of values each
-            val each = { r: Int ->
+            // The rows side by side on every core, a block of them on each: of the tags, tens of thousands of works of
+            // thousands of values each. Of [scratch], a buffer a block, its rows made in it one after another
+            val each = { r: Int, buffer: FloatArray? ->
                 val i = rows[members[r]]
-                val row = FloatArray(k)
+                val row = buffer ?: FloatArray(k)
                 if (product == null) Simd.combine(coords!!, r * rank, rank, vt[f], m, shift, row)
                 else {
                     product.take(row, 0, r * k, k)
@@ -218,10 +238,14 @@ internal class Scoring(
                 }
                 task.examples[i].forEach { v -> place(v).let { if (it >= 0) row[it] += w[0] } }
                 if (chances) for (c in 0 until k) row[c] = Bilinear.sigmoid(row[c])
-                out[members[r]] = row
+                put(members[r], row)
             }
             val made = System.nanoTime()
-            if (n.toLong() * k <= DIRECT) for (r in 0 until n) each(r) else IntStream.range(0, n).parallel().forEach { each(it) }
+            val blocks = if (n.toLong() * k <= DIRECT) 1 else minOf(n, BLOCKS)
+            IntStream.range(0, blocks).let { if (blocks > 1) it.parallel() else it }.forEach { b ->
+                val buffer = if (scratch) FloatArray(k) else null
+                for (r in n * b / blocks until n * (b + 1) / blocks) each(r, buffer)
+            }
             if (cols == null) making.addAndGet(System.nanoTime() - made)
         }
     }
@@ -258,6 +282,12 @@ internal class Scoring(
 
         /** Rows × values × rank up to which the scores are summed by hand: a product is set up for more. */
         private const val DIRECT = 1 shl 16
+
+        /** The blocks of rows made side by side: a few for every core, for none to wait for the slowest. */
+        private val BLOCKS = 4 * Runtime.getRuntime().availableProcessors()
+
+        /** The items of a task from which its scoring's times are told in the log: of a pass over a source, not of a page. */
+        private const val LOGGED = 1000
 
         /** Values asked up to which a value's place among them is looked for by going through them. */
         private const val FEW = 32

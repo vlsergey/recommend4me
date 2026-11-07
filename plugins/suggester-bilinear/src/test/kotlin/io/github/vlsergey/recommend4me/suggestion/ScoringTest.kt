@@ -26,7 +26,7 @@ class ScoringTest {
     }
 
     /** Items of a text each, values of a name each; an item has a value its text points to; some items the site's examples, some the texts' counts of names. */
-    private fun task(random: Random = Random(5)): SuggestionTask {
+    private fun task(random: Random = Random(5), m: Int = this.m): SuggestionTask {
         val directions = List(m) { FloatArray(d) { random.nextGaussian().toFloat() }.normalized() }
         val texts = Matrix(n, d)
         val assigned = List(n) { i ->
@@ -72,6 +72,35 @@ class ScoringTest {
             assertEquals(columns[i].size, asked[i].size, "item $i")
             columns[i].forEachIndexed { c, v -> assertNear(chances[i][v], scores.chance(asked[i][c]), "item $i, value $v") }
         }
+    }
+
+    @Test
+    fun `the rows handed over one at a time, made in a buffer of their block, are the rows of the scores`() {
+        // So many values that the rows of every value are made side by side, a block of them in a buffer each
+        val values = 900
+        val task = task(Random(11), values)
+        val scores = assertNotNull(BilinearSuggester().fit(task)).on(task)
+        val rows = IntArray(2_000) { (it * 7) % n }
+        val shared = IntArray(40) { (it * 11 + 3) % values }.distinct().toIntArray()
+        val columns = List(rows.size) { r ->
+            when (r % 4) {
+                0 -> null
+                1 -> shared
+                2 -> intArrayOf(r % values, 40, 41).distinct().toIntArray()
+                else -> IntArray(0)
+            }
+        }
+        val whole = scores.scores(rows, columns)
+        val handed = arrayOfNulls<FloatArray>(rows.size)
+        val threads = java.util.concurrent.ConcurrentHashMap.newKeySet<Thread>()
+        // A row is valid during its call alone: copied, as a reader keeps what it keeps
+        scores.scores(rows, columns) { r, row ->
+            threads += Thread.currentThread()
+            assertEquals(null, handed[r], "row $r handed twice")
+            handed[r] = row.copyOf()
+        }
+        rows.indices.forEach { r -> assertEquals(whole[r].toList(), handed[r]!!.toList(), "row $r") }
+        assertTrue(threads.size > 1 || Runtime.getRuntime().availableProcessors() == 1, "made on ${threads.size} threads")
     }
 
     @Test

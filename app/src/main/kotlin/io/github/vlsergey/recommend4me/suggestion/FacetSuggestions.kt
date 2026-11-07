@@ -402,6 +402,9 @@ class FacetSuggestions(
     /** The characters of the dictionary of the [store]'s type, for one operation to read once ([CharactersRead]). */
     private fun charactersRead(store: SourceStore) = CharactersRead(stores.typeOf(store.id).universes)
 
+    /** What a work is shown with besides what it is told of ([keep]): the places of the values among those it may have, and their scores. */
+    private class Shown(val places: IntArray, val scores: FloatArray)
+
     /** The chances of a facet's works as the model scores them: the task they are of, its scores, the vocabulary read. */
     private class Scored(val data: FacetData, val scores: SuggestionScores, val vocabulary: Vocabulary?)
 
@@ -462,10 +465,11 @@ class FacetSuggestions(
      * keep the model's chance — and, when [compare], the values the model alone gives each (no draft
      * among them): what a refit compares; none made of the chain, which compares nothing.
      *
-     * OF EVERY WORK THE SCORES OF THE VALUES IT IS SHOWN WITH ALONE ([SuggestionScores.scores]): of
-     * those it is told of — its own, the site's examples, the rejected — and of the others of those it
-     * may have ([SuggestionTask.allowed], one array for every work of the same universes), their
-     * chances made of the few chosen. Every chance of every character of a facet of seven thousand,
+     * OF EVERY WORK THE SCORES OF THE VALUES IT IS SHOWN WITH ALONE: of those it is told of — its own,
+     * the site's examples, the rejected ([SuggestionScores.scores]) — and of the others of those it may
+     * have ([SuggestionTask.allowed], one array for every work of the same universes) the few chosen of
+     * its row as the suggester hands it over, a row at a time ([SuggestionScores.scores] with a reader),
+     * their chances made of them. Every chance of every character of a facet of seven thousand,
      * of every one of tens of thousands of works, was six seconds of a reading.
      */
     private fun keep(
@@ -473,12 +477,13 @@ class FacetSuggestions(
     ): Map<String, Set<String>> {
         val given = HashMap<String, Set<String>>()
         val task = data.task
-        // The time of its parts, each summed over the chunks: what each work is told of, the scores of what it
-        // may have and of what it is told of, the choice, the putting
+        // The time of its parts, each summed over the chunks: what each work is told of, what it is shown with
+        // besides — chosen by the suggester of what it may have — the scores of what it is told of, the
+        // chances made, the putting
         var telling = 0L
-        var scoring = 0L
-        var scoringOwn = 0L
         var choosing = 0L
+        var scoringOwn = 0L
+        var making = 0L
         var putting = 0L
         var from = 0
         while (from < data.ids.size) {
@@ -486,22 +491,32 @@ class FacetSuggestions(
             val rows = IntArray(minOf(CHUNK, data.ids.size - from)) { from + it }
             from += rows.size
             val told = Array(rows.size) { toldOf(data, rows[it]) }
+            // Neither what it is told of nor what it may not have after all is offered besides
+            val closed = rows.mapIndexed { r, i -> (told[r] + task.barred[i]).also { it.sort() } }
             telling += System.nanoTime() - at
             at = System.nanoTime()
-            val open = scores.scores(rows, rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] })
-            scoring += System.nanoTime() - at
+            // What each work is shown with besides, chosen of its row as the suggester hands it over — a row of
+            // every value of every work never kept, of the tags thousands of values a work: the likely, and the
+            // likeliest of the rest, likely or not, to offer the work at least so many the site does not give
+            // ([ModelValues.offered]), chosen of the values by their places. Of a work all named by the user's word, none
+            val columns = rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] }
+            val open = arrayOfNulls<Shown>(rows.size)
+            scores.scores(rows, columns) { r, row ->
+                val places = ModelValues.open(row, columns[r], closed[r], scores)
+                open[r] = Shown(places, FloatArray(places.size) { row[places[it]] })
+            }
+            choosing += System.nanoTime() - at
             at = System.nanoTime()
             val own = scores.scores(rows, told.asList())
             scoringOwn += System.nanoTime() - at
             at = System.nanoTime()
-            // What each work is shown with, the works side by side on every core — of the tags a pass over
-            // thousands of values a work; put among the chances after, one work after another
+            // The chances of each work made side by side on every core; put among the chances after, one work after another
             val of = arrayOfNulls<FewChances>(rows.size)
             IntStream.range(0, rows.size).parallel().forEach { r ->
                 val i = rows[r]
-                of[r] = chancesOf(data.ids[i], facet.key, scores, open[r], told[r], own[r], data, i)
+                of[r] = chancesOf(data.ids[i], facet.key, scores, open[r]!!, told[r], own[r], data, i)
             }
-            choosing += System.nanoTime() - at
+            making += System.nanoTime() - at
             at = System.nanoTime()
             rows.forEachIndexed { r, i ->
                 val id = data.ids[i]
@@ -518,9 +533,9 @@ class FacetSuggestions(
             putting += System.nanoTime() - at
         }
         laps?.took("told", telling / 1_000_000)
-        laps?.took("scores", scoring / 1_000_000)
-        laps?.took("scores of the told", scoringOwn / 1_000_000)
         laps?.took("chosen", choosing / 1_000_000)
+        laps?.took("scores of the told", scoringOwn / 1_000_000)
+        laps?.took("made", making / 1_000_000)
         laps?.took("put", putting / 1_000_000)
         return given
     }
@@ -643,11 +658,12 @@ class FacetSuggestions(
      * its characters) of those alone. Not every value it may have: of a work of a large universe
      * thousands of characters — the user choosing among them gets every one at the asking ([candidates]).
      *
-     * Of the [scores]: [told] — the values it is told of ([toldOf]) — scored [own]; [open] the scores of
-     * the values it may have ([SuggestionTask.allowed], every value when it says none).
+     * Of the [scores]: [told] — the values it is told of ([toldOf]) — scored [own]; [open] what it is
+     * shown with besides, of the values it may have ([SuggestionTask.allowed], every value when it says
+     * none) — their places among them and their scores.
      */
     private fun chancesOf(
-        id: String, facet: String, scores: SuggestionScores, open: FloatArray, told: IntArray, own: FloatArray, data: FacetData, i: Int,
+        id: String, facet: String, scores: SuggestionScores, open: Shown, told: IntArray, own: FloatArray, data: FacetData, i: Int,
     ): FewChances {
         val has = data.held[i]
         fun chance(v: Int, score: Float) = Chance(id, facet, data.values[v], v in has, scores.chance(score).toDouble())
@@ -655,12 +671,8 @@ class FacetSuggestions(
         // The site's own are shown to answer on, unlikely as they may be; a value the user rejected keeps its
         // chance: it is shown crossed out, in its place by it
         if (data.complete[i]) return FewChances(Array(told.size) { chance(told[it], own[it]) })
-        // The likeliest of the rest too, likely or not, to offer the work at least so many the site does not
-        // give ([ModelValues.offered]): chosen of the values by their places, not of a map of thousands of
-        // characters made for every work and sorted whole
         val allowed = data.task.allowed[i]
-        val closed = (told + data.task.barred[i]).also { it.sort() }
-        val places = ModelValues.open(open, allowed, closed, scores)
+        val places = open.places
         // In the order of the values: those told, then the open ones among them
         val values = IntArray(told.size + places.size)
         val of = FloatArray(values.size)
@@ -670,7 +682,7 @@ class FacetSuggestions(
         }
         places.forEachIndexed { k, p ->
             values[told.size + k] = allowed?.get(p) ?: p
-            of[told.size + k] = open[p]
+            of[told.size + k] = open.scores[k]
         }
         val order = values.indices.sortedBy { values[it] }
         return FewChances(Array(values.size) { chance(values[order[it]], of[order[it]]) })

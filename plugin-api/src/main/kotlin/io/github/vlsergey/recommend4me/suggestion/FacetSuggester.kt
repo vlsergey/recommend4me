@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.stream.IntStream
 
 /**
  * One input of the items, as the model of the grades reads them too: a vector per item, as it was
@@ -259,6 +260,23 @@ fun interface SuggestionScores {
      */
     fun scores(rows: IntArray, columns: List<IntArray?>): List<FloatArray> =
         of(rows).mapIndexed { r, row -> columns[r]?.let { c -> FloatArray(c.size) { row[c[it]] } } ?: row }
+
+    /**
+     * [scores] HANDED OVER A ROW AT A TIME, for the reader of a few of each row: [each] is given the
+     * place of a row among [rows] and its scores of its values [columns] (null: every value), in their
+     * order — `columns.size == rows.size`. THE ROW IS VALID DURING THE CALL ALONE: it may be a buffer
+     * the next row is made in, never to be kept; the reader copies what it keeps. [each] may be called
+     * from several threads at once, every place of [rows] once, in no order; a row of [rows] may be the
+     * same item as another. Of a facet of thousands of values, a row of every one of them kept for
+     * every work of a pass is what a suggester making them in place saves.
+     *
+     * Of a suggester that tells no other: the rows of [scores], side by side on every core.
+     */
+    fun scores(rows: IntArray, columns: List<IntArray?>, each: (Int, FloatArray) -> Unit) {
+        require(columns.size == rows.size) { "${columns.size} sets of values of ${rows.size} rows" }
+        val made = scores(rows, columns)
+        IntStream.range(0, rows.size).parallel().forEach { each(it, made[it]) }
+    }
 
     /** The chance of a [score] of [scores]: never lower of a higher score. */
     fun chance(score: Float): Float = score
