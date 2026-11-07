@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, CopyIcon, EqualIcon, EqualNotIcon, ExternalLinkIcon, LanguagesIcon, LibraryBigIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -101,13 +101,21 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const answers = chosen.filter((c): c is Verdict => c !== "NONE");
   const [searchPressed, setSearchPressed] = useState(false);
   const queryClient = useQueryClient();
+  /** When the last word was kept ([settle]): a list read that began before it may not have it. */
+  const wordKept = useRef(0);
   const list = useQuery({
     queryKey: [...duplicatesKey(type.id), open, answers, limit, sort],
     enabled: tab !== "journal",
-    queryFn: async (): Promise<DuplicatePage> => {
-      const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { open, answers, offset: 0, limit, sort } } });
-      if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
-      return result.data;
+    queryFn: async ({ signal }): Promise<DuplicatePage> => {
+      // A list read while a word was being kept may hold the pair as it was, the row answered on brought back:
+      // read again till the list began after every word kept — the list read in the background while a search
+      // runs (user, 2026-11-07)
+      for (;;) {
+        const began = performance.now();
+        const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { open, answers, offset: 0, limit, sort } }, signal });
+        if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
+        if (wordKept.current < began) return result.data;
+      }
     },
     refetchInterval: (query) => {
       const page = query.state.data;
@@ -136,6 +144,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
    * locking them, between two presses of the user (user, 2026-10-30).
    */
   const settle = (p: DuplicatePair, verdict: Verdict | undefined) => {
+    wordKept.current = performance.now();
     const rows = calm.shown ?? [];
     const touched = sharing(p, rows);
     const stays = chosen.includes(verdict ?? "NONE");
