@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.textvector
 
+import io.github.vlsergey.recommend4me.database.streamed
 import io.github.vlsergey.recommend4me.database.source.tables.references.PHRASE_VECTOR
 import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_VECTOR
 import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_WINDOW
@@ -121,11 +122,10 @@ class TextVectorRepository(private val db: DSLContext) {
     /** [forEach] as stored: every vector its half-precision numbers, little-endian. */
     fun forEachHalves(encoder: String, keys: Collection<String>, action: (itemId: String, key: String, halves: ByteArray) -> Unit) {
         if (keys.isEmpty()) return
-        db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.VEC).from(TEXT_VECTOR)
-            .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.TEXT_KEY.`in`(keys))
-            .fetchSize(2000).fetchLazy().use { cursor ->
-                cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) }
-            }
+        db.streamed(
+            "SELECT item_id, text_key, vec FROM text_vector WHERE encoder = ? AND text_key IN (${keys.joinToString(",") { "?" }})",
+            listOf(encoder) + keys,
+        ) { r -> action(r.getString(1), r.getString(2), r.getBytes(3)) }
     }
 
     fun count(encoder: String): Int = db.fetchCount(TEXT_VECTOR, TEXT_VECTOR.ENCODER.eq(encoder))

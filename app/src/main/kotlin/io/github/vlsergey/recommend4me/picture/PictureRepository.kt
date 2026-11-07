@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.picture
 
+import io.github.vlsergey.recommend4me.database.streamed
 import io.github.vlsergey.recommend4me.database.source.tables.records.PictureRecord
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_PICTURE_VECTOR
 import io.github.vlsergey.recommend4me.database.source.tables.references.PICTURE
@@ -250,13 +251,10 @@ class PictureRepository(private val db: DSLContext) {
         forEachItemHalves(encoder) { id, key, bytes -> action(id, key, Vectors.fromHalf(bytes)) }
 
     /** [forEachItemVector] as stored: every vector its half-precision numbers, little-endian. */
-    fun forEachItemHalves(encoder: String, action: (itemId: String, key: String, halves: ByteArray) -> Unit) {
-        db.select(ITEM_PICTURE_VECTOR.ITEM_ID, ITEM_PICTURE_VECTOR.BLOCK, ITEM_PICTURE_VECTOR.VEC).from(ITEM_PICTURE_VECTOR)
-            .where(ITEM_PICTURE_VECTOR.ENCODER.eq(encoder))
-            .fetchSize(5000).fetchLazy().use { cursor ->
-                cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) }
-            }
-    }
+    fun forEachItemHalves(encoder: String, action: (itemId: String, key: String, halves: ByteArray) -> Unit) =
+        db.streamed("SELECT item_id, block, vec FROM item_picture_vector WHERE encoder = ?", listOf(encoder)) { r ->
+            action(r.getString(1), r.getString(2), r.getBytes(3))
+        }
 
     /** The stored vectors of the items [ids]: item to block key to vector. */
     fun itemVectorsOf(ids: Collection<String>, encoder: String): Map<String, Map<String, FloatArray>> =

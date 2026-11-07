@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.setvector
 
+import io.github.vlsergey.recommend4me.database.streamed
 import io.github.vlsergey.recommend4me.database.source.tables.references.SET_VECTOR
 import io.github.vlsergey.recommend4me.vector.Vectors
 import org.jooq.DSLContext
@@ -50,13 +51,9 @@ class SetVectorRepository(private val db: DSLContext) {
     }
 
     /** Every stored vector by the directions in use, streamed: (item, block key, vector). */
-    fun forEach(current: Map<SetKind, Long>, action: (itemId: String, key: String, vector: FloatArray) -> Unit) {
-        db.select(SET_VECTOR.ITEM_ID, SET_VECTOR.KIND, SET_VECTOR.EMBEDDING_ID, SET_VECTOR.VEC).from(SET_VECTOR)
-            .fetchSize(2000).fetchLazy().use { cursor ->
-                cursor.forEach { r ->
-                    val kind = SetKind.valueOf(r.value2()!!)
-                    if (current[kind] == r.value3()) action(r.value1()!!, kind.key, Vectors.unpack(r.value4()!!))
-                }
-            }
-    }
+    fun forEach(current: Map<SetKind, Long>, action: (itemId: String, key: String, vector: FloatArray) -> Unit) =
+        db.streamed("SELECT item_id, kind, embedding_id, vec FROM set_vector", emptyList()) { r ->
+            val kind = SetKind.valueOf(r.getString(2))
+            if (current[kind] == (r.getObject(3) as Number?)?.toLong()) action(r.getString(1), kind.key, Vectors.unpack(r.getBytes(4)))
+        }
 }
