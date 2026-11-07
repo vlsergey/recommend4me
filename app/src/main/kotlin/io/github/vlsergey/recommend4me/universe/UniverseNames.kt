@@ -14,16 +14,27 @@ class UniverseNames(private val dictionary: UniverseRepository) {
         keys: Collection<String>?,
         own: (Collection<String>?) -> Map<String, String>,
     ): Map<String, String>? {
-        val named: Map<String, String> =
-            when (facet) {
-                UniverseFacets.KIND -> UniverseFacet.KINDS
-                UniverseFacet.KEY -> dictionary.universeNames(keys)
-                in UniverseFacet.CHARACTER_FACETS ->
-                    UniverseFacet.ORIGINAL_CHARACTERS + dictionary.characterNames(keys).mapValues { it.value.first }
-                UniverseFacets.PAIRINGS -> pairings(keys)
-                else -> return null
-            }
-        if (keys == null) return own(null) + named
+        val named = layerNames(facet, keys) ?: return null
+        return if (keys == null) own(null) + named else namedOrOwn(keys, named, own)
+    }
+
+    /** The names the layer gives [keys] of [facet] — every value's when null; null for a facet not of the layer. */
+    private fun layerNames(facet: String, keys: Collection<String>?): Map<String, String>? =
+        when (facet) {
+            UniverseFacets.KIND -> UniverseFacet.KINDS
+            UniverseFacet.KEY -> dictionary.names.universeNames(keys)
+            in UniverseFacet.CHARACTER_FACETS ->
+                UniverseFacet.ORIGINAL_CHARACTERS + dictionary.names.characterNames(keys).mapValues { it.value.first }
+            UniverseFacets.PAIRINGS -> pairings(keys)
+            else -> null
+        }
+
+    /** The [keys] by the layer's [named] names; those it does not name, by the source's ([own]). */
+    private fun namedOrOwn(
+        keys: Collection<String>,
+        named: Map<String, String>,
+        own: (Collection<String>?) -> Map<String, String>,
+    ): Map<String, String> {
         val found = keys.mapNotNull { k -> named[k]?.let { k to it } }.toMap()
         val unnamed = keys.filter { it !in found }
         return (if (unnamed.isEmpty()) emptyMap() else own(unnamed)) + found
@@ -34,7 +45,7 @@ class UniverseNames(private val dictionary: UniverseRepository) {
      * facet.
      */
     fun descriptions(facet: String, keys: Collection<String>): Map<String, String> =
-        if (facet == UniverseFacet.KEY || facet in UniverseFacet.CHARACTER_FACETS) dictionary.descriptions(keys)
+        if (facet == UniverseFacet.KEY || facet in UniverseFacet.CHARACTER_FACETS) dictionary.names.descriptions(keys)
         else emptyMap()
 
     /**
@@ -43,7 +54,7 @@ class UniverseNames(private val dictionary: UniverseRepository) {
      */
     fun allNames(facet: String, keys: Collection<String>): Map<String, List<String>> =
         if (facet in UniverseFacet.CHARACTER_FACETS)
-            dictionary.characterAllNames(keys.filter { it !in UniverseFacet.ORIGINAL_CHARACTERS })
+            dictionary.names.characterAllNames(keys.filter { it !in UniverseFacet.ORIGINAL_CHARACTERS })
         else emptyMap()
 
     /**
@@ -53,7 +64,7 @@ class UniverseNames(private val dictionary: UniverseRepository) {
     private fun pairings(keys: Collection<String>?): Map<String, String> {
         val pairs = keys?.mapNotNull { p -> UniverseFacet.members(p)?.let { p to it } } ?: return emptyMap()
         val characters =
-            dictionary.characterNames(
+            dictionary.names.characterNames(
                 pairs.flatMap { it.second.toList() }.filter { it !in UniverseFacet.ORIGINAL_CHARACTERS }
             )
         fun name(c: String) = UniverseFacet.ORIGINAL_CHARACTERS[c] ?: characters[c]?.first
@@ -66,8 +77,17 @@ class UniverseNames(private val dictionary: UniverseRepository) {
                         if (sexes[x] == CharacterSex.FEMALE && sexes[y] == CharacterSex.MALE) y to x else x to y
                     }
                 val written = "${name(a) ?: return@mapNotNull null} / ${name(b) ?: return@mapNotNull null}"
-                p to (UniverseFacet.sexesOf(p, sexes)?.let { "${UniverseFacet.sign(it)} $written" } ?: written)
+                p to (UniverseFacet.sexesOf(p, sexes)?.let { "${sign(it)} $written" } ?: written)
             }
             .toMap()
     }
+
+    /** The sign of a pairing by its characters' sexes: ⚣ two men, ⚢ two women, ⚤ a man and a woman, ⚧ anyone else. */
+    private fun sign(sexes: Pair<CharacterSex, CharacterSex>): String =
+        when (sexes) {
+            CharacterSex.MALE to CharacterSex.MALE -> "⚣"
+            CharacterSex.FEMALE to CharacterSex.FEMALE -> "⚢"
+            CharacterSex.MALE to CharacterSex.FEMALE -> "⚤"
+            else -> "⚧"
+        }
 }

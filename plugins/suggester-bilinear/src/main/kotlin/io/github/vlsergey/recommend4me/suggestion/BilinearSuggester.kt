@@ -59,14 +59,7 @@ internal constructor(
         // choice moves with the data, a step at a time
         val last = (previous as? Fitted)?.takeIf { it.folds.size == FOLDS && it.rank in RANKS }
         val ranks = if (last == null) RANKS else listOf(last.rank)
-        val lambdas =
-            if (last == null) grid
-            else
-                grid.indices
-                    .minBy { abs(ln(grid[it] / last.lambda)) }
-                    .let { at ->
-                        grid.subList(maxOf(0, at - 1), minOf(grid.size, at + 2))
-                    }
+        val lambdas = penaltiesTried(grid, last)
         var where = "on the processor"
         // The card found slower last time at as many groups of names or fewer: not opened again — its
         // graph of hundreds of groups takes tens of seconds to open, only to be closed. More groups
@@ -105,8 +98,8 @@ internal constructor(
         val least = tried.minBy { it.held.mean }
         val chosen = tried.filter { it.held.mean <= least.held.mean + least.held.error }.maxBy { it.lambda }
         log.info(
-            "{} items × {} values, {} features of an item, {} of a value, {} names against {} values, {}: {}; chosen r={} λ={} — in {} ms; " +
-                "of the values no item of the other folds has: {}",
+            "{} items × {} values, {} features of an item, {} of a value, {} names against {} values, {}: {}; " +
+                "chosen r={} λ={} — in {} ms; of the values no item of the other folds has: {}",
             task.itemCount,
             task.valueCount,
             design.itemWidth,
@@ -114,33 +107,27 @@ internal constructor(
             problem.hints.size,
             problem.hintPairs,
             (if (last == null) "from scratch" else "from the last state") + ", " + where,
-            tried.joinToString("; ") {
-                "r=${it.rank} λ=${it.lambda}: %.4f ± %.4f (losses %s in %d ms)"
-                    .format(it.held.mean, it.held.error, it.losses, it.millis)
-            },
+            tried.joinToString("; ") { it.told() },
             chosen.rank,
             chosen.lambda,
             System.currentTimeMillis() - started,
-            tried.joinToString("; ") {
-                "λ=${it.lambda}: " +
-                    if (it.unseen.weight > 0) "%.4f ± %.4f".format(it.unseen.mean, it.unseen.error) else "none"
-            },
+            tried.joinToString("; ") { it.unseenTold() },
         )
-        // Kept with the chosen weights: those of the penalties beside it, each of the next refit's to go on from
-        val at = grid.indices.minBy { abs(ln(grid[it] / chosen.lambda)) }
-        val beside = setOfNotNull(grid.getOrNull(at - 1), grid.getOrNull(at + 1))
-        val nearby =
-            tried.filter { it.rank == chosen.rank && it.lambda in beside }.associate { it.lambda to it.fitted.folds }
-        fun settings(t: Tried) = mapOf(RANK to t.rank.toString(), PENALTY to t.lambda.toString())
-        val report =
-            FitReport(
-                settings(chosen),
-                chosen.held.mean,
-                chosen.held.error,
-                tried.map { FitTry(settings(it), it.held.mean, it.held.error, it.millis) },
-                fromScratch = last == null,
-            )
+        val nearby = besideChosen(grid, chosen, tried)
+        val report = reportOf(chosen, tried, fromScratch = last == null)
         return Fitted(design, chosen.rank, chosen.lambda, chosen.fitted.folds, nearby, slowerAt, report)
+    }
+
+    /** What the fitting tried and chose, by their settings — the rank and the penalty — and held-out losses. */
+    private fun reportOf(chosen: Tried, tried: List<Tried>, fromScratch: Boolean): FitReport {
+        fun settings(t: Tried) = mapOf(RANK to t.rank.toString(), PENALTY to t.lambda.toString())
+        return FitReport(
+            settings(chosen),
+            chosen.held.mean,
+            chosen.held.error,
+            tried.map { FitTry(settings(it), it.held.mean, it.held.error, it.millis) },
+            fromScratch = fromScratch,
+        )
     }
 
     /** A penalty tried: what its folds held out, the folds' weights, how many losses each took and how long. */
@@ -152,7 +139,35 @@ internal constructor(
         val fitted: Fitted,
         val losses: List<Int>,
         val millis: Long,
-    )
+    ) {
+        /** As the log tells it: the settings, the held-out loss, the losses each fold took and how long. */
+        fun told() = "r=$rank λ=$lambda: %.4f ± %.4f (losses %s in %d ms)".format(held.mean, held.error, losses, millis)
+
+        /** As the log tells it: the held-out loss of the values no item of the other folds has. */
+        fun unseenTold() =
+            "λ=$lambda: " + if (unseen.weight > 0) "%.4f ± %.4f".format(unseen.mean, unseen.error) else "none"
+    }
+
+    /**
+     * The penalties tried: every one of the [grid] when fitted from scratch; gone on from the [last] state, its penalty
+     * and the two beside it on the grid — the choice moves with the data, a step at a time.
+     */
+    private fun penaltiesTried(grid: List<Double>, last: Fitted?): List<Double> =
+        if (last == null) grid
+        else
+            grid.indices
+                .minBy { abs(ln(grid[it] / last.lambda)) }
+                .let { at -> grid.subList(maxOf(0, at - 1), minOf(grid.size, at + 2)) }
+
+    /**
+     * Kept with the chosen weights: the folds' weights of the penalties beside the [chosen] one on the [grid], each of
+     * the next refit's to go on from.
+     */
+    private fun besideChosen(grid: List<Double>, chosen: Tried, tried: List<Tried>): Map<Double, List<Weights>> {
+        val at = grid.indices.minBy { abs(ln(grid[it] / chosen.lambda)) }
+        val beside = setOfNotNull(grid.getOrNull(at - 1), grid.getOrNull(at + 1))
+        return tried.filter { it.rank == chosen.rank && it.lambda in beside }.associate { it.lambda to it.fitted.folds }
+    }
 
     /**
      * Whether a step on the [card] is faster than on the processor, measured: one loss and gradient on each, from the
@@ -226,14 +241,7 @@ internal constructor(
                     losses = fits.losses
                     endedAt = fits.endedAt
                     ensemble.heldOut(weights, List(count) { held[it / FOLDS] }, List(count) { unseen[it / FOLDS] })
-                    where =
-                        (if (ensemble.featuresOnCard) "the items' features on the card (cuBLAS)"
-                        else "on the processor (OpenBLAS)") +
-                            (if (ensemble.searchesOnCard) ", the searches on the card"
-                            else ", the searches on the processor") +
-                            (if (ensemble.pairsOnCardUsed) ", the pairs and names on the card" else "") +
-                            ", " +
-                            ensemble.timing
+                    where = placeOf(ensemble)
                 }
         } else {
             where = "on the card (ONNX Runtime), a model at a time"
@@ -265,6 +273,14 @@ internal constructor(
             )
         } to where
     }
+
+    /** Where the [ensemble] fitted its models, as the log tells it: its features, searches, pairs and its timing. */
+    private fun placeOf(ensemble: Ensemble): String =
+        (if (ensemble.featuresOnCard) "the items' features on the card (cuBLAS)" else "on the processor (OpenBLAS)") +
+            (if (ensemble.searchesOnCard) ", the searches on the card" else ", the searches on the processor") +
+            (if (ensemble.pairsOnCardUsed) ", the pairs and names on the card" else "") +
+            ", " +
+            ensemble.timing
 
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? = runCatching {
         // Buffered: the stream is read in many small pieces — the numbers in blocks, the keys one by one

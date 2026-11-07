@@ -92,6 +92,7 @@ class Universes(
      * background: their names and descriptions are then there in every language of the user, and their characters'
      * statements the plugins'.
      */
+    @Suppress("TooGenericExceptionCaught")
     @EventListener(ApplicationReadyEvent::class)
     fun askInNewLanguages() {
         if (stores.types.none { it.type.universes }) return
@@ -106,6 +107,8 @@ class Universes(
                         try {
                             add(u.catalogue, u.id)
                         } catch (e: Exception) {
+                            // A BOUNDARY: a universe asked again of its catalogue's plugin and service in the
+                            // background may fail in any way; the failure is logged and the next universe asked
                             log.warn("The universe {} was not asked again in {}: {}", u.value, languages, e.message)
                         }
                     }
@@ -123,7 +126,7 @@ class Universes(
      */
     fun setLocalName(catalogueId: String, id: String, name: String?) {
         val scope = scope()
-        scope.universes.setLocalName(catalogueId, id, name, Instant.now())
+        scope.universes.names.setLocalName(catalogueId, id, name, Instant.now())
         log.info(
             "{} named {}",
             UniverseFacet.valueOf(catalogueId, id),
@@ -136,7 +139,7 @@ class Universes(
     fun chooseClass(catalogueId: String, id: String, cls: String, included: Boolean?) {
         val scope = scope()
         scope.universes.find(catalogueId, id) ?: throw NoSuchElementException("No universe $catalogueId:$id")
-        scope.universes.chooseClass(catalogueId, id, cls, included)
+        scope.universes.entries.chooseClass(catalogueId, id, cls, included)
         dictionaryChanged(scope)
     }
 
@@ -144,7 +147,7 @@ class Universes(
     fun chooseEntry(catalogueId: String, id: String, character: String, included: Boolean?) {
         val scope = scope()
         scope.universes.find(catalogueId, id) ?: throw NoSuchElementException("No universe $catalogueId:$id")
-        scope.universes.chooseEntry(catalogueId, id, character, included)
+        scope.universes.entries.chooseEntry(catalogueId, id, character, included)
         dictionaryChanged(scope)
     }
 

@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.lang.foreign.MemorySegment
 import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -63,7 +64,7 @@ internal class Scoring(
         val m = valueKeys.size
         val sums = DoubleArray(m)
         val scores = on(task)
-        (0 until task.itemCount).chunked(SHARE_CHUNK).forEach { chunk ->
+        for (chunk in (0 until task.itemCount).chunked(SHARE_CHUNK)) {
             scores.of(chunk.toIntArray()).forEachIndexed { r, row ->
                 val allowed = task.allowed[chunk[r]]
                 if (allowed == null) for (j in 0 until m) sums[j] += row[j]
@@ -85,6 +86,31 @@ internal class Scoring(
      * so. Its scores ([SuggestionScores.scores]): the logit of the chance, of the values asked alone.
      */
     fun on(task: SuggestionTask): SuggestionScores = Scored(task)
+
+    /**
+     * The products of the [n] rows of coordinates [u] with the values [cols] of their fold's side [side], in the native
+     * memory of the product, each row taken out of it once: a few rows of a few values summed here, no product to set
+     * up; more by one product.
+     */
+    private fun productOf(side: FloatArray, n: Int, cols: IntArray, u: Floats): Floats {
+        val m = valueKeys.size
+        val k = cols.size
+        val product = Floats(n * k)
+        if (n.toLong() * k * rank <= DIRECT) {
+            // A few rows of a few values: summed here, no product to set up
+            val own = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
+            for (r in 0 until n) for (c in 0 until k) {
+                var sum = 0f
+                for (q in 0 until rank) sum += own[r * rank + q] * side[q * m + cols[c]]
+                product[r * k + c] = sum
+            }
+        } else {
+            val sub = FloatArray(rank * k)
+            for (q in 0 until rank) for (c in 0 until k) sub[q * k + c] = side[q * m + cols[c]]
+            Blas.product(u, rank, n, rank, Floats.of(sub), k, product)
+        }
+        return product
+    }
 
     /**
      * Every fold's A side by side, as the products of the coordinates read them: of a feature its row, the folds'
@@ -163,23 +189,25 @@ internal class Scoring(
                 Blas.wide { features.blocksTimes(weights, width, out, features.scratchOf(width)) }
                 if (task.itemCount >= LOGGED)
                     log.info(
-                        "the coordinates of {} items of {} values, {} features, {} folds of rank {}, in the main memory: the weights laid out in {} ms; " +
-                            "the ones, {} an item, summed in {} ms; the blocks {} multiplied in {} ms",
+                        "the coordinates of {} items of {} values, {} features, {} folds of rank {}, in the main " +
+                            "memory: the weights laid out in {} ms; the ones, {} an item, summed in {} ms; " +
+                            "the blocks {} multiplied in {} ms",
                         task.itemCount,
                         m,
                         design.itemWidth,
                         folds,
                         rank,
-                        (laid - started) / 1_000_000,
+                        (laid - started) / NANOS_IN_MILLI,
                         onesPerItem(),
-                        (summed - laid) / 1_000_000,
+                        (summed - laid) / NANOS_IN_MILLI,
                         blocksTold(),
-                        (System.nanoTime() - summed) / 1_000_000,
+                        (System.nanoTime() - summed) / NANOS_IN_MILLI,
                     )
             } else if (task.itemCount >= LOGGED)
                 log.info(
-                    "the coordinates of {} items of {} values, {} features, {} folds of rank {}, on the card: the weights and ones sent in {} ms, " +
-                        "the ones, {} an item, summed and the blocks {} multiplied and brought over in {} ms",
+                    "the coordinates of {} items of {} values, {} features, {} folds of rank {}, on the card: the " +
+                        "weights and ones sent in {} ms, the ones, {} an item, summed and the blocks {} multiplied " +
+                        "and brought over in {} ms",
                     task.itemCount,
                     m,
                     design.itemWidth,
@@ -314,11 +342,12 @@ internal class Scoring(
             if (columns == null || columns.all { it == null }) {
                 if (wholeRows.addAndGet(rows.size) == task.itemCount && task.itemCount >= LOGGED)
                     log.info(
-                        "the scores of every value of {} items of {} values: their coordinates gathered in {} ms, the rows made in {} ms",
+                        "the scores of every value of {} items of {} values: their coordinates gathered in {} ms, " +
+                            "the rows made in {} ms",
                         task.itemCount,
                         m,
-                        gathering.get() / 1_000_000,
-                        making.get() / 1_000_000,
+                        gathering.get() / NANOS_IN_MILLI,
+                        making.get() / NANOS_IN_MILLI,
                     )
             }
         }
@@ -347,50 +376,13 @@ internal class Scoring(
             // ([Simd.combine]): a product of tens of thousands of works by thousands of values written into fresh
             // native memory, then copied out a row at a time, took the most of the tags' scores. Of the values
             // asked, the products of the rows in the native memory of the product, each row taken out of it once
-            val product: Floats?
-            val coords: FloatArray?
-            if (cols == null) {
-                product = null
-                coords = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
-            } else if (n.toLong() * k * rank <= DIRECT) {
-                // A few rows of a few values: summed here, no product to set up
-                val side = vt[f]
-                val own = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
-                product = Floats(n * k)
-                coords = null
-                for (r in 0 until n) for (c in 0 until k) {
-                    var sum = 0f
-                    for (q in 0 until rank) sum += own[r * rank + q] * side[q * m + cols[c]]
-                    product[r * k + c] = sum
-                }
-            } else {
-                val side = vt[f]
-                val sub = FloatArray(rank * k)
-                for (q in 0 until rank) for (c in 0 until k) sub[q * k + c] = side[q * m + cols[c]]
-                product = Floats(n * k)
-                coords = null
-                Blas.product(u, rank, n, rank, Floats.of(sub), k, product)
-            }
-            // A value's place among those asked
-            val place: (Int) -> Int =
-                when {
-                    cols == null -> { v ->
-                        v
-                    }
-                    k <= FEW -> { v ->
-                        cols.indexOf(v)
-                    }
-                    else ->
-                        IntArray(m) { -1 }
-                            .also { at -> cols.forEachIndexed { c, v -> at[v] = c } }
-                            .let { at -> { v: Int -> at[v] } }
-                }
+            val product = cols?.let { productOf(vt[f], n, it, u) }
+            val coords = if (cols == null) FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) } else null
+            val place = placeOf(cols, m)
             val w = pair[f]
             // Every value's bias with the common one, of the values asked: added to a row at once, in the wide
             // registers
             val shift = FloatArray(k) { c -> bias[f][cols?.get(c) ?: c] + w[1] }
-            // The rows side by side on every core, a block of them on each: of the tags, tens of thousands of works of
-            // thousands of values each. Of [scratch], a buffer a block, its rows made in it one after another
             val each = { r: Int, buffer: FloatArray? ->
                 val i = rows[members[r]]
                 val row = buffer ?: FloatArray(k)
@@ -399,18 +391,12 @@ internal class Scoring(
                     product.take(row, 0, r * k, k)
                     Simd.axpy(1f, shift, row)
                 }
-                task.examples[i].forEach { v -> place(v).let { if (it >= 0) row[it] += w[0] } }
+                addExamples(row, task.examples[i], place, w[0])
                 if (chances) for (c in 0 until k) row[c] = Bilinear.sigmoid(row[c])
                 put(members[r], row)
             }
             val made = System.nanoTime()
-            val blocks = if (n.toLong() * k <= DIRECT) 1 else minOf(n, BLOCKS)
-            IntStream.range(0, blocks)
-                .let { if (blocks > 1) it.parallel() else it }
-                .forEach { b ->
-                    val buffer = if (scratch) FloatArray(k) else null
-                    for (r in n * b / blocks until n * (b + 1) / blocks) each(r, buffer)
-                }
+            inBlocks(n, k, scratch, each)
             if (cols == null) making.addAndGet(System.nanoTime() - made)
         }
 
@@ -435,7 +421,7 @@ internal class Scoring(
                 val have = rooms[name]
                 if (have != null && have.bytes >= bytes) return have
                 have?.close()
-                return (cublas.allocateBytes(maxOf(bytes, 2 * (have?.bytes ?: 0), 64)) ?: throw NoRoom()).also {
+                return (cublas.allocateBytes(maxOf(bytes, 2 * (have?.bytes ?: 0), LEAST_ROOM)) ?: throw NoRoom()).also {
                     rooms[name] = it
                 }
             }
@@ -519,7 +505,7 @@ internal class Scoring(
                     it.close()
                     made.remove(it)
                 }
-                return longArrayOf((sent - started) / 1_000_000, (multiplied - sent) / 1_000_000)
+                return longArrayOf((sent - started) / NANOS_IN_MILLI, (multiplied - sent) / NANOS_IN_MILLI)
             }
 
             /**
@@ -530,7 +516,7 @@ internal class Scoring(
                 val have = pins[name]
                 if (have != null && have.bytes >= bytes) return have
                 have?.close()
-                return (cublas.pinned(maxOf(bytes, 2 * (have?.bytes ?: 0), 64)) ?: throw NoRoom()).also {
+                return (cublas.pinned(maxOf(bytes, 2 * (have?.bytes ?: 0), LEAST_ROOM)) ?: throw NoRoom()).also {
                     pins[name] = it
                 }
             }
@@ -563,58 +549,7 @@ internal class Scoring(
                 val started = System.nanoTime()
                 val count = rows.size
                 if (count == 0) return emptyList()
-                // Every array of values once, every row by where its array begins (-1: every value)
-                val arrays = IdentityHashMap<IntArray, Int>()
-                var total = 0
-                val colAt = IntArray(count)
-                val colLen = IntArray(count)
-                columns.forEachIndexed { r, cols ->
-                    if (cols == null) colAt[r] = -1
-                    else {
-                        colAt[r] = arrays.getOrPut(cols) { total.also { total += cols.size } }
-                        colLen[r] = cols.size
-                    }
-                }
-                // What the kernels read, ints one after another: the items, where each row's values begin and how
-                // many, the values, the closed and the examples by where each row's begin
-                val closedSize = (0 until count).sumOf { closed[it].size }
-                val exSize = (0 until count).sumOf { task.examples[rows[it]].size }
-                val ins = IntArray(3 * count + total + 2 * (count + 1) + closedSize + exSize)
-                rows.copyInto(ins, 0)
-                colAt.copyInto(ins, count)
-                colLen.copyInto(ins, 2 * count)
-                val colsAt = 3 * count
-                arrays.forEach { (a, at) -> a.copyInto(ins, colsAt + at) }
-                val closedFrom = colsAt + total
-                val closedInts = laid(ins, closedFrom, count) { closed[it] }
-                val exFrom = closedFrom + closedInts
-                laid(ins, exFrom, count) { task.examples[rows[it]] }
-                val inBytes = ins.size.toLong() * Int.SIZE_BYTES
-                val staging = pinned("in", inBytes)
-                staging.put(0, ins)
-                val input = room("in", inBytes)
-                input.upload(staging, inBytes)
-                fun at(int: Int) = input.at(int.toLong() * Int.SIZE_BYTES)
-                val args =
-                    arrayOf<Any>(
-                        at(0),
-                        folded,
-                        u,
-                        width,
-                        rank,
-                        vts,
-                        shifts,
-                        examples,
-                        m,
-                        at(count),
-                        at(2 * count),
-                        at(colsAt),
-                        at(closedFrom),
-                        at(closedFrom + count + 1),
-                        at(exFrom),
-                        at(exFrom + count + 1),
-                        half,
-                    )
+                val args = sent(rows, columns, closed)
                 // What it gives: of every row how many are likely and how many of the highest besides, their places and
                 // scores
                 val l = maxOf(least, 0)
@@ -645,7 +580,96 @@ internal class Scoring(
                 val tops = back.ints(2L * count * Int.SIZE_BYTES, count * l)
                 val topScores = back.floats((2L * count + count.toLong() * l) * Int.SIZE_BYTES, count * l)
                 val chosen = System.nanoTime()
-                // The stripes packed; the rows of more likely than a stripe holds written again whole after them
+                val likely = likely(likelyOf, args, out(0), stripePlace, stripeScore)
+                val result =
+                    List(count) { r ->
+                        val many = likelyOf[r]
+                        val from = likely.from[r]
+                        val others = minOf(takenOf[r], (least - many).coerceAtLeast(0))
+                        val p = IntArray(many + others)
+                        val s = FloatArray(many + others)
+                        likely.places.copyInto(p, 0, from, from + many)
+                        likely.scores.copyInto(s, 0, from, from + many)
+                        tops.copyInto(p, many, r * l, r * l + others)
+                        topScores.copyInto(s, many, r * l, r * l + others)
+                        Shown(p, s)
+                    }
+                if (count >= LOGGED) told(count, sent - started, chosen - sent, likely.over, System.nanoTime() - chosen)
+                return result
+            }
+
+            /**
+             * What the kernels read, laid out and sent in one copy from page-locked memory: ints one after another —
+             * the items, where each row's values begin and how many, the values, the closed and the examples by where
+             * each row's begin. Answers the arguments every kernel of the choosing begins with, the scoring's numbers
+             * on the card among them.
+             */
+            private fun sent(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>): Array<Any> {
+                val count = rows.size
+                // Every array of values once, every row by where its array begins (-1: every value)
+                val arrays = IdentityHashMap<IntArray, Int>()
+                var total = 0
+                val colAt = IntArray(count)
+                val colLen = IntArray(count)
+                columns.forEachIndexed { r, cols ->
+                    if (cols == null) colAt[r] = -1
+                    else {
+                        colAt[r] = arrays.getOrPut(cols) { total.also { total += cols.size } }
+                        colLen[r] = cols.size
+                    }
+                }
+                val closedSize = (0 until count).sumOf { closed[it].size }
+                val exSize = (0 until count).sumOf { task.examples[rows[it]].size }
+                val ins = IntArray(3 * count + total + 2 * (count + 1) + closedSize + exSize)
+                rows.copyInto(ins, 0)
+                colAt.copyInto(ins, count)
+                colLen.copyInto(ins, 2 * count)
+                val colsAt = 3 * count
+                arrays.forEach { (a, at) -> a.copyInto(ins, colsAt + at) }
+                val closedFrom = colsAt + total
+                val closedInts = laid(ins, closedFrom, count) { closed[it] }
+                val exFrom = closedFrom + closedInts
+                laid(ins, exFrom, count) { task.examples[rows[it]] }
+                val inBytes = ins.size.toLong() * Int.SIZE_BYTES
+                val staging = pinned("in", inBytes)
+                staging.put(0, ins)
+                val input = room("in", inBytes)
+                input.upload(staging, inBytes)
+                fun at(int: Int) = input.at(int.toLong() * Int.SIZE_BYTES)
+                return arrayOf<Any>(
+                    at(0),
+                    folded,
+                    u,
+                    width,
+                    rank,
+                    vts,
+                    shifts,
+                    examples,
+                    m,
+                    at(count),
+                    at(2 * count),
+                    at(colsAt),
+                    at(closedFrom),
+                    at(closedFrom + count + 1),
+                    at(exFrom),
+                    at(exFrom + count + 1),
+                    half,
+                )
+            }
+
+            /**
+             * The likely of every row — [likelyOf] it, of the first pass's stripes [stripePlace] and [stripeScore] —
+             * brought back in one copy: the stripes packed (`shown_pack`); the rows of more likely than a stripe holds
+             * written again whole after them (`shown_likely`).
+             */
+            private fun likely(
+                likelyOf: IntArray,
+                args: Array<Any>,
+                firstOut: MemorySegment,
+                stripePlace: Cublas.DeviceBytes,
+                stripeScore: Cublas.DeviceBytes,
+            ): Likely {
+                val count = likelyOf.size
                 val packedAt = IntArray(count)
                 var packed = 0
                 val over = ArrayList<Int>()
@@ -675,7 +699,7 @@ internal class Scoring(
                         count.toLong() * stripe,
                         count,
                         stripe,
-                        out(0),
+                        firstOut,
                         afterRoom,
                         stripePlace,
                         stripeScore,
@@ -694,37 +718,25 @@ internal class Scoring(
                     )
                 val got = pinned("likely", 2L * all * Int.SIZE_BYTES)
                 likely.download(got, 2L * all * Int.SIZE_BYTES)
-                val placesOf = got.ints(0, all)
-                val scoresOf = got.floats(all.toLong() * Int.SIZE_BYTES, all)
-                val overOf = HashMap<Int, Int>().also { m -> over.forEachIndexed { k, r -> m[r] = overAt[k] } }
-                val result =
-                    List(count) { r ->
-                        val many = likelyOf[r]
-                        val from = overOf[r] ?: packedAt[r]
-                        val others = minOf(takenOf[r], (least - many).coerceAtLeast(0))
-                        val p = IntArray(many + others)
-                        val s = FloatArray(many + others)
-                        placesOf.copyInto(p, 0, from, from + many)
-                        scoresOf.copyInto(s, 0, from, from + many)
-                        tops.copyInto(p, many, r * l, r * l + others)
-                        topScores.copyInto(s, many, r * l, r * l + others)
-                        Shown(p, s)
-                    }
-                val taken = System.nanoTime()
-                if (count >= LOGGED)
-                    log.info(
-                        "what {} items of {} values are shown with, chosen on the card: laid out and sent in {} ms, chosen and brought back in {} ms, " +
-                            "the likely packed — {} rows of more than {} written again — and brought back in {} ms",
-                        count,
-                        m,
-                        (sent - started) / 1_000_000,
-                        (chosen - sent) / 1_000_000,
-                        over.size,
-                        stripe,
-                        (taken - chosen) / 1_000_000,
-                    )
-                return result
+                // Where every row's likely begin: among the packed, or written again after them
+                val from = packedAt.copyOf().also { f -> over.forEachIndexed { k, r -> f[r] = overAt[k] } }
+                return Likely(got.ints(0, all), got.floats(all.toLong() * Int.SIZE_BYTES, all), from, over.size)
             }
+
+            /** The times of a choosing told in the log, in nanoseconds: of the sending, the choosing, the packing. */
+            private fun told(count: Int, sending: Long, choosing: Long, over: Int, packing: Long) =
+                log.info(
+                    "what {} items of {} values are shown with, chosen on the card: laid out and sent in {} ms, " +
+                        "chosen and brought back in {} ms, the likely packed — {} rows of more than {} written " +
+                        "again — and brought back in {} ms",
+                    count,
+                    m,
+                    sending / NANOS_IN_MILLI,
+                    choosing / NANOS_IN_MILLI,
+                    over,
+                    stripe,
+                    packing / NANOS_IN_MILLI,
+                )
 
             override fun close() {
                 if (closed) return
@@ -786,6 +798,12 @@ internal class Scoring(
         /** Values asked up to which a value's place among them is looked for by going through them. */
         private const val FEW = 32
 
+        /** The nanoseconds of a millisecond: the log tells the times in milliseconds. */
+        private const val NANOS_IN_MILLI = 1_000_000L
+
+        /** The fewest bytes a room on the card or in pinned memory is made of: never an empty one. */
+        private const val LEAST_ROOM = 64L
+
         /** A scoring kept by [pack]; null of another version or of other bytes. */
         fun read(bytes: ByteArray): Scoring? = runCatching {
             DataInputStream(ByteArrayInputStream(bytes).buffered(BUFFER)).use { input ->
@@ -796,14 +814,78 @@ internal class Scoring(
                 val design = Design.read(input)
                 val rank = input.readInt()
                 val keys = Design.readStrings(input)
-                val parts = List(BilinearSuggester.FOLDS) { List(4) { Design.readFloats(input) } }
+                val folds =
+                    List(BilinearSuggester.FOLDS) {
+                        KeptFold(
+                            Design.readFloats(input),
+                            Design.readFloats(input),
+                            Design.readFloats(input),
+                            Design.readFloats(input),
+                        )
+                    }
                 val shares = Design.readFloats(input).takeIf { it.size == keys.size }
-                val pair = parts.map { p ->
-                    p[1].let { w -> if (w.size == Bilinear.PAIR) w else floatArrayOf(w[0], w[w.size - 1]) }
+                val pair = folds.map { f ->
+                    f.pair.let { w -> if (w.size == Bilinear.PAIR) w else floatArrayOf(w[0], w[w.size - 1]) }
                 }
-                Scoring(design, rank, keys, parts.map { it[0] }, pair, parts.map { it[2] }, parts.map { it[3] }, shares)
+                Scoring(
+                    design,
+                    rank,
+                    keys,
+                    folds.map { it.a },
+                    pair,
+                    folds.map { it.vt },
+                    folds.map { it.bias },
+                    shares,
+                )
             }
         }
             .getOrNull()
+
+        /**
+         * A value's place among those asked, [cols] of the [m] values — null: every value, its own place; -1: one not
+         * asked.
+         */
+        private fun placeOf(cols: IntArray?, m: Int): (Int) -> Int =
+            when {
+                cols == null -> { v ->
+                    v
+                }
+                cols.size <= FEW -> { v ->
+                    cols.indexOf(v)
+                }
+                else ->
+                    IntArray(m) { -1 }
+                        .also { at -> cols.forEachIndexed { c, v -> at[v] = c } }
+                        .let { at -> { v: Int -> at[v] } }
+            }
+
+        /**
+         * The weight of the pair's own feature, [weight], added to the scores in [row] of the values the site gives the
+         * item as [examples] — of those asked, at their [place] among them.
+         */
+        private fun addExamples(row: FloatArray, examples: IntArray, place: (Int) -> Int, weight: Float) {
+            examples.forEach { v -> place(v).let { if (it >= 0) row[it] += weight } }
+        }
+
+        /**
+         * [each] of the [n] rows of [k] values side by side on every core, a block of them on each: of the tags, tens
+         * of thousands of works of thousands of values each. Of [scratch], a buffer a block, its rows made in it one
+         * after another.
+         */
+        private fun inBlocks(n: Int, k: Int, scratch: Boolean, each: (Int, FloatArray?) -> Unit) {
+            val blocks = if (n.toLong() * k <= DIRECT) 1 else minOf(n, BLOCKS)
+            IntStream.range(0, blocks)
+                .let { if (blocks > 1) it.parallel() else it }
+                .forEach { b ->
+                    val buffer = if (scratch) FloatArray(k) else null
+                    for (r in n * b / blocks until n * (b + 1) / blocks) each(r, buffer)
+                }
+        }
     }
+
+    /** A fold's numbers as [pack] keeps them, in its order: A, the pair's own weights, the values' side, the biases. */
+    private class KeptFold(val a: FloatArray, val pair: FloatArray, val vt: FloatArray, val bias: FloatArray)
+
+    /** The likely of every row brought back: their places and scores one row after another, where each row's begin. */
+    private class Likely(val places: IntArray, val scores: FloatArray, val from: IntArray, val over: Int)
 }

@@ -2,24 +2,25 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Cublas
-import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Simd
-import io.github.vlsergey.recommend4me.matrix.logisticRow
 import io.github.vlsergey.recommend4me.matrix.weightedLogisticRow
 import java.util.concurrent.CancellationException
 import kotlin.concurrent.withLock
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(Ensemble::class.java)
 
 /**
  * EVERY MODEL OF A FITTING IN ONE PRODUCT ([Bilinear], the same model and the same loss): the folds and the penalties
- * tried, side by side. Their weights A lie one under another, transposed — of a model its rank's rows of the item's
- * features — so the coordinates of every item by every model are ONE product of the items' features, Uᵀ = Aᵀ Xᵀ, and
- * the gradient back ONE more, dAᵀ = dUᵀ X: the features of the items, a gigabyte and a half of a catalogue of games,
- * read twice a step for all the models, not twice for each.
+ * tried, side by side. Their weights A lie one under another, transposed ([TransposedLayout]) — of a model its rank's
+ * rows of the item's features — so the coordinates of every item by every model are ONE product of the items' features,
+ * Uᵀ = Aᵀ Xᵀ, and the gradient back ONE more, dAᵀ = dUᵀ X ([ItemProducts]): the features of the items, a gigabyte and a
+ * half of a catalogue of games, read twice a step for all the models, not twice for each.
  *
  * THE PAIRS OF THE ITEMS AND THEIR VALUES BY PRODUCTS TOO: a block of the items' rows against every value, S = U Vᵀ,
  * the slopes of the pairs that weigh anything written over it, and the gradient back by two products, dU = S V and dV =
- * Sᵀ U. The names as texts of a work ([Problem.hints]) the same, a group of them at a time.
+ * Sᵀ U. The names as texts of a work ([Problem.hints]) the same, a group of them at a time ([NamesOfEnsemble]).
  *
  * ONE THREAD, THE LIBRARY SHARING EVERY PRODUCT OUT AMONG ITS OWN ([Blas.wide]): no thread of ours. EVERY NUMBER WHERE
  * THE PRODUCTS READ IT, made once for the fitting: nothing copied out and back between them, no array made a step.
@@ -45,8 +46,11 @@ internal class Ensemble(
     /** How many models. */
     val count = lambdas.size
 
+    /** A model's weights as the products read them, and as [Bilinear] does. */
+    private val layout = TransposedLayout(dx, dz, m, r)
+
     /** The numbers of one model, in the order its search reads them: Aᵀ, Bᵀ, Eᵀ, the biases, the pair's own weights. */
-    val size = r * dx + r * dz + r * m + m + Bilinear.PAIR
+    val size = layout.size
 
     // The point every model's search asks for, a piece of each kind one model after another — and the gradient there
     private val aT = Floats(count * r * dx)
@@ -69,36 +73,20 @@ internal class Ensemble(
     /** The rows of items a block of the pairs takes: a block of them against every value, held at once. */
     private val blockRows = minOf(n, maxOf(1, BLOCK / maxOf(1, m)))
     private val scores = Floats(blockRows * m)
-    private val ones =
-        Floats(maxOf(blockRows, p.hintGroups.maxOfOrNull { it.rows.size } ?: 0, 1)).also { o ->
-            for (k in 0 until o.count) o[k] = 1f
-        }
+    private val ones = Floats(maxOf(blockRows, 1)).also { o -> for (k in 0 until o.count) o[k] = 1f }
 
     // A row of the pairs that weigh anything, worked on in Java between the products: made once, as long as the longest
     // row
     private val longest = p.longest
     private val pairRow = p.row()
     private val z = FloatArray(longest)
-    private val shift = FloatArray(maxOf(longest, p.hintGroups.maxOfOrNull { it.values.size } ?: 0))
+    private val shift = FloatArray(longest)
     private val slopes = FloatArray(longest)
     private val sums = FloatArray(2)
 
-    // The names as texts of a work: their coordinates of every model, and a group's names and values gathered
+    /** The names as texts of a work: their coordinates of every model, their loss and their slopes. */
     private val h = p.hints.size
-    private val hd = p.hintDim
-    private val sumT = if (h > 0) Floats(count * r * hd) else Floats(0)
-    private val uhT = if (h > 0) Floats(count * r * h) else Floats(0)
-    private val duhT = if (h > 0) Floats(count * r * h) else Floats(0)
-    private val dSumT = if (h > 0) Floats(count * r * hd) else Floats(0)
-    private val largest = p.hintGroups.maxOfOrNull { it.rows.size } ?: 0
-    private val widest = p.hintGroups.maxOfOrNull { it.values.size } ?: 0
-    private val gu = Floats(r * largest)
-    private val gv = Floats(r * widest)
-    private val gs = Floats(largest * widest)
-    private val gdu = Floats(r * largest)
-    private val gdv = Floats(r * widest)
-    private val columns = Floats(widest)
-    private val hintBase = FloatArray(r)
+    private val names = NamesOfEnsemble(p, count, r, aT, vT, bias, gA, gE, gBias, gPair)
 
     /** The total weight of every model's training: the loss a mean over it, the penalty the same at any size. */
     private val totals =
@@ -122,61 +110,9 @@ internal class Ensemble(
             intArrayOf(r * dx, r * dz, r * m, m, Bilinear.PAIR),
         )
 
-    /**
-     * THE ITEMS' VECTORS ON THE CARD, and the sides of their two products: every block there once for the fitting — as
-     * the application put the task's there for its operation, or put there now — its rows of the items that have it
-     * alone, read at the card's speed, not the main memory's. A step sends the models' A there and takes U back, sends
-     * dU and takes dA back — tens of megabytes, not the features; the part of the ones ([ItemFeatures.ones]) made in
-     * the main memory and sent with them. A block's product written into [part], carried onto the items' columns by a
-     * kernel ([FeatureKernels]); its rows, kept in half precision, made single a run of [FeatureKernels.CARD_ROWS] at a
-     * time into [rows] for the library to multiply. Null on the processor: no card, no kernels, or no room.
-     */
-    private class OnCard(
-        val cublas: Cublas,
-        val kernels: CudaKernels,
-        val blocks: List<CardRows>,
-        val aT: Cublas.DeviceFloats,
-        val uT: Cublas.DeviceFloats,
-        val duT: Cublas.DeviceFloats,
-        val gA: Cublas.DeviceFloats,
-        val part: Cublas.DeviceFloats,
-        val rows: Cublas.DeviceFloats,
-        /** What was put there for the fitting: freed with it — the application's rows are the application's. */
-        private val made: List<AutoCloseable>,
-    ) : AutoCloseable {
-        override fun close() = made.forEach { it.close() }
-    }
-
-    private val onCard: OnCard? = card?.let { c ->
-        val kernels = FeatureKernels.of(c) ?: return@let null
-        c.lock.withLock {
-            val made = ArrayList<AutoCloseable>()
-            fun room(count: Long) = c.allocate(count)?.also { made += it }
-            val blocks = p.x.blocks.map { b -> b.card ?: CardRows.put(c, b.vectors, b.items)?.also { made += it } }
-            val a = room(count.toLong() * r * dx)
-            val u = room(count.toLong() * r * n)
-            val du = room(count.toLong() * r * n)
-            val g = room(count.toLong() * r * dx)
-            val part = room(maxOf(1L, count.toLong() * r * p.x.widest))
-            val rows = room(maxOf(1L, minOf(FeatureKernels.CARD_ROWS, p.x.widest).toLong() * p.x.longest))
-            if (
-                blocks.any { it == null } ||
-                    a == null ||
-                    u == null ||
-                    du == null ||
-                    g == null ||
-                    part == null ||
-                    rows == null
-            ) {
-                made.forEach { it.close() }
-                null
-            } else OnCard(c, kernels, blocks.map { it!! }, a, u, du, g, part, rows, made)
-        }
-    }
-
-    /** A block's part of the products in the main memory, when they are made there. */
-    private val blockPart: ItemFeatures.Scratch =
-        if (onCard == null) p.x.scratchOf(count * r) else ItemFeatures.Scratch(Floats(1), Floats(1))
+    /** The two products of the items' features: on the card when it is asked for and has room. */
+    private val products = ItemProducts(p, count, r, card, aT, uT, duT, gA)
+    private val onCard = products.onCard
 
     /** [work] holding the card's lock when the products are made there: one thread at a time on it. */
     private fun <T> onTheCard(work: () -> T): T =
@@ -198,107 +134,7 @@ internal class Ensemble(
 
     override fun close() {
         pairsOnCard?.close()
-        onCard?.close()
-    }
-
-    /**
-     * Uᵀ = Aᵀ Xᵀ of the first [kr] rows of Aᵀ — every model still searching: the vectors' part on the card when they
-     * are there, onto the ones' part made here; Aᵀ sent there first unless the searches write it there ([aOnCard]) —
-     * then brought over, the ones read it here.
-     */
-    private fun itemsCoordinates(kr: Int, aOnCard: Boolean, keep: Boolean = false) {
-        val c = onCard
-        if (c == null) {
-            p.x.transposedCoordinates(aT, kr, uT, blockPart)
-            return
-        }
-        if (aOnCard) c.aT.download(aT, 0, 0, kr * dx) else c.aT.upload(aT, 0, 0, kr * dx)
-        p.x.onesCoordinates(aT, kr, uT)
-        c.uT.upload(uT, 0, 0, kr * n)
-        // A block's rows multiplied a run at a time, then carried onto its items' columns
-        p.x.blocks.forEachIndexed { k, b ->
-            val rows = c.blocks[k]
-            runs(c, rows) { from, many ->
-                c.cublas.gemm(
-                    false,
-                    true,
-                    kr,
-                    many,
-                    b.dim,
-                    c.aT,
-                    b.column.toLong(),
-                    dx,
-                    c.rows,
-                    0,
-                    b.dim,
-                    c.part,
-                    from.toLong(),
-                    b.count,
-                    alpha = b.scale,
-                )
-            }
-            c.kernels.launch("scatter_columns", kr.toLong() * b.count, kr, b.count, c.part, rows.items, c.uT, n)
-        }
-        // Left there when the pairs are worked out there ([keep]): nothing of the processor reads them then
-        if (!keep) c.uT.download(uT, 0, 0, kr * n)
-    }
-
-    /**
-     * dAᵀ = dUᵀ X of the first [kr] rows: the vectors' part on the card when they are there, beside the ones' part made
-     * here and sent; taken back unless the searches read it there ([aOnCard]) — then only for the names to add their
-     * part.
-     */
-    private fun itemsGradient(kr: Int, aOnCard: Boolean, duOnCard: Boolean = false) {
-        val c = onCard
-        if (c == null) {
-            p.x.transposedGradient(duT, kr, gA, blockPart)
-            return
-        }
-        // Written there by the pairs on the card ([duOnCard]) and brought over for the ones, else sent
-        if (duOnCard) c.duT.download(duT, 0, 0, kr * n) else c.duT.upload(duT, 0, 0, kr * n)
-        p.x.onesGradient(duT, kr, gA)
-        c.gA.upload(gA, 0, 0, kr * dx)
-        // The columns of a block's items taken, then multiplied by its rows a run at a time — onto the block's
-        // columns of dA, nought of the ones' part sent
-        p.x.blocks.forEachIndexed { k, b ->
-            val rows = c.blocks[k]
-            c.kernels.launch("gather_columns", kr.toLong() * b.count, kr, b.count, c.duT, n, rows.items, c.part)
-            runs(c, rows) { from, many ->
-                c.cublas.gemm(
-                    false,
-                    false,
-                    kr,
-                    b.dim,
-                    many,
-                    c.part,
-                    from.toLong(),
-                    b.count,
-                    c.rows,
-                    0,
-                    b.dim,
-                    c.gA,
-                    b.column.toLong(),
-                    dx,
-                    beta = 1f,
-                    alpha = b.scale,
-                )
-            }
-        }
-        if (!aOnCard || h > 0) c.gA.download(gA, 0, 0, kr * dx)
-    }
-
-    /**
-     * Every run of [FeatureKernels.CARD_ROWS] rows of a block made single precision into the card's [OnCard.rows]:
-     * [work] of its first row and its number.
-     */
-    private inline fun runs(c: OnCard, rows: CardRows, work: (Int, Int) -> Unit) {
-        var from = 0
-        while (from < rows.count) {
-            val many = minOf(FeatureKernels.CARD_ROWS, rows.count - from)
-            FeatureKernels.floats(c.kernels, rows, from, many, c.rows)
-            work(from, many)
-            from += many
-        }
+        products.close()
     }
 
     /** Of every slot, its pieces of the point and of the gradient: told once. */
@@ -328,10 +164,10 @@ internal class Ensemble(
             "%d rounds: the searches %d ms, the items' features %d ms, the pairs and names %d ms, the rest %d ms"
                 .format(
                     rounds,
-                    searchNanos / 1_000_000,
-                    featuresNanos / 1_000_000,
-                    pairsNanos / 1_000_000,
-                    restNanos / 1_000_000,
+                    searchNanos / NANOS_IN_MILLI,
+                    featuresNanos / NANOS_IN_MILLI,
+                    pairsNanos / NANOS_IN_MILLI,
+                    restNanos / NANOS_IN_MILLI,
                 )
 
     /** Whether the searches of the last fitting were on the card. */
@@ -356,11 +192,12 @@ internal class Ensemble(
                                 if (gradient) c.gA else c.aT,
                                 slot.toLong() * r * dx,
                                 r * dx,
+                                // The pieces but A, which lies on the card: B, E, the biases, the pair's own
                                 (if (gradient) grads else points)[slot].let { all ->
                                     Pieces(
-                                        all.floats.copyOfRange(1, 5),
-                                        all.at.copyOfRange(1, 5),
-                                        all.count.copyOfRange(1, 5),
+                                        all.floats.copyOfRange(1, PIECES),
+                                        all.at.copyOfRange(1, PIECES),
+                                        all.count.copyOfRange(1, PIECES),
                                     )
                                 },
                                 scratch,
@@ -377,6 +214,7 @@ internal class Ensemble(
                         )
                     } catch (e: NoRoomOnCard) {
                         // Left in the main memory: the vectors made on the card freed as the space closes
+                        log.info("the searches of {} models in the main memory: {}", count, e.message)
                     }
                 }
             }
@@ -397,7 +235,7 @@ internal class Ensemble(
         starts: List<FloatArray>,
         stop: () -> Boolean,
     ): Fits {
-        searches.forEachIndexed { k, s -> s.begin(ordered(starts[k])) }
+        searches.forEachIndexed { k, s -> s.begin(layout.ordered(starts[k])) }
         val losses = FloatArray(count)
         val endedAt = LongArray(count)
         while (active > 0) {
@@ -420,7 +258,11 @@ internal class Ensemble(
                 } else slot++
             }
         }
-        return Fits(searches.map { standard(it.result()) }, IntArray(count) { searches[it].evaluations }, endedAt)
+        return Fits(
+            searches.map { layout.standard(it.result()) },
+            IntArray(count) { searches[it].evaluations },
+            endedAt,
+        )
     }
 
     /**
@@ -451,12 +293,12 @@ internal class Ensemble(
         // Uᵀ = Aᵀ Xᵀ and Vᵀ = Bᵀ Zᵀ + Eᵀ of every model, one product each
         val onPairs = pairsOnCard
         var at = System.nanoTime()
-        itemsCoordinates(kr, aOnCard, keep = onPairs != null)
+        products.coordinates(kr, aOnCard, keep = onPairs != null)
         featuresNanos += System.nanoTime() - at
         at = System.nanoTime()
         Blas.gemm(false, true, kr, m, dz, bT, 0, dz, p.z.held, 0, dz, vT, 0, m)
         Simd.axpy(1f, eT, 0, vT, 0, kr * m)
-        if (h > 0) namesCoordinates(k)
+        if (h > 0) names.coordinates(k)
         restNanos += System.nanoTime() - at
         at = System.nanoTime()
         if (onPairs != null) {
@@ -471,10 +313,10 @@ internal class Ensemble(
                 pair,
                 vT,
                 bias,
-                uhT,
+                names.uhT,
                 gE,
                 gBias,
-                duhT,
+                names.duhT,
                 gPair,
                 losses,
             )
@@ -485,7 +327,7 @@ internal class Ensemble(
                 val scale = 1 / totals[model]
                 val common = pair[slot * Bilinear.PAIR + 1]
                 var loss = pairs(slot, model, scale, common)
-                if (h > 0) loss += names(slot, scale, common)
+                if (h > 0) loss += names.loss(slot, scale, common)
                 losses[slot] = loss * scale
             }
         pairsNanos += System.nanoTime() - at
@@ -494,16 +336,24 @@ internal class Ensemble(
         Blas.gemm(false, false, kr, dz, m, gE, 0, m, p.z.held, 0, dz, gB, 0, dz)
         restNanos += System.nanoTime() - at
         at = System.nanoTime()
-        itemsGradient(kr, aOnCard, duOnCard = onPairs != null)
+        products.gradient(kr, aOnCard, duOnCard = onPairs != null)
         featuresNanos += System.nanoTime() - at
         at = System.nanoTime()
         if (h > 0) {
-            namesGradient(k)
+            names.gradient(k)
             // The gradient of A with the names' part, back where the searches read it
             if (aOnCard) onCard!!.gA.upload(gA, 0, 0, kr * dx)
         }
-        // The penalty on every weight, once the products have written the gradient: the pair's own
-        // too, but the common bias, the base rate of every value. Of A on the card when it is there
+        addPenalty(k, aOnCard, losses)
+        restNanos += System.nanoTime() - at
+    }
+
+    /**
+     * The penalty on every weight of the first [k] slots, once the products have written the gradient: added to
+     * [losses], its slope to the gradient — the pair's own weights too, but the common bias, the base rate of every
+     * value. Of A on the card when it is there ([aOnCard]).
+     */
+    private fun addPenalty(k: Int, aOnCard: Boolean, losses: FloatArray) {
         for (slot in 0 until k) {
             val lambda = lambdas[slotModel[slot]]
             val common = pair[slot * Bilinear.PAIR + 1]
@@ -524,7 +374,6 @@ internal class Ensemble(
             gPair[slot * Bilinear.PAIR + 1] = gPair[slot * Bilinear.PAIR + 1] - 2 * lambda * common
             losses[slot] += lambda * (penalty - common * common)
         }
-        restNanos += System.nanoTime() - at
     }
 
     /**
@@ -582,111 +431,6 @@ internal class Ensemble(
     }
 
     /**
-     * The names' coordinates of every model: Uhᵀ = (Σ_b s_b A_bᵀ) Hᵀ + A_constᵀ + Σ_b A_mark(b)ᵀ — every text block of
-     * theirs holds the name, so the text blocks' weights summed meet it once.
-     */
-    private fun namesCoordinates(k: Int) {
-        sumT.clear(0, k * r * hd)
-        for (slot in 0 until k) for (q in 0 until r) {
-            val rowA = (slot * r + q) * dx
-            val rowSum = (slot * r + q) * hd
-            p.hintBlocks.forEach { b ->
-                Simd.axpy(p.design.blocks[b].scale, aT, rowA + p.design.blockOffsets[b] + 1, sumT, rowSum, hd)
-            }
-        }
-        Blas.gemm(false, true, k * r, h, hd, sumT, 0, hd, p.hintText.held, 0, hd, uhT, 0, h)
-        for (slot in 0 until k) for (q in 0 until r) {
-            val rowA = (slot * r + q) * dx
-            var base = aT[rowA]
-            p.hintBlocks.forEach { b -> base += aT[rowA + p.design.blockOffsets[b]] }
-            Simd.add(base, uhT, (slot * r + q) * h, h)
-        }
-        duhT.clear(0, k * r * h)
-    }
-
-    /**
-     * The loss of every name of the model in [slot] read as a text that names its value and none of its rivals, weight
-     * 1 a pair, a group of them at a time: the group's names' and values' coordinates gathered, their scores by one
-     * product, the slopes back by two; the loss summed.
-     */
-    private fun names(slot: Int, scale: Float, common: Float): Float {
-        val uhAt = slot * r * h
-        val vAt = slot * r * m
-        val biasAt = slot * m
-        val pairAt = slot * Bilinear.PAIR
-        var loss = 0f
-        var gCommon = 0f
-        p.hintGroups.forEach { group ->
-            val kRows = group.rows.size
-            val c = group.values.size
-            for (q in 0 until r) {
-                for (row in 0 until kRows) gu[q * kRows + row] = uhT[uhAt + q * h + group.rows[row]]
-                for (j in 0 until c) gv[q * c + j] = vT[vAt + q * m + group.values[j]]
-            }
-            for (j in 0 until c) shift[j] = bias[biasAt + group.values[j]] + common
-            // The scores of the group's every name against its every value
-            Blas.gemm(true, false, kRows, c, r, gu, 0, kRows, gv, 0, c, gs, 0, c)
-            // Every value of a row against the label nought at once; the name's own value then set
-            // right: its label is one
-            for (row in 0 until kRows) {
-                val own = group.positive[row]
-                val at = row * c
-                val before = if (own in 0 until c) gs[at + own] + shift[own] else 0f
-                sums[0] = 0f
-                sums[1] = 0f
-                Simd.logisticRow(gs, at, shift, c, scale, sums)
-                if (own in 0 until c) {
-                    // softplus(z) − z for the label one in place of softplus(z) for nought
-                    val d = (Bilinear.sigmoid(before) - 1) * scale
-                    sums[0] -= before
-                    sums[1] += d - Bilinear.sigmoid(before) * scale
-                    gs[at + own] = d
-                }
-                loss += sums[0]
-                gCommon += sums[1]
-            }
-            // The slopes of the values' biases: the columns summed
-            Blas.gemv(true, kRows, c, gs, 0, c, ones, 0, columns, 0)
-            for (j in 0 until c) gBias[biasAt + group.values[j]] = gBias[biasAt + group.values[j]] + columns[j]
-            // The gradient of the group's coordinates, scattered back: of the names dUhᵀ = Vᵀ Sᵀ, of the values dVᵀ =
-            // Uhᵀ S
-            Blas.gemm(false, true, r, kRows, c, gv, 0, c, gs, 0, c, gdu, 0, kRows)
-            Blas.gemm(false, false, r, c, kRows, gu, 0, kRows, gs, 0, c, gdv, 0, c)
-            for (q in 0 until r) {
-                for (row in 0 until kRows) {
-                    val at = uhAt + q * h + group.rows[row]
-                    duhT[at] = duhT[at] + gdu[q * kRows + row]
-                }
-                for (j in 0 until c) {
-                    val at = vAt + q * m + group.values[j]
-                    gE[at] = gE[at] + gdv[q * c + j]
-                }
-            }
-        }
-        gPair[pairAt + 1] = gPair[pairAt + 1] + gCommon
-        return loss
-    }
-
-    /**
-     * The names' slopes carried back to the text blocks' weights, the constant's and the marks': of every model, one
-     * product.
-     */
-    private fun namesGradient(k: Int) {
-        Blas.gemm(false, false, k * r, hd, h, duhT, 0, h, p.hintText.held, 0, hd, dSumT, 0, hd)
-        for (slot in 0 until k) for (q in 0 until r) {
-            val rowA = (slot * r + q) * dx
-            val rowSum = (slot * r + q) * hd
-            val base = Simd.sum(duhT, (slot * r + q) * h, h)
-            gA[rowA] = gA[rowA] + base
-            p.hintBlocks.forEach { b ->
-                val mark = rowA + p.design.blockOffsets[b]
-                gA[mark] = gA[mark] + base
-                Simd.axpy(p.design.blocks[b].scale, dSumT, rowSum, gA, mark + 1, hd)
-            }
-        }
-    }
-
-    /**
      * The held-out loss of every model, the pairs of the items of its fold that weigh anything, as
      * [Bilinear.heldOutLoss] takes them — of the weights [fitted] ([Bilinear]'s layout), into [into] and, of the values
      * no item outside the fold has, [unseen].
@@ -697,10 +441,10 @@ internal class Ensemble(
             for (model in 0 until count) {
                 slotModel[model] = model
                 modelSlot[model] = model
-                points[model].write(Floats.of(ordered(fitted[model])))
+                points[model].write(Floats.of(layout.ordered(fitted[model])))
             }
             val kr = count * r
-            itemsCoordinates(kr, aOnCard = false)
+            products.coordinates(kr, aOnCard = false)
             Blas.gemm(false, true, kr, m, dz, bT, 0, dz, p.z.held, 0, dz, vT, 0, m)
             Simd.axpy(1f, eT, 0, vT, 0, kr * m)
             for (model in 0 until count) {
@@ -736,7 +480,7 @@ internal class Ensemble(
             for (model in 0 until count) {
                 slotModel[model] = model
                 modelSlot[model] = model
-                points[model].write(Floats.of(ordered(thetas[model])))
+                points[model].write(Floats.of(layout.ordered(thetas[model])))
             }
             val losses = FloatArray(count)
             evaluate(losses)
@@ -744,41 +488,9 @@ internal class Ensemble(
             losses to
                 List(count) { model ->
                     grads[model].read(own)
-                    standard(own.toArray())
+                    layout.standard(own.toArray())
                 }
         }
-    }
-
-    /**
-     * Weights of [Bilinear]'s layout — A (dx × rank), B (dz × rank), E (m × rank), biases, the pair's — in this one's:
-     * each transposed.
-     */
-    private fun ordered(theta: FloatArray): FloatArray {
-        val out = FloatArray(size)
-        transpose(theta, 0, dx, out, 0)
-        transpose(theta, dx * r, dz, out, r * dx)
-        transpose(theta, dx * r + dz * r, m, out, r * dx + r * dz)
-        theta.copyInto(out, r * dx + r * dz + r * m, dx * r + dz * r + m * r, theta.size)
-        return out
-    }
-
-    /** This one's layout back in [Bilinear]'s. */
-    private fun standard(own: FloatArray): FloatArray {
-        val out = FloatArray(size)
-        untranspose(own, 0, dx, out, 0)
-        untranspose(own, r * dx, dz, out, dx * r)
-        untranspose(own, r * dx + r * dz, m, out, dx * r + dz * r)
-        own.copyInto(out, dx * r + dz * r + m * r, r * dx + r * dz + r * m, own.size)
-        return out
-    }
-
-    /** rows × rank at [from] of [src] written rank × rows at [to] of [out]. */
-    private fun transpose(src: FloatArray, from: Int, rows: Int, out: FloatArray, to: Int) {
-        for (f in 0 until rows) for (q in 0 until r) out[to + q * rows + f] = src[from + f * r + q]
-    }
-
-    private fun untranspose(src: FloatArray, from: Int, rows: Int, out: FloatArray, to: Int) {
-        for (f in 0 until rows) for (q in 0 until r) out[to + f * r + q] = src[from + q * rows + f]
     }
 
     companion object {
@@ -786,5 +498,11 @@ internal class Ensemble(
          * The scores of the pairs held at once, a block of the items' rows against every value: memory, not meaning.
          */
         const val BLOCK = 8 shl 20
+
+        /** The pieces of a model's point ([pieces]): A, B, E, the biases, the pair's own weights. */
+        private const val PIECES = 5
+
+        /** The nanoseconds of a millisecond: the log tells the times in milliseconds. */
+        private const val NANOS_IN_MILLI = 1_000_000L
     }
 }

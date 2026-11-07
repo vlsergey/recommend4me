@@ -17,7 +17,8 @@ private val log = LoggerFactory.getLogger(NaiveBayesSuggester::class.java)
  * share among the works. Reads no text and no picture: fast, and a measure of how much of a facet the other facets tell
  * by themselves.
  *
- *     logit P(v | i) = ln((N₁ᵥ + α) / (N₀ᵥ + α)) + s · Σ_{c ∈ context(i)} ln( (n₁(c,v) + α·q_c) / (N₁ᵥ + α) · (N₀ᵥ + α) / (n₀(c,v) + α·q_c) )
+ *     logit P(v | i) = ln((N₁ᵥ + α) / (N₀ᵥ + α))
+ *                    + s · Σ_{c ∈ context(i)} ln( (n₁(c,v) + α·q_c) / (N₁ᵥ + α) · (N₀ᵥ + α) / (n₀(c,v) + α·q_c) )
  *
  * N₁ᵥ, N₀ᵥ: the weights of the pairs of v labelled 1 and 0 ([SuggestionPairs]); n₁(c,v), n₀(c,v) of the works with c;
  * q_c the share of the works with c. The values of the other facets are not independent — a fandom and its pairings say

@@ -32,6 +32,9 @@ class LanguageAnswers(
     private val events: ApplicationEventPublisher,
 ) {
 
+    // A BOUNDARY: a giving once on the start, which must not stop the start — a source's failure, of its store or of a
+    // listener of the changed works, is logged, and the giving is left not marked done, to be tried on the next start
+    @Suppress("TooGenericExceptionCaught")
     @Order(2)
     @EventListener(ApplicationReadyEvent::class)
     fun give() {
@@ -75,6 +78,7 @@ class LanguageAnswers(
      * source whose works have it ([StandardLanguages.DESCRIPTION]) — the games, whose pages are written in English —
      * English, by the user's word. A work the user answered on is left as it is. Once: marked in the settings.
      */
+    @Suppress("TooGenericExceptionCaught")
     private fun giveDescriptions() {
         if (settings.get(DESCRIPTIONS_DONE) != null) return
         stores.sources.forEach { s ->
@@ -94,6 +98,7 @@ class LanguageAnswers(
                 )
                 events.publishEvent(ItemsChanged(s.id, given))
             } catch (e: Exception) {
+                // A BOUNDARY, as in [give]: a failure is logged and the giving left not marked done, the start going on
                 log.error("{}: the language of the descriptions was not given", s.id, e)
                 return
             }

@@ -21,20 +21,10 @@ class BilinearTest {
         val n = 12
         val d = 6
         val m = 4
-        fun block(name: String, every: Int) =
-            Matrix(n, d).let { b ->
-                val present = BooleanArray(n) { it % every != 0 }
-                for (i in 0 until n) if (present[i])
-                    b.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, b.row(i), d)
-                InputBlock.of(name, b, present)
-            }
-        val names =
-            Matrix(m, d).also { v ->
-                for (j in 0 until m) v.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, v.row(j), d)
-            }
+        val names = randomRows(random, m, d)
         return SuggestionTask(
             itemIds = List(n) { "i$it" },
-            inputs = listOf(block("text:title", 5), block("text:annotation", 3)),
+            inputs = listOf(block(random, "text:title", n, d, 5), block(random, "text:annotation", n, d, 3)),
             values = names,
             valueKeys = List(m) { "v$it" },
             assigned = List(n) { i -> if (i % 4 == 0) IntArray(0) else intArrayOf(i % m) },
@@ -45,10 +35,7 @@ class BilinearTest {
             lackWeight = 0.5,
             examples = List(n) { i -> if (i % 2 == 0) intArrayOf(i % m) else IntArray(0) },
             hints = IntArray(m) { it }.let { all -> List(6) { k -> NameHint(k % m, all) } },
-            hintTexts =
-                Matrix(6, d).also { t ->
-                    for (k in 0 until 6) t.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, t.row(k), d)
-                },
+            hintTexts = randomRows(random, 6, d),
             // Values some items may have, one array for them all, one of them barred to an item; a draft not confirmed
             allowed = intArrayOf(2, 0, 1).let { shared -> List(n) { i -> if (i % 3 == 1) shared else null } },
             barred = List(n) { i -> if (i == 7) intArrayOf(0) else IntArray(0) },
@@ -56,6 +43,21 @@ class BilinearTest {
             draftWeight = 0.5,
         )
     }
+
+    /** [rows] rows of [d] numbers drawn from [random]. */
+    private fun randomRows(random: Random, rows: Int, d: Int) =
+        Matrix(rows, d).also { v ->
+            for (j in 0 until rows) v.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, v.row(j), d)
+        }
+
+    /** The text block [name] of [n] items, [d] numbers each drawn from [random]: every [every]th item without it. */
+    private fun block(random: Random, name: String, n: Int, d: Int, every: Int) =
+        Matrix(n, d).let { b ->
+            val present = BooleanArray(n) { it % every != 0 }
+            for (i in 0 until n) if (present[i])
+                b.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, b.row(i), d)
+            InputBlock.of(name, b, present)
+        }
 
     @Test
     fun `the pairs not kept one by one are those laid out whole`() {
@@ -180,7 +182,8 @@ class BilinearTest {
                 }
             assertTrue(
                 worst < 1e-3,
-                "model $k: the worst relative difference of the gradient $worst, at $at of $part: ${grad[at]} alone, ${gradients[k][at]} together",
+                "model $k: the worst relative difference of the gradient $worst, at $at of $part: " +
+                    "${grad[at]} alone, ${gradients[k][at]} together",
             )
         }
     }
@@ -252,22 +255,7 @@ class BilinearTest {
         val random = Random(13)
         val x = design.features(task)
         val n = task.itemCount
-        // Laid out whole: the constant, every block's mark and its vector times its scale, the values of the context
-        val base = 1 + design.blocks.sumOf { 1 + it.dim }
-        val dense =
-            Array(n) { i ->
-                FloatArray(width).also { row ->
-                    row[0] = 1f
-                    design.blocks.forEachIndexed { k, b ->
-                        val block = task.inputs.first { it.name == b.name }
-                        val slot = block.slots(n)[i]
-                        if (slot < 0) return@forEachIndexed
-                        row[design.blockOffsets[k]] = 1f
-                        for (q in 0 until b.dim) row[design.blockOffsets[k] + 1 + q] = block.vectors[slot, q] * b.scale
-                    }
-                    task.context[i].forEach { row[base + design.contextKeys.indexOf(task.contextKeys[it])] = 1f }
-                }
-            }
+        val dense = laidOutWhole(task, design)
         fun close(expected: FloatArray, actual: Floats, what: String) =
             expected.indices.forEach {
                 assertTrue(
@@ -313,6 +301,28 @@ class BilinearTest {
             gA,
             "dUᵀ X",
         )
+    }
+
+    /**
+     * The features of every item of [task] laid out whole: the constant, every block's mark and its vector times its
+     * scale, the values of the context.
+     */
+    private fun laidOutWhole(task: SuggestionTask, design: Design): Array<FloatArray> {
+        val n = task.itemCount
+        val base = 1 + design.blocks.sumOf { 1 + it.dim }
+        return Array(n) { i ->
+            FloatArray(design.itemWidth).also { row ->
+                row[0] = 1f
+                design.blocks.forEachIndexed { k, b ->
+                    val block = task.inputs.first { it.name == b.name }
+                    val slot = block.slots(n)[i]
+                    if (slot < 0) return@forEachIndexed
+                    row[design.blockOffsets[k]] = 1f
+                    for (q in 0 until b.dim) row[design.blockOffsets[k] + 1 + q] = block.vectors[slot, q] * b.scale
+                }
+                task.context[i].forEach { row[base + design.contextKeys.indexOf(task.contextKeys[it])] = 1f }
+            }
+        }
     }
 
     @Test

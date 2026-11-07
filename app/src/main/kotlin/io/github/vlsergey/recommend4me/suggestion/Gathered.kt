@@ -64,7 +64,8 @@ internal class Gathered(items: Int, private val dim: Int) {
             card.lock.withLock { CardRows.put(card, vectors, items) }
                 ?: null.also {
                     log.warn(
-                        "no room on the card for {} vectors of {} numbers of {}: they are multiplied in the main memory",
+                        "no room on the card for {} vectors of {} numbers of {}: " +
+                            "they are multiplied in the main memory",
                         vectors.rows,
                         vectors.cols,
                         name,

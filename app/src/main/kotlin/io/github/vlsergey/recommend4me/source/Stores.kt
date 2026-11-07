@@ -42,6 +42,7 @@ import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tagtext.TagTextAnswerRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.universe.UniverseFacetDefs
 import io.github.vlsergey.recommend4me.universe.UniverseNames
 import io.github.vlsergey.recommend4me.universe.UniverseRepository
 import io.github.vlsergey.recommend4me.work.WorkPairJournal
@@ -75,7 +76,7 @@ class SourceStore(
      */
     val schema: SourceSchema = run {
         val layer =
-            (if (contentType.universes) UniverseFacet.defs(source.schema) else emptyList()) +
+            (if (contentType.universes) UniverseFacetDefs.defs(source.schema) else emptyList()) +
                 contentType.layer.map { standard ->
                     fun keyOf(of: StandardFacet?) = of?.let { o ->
                         source.schema.facets.firstOrNull { it.standard === o }?.key

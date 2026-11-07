@@ -26,8 +26,11 @@ class LanguagesTest {
         assertEquals("русский", StandardLanguages.NAMES["ru"])
     }
 
+    /**
+     * Of a facet of one value the model gives the likeliest alone, and the user's answer takes the place of the rest.
+     */
     @Test
-    fun `of a facet of one value the model gives the likeliest alone, and the user's answer takes the place of the rest`() {
+    fun `of a facet of one value the likeliest alone, the user's answer in place of the rest`() {
         val books = FacetDef(StandardLanguages.KEY, infer = true, single = true)
         val games = FacetDef(StandardLanguages.KEY, infer = true)
         fun chance(key: String, p: Double) = Chance("1", StandardLanguages.KEY, key, false, p)

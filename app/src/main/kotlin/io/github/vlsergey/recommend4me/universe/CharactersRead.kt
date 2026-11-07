@@ -11,7 +11,7 @@ package io.github.vlsergey.recommend4me.universe
  * was seven queries a universe, a reading of the chances every universe so.
  */
 class CharactersRead(private val universes: UniverseRepository) {
-    val local: Map<String, String> by lazy { universes.localNames() }
+    val local: Map<String, String> by lazy { universes.names.localNames() }
 
     /** The universes read so far; guarded by itself. */
     private val read = HashMap<UniverseKey, List<KeptEntry>>()
@@ -19,15 +19,15 @@ class CharactersRead(private val universes: UniverseRepository) {
     /** Whether every universe of the dictionary is read: one not among them has no entry. */
     private var whole = false
 
-    /** Every entry of the [universe], kept or not ([UniverseRepository.entries]). */
+    /** Every entry of the [universe], kept or not ([UniverseEntries.of]). */
     fun entries(universe: UniverseKey): List<KeptEntry> =
         synchronized(read) {
             read[universe]
                 ?: if (whole) emptyList()
-                else universes.entries(universe.catalogue, universe.id, local).also { read[universe] = it }
+                else universes.entries.of(universe.catalogue, universe.id, local).also { read[universe] = it }
         }
 
-    /** The entries of the [universe] kept as characters ([UniverseRepository.characters]). */
+    /** The entries of the [universe] kept as characters ([UniverseEntries.characters]). */
     fun of(universe: UniverseKey): List<UniverseCharacter> =
         entries(universe).filter { it.included }.map { it.character }
 
@@ -37,7 +37,7 @@ class CharactersRead(private val universes: UniverseRepository) {
             if (whole) return@synchronized
             val missing = wanted.filter { it !in read }.distinct()
             if (missing.isEmpty()) return@synchronized
-            val found = universes.entriesOf(missing, local)
+            val found = universes.entries.ofUniverses(missing, local)
             missing.forEach { read[it] = found[it].orEmpty() }
         }
 
@@ -45,7 +45,7 @@ class CharactersRead(private val universes: UniverseRepository) {
     fun every() =
         synchronized(read) {
             if (whole) return@synchronized
-            universes.entriesOf(null, local).forEach { (key, entries) -> read.putIfAbsent(key, entries) }
+            universes.entries.ofUniverses(null, local).forEach { (key, entries) -> read.putIfAbsent(key, entries) }
             whole = true
         }
 }

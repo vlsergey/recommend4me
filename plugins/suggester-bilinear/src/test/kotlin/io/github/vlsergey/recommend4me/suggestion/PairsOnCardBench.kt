@@ -53,8 +53,10 @@ class PairsOnCardBench {
                     val started = System.nanoTime()
                     repeat(5) { ensemble.lossesAndGradients(thetas) }
                     println(
-                        "BENCH $what: ${problem.n} items × ${problem.m} values, ${problem.hintPairs} pairs of names in ${problem.hintGroups.size} groups; " +
-                            "pairs on the card ${ensemble.pairsOnCardUsed}; a step of $count models ${(System.nanoTime() - started) / 5 / 1_000_000} ms; ${ensemble.timing}"
+                        "BENCH $what: ${problem.n} items × ${problem.m} values, ${problem.hintPairs} pairs of names " +
+                            "in ${problem.hintGroups.size} groups; pairs on the card ${ensemble.pairsOnCardUsed}; " +
+                            "a step of $count models ${(System.nanoTime() - started) / 5 / 1_000_000} ms; " +
+                            ensemble.timing
                     )
                 }
         }

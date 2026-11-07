@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.matrix.Simd
-import io.github.vlsergey.recommend4me.matrix.logisticRow
 import io.github.vlsergey.recommend4me.matrix.weightedLogisticRow
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -220,30 +219,8 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
     /** A block's part of the items' products, between its rows and the items' ([ItemFeatures.scratchOf]). */
     private val blockPart = p.x.scratchOf(rank)
 
-    // The names as texts of a work ([Problem.hints]): every text block of theirs holds the name, so
-    // their coordinates are the name times the text blocks' weights summed, plus the constant's and
-    // the blocks' marks'. Their loss on the processor needs room for a group's every pair — a large
-    // universe's a hundred megabytes: made only when the processor is the one to take it, never
-    // with a card
-    private val h = p.hints.size
-    private val hd = p.hintDim
-    private val uh by lazy { Floats(h * rank) }
-    private val duh by lazy { Floats(h * rank) }
-    private val aSum by lazy { Floats(hd * rank) }
-    private val dSum by lazy { Floats(hd * rank) }
-    private val hintBase = FloatArray(rank)
-    private val dvHint by lazy { FloatArray(m * rank) }
-    private val largest = p.hintGroups.maxOfOrNull { it.rows.size } ?: 0
-    private val widest = p.hintGroups.maxOfOrNull { it.values.size } ?: 0
-    private val gu by lazy { Floats(largest * rank) }
-    private val gv by lazy { Floats(widest * rank) }
-    private val gvt by lazy { Floats(rank * widest) }
-    private val gs by lazy { Floats(largest * widest) }
-    private val gdu by lazy { Floats(largest * rank) }
-    private val gdv by lazy { Floats(widest * rank) }
-    /** A column of ones, and the sums of a group's columns it makes. */
-    private val ones by lazy { Floats.of(FloatArray(largest) { 1f }) }
-    private val columns by lazy { Floats(widest) }
+    /** The names as texts of a work ([Problem.hints]): their coordinates, loss and gradient on the processor. */
+    private val namesAsTexts = NamesAsTexts(p, rank)
 
     /**
      * The start: A and B nought, so a weight grows only where the data lead it — along a direction no item varies in
@@ -377,108 +354,7 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         Blas.product(p.z.held, dz, m, dz, bF, rank, v)
         val eAt = bAt + dz * rank
         for (k in 0 until m * rank) v[k] = v[k] + theta[eAt + k]
-        if (names && h > 0) hintCoordinates()
-    }
-
-    /** The coordinates of every name read as a work's every text: Uh = H·Σ_b s_b·A_b + A_const + Σ_b A_mark(b). */
-    private fun hintCoordinates() {
-        aSum.clear()
-        hintBase.fill(0f)
-        for (q in 0 until rank) hintBase[q] = aF[q]
-        p.hintBlocks.forEach { b ->
-            val mark = p.design.blockOffsets[b]
-            val scale = p.design.blocks[b].scale
-            for (q in 0 until rank) hintBase[q] += aF[mark * rank + q]
-            for (c in 0 until hd) for (q in 0 until rank) aSum[c * rank + q] =
-                aSum[c * rank + q] + scale * aF[(mark + 1 + c) * rank + q]
-        }
-        Blas.product(p.hintText.held, hd, h, hd, aSum, rank, uh)
-        for (k in 0 until h) for (q in 0 until rank) uh[k * rank + q] = uh[k * rank + q] + hintBase[q]
-    }
-
-    /**
-     * The loss of every name read as a text that names its value and none of its rivals, weight 1 a pair; its gradient
-     * into [duh], [dvHint] and the biases, the slope of the common bias into [common]. Answers the loss summed, not
-     * averaged.
-     */
-    private fun hintLoss(
-        theta: FloatArray,
-        pair: FloatArray,
-        total: Float,
-        gBias: FloatArray,
-        common: FloatArray,
-    ): Float {
-        duh.clear()
-        dvHint.fill(0f)
-        val bias = size - PAIR - m
-        var loss = 0f
-        p.hintGroups.forEach { group ->
-            val k = group.rows.size
-            val c = group.values.size
-            // The group's names' and values' coordinates, gathered; their scores by one product
-            group.rows.forEachIndexed { r, row -> for (q in 0 until rank) gu[r * rank + q] = uh[row * rank + q] }
-            group.values.forEachIndexed { j, value ->
-                for (q in 0 until rank) {
-                    gv[j * rank + q] = v[value * rank + q]
-                    gvt[q * c + j] = v[value * rank + q]
-                }
-            }
-            Blas.product(gu, rank, k, rank, gvt, c, gs)
-            // Every pair's loss and slope, a row of names at a time on every core: a large universe
-            // has thousands of names against thousands of characters. Every value of the row is
-            // taken against the label nought at once, in the wide registers; the name's own value
-            // is then set right: its label is one
-            val shift = FloatArray(c) { j -> theta[bias + group.values[j]] + pair[1] }
-            val scale = 1 / total
-            val rowLoss = FloatArray(k)
-            val rowSlope = FloatArray(k)
-            // The scores are taken where they lie, in the native memory of the product: not copied out and back
-            IntStream.range(0, k).parallel().forEach { r ->
-                val own = group.positive[r]
-                val at = r * c
-                val before = if (own in 0 until c) gs[at + own] + shift[own] else 0f
-                val sums = FloatArray(2)
-                Simd.logisticRow(gs, at, shift, c, scale, sums)
-                if (own in 0 until c) {
-                    // softplus(z) − z for the label one in place of softplus(z) for nought
-                    val d = (sigmoid(before) - 1) / total
-                    sums[0] -= before
-                    sums[1] += d - sigmoid(before) / total
-                    gs[at + own] = d
-                }
-                rowLoss[r] = sums[0]
-                rowSlope[r] = sums[1]
-            }
-            loss += rowLoss.sum()
-            common[0] += rowSlope.sum()
-            // The slope of every value's bias: the sum of its column, by one product with a column of ones
-            Blas.transposedProduct(gs, c, k, c, ones, 1, columns)
-            for (j in 0 until c) gBias[group.values[j]] += columns[j]
-            // The gradient of the group's coordinates, scattered back
-            Blas.product(gs, c, k, c, gv, rank, gdu)
-            Blas.transposedProduct(gs, c, k, c, gu, rank, gdv)
-            group.rows.forEachIndexed { r, row ->
-                for (q in 0 until rank) duh[row * rank + q] = duh[row * rank + q] + gdu[r * rank + q]
-            }
-            group.values.forEachIndexed { j, value ->
-                for (q in 0 until rank) dvHint[value * rank + q] += gdv[j * rank + q]
-            }
-        }
-        return loss
-    }
-
-    /**
-     * The gradient of the names' coordinates carried back into the text blocks' weights, the constant's and the marks',
-     * added to [da]: of Hᵀ dUh ([sum], hintDim × rank) and of Σ dUh ([base]).
-     */
-    private fun addNamesGradient(da: FloatArray, sum: FloatArray, base: FloatArray) {
-        for (q in 0 until rank) da[q] += base[q]
-        p.hintBlocks.forEach { b ->
-            val mark = p.design.blockOffsets[b]
-            val scale = p.design.blocks[b].scale
-            for (q in 0 until rank) da[mark * rank + q] += base[q]
-            for (c in 0 until hd) for (q in 0 until rank) da[(mark + 1 + c) * rank + q] += scale * sum[c * rank + q]
-        }
+        if (names && namesAsTexts.h > 0) namesAsTexts.coordinates(aF)
     }
 
     /**
@@ -518,53 +394,16 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         }
         val uH = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
         val pairs = pairs(uH, vH, theta, pair, bias, scale, trains)
-        var loss = pairs.loss
-        var gCommon = pairs.common
-        val gBias = pairs.bias
-        val dE = pairs.dv
-        val dA: FloatArray
-        val dB: FloatArray
-        if (card != null) {
-            loss += card.loss
-            gCommon += card.slope
-            for (k in dE.indices) dE[k] += card.dv[k]
-            for (j in 0 until m) gBias[j] += card.dBias[j]
-            du.put(pairs.du, 0, 0, n * rank)
-            p.x.transposedTimes(du, rank, da, blockPart)
-            dA = FloatArray(dx * rank).also { da.take(it, 0, 0, dx * rank) }
-            addNamesGradient(dA, card.dSum, card.dBase)
-            dB = step.backward(dE)
-        } else {
-            // The names as texts that name their values
-            if (h > 0) {
-                val common = FloatArray(1)
-                loss += hintLoss(theta, pair, total, gBias, common)
-                gCommon += common[0]
-                for (k in 0 until m * rank) dE[k] += dvHint[k]
-            }
-            // dA = Xᵀ dU, dB = Zᵀ dV, dE = dV — the names' parts added
-            du.put(pairs.du, 0, 0, n * rank)
-            dv.put(dE, 0, 0, m * rank)
-            p.x.transposedTimes(du, rank, da, blockPart)
-            Blas.transposedProduct(p.z.held, dz, m, dz, dv, rank, db)
-            dA = FloatArray(dx * rank).also { da.take(it, 0, 0, dx * rank) }
-            dB = FloatArray(dz * rank).also { db.take(it, 0, 0, dz * rank) }
-            if (h > 0) {
-                Blas.transposedProduct(p.hintText.held, hd, h, hd, duh, rank, dSum)
-                val base = FloatArray(rank)
-                for (k in 0 until h) for (q in 0 until rank) base[q] += duh[k * rank + q]
-                addNamesGradient(dA, FloatArray(hd * rank).also { dSum.take(it, 0, 0, hd * rank) }, base)
-            }
-        }
-        loss /= total
+        val names = if (card != null) namesOnCard(card, step, pairs) else namesOnProcessor(theta, pair, total, pairs)
+        val loss = (pairs.loss + names.loss) / total
         val bAt = dx * rank
         val eAt = bAt + dz * rank
-        dA.copyInto(grad, 0)
-        dB.copyInto(grad, bAt)
-        dE.copyInto(grad, eAt)
-        gBias.copyInto(grad, bias)
+        names.dA.copyInto(grad, 0)
+        names.dB.copyInto(grad, bAt)
+        pairs.dv.copyInto(grad, eAt)
+        pairs.bias.copyInto(grad, bias)
         grad[size - PAIR] = pairs.example
-        grad[size - PAIR + 1] = gCommon
+        grad[size - PAIR + 1] = pairs.common + names.common
         // The penalty on every weight: the pair's own too — a few answers on the site's examples
         // all of one kind would make the example's weight endless; but the common bias, the base
         // rate of every value, which the values' own biases are counted from
@@ -573,6 +412,52 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         grad[size - 1] -= 2 * lambda * common
         val penalty = Simd.dot(theta, theta) - common * common
         return loss + lambda * penalty
+    }
+
+    /**
+     * What the names add to the pairs' gradient, and the gradient carried back to the weights A and B: the names' loss,
+     * the slope of the common bias, dA and dB.
+     */
+    private class Gradient(val loss: Float, val common: Float, val dA: FloatArray, val dB: FloatArray)
+
+    /**
+     * The names' loss and slopes as the [card]'s forward run gave them, added to the values' slopes of [pairs] (in
+     * place); dA of the items' slopes here and of the names', dB by the card's backward run of [onCard].
+     */
+    private fun namesOnCard(card: StepOnCard.Forward, onCard: StepOnCard, pairs: Pairs): Gradient {
+        val dE = pairs.dv
+        val gBias = pairs.bias
+        for (k in dE.indices) dE[k] += card.dv[k]
+        for (j in 0 until m) gBias[j] += card.dBias[j]
+        du.put(pairs.du, 0, 0, n * rank)
+        p.x.transposedTimes(du, rank, da, blockPart)
+        val dA = FloatArray(dx * rank).also { da.take(it, 0, 0, dx * rank) }
+        namesAsTexts.addGradient(dA, card.dSum, card.dBase)
+        return Gradient(card.loss, card.slope, dA, onCard.backward(dE))
+    }
+
+    /**
+     * The names as texts that name their values, on the processor: their loss and slopes added to the values' slopes of
+     * [pairs] (in place); dA = Xᵀ dU, dB = Zᵀ dV, dE = dV — the names' parts added.
+     */
+    private fun namesOnProcessor(theta: FloatArray, pair: FloatArray, total: Float, pairs: Pairs): Gradient {
+        val dE = pairs.dv
+        val common = FloatArray(1)
+        var loss = 0f
+        val named = namesAsTexts.h > 0
+        if (named) {
+            loss = namesAsTexts.loss(theta, pair, size - PAIR - m, v, total, pairs.bias, common)
+            val dvHint = namesAsTexts.dvHint
+            for (k in 0 until m * rank) dE[k] += dvHint[k]
+        }
+        du.put(pairs.du, 0, 0, n * rank)
+        dv.put(dE, 0, 0, m * rank)
+        p.x.transposedTimes(du, rank, da, blockPart)
+        Blas.transposedProduct(p.z.held, dz, m, dz, dv, rank, db)
+        val dA = FloatArray(dx * rank).also { da.take(it, 0, 0, dx * rank) }
+        val dB = FloatArray(dz * rank).also { db.take(it, 0, 0, dz * rank) }
+        if (named) namesAsTexts.addGradientOfLoss(dA)
+        return Gradient(loss, common[0], dA, dB)
     }
 
     /**
@@ -608,8 +493,8 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
             val dv = partDv[part]
             val gBias = partBias[part]
             for (i in n * part / parts until n * (part + 1) / parts) {
-                if (!trains(i)) continue
-                val len = p.pairsOf(i, row)
+                // An item not trained on has no pairs here
+                val len = if (trains(i)) p.pairsOf(i, row) else 0
                 if (len == 0) continue
                 val at = row.values
                 for (j in 0 until len) {

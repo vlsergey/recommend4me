@@ -1,9 +1,7 @@
 package io.github.vlsergey.recommend4me.correction
 
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
-import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_COMPLETE
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_CORRECTION
-import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FIELD_CORRECTION
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
@@ -22,10 +20,12 @@ data class FacetCorrection(
 
 /**
  * The user's corrections of the normalized works (in the dictionaries), as the items of one source see them — every
- * item of a work has them alike: facet values added and taken away, facets whose values are all named, fields
- * overridden.
+ * item of a work has them alike: facet values added and taken away here; facets whose values are all named
+ * ([CompleteFacets]) and fields overridden ([FieldCorrections]) each of its own.
  */
-class CorrectionRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) {
+class CorrectionRepository(private val db: DSLContext, private val source: String, private val works: WorkRepository) :
+    FieldCorrections by WorkFieldCorrections(db, source, works),
+    CompleteFacets by WorkCompleteFacets(db, source, works) {
 
     private fun workOf(itemId: String, now: Instant = Instant.now()) = works.of(ItemKey(source, itemId), now)
 
@@ -37,13 +37,13 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
         db.insertInto(f)
             .set(f.WORK, workOf(itemId, now))
             .set(f.FACET, facet)
-            .set(f.VALUE_KEY, key.take(500))
+            .set(f.VALUE_KEY, key.take(KEY_WIDTH))
             .set(f.ADDED, added)
-            .set(f.NAME, name?.take(1000))
+            .set(f.NAME, name?.take(NAME_WIDTH))
             .set(f.CORRECTED_AT, now)
             .onDuplicateKeyUpdate()
             .set(f.ADDED, added)
-            .set(f.NAME, name?.take(1000))
+            .set(f.NAME, name?.take(NAME_WIDTH))
             .set(f.CORRECTED_AT, now)
             .execute()
     }
@@ -107,7 +107,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
                     tx.insertInto(f)
                         .set(f.WORK, work)
                         .set(f.FACET, facet)
-                        .set(f.VALUE_KEY, to.take(500))
+                        .set(f.VALUE_KEY, to.take(KEY_WIDTH))
                         .set(f.ADDED, newest.added)
                         .set(f.NAME, newest.name)
                         .set(f.CORRECTED_AT, newest.correctedAt)
@@ -126,89 +126,14 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
     /** Every facet correction: they are few, the user makes them by hand. */
     fun allFacets(): List<FacetCorrection> = seenFacets(DSL.noCondition())
 
-    fun setField(itemId: String, field: String, content: String, now: Instant) {
-        val f = WORK_FIELD_CORRECTION
-        db.insertInto(f)
-            .set(f.WORK, workOf(itemId, now))
-            .set(f.FIELD, field)
-            .set(f.CONTENT, content)
-            .set(f.CORRECTED_AT, now)
-            .onDuplicateKeyUpdate()
-            .set(f.CONTENT, content)
-            .set(f.CORRECTED_AT, now)
-            .execute()
-    }
+    private companion object {
+        /** The ids asked for by their ids at most; of more, every answer of the source is read once and picked from. */
+        const val BATCH = 1000
 
-    fun unsetField(itemId: String, field: String) {
-        val f = WORK_FIELD_CORRECTION
-        db.deleteFrom(f).where(f.WORK.eq(workOf(itemId)), f.FIELD.eq(field)).execute()
-    }
+        /** The width of the column of a value's key (VARCHAR(500)): a longer one is cut. */
+        const val KEY_WIDTH = 500
 
-    private fun seenFields(condition: Condition): Map<String, Map<String, String>> {
-        val f = WORK_FIELD_CORRECTION
-        return db.select(SITE_WORK.ITEM, f.FIELD, f.CONTENT)
-            .from(SITE_WORK)
-            .join(f)
-            .on(f.WORK.eq(SITE_WORK.NORMALIZED))
-            .where(SITE_WORK.SOURCE.eq(source), condition)
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! to it.value3()!! })
-            .mapValues { it.value.toMap() }
-    }
-
-    fun fieldsOf(itemId: String): Map<String, String> = fieldsOf(listOf(itemId))[itemId].orEmpty()
-
-    fun fieldsOf(ids: Collection<String>): Map<String, Map<String, String>> =
-        ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
-            out.apply { putAll(seenFields(SITE_WORK.ITEM.`in`(chunk))) }
-        }
-
-    /** Every field correction: item to field to content. */
-    fun allFields(): Map<String, Map<String, String>> = seenFields(DSL.noCondition())
-
-    // --- Facets whose values are all named ---
-
-    /** The user's word that the work's values of the facet are all named ([complete]), or its taking back. */
-    fun setComplete(itemId: String, facet: String, complete: Boolean, now: Instant) {
-        val c = WORK_FACET_COMPLETE
-        if (complete)
-            db.insertInto(c)
-                .set(c.WORK, workOf(itemId, now))
-                .set(c.FACET, facet)
-                .set(c.COMPLETED_AT, now)
-                .onDuplicateKeyIgnore()
-                .execute()
-        else db.deleteFrom(c).where(c.WORK.eq(workOf(itemId, now)), c.FACET.eq(facet)).execute()
-    }
-
-    private fun seenComplete(condition: Condition): Map<String, Set<String>> {
-        val c = WORK_FACET_COMPLETE
-        return db.select(SITE_WORK.ITEM, c.FACET)
-            .from(SITE_WORK)
-            .join(c)
-            .on(c.WORK.eq(SITE_WORK.NORMALIZED))
-            .where(SITE_WORK.SOURCE.eq(source), condition)
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! })
-            .mapValues { it.value.toSet() }
-    }
-
-    /**
-     * The facets whose values the user said are all named, of each of the items [ids] that has any: read as [facetsOf]
-     * reads.
-     */
-    fun completeOf(ids: Collection<String>): Map<String, Set<String>> {
-        val asked = ids.toHashSet()
-        return if (asked.size > BATCH) allComplete().filterKeys { it in asked }
-        else seenComplete(SITE_WORK.ITEM.`in`(asked))
-    }
-
-    fun completeOf(itemId: String): Set<String> = completeOf(listOf(itemId))[itemId].orEmpty()
-
-    /** Every item with a facet whose values are all named: they are few, the user says it by hand. */
-    fun allComplete(): Map<String, Set<String>> = seenComplete(DSL.noCondition())
-
-    companion object {
-        private const val BATCH = 1000
+        /** The width of the column of the name the user gave a value (VARCHAR(1000)): a longer one is cut. */
+        const val NAME_WIDTH = 1000
     }
 }

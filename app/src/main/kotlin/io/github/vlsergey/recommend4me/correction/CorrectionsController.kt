@@ -35,9 +35,73 @@ private fun siteField(store: SourceStore, def: FacetDef) =
         "field" to I18nKeys.facetLabel(store.id, def),
     )
 
+/** The source [source] when it has the item [item]; null when it has not. */
+private fun Stores.withItem(source: String, item: String): SourceStore? =
+    source(source)?.takeIf { it.items.find(item) != null }
+
 /**
- * The user's corrections of an item. Every correction is a change of the item's searchable data — its texts are encoded
- * again and it is indexed again — and of what the model reads.
+ * The [facet] of the [store] as the user answers on it; refused when the source has no such facet, or it is the site's
+ * word — shown and read as it is: only the application's layer over it is corrected.
+ */
+private fun editableFacet(store: SourceStore, facet: String): FacetDef {
+    val def = store.schema.facet(facet) ?: throw noField(store, facet)
+    if (!def.editable) throw siteField(store, def)
+    return def
+}
+
+/**
+ * The tag an entry of a catalogue ([c] offered it as a new tag) is bound to, made of it when there is none; null when
+ * the answer names no entry, or its facet is not of tags.
+ */
+private fun tagOfEntry(tags: Tags, store: SourceStore, c: ApiFacetCorrection): String? =
+    c.entry
+        ?.takeIf { c.facet in store.tagFacets }
+        ?.let { e ->
+            val scope =
+                tags.scope()
+                    ?: throw Refusal.NO_VALUE.refuse(
+                        HttpStatus.BAD_REQUEST,
+                        "No tags to make one of ${e.catalogue}:${e.entry}",
+                    )
+            try {
+                tags.tagOfEntry(scope, c.facet, e.catalogue, e.entry)
+            } catch (x: NoSuchElementException) {
+                throw Refusal.NO_VALUE.refuse(HttpStatus.BAD_REQUEST, x.message ?: "No entry ${e.catalogue}:${e.entry}")
+                    .apply { initCause(x) }
+            }
+        }
+
+/** "title", "text:<a text of the source>", "number:<a number of the source>". */
+private fun knownField(store: SourceStore, field: String): Boolean =
+    when {
+        field == Corrected.TITLE -> true
+        field.startsWith("text:") -> store.schema.text(field.removePrefix("text:")) != null
+        field.startsWith("number:") -> store.schema.number(field.removePrefix("number:")) != null
+        else -> false
+    }
+
+/**
+ * The work [other] of a source is joined with the work [item] of the [store]: refused of two content types, and of a
+ * work with itself.
+ */
+private fun refuseJoin(store: SourceStore, item: String, other: SourceStore, otherItem: String) {
+    if (other.type != store.type) {
+        throw Refusal.JOIN_TYPES.refuse(
+            HttpStatus.BAD_REQUEST,
+            "A work of ${store.type} is not joined with one of ${other.type}",
+        )
+    }
+    if (other.id == store.id && otherItem == item) {
+        throw Refusal.JOIN_SELF.refuse(HttpStatus.BAD_REQUEST, "The work ${store.id}/$item is not joined with itself")
+    }
+}
+
+/**
+ * The user's corrections of an item. Every correction of its fields and links is a change of the item's searchable data
+ * — its texts are encoded again and it is indexed again — and of what the model reads. An answer on a facet is written,
+ * and nothing else — nothing of the work read back: a second answer right after the first waits for no reading. The
+ * page shows the answer once it is kept and reads the work anew once the answers have settled; its chances are made of
+ * the answer when it is read ([FacetSuggestions.chances]).
  */
 @RestController
 class CorrectionsController(
@@ -58,48 +122,17 @@ class CorrectionsController(
         return details.read(ItemKey(store.id, item))?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
     }
 
-    /**
-     * An answer on a facet: [change] written, and nothing else — nothing of the work read back: a second answer right
-     * after the first waits for no reading. The page shows the answer once it is kept and reads the work anew once the
-     * answers have settled; its chances are made of the answer when it is read ([FacetSuggestions.chances]).
-     */
-    private fun answered(store: SourceStore, item: String, facet: String, change: () -> Unit) =
-        answering.answered(store, item, listOf(facet), change)
-
-    private fun itemOf(source: String, item: String): SourceStore? =
-        stores.source(source)?.takeIf { it.items.find(item) != null }
-
     override fun correctFacet(
         source: String,
         item: String,
         facetCorrection: ApiFacetCorrection,
     ): ResponseEntity<FacetAnswer> {
-        val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
+        val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         val c = facetCorrection
-        val def = store.schema.facet(c.facet) ?: throw noField(store, c.facet)
-        // The site's word is shown and read as it is: only the application's layer over it is corrected
-        if (!def.editable) throw siteField(store, def)
+        editableFacet(store, c.facet)
         val name = c.name?.trim()?.takeIf { it.isNotEmpty() }
         // An entry of a catalogue offered as a new tag: the tag bound to it, made of it when there is none
-        val ofEntry =
-            c.entry
-                ?.takeIf { c.facet in store.tagFacets }
-                ?.let { e ->
-                    val scope =
-                        tags.scope()
-                            ?: throw Refusal.NO_VALUE.refuse(
-                                HttpStatus.BAD_REQUEST,
-                                "No tags to make one of ${e.catalogue}:${e.entry}",
-                            )
-                    try {
-                        tags.tagOfEntry(scope, c.facet, e.catalogue, e.entry)
-                    } catch (x: NoSuchElementException) {
-                        throw Refusal.NO_VALUE.refuse(
-                            HttpStatus.BAD_REQUEST,
-                            x.message ?: "No entry ${e.catalogue}:${e.entry}",
-                        )
-                    }
-                }
+        val ofEntry = tagOfEntry(tags, store, c)
         val key =
             ofEntry
                 ?: c.key?.trim()?.takeIf { it.isNotEmpty() }
@@ -109,7 +142,7 @@ class CorrectionsController(
                     "Neither a key nor a name of a value of '${c.facet}' given",
                 )
         if (!c.added) answering.refuseImplied(store, item, c.facet, key)
-        answered(store, item, c.facet) {
+        answering.answered(store, item, listOf(c.facet)) {
             // A name is kept for a value the site does not name: one the user made up
             val known = store.names(c.facet, listOf(key)).isNotEmpty()
             answering.write(store, item, c.facet, key, c.added, name.takeIf { !known })
@@ -120,8 +153,8 @@ class CorrectionsController(
     }
 
     override fun uncorrectFacet(source: String, item: String, facet: String, key: String): ResponseEntity<Unit> {
-        val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
-        answered(store, item, facet) { store.corrections.unsetFacet(item, facet, key) }
+        val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
+        answering.answered(store, item, listOf(facet)) { store.corrections.unsetFacet(item, facet, key) }
         return ResponseEntity.noContent().build()
     }
 
@@ -136,10 +169,11 @@ class CorrectionsController(
      * current apart.
      */
     private fun complete(source: String, item: String, facet: String, complete: Boolean): ResponseEntity<Unit> {
-        val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
-        val def = store.schema.facet(facet) ?: throw noField(store, facet)
-        if (!def.editable) throw siteField(store, def)
-        answered(store, item, facet) { store.corrections.setComplete(item, facet, complete, Instant.now()) }
+        val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
+        editableFacet(store, facet)
+        answering.answered(store, item, listOf(facet)) {
+            store.corrections.setComplete(item, facet, complete, Instant.now())
+        }
         return ResponseEntity.noContent().build()
     }
 
@@ -149,44 +183,27 @@ class CorrectionsController(
         field: String,
         fieldCorrection: FieldCorrection,
     ): ResponseEntity<ItemDetails> {
-        val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
+        val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         if (!knownField(store, field)) throw noField(store, field)
         store.corrections.setField(item, field, fieldCorrection.content, Instant.now())
         return corrected(store, item)
     }
 
     override fun uncorrectField(source: String, item: String, field: String): ResponseEntity<ItemDetails> {
-        val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
+        val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         store.corrections.unsetField(item, field)
         return corrected(store, item)
     }
 
-    /** "title", "text:<a text of the source>", "number:<a number of the source>". */
-    private fun knownField(store: SourceStore, field: String): Boolean =
-        when {
-            field == Corrected.TITLE -> true
-            field.startsWith("text:") -> store.schema.text(field.removePrefix("text:")) != null
-            field.startsWith("number:") -> store.schema.number(field.removePrefix("number:")) != null
-            else -> false
-        }
-
     override fun linkItem(source: String, item: String, itemRef: ItemRef): ResponseEntity<ItemDetails> {
-        val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
+        val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         val other =
-            itemOf(itemRef.source, itemRef.item)
+            stores.withItem(itemRef.source, itemRef.item)
                 ?: throw Refusal.NO_SUCH_WORK.refuse(
                     HttpStatus.BAD_REQUEST,
                     "There is no work ${itemRef.source}/${itemRef.item}",
                 )
-        if (other.type != store.type) {
-            throw Refusal.JOIN_TYPES.refuse(
-                HttpStatus.BAD_REQUEST,
-                "A work of ${store.type} is not joined with one of ${other.type}",
-            )
-        }
-        if (other.id == store.id && itemRef.item == item) {
-            throw Refusal.JOIN_SELF.refuse(HttpStatus.BAD_REQUEST, "The work $source/$item is not joined with itself")
-        }
+        refuseJoin(store, item, other, itemRef.item)
         stores.typeOf(source).links.link(ItemKey(source, item), ItemKey(itemRef.source, itemRef.item), Instant.now())
         workEvents.merged(ItemKey(source, item))
         return corrected(store, item)
@@ -198,7 +215,7 @@ class CorrectionsController(
         otherSource: String,
         otherItem: String,
     ): ResponseEntity<ItemDetails> {
-        val store = itemOf(source, item) ?: return ResponseEntity.notFound().build()
+        val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         stores.typeOf(source).links.unlink(ItemKey(source, item), ItemKey(otherSource, otherItem), Instant.now())
         return corrected(store, item)
     }

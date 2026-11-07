@@ -2,9 +2,9 @@ package io.github.vlsergey.recommend4me.tagtext
 
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.database.Databases
-import io.github.vlsergey.recommend4me.matrix.Blas
-import io.github.vlsergey.recommend4me.matrix.Floats
+import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.part.Paragraphs
+import io.github.vlsergey.recommend4me.part.PartRepository
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -49,6 +49,37 @@ class TextTag(
 )
 
 /**
+ * A tag of the [key] found close to a work's [paragraph]: its [closeness], and its [chance] by the model when fitted.
+ */
+private class TextTagFound(
+    val key: String,
+    val closeness: Double,
+    val chance: Double?,
+    val paragraph: PartRepository.Paragraph,
+)
+
+/** The first words of a paragraph its address on the site scrolls to. */
+private const val FRAGMENT_WORDS = 8
+
+/**
+ * Where the paragraph [quote] is read on the site: the page of its part, with a text fragment of its first words — the
+ * browser scrolls to them and marks them (`#:~:text=`).
+ */
+private fun placeOf(store: SourceStore, itemId: String, partId: String, quote: String): String {
+    val words =
+        quote
+            .lineSequence()
+            .first()
+            .split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+            .take(FRAGMENT_WORDS)
+            .joinToString(" ")
+    // The dash, the comma and the ampersand are the fragment's own marks: escaped in the text
+    val fragment = URLEncoder.encode(words, StandardCharsets.UTF_8).replace("+", "%20").replace("-", "%2D")
+    return "${store.source.partUrl(itemId, partId)}#:~:text=$fragment"
+}
+
+/**
  * The tags offered by a work's text, and whether its paragraphs are still to be encoded, and whether the model is
  * fitted.
  */
@@ -57,9 +88,10 @@ class TextTagList(val pending: Boolean, val fitted: Boolean, val tags: List<Text
 /**
  * THE TAGS A WORK'S OWN TEXT IS CLOSEST TO — a list apart from the model's chances, which come of a matrix of features
  * and ids (the user, 2026-10-21): every tag held against every paragraph of the work's chapters ([Paragraphs]), at the
- * asking, of the vectors kept — the paragraphs' encoded in the background, the tags' names'. A tag's closeness is the
- * mean of its three closest paragraphs, by its closest name; its closest paragraph quoted beside it. Not offered: a tag
- * the site gives the work, one answered on, one ignored, and a paragraph answered on for that tag.
+ * asking, of the vectors kept — the paragraphs' encoded in the background, the tags' names' ([ClosestParagraphs]). A
+ * tag's closeness is the mean of its three closest paragraphs, by its closest name; its closest paragraph quoted beside
+ * it. Not offered: a tag the site gives the work, one answered on, one ignored, and a paragraph answered on for that
+ * tag.
  *
  * The user's three answers on a tag and its paragraph ([TagTextVerdict]) teach the model of the closeness
  * ([TagTextModel]), fitted in the queue of the computations once they pause; fitted, it gives every tag its chance by
@@ -82,102 +114,67 @@ class TextTags(
     /** The tags offered by the text of the item; null when its source has no tags. */
     fun of(store: SourceStore, itemId: String): TextTagList? {
         val facet = store.tagFacets.firstOrNull() ?: return null
-        val encoder = plugins.textEncoder() ?: return TextTagList(pending = false, fitted = false, tags = emptyList())
+        val encoder = plugins.textEncoder()
+        return if (encoder == null) TextTagList(pending = false, fitted = false, tags = emptyList())
+        else offered(store, facet, itemId, encoder)
+    }
+
+    /**
+     * The tags of the [facet] offered by the text of the item, of its paragraphs as the [encoder] encoded them: none
+     * while none is encoded, and none of a tag left out ([leftOut]).
+     */
+    private fun offered(store: SourceStore, facet: String, itemId: String, encoder: TextEncoder): TextTagList {
         val model = models.read()
         val paragraphs = store.parts.paragraphVectors(itemId, Paragraphs.keyOf(encoder.id))
         val waiting = store.parts.paragraphsPending(itemId, Paragraphs.keyOf(encoder.id))
-        if (paragraphs.isEmpty()) return TextTagList(waiting, model != null, emptyList())
         val started = System.currentTimeMillis()
-        val left = leftOut(store, facet, itemId)
-        val vectors = store.tags.vectors(plugins.pluginOf(encoder), encoder.id).filterKeys { it !in left }
-        if (vectors.isEmpty()) return TextTagList(waiting, model != null, emptyList())
+        val vectors =
+            if (paragraphs.isEmpty()) emptyMap()
+            else {
+                val left = leftOut(store, facet, itemId)
+                store.tags.vectors(plugins.pluginOf(encoder), encoder.id).filterKeys { it !in left }
+            }
+        val tags = if (vectors.isEmpty()) emptyList() else closest(store, itemId, paragraphs, vectors, model, started)
+        return TextTagList(waiting, model != null, tags)
+    }
+
+    /**
+     * The tags of [vectors] (a tag's key to its names' vectors) closest to the work's [paragraphs], the likeliest first
+     * by the [model] when it is fitted, else the closest: a tag's closeness the mean of its closest paragraphs not
+     * answered on for it, its closest quoted.
+     */
+    private fun closest(
+        store: SourceStore,
+        itemId: String,
+        paragraphs: List<PartRepository.Paragraph>,
+        vectors: Map<String, List<FloatArray>>,
+        model: TagTextModel?,
+        started: Long,
+    ): List<TextTag> {
         // A paragraph answered on for a tag, of any cutting, by the hash of its text
         val answered = store.tagTextAnswers.ofItem(itemId).mapNotNull { a -> a.hash?.let { a.tag to it } }.toSet()
         val tags = vectors.keys.toList()
         val tagIds = LongArray(tags.size) { tags[it].toLong() }
-        // Every name of every tag a row, and the tag each is of
-        val ownerOf = ArrayList<Int>()
-        vectors.values.forEachIndexed { t, names -> names.forEach { _ -> ownerOf += t } }
-        val dim = paragraphs.first().vector.size
-        val names = Floats(ownerOf.size * dim)
-        var row = 0
-        vectors.values.forEach { list ->
-            list.forEach { v ->
-                for (q in 0 until dim) names[row * dim + q] = v[q]
-                row++
-            }
-        }
-        // Of every tag its three closest paragraphs not answered on for it, by its closest name: a block of paragraphs
-        // at a time
-        val best = Array(tags.size) { DoubleArray(TOP) { Double.NEGATIVE_INFINITY } }
-        val bestAt = Array(tags.size) { IntArray(TOP) { -1 } }
-        val block = minOf(paragraphs.size, BLOCK)
-        val p = Floats(block * dim)
-        val s = Floats(block * ownerOf.size)
-        val ofTag = DoubleArray(tags.size)
-        for (from in paragraphs.indices step block) {
-            val rows = minOf(block, paragraphs.size - from)
-            for (k in 0 until rows) {
-                val v = paragraphs[from + k].vector
-                for (q in 0 until dim) p[k * dim + q] = v[q]
-            }
-            Blas.gemm(false, true, rows, ownerOf.size, dim, p, 0, dim, names, 0, dim, s, 0, ownerOf.size)
-            for (k in 0 until rows) {
-                val paragraph = paragraphs[from + k]
-                ofTag.fill(Double.NEGATIVE_INFINITY)
-                for (n in ownerOf.indices) {
-                    val t = ownerOf[n]
-                    val c = s[k * ownerOf.size + n].toDouble()
-                    if (c > ofTag[t]) ofTag[t] = c
-                }
-                for (t in tags.indices) {
-                    val c = ofTag[t]
-                    if (c <= best[t][TOP - 1]) continue
-                    if ((tagIds[t] to paragraph.hash) in answered) continue
-                    var at = TOP - 1
-                    while (at > 0 && best[t][at - 1] < c) {
-                        best[t][at] = best[t][at - 1]
-                        bestAt[t][at] = bestAt[t][at - 1]
-                        at--
-                    }
-                    best[t][at] = c
-                    bestAt[t][at] = from + k
-                }
-            }
-        }
+        val found = ClosestParagraphs.of(paragraphs, tagIds, vectors.values, answered)
         val scored =
             tags.indices
-                .filter { bestAt[it][0] >= 0 }
+                .filter { found.at[it][0] >= 0 }
                 .map { t ->
-                    val kept = best[t].filter { it > Double.NEGATIVE_INFINITY }
+                    val kept = found.best[t].filter { it > Double.NEGATIVE_INFINITY }
                     val closeness = kept.average()
-                    val chance = model?.chance(tagIds[t], best[t][0])
+                    val chance = model?.chance(tagIds[t], found.best[t][0])
                     Triple(t, closeness, chance)
                 }
                 .sortedByDescending { (_, closeness, chance) -> chance ?: closeness }
                 .take(SHOWN)
-        // The paragraphs quoted, of their parts' texts
-        val texts = HashMap<String, Pair<String?, List<String>>>()
-        val out = scored.mapNotNull { (t, closeness, chance) ->
-            val paragraph = paragraphs[bestAt[t][0]]
-            val (title, own) =
-                texts.getOrPut(paragraph.partId) {
-                    store.parts.text(itemId, paragraph.partId)?.let { (part, text) ->
-                        part.title to Paragraphs.of(text)
-                    } ?: (null to emptyList())
-                }
-            val quote = own.getOrNull(paragraph.number) ?: return@mapNotNull null
-            TextTag(
-                tags[t],
-                closeness,
-                chance,
-                paragraph.partId,
-                title,
-                paragraph.number,
-                quote,
-                placeOf(store, itemId, paragraph.partId, quote),
+        val out =
+            quoted(
+                store,
+                itemId,
+                scored.map { (t, closeness, chance) ->
+                    TextTagFound(tags[t], closeness, chance, paragraphs[found.at[t][0]])
+                },
             )
-        }
         log.info(
             "{}: {} tags held against {} paragraphs of {} in {} ms",
             store.id,
@@ -186,25 +183,35 @@ class TextTags(
             itemId,
             System.currentTimeMillis() - started,
         )
-        return TextTagList(waiting, model != null, out)
+        return out
     }
 
     /**
-     * Where the paragraph [quote] is read on the site: the page of its part, with a text fragment of its first words —
-     * the browser scrolls to them and marks them (`#:~:text=`).
+     * The tags [found] with their closest paragraphs quoted, of their parts' texts; one whose text is gone left out.
      */
-    private fun placeOf(store: SourceStore, itemId: String, partId: String, quote: String): String {
-        val words =
-            quote
-                .lineSequence()
-                .first()
-                .split(Regex("\\s+"))
-                .filter { it.isNotEmpty() }
-                .take(FRAGMENT_WORDS)
-                .joinToString(" ")
-        // The dash, the comma and the ampersand are the fragment's own marks: escaped in the text
-        val fragment = URLEncoder.encode(words, StandardCharsets.UTF_8).replace("+", "%20").replace("-", "%2D")
-        return "${store.source.partUrl(itemId, partId)}#:~:text=$fragment"
+    private fun quoted(store: SourceStore, itemId: String, found: List<TextTagFound>): List<TextTag> {
+        val texts = HashMap<String, Pair<String?, List<String>>>()
+        return found.mapNotNull { f ->
+            val paragraph = f.paragraph
+            val (title, own) =
+                texts.getOrPut(paragraph.partId) {
+                    store.parts.text(itemId, paragraph.partId)?.let { (part, text) ->
+                        part.title to Paragraphs.of(text)
+                    } ?: (null to emptyList())
+                }
+            own.getOrNull(paragraph.number)?.let { quote ->
+                TextTag(
+                    f.key,
+                    f.closeness,
+                    f.chance,
+                    paragraph.partId,
+                    title,
+                    paragraph.number,
+                    quote,
+                    placeOf(store, itemId, paragraph.partId, quote),
+                )
+            }
+        }
     }
 
     /**
@@ -246,25 +253,41 @@ class TextTags(
         paragraph: Int,
         verdict: TagTextVerdict,
     ): Boolean {
-        val facet = store.tagFacets.firstOrNull() ?: return false
-        val tag = key.toLongOrNull() ?: return false
-        val encoder = plugins.textEncoder() ?: return false
-        val found = store.parts.paragraph(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id)) ?: return false
-        val vector = found.vector
-        val names =
-            store.tags.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id).takeIf { it.isNotEmpty() } ?: return false
-        val closeness = names.maxOf { name -> name.indices.sumOf { (name[it] * vector[it]).toDouble() } }
-        val now = Instant.now()
-        store.tagTextAnswers.answer(
-            TagTextAnswer(itemId, tag, partId, paragraph, found.hash, verdict, closeness.toFloat()),
-            now,
-        )
-        if (verdict == TagTextVerdict.YES) {
-            store.corrections.setFacet(itemId, facet, key, true, null, now)
-            events.publishEvent(FacetAnswered(store.type, store.id, itemId, facet))
+        val facet = store.tagFacets.firstOrNull()
+        val tag = key.toLongOrNull()
+        val held = if (facet != null && tag != null) heldAgainst(store, itemId, tag, partId, paragraph) else null
+        if (facet != null && tag != null && held != null) {
+            val (found, closeness) = held
+            val now = Instant.now()
+            store.tagTextAnswers.answer(
+                TagTextAnswer(itemId, tag, partId, paragraph, found.hash, verdict, closeness.toFloat()),
+                now,
+            )
+            if (verdict == TagTextVerdict.YES) {
+                store.corrections.setFacet(itemId, facet, key, true, null, now)
+                events.publishEvent(FacetAnswered(store.type, store.id, itemId, facet))
+            }
+            events.publishEvent(TagTextAnswered(store.id))
         }
-        events.publishEvent(TagTextAnswered(store.id))
-        return true
+        return held != null
+    }
+
+    /**
+     * The paragraph [paragraph] of the part [partId] and its closeness to the [tag] now, by the tag's closest name;
+     * null when there is no encoder of texts, no such paragraph encoded, or no name of the tag encoded.
+     */
+    private fun heldAgainst(
+        store: SourceStore,
+        itemId: String,
+        tag: Long,
+        partId: String,
+        paragraph: Int,
+    ): Pair<PartRepository.Paragraph, Double>? {
+        val encoder = plugins.textEncoder() ?: return null
+        val found = store.parts.paragraph(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id))
+        val names = found?.let { store.tags.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id) }.orEmpty()
+        return if (found == null || names.isEmpty()) null
+        else found to names.maxOf { name -> name.indices.sumOf { (name[it] * found.vector[it]).toDouble() } }
     }
 
     /**
@@ -296,12 +319,13 @@ class TextTags(
                 unbound.size,
             )
         }
-        answered(TagTextAnswered("start"))
+        answered()
     }
 
-    /** An answer kept: the model fitted anew once the answers pause. */
-    @EventListener
-    fun answered(event: TagTextAnswered) {
+    /** An answer kept ([TagTextAnswered]): the model fitted anew once the answers pause. */
+    @Suppress("TooGenericExceptionCaught")
+    @EventListener(TagTextAnswered::class)
+    fun answered() {
         workload.plan(FITTING, Instant.now().plusSeconds(QUIET_SECONDS), REASON)
         val next =
             scheduler.schedule(
@@ -309,6 +333,8 @@ class TextTags(
                     try {
                         workload.run(FITTING) { fit() }
                     } catch (e: Exception) {
+                        // A BOUNDARY: this runs on the scheduler's thread, where nothing would hear of a failure of
+                        // the queue or of the fitting; it is logged
                         log.warn("The model of the tags' closeness to the texts was not fitted: {}", e.message, e)
                     }
                 },
@@ -338,17 +364,8 @@ class TextTags(
     }
 
     private companion object {
-        /** The paragraphs a tag's closeness is the mean of. */
-        const val TOP = 3
-
         /** The tags offered at most. */
         const val SHOWN = 30
-
-        /** The first words of a paragraph its address on the site scrolls to. */
-        const val FRAGMENT_WORDS = 8
-
-        /** Paragraphs held against the tags at once: memory, not meaning. */
-        const val BLOCK = 256
 
         /** The quiet after an answer before the model is fitted: the user answers in a row. */
         const val QUIET_SECONDS = 10L

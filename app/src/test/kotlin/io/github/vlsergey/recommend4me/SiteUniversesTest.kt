@@ -44,7 +44,7 @@ class SiteUniversesTest : SiteTestBase() {
             universes.listCharacters("fake", "U1").body!!.single { it.character == "C1" }.names,
         )
         // The statements the site asked of the catalogue came with the characters, and are kept
-        val pilot = stores.type("books")!!.universes.characters("fake", "U1").single { it.id == "C1" }
+        val pilot = stores.type("books")!!.universes.entries.characters("fake", "U1").single { it.id == "C1" }
         assertEquals(mapOf("P1" to listOf("Space Pilot")), pilot.properties)
         assertEquals(setOf("P1"), stores.type("books")!!.universes.find("fake", "U1")!!.properties)
 
