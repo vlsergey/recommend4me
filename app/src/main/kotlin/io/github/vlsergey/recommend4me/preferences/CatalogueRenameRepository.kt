@@ -68,10 +68,10 @@ class CatalogueRenameRepository(private val db: DSLContext) {
                 val tx = DSL.using(c)
                 rows.forEach {
                     tx.insertInto(r)
-                        .set(r.CATALOGUE, it.get(0, String::class.java))
-                        .set(r.ENTITY, it.get(1, String::class.java))
-                        .set(r.NAME, it.get(2, String::class.java))
-                        .set(r.RENAMED_AT, it.get(3, java.time.OffsetDateTime::class.java).toInstant())
+                        .set(r.CATALOGUE, it.get("CATALOGUE", String::class.java))
+                        .set(r.ENTITY, it.get("ENTRY_ID", String::class.java))
+                        .set(r.NAME, it.get("NAME", String::class.java))
+                        .set(r.RENAMED_AT, it.get("NAMED_AT", java.time.OffsetDateTime::class.java).toInstant())
                         .onDuplicateKeyIgnore()
                         .execute()
                 }

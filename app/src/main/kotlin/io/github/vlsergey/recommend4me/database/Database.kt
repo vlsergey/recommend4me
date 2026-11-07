@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import org.flywaydb.core.Flyway
 import org.h2.engine.SessionLocal
 import org.h2.jdbc.JdbcConnection
@@ -16,6 +17,9 @@ import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(Database::class.java)
+
+/** Bytes to megabytes, as a shift: 2^20 bytes in a megabyte. */
+internal const val MEGABYTE_SHIFT = 20
 
 /**
  * One H2 file — the data of one level of one source or content type — with its own pool of connections and its own
@@ -55,7 +59,8 @@ class Database(
                 // space. Closed, it is compacted for up to [CLOSE_COMPACT_MS]: what a long run of writes left
                 // unused is given back
                 jdbcUrl =
-                    "jdbc:h2:file:${file.toAbsolutePath().toString().replace('\\', '/')};DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;COMPRESS=TRUE" +
+                    "jdbc:h2:file:${file.toAbsolutePath().toString().replace('\\', '/')}" +
+                        ";DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;COMPRESS=TRUE" +
                         ";MAX_COMPACT_TIME=$CLOSE_COMPACT_MS" +
                         (cacheMegabytes?.let { ";CACHE_SIZE=${it * 1024}" } ?: "")
                 username = "sa"
@@ -101,6 +106,14 @@ class Database(
             log.info("{}: {} migrations of {} applied", name, result.migrationsExecuted, locations)
     }
 
+    /** The file's size and the share of it used, in per cent, as H2 counts them now. */
+    fun usage(): Triple<Long, Int, Int>? =
+        pool.connection.use { c ->
+            val mv =
+                (c.unwrap(JdbcConnection::class.java).session as? SessionLocal)?.database?.store?.mvStore ?: return null
+            Triple(mv.fileStore.size(), mv.fillRate, mv.fileStore.chunksFillRate)
+        }
+
     /**
      * COMPACTS THE FILE WHILE IT IS OPEN, for at most [maxMillis]: H2 writes every change at the end of its file and
      * leaves the old pages unused, and a file written all day — the model's — is never idle long enough to be closed.
@@ -111,14 +124,6 @@ class Database(
      * Returns the size before and after; null when it was not needed. H2's own classes: its API compacts a file at its
      * closing alone.
      */
-    /** The file's size and the share of it used, in per cent, as H2 counts them now. */
-    fun usage(): Triple<Long, Int, Int>? =
-        pool.connection.use { c ->
-            val mv =
-                (c.unwrap(JdbcConnection::class.java).session as? SessionLocal)?.database?.store?.mvStore ?: return null
-            Triple(mv.fileStore.size(), mv.fillRate, mv.fileStore.chunksFillRate)
-        }
-
     fun compact(maxMillis: Int): Pair<Long, Long>? =
         pool.connection.use { c ->
             val session = c.unwrap(JdbcConnection::class.java).session as? SessionLocal ?: return null
@@ -136,22 +141,30 @@ class Database(
                 // And the chunks after the first free space moved into it, the file cut short: H2 does it
                 // after the rewriting alone — a file of full chunks with holes between them, a file written
                 // all day, never shrinks so — and at its closing; here a part at a time, while it shrinks
-                val fileStore = mv.fileStore
-                if (fileStore is RandomAccessStore) {
-                    mv.retentionTime = 0
-                    var size = fileStore.size()
-                    while (System.nanoTime() < until) {
-                        fileStore.compactMoveChunks(100, MOVE_BYTES, mv)
-                        val now = fileStore.size()
-                        if (now >= size) break
-                        size = now
-                    }
-                }
+                moveChunksTogether(mv, until)
             } finally {
                 mv.retentionTime = retention
             }
             before to mv.fileStore.size()
         }
+
+    /**
+     * Moves the chunks after the first free space of [mv]'s file into it and cuts the file short, [MOVE_BYTES] at a
+     * time, while the file shrinks and [until] (of [System.nanoTime]) has not come. The old pages are kept for no time
+     * meanwhile; the caller sets that time back.
+     */
+    private fun moveChunksTogether(mv: MVStore, until: Long) {
+        val fileStore = mv.fileStore
+        if (fileStore !is RandomAccessStore) return
+        mv.retentionTime = 0
+        var size = fileStore.size()
+        while (System.nanoTime() < until) {
+            fileStore.compactMoveChunks(MOVE_ANY_FILL, MOVE_BYTES, mv)
+            val now = fileStore.size()
+            if (now >= size) break
+            size = now
+        }
+    }
 
     override fun close() = pool.close()
 
@@ -178,9 +191,9 @@ class Database(
             log.info(
                 "{}: written anew from {} MB to {} MB in {} s, {} % of its chunks live before",
                 name,
-                before shr 20,
-                Files.size(mvFile) shr 20,
-                (System.currentTimeMillis() - started) / 1000,
+                before shr MEGABYTE_SHIFT,
+                Files.size(mvFile) shr MEGABYTE_SHIFT,
+                TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - started),
                 live,
             )
         }
@@ -201,5 +214,11 @@ class Database(
 
         /** The chunks moved to the free space before the file is cut short, at a time: the writes wait meanwhile. */
         private const val MOVE_BYTES = 512L shl 20
+
+        /**
+         * The fill rate of the file, in per cent, up to which H2 moves its chunks together: a hundred, whatever the
+         * file's — the caller has judged it worth it already.
+         */
+        private const val MOVE_ANY_FILL = 100
     }
 }

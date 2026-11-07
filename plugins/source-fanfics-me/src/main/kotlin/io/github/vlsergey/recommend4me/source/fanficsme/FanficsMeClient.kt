@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.fanficsme
 
+import java.net.HttpURLConnection
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -43,8 +44,8 @@ class FanficsMeClient {
                         HttpResponse.BodyHandlers.ofString(),
                     )
                 when (response.statusCode()) {
-                    200 -> return response.body()
-                    404 -> return null
+                    HttpURLConnection.HTTP_OK -> return response.body()
+                    HttpURLConnection.HTTP_NOT_FOUND -> return null
                     else -> failure = IllegalStateException("the site answered ${response.statusCode()} to $url")
                 }
             } catch (e: java.io.IOException) {

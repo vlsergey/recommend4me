@@ -164,19 +164,20 @@ class SourceStore(
      * What the values [keys] of a facet are shown by: of the layer of universes, as the dictionary names them
      * ([UniverseNames]); of any other facet, as the source does.
      */
-    fun names(facet: String, keys: Collection<String>): Map<String, String> {
-        if (keys.isEmpty()) return emptyMap()
-        // A language by its code, named as the model reads it ([StandardLanguages])
-        if (StandardLanguages.ofLanguages(facet))
-            return keys.mapNotNull { k -> StandardLanguages.NAMES[k]?.let { k to it } }.toMap()
-        if (facet in tagFacets) {
-            // The tags as the user and every site name them ([TagRepository]); one the user made up, by the source
-            val shown = tags.shown(keys)
-            val rest = keys.filter { it !in shown }
-            return (if (rest.isEmpty()) emptyMap() else items.facetNames(facet, rest)) + shown
+    fun names(facet: String, keys: Collection<String>): Map<String, String> =
+        when {
+            keys.isEmpty() -> emptyMap()
+            // A language by its code, named as the model reads it ([StandardLanguages])
+            StandardLanguages.ofLanguages(facet) ->
+                keys.mapNotNull { k -> StandardLanguages.NAMES[k]?.let { k to it } }.toMap()
+            facet in tagFacets -> {
+                // The tags as the user and every site name them ([TagRepository]); one the user made up, by the source
+                val shown = tags.shown(keys)
+                val rest = keys.filter { it !in shown }
+                (if (rest.isEmpty()) emptyMap() else items.facetNames(facet, rest)) + shown
+            }
+            else -> dictionaryNames?.of(facet, keys) { items.facetNames(facet, it!!) } ?: items.facetNames(facet, keys)
         }
-        return dictionaryNames?.of(facet, keys) { items.facetNames(facet, it!!) } ?: items.facetNames(facet, keys)
-    }
 
     /**
      * What the catalogue says of the values [keys] of a facet of universes or characters: key to description; none of
@@ -193,15 +194,17 @@ class SourceStore(
         if (keys.isEmpty()) emptyMap() else dictionaryNames?.allNames(facet, keys).orEmpty()
 
     /** The name of every value of a facet the source or the dictionary names. */
-    fun names(facet: String): Map<String, String> {
-        // The normalized tags alone: the source's names of the facet are of the sites' keys it had before them
-        if (facet in tagFacets) return tags.shown(null)
-        // Every language, a work in it or not yet: a value to answer by
-        if (StandardLanguages.ofLanguages(facet)) return StandardLanguages.NAMES
-        return dictionaryNames?.of(facet, null) {
-            if (it == null) items.facetNames(facet) else items.facetNames(facet, it)
-        } ?: items.facetNames(facet)
-    }
+    fun names(facet: String): Map<String, String> =
+        when {
+            // The normalized tags alone: the source's names of the facet are of the sites' keys it had before them
+            facet in tagFacets -> tags.shown(null)
+            // Every language, a work in it or not yet: a value to answer by
+            StandardLanguages.ofLanguages(facet) -> StandardLanguages.NAMES
+            else ->
+                dictionaryNames?.of(facet, null) {
+                    if (it == null) items.facetNames(facet) else items.facetNames(facet, it)
+                } ?: items.facetNames(facet)
+        }
 
     /**
      * The key of the words the value [key] of a facet is SHOWN by, when it is a value of the application's own — a

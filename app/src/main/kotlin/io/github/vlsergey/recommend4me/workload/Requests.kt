@@ -17,6 +17,7 @@ object Requests {
     /** Fails when the current thread serves a request: [what] — a computation, a wait — is not to be done on it. */
     fun refuseWaiting(what: Any) =
         check(!serving()) {
-            "$what asked for on the thread of a request of the browser: a request never waits for a computation — it plans the work and answers with what there is"
+            "$what asked for on the thread of a request of the browser: a request never waits for a computation — " +
+                "it plans the work and answers with what there is"
         }
 }

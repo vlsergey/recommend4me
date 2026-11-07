@@ -62,7 +62,8 @@ class Plugins(
             "Two sources of one id: ${this.sources.map { it.id }}"
         }
         log.info(
-            "sources {}, text encoders {}, picture encoders {}, rerankers {}, scorers {}, search {}, suggesters {}, catalogues {}, tag catalogues {}",
+            "sources {}, text encoders {}, picture encoders {}, rerankers {}, scorers {}, search {}, suggesters {}, " +
+                "catalogues {}, tag catalogues {}",
             this.sources.map { it.id },
             this.textEncoders.map { it.id },
             this.imageEncoders.map { it.id },
@@ -93,8 +94,8 @@ class Plugins(
      * from — or, run from a build, the name of the jar or the folder of its classes.
      */
     fun pluginOf(component: Any): String {
-        val location = component.javaClass.protectionDomain?.codeSource?.location ?: return component.javaClass.name
-        val path = runCatching { Path.of(location.toURI()) }.getOrNull() ?: return component.javaClass.name
+        val location = component.javaClass.protectionDomain?.codeSource?.location
+        val path = location?.let { runCatching { Path.of(it.toURI()) }.getOrNull() } ?: return component.javaClass.name
         val name = path.fileName?.toString().orEmpty()
         return if (name.endsWith(".jar")) path.parent?.fileName?.toString() ?: name else name
     }

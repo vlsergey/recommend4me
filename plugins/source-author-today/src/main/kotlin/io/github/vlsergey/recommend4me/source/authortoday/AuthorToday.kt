@@ -68,7 +68,8 @@ class AuthorToday : Source {
     override val capturePatterns =
         listOf(
             Regex(
-                "https://author\\.today/(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"
+                "https://author\\.today/" +
+                    "(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"
             )
         )
 

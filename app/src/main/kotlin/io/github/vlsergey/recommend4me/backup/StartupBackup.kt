@@ -1,10 +1,13 @@
 package io.github.vlsergey.recommend4me.backup
 
+import java.io.IOException
+import java.io.UncheckedIOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.exists
@@ -33,7 +36,7 @@ class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
         val keep = env.getProperty("recommend4me.backup.keep", Int::class.java, 10)
         try {
             copy(dataDir, LocalDateTime.now())
-        } catch (e: Exception) {
+        } catch (e: IOException) {
             // A failed backup must not prevent the application from starting
             log.error("Unable to back up the databases in {}", dataDir.toAbsolutePath(), e)
         }
@@ -43,7 +46,10 @@ class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
                 {
                     try {
                         compress(backupDir, keep)
-                    } catch (e: Exception) {
+                    } catch (e: IOException) {
+                        log.error("Unable to zip the backups in {}", backupDir.toAbsolutePath(), e)
+                    } catch (e: UncheckedIOException) {
+                        // A walk of the files fails so
                         log.error("Unable to zip the backups in {}", backupDir.toAbsolutePath(), e)
                     }
                 },
@@ -60,6 +66,9 @@ class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
         private const val PREFIX = "backup-"
         private const val ZIP = ".zip"
         private const val TMP = ".tmp"
+
+        /** The buffer of an archive being written, a megabyte: memory, not meaning. */
+        private const val ZIP_BUFFER = 1 shl 20
 
         /** The files to keep, by their path inside the data folder. */
         fun personalFiles(dataDir: Path): List<Path> {
@@ -107,7 +116,7 @@ class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
                     val started = System.nanoTime()
                     val target = copy.resolveSibling(copy.name + ZIP)
                     val tmp = target.resolveSibling(target.name + TMP)
-                    ZipOutputStream(Files.newOutputStream(tmp).buffered(1 shl 20)).use { zip ->
+                    ZipOutputStream(Files.newOutputStream(tmp).buffered(ZIP_BUFFER)).use { zip ->
                         Files.walk(copy).use { paths ->
                             paths
                                 .filter { Files.isRegularFile(it) }
@@ -121,7 +130,11 @@ class StartupBackup : ApplicationListener<ApplicationEnvironmentPreparedEvent> {
                     }
                     Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING)
                     copy.toFile().deleteRecursively()
-                    log.info("Backup zipped to {} in {} s", target.name, (System.nanoTime() - started) / 1_000_000_000)
+                    log.info(
+                        "Backup zipped to {} in {} s",
+                        target.name,
+                        TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started),
+                    )
                 }
             // Names embed a sortable timestamp, so lexical order is chronological
             backupDir

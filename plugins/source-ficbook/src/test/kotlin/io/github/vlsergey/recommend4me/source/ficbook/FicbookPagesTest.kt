@@ -157,7 +157,8 @@ class FicbookPagesTest {
         val part = context.parts.getValue(work).getValue("42501445")
         assertEquals(0, part.position)
         assertEquals(
-            "Дорога в небольшом поселении на пару сотен человек серая, каменистая и неприятная.\nНо еще неприятнее была боль, создавшая в горле ком.\n\n— Доброе утро, — сказал он.",
+            "Дорога в небольшом поселении на пару сотен человек серая, каменистая и неприятная.\n" +
+                "Но еще неприятнее была боль, создавшая в горле ком.\n\n— Доброе утро, — сказал он.",
             part.content,
         )
 
@@ -178,7 +179,8 @@ class FicbookPagesTest {
         assertEquals(emptyList(), capture(context, "https://ficbook.net/tags/1682", "tag.html"))
         assertEquals("Hurt/Comfort", context.facetNames.getValue("tag")["hurt/comfort"])
         assertEquals(
-            "Работа сосредоточена на эмоциональных и/или физических страданиях одних персонажей и заботе о них со стороны других персонажей.",
+            "Работа сосредоточена на эмоциональных и/или физических страданиях одних персонажей " +
+                "и заботе о них со стороны других персонажей.",
             context.facetDescriptions.getValue("tag")["hurt/comfort"],
         )
         // The other names the site files under it: each a tag of its own, named, a synonym of it
@@ -194,7 +196,7 @@ class FicbookPagesTest {
     }
 
     @Test
-    fun `the site's search of tags, asked by the browser, says what the tag asked means — of its own name or a synonym`() {
+    fun `the site's search of tags, asked by the browser, says what the tag means — of its own name or a synonym`() {
         val harassment =
             "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."
         val asked = source.describing("tag", listOf("харассмент", "домогательства"))
@@ -236,7 +238,8 @@ class FicbookPagesTest {
         card
             .selectFirst(".side-section")!!
             .append(
-                """<a href="/readfic/$id"><picture class="fanfic-hat-cover-picture"><source media="(max-width: 480px)" srcset="$covers/m_Y.webp">""" +
+                """<a href="/readfic/$id"><picture class="fanfic-hat-cover-picture">""" +
+                    """<source media="(max-width: 480px)" srcset="$covers/m_Y.webp">""" +
                     """<source media="(min-width: 481px)" srcset="$covers/d_Y.webp"><img src="$covers/m_Y.webp" alt="" width="180px"></picture></a>"""
             )
         val context = MemorySourceContext()
@@ -260,7 +263,8 @@ class FicbookPagesTest {
             CapturedPage(
                 url,
                 withCover(
-                    """<fanfic-cover class="jsVueComponent" src-original="$covers/X.webp" src-desktop="$covers/d_X.webp" src-mobile="$covers/m_X.webp"></fanfic-cover>"""
+                    """<fanfic-cover class="jsVueComponent" src-original="$covers/X.webp" """ +
+                        """src-desktop="$covers/d_X.webp" src-mobile="$covers/m_X.webp"></fanfic-cover>"""
                 ),
                 now,
             ),

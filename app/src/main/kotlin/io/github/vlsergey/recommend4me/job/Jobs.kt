@@ -108,6 +108,8 @@ class Jobs(
         override val cancelled: Boolean
             get() = cancelRequested
 
+        // A BOUNDARY: a checkpoint is a courtesy along a job's way — whatever it throws is logged, the job goes on
+        @Suppress("TooGenericExceptionCaught")
         override fun checkpoint() {
             try {
                 val store = stores.source(sourceId) ?: return
@@ -132,10 +134,7 @@ class Jobs(
     /** Starts a job; false when one of the source runs already or the source has no such mode. */
     @Synchronized
     fun start(sourceId: String, mode: SourceMode): Boolean {
-        val store = stores.source(sourceId) ?: return false
-        if (!mode.job || mode !in store.source.modes) return false
-        val current = runs[sourceId]?.progress?.state
-        if (current == JobState.RUNNING || current == JobState.CANCELLING) return false
+        if (!startable(sourceId, mode)) return false
         val run = Run(sourceId, mode)
         runs[sourceId] = run
         val executor =
@@ -144,6 +143,13 @@ class Jobs(
             }
         executor.execute { run(run) }
         return true
+    }
+
+    /** Whether a job of [mode] may start for the source: the source has such a job, and none of its runs already. */
+    private fun startable(sourceId: String, mode: SourceMode): Boolean {
+        val modes = stores.source(sourceId)?.source?.modes.orEmpty()
+        val current = runs[sourceId]?.progress?.state
+        return mode.job && mode in modes && current != JobState.RUNNING && current != JobState.CANCELLING
     }
 
     @Synchronized
@@ -155,6 +161,9 @@ class Jobs(
         }
     }
 
+    // A BOUNDARY: a job runs a plugin's code on a thread of its own — whatever it throws is logged and shown as the
+    // job's failure, never lost with the thread
+    @Suppress("TooGenericExceptionCaught")
     private fun run(run: Run) {
         val store = stores.source(run.sourceId) ?: return
         val whole = run.mode == SourceMode.SCRAPE_ALL
@@ -193,7 +202,7 @@ class Jobs(
     }
 
     /** A job of the whole catalogue the last run of the application left unfinished goes on. */
-    @Order(10)
+    @Order(RESUME_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun resume() {
         stores.sources.forEach { s ->
@@ -209,5 +218,13 @@ class Jobs(
         shuttingDown = true
         runs.values.forEach { it.cancelRequested = true }
         executors.values.forEach { it.shutdownNow() }
+    }
+
+    private companion object {
+        /**
+         * The place of [resume] among the listeners of the application's start: after those that make the catalogue
+         * ready to be read (of orders up to 6), before the sources' own background work (20).
+         */
+        const val RESUME_ORDER = 10
     }
 }

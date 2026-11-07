@@ -80,7 +80,9 @@ class Ficbook : Source {
     override val capturePatterns =
         listOf(
             Regex(
-                "https://ficbook\\.net/(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*|popular-fanfics[^/?#]*|recommendation|home/[^?#]*)([/?#].*)?"
+                "https://ficbook\\.net/" +
+                    "(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*" +
+                    "|popular-fanfics[^/?#]*|recommendation|home/[^?#]*)([/?#].*)?"
             )
         )
 

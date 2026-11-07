@@ -99,7 +99,9 @@ internal class InlineBlobs(private val source: DataSource) : ConnectionProvider 
             return len
         }
 
-        override fun free() {}
+        override fun free() {
+            // Nothing to give back: the bytes are a plain array, the collector's
+        }
 
         override fun position(pattern: ByteArray, start: Long): Long = throw SQLFeatureNotSupportedException()
 

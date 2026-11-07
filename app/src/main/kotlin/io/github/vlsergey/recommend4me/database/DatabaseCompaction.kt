@@ -28,6 +28,9 @@ class DatabaseCompaction(private val databases: Databases) {
         scheduler.scheduleWithFixedDelay(::compactAll, FIRST_MINUTES, EVERY_MINUTES, TimeUnit.MINUTES)
     }
 
+    // A BOUNDARY: an exception let out of a task of the scheduler cancels its every next round, so whatever one file
+    // throws is logged and the next file compacted
+    @Suppress("TooGenericExceptionCaught")
     private fun compactAll() {
         databases.all().forEach { db ->
             try {
@@ -37,8 +40,8 @@ class DatabaseCompaction(private val databases: Databases) {
                 log.info(
                     "{}: compacted from {} MB to {} MB in {} ms; of it used {} %, of its chunks {} %",
                     db.name,
-                    before shr 20,
-                    after shr 20,
+                    before shr MEGABYTE_SHIFT,
+                    after shr MEGABYTE_SHIFT,
                     System.currentTimeMillis() - started,
                     used?.second,
                     used?.third,
