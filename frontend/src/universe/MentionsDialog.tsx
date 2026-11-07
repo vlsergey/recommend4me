@@ -41,6 +41,7 @@ function Quotes({ item, facet, value }: { item: ItemRef; facet: string; value: s
       ) : (
         <ol className="flex flex-col gap-2">
           {list.map((q, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a passage has no identity — the same words may stand twice in one place — and the list, read once, never reorders
             <li key={i} className="flex flex-col gap-0.5 rounded-lg border px-3 py-2">
               <span className="text-xs text-muted-foreground">{placeName(q)}</span>
               <Marked quote={q} />
@@ -54,26 +55,27 @@ function Quotes({ item, facet, value }: { item: ItemRef; facet: string; value: s
 
 /** A passage with the names in it marked. */
 function Marked({ quote }: { quote: MentionQuote }) {
-  const parts: { text: string; found: boolean }[] = [];
+  // Each part by where it starts in the passage: its own place, one of a part alone
+  const parts: { start: number; text: string; found: boolean }[] = [];
   let at = 0;
   [...quote.highlights]
     .sort((a, b) => a.start - b.start)
     .forEach(({ start, end }) => {
       if (start < at) return;
-      if (start > at) parts.push({ text: quote.text.slice(at, start), found: false });
-      parts.push({ text: quote.text.slice(start, end), found: true });
+      if (start > at) parts.push({ start: at, text: quote.text.slice(at, start), found: false });
+      parts.push({ start, text: quote.text.slice(start, end), found: true });
       at = end;
     });
-  if (at < quote.text.length) parts.push({ text: quote.text.slice(at), found: false });
+  if (at < quote.text.length) parts.push({ start: at, text: quote.text.slice(at), found: false });
   return (
     <p className="text-sm leading-relaxed whitespace-pre-line">
-      {parts.map((p, i) =>
+      {parts.map((p) =>
         p.found ? (
-          <mark key={i} className="rounded-sm bg-maybe/35 px-0.5 font-medium text-foreground">
+          <mark key={p.start} className="rounded-sm bg-maybe/35 px-0.5 font-medium text-foreground">
             {p.text}
           </mark>
         ) : (
-          <span key={i}>{p.text}</span>
+          <span key={p.start}>{p.text}</span>
         ),
       )}
     </p>

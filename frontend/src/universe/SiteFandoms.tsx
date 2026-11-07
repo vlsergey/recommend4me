@@ -82,7 +82,7 @@ export function SiteFandoms({ type, dictionary }: { type: ContentTypeInfo; dicti
             ))}
           </select>
         )}
-        <div className="flex gap-1" role="group" aria-label={t("SiteFandoms.shown")}>
+        <fieldset className="flex gap-1" aria-label={t("SiteFandoms.shown")}>
           {(
             [
               ["all", t("SiteFandoms.all", { n: ofSource.length })],
@@ -103,7 +103,7 @@ export function SiteFandoms({ type, dictionary }: { type: ContentTypeInfo; dicti
               {label}
             </Button>
           ))}
-        </div>
+        </fieldset>
         {needle !== "" && <span className="text-xs text-muted-foreground tabular-nums">{t("SiteFandoms.found", { n: list.length })}</span>}
       </div>
       <ul className="flex flex-col divide-y rounded-lg border">

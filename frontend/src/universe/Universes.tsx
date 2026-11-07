@@ -303,7 +303,7 @@ function Characters({ type, universe: u }: { type: ContentTypeInfo; universe: Un
       <Classes classes={classes.data ?? []} onToggle={inclusion.setClass} />
       <div className="flex flex-wrap items-center gap-2">
         <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t("Characters.filterPlaceholder")} className="max-w-xs" type="search" />
-        <div className="flex gap-1" role="group" aria-label={t("Characters.shown")}>
+        <fieldset className="flex gap-1" aria-label={t("Characters.shown")}>
           {(
             [
               ["kept", t("Characters.kept", { n: kept })],
@@ -315,7 +315,7 @@ function Characters({ type, universe: u }: { type: ContentTypeInfo; universe: Un
               {label}
             </Button>
           ))}
-        </div>
+        </fieldset>
         {needle !== "" && <span className="text-xs text-muted-foreground tabular-nums">{t("Characters.found", { n: shown.length })}</span>}
       </div>
       <ul className="flex max-h-96 flex-col divide-y overflow-y-auto rounded-lg border">

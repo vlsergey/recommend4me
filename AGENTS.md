@@ -28,8 +28,8 @@ and tell the user to update the extension.
 | The mark beside a value: chance, "site" (`fromSite`), "by tag" (`draftedFrom`), ↑ (`implied`) | `facet/FacetValueMarks.tsx` | `answers` |
 | "✓ all" — the unanswered values, not offered, not implied | `FacetCorrections.tsx` `FacetLine` | `facetBlock` |
 | "…" — more candidates; busy only while its own press is; of the characters and the pairings 2 likeliest and 2 most named by the work's texts (3 times at least, with the count) a press, each once | `FacetCorrections.tsx` `MoreCandidates` (`AsyncButton`) | `moreOf` |
-| A value found by its name and added | `FacetCorrections.tsx` `SearchButton` + `AddFacetValue`; characters `universe/FanficSection.tsx` `Picker` | `addField` |
-| "No other …" — shown with no value too; the unconfirmed go | `universe/FanficSection.tsx` `AllNamed` | `completeButton` |
+| A value found by its name and added | `FacetCorrections.tsx` `SearchButton` + `AddFacetValue`; characters `universe/Picker.tsx` `Picker` | `addField` |
+| "No other …" — shown with no value too; the unconfirmed go | `universe/AllNamed.tsx` `AllNamed` | `completeButton` |
 | An answer: only written; shown once kept, never before; read anew after 2 s of quiet, the work once its chances are made | `correction/useCorrections.ts`, `suggestion/useSuggestions.ts` `suggestionsLater` | `act`, `loadLater`, `settledLater` |
 | A facet whose values are a scale (the age rating, `steps`): the steps in order, the chosen one with where it is from (the user's / the site's / by the tags with its chance), the model's chance under every other, a step any site lets not faded yet chosen; sites that disagree choose none, each step held marked with its sites; a step pressed is the user's answer, the user's own pressed again taken back | `correction/ScaleChoice.tsx` | `scaleBlock`, `chosenShown` |
 | The suggestions of a facet | `suggestion/Suggestions.tsx` | `suggestedChip` |
