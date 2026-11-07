@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { followLink, navigate, screenHref, type Screen } from "@/screen/screens";
 import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
-import { useTagsChanged } from "@/tag/TagsScreen";
+import { useTagsChanged } from "@/tag/tagQueries";
 import type { Corrections } from "./useCorrections";
 import { ValueActions, type AskedValue } from "./valueActions";
 

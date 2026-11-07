@@ -14,7 +14,7 @@ import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
 import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
 import { TagNameLink } from "@/tag/TagNameLink";
-import { useTagsChanged } from "@/tag/TagsScreen";
+import { useTagsChanged } from "@/tag/tagQueries";
 
 export const tagsByTextKey = (item: ItemRef) => ["tagsByText", item.source, item.item];
 

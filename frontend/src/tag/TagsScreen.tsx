@@ -18,7 +18,6 @@ import { TagList } from "./TagList";
 import { TAGS, useTagsChanged } from "./tagQueries";
 
 /** What a change of the tags is read anew by — the screens that change tags take it from the screen of the tags. */
-export { useTagsChanged } from "./tagQueries";
 
 /** The key of the words saying how a tag's name was chosen. */
 function ruleKey(rule: TagNameRule) {

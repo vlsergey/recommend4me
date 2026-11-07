@@ -12,8 +12,6 @@ import { Pairings } from "./PairingField";
 import { Universes } from "./UniverseField";
 
 /** What the screen of a work and the screen of the pairings take of the fields of a fanfic's universe. */
-export { has, ORIGINAL_CHARACTERS, universeless } from "./fanficFields";
-export { type Option, Picker } from "./Picker";
 
 /** The facets this section answers: the generic list of the work's facets leaves them out. */
 export const FANFIC_FACETS: readonly string[] = [KIND, UNIVERSE, CHARACTERS, SECONDARY_CHARACTERS, PAIRINGS];

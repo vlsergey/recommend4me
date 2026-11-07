@@ -8,7 +8,8 @@ import { decided } from "@/facet/valueOrder";
 import { label } from "@/i18n/label";
 import { cn } from "@/lib/utils";
 import { useSuggestions } from "@/suggestion/useSuggestions";
-import { FANFIC_FACETS, FanficSection, FieldGroup, has, NAMED_FACETS, universeless } from "@/universe/FanficSection";
+import { FANFIC_FACETS, FanficSection, FieldGroup, NAMED_FACETS } from "@/universe/FanficSection";
+import { has, universeless } from "@/universe/fanficFields";
 import { WorkFields } from "./WorkFields";
 
 /** The facets the user closes by "No other …": others are done when nothing is left to answer. */

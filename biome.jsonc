@@ -7,6 +7,8 @@
     // Not the types generated of the API: no one writes them
     "includes": ["frontend/src/**", "browser-extension/extension/**/*.js", "!frontend/src/api/schema.d.ts"]
   },
+  // The styles are Tailwind's: its directives (@theme, @apply, @custom-variant) read as such
+  "css": { "parser": { "tailwindDirectives": true } },
   "formatter": { "enabled": false },
   "assist": { "enabled": false },
   "linter": {

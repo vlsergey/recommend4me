@@ -12,7 +12,8 @@ import { usePref } from "@/lib/usePref";
 import { cn } from "@/lib/utils";
 import { MarkingTable } from "@/marking/MarkingTable";
 import { followLink, navigate, screenHref } from "@/screen/screens";
-import { ORIGINAL_CHARACTERS, Picker, type Option } from "@/universe/FanficSection";
+import { ORIGINAL_CHARACTERS } from "@/universe/fanficFields";
+import { type Option, Picker } from "@/universe/Picker";
 import { charactersQuery, useUniverses } from "@/universe/Universes";
 
 /** The cache key of the pairings known: their counts change with every answer on one. */

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * How long the rows move to their places once the list is read anew, and how long the list stays
- * locked after that: as the table of the similar tags (tag/TagsScreen.tsx `Similar`).
+ * locked after that: as the table of the similar tags (tag/SimilarTags.tsx `Similar`).
  */
 const MOVE_MS = 1000;
 const SETTLE_MS = 1000;
