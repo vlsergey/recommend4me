@@ -1700,14 +1700,19 @@ internal class FacetData(
                 val i = row[id] ?: return
                 blocks.getOrPut(block) { Gathered(ids.size, v.size) }.put(i, v)
             }
+            // The texts' and the pictures' vectors as the database keeps them, half precision: their bytes copied as they are
+            fun halves(id: String, block: String, bytes: ByteArray) {
+                val i = row[id] ?: return
+                blocks.getOrPut(block) { Gathered(ids.size, bytes.size / 2) }.putHalves(i, bytes)
+            }
             val texts = TextVectors.blocks(store.id, store.schema).mapValues { it.value.first }
             if (only == null) {
-                store.textVectors.forEach(encoder.id, texts.keys) { id, key, v -> put(id, texts.getValue(key), v) }
-                imageEncoder?.let { e -> store.pictures.forEachItemVector(e) { id, block, v -> put(id, block, v) } }
+                store.textVectors.forEachHalves(encoder.id, texts.keys) { id, key, v -> halves(id, texts.getValue(key), v) }
+                imageEncoder?.let { e -> store.pictures.forEachItemHalves(e) { id, block, v -> halves(id, block, v) } }
                 store.setVectors.forEach(sets) { id, block, v -> put(id, block, v) }
             } else {
-                store.textVectors.ofMany(ids, encoder.id).forEach { (id, own) -> own.forEach { (key, v) -> texts[key]?.let { put(id, it, v) } } }
-                imageEncoder?.let { e -> store.pictures.itemVectorsOf(ids, e).forEach { (id, own) -> own.forEach { (block, v) -> put(id, block, v) } } }
+                store.textVectors.halvesOf(ids, encoder.id).forEach { (id, own) -> own.forEach { (key, v) -> texts[key]?.let { halves(id, it, v) } } }
+                imageEncoder?.let { e -> store.pictures.itemHalvesOf(ids, e).forEach { (id, own) -> own.forEach { (block, v) -> halves(id, block, v) } } }
                 store.setVectors.ofMany(ids, sets).forEach { (id, own) -> own.forEach { (block, v) -> put(id, block, v) } }
             }
             return blocks.map { (name, gathered) -> gathered.block(name, card) }

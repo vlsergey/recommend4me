@@ -115,6 +115,11 @@ class Cublas private constructor(
             into.toArray(ValueLayout.JAVA_DOUBLE)
         }
 
+        /** The rows [fromRow] to [fromRow] + [count] of [from], half precision as they are, written [at] bytes on. */
+        fun upload(from: HalfMatrix, fromRow: Int, count: Int, at: Long = 0) {
+            if (count > 0) copyBytes(at(at), from.slice(fromRow, count), count.toLong() * from.cols * 2, HOST_TO_DEVICE)
+        }
+
         /** The first [n] ints. */
         fun ints(n: Int): IntArray = Arena.ofConfined().use { a ->
             if (n == 0) return IntArray(0)

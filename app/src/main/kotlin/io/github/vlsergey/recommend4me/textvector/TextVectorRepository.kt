@@ -100,23 +100,31 @@ class TextVectorRepository(private val db: DSLContext) {
     }
 
     /** Vectors of the items [ids] by [encoder]: item to text key to vector. */
-    fun ofMany(ids: Collection<String>, encoder: String): Map<String, Map<String, FloatArray>> {
-        val out = HashMap<String, MutableMap<String, FloatArray>>()
+    fun ofMany(ids: Collection<String>, encoder: String): Map<String, Map<String, FloatArray>> =
+        halvesOf(ids, encoder).mapValues { (_, own) -> own.mapValues { Vectors.fromHalf(it.value) } }
+
+    /** [ofMany] as stored: every vector its half-precision numbers, little-endian ([Vectors.fromHalf]). */
+    fun halvesOf(ids: Collection<String>, encoder: String): Map<String, Map<String, ByteArray>> {
+        val out = HashMap<String, MutableMap<String, ByteArray>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.VEC).from(TEXT_VECTOR)
                 .where(TEXT_VECTOR.ITEM_ID.`in`(chunk), TEXT_VECTOR.ENCODER.eq(encoder))
-                .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = Vectors.fromHalf(it.value3()!!) }
+                .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = it.value3()!! }
         }
         return out
     }
 
     /** Every stored vector by [encoder] of the text keys [keys], streamed: (item, text key, vector). */
-    fun forEach(encoder: String, keys: Collection<String>, action: (itemId: String, key: String, vector: FloatArray) -> Unit) {
+    fun forEach(encoder: String, keys: Collection<String>, action: (itemId: String, key: String, vector: FloatArray) -> Unit) =
+        forEachHalves(encoder, keys) { id, key, bytes -> action(id, key, Vectors.fromHalf(bytes)) }
+
+    /** [forEach] as stored: every vector its half-precision numbers, little-endian. */
+    fun forEachHalves(encoder: String, keys: Collection<String>, action: (itemId: String, key: String, halves: ByteArray) -> Unit) {
         if (keys.isEmpty()) return
         db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.VEC).from(TEXT_VECTOR)
             .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.TEXT_KEY.`in`(keys))
             .fetchSize(2000).fetchLazy().use { cursor ->
-                cursor.forEach { action(it.value1()!!, it.value2()!!, Vectors.fromHalf(it.value3()!!)) }
+                cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) }
             }
     }
 

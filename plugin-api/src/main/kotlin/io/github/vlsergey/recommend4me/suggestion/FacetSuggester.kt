@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import java.util.Collections
 import java.util.IdentityHashMap
@@ -15,11 +16,12 @@ import java.util.stream.IntStream
  * OF THE ITEMS THAT HAVE IT ALONE, LAID OUT AS THE PRODUCTS READ THEM: [vectors] a row of every such
  * item, [rows] the item (a row of the task) each is of — every item once, in no order. An item
  * without the input has no row: of the 75 630 works of fanfics.me the notes are of 46, the cover of
- * 10 217, and a row of zeros of every other was multiplied at every product. [onCard]: the same rows
- * on the card, put there by the application for the operation the task is of and freed at its end;
- * null without a card or of an operation of a few works.
+ * 10 217, and a row of zeros of every other was multiplied at every product. IN HALF PRECISION, as
+ * the database keeps the texts' and the pictures' vectors: the 0.9 GB of fanfics.me's single
+ * precision 0.46. [onCard]: the same rows on the card, put there by the application for the
+ * operation the task is of and freed at its end; null without a card or of an operation of a few works.
  */
-class InputBlock(val name: String, val vectors: Matrix, val rows: IntArray, val onCard: CardRows? = null) {
+class InputBlock(val name: String, val vectors: HalfMatrix, val rows: IntArray, val onCard: CardRows? = null) {
     init {
         require(rows.size == vectors.rows) { "$name: ${vectors.rows} vectors of ${rows.size} items" }
         require(onCard == null || onCard.count == rows.size && onCard.dim == vectors.cols) { "$name: other rows on the card" }
@@ -34,21 +36,21 @@ class InputBlock(val name: String, val vectors: Matrix, val rows: IntArray, val 
     val card: CardRows? get() = onCard?.takeIf { it.open }
 
     companion object {
-        /** A block of every item of [vectors] whose row is [present], the rest left out. */
+        /** A block of every item of [vectors] whose row is [present], the rest left out, in half precision. */
         fun of(name: String, vectors: Matrix, present: BooleanArray): InputBlock {
             val rows = present.indices.filter { present[it] }.toIntArray()
-            return InputBlock(name, vectors.gather(rows), rows)
+            return InputBlock(name, HalfMatrix.of(vectors, rows), rows)
         }
     }
 }
 
 /**
  * THE ROWS OF AN INPUT BLOCK ON THE CARD ([InputBlock.onCard]): its [count] vectors of [dim]
- * numbers, row after row, and the items they are of ([items], ints), on the card of [cublas]. Freed
+ * numbers in half precision, row after row, and the items they are of ([items], ints), on the card of [cublas]. Freed
  * by the application with the operation that put them there; [open] says whether they are there
  * still. What a plugin made on the card of them ([alongside]) lives no longer: freed with them.
  */
-class CardRows(val cublas: Cublas, val vectors: Cublas.DeviceFloats, val items: Cublas.DeviceBytes, val count: Int, val dim: Int) : AutoCloseable {
+class CardRows(val cublas: Cublas, val vectors: Cublas.DeviceBytes, val items: Cublas.DeviceBytes, val count: Int, val dim: Int) : AutoCloseable {
     @Volatile
     var open: Boolean = true
         private set
@@ -73,12 +75,12 @@ class CardRows(val cublas: Cublas, val vectors: Cublas.DeviceFloats, val items: 
 
     companion object {
         /** The rows [vectors] of the [items] put on the [card]; null when it has no room for them. Under the card's lock. */
-        fun put(card: Cublas, vectors: Matrix, items: IntArray): CardRows? {
-            val floats = card.allocate(vectors.rows.toLong() * vectors.cols) ?: return null
-            val ints = card.allocateBytes(items.size.toLong() * Int.SIZE_BYTES) ?: return null.also { floats.close() }
-            floats.upload(vectors.held, 0, 0, vectors.rows * vectors.cols)
+        fun put(card: Cublas, vectors: HalfMatrix, items: IntArray): CardRows? {
+            val halves = card.allocateBytes(vectors.rows.toLong() * vectors.cols * 2) ?: return null
+            val ints = card.allocateBytes(items.size.toLong() * Int.SIZE_BYTES) ?: return null.also { halves.close() }
+            halves.upload(vectors, 0, vectors.rows)
             ints.upload(items)
-            return CardRows(card, floats, ints, items.size, vectors.cols)
+            return CardRows(card, halves, ints, items.size, vectors.cols)
         }
     }
 }

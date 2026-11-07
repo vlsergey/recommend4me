@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -21,19 +22,21 @@ import kotlin.math.sqrt
 class BlockScale(val name: String, val dim: Int, val scale: Float) {
     companion object {
         /** Of the rows [rows] of [vectors] — every row when null; null of none, or of vectors of no length. */
-        fun of(name: String, vectors: Matrix, rows: IntArray? = null): BlockScale? {
-            val d = vectors.cols
-            val count = rows?.size ?: vectors.rows
+        fun of(name: String, vectors: Matrix, rows: IntArray? = null): BlockScale? =
+            of(name, rows?.size ?: vectors.rows, vectors.cols) { k, into -> vectors.held.take(into, 0, vectors.row(rows?.get(k) ?: k), vectors.cols) }
+
+        /** Of every row of an input block's [vectors]. */
+        fun of(name: String, vectors: HalfMatrix): BlockScale? = of(name, vectors.rows, vectors.cols) { k, into -> vectors.take(k, into) }
+
+        /** Of [count] vectors of [d] numbers, each taken by [take]: their typical length. */
+        private fun of(name: String, count: Int, d: Int, take: (Int, FloatArray) -> Unit): BlockScale? {
             if (count == 0 || d == 0) return null
-            val held = vectors.held
+            val v = FloatArray(d)
             var length = 0.0
             for (k in 0 until count) {
-                val i = rows?.get(k) ?: k
+                take(k, v)
                 var s = 0.0
-                for (q in 0 until d) {
-                    val c = held[vectors.row(i) + q]
-                    s += c * c
-                }
+                for (q in 0 until d) s += v[q] * v[q]
                 length += sqrt(s)
             }
             length /= count

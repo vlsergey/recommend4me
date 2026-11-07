@@ -7,6 +7,16 @@
 
 #define BLOCK 256
 
+// out = the n half-precision numbers of src (a block's rows as kept) as single precision, for the products to read
+extern "C" __global__ void halves_to_floats(long long n, const unsigned short* src, float* out) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    unsigned short h = src[t];
+    float f;
+    asm("cvt.f32.f16 %0, %1;" : "=f"(f) : "h"(h));
+    out[t] = f;
+}
+
 // out (k × n) += src (k × count) onto the columns of the block's items: an item once in a block
 extern "C" __global__ void scatter_columns(int k, int count, const float* src, const int* items, float* out, int n) {
     long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;

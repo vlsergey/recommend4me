@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -77,7 +78,7 @@ object SuggestionTaskFile {
             val name = input.readUTF()
             val vectors = matrix(input)
             // The formats before 7: a row of every item, and whether it has the block
-            if (format >= 7) InputBlock(name, vectors, ints(input)) else InputBlock.of(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
+            if (format >= 7) InputBlock(name, HalfMatrix.of(vectors), ints(input)) else InputBlock.of(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
         }
         val values = matrix(input)
         val valueKeys = strings(input)
@@ -147,6 +148,17 @@ object SuggestionTaskFile {
         val row = FloatArray(m.cols)
         for (i in 0 until m.rows) {
             m.held.take(row, 0, m.row(i), m.cols)
+            row.forEach(out::writeFloat)
+        }
+    }
+
+    /** Of half precision, written as single: the file reads the same of either. */
+    private fun matrix(out: DataOutputStream, m: HalfMatrix) {
+        out.writeInt(m.rows)
+        out.writeInt(m.cols)
+        val row = FloatArray(m.cols)
+        for (i in 0 until m.rows) {
+            m.take(i, row)
             row.forEach(out::writeFloat)
         }
     }

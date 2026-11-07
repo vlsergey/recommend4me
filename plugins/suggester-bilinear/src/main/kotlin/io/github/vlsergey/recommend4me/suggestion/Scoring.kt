@@ -369,21 +369,29 @@ internal class Scoring(
                 val onesAt = ints("onesAt", at)
                 val ones = ints("ones", flat)
                 val part = floats(features.widest.toLong() * width)
+                // A block's rows, kept in half precision, made single a run at a time for the library to multiply
+                val single = floats(minOf(FeatureKernels.CARD_ROWS, features.widest).toLong() * features.longest)
                 val sent = System.nanoTime()
                 kernels.launch("ones_rows", n.toLong() * width, n, width, onesAt, ones, weights, u)
                 features.blocks.forEach { b ->
                     val rows = b.card!!
-                    cublas.gemm(false, false, b.count, width, b.dim, rows.vectors, 0, b.dim, weights, b.column.toLong() * width, width, part, 0, width, alpha = b.scale)
+                    var from = 0
+                    while (from < b.count) {
+                        val many = minOf(FeatureKernels.CARD_ROWS, b.count - from)
+                        FeatureKernels.floats(kernels, rows, from, many, single)
+                        cublas.gemm(false, false, many, width, b.dim, single, 0, b.dim, weights, b.column.toLong() * width, width, part, from.toLong() * width, width, alpha = b.scale)
+                        from += many
+                    }
                     kernels.launch("scatter_rows", b.count.toLong() * width, b.count, width, part, rows.items, u)
                 }
                 // Brought over: the copy waits for the products before it
                 u.download(out, 0, 0, n * width)
                 val multiplied = System.nanoTime()
-                // The weights and the block's part are of the products alone
-                weights.close()
-                part.close()
-                made.remove(weights)
-                made.remove(part)
+                // The weights, the block's part and its single rows are of the products alone
+                listOf(weights, part, single).forEach {
+                    it.close()
+                    made.remove(it)
+                }
                 return longArrayOf((sent - started) / 1_000_000, (multiplied - sent) / 1_000_000)
             }
 

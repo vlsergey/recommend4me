@@ -108,7 +108,7 @@ class BilinearSuggesterTest {
         val texts = task.inputs.single().vectors.gather(rows)
         val alone = SuggestionTask(
             itemIds = rows.map { task.itemIds[it] },
-            inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(rows.size) { true })),
+            inputs = listOf(InputBlock("text:annotation", texts, IntArray(rows.size) { it })),
             values = Matrix(task.valueCount, 0),
             valueKeys = task.valueKeys,
             assigned = rows.map { task.assigned[it] },

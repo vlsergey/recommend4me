@@ -210,7 +210,7 @@ class BilinearTest {
                     val slot = block.slots(n)[i]
                     if (slot < 0) return@forEachIndexed
                     row[design.blockOffsets[k]] = 1f
-                    for (q in 0 until b.dim) row[design.blockOffsets[k] + 1 + q] = block.vectors.held[block.vectors.row(slot) + q] * b.scale
+                    for (q in 0 until b.dim) row[design.blockOffsets[k] + 1 + q] = block.vectors[slot, q] * b.scale
                 }
                 task.context[i].forEach { row[base + design.contextKeys.indexOf(task.contextKeys[it])] = 1f }
             }

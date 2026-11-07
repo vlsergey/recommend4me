@@ -144,7 +144,7 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                     val cols = b.vectors.cols
                     val part = FloatArray(cols)
                     b.rows.forEachIndexed { k, i ->
-                        b.vectors.held.take(part, 0, b.vectors.row(k), cols)
+                        b.vectors.take(k, part)
                         val norm = sqrt(part.sumOf { (it * it).toDouble() }).toFloat()
                         if (norm > 0f) {
                             for (q in 0 until cols) part[q] /= norm

@@ -34,7 +34,7 @@ class ScoringTest {
      * the site's examples. A block of notes of every third item besides: of the items that have it
      * alone. Given a [card], the inputs put there, as the application puts those of a pass of every work.
      */
-    private fun task(random: Random = Random(5), m: Int = this.m, card: Cublas? = null): SuggestionTask {
+    private fun task(random: Random = Random(5), m: Int = this.m, card: Cublas? = null, n: Int = this.n): SuggestionTask {
         val directions = List(m) { FloatArray(d) { random.nextGaussian().toFloat() }.normalized() }
         val texts = Matrix(n, d)
         val notes = Matrix(n, d)
@@ -147,20 +147,26 @@ class ScoringTest {
     }
 
     @Test
-    fun `on the card the chances and what every row is shown with are those of the main memory`() {
+    fun `on the card the chances and what every row is shown with are those of the main memory`() = cardAlike(n, 900)
+
+    @Test
+    fun `on the card as in the main memory of a block of more rows than are made single precision at a time`() =
+        cardAlike(maxOf(FeatureKernels.CARD_ROWS, ItemFeatures.ROWS) + 3_000, 60)
+
+    /** Of a task of [items] and [values], the scoring on the card and in the main memory: what every row is shown with the same, the scores near. */
+    private fun cardAlike(items: Int, values: Int) {
         val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
         assumeTrue(dir != null, "no CUDA libraries")
         val cublas = Cublas.open(dir!!)
         assumeTrue(cublas != null, "no cuBLAS to run on")
-        val values = 900
-        val here = task(Random(11), values)
-        val there = task(Random(11), values, cublas)
+        val here = task(Random(11), values, n = items)
+        val there = task(Random(11), values, cublas, items)
         try {
             val suggester = BilinearSuggester()
             val bytes = assertNotNull(assertNotNull(suggester.fit(here)).scoring(here))
             val main = assertNotNull(suggester.scoring(bytes, here))
             val card = assertNotNull(suggester.scoring(bytes, there))
-            val rows = IntArray(2_000) { (it * 7) % n }
+            val rows = IntArray(2_000) { (it * 7 + it / 3 * 4_001) % items }
             // Every value, a set of many rows, a few of a row's own, none; of the closed some
             val shared = IntArray(40) { (it * 11 + 3) % values }.distinct().sorted().toIntArray()
             val columns = List(rows.size) { r ->
@@ -184,7 +190,7 @@ class ScoringTest {
                 }
             }
             // The coordinates made on the card, brought over: the chances of every value as the main memory's
-            val asked = intArrayOf(0, 3, 299, 150)
+            val asked = intArrayOf(0, 3, items - 1, items / 2)
             val a = main.of(asked)
             val b = card.of(asked)
             asked.indices.forEach { r -> for (v in 0 until values) assertNear(a[r][v], b[r][v], "row $r, value $v") }

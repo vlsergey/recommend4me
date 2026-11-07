@@ -9,13 +9,22 @@ import io.github.vlsergey.recommend4me.matrix.CudaKernels
  * chosen. Compiled once for the card of the process: the code, nothing of the data.
  */
 internal object FeatureKernels {
-    val NAMES = listOf("scatter_columns", "gather_columns", "scatter_rows", "ones_rows", "shown_count", "shown_likely")
+    val NAMES = listOf("halves_to_floats", "scatter_columns", "gather_columns", "scatter_rows", "ones_rows", "shown_count", "shown_likely")
 
     /** The coordinates of a value a kernel holds at most (`MAX_RANK` of `features.cu`). */
     const val MAX_RANK = 64
 
     /** The values besides the likely a kernel chooses at most (`MAX_LEAST`). */
     const val MAX_LEAST = 8
+
+    /** The rows of a block made single precision at a time on the card, for a product to read: memory, not meaning. */
+    const val CARD_ROWS = 16_384
+
+    /** The rows [from] to [from] + [count] of [rows], kept in half precision, written into [into] as single. */
+    fun floats(kernels: CudaKernels, rows: CardRows, from: Int, count: Int, into: Cublas.DeviceFloats) {
+        val n = count.toLong() * rows.dim
+        kernels.launch("halves_to_floats", n, n, rows.vectors.at(from.toLong() * rows.dim * 2), into)
+    }
 
     private var compiledFor: Cublas? = null
     private var compiled: CudaKernels? = null

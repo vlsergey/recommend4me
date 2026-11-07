@@ -121,11 +121,13 @@ internal class Ensemble(
      * step sends the models' A there and takes U back, sends dU and takes dA back — tens of
      * megabytes, not the features; the part of the ones ([ItemFeatures.ones]) made in the main
      * memory and sent with them. A block's product written into [part], carried onto the items'
-     * columns by a kernel ([FeatureKernels]). Null on the processor: no card, no kernels, or no room.
+     * columns by a kernel ([FeatureKernels]); its rows, kept in half precision, made single a run of
+     * [FeatureKernels.CARD_ROWS] at a time into [rows] for the library to multiply. Null on the
+     * processor: no card, no kernels, or no room.
      */
     private class OnCard(
         val cublas: Cublas, val kernels: CudaKernels, val blocks: List<CardRows>, val aT: Cublas.DeviceFloats, val uT: Cublas.DeviceFloats,
-        val duT: Cublas.DeviceFloats, val gA: Cublas.DeviceFloats, val part: Cublas.DeviceFloats,
+        val duT: Cublas.DeviceFloats, val gA: Cublas.DeviceFloats, val part: Cublas.DeviceFloats, val rows: Cublas.DeviceFloats,
         /** What was put there for the fitting: freed with it — the application's rows are the application's. */
         private val made: List<AutoCloseable>,
     ) : AutoCloseable {
@@ -143,15 +145,16 @@ internal class Ensemble(
             val du = room(count.toLong() * r * n)
             val g = room(count.toLong() * r * dx)
             val part = room(maxOf(1L, count.toLong() * r * p.x.widest))
-            if (blocks.any { it == null } || a == null || u == null || du == null || g == null || part == null) {
+            val rows = room(maxOf(1L, minOf(FeatureKernels.CARD_ROWS, p.x.widest).toLong() * p.x.longest))
+            if (blocks.any { it == null } || a == null || u == null || du == null || g == null || part == null || rows == null) {
                 made.forEach { it.close() }
                 null
-            } else OnCard(c, kernels, blocks.map { it!! }, a, u, du, g, part, made)
+            } else OnCard(c, kernels, blocks.map { it!! }, a, u, du, g, part, rows, made)
         }
     }
 
     /** A block's part of the products in the main memory, when they are made there. */
-    private val blockPart: Floats = if (onCard == null) p.x.scratchOf(count * r) else Floats(1)
+    private val blockPart: ItemFeatures.Scratch = if (onCard == null) p.x.scratchOf(count * r) else ItemFeatures.Scratch(Floats(1), Floats(1))
 
     /** [work] holding the card's lock when the products are made there: one thread at a time on it. */
     private fun <T> onTheCard(work: () -> T): T = onCard?.cublas?.lock.let { lock -> if (lock == null) work() else lock.withLock(work) }
@@ -187,10 +190,12 @@ internal class Ensemble(
         if (aOnCard) c.aT.download(aT, 0, 0, kr * dx) else c.aT.upload(aT, 0, 0, kr * dx)
         p.x.onesCoordinates(aT, kr, uT)
         c.uT.upload(uT, 0, 0, kr * n)
-        // A block's rows multiplied, then carried onto its items' columns
+        // A block's rows multiplied a run at a time, then carried onto its items' columns
         p.x.blocks.forEachIndexed { k, b ->
             val rows = c.blocks[k]
-            c.cublas.gemm(false, true, kr, b.count, b.dim, c.aT, b.column.toLong(), dx, rows.vectors, 0, b.dim, c.part, 0, b.count, alpha = b.scale)
+            runs(c, rows) { from, many ->
+                c.cublas.gemm(false, true, kr, many, b.dim, c.aT, b.column.toLong(), dx, c.rows, 0, b.dim, c.part, from.toLong(), b.count, alpha = b.scale)
+            }
             c.kernels.launch("scatter_columns", kr.toLong() * b.count, kr, b.count, c.part, rows.items, c.uT, n)
         }
         // Left there when the pairs are worked out there ([keep]): nothing of the processor reads them then
@@ -212,13 +217,27 @@ internal class Ensemble(
         if (duOnCard) c.duT.download(duT, 0, 0, kr * n) else c.duT.upload(duT, 0, 0, kr * n)
         p.x.onesGradient(duT, kr, gA)
         c.gA.upload(gA, 0, 0, kr * dx)
-        // The columns of a block's items taken, then multiplied by its rows
+        // The columns of a block's items taken, then multiplied by its rows a run at a time — onto the block's
+        // columns of dA, nought of the ones' part sent
         p.x.blocks.forEachIndexed { k, b ->
             val rows = c.blocks[k]
             c.kernels.launch("gather_columns", kr.toLong() * b.count, kr, b.count, c.duT, n, rows.items, c.part)
-            c.cublas.gemm(false, false, kr, b.dim, b.count, c.part, 0, b.count, rows.vectors, 0, b.dim, c.gA, b.column.toLong(), dx, alpha = b.scale)
+            runs(c, rows) { from, many ->
+                c.cublas.gemm(false, false, kr, b.dim, many, c.part, from.toLong(), b.count, c.rows, 0, b.dim, c.gA, b.column.toLong(), dx, beta = 1f, alpha = b.scale)
+            }
         }
         if (!aOnCard || h > 0) c.gA.download(gA, 0, 0, kr * dx)
+    }
+
+    /** Every run of [FeatureKernels.CARD_ROWS] rows of a block made single precision into the card's [OnCard.rows]: [work] of its first row and its number. */
+    private inline fun runs(c: OnCard, rows: CardRows, work: (Int, Int) -> Unit) {
+        var from = 0
+        while (from < rows.count) {
+            val many = minOf(FeatureKernels.CARD_ROWS, rows.count - from)
+            FeatureKernels.floats(c.kernels, rows, from, many, c.rows)
+            work(from, many)
+            from += many
+        }
     }
 
     /** Of every slot, its pieces of the point and of the gradient: told once. */

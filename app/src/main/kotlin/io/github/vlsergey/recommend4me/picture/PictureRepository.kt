@@ -246,21 +246,29 @@ class PictureRepository(private val db: DSLContext) {
             .fetch { it.value1()!! }
 
     /** Every item's stored vectors of its pictures by [encoder], streamed: (item, block key, vector). */
-    fun forEachItemVector(encoder: String, action: (itemId: String, key: String, vector: FloatArray) -> Unit) {
+    fun forEachItemVector(encoder: String, action: (itemId: String, key: String, vector: FloatArray) -> Unit) =
+        forEachItemHalves(encoder) { id, key, bytes -> action(id, key, Vectors.fromHalf(bytes)) }
+
+    /** [forEachItemVector] as stored: every vector its half-precision numbers, little-endian. */
+    fun forEachItemHalves(encoder: String, action: (itemId: String, key: String, halves: ByteArray) -> Unit) {
         db.select(ITEM_PICTURE_VECTOR.ITEM_ID, ITEM_PICTURE_VECTOR.BLOCK, ITEM_PICTURE_VECTOR.VEC).from(ITEM_PICTURE_VECTOR)
             .where(ITEM_PICTURE_VECTOR.ENCODER.eq(encoder))
             .fetchSize(5000).fetchLazy().use { cursor ->
-                cursor.forEach { action(it.value1()!!, it.value2()!!, Vectors.fromHalf(it.value3()!!)) }
+                cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) }
             }
     }
 
     /** The stored vectors of the items [ids]: item to block key to vector. */
-    fun itemVectorsOf(ids: Collection<String>, encoder: String): Map<String, Map<String, FloatArray>> {
-        val out = HashMap<String, MutableMap<String, FloatArray>>()
+    fun itemVectorsOf(ids: Collection<String>, encoder: String): Map<String, Map<String, FloatArray>> =
+        itemHalvesOf(ids, encoder).mapValues { (_, own) -> own.mapValues { Vectors.fromHalf(it.value) } }
+
+    /** [itemVectorsOf] as stored: every vector its half-precision numbers, little-endian. */
+    fun itemHalvesOf(ids: Collection<String>, encoder: String): Map<String, Map<String, ByteArray>> {
+        val out = HashMap<String, MutableMap<String, ByteArray>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(ITEM_PICTURE_VECTOR.ITEM_ID, ITEM_PICTURE_VECTOR.BLOCK, ITEM_PICTURE_VECTOR.VEC).from(ITEM_PICTURE_VECTOR)
                 .where(ITEM_PICTURE_VECTOR.ITEM_ID.`in`(chunk), ITEM_PICTURE_VECTOR.ENCODER.eq(encoder))
-                .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = Vectors.fromHalf(it.value3()!!) }
+                .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = it.value3()!! }
         }
         return out
     }
