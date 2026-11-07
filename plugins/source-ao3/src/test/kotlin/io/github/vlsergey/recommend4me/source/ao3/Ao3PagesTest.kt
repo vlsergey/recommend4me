@@ -168,7 +168,10 @@ class Ao3PagesTest {
                 .replace("<p class=\"kudos\">", "<p class=\"kudos\"><a href=\"/users/Reader\">Reader</a>, ")
                 .replace(
                     "<ul class=\"work navigation actions\">",
-                    "<ul class=\"work navigation actions\"><li class=\"bookmark\"><a href=\"#bookmark-form\">Edit Bookmark</a></li><li class=\"subscribe\"><form><input type=\"submit\" value=\"Unsubscribe\"></form></li><li class=\"mark\"><a href=\"#\">Mark as Read</a></li>",
+                    "<ul class=\"work navigation actions\">" +
+                        "<li class=\"bookmark\"><a href=\"#bookmark-form\">Edit Bookmark</a></li>" +
+                        "<li class=\"subscribe\"><form><input type=\"submit\" value=\"Unsubscribe\"></form></li>" +
+                        "<li class=\"mark\"><a href=\"#\">Mark as Read</a></li>",
                 )
         source.capture(
             CapturedPage("https://archiveofourown.org/works/$saints?view_full_work=true", html, now),

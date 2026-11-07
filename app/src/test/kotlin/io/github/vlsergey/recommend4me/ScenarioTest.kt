@@ -78,7 +78,9 @@ class ScenarioTest {
         override fun itemUrl(itemId: String) = "https://test.example/work/$itemId"
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
-            val (id, title, tags, annotation) = page.html.split('|')
+            val fields = page.html.split('|')
+            val (id, title, tags) = fields
+            val annotation = fields[3]
             context.items.upsert(
                 ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-0${id.last()}T00:00:00Z")),
                 page.capturedAt,
@@ -121,11 +123,27 @@ class ScenarioTest {
 
     @Test
     fun `a captured page becomes an item that can be graded, corrected, filtered and sorted`() {
+        captured()
+        describedByKeys()
+        graded()
+        filteredAndSorted()
+        searchJudged()
+        linkedAsOneWork()
+        removedAndSeenAgain()
+    }
+
+    /** The pages of the test site captured, a page of another site not. */
+    private fun captured() {
         assertEquals("test", capture("w1|Dragons|fantasy,dragons|A boy finds a dragon egg").source)
         capture("w2|Office|romance|A romance at the office")
         capture("w3|Knights|fantasy|Knights and castles")
         assertEquals(emptyList(), captures.capturePage(CaptureRequest("https://elsewhere.example/", "x")).body!!.items)
+    }
 
+    /**
+     * The content type and its source told by the keys of their words, the words of a source's namespace its plugin's.
+     */
+    private fun describedByKeys() {
         val type = types.listTypes().body!!.single()
         assertEquals("books", type.id)
         // The server words nothing: a source's own things by the keys of its namespace, the standard ones of the
@@ -146,6 +164,10 @@ class ScenarioTest {
         // An id of dotted words ("author.today") is a namespace; a path is not
         assertEquals(404, translations.translations("no.such.plugin", "en").statusCode.value())
         assertEquals(404, translations.translations("..", "en").statusCode.value())
+    }
+
+    /** The newest updated first; a grade kept and the list's views by it. */
+    private fun graded() {
         val updated = list(sort = ItemSort.UPDATED)
         assertEquals(3, updated.total)
         assertEquals("w3", updated.items.first().item)
@@ -153,7 +175,13 @@ class ScenarioTest {
         assertEquals(5, items.rateItem("test", "w1", RatingRequest(5)).body!!.grade)
         assertEquals(1, list(view = ItemView.RATED).total)
         assertEquals(2, list(view = ItemView.UNRATED).total)
+    }
 
+    /**
+     * The site's tags not corrected; the list filtered by them, sorted by a number and limited to its range; the
+     * filters of the content type.
+     */
+    private fun filteredAndSorted() {
         // The site's tags are its word, not corrected; the list is filtered by them
         val siteField =
             assertThrows<Refused> {
@@ -198,8 +226,10 @@ class ScenarioTest {
             listOf("g", "pg-13", "r", "nc-17", "nc-21"),
             items.listFilterValues("books", rating.id).body!!.propertyValues.map { it.key },
         )
+    }
 
-        // The user's word on what a search found: one line however typed, taken back when pressed again
+    /** The user's word on what a search found: one line however typed, taken back when pressed again. */
+    private fun searchJudged() {
         items.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", relevant = true))
         items.judgeSearch("books", SearchJudgment("dragons", "test", "w2", relevant = false))
         items.judgeSearch("books", SearchJudgment("knights", "test", "w3", relevant = true))
@@ -208,7 +238,10 @@ class ScenarioTest {
         assertEquals(listOf("dragons"), quality.queries.map { it.query })
         assertEquals(1, quality.queries.single().relevant)
         assertEquals(1, quality.queries.single().irrelevant)
+    }
 
+    /** Linked, two items are one work: a grade, a mark of interest and a correction of either are of both. */
+    private fun linkedAsOneWork() {
         // Linked, two items are one work: a grade of either is of both, in the list one row
         fun gradeOf(id: String) = items.getItem("test", id).body!!.summary.grade
         corrections.linkItem("test", "w2", ItemRef("test", "w3"))
@@ -248,7 +281,10 @@ class ScenarioTest {
         assertEquals(listOf("magic"), correctedOf("w3"))
         corrections.uncorrectFacet("test", "w2", "tags", "magic")
         corrections.uncorrectFacet("test", "w3", "tags", "magic")
+    }
 
+    /** Removed from the library — gone from the site — with its grade and the user's answers; seen again, made anew. */
+    private fun removedAndSeenAgain() {
         // Removed from the library — gone from the site — with its grade and the user's answers
         items.markInterest("test", "w1", InterestRequest(true))
         corrections.correctFacet("test", "w1", FacetCorrection(facet = "tags", added = true, key = "magic"))

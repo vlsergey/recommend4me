@@ -67,7 +67,7 @@ class FanficsMePagesTest {
     }
 
     @Test
-    fun `a card's pairings by the ids of their characters, a translation by its translator, an original by its fandom`() {
+    fun `a card's pairings by their characters' ids, a translation by its translator, an original by its fandom`() {
         val context = MemorySourceContext()
         capture(context, "https://fanfics.me/find?reit1=0&page=1", "find.html")
         val pairings = context.facets.getValue("218574").getValue("pairing")

@@ -110,13 +110,16 @@ class AuthorTodayPagesTest {
     fun `the reader gives the text of a chapter once it is loaded`() {
         val context = MemorySourceContext()
         val empty =
-            "<html><head><title>Книга Ученик Белого Дьявола - 9, Глава 1. Прикрывая тылы, Джон Голд читать онлайн</title></head>" +
+            "<html><head><title>" +
+                "Книга Ученик Белого Дьявола - 9, Глава 1. Прикрывая тылы, Джон Голд читать онлайн" +
+                "</title></head>" +
                 "<body><div id=\"reader\"><div id=\"text-container\" class=\"text-container\"></div></div></body></html>"
         assertEquals(emptyList(), capture(context, "https://author.today/reader/661269/6337965", empty))
         val loaded =
             empty.replace(
                 "<div id=\"text-container\" class=\"text-container\"></div>",
-                "<div id=\"text-container\" class=\"text-container\"><h1>Глава 1. Прикрывая тылы</h1><p><em>55 сутки, север Дуата</em></p><p>Гуам давно меня заметил.</p></div>",
+                "<div id=\"text-container\" class=\"text-container\"><h1>Глава 1. Прикрывая тылы</h1>" +
+                    "<p><em>55 сутки, север Дуата</em></p><p>Гуам давно меня заметил.</p></div>",
             )
         assertEquals(listOf("661269"), capture(context, "https://author.today/reader/661269/6337965", loaded))
         // The reader before the work's page: the work is named after the page's title

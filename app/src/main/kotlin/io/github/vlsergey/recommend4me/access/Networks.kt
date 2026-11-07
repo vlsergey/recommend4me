@@ -11,18 +11,27 @@ class Network(cidr: String) {
     init {
         val (address, prefix) = cidr.trim().split('/', limit = 2).let { it[0] to it.getOrNull(1) }
         base = InetAddress.getByName(address).address
-        bits = prefix?.toInt() ?: (base.size * 8)
-        require(bits in 0..base.size * 8) { "Not a network: $cidr" }
+        bits = prefix?.toInt() ?: (base.size * Byte.SIZE_BITS)
+        require(bits in 0..base.size * Byte.SIZE_BITS) { "Not a network: $cidr" }
     }
 
+    /**
+     * Whether [address] is of this network: of the same family, its whole bytes of the prefix equal, and the prefix's
+     * bits of the byte the prefix ends within.
+     */
     fun contains(address: InetAddress): Boolean {
         val bytes = address.address
-        if (bytes.size != base.size) return false
-        for (i in 0 until bits / 8) if (bytes[i] != base[i]) return false
-        val rest = bits % 8
-        if (rest == 0) return true
-        val mask = (0xff shl (8 - rest)) and 0xff
-        return (bytes[bits / 8].toInt() and mask) == (base[bits / 8].toInt() and mask)
+        val whole = bits / Byte.SIZE_BITS
+        val rest = bits % Byte.SIZE_BITS
+        val mask = (BYTE shl (Byte.SIZE_BITS - rest)) and BYTE
+        return bytes.size == base.size &&
+            (0 until whole).all { bytes[it] == base[it] } &&
+            (rest == 0 || (bytes[whole].toInt() and mask) == (base[whole].toInt() and mask))
+    }
+
+    private companion object {
+        /** The bits of a byte, all set: a byte read as an unsigned number. */
+        const val BYTE = 0xff
     }
 }
 

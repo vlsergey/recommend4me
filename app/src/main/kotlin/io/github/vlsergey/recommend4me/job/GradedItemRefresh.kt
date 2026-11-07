@@ -29,6 +29,9 @@ class GradedItemRefresh(
         Thread(r, "graded-refresh").apply { isDaemon = true }
     }
 
+    // A BOUNDARY: the page is loaded by a plugin's code on a thread of its own — whatever it throws is logged, the
+    // grade stays as given
+    @Suppress("TooGenericExceptionCaught")
     @EventListener
     fun gradesChanged(event: GradesChanged) {
         val store = stores.source(event.source) ?: return

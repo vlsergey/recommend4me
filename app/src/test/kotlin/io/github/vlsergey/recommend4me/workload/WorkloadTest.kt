@@ -37,7 +37,7 @@ class WorkloadTest {
     }
 
     @Test
-    fun `a request of the browser never waits for a computation, nor runs one, where a thread of the background does`() {
+    fun `a request of the browser never waits for a computation, nor runs one, as a background thread does`() {
         val workload = Workload()
         val ran = AtomicInteger()
         RequestContextHolder.setRequestAttributes(
@@ -149,7 +149,7 @@ class WorkloadTest {
     }
 
     @Test
-    fun `a work the user asked for waits ahead of the background, the running one not stopped, each kind in the order asked`() {
+    fun `the user's work waits ahead of the background, the running one not stopped, each kind in the order asked`() {
         val workload = Workload()
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)

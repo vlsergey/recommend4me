@@ -18,7 +18,10 @@ class SourceLifecycle(
     /** Off in tests, where no source is to reach its site. */
     @Value("\${recommend4me.sources.background:true}") private val enabled: Boolean,
 ) {
-    @Order(20)
+    // A BOUNDARY: a plugin's start may throw anything — logged, and the other sources and the application start all the
+    // same
+    @Suppress("TooGenericExceptionCaught")
+    @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         if (!enabled) return
@@ -34,5 +37,13 @@ class SourceLifecycle(
     @PreDestroy
     fun stop() {
         stores.sources.forEach { s -> runCatching { s.source.stop() } }
+    }
+
+    private companion object {
+        /**
+         * The place of [start] among the listeners of the application's start: last, after the catalogue is made ready
+         * and a job left unfinished is resumed (10).
+         */
+        const val START_ORDER = 20
     }
 }

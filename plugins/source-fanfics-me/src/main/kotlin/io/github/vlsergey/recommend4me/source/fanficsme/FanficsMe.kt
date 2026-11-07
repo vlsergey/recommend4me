@@ -93,7 +93,9 @@ class FanficsMe : Source {
     override val capturePatterns =
         listOf(
             Regex(
-                "https://fanfics\\.me/(fic\\d+|read\\.php|find|fandom\\d+|character\\d+|paring[\\d_]+|serie\\d+|collection\\d+|user\\d+|translations|recommends|fics_rating|html)([/?#].*)?"
+                "https://fanfics\\.me/" +
+                    "(fic\\d+|read\\.php|find|fandom\\d+|character\\d+|paring[\\d_]+|serie\\d+|collection\\d+" +
+                    "|user\\d+|translations|recommends|fics_rating|html)([/?#].*)?"
             )
         )
 
@@ -142,9 +144,9 @@ class FanficsMe : Source {
      */
     override fun refresh(itemId: String, context: SourceContext): Boolean {
         val url = itemUrl(itemId)
-        val html = client.get(url) ?: return false
         val pages = FanficsMePages(context)
-        if (itemId !in pages.read(CapturedPage(url, html, Instant.now()))) return false
+        val html =
+            client.get(url)?.takeIf { itemId in pages.read(CapturedPage(url, it, Instant.now())) } ?: return false
         context.keepPage(url, html, itemId)
         val reader = "$BASE/read.php?id=$itemId"
         client.get(reader)?.let { text ->

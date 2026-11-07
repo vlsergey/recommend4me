@@ -3,11 +3,7 @@ package io.github.vlsergey.recommend4me.workload
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CancellationException
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -71,29 +67,15 @@ class FinishedWork(
  * an answer, a tag — are told here with their reasons, which go with them once they begin ([take]). Of the works
  * nothing is kept but what they are, their times and their reasons, and nothing outlives the process.
  *
- * AND WHAT IS DONE: the last [FINISHED] works, with how long each took, and of every kind of work — a work of any item
- * alike ([kind]) — how long its last run took: what a work to come is expected to take ([expected]). In memory, by the
- * user's word (2026-10-15): a few dozen numbers, forgotten on a restart — till a kind runs again, it has no estimate.
+ * AND WHAT IS DONE ([WorksDone]): the last works, with how long each took, and of every kind of work how long its last
+ * run took: what a work to come is expected to take ([expected]).
  */
 @Component
 class Workload {
-    /**
-     * Guards whose turn it is: the [waiting], and the thread holding the turn ([holder]). [turn] wakes the waiting when
-     * the turn is free or the waiting change.
-     */
-    private val lock = ReentrantLock()
-    private val turn = lock.newCondition()
-    private var holder: Thread? = null
-
-    /** The works waiting their turn, in the order they are asked; guarded by [lock]. Whose turn comes: [next]. */
-    private val waiting = ArrayList<Waiter>()
+    /** Whose turn it is: the works waiting their turn and the thread holding it. */
+    private val turns = Turns()
     private val planned = ConcurrentHashMap<Work, PlannedWork>()
-
-    /** The last works done, the oldest first; guarded by itself. */
-    private val finished = ArrayDeque<FinishedWork>()
-
-    /** How long the last run of every kind of work took. */
-    private val lastMillis = ConcurrentHashMap<Work, Long>()
+    private val done = WorksDone()
 
     @Volatile private var current: HeavyWork? = null
 
@@ -119,39 +101,22 @@ class Workload {
     ): T {
         Requests.refuseWaiting(work)
         // A work asking for another inside it goes on: the turn is its own
-        if (lock.withLock { holder === Thread.currentThread() }) return body()
-        val (entry, own) =
-            lock.withLock {
-                val alike = if (joinAlike) waiting.firstOrNull { it.joinable && it.work == work } else null
-                if (alike != null) {
-                    alike.reasons = merged(alike.reasons, reasons)
-                    if (asked && !alike.asked) {
-                        alike.asked = true
-                        turn.signalAll()
-                    }
-                    alike to false
-                } else Waiter(work, Instant.now(), reasons, joinAlike, asked).also { waiting += it } to true
-            }
-        if (!own) return joined(entry)
-        try {
-            lock.withLock {
-                try {
-                    while (holder != null || next() !== entry) turn.await()
-                    holder = Thread.currentThread()
-                } finally {
-                    waiting -= entry
-                    // Gone from the waiting — its turn taken, or given up: whose turn it is now is asked anew
-                    turn.signalAll()
-                }
-            }
-        } catch (e: Throwable) {
-            entry.result.completeExceptionally(e)
-            throw e
-        }
+        if (turns.heldHere()) return body()
+        val (entry, own) = turns.enter(work, reasons, joinAlike, asked)
+        return if (own) runOwn(entry, body) else entry.answer()
+    }
+
+    /**
+     * Runs [body] as the work [entry], the caller's own, once its turn comes: what it answers, or its failure, handed
+     * to the callers joined to it as well; the run kept among the works done, and the turn given back after it.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private fun <T> runOwn(entry: Waiter, body: () -> T): T {
+        turns.take(entry)
         try {
             val waited = Duration.between(entry.since, Instant.now())
-            if (waited > NOTED) log.info("{} waited {} s for the works before it", work, waited.toSeconds())
-            val running = HeavyWork(work, Instant.now(), entry.reasons, entry.asked)
+            if (waited > NOTED) log.info("{} waited {} s for the works before it", entry.work, waited.toSeconds())
+            val running = HeavyWork(entry.work, Instant.now(), entry.reasons, entry.asked)
             current = running
             var failed = true
             var givenUp = false
@@ -166,72 +131,25 @@ class Workload {
                 entry.result.completeExceptionally(e)
                 throw e
             } catch (e: Throwable) {
+                // A RELAY, NOT A CATCH: whatever the work throws is handed to the callers joined to it and thrown on
                 entry.result.completeExceptionally(e)
                 throw e
             } finally {
-                done(running, failed, givenUp)
+                done.add(running, failed, givenUp)
             }
         } finally {
             current = null
-            lock.withLock {
-                holder = null
-                turn.signalAll()
-            }
+            turns.release()
         }
     }
-
-    /** Whose turn comes next: of the works the user asked for the longest waiting, else of the rest. Under [lock]. */
-    private fun next(): Waiter? = waiting.minWithOrNull(ORDER)
-
-    /** What the work alike [entry] answered, once it is done; its failure thrown here too. */
-    @Suppress("UNCHECKED_CAST")
-    private fun <T> joined(entry: Waiter): T =
-        try {
-            entry.result.get() as T
-        } catch (e: ExecutionException) {
-            throw e.cause ?: e
-        }
-
-    private fun merged(a: Map<String, Int>, b: Map<String, Int>): Map<String, Int> =
-        a.toMutableMap().apply { b.forEach { (k, n) -> merge(k, n, Int::plus) } }
-
-    /**
-     * A work waiting its turn: its reasons grow as works alike join it — put ahead when one the user asked for does —
-     * its callers wait for its [result].
-     */
-    private class Waiter(
-        val work: Work,
-        val since: Instant,
-        @Volatile var reasons: Map<String, Int>,
-        val joinable: Boolean,
-        @Volatile var asked: Boolean,
-    ) {
-        val result = CompletableFuture<Any?>()
-    }
-
-    /**
-     * The work [entry] ended: kept among the works done, with how long it took — of a work given up, a part of it, no
-     * estimate.
-     */
-    private fun done(entry: HeavyWork, failed: Boolean, givenUp: Boolean) {
-        val ended = Instant.now()
-        if (!givenUp) lastMillis[kind(entry.work)] = Duration.between(entry.since, ended).toMillis()
-        synchronized(finished) {
-            finished.addLast(FinishedWork(entry.work, entry.since, ended, entry.reasons, failed, givenUp))
-            while (finished.size > FINISHED) finished.removeFirst()
-        }
-    }
-
-    /** The kind of a work: alike for every item — what the work of another item took, this one is expected to take. */
-    private fun kind(work: Work) = work.copy(item = null)
 
     /**
      * How long the [work] is expected to take: as long as the last run of its kind; null when none ran since the start.
      */
-    fun expected(work: Work): Long? = lastMillis[kind(work)]
+    fun expected(work: Work): Long? = done.expected(work)
 
     /** The last works done, the oldest first. */
-    fun finished(): List<FinishedWork> = synchronized(finished) { finished.toList() }
+    fun finished(): List<FinishedWork> = done.list()
 
     /**
      * The [work] planned for [due] — later than planned before, if put off; when null, as planned before — for one more
@@ -251,25 +169,16 @@ class Workload {
     fun running(): HeavyWork? = current
 
     /** The works waiting their turn, in the order they will run: those the user asked for first. */
-    fun waiting(): List<HeavyWork> = lock.withLock {
-        waiting.sortedWith(ORDER).map { HeavyWork(it.work, it.since, it.reasons, it.asked) }
-    }
+    fun waiting(): List<HeavyWork> = turns.waiting()
 
     /** Whether the [work] is to be done: planned, waiting its turn or running now — what it makes is not made yet. */
-    fun due(work: Work): Boolean =
-        planned.containsKey(work) || lock.withLock { waiting.any { it.work == work } } || current?.work == work
+    fun due(work: Work): Boolean = planned.containsKey(work) || turns.waits(work) || current?.work == work
 
     /** The works planned, the soonest due first. */
     fun planned(): List<PlannedWork> = planned.values.sortedBy { it.due }
 
     private companion object {
-        /** The order of the turns: the works the user asked for first, each kind the longest waiting first. */
-        val ORDER: Comparator<Waiter> = compareBy<Waiter> { !it.asked }.thenBy { it.since }
-
         /** A wait worth telling in the log. */
         val NOTED: Duration = Duration.ofSeconds(2)
-
-        /** How many works done are told. */
-        const val FINISHED = 5
     }
 }

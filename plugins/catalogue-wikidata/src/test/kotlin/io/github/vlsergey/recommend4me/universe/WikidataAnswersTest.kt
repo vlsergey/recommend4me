@@ -112,7 +112,7 @@ class WikidataAnswersTest {
     }
 
     @Test
-    fun `what an entry is a kind of — its classes and what it is a fictional analog of, never what it is an instance of, nor a deprecated class, nor itself`() {
+    fun `an entry is a kind of its classes and fictional analogs — not of its P31, a deprecated class or itself`() {
         assertEquals(mapOf("Q10" to listOf("Q11", "Q13")), catalogue.above(listOf("Q10", "Q20")))
     }
 

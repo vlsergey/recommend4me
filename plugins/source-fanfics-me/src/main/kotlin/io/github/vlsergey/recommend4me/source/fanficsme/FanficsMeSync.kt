@@ -119,6 +119,7 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
      * The events of every fandom the works are of, in its encyclopedia, the fandoms of the most works first: what each
      * event means. Resumed where the last run stopped.
      */
+    @Suppress("TooGenericExceptionCaught")
     private fun readKeywords(job: Job) {
         val works = HashMap<String, Int>()
         context.items.forEachFacet(FANDOM) { _, keys -> keys.forEach { works.merge(it, 1, Int::plus) } }
@@ -135,6 +136,8 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
             try {
                 client.get(url)?.let { pages.read(CapturedPage(url, it, Instant.now())) }
             } catch (e: Exception) {
+                // A BOUNDARY of the crawl: whatever one fandom's page throws is told as the job's error, and the
+                // next fandom read
                 job.error("the events of fandom ${fandoms[next]} were not read: ${e.message}")
             }
             next++
@@ -176,21 +179,23 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
         fun progress(context: SourceContext): ScrapeProgress {
             val items = context.items.count()
             val next = context.jobState(NEXT_PAGE)?.toIntOrNull()
-            if (context.jobState(CATALOGUE_DONE) == "true") {
-                val total = context.jobState(TOTAL_FANDOMS)?.toIntOrNull() ?: 0
-                return ScrapeProgress(
-                    "dictionary",
-                    context.jobState(NEXT_FANDOM)?.toIntOrNull() ?: 0,
-                    total,
-                    complete = false,
-                )
+            return when {
+                context.jobState(CATALOGUE_DONE) == "true" -> {
+                    val total = context.jobState(TOTAL_FANDOMS)?.toIntOrNull() ?: 0
+                    ScrapeProgress(
+                        "dictionary",
+                        context.jobState(NEXT_FANDOM)?.toIntOrNull() ?: 0,
+                        total,
+                        complete = false,
+                    )
+                }
+                next != null -> {
+                    val total = context.jobState(TOTAL_PAGES)?.toIntOrNull() ?: next
+                    ScrapeProgress("catalogue", next - 1, total, complete = false)
+                }
+                context.jobState(COMPLETE) == "true" -> ScrapeProgress("catalogue", items, items, complete = true)
+                else -> ScrapeProgress("none", 0, 0, complete = false)
             }
-            if (next != null) {
-                val total = context.jobState(TOTAL_PAGES)?.toIntOrNull() ?: next
-                return ScrapeProgress("catalogue", next - 1, total, complete = false)
-            }
-            if (context.jobState(COMPLETE) == "true") return ScrapeProgress("catalogue", items, items, complete = true)
-            return ScrapeProgress("none", 0, 0, complete = false)
         }
     }
 }

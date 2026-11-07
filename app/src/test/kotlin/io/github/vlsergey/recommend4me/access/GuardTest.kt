@@ -57,7 +57,7 @@ class GuardTest {
     }
 
     @Test
-    fun `the names — loopback, any address written out, the hosts of the configuration — never a foreign name at our address`() {
+    fun `the names — loopback, an address written out, the configured hosts — never a foreign name at our address`() {
         assertEquals(200, status(host = "localhost"))
         assertEquals(200, status(host = "127.0.0.1"))
         // An address needs no name: rebinding needs a NAME

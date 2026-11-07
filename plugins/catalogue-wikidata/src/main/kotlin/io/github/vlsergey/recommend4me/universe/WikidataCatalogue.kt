@@ -2,16 +2,7 @@ package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.tag.TagCatalogue
 import io.github.vlsergey.recommend4me.tag.TagEntry
-import java.net.URI
-import java.net.URLEncoder
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.time.Duration
-import java.time.Instant
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import tools.jackson.databind.JsonNode
+import io.github.vlsergey.recommend4me.universe.WikidataClient.Companion.enc
 import tools.jackson.databind.json.JsonMapper
 
 /**
@@ -30,13 +21,16 @@ import tools.jackson.databind.json.JsonMapper
  * of them that has them.
  */
 class WikidataCatalogue(
-    private val json: JsonMapper,
+    json: JsonMapper,
     /** The API's address: Wikidata's own, another only in the tests. */
     private val api: String = API,
     /** The query service's address. */
-    private val sparqlUrl: String = SPARQL,
+    sparqlUrl: String = SPARQL,
 ) : UniverseCatalogue, TagCatalogue {
     override val id = "wikidata"
+
+    private val client = WikidataClient(json, sparqlUrl)
+    private val characters = WikidataCharacters(client)
 
     /**
      * An item a tag stands for — "Quidditch", "angst", "slow burn" — by its names and aliases in every language; a
@@ -45,14 +39,18 @@ class WikidataCatalogue(
     override fun find(text: String, languages: List<String>): List<TagEntry> {
         val asked = ITEM_IN.find(text.trim())?.value
         if (asked != null) return entries(listOf(asked), languages)
-        val found = languages.flatMap { lang ->
-            get(
-                    "$api?action=wbsearchentities&type=item&limit=$SEARCHED&format=json&language=$lang&uselang=$lang&search=${enc(text.trim())}"
-                )
-                .path("search")
-                .mapNotNull { it.path("id").asString(null) }
-        }
-        return entries(found.distinct(), languages)
+        return entries(searched(text.trim(), languages).distinct(), languages)
+    }
+
+    /** The items the API's search by names and aliases finds of [text], in every one of [languages]. */
+    private fun searched(text: String, languages: List<String>): List<String> = languages.flatMap { lang ->
+        client
+            .get(
+                "$api?action=wbsearchentities&type=item&limit=$SEARCHED&format=json" +
+                    "&language=$lang&uselang=$lang&search=${enc(text)}"
+            )
+            .path("search")
+            .mapNotNull { it.path("id").asString(null) }
     }
 
     /**
@@ -63,8 +61,10 @@ class WikidataCatalogue(
         val items = ids.filter { ITEM.matches(it) }.distinct()
         return items.chunked(ENTITIES_ASKED).flatMap { chunk ->
             val entities =
-                get(
-                        "$api?action=wbgetentities&props=labels%7Caliases%7Cdescriptions&format=json&ids=${chunk.joinToString("%7C")}&languages=${languages.joinToString("%7C")}"
+                client
+                    .get(
+                        "$api?action=wbgetentities&props=labels%7Caliases%7Cdescriptions&format=json" +
+                            "&ids=${chunk.joinToString("%7C")}&languages=${languages.joinToString("%7C")}"
                     )
                     .path("entities")
             chunk.mapNotNull { id ->
@@ -99,7 +99,8 @@ class WikidataCatalogue(
             .chunked(ENTITIES_ASKED)
             .flatMap { chunk ->
                 val entities =
-                    get("$api?action=wbgetentities&props=claims&format=json&ids=${chunk.joinToString("%7C")}")
+                    client
+                        .get("$api?action=wbgetentities&props=claims&format=json&ids=${chunk.joinToString("%7C")}")
                         .path("entities")
                 chunk.mapNotNull { id ->
                     val claims = entities.path(id).path("claims")
@@ -120,23 +121,15 @@ class WikidataCatalogue(
             .toMap()
     }
 
-    private val http =
-        HttpClient.newBuilder().connectTimeout(TIMEOUT).followRedirects(HttpClient.Redirect.NORMAL).build()
-
     /**
      * By the names and aliases of the items in every language first — what a short name like "Гарри Поттер" is — then
      * by their whole text, which finds a long one like "Роулинг Джоан «Гарри Поттер»".
      */
     override fun findUniverses(name: String, languages: List<String>): List<UniverseEntry> {
-        val byName = languages.flatMap { lang ->
-            get(
-                    "$api?action=wbsearchentities&type=item&limit=$SEARCHED&format=json&language=$lang&uselang=$lang&search=${enc(name)}"
-                )
-                .path("search")
-                .mapNotNull { it.path("id").asString(null) }
-        }
+        val byName = searched(name, languages)
         val byText =
-            get("$api?action=query&list=search&srnamespace=0&srlimit=$SEARCHED&format=json&srsearch=${enc(name)}")
+            client
+                .get("$api?action=query&list=search&srnamespace=0&srlimit=$SEARCHED&format=json&srsearch=${enc(name)}")
                 .path("query")
                 .path("search")
                 .mapNotNull { it.path("title").asString(null) }
@@ -149,8 +142,9 @@ class WikidataCatalogue(
         // (P1434 "takes place in fictional universe": the series of a universe of its own) — but its
         // characters', which are said to be in it the same way
         val stated =
-            statements(
-                "{ SELECT DISTINCT ?c WHERE { ?c (wdt:P179|wdt:P361|wdt:P8345|wdt:P1434)* wd:$id . FILTER NOT EXISTS { ?c wdt:P31/wdt:P279* wd:$CHARACTER } } }",
+            client.statements(
+                "{ SELECT DISTINCT ?c WHERE { ?c (wdt:P179|wdt:P361|wdt:P8345|wdt:P1434)* wd:$id . " +
+                    "FILTER NOT EXISTS { ?c wdt:P31/wdt:P279* wd:$CHARACTER } } }",
                 properties,
             )
         val merged = HashMap<String, MutableList<String>>()
@@ -167,140 +161,8 @@ class WikidataCatalogue(
         )
     }
 
-    override fun characters(id: String, languages: List<String>, properties: Set<String>): List<UniverseCharacter> {
-        require(ITEM.matches(id)) { "Not an item of Wikidata: $id" }
-        val langs = languages.joinToString(",") { "\"$it\"" }
-        // The parts of the universe, walked once as its own statements are (P1434 "takes place in
-        // fictional universe" too: a character only of a work set in the universe is one of its
-        // characters), then its entries once from them; every later query is given the entries as
-        // a list. A walk repeated in each query makes the service walk it each time, and a
-        // universe with hundreds of works set in it then runs out of time
-        val parts =
-            sparql("SELECT DISTINCT ?part WHERE { ?part (wdt:P179|wdt:P361|wdt:P8345|wdt:P1434)* wd:$id . }")
-                .map { it.path("part").path("value").asString().substringAfterLast('/') }
-                .filter { ITEM.matches(it) }
-        val partList = parts.joinToString(" ") { "wd:$it" }
-        // Two subqueries, each evaluated by itself: within one, the union of the two ways makes
-        // the service join them for every character there is
-        val ids =
-            sparql(
-                    """
-            SELECT DISTINCT ?c WHERE {
-              { SELECT DISTINCT ?c WHERE { VALUES ?part { $partList } ?c (wdt:P1441|wdt:P1080|wdt:P8345) ?part . } }
-              UNION
-              { SELECT DISTINCT ?c WHERE { VALUES ?part { $partList } ?part wdt:P674 ?c . } }
-            }
-            """
-                        .trimIndent()
-                )
-                .map { it.path("c").path("value").asString().substringAfterLast('/') }
-                .filter { ITEM.matches(it) }
-                .distinct()
-        if (ids.isEmpty()) return emptyList()
-        val entries = "VALUES ?c { ${ids.joinToString(" ") { "wd:$it" }} }"
-        val query =
-            """
-            SELECT ?c ?kind ?text WHERE {
-              $entries
-              { ?c rdfs:label ?text . BIND("label" AS ?kind) }
-              UNION { ?c skos:altLabel ?text . BIND("alias" AS ?kind) }
-              UNION { ?c schema:description ?text . BIND("description" AS ?kind) }
-              FILTER(LANG(?text) IN ($langs))
-            }
-        """
-                .trimIndent()
-        class Names(
-            val labels: MutableMap<String, String> = HashMap(),
-            val aliases: MutableList<Pair<String, String>> = ArrayList(),
-            val descriptions: MutableMap<String, String> = HashMap(),
-        )
-        val byCharacter = LinkedHashMap<String, Names>()
-        // What each entry is (P31 "instance of"), asked by itself: joined to the names, it multiplies
-        // them. OPTIONAL keeps the order — the entries first, then their classes: a plain join lets
-        // the service start from every P31 statement there is and run out of time
-        val classes = HashMap<String, MutableList<String>>()
-        sparql("SELECT ?c ?class WHERE { $entries OPTIONAL { ?c wdt:P31 ?class . } }").forEach { row ->
-            val cls = row.path("class").path("value").asString("").substringAfterLast('/')
-            if (ITEM.matches(cls))
-                classes.getOrPut(row.path("c").path("value").asString().substringAfterLast('/')) { ArrayList() } += cls
-        }
-        // The sex or gender of each entry (P21), asked by itself the same way
-        val sexes = HashMap<String, MutableSet<String>>()
-        sparql("SELECT ?c ?sex WHERE { $entries OPTIONAL { ?c wdt:P21 ?sex . } }").forEach { row ->
-            val sex = row.path("sex").path("value").asString("").substringAfterLast('/')
-            if (ITEM.matches(sex))
-                sexes.getOrPut(row.path("c").path("value").asString().substringAfterLast('/')) { HashSet() } += sex
-        }
-        // What each entry is based on (P144), asked by itself the same way: a character's version in a film or a
-        // musical
-        val basedOn = HashMap<String, MutableSet<String>>()
-        sparql("SELECT ?c ?original WHERE { $entries ?c wdt:P144 ?original . }").forEach { row ->
-            val original = row.path("original").path("value").asString("").substringAfterLast('/')
-            if (ITEM.matches(original))
-                basedOn.getOrPut(row.path("c").path("value").asString().substringAfterLast('/')) { HashSet() } +=
-                    original
-        }
-        sparql(query).forEach { row ->
-            val character = row.path("c").path("value").asString().substringAfterLast('/')
-            val text = row.path("text")
-            val lang = text.path("xml:lang").asString("")
-            val value = text.path("value").asString()
-            val names = byCharacter.getOrPut(character) { Names() }
-            when (row.path("kind").path("value").asString()) {
-                "label" -> names.labels[lang] = value
-                "alias" -> names.aliases += lang to value
-                "description" -> names.descriptions[lang] = value
-            }
-        }
-        val stated = statements(entries, properties)
-        val read =
-            byCharacter
-                .map { (character, n) ->
-                    UniverseCharacter(
-                        character,
-                        n.labels,
-                        n.aliases.groupBy({ it.first }, { it.second }),
-                        n.descriptions,
-                        "$PAGE$character",
-                        languages,
-                        classes[character].orEmpty(),
-                        sexes[character]?.let(::sexOf),
-                        stated[character].orEmpty(),
-                    )
-                }
-                .filter { it.names.isNotEmpty() }
-        return withoutVersions(read, basedOn)
-    }
-
-    /**
-     * The statements of [properties] of every entry [entries] binds to `?c` — a list of them, or a subquery selecting
-     * them — asked by themselves as the classes are: entry to property to its values, an item by its id, any other
-     * value as its text. A list is joined as it is: wrapped in a subquery of its own, thousands of entries take the
-     * service most of a minute.
-     */
-    private fun statements(entries: String, properties: Set<String>): Map<String, Map<String, List<String>>> {
-        val asked = properties.filter { PROPERTY.matches(it) }.distinct()
-        if (asked.isEmpty()) return emptyMap()
-        val values = asked.joinToString(" ") { "wdt:$it" }
-        val out = HashMap<String, MutableMap<String, MutableList<String>>>()
-        sparql("SELECT ?c ?p ?v WHERE { $entries VALUES ?p { $values } ?c ?p ?v . }").forEach { row ->
-            val character = row.path("c").path("value").asString().substringAfterLast('/')
-            val property = row.path("p").path("value").asString().substringAfterLast('/')
-            val v = row.path("v")
-            val value = v.path("value").asString()
-            val shown =
-                if (v.path("type").asString("") == "uri" && value.startsWith(ENTITY)) value.removePrefix(ENTITY)
-                else value
-            out.getOrPut(character) { HashMap() }.getOrPut(property) { ArrayList() } += shown
-        }
-        return out
-    }
-
-    /** One sex of the values of P21: male or female when that is all they say, anything else otherwise. */
-    private fun sexOf(values: Set<String>): CharacterSex {
-        val read = values.map { SEXES[it] ?: CharacterSex.OTHER }.toSet()
-        return read.singleOrNull() ?: CharacterSex.OTHER
-    }
+    override fun characters(id: String, languages: List<String>, properties: Set<String>): List<UniverseCharacter> =
+        characters.of(id, languages, properties)
 
     /**
      * A class is of characters when "character" (Q95074) is among its superclasses (P279, any steps up). Every
@@ -316,14 +178,17 @@ class WikidataCatalogue(
         val names = HashMap<String, MutableMap<String, String>>()
         items.chunked(CLASSES_ASKED).forEach { chunk ->
             val values = chunk.joinToString(" ") { "wd:$it" }
-            sparql("SELECT ?class ?super WHERE { VALUES ?class { $values } ?class wdt:P279* ?super . }").forEach { row
-                ->
-                if (row.path("super").path("value").asString().substringAfterLast('/') == CHARACTER) {
-                    characters += row.path("class").path("value").asString().substringAfterLast('/')
+            client
+                .sparql("SELECT ?class ?super WHERE { VALUES ?class { $values } ?class wdt:P279* ?super . }")
+                .forEach { row ->
+                    if (row.path("super").path("value").asString().substringAfterLast('/') == CHARACTER) {
+                        characters += row.path("class").path("value").asString().substringAfterLast('/')
+                    }
                 }
-            }
-            sparql(
-                    "SELECT ?class ?name WHERE { VALUES ?class { $values } ?class rdfs:label ?name . FILTER(LANG(?name) IN ($langs)) }"
+            client
+                .sparql(
+                    "SELECT ?class ?name WHERE { VALUES ?class { $values } ?class rdfs:label ?name . " +
+                        "FILTER(LANG(?name) IN ($langs)) }"
                 )
                 .forEach { row ->
                     val name = row.path("name")
@@ -336,65 +201,16 @@ class WikidataCatalogue(
     }
 
     /**
-     * The rows a query of the query service answers; sent in the body, as a list of hundreds of items does not fit an
-     * address.
-     */
-    private fun sparql(query: String): List<JsonNode> {
-        val request =
-            HttpRequest.newBuilder(URI.create(sparqlUrl))
-                .timeout(TIMEOUT)
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "application/sparql-results+json")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString("query=${enc(query)}"))
-                .build()
-        return json.readTree(send(request)).path("results").path("bindings").toList()
-    }
-
-    /**
-     * The body of the answer to [request]. Asked too often, Wikidata answers 429 with how long to wait (Retry-After):
-     * the request is sent again after that, for as long as the waits add up to no more than [TIMEOUT]; an answer of 429
-     * without the header, or past it, fails as any other.
-     */
-    private fun send(request: HttpRequest): String {
-        var waited = Duration.ZERO
-        while (true) {
-            val response = http.send(request, HttpResponse.BodyHandlers.ofString())
-            if (response.statusCode() == 200) return response.body()
-            val wait =
-                response
-                    .takeIf { it.statusCode() == TOO_MANY_REQUESTS }
-                    ?.headers()
-                    ?.firstValue("Retry-After")
-                    ?.orElse(null)
-                    ?.let(::retryAfter)
-            check(wait != null && waited + wait <= TIMEOUT) { "Wikidata answered ${response.statusCode()}" }
-            Thread.sleep(wait.toMillis())
-            waited += wait
-        }
-    }
-
-    /** Retry-After as seconds, or as the date to retry at; null when it is neither. */
-    private fun retryAfter(value: String): Duration? =
-        value.trim().toLongOrNull()?.let { Duration.ofSeconds(it.coerceAtLeast(0)) }
-            ?: runCatching {
-                Duration.between(
-                        Instant.now(),
-                        ZonedDateTime.parse(value.trim(), DateTimeFormatter.RFC_1123_DATE_TIME),
-                    )
-                    .coerceAtLeast(Duration.ZERO)
-            }
-                .getOrNull()
-
-    /**
      * The items [ids] with their names and descriptions in every one of [languages] that has them, in the order given.
      */
     private fun universeEntries(ids: List<String>, languages: List<String>): List<UniverseEntry> {
         val items = ids.filter { ITEM.matches(it) }
         if (items.isEmpty()) return emptyList()
         val entities =
-            get(
-                    "$api?action=wbgetentities&props=labels%7Cdescriptions&format=json&ids=${items.joinToString("%7C")}&languages=${languages.joinToString("%7C")}"
+            client
+                .get(
+                    "$api?action=wbgetentities&props=labels%7Cdescriptions&format=json" +
+                        "&ids=${items.joinToString("%7C")}&languages=${languages.joinToString("%7C")}"
                 )
                 .path("entities")
         return items.mapNotNull { id ->
@@ -408,17 +224,6 @@ class WikidataCatalogue(
         }
     }
 
-    private fun get(url: String): JsonNode {
-        val request =
-            HttpRequest.newBuilder(URI.create(url))
-                .timeout(TIMEOUT)
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "application/json")
-                .GET()
-                .build()
-        return json.readTree(send(request))
-    }
-
     companion object {
         private const val API = "https://www.wikidata.org/w/api.php"
         private const val SPARQL = "https://query.wikidata.org/sparql"
@@ -427,26 +232,12 @@ class WikidataCatalogue(
         /** "character": the class every class of characters is a subclass of. */
         private const val CHARACTER = "Q95074"
 
-        /** The values of P21 that say male or female: of a person, and of an organism. */
-        private val SEXES =
-            mapOf(
-                "Q6581097" to CharacterSex.MALE,
-                "Q44148" to CharacterSex.MALE,
-                "Q6581072" to CharacterSex.FEMALE,
-                "Q43445" to CharacterSex.FEMALE,
-            )
-
         /** Classes asked for in one query: the length of a request, not meaning. */
         private const val CLASSES_ASKED = 500
 
         /** Entries a search answers with: a page of them for the user to pick from. */
         private const val SEARCHED = 10
 
-        /** The Wikimedia user-agent policy: who asks, and where to find them. */
-        private const val USER_AGENT = "recommend4me (https://github.com/vlsergey/recommend4me)"
-
-        private val TIMEOUT: Duration = Duration.ofSeconds(60)
-        private const val TOO_MANY_REQUESTS = 429
         private val ITEM = Regex("Q\\d+")
 
         /** An item's id within a text: itself, or the address of its page. */
@@ -457,9 +248,6 @@ class WikidataCatalogue(
 
         /** What an item is a kind of ([above]): P279 "subclass of", P1074 "fictional analog of". */
         private val ABOVE = listOf("P279", "P1074")
-
-        /** A property of Wikidata: "P8419". */
-        private val PROPERTY = Regex("P\\d+")
 
         /**
          * The [characters] without the versions of a character of the same universe (user, 2026-10-20): an entry based
@@ -474,70 +262,79 @@ class WikidataCatalogue(
             basedOn: Map<String, Set<String>>,
         ): List<UniverseCharacter> {
             val byId = characters.associateBy { it.id }
-            fun namesOf(c: UniverseCharacter) =
-                (c.labels.values + c.aliases.values.flatten()).map { it.lowercase() }.toSet()
-            // Each version to the entry it is a version of
-            val versionOf =
-                characters
-                    .mapNotNull { c ->
-                        basedOn[c.id]
-                            .orEmpty()
-                            .firstOrNull { id ->
-                                val original = byId[id] ?: return@firstOrNull false
-                                original.id != c.id &&
-                                    (original.sex == c.sex || original.sex == null || c.sex == null) &&
-                                    namesOf(original).let { names -> c.labels.values.any { it.lowercase() in names } }
-                            }
-                            ?.let { c.id to it }
-                    }
-                    .toMap()
-            fun standing(id: String): String? {
-                val seen = HashSet<String>()
-                var at = id
-                while (true) {
-                    if (!seen.add(at)) return null
-                    at = versionOf[at] ?: return at
-                }
-            }
+            val versionOf = versionsOf(characters, byId, basedOn)
             // The names of the versions, by language, to the entry standing for each — a circle of versions stands for
             // none
             val gained = HashMap<String, MutableMap<String, MutableList<String>>>()
             versionOf.keys.forEach { id ->
-                val into = standing(id) ?: return@forEach
+                val into = standing(versionOf, id) ?: return@forEach
                 val version = byId.getValue(id)
                 val names = gained.getOrPut(into) { LinkedHashMap() }
                 version.labels.forEach { (lang, name) -> names.getOrPut(lang) { ArrayList() } += name }
                 version.aliases.forEach { (lang, aliases) -> names.getOrPut(lang) { ArrayList() } += aliases }
             }
-            val circled = versionOf.keys.filter { standing(it) == null }.toSet()
+            val circled = versionOf.keys.filter { standing(versionOf, it) == null }.toSet()
             return characters
                 .filter { it.id !in versionOf || it.id in circled }
-                .map { c ->
-                    val more = gained[c.id] ?: return@map c
-                    val known = namesOf(c).toMutableSet()
-                    val aliases = LinkedHashMap(c.aliases.mapValues { it.value.toMutableList() })
-                    more.forEach { (lang, names) ->
-                        names.forEach { name ->
-                            if (known.add(name.lowercase())) aliases.getOrPut(lang) { ArrayList() } += name
-                        }
-                    }
-                    UniverseCharacter(
-                        c.id,
-                        c.labels,
-                        aliases,
-                        c.descriptions,
-                        c.url,
-                        c.languages,
-                        c.classes,
-                        c.sex,
-                        c.properties,
-                    )
-                }
+                .map { c -> gained[c.id]?.let { withNames(c, it) } ?: c }
         }
 
-        /** The address an item of Wikidata is given by in the answers of the query service. */
-        private const val ENTITY = "http://www.wikidata.org/entity/"
+        private fun namesOf(c: UniverseCharacter) =
+            (c.labels.values + c.aliases.values.flatten()).map { it.lowercase() }.toSet()
 
-        private fun enc(s: String) = URLEncoder.encode(s, Charsets.UTF_8)
+        /**
+         * Each version among [characters] to the entry it is a version of: the first it is based on ([basedOn]) that is
+         * another entry, of its sex — or of a sex one of them does not state — and named by one of its labels.
+         */
+        private fun versionsOf(
+            characters: List<UniverseCharacter>,
+            byId: Map<String, UniverseCharacter>,
+            basedOn: Map<String, Set<String>>,
+        ): Map<String, String> =
+            characters
+                .mapNotNull { c ->
+                    basedOn[c.id]
+                        .orEmpty()
+                        .firstOrNull { id ->
+                            val original = byId[id] ?: return@firstOrNull false
+                            original.id != c.id &&
+                                (original.sex == c.sex || original.sex == null || c.sex == null) &&
+                                namesOf(original).let { names -> c.labels.values.any { it.lowercase() in names } }
+                        }
+                        ?.let { c.id to it }
+                }
+                .toMap()
+
+        /** The entry standing for [id]: the first up its chain of versions not a version itself; none in a circle. */
+        private fun standing(versionOf: Map<String, String>, id: String): String? {
+            val seen = HashSet<String>()
+            var at = id
+            while (true) {
+                if (!seen.add(at)) return null
+                at = versionOf[at] ?: return at
+            }
+        }
+
+        /** [c] with every name of [more], by language, it is not known by yet as an alias of its own. */
+        private fun withNames(c: UniverseCharacter, more: Map<String, List<String>>): UniverseCharacter {
+            val known = namesOf(c).toMutableSet()
+            val aliases = LinkedHashMap(c.aliases.mapValues { it.value.toMutableList() })
+            more.forEach { (lang, names) ->
+                names.forEach { name ->
+                    if (known.add(name.lowercase())) aliases.getOrPut(lang) { ArrayList() } += name
+                }
+            }
+            return UniverseCharacter(
+                c.id,
+                c.labels,
+                aliases,
+                c.descriptions,
+                c.url,
+                c.languages,
+                c.classes,
+                c.sex,
+                c.properties,
+            )
+        }
     }
 }

@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.source.ficbook
 
-import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
@@ -14,47 +13,38 @@ import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.AUTHOR
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.BASE
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.COMMENTS
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.DEDICATION
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.DIRECTION
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.FANDOM
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.LIKES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.NOTES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.ONLY_PART
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAGES
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRING
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRINGS_LINE
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PARTS
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.SERIES
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.STATUS
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.TAG
-import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.WORDS
-import io.github.vlsergey.recommend4me.universe.UniverseFacets
+import io.github.vlsergey.recommend4me.source.ficbook.FicbookFields.Companion.AUTHOR_ID
+import io.github.vlsergey.recommend4me.source.ficbook.FicbookFields.Companion.cover
+import io.github.vlsergey.recommend4me.source.ficbook.FicbookFields.Companion.pictured
 import java.net.URI
-import java.net.URLDecoder
 import java.time.Instant
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
-import tools.jackson.databind.JsonNode
-import tools.jackson.databind.json.JsonMapper
 
 /**
  * Reads the pages of ficbook.net and writes what they say: the cards of a list (a fandom, a tag, a search, a
- * collection), a work's header and table of contents, the text of a part, the comments.
+ * collection), a work's header and table of contents, the text of a part, the comments; and what the site's tags mean
+ * ([FicbookTagMeanings]).
  */
 class FicbookPages(private val context: SourceContext) {
 
     private val items = context.items
+    private val fields = FicbookFields(items)
+    private val meanings = FicbookTagMeanings(items)
 
     fun read(page: CapturedPage): List<String> {
         val path = runCatching { URI(page.url).path }.getOrDefault("")
         if (path == TAG_SEARCH) {
-            tagSearch(page)
+            meanings.tagSearch(page)
             return emptyList()
         }
         val doc = Jsoup.parse(page.html, page.url)
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
-        if (TAG_PAGE.matches(path)) tagPage(doc)
+        if (TAG_PAGE.matches(path)) meanings.tagPage(doc)
         READFIC.matchEntire(path)?.let { m ->
             val id = m.groupValues[1]
             val rest = m.groupValues[2]
@@ -85,213 +75,18 @@ class FicbookPages(private val context: SourceContext) {
             val updated =
                 info.entries.firstOrNull { it.key.startsWith("Дата") }?.value?.text()?.let { PageText.russianDate(it) }
             items.upsert(ItemHead(id, "$BASE/readfic/$id", title, updatedAt = updated), now)
-            badges(id, card.selectFirst(".fanfic-badges"))
+            fields.badges(id, card.selectFirst(".fanfic-badges"))
             card.selectFirst(".js-like-count")?.text()?.let(PageText::number)?.let {
                 items.setNumbers(id, mapOf(LIKES to it.toDouble()))
             }
-            described(id, info.mapValues { it.value })
-            card.select(".tags a.tag").takeIf { it.isNotEmpty() }?.let { tags(id, it) }
+            fields.described(id, info.mapValues { it.value })
+            card.select(".tags a.tag").takeIf { it.isNotEmpty() }?.let { fields.tags(id, it) }
             card.selectFirst(".fanfic-description-text")?.let {
                 items.setTexts(id, mapOf(ANNOTATION to PageText.of(it)))
             }
             pictured(card)?.let { items.setPictures(id, listOf(it)) }
             id
         }
-
-    /**
-     * The cover of a work's header, of the size a card of a list shows — one picture, whichever page it is read of: as
-     * the site sends it, the attribute of its component; as the browser drew it, the picture ([pictured]). None when
-     * the header has none: a work without a cover, or a markup changed.
-     */
-    private fun cover(hat: Element): String? =
-        hat.selectFirst("fanfic-cover[src-desktop]")?.attr("src-desktop")?.takeIf { it.isNotBlank() }
-            ?: hat.selectFirst(".fanfic-hat-cover")?.let(::pictured)
-
-    /**
-     * A cover drawn as a picture — of a card, of a header — at the size of a wide screen: the source the picture gives
-     * for it, else the picture's own; a cover of the older markup (img.fic-cover) as it is. The size of a card and of a
-     * header is one: one picture of a work.
-     */
-    private fun pictured(at: Element): String? {
-        val picture =
-            at.selectFirst("picture.fanfic-hat-cover-picture")
-                ?: return at.selectFirst("img.fic-cover[src]")?.attr("src")?.takeIf { it.isNotBlank() }
-        val wide = picture.selectFirst("source[media*=min-width][srcset]")?.attr("srcset")?.trim()?.substringBefore(' ')
-        return wide?.takeIf { it.isNotBlank() }
-            ?: picture.selectFirst("img[src]")?.attr("src")?.takeIf { it.isNotBlank() }
-    }
-
-    /** The direction, the rating and the status a card or a header shows as labels. */
-    private fun badges(id: String, badges: Element?) {
-        badges ?: return
-        badges.selectFirst(".direction")?.let { d ->
-            // The site's classes are the standard keys; "unknown" — not told — is no direction
-            val key = d.classNames().firstOrNull { it.startsWith("direction-") }?.removePrefix("direction-")
-            if (key != null)
-                items.setFacet(
-                    id,
-                    DIRECTION,
-                    listOfNotNull(Books.DIRECTION.value(key)?.let { FacetValue(it.key, it.modelName) }),
-                )
-        }
-        // The rating the site states: the age rating's own scale, one of it ("NC-17")
-        badges.select("[class*=ds-label-rating-]").firstOrNull()?.let { r ->
-            val key = r.classNames().first { it.startsWith("ds-label-rating-") }.removePrefix("ds-label-rating-")
-            AgeRating.write(items, id, listOfNotNull(AgeRating.VALUES.firstOrNull { it.key == key.lowercase() }))
-        }
-        badges.select("[class*=ds-label-status-]").firstOrNull()?.let { s ->
-            val key = s.classNames().first { it.startsWith("ds-label-status-") }.removePrefix("ds-label-status-")
-            val text = s.text().trim()
-            // The standard status by the label's class or its text; another as the site writes it, for the application
-            // to tell of
-            val status = STATUSES[key] ?: STATUSES[text.lowercase()]
-            items.setFacet(
-                id,
-                STATUS,
-                listOf(status?.let { FacetValue(it.key, it.modelName) } ?: FacetValue(key, text.ifEmpty { key })),
-            )
-        }
-    }
-
-    /**
-     * What the labelled lines of a card or a header say: the author, the fandoms, the series, the pairings, the size.
-     */
-    private fun described(id: String, info: Map<String, Element?>) {
-        info["Автор"]?.let { dd ->
-            val authors =
-                dd.select("a[href^=/authors/]").mapNotNull { a ->
-                    AUTHOR_ID.find(a.attr("href"))?.groupValues?.get(1)?.let { FacetValue(it, a.text().trim()) }
-                }
-            if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors)
-        }
-        info["Фэндом"]?.let { dd ->
-            val fandoms =
-                dd.select("a[href^=/fanfiction/]").map { a ->
-                    FacetValue(a.attr("href").removePrefix("/fanfiction/").substringBefore('?'), a.text().trim())
-                }
-            if (fandoms.isNotEmpty()) {
-                items.setFacet(id, FANDOM, fandoms)
-                // A work of the fandom "originals" is an original one; of any other, fan fiction
-                val original = fandoms.all { it.key == ORIGINALS }
-                items.setFacet(
-                    id,
-                    UniverseFacets.KIND,
-                    listOf(FacetValue(if (original) UniverseFacets.ORIGINAL else UniverseFacets.FANFICTION)),
-                )
-            }
-        }
-        info["Серия"]?.selectFirst("a[href^=/series/]")?.let { a ->
-            items.setFacet(
-                id,
-                SERIES,
-                listOf(FacetValue(a.attr("href").removePrefix("/series/").substringBefore('?'), a.text().trim())),
-            )
-        }
-        info["Пэйринг и персонажи"]?.let { dd ->
-            // The line as the site shows it: what the application works the pairings and characters out from
-            items.setTexts(id, mapOf(PAIRINGS_LINE to PageText.of(dd)))
-            // Every entry of the line as written, one field: a pairing "A/B" and a character alone
-            val entries =
-                dd.select("a")
-                    .map { it.text().trim() }
-                    .flatMap { it.split(", ") }
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-            items.setFacet(id, PAIRING, entries.map(::entry).distinctBy { it.key })
-        }
-        info["Размер"]?.text()?.let { size ->
-            items.setNumbers(
-                id,
-                listOfNotNull(
-                        PageText.numberBefore(size, "стр")?.let { PAGES to it.toDouble() },
-                        PageText.numberBefore(size, "слов")?.let { WORDS to it.toDouble() },
-                        PageText.numberBefore(size, "част")?.let { PARTS to it.toDouble() },
-                    )
-                    .toMap(),
-            )
-        }
-    }
-
-    private fun tags(id: String, links: List<Element>) =
-        items.setFacet(
-            id,
-            TAG,
-            links.map { a -> a.text().trim().let { FacetValue(it.lowercase(), it) } }.filter { it.key.isNotEmpty() },
-        )
-
-    /**
-     * A tag's own page: its heading names it — «Метка «Hurt/Comfort» - фанфики и ориджиналы» — the box under it says
-     * what it means, and the line under that the other names the site files under it — «Синонимы: Хёрт/комфорт, Х/К,
-     * H/C» — each a tag of its own of the same thing. The tag is known by its name as the works write it.
-     */
-    private fun tagPage(doc: Document) {
-        val name =
-            doc.selectFirst("h1.heading")
-                ?.text()
-                ?.let { TAG_HEADING.find(it)?.groupValues?.get(1) }
-                ?.trim()
-                ?.ifEmpty { null } ?: return
-        val description = doc.selectFirst(".primary-box p.text-t3")?.let { PageText.of(it) }?.trim()?.ifEmpty { null }
-        val synonyms =
-            doc.select(".primary-box .text-muted")
-                .map { it.text().trim() }
-                .firstOrNull { it.startsWith(SYNONYMS) }
-                ?.removePrefix(SYNONYMS)
-                ?.split(',')
-                .orEmpty()
-        items.nameFacetValues(TAG, mapOf(name.lowercase() to name))
-        description?.let { items.describeFacetValues(TAG, mapOf(name.lowercase() to it)) }
-        items.setFacetValueSynonyms(TAG, mapOf(name.lowercase() to synonymsOf(name, synonyms)))
-    }
-
-    /** The synonyms of the tag [name] by their keys, as the works would write them: none empty, none the tag itself. */
-    private fun synonymsOf(name: String, synonyms: List<String>): Map<String, String> =
-        synonyms.map { it.trim() }.filter { it.isNotEmpty() }.associateBy { it.lowercase() } - name.lowercase()
-
-    /**
-     * The answer of the site's search of tags the browser made for the application ([Ficbook.describing]), JSON: the
-     * tags found, each with what it means and its synonyms. The tag asked — its name in the address — is described by
-     * the tag of its name, or by the one it is a synonym of: the site files a synonym under its tag. A tag the site
-     * does not describe is left without a description.
-     */
-    private fun tagSearch(page: CapturedPage) {
-        val asked =
-            runCatching { URI(page.url).rawQuery }
-                .getOrNull()
-                .orEmpty()
-                .split('&')
-                .firstNotNullOfOrNull { p ->
-                    p.split('=', limit = 2)
-                        .takeIf { it.size == 2 && it[0] == "title" }
-                        ?.let { URLDecoder.decode(it[1], Charsets.UTF_8) }
-                }
-                ?.trim()
-                ?.lowercase()
-                ?.ifEmpty { null } ?: return
-        val found = runCatching { JSON.readTree(page.html) }.getOrNull()?.path("data")?.path("tags") ?: return
-        fun named(t: JsonNode) = t.path("title").asString("").trim().lowercase()
-        val tag =
-            found.firstOrNull { named(it) == asked }
-                ?: found.firstOrNull { t -> t.path("synonyms").any { named(it) == asked } }
-                ?: return
-        // The tag and the other names the site files under it, each a tag of its own of the same thing
-        val name = tag.path("title").asString("").trim()
-        if (name.isNotEmpty()) {
-            items.nameFacetValues(TAG, mapOf(name.lowercase() to name))
-            items.setFacetValueSynonyms(
-                TAG,
-                mapOf(
-                    name.lowercase() to
-                        synonymsOf(
-                            name,
-                            buildList { tag.path("synonyms").forEach { add(it.path("title").asString("")) } },
-                        )
-                ),
-            )
-        }
-        val description = tag.path("description").asString("").trim().ifEmpty { null } ?: return
-        items.describeFacetValues(TAG, mapOf(asked to description))
-    }
 
     // --- A work's page ---
 
@@ -301,34 +96,20 @@ class FicbookPages(private val context: SourceContext) {
      * known to be gone. Of the header, a block it has not is a thing the work has not.
      */
     private fun work(doc: Document, id: String, now: Instant): String? {
-        val title = doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null } ?: return null
-        val hat = doc.selectFirst(".fanfic-hat") ?: return null
+        val title = doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null }
+        val hat = doc.selectFirst(".fanfic-hat")
+        if (title == null || hat == null) return null
         val blocks =
             hat.select(".description > .mb-10").associate { block ->
                 block.selectFirst("strong")?.text()?.trim()?.removeSuffix(":").orEmpty() to
                     block.selectFirst("strong + div")
             }
-        val parts =
-            doc.select("ul.list-of-fanfic-parts li.part").mapIndexedNotNull { i, li ->
-                val a = li.selectFirst("a.part-link[href^=/readfic/]") ?: return@mapIndexedNotNull null
-                val partId =
-                    READFIC.matchEntire(a.attr("href").substringBefore('#').substringBefore('?'))
-                        ?.groupValues
-                        ?.get(2)
-                        ?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) } ?: return@mapIndexedNotNull null
-                PartData(
-                    partId,
-                    i,
-                    li.selectFirst(".part-title")?.text()?.trim(),
-                    null,
-                    li.selectFirst(".part-info [title]")?.attr("title")?.let { PageText.russianDate(it) },
-                )
-            }
+        val parts = contents(doc)
         items.upsert(
             ItemHead(id, "$BASE/readfic/$id", title, updatedAt = parts.mapNotNull { it.publishedAt }.maxOrNull()),
             now,
         )
-        badges(id, doc.selectFirst("section.fanfic-badges"))
+        fields.badges(id, doc.selectFirst("section.fanfic-badges"))
         cover(hat)?.let { items.setPictures(id, listOf(it)) }
         doc.selectFirst("section.fanfic-badges button span")?.text()?.let(PageText::number)?.let {
             items.setNumbers(id, mapOf(LIKES to it.toDouble()))
@@ -338,10 +119,10 @@ class FicbookPages(private val context: SourceContext) {
                 AUTHOR_ID.find(a.attr("href"))?.groupValues?.get(1)?.let { FacetValue(it, a.text().trim()) }
             }
         if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors)
-        described(id, blocks.filterKeys { it != "Автор" })
+        fields.described(id, blocks.filterKeys { it != "Автор" })
         // The block of tags with no tag found in it: its markup changed, not the work's tags gone
         blocks["Метки"]?.let { block ->
-            block.select("a.tag").takeIf { it.isNotEmpty() || block.text().isBlank() }?.let { tags(id, it) }
+            block.select("a.tag").takeIf { it.isNotEmpty() || block.text().isBlank() }?.let { fields.tags(id, it) }
         }
         items.setTexts(
             id,
@@ -364,6 +145,24 @@ class FicbookPages(private val context: SourceContext) {
             }
         return id
     }
+
+    /** The parts the work's table of contents names, each with the day it came out, without their texts. */
+    private fun contents(doc: Document): List<PartData> =
+        doc.select("ul.list-of-fanfic-parts li.part").mapIndexedNotNull { i, li ->
+            val a = li.selectFirst("a.part-link[href^=/readfic/]") ?: return@mapIndexedNotNull null
+            val partId =
+                READFIC.matchEntire(a.attr("href").substringBefore('#').substringBefore('?'))
+                    ?.groupValues
+                    ?.get(2)
+                    ?.takeIf { it.isNotEmpty() && it.all(Char::isDigit) } ?: return@mapIndexedNotNull null
+            PartData(
+                partId,
+                i,
+                li.selectFirst(".part-title")?.text()?.trim(),
+                null,
+                li.selectFirst(".part-info [title]")?.attr("title")?.let { PageText.russianDate(it) },
+            )
+        }
 
     /**
      * The user's own marks of the work in the buttons of its header — liked, read, followed: a button pressed is
@@ -391,15 +190,10 @@ class FicbookPages(private val context: SourceContext) {
 
     // --- A part ---
 
+    /** The text of a part, of a work known — or made known by the part's own page ([known]). */
     private fun part(doc: Document, id: String, partId: String, now: Instant): String? {
-        val content = doc.selectFirst("#content") ?: return null
-        val text = PageText.of(content, NOT_THE_TEXT)
-        if (text.isBlank()) return null
-        if (items.find(id) == null) {
-            val title =
-                doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null } ?: return null
-            items.upsert(ItemHead(id, "$BASE/readfic/$id", title), now)
-        }
+        val text = doc.selectFirst("#content")?.let { PageText.of(it, NOT_THE_TEXT) }
+        if (text.isNullOrBlank() || !known(doc, id, now)) return null
         marks(doc, id)
         val area = doc.selectFirst(".title-area")
         items.saveParts(
@@ -415,6 +209,17 @@ class FicbookPages(private val context: SourceContext) {
             ),
         )
         return id
+    }
+
+    /**
+     * Whether the work [id] is known — or made known by the page of its part, opened before the work's: its title is
+     * the page's heading. No title, no work.
+     */
+    private fun known(doc: Document, id: String, now: Instant): Boolean {
+        if (items.find(id) != null) return true
+        val title = doc.selectFirst("h1.heading, h1[itemprop=name]")?.text()?.trim()?.ifEmpty { null }
+        if (title != null) items.upsert(ItemHead(id, "$BASE/readfic/$id", title), now)
+        return title != null
     }
 
     // --- Comments ---
@@ -456,45 +261,11 @@ class FicbookPages(private val context: SourceContext) {
         /** The site's search of tags ([Ficbook.tagSearch]). */
         private const val TAG_SEARCH = "/tags/search"
 
-        private val JSON = JsonMapper.builder().build()
-
-        /** The heading of a tag's page: the name between the outer quotes, whatever quotes it holds itself. */
-        private val TAG_HEADING = Regex("^Метка «(.*)»\\s*-\\s*фанфики")
-
-        /** What the line of a tag's other names begins with, on its page. */
-        private const val SYNONYMS = "Синонимы:"
-        private val AUTHOR_ID = Regex("^/authors/([^/?#]+)")
-
-        /** The fandom of the original works. */
-        private const val ORIGINALS = "no_fandom/originals"
-
-        /** The statuses of the site, by the class of their label and by its text, to the standard ones. */
-        private val STATUSES =
-            mapOf(
-                "in-progress" to Books.Status.IN_PROGRESS,
-                "в процессе" to Books.Status.IN_PROGRESS,
-                "finished" to Books.Status.FINISHED,
-                "завершён" to Books.Status.FINISHED,
-                "завершен" to Books.Status.FINISHED,
-                "frozen" to Books.Status.FROZEN,
-                "заморожен" to Books.Status.FROZEN,
-            )
-
         /**
          * What the site puts into the text of a part that is not the text: the promotion of another work, put by its
          * scripts into a placeholder among the paragraphs; and the scripts and styles.
          */
         private const val NOT_THE_TEXT = ".js-fanfic-text-promo-placeholder, [class*=promo], script, style"
-
-        /**
-         * An entry of the line as written — a pairing "A/B", or a character alone: a pairing is one whatever the order
-         * of its names — the key has them sorted.
-         */
-        private fun entry(written: String): FacetValue =
-            FacetValue(
-                written.split('/').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.sorted().joinToString("/"),
-                written,
-            )
 
         private fun workId(href: String): String? =
             READFIC.matchEntire(href.substringBefore('?').substringBefore('#'))?.groupValues?.get(1)

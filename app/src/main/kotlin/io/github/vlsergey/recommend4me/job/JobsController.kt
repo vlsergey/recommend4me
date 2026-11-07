@@ -57,8 +57,7 @@ class JobsController(private val jobs: Jobs, private val stores: Stores, private
 
     /** How far the whole catalogue is loaded, as the source tells it. */
     private fun catalogue(source: String): CatalogueProgress? {
-        val store = stores.source(source) ?: return null
-        if (SourceMode.SCRAPE_ALL !in store.source.modes) return null
+        val store = stores.source(source)?.takeIf { SourceMode.SCRAPE_ALL in it.source.modes } ?: return null
         return store.source.scrapeProgress(contexts.of(source))?.let {
             CatalogueProgress(it.stage, it.done, it.total, it.complete)
         }

@@ -24,10 +24,7 @@ data class Backoff(
         if (failures <= 0) return Duration.ZERO
         val seconds = seconds(first) * Math.pow(factor, (failures - 1).toDouble())
         val bounded = max?.let { minOf(seconds, seconds(it)) } ?: seconds
-        // Past what a duration holds, some 292 billion years: as long as one can
-        if (bounded >= Long.MAX_VALUE.toDouble()) return Duration.ofSeconds(Long.MAX_VALUE)
-        val whole = Math.floor(bounded).toLong()
-        return Duration.ofSeconds(whole, ((bounded - whole) * 1e9).toLong())
+        return duration(bounded)
     }
 
     /** When to try again what failed the [failures]-th time in a row at [failedAt]: never past [LATEST]. */
@@ -40,6 +37,17 @@ data class Backoff(
         /** The latest moment a database keeps: a wait growing without bound ends here, in the year 9999. */
         val LATEST: Instant = Instant.parse("9999-12-31T23:59:59Z")
 
-        private fun seconds(d: Duration) = d.seconds + d.nano / 1e9
+        /** Nanoseconds in a second. */
+        private const val NANOS_PER_SECOND = 1e9
+
+        private fun seconds(d: Duration) = d.seconds + d.nano / NANOS_PER_SECOND
+
+        /** A duration of [seconds], to the nanosecond. */
+        private fun duration(seconds: Double): Duration {
+            // Past what a duration holds, some 292 billion years: as long as one can
+            if (seconds >= Long.MAX_VALUE.toDouble()) return Duration.ofSeconds(Long.MAX_VALUE)
+            val whole = Math.floor(seconds).toLong()
+            return Duration.ofSeconds(whole, ((seconds - whole) * NANOS_PER_SECOND).toLong())
+        }
     }
 }

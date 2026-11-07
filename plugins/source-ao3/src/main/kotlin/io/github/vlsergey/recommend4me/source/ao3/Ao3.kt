@@ -24,6 +24,7 @@ import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.universe.CatalogueLookup
 import io.github.vlsergey.recommend4me.universe.LayerDraft
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
+import java.net.HttpURLConnection
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -118,13 +119,10 @@ class Ao3 : Source {
             val names = written.split(if (romantic) "/" else " & ").map { it.trim() }.filter { it.isNotEmpty() }
             val characters = names.map { one(lookup.characters(WIKIDATA, AO3_TAG, it)) }
             characters.filterNotNull().forEach { out += LayerDraft(UniverseFacets.CHARACTERS, it, written) }
-            if (romantic && characters.size == 2 && characters.all { it != null } && characters[0] != characters[1]) {
-                out +=
-                    LayerDraft(
-                        UniverseFacets.PAIRINGS,
-                        UniverseFacets.pairing(characters[0]!!, characters[1]!!),
-                        written,
-                    )
+            // A pairing of two characters, both found and not one twice
+            val two = characters.filterNotNull().distinct()
+            if (romantic && characters.size == 2 && two.size == 2) {
+                out += LayerDraft(UniverseFacets.PAIRINGS, UniverseFacets.pairing(two[0], two[1]), written)
             }
         }
         return out.distinct()
@@ -180,9 +178,9 @@ class Ao3 : Source {
             )
         }
         when (response.statusCode()) {
-            200 -> Unit
-            404 -> return false
-            429 -> error("the site asks to wait before the next request (429)")
+            HttpURLConnection.HTTP_OK -> Unit
+            HttpURLConnection.HTTP_NOT_FOUND -> return false
+            TOO_MANY_REQUESTS -> error("the site asks to wait before the next request (429)")
             else -> error("the site answered ${response.statusCode()}")
         }
         return itemId in capture(CapturedPage(url, response.body(), Instant.now()), context)
@@ -233,6 +231,9 @@ class Ao3 : Source {
             "recommend4me-bot (a personal recommender; one work's page at its user's request)"
 
         private val PAUSE: Duration = Duration.ofSeconds(5)
+
+        /** HTTP's "Too Many Requests": the site asks to wait. */
+        private const val TOO_MANY_REQUESTS = 429
 
         private const val AFTER_TAGS = "dl.work.meta dd.language"
 
