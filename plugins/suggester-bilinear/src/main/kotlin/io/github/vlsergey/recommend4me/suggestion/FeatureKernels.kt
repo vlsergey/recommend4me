@@ -1,0 +1,32 @@
+package io.github.vlsergey.recommend4me.suggestion
+
+import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.CudaKernels
+
+/**
+ * The kernels of the items' features on the card (`features.cu`): a block's rows carried onto the
+ * items' rows and columns and taken from them, the ones summed, and what a row is shown with
+ * chosen. Compiled once for the card of the process: the code, nothing of the data.
+ */
+internal object FeatureKernels {
+    val NAMES = listOf("scatter_columns", "gather_columns", "scatter_rows", "ones_rows", "shown_count", "shown_likely")
+
+    /** The coordinates of a value a kernel holds at most (`MAX_RANK` of `features.cu`). */
+    const val MAX_RANK = 64
+
+    /** The values besides the likely a kernel chooses at most (`MAX_LEAST`). */
+    const val MAX_LEAST = 8
+
+    private var compiledFor: Cublas? = null
+    private var compiled: CudaKernels? = null
+
+    /** The kernels for the card of [cublas]; null when they cannot be made — that work stays on the processor. */
+    @Synchronized
+    fun of(cublas: Cublas): CudaKernels? {
+        if (compiledFor !== cublas) {
+            compiledFor = cublas
+            compiled = cublas.kernels(FeatureKernels::class.java.getResource("features.cu")!!.readText(), NAMES)
+        }
+        return compiled
+    }
+}

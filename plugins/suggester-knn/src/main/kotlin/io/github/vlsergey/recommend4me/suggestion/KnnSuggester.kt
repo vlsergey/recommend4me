@@ -138,22 +138,20 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                 val n = task.itemCount
                 val width = task.inputs.sumOf { it.vectors.cols }
                 val x = Floats(n.toLong().times(width).toInt().coerceAtLeast(1))
+                // A block's rows, each of unit length, at its place of its item's row; nought of an item without it
                 var at = 0
-                val row = FloatArray(width.coerceAtLeast(1))
-                for (i in 0 until n) {
-                    row.fill(0f)
-                    at = 0
-                    task.inputs.forEach { b ->
-                        val cols = b.vectors.cols
-                        if (b.present[i]) {
-                            val part = FloatArray(cols)
-                            b.vectors.held.take(part, 0, b.vectors.row(i), cols)
-                            val norm = sqrt(part.sumOf { (it * it).toDouble() }).toFloat()
-                            if (norm > 0f) for (q in 0 until cols) row[at + q] = part[q] / norm
+                task.inputs.forEach { b ->
+                    val cols = b.vectors.cols
+                    val part = FloatArray(cols)
+                    b.rows.forEachIndexed { k, i ->
+                        b.vectors.held.take(part, 0, b.vectors.row(k), cols)
+                        val norm = sqrt(part.sumOf { (it * it).toDouble() }).toFloat()
+                        if (norm > 0f) {
+                            for (q in 0 until cols) part[q] /= norm
+                            x.put(part, 0, i * width + at, cols)
                         }
-                        at += cols
                     }
-                    x.put(row, 0, i * width, width)
+                    at += cols
                 }
                 val random = Random(SEED)
                 val r = Floats.of(FloatArray(width * DIMENSIONS) { (random.nextGaussian() / sqrt(DIMENSIONS.toDouble())).toFloat() })

@@ -56,7 +56,7 @@ class Weights(val rank: Int, val a: FloatArray, val b: FloatArray, val e: FloatA
 internal class Problem(val task: SuggestionTask, val design: Design, val folds: Int) {
     val n = task.itemCount
     val m = task.valueCount
-    val x: ItemFeatures = design.features(task, IntArray(n) { it })
+    val x: ItemFeatures = design.features(task)
     val z: Matrix = design.values(task)
     /** The values the site gives each item as an example — the site's word, an input of the pair — ascending. */
     val exampleValues: Array<IntArray> = Array(n) { i -> task.examples[i].filter { it in 0 until m }.distinct().sorted().toIntArray() }
@@ -177,6 +177,9 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
     private val dv = Floats(m * rank)
     private val da = Floats(dx * rank)
     private val db = Floats(dz * rank)
+
+    /** A block's part of the items' products, between its rows and the items' ([ItemFeatures.scratchOf]). */
+    private val blockPart = p.x.scratchOf(rank)
 
     // The names as texts of a work ([Problem.hints]): every text block of theirs holds the name, so
     // their coordinates are the name times the text blocks' weights summed, plus the constant's and
@@ -315,7 +318,7 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         aF.put(theta, 0, 0, dx * rank)
         val bAt = dx * rank
         bF.put(theta, bAt, 0, dz * rank)
-        p.x.times(aF, rank, u)
+        p.x.times(aF, rank, u, blockPart)
         Blas.product(p.z.held, dz, m, dz, bF, rank, v)
         val eAt = bAt + dz * rank
         for (k in 0 until m * rank) v[k] = v[k] + theta[eAt + k]
@@ -429,7 +432,7 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         val vH: FloatArray
         if (card != null) {
             aF.put(theta, 0, 0, dx * rank)
-            p.x.times(aF, rank, u)
+            p.x.times(aF, rank, u, blockPart)
             vH = card.v
         } else {
             coordinates(theta)
@@ -449,7 +452,7 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
             for (k in dE.indices) dE[k] += card.dv[k]
             for (j in 0 until m) gBias[j] += card.dBias[j]
             du.put(pairs.du, 0, 0, n * rank)
-            p.x.transposedTimes(du, rank, da)
+            p.x.transposedTimes(du, rank, da, blockPart)
             dA = FloatArray(dx * rank).also { da.take(it, 0, 0, dx * rank) }
             addNamesGradient(dA, card.dSum, card.dBase)
             dB = step.backward(dE)
@@ -464,7 +467,7 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
             // dA = Xᵀ dU, dB = Zᵀ dV, dE = dV — the names' parts added
             du.put(pairs.du, 0, 0, n * rank)
             dv.put(dE, 0, 0, m * rank)
-            p.x.transposedTimes(du, rank, da)
+            p.x.transposedTimes(du, rank, da, blockPart)
             Blas.transposedProduct(p.z.held, dz, m, dz, dv, rank, db)
             dA = FloatArray(dx * rank).also { da.take(it, 0, 0, dx * rank) }
             dB = FloatArray(dz * rank).also { db.take(it, 0, 0, dz * rank) }

@@ -97,3 +97,12 @@ in `inBackground` (the thread of a Spring test is bound to a request).
 A button is busy (spinner, disabled) only while its own press is at work — `AsyncButton` in the web
 interface, `act` with its `about` mark in the extension. Never by the state of a query: a list read
 anew in the background is not the button's work.
+
+## The speed of a computation before its last digits
+
+In the implementation of an algorithm, speed comes before the precision of the last digits:
+numbers kept in half precision (fp16) in the memory and on the card, sums taken in another order,
+the card's products against the processor's, a multiply and an add fused or not — whatever moves
+only the last digits of a result is taken for speed. A test of such an implementation compares
+within those digits, never bit by bit. This is of how an algorithm is computed, not of which one:
+the model, its loss, what it reads and the rule it chooses by are chosen for what they give.

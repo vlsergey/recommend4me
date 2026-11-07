@@ -8,6 +8,9 @@ import io.github.vlsergey.recommend4me.encoder.TextKind
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
 import io.github.vlsergey.recommend4me.tag.TagRepository
+import io.github.vlsergey.recommend4me.matrix.CardSource
+import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.part.PartsSaved
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -108,6 +111,8 @@ class FacetSuggestions(
     private val settings: Settings,
     private val workload: Workload,
     models: ObjectProvider<FacetModel>,
+    /** The card, when the launch asks for it: the inputs of a pass of every work put there for its facets ([FacetData.WorksRead]). */
+    private val cards: ObjectProvider<CardSource>,
 ) {
     /** The facets worked out by models of their own ([FacetModel]): no suggester of them fitted, their chances theirs. */
     private val ownModels: List<FacetModel> by lazy { models.orderedStream().toList() }
@@ -362,7 +367,7 @@ class FacetSuggestions(
         val given = every?.takeIf { ids == null }
         val encoder = plugins.textEncoder() ?: return seeded(store, ids, every = given)
         if (ids != null && ids.isEmpty()) return seeded(store, ids)
-        return chain(store, encoder, worksRead(store, encoder, reading(store, ids, upTo), given), upTo, laps)
+        return worksRead(store, encoder, reading(store, ids, upTo), given, card = true).use { chain(store, encoder, it, upTo, laps) }
     }
 
     /** The chain over the works of [read]: what the facets read alike read once, for all of them. */
@@ -375,7 +380,7 @@ class FacetSuggestions(
             val suggester = plugins.suggester(store.id, facet.key) ?: return@forEach
             val own = laps.within(facet.key)
             val scored = scored(store, facet, suggester, encoder, read, made, own) ?: return@forEach
-            keep(made, facet, scored.data, scored.scores, laps = own)
+            scored.scores.use { keep(made, facet, scored.data, it, laps = own) }
             own.lap("kept", scored.data.ids.size)
             read.given(store, facet.key, made)
             own.lap("context")
@@ -395,15 +400,21 @@ class FacetSuggestions(
             if (asked == null || suggester == null) asked else suggester.reads(asked)
         }
 
+    /**
+     * What the facets of a pass over the works [ids] (every work when null) read alike. [card]: the
+     * pass ends with the operation, and whatever reads its inputs ends with it — of every work its
+     * inputs put on the card for its facets, freed as it is closed; never of a task handed out.
+     */
     private fun worksRead(
         store: SourceStore, encoder: TextEncoder, ids: Collection<String>?, every: EveryItemFacets? = null, characters: CharactersRead = charactersRead(store),
-    ) = FacetData.WorksRead(store, encoder, plugins.imageEncoder()?.id, stores.typeOf(store.id).embeddings.ids(), ids, characters, every?.takeIf { ids == null })
+        card: Boolean = false,
+    ) = FacetData.WorksRead(
+        store, encoder, plugins.imageEncoder()?.id, stores.typeOf(store.id).embeddings.ids(), ids, characters, every?.takeIf { ids == null },
+        if (card && ids == null) cards.getIfAvailable()?.cublas() else null,
+    )
 
     /** The characters of the dictionary of the [store]'s type, for one operation to read once ([CharactersRead]). */
     private fun charactersRead(store: SourceStore) = CharactersRead(stores.typeOf(store.id).universes)
-
-    /** What a work is shown with besides what it is told of ([keep]): the places of the values among those it may have, and their scores. */
-    private class Shown(val places: IntArray, val scores: FloatArray)
 
     /** The chances of a facet's works as the model scores them: the task they are of, its scores, the vocabulary read. */
     private class Scored(val data: FacetData, val scores: SuggestionScores, val vocabulary: Vocabulary?)
@@ -500,11 +511,7 @@ class FacetSuggestions(
             // likeliest of the rest, likely or not, to offer the work at least so many the site does not give
             // ([ModelValues.offered]), chosen of the values by their places. Of a work all named by the user's word, none
             val columns = rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] }
-            val open = arrayOfNulls<Shown>(rows.size)
-            scores.scores(rows, columns) { r, row ->
-                val places = ModelValues.open(row, columns[r], closed[r], scores)
-                open[r] = Shown(places, FloatArray(places.size) { row[places[it]] })
-            }
+            val open = scores.shown(rows, columns, closed, ModelValues.OFFERED)
             choosing += System.nanoTime() - at
             at = System.nanoTime()
             val own = scores.scores(rows, told.asList())
@@ -514,7 +521,7 @@ class FacetSuggestions(
             val of = arrayOfNulls<FewChances>(rows.size)
             IntStream.range(0, rows.size).parallel().forEach { r ->
                 val i = rows[r]
-                of[r] = chancesOf(data.ids[i], facet.key, scores, open[r]!!, told[r], own[r], data, i)
+                of[r] = chancesOf(data.ids[i], facet.key, scores, open[r], told[r], own[r], data, i)
             }
             making += System.nanoTime() - at
             at = System.nanoTime()
@@ -571,7 +578,7 @@ class FacetSuggestions(
      */
     private fun load(
         store: SourceStore, facet: FacetDef, encoder: TextEncoder, vocabulary: Vocabulary?, ids: Collection<String>?,
-        made: WorkChances, valueKeys: List<String>?, read: FacetData.WorksRead = worksRead(store, encoder, ids),
+        made: WorkChances, valueKeys: List<String>?, read: FacetData.WorksRead,
     ) = FacetData.load(
         store, facet, encoder, read, vocabulary?.values.orEmpty(),
         modelled = made, valueKeys = valueKeys,
@@ -591,13 +598,18 @@ class FacetSuggestions(
     private fun fitFacet(
         store: SourceStore, facets: List<FacetDef>, k: Int, suggester: FacetSuggester, encoder: TextEncoder, made: MadeChances, stop: () -> Boolean,
         anew: Boolean = false,
+    ): List<String> = worksRead(store, encoder, null, card = true).use { works -> fitFacet(store, facets, k, suggester, encoder, made, stop, anew, works) }
+
+    /** [fitFacet] of the works read for it, [works]: their inputs on the card for the fitting and the scoring after it. */
+    private fun fitFacet(
+        store: SourceStore, facets: List<FacetDef>, k: Int, suggester: FacetSuggester, encoder: TextEncoder, made: MadeChances, stop: () -> Boolean,
+        anew: Boolean, works: FacetData.WorksRead,
     ): List<String> {
         val facet = facets[k]
         fun checkpoint() {
             if (stop()) throw CancellationException("${store.id}: ${facet.key} given up for newer changes")
         }
         val started = System.currentTimeMillis()
-        val works = worksRead(store, encoder, null)
         val vocabulary = vocabularyOf(store, facet, null, made, works.characters)
         val vocabularyMillis = System.currentTimeMillis() - started
         checkpoint()
@@ -630,11 +642,11 @@ class FacetSuggestions(
             fresh
         }
         val fittedAt = System.currentTimeMillis() - started
-        val after = keep(made, facet, data, fitted.on(data.task), compare = true)
+        val after = fitted.on(data.task).use { keep(made, facet, data, it, compare = true) }
         val scored = System.currentTimeMillis() - started
         // What the model before the refit gave alone: scored again, nothing of it kept
         val changedIds = if (current || !facet.infer) emptyList() else {
-            val before = kept?.let { k0 -> keep(MadeChances(), facet, data, k0.on(data.task), compare = true) }
+            val before = kept?.let { k0 -> k0.on(data.task).use { keep(MadeChances(), facet, data, it, compare = true) } }
             data.ids.filter { id -> before == null || before[id].orEmpty() != after[id].orEmpty() }
         }
         // How many values the model gives the works: a model that gives one work dozens tells of itself
@@ -1283,7 +1295,12 @@ internal class FacetData(
         val characters: CharactersRead,
         /** Of every work ([only] null), their facets and answers read already by the reading the pass serves. */
         val every: EveryItemFacets? = null,
-    ) {
+        /**
+         * The card the inputs are put on as they are read, for every facet of the pass to multiply there
+         * ([InputBlock.onCard]) — once, not a facet at a time; freed by [close]. Null: in the main memory alone.
+         */
+        private val card: Cublas? = null,
+    ) : AutoCloseable {
         init {
             require(every == null || only == null) { "the facets of every work given to a pass of some works" }
         }
@@ -1297,7 +1314,13 @@ internal class FacetData(
         }
         val complete: Map<String, Set<String>> by lazy { if (only == null) store.corrections.allComplete() else store.corrections.completeOf(ids) }
         val drafts: Map<String, List<LayerDraft>> by lazy { if (only == null) store.drafts.all() else store.drafts.ofItems(ids) }
-        val inputs: List<InputBlock> by lazy { inputs(store, ids, encoder, imageEncoder, sets, only) }
+        private val inputsRead = lazy { inputs(store, ids, encoder, imageEncoder, sets, only, card) }
+        val inputs: List<InputBlock> by inputsRead
+
+        /** The inputs on the card freed: the pass is over, and nothing of it reads them after. */
+        override fun close() {
+            if (inputsRead.isInitialized()) inputs.forEach { it.onCard?.close() }
+        }
 
         /**
          * THE CONTEXT OF THE WORKS OF A PASS AS NUMBERS: every value of every facet a number of the
@@ -1662,19 +1685,20 @@ internal class FacetData(
          * that has vectors (the title, the description, the notes, the site's lines), of every
          * picture block, of every set (the reviews, the windows of the chapters, the screenshots).
          * Of the works [only] alone when given, read by their keys; of every work streamed.
+         *
+         * A BLOCK OF THE WORKS THAT HAVE IT ALONE ([InputBlock]): every vector written as it is read
+         * into the rows of its block, a chunk of them after another ([Gathered]), laid out whole once
+         * every vector is read; then, given the [card], put there for every facet of the pass.
          */
         private fun inputs(
             store: SourceStore, ids: List<String>, encoder: TextEncoder, imageEncoder: String?, sets: Map<SetKind, Long>, only: Collection<String>?,
+            card: Cublas?,
         ): List<InputBlock> {
             val row = ids.withIndex().associate { (i, id) -> id to i }
-            val blocks = LinkedHashMap<String, Pair<Matrix, BooleanArray>>()
+            val blocks = LinkedHashMap<String, Gathered>()
             fun put(id: String, block: String, v: FloatArray) {
                 val i = row[id] ?: return
-                val (m, present) = blocks.getOrPut(block) { Matrix(ids.size, v.size) to BooleanArray(ids.size) }
-                // A vector of another length is of another encoder: not of this block
-                if (v.size != m.cols) return
-                m.held.put(v, 0, m.row(i), v.size)
-                present[i] = true
+                blocks.getOrPut(block) { Gathered(ids.size, v.size) }.put(i, v)
             }
             val texts = TextVectors.blocks(store.id, store.schema).mapValues { it.value.first }
             if (only == null) {
@@ -1686,7 +1710,7 @@ internal class FacetData(
                 imageEncoder?.let { e -> store.pictures.itemVectorsOf(ids, e).forEach { (id, own) -> own.forEach { (block, v) -> put(id, block, v) } } }
                 store.setVectors.ofMany(ids, sets).forEach { (id, own) -> own.forEach { (block, v) -> put(id, block, v) } }
             }
-            return blocks.map { (name, b) -> InputBlock(name, b.first, b.second) }
+            return blocks.map { (name, gathered) -> gathered.block(name, card) }
         }
 
         /**

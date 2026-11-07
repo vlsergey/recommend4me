@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import java.util.Collections
 import java.util.IdentityHashMap
@@ -8,13 +9,77 @@ import java.util.stream.IntStream
 /**
  * One input of the items, as the model of the grades reads them too: a vector per item, as it was
  * encoded — a text (the title, the description, the notes, a line of the site), a picture, a set
- * of vectors made one (the reviews, the windows of the chapters, the screenshots) — and whether the
- * item has it; a row of zeros for an item without. [name]: stable, the weights learnt of the input
- * are kept by it.
+ * of vectors made one (the reviews, the windows of the chapters, the screenshots). [name]: stable,
+ * the weights learnt of the input are kept by it.
+ *
+ * OF THE ITEMS THAT HAVE IT ALONE, LAID OUT AS THE PRODUCTS READ THEM: [vectors] a row of every such
+ * item, [rows] the item (a row of the task) each is of — every item once, in no order. An item
+ * without the input has no row: of the 75 630 works of fanfics.me the notes are of 46, the cover of
+ * 10 217, and a row of zeros of every other was multiplied at every product. [onCard]: the same rows
+ * on the card, put there by the application for the operation the task is of and freed at its end;
+ * null without a card or of an operation of a few works.
  */
-class InputBlock(val name: String, val vectors: Matrix, val present: BooleanArray) {
+class InputBlock(val name: String, val vectors: Matrix, val rows: IntArray, val onCard: CardRows? = null) {
     init {
-        require(present.size == vectors.rows) { "$name: ${vectors.rows} rows, ${present.size} marks" }
+        require(rows.size == vectors.rows) { "$name: ${vectors.rows} vectors of ${rows.size} items" }
+        require(onCard == null || onCard.count == rows.size && onCard.dim == vectors.cols) { "$name: other rows on the card" }
+    }
+
+    val dim: Int get() = vectors.cols
+
+    /** Of every item of the [itemCount], its row of [vectors]; -1 of an item without the input. Made at every asking. */
+    fun slots(itemCount: Int): IntArray = IntArray(itemCount) { -1 }.also { at -> rows.forEachIndexed { k, i -> at[i] = k } }
+
+    /** The rows on the card while they are there: null once the operation that put them there freed them. */
+    val card: CardRows? get() = onCard?.takeIf { it.open }
+
+    companion object {
+        /** A block of every item of [vectors] whose row is [present], the rest left out. */
+        fun of(name: String, vectors: Matrix, present: BooleanArray): InputBlock {
+            val rows = present.indices.filter { present[it] }.toIntArray()
+            return InputBlock(name, vectors.gather(rows), rows)
+        }
+    }
+}
+
+/**
+ * THE ROWS OF AN INPUT BLOCK ON THE CARD ([InputBlock.onCard]): its [count] vectors of [dim]
+ * numbers, row after row, and the items they are of ([items], ints), on the card of [cublas]. Freed
+ * by the application with the operation that put them there; [open] says whether they are there
+ * still. What a plugin made on the card of them ([alongside]) lives no longer: freed with them.
+ */
+class CardRows(val cublas: Cublas, val vectors: Cublas.DeviceFloats, val items: Cublas.DeviceBytes, val count: Int, val dim: Int) : AutoCloseable {
+    @Volatile
+    var open: Boolean = true
+        private set
+
+    private val after = ArrayList<AutoCloseable>()
+
+    /** [made] of these rows, freed with them if not before — at once if they are freed already. */
+    @Synchronized
+    fun alongside(made: AutoCloseable) {
+        if (open) after += made else made.close()
+    }
+
+    @Synchronized
+    override fun close() {
+        if (!open) return
+        open = false
+        after.forEach { it.close() }
+        after.clear()
+        vectors.close()
+        items.close()
+    }
+
+    companion object {
+        /** The rows [vectors] of the [items] put on the [card]; null when it has no room for them. Under the card's lock. */
+        fun put(card: Cublas, vectors: Matrix, items: IntArray): CardRows? {
+            val floats = card.allocate(vectors.rows.toLong() * vectors.cols) ?: return null
+            val ints = card.allocateBytes(items.size.toLong() * Int.SIZE_BYTES) ?: return null.also { floats.close() }
+            floats.upload(vectors.held, 0, 0, vectors.rows * vectors.cols)
+            ints.upload(items)
+            return CardRows(card, floats, ints, items.size, vectors.cols)
+        }
     }
 }
 
@@ -123,7 +188,7 @@ class SuggestionTask(
 
     init {
         require(itemIds.size == itemCount) { "${itemIds.size} ids of $itemCount items" }
-        require(inputs.all { it.vectors.rows == itemCount }) { "Inputs of ${inputs.map { "${it.name} ${it.vectors.rows}×${it.vectors.cols}" }}, $itemCount items" }
+        require(inputs.all { b -> b.rows.all { it in 0 until itemCount } }) { "Inputs of items not of the $itemCount" }
         require(inputs.map { it.name }.toSet().size == inputs.size) { "Inputs named twice: ${inputs.map { it.name }}" }
         require(valueKeys.size == valueCount) { "${valueKeys.size} keys of $valueCount values" }
         require(context.all { c -> c.all { it in 0 until contextCount } }) { "A context out of the $contextCount keys" }
@@ -240,7 +305,7 @@ class FitReport(
 /** One setting tried: its values by name, the loss its folds held out with its standard error, how long it took. */
 class FitTry(val settings: Map<String, String>, val loss: Double, val lossError: Double, val millis: Long)
 
-fun interface SuggestionScores {
+fun interface SuggestionScores : AutoCloseable {
     /**
      * For each of [rows] (items of the task), the chance of every value — an array as long as the
      * task has values. A value the item has is judged as if the item did not say so: a low chance
@@ -278,9 +343,76 @@ fun interface SuggestionScores {
         IntStream.range(0, rows.size).parallel().forEach { each(it, made[it]) }
     }
 
+    /**
+     * OF EACH OF [rows], WHAT IT IS SHOWN WITH of its values [columns] (null: every value; one array
+     * given to several rows one set of values for them all): every value likely — its score above
+     * [half] — and of the rest the highest-scored, likely or not, up to [least] with the likely; none
+     * of its [closed] (values, ascending, a list a row). The likely in the order of their places, the
+     * rest after them, the higher first, of equal scores the lower value ([choose]). Of the tags of
+     * fanfics.me a work is a few values of 8 894: a suggester that scores where it chooses hands
+     * back the few, not the rows of every value.
+     *
+     * Of a suggester that tells no other: chosen of the rows handed over one at a time ([scores] with a reader).
+     */
+    fun shown(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>, least: Int): List<Shown> {
+        require(columns.size == rows.size && closed.size == rows.size) { "${columns.size} sets of values, ${closed.size} closed of ${rows.size} rows" }
+        val out = arrayOfNulls<Shown>(rows.size)
+        scores(rows, columns) { r, row -> out[r] = choose(row, columns[r], closed[r], least, half) }
+        return out.map { it!! }
+    }
+
     /** The chance of a [score] of [scores]: never lower of a higher score. */
     fun chance(score: Float): Float = score
 
-    /** A score whose chance is one half, or the highest of those whose chance is one half or lower: no score at or under it is likely. */
+    /** A score whose chance is one half, or the highest of those whose chance is one half or lower: no score at or under it is likely, every one above it is. */
     val half: Float get() = 0.5f
+
+    /** What the scores hold besides the main memory freed — the coordinates of the items on the card: closed by whoever readied them, once read. */
+    override fun close() {}
+
+    companion object {
+        /**
+         * THE RULE OF [shown], of one row: of a row's [scores] — of the values [allowed], in their
+         * order (null: of every value, by its place) — the places of those shown and their scores.
+         * Every suggester's own choosing gives what this gives.
+         *
+         * IN ONE PASS, THE NUMBER LOOKED AT FIRST: [closed] is asked only of a value that would stay. Of
+         * every work a set asked of every value in five passes, a facet of thousands of characters over
+         * tens of thousands of works took half a minute.
+         */
+        fun choose(scores: FloatArray, allowed: IntArray?, closed: IntArray, least: Int, half: Float): Shown {
+            val likely = ArrayList<Int>()
+            val others = IntArray(least)
+            var kept = 0
+            fun value(p: Int) = allowed?.get(p) ?: p
+            fun shut(p: Int) = closed.binarySearch(value(p)) >= 0
+            fun before(p: Int, other: Int) = scores[p] > scores[other] || scores[p] == scores[other] && value(p) < value(other)
+            for (p in scores.indices) {
+                if (scores[p] > half) {
+                    if (!shut(p)) likely += p
+                    continue
+                }
+                if (least == 0 || kept == least && !before(p, others[least - 1]) || shut(p)) continue
+                var at = minOf(kept, least - 1)
+                while (at > 0 && before(p, others[at - 1])) {
+                    others[at] = others[at - 1]
+                    at--
+                }
+                others[at] = p
+                if (kept < least) kept++
+            }
+            val places = (likely + others.take(minOf(kept, (least - likely.size).coerceAtLeast(0)))).toIntArray()
+            return Shown(places, FloatArray(places.size) { scores[places[it]] })
+        }
+    }
+}
+
+/**
+ * What a row of a task is shown with ([SuggestionScores.shown]): the [places] of the values among
+ * the values it was asked of — the value itself when it was asked of every one — and their [scores].
+ */
+class Shown(val places: IntArray, val scores: FloatArray) {
+    init {
+        require(places.size == scores.size) { "${places.size} places, ${scores.size} scores" }
+    }
 }

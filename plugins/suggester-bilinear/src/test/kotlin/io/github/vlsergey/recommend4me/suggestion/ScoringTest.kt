@@ -1,6 +1,10 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.onnx.Onnx
+import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.util.Random
 import kotlin.math.abs
 import kotlin.test.Test
@@ -25,20 +29,28 @@ class ScoringTest {
         return FloatArray(size) { this[it] / l }
     }
 
-    /** Items of a text each, values of a name each; an item has a value its text points to; some items the site's examples, some the texts' counts of names. */
-    private fun task(random: Random = Random(5), m: Int = this.m): SuggestionTask {
+    /**
+     * Items of a text each, values of a name each; an item has a value its text points to; some items
+     * the site's examples. A block of notes of every third item besides: of the items that have it
+     * alone. Given a [card], the inputs put there, as the application puts those of a pass of every work.
+     */
+    private fun task(random: Random = Random(5), m: Int = this.m, card: Cublas? = null): SuggestionTask {
         val directions = List(m) { FloatArray(d) { random.nextGaussian().toFloat() }.normalized() }
         val texts = Matrix(n, d)
+        val notes = Matrix(n, d)
         val assigned = List(n) { i ->
             val v = FloatArray(d) { random.nextGaussian().toFloat() }.normalized()
             texts.held.put(v, 0, texts.row(i), d)
+            notes.held.put(FloatArray(d) { v[(it + 1) % d] }, 0, notes.row(i), d)
             directions.indices.filter { k -> directions[k].indices.sumOf { (directions[k][it] * v[it]).toDouble() } > 0.6 }.toIntArray()
         }
         val names = Matrix(m, d)
         directions.forEachIndexed { k, v -> names.held.put(v, 0, names.row(k), d) }
+        val inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(n) { true }), InputBlock.of("text:notes", notes, BooleanArray(n) { it % 3 == 0 }))
+            .map { b -> if (card == null) b else InputBlock(b.name, b.vectors, b.rows, CardRows.put(card, b.vectors, b.rows)!!) }
         return SuggestionTask(
             itemIds = List(n) { "item$it" },
-            inputs = listOf(InputBlock("text:annotation", texts, BooleanArray(n) { true })),
+            inputs = inputs,
             values = names,
             valueKeys = List(m) { "v$it" },
             assigned = assigned,
@@ -52,6 +64,13 @@ class ScoringTest {
 
     private fun assertNear(expected: Float, actual: Float, what: String) =
         assertTrue(abs(expected - actual) <= 1e-5f, "$what: $expected, scored $actual")
+
+    /**
+     * Near as two products of single precision summed in other orders are: by a few of the last digits
+     * of their terms — of the scores of this task terms of a hundred, cancelling down to a score of one.
+     */
+    private fun assertRelative(expected: Float, actual: Float, what: String) =
+        assertTrue(abs(expected - actual) <= 2e-4f + 1e-5f * abs(expected), "$what: $expected, scored $actual")
 
     @Test
     fun `the scores of every value, of a set shared by many rows and of a few of a row's own are the chances of those values`() {
@@ -124,6 +143,55 @@ class ScoringTest {
             val chance = scores.chance(k / 10f)
             assertTrue(chance >= last, "the chance of ${k / 10f}")
             last = chance
+        }
+    }
+
+    @Test
+    fun `on the card the chances and what every row is shown with are those of the main memory`() {
+        val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
+        assumeTrue(dir != null, "no CUDA libraries")
+        val cublas = Cublas.open(dir!!)
+        assumeTrue(cublas != null, "no cuBLAS to run on")
+        val values = 900
+        val here = task(Random(11), values)
+        val there = task(Random(11), values, cublas)
+        try {
+            val suggester = BilinearSuggester()
+            val bytes = assertNotNull(assertNotNull(suggester.fit(here)).scoring(here))
+            val main = assertNotNull(suggester.scoring(bytes, here))
+            val card = assertNotNull(suggester.scoring(bytes, there))
+            val rows = IntArray(2_000) { (it * 7) % n }
+            // Every value, a set of many rows, a few of a row's own, none; of the closed some
+            val shared = IntArray(40) { (it * 11 + 3) % values }.distinct().sorted().toIntArray()
+            val columns = List(rows.size) { r ->
+                when (r % 4) {
+                    0 -> null
+                    1 -> shared
+                    2 -> intArrayOf(r % values, 40, 41).distinct().toIntArray()
+                    else -> IntArray(0)
+                }
+            }
+            val random = Random(3)
+            val closed = List(rows.size) { IntArray(random.nextInt(4)) { random.nextInt(values) }.distinct().sorted().toIntArray() }
+            for (least in listOf(0, 3)) {
+                val expected = main.shown(rows, columns, closed, least)
+                val got = card.shown(rows, columns, closed, least)
+                assertTrue((card as Scoring.Scored).onTheCard, "chosen on the card")
+                rows.indices.forEach { r ->
+                    // The coordinates of the card's product and of the processor's differ in their last digits: the scores near
+                    assertEquals(expected[r].places.toList(), got[r].places.toList(), "row $r, least $least")
+                    expected[r].scores.indices.forEach { k -> assertRelative(expected[r].scores[k], got[r].scores[k], "row $r, place ${expected[r].places[k]}") }
+                }
+            }
+            // The coordinates made on the card, brought over: the chances of every value as the main memory's
+            val asked = intArrayOf(0, 3, 299, 150)
+            val a = main.of(asked)
+            val b = card.of(asked)
+            asked.indices.forEach { r -> for (v in 0 until values) assertNear(a[r][v], b[r][v], "row $r, value $v") }
+            card.close()
+            main.close()
+        } finally {
+            there.inputs.forEach { it.onCard?.close() }
         }
     }
 }

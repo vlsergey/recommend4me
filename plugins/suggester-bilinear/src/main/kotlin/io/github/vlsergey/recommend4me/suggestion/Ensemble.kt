@@ -2,9 +2,11 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Simd
 import java.util.concurrent.CancellationException
+import kotlin.concurrent.withLock
 
 /**
  * EVERY MODEL OF A FITTING IN ONE PRODUCT ([Bilinear], the same model and the same loss): the folds
@@ -113,35 +115,46 @@ internal class Ensemble(
     )
 
     /**
-     * THE ITEMS' VECTORS ON THE CARD, and the sides of their two products: every block put there
-     * once for the fitting, the gigabyte and a half of a catalogue of games read there at the card's
-     * speed, not the main memory's. A step sends the models' A there and takes U back, sends dU and
-     * takes dA back — tens of megabytes, not the features; the part of the ones ([ItemFeatures.ones])
-     * made in the main memory and sent with them. Null on the processor: no card, or no room on it.
+     * THE ITEMS' VECTORS ON THE CARD, and the sides of their two products: every block there once
+     * for the fitting — as the application put the task's there for its operation, or put there now
+     * — its rows of the items that have it alone, read at the card's speed, not the main memory's. A
+     * step sends the models' A there and takes U back, sends dU and takes dA back — tens of
+     * megabytes, not the features; the part of the ones ([ItemFeatures.ones]) made in the main
+     * memory and sent with them. A block's product written into [part], carried onto the items'
+     * columns by a kernel ([FeatureKernels]). Null on the processor: no card, no kernels, or no room.
      */
     private class OnCard(
-        val cublas: Cublas, val blocks: List<Cublas.DeviceFloats>, val aT: Cublas.DeviceFloats, val uT: Cublas.DeviceFloats,
-        val duT: Cublas.DeviceFloats, val gA: Cublas.DeviceFloats,
+        val cublas: Cublas, val kernels: CudaKernels, val blocks: List<CardRows>, val aT: Cublas.DeviceFloats, val uT: Cublas.DeviceFloats,
+        val duT: Cublas.DeviceFloats, val gA: Cublas.DeviceFloats, val part: Cublas.DeviceFloats,
+        /** What was put there for the fitting: freed with it — the application's rows are the application's. */
+        private val made: List<AutoCloseable>,
     ) : AutoCloseable {
-        override fun close() = (blocks + listOf(aT, uT, duT, gA)).forEach { it.close() }
+        override fun close() = made.forEach { it.close() }
     }
 
     private val onCard: OnCard? = card?.let { c ->
-        val made = ArrayList<Cublas.DeviceFloats>()
-        fun room(count: Long) = c.allocate(count)?.also { made += it }
-        val blocks = p.x.blocks.map { room(n.toLong() * it.dim) }
-        val a = room(count.toLong() * r * dx)
-        val u = room(count.toLong() * r * n)
-        val du = room(count.toLong() * r * n)
-        val g = room(count.toLong() * r * dx)
-        if (blocks.any { it == null } || a == null || u == null || du == null || g == null) {
-            made.forEach { it.close() }
-            null
-        } else {
-            p.x.blocks.forEachIndexed { k, b -> blocks[k]!!.upload(b.vectors.held, 0, 0, n * b.dim) }
-            OnCard(c, blocks.map { it!! }, a, u, du, g)
+        val kernels = FeatureKernels.of(c) ?: return@let null
+        c.lock.withLock {
+            val made = ArrayList<AutoCloseable>()
+            fun room(count: Long) = c.allocate(count)?.also { made += it }
+            val blocks = p.x.blocks.map { b -> b.card ?: CardRows.put(c, b.vectors, b.items)?.also { made += it } }
+            val a = room(count.toLong() * r * dx)
+            val u = room(count.toLong() * r * n)
+            val du = room(count.toLong() * r * n)
+            val g = room(count.toLong() * r * dx)
+            val part = room(maxOf(1L, count.toLong() * r * p.x.widest))
+            if (blocks.any { it == null } || a == null || u == null || du == null || g == null || part == null) {
+                made.forEach { it.close() }
+                null
+            } else OnCard(c, kernels, blocks.map { it!! }, a, u, du, g, part, made)
         }
     }
+
+    /** A block's part of the products in the main memory, when they are made there. */
+    private val blockPart: Floats = if (onCard == null) p.x.scratchOf(count * r) else Floats(1)
+
+    /** [work] holding the card's lock when the products are made there: one thread at a time on it. */
+    private fun <T> onTheCard(work: () -> T): T = onCard?.cublas?.lock.let { lock -> if (lock == null) work() else lock.withLock(work) }
 
     /** Whether the items' features and their products are on the card. */
     val featuresOnCard: Boolean get() = onCard != null
@@ -168,14 +181,17 @@ internal class Ensemble(
     private fun itemsCoordinates(kr: Int, aOnCard: Boolean, keep: Boolean = false) {
         val c = onCard
         if (c == null) {
-            p.x.transposedCoordinates(aT, kr, uT)
+            p.x.transposedCoordinates(aT, kr, uT, blockPart)
             return
         }
         if (aOnCard) c.aT.download(aT, 0, 0, kr * dx) else c.aT.upload(aT, 0, 0, kr * dx)
         p.x.onesCoordinates(aT, kr, uT)
         c.uT.upload(uT, 0, 0, kr * n)
+        // A block's rows multiplied, then carried onto its items' columns
         p.x.blocks.forEachIndexed { k, b ->
-            c.cublas.gemm(false, true, kr, n, b.dim, c.aT, b.column.toLong(), dx, c.blocks[k], 0, b.dim, c.uT, 0, n, beta = 1f, alpha = b.scale)
+            val rows = c.blocks[k]
+            c.cublas.gemm(false, true, kr, b.count, b.dim, c.aT, b.column.toLong(), dx, rows.vectors, 0, b.dim, c.part, 0, b.count, alpha = b.scale)
+            c.kernels.launch("scatter_columns", kr.toLong() * b.count, kr, b.count, c.part, rows.items, c.uT, n)
         }
         // Left there when the pairs are worked out there ([keep]): nothing of the processor reads them then
         if (!keep) c.uT.download(uT, 0, 0, kr * n)
@@ -189,15 +205,18 @@ internal class Ensemble(
     private fun itemsGradient(kr: Int, aOnCard: Boolean, duOnCard: Boolean = false) {
         val c = onCard
         if (c == null) {
-            p.x.transposedGradient(duT, kr, gA)
+            p.x.transposedGradient(duT, kr, gA, blockPart)
             return
         }
         // Written there by the pairs on the card ([duOnCard]) and brought over for the ones, else sent
         if (duOnCard) c.duT.download(duT, 0, 0, kr * n) else c.duT.upload(duT, 0, 0, kr * n)
         p.x.onesGradient(duT, kr, gA)
         c.gA.upload(gA, 0, 0, kr * dx)
+        // The columns of a block's items taken, then multiplied by its rows
         p.x.blocks.forEachIndexed { k, b ->
-            c.cublas.gemm(false, false, kr, b.dim, n, c.duT, 0, n, c.blocks[k], 0, b.dim, c.gA, b.column.toLong(), dx, alpha = b.scale)
+            val rows = c.blocks[k]
+            c.kernels.launch("gather_columns", kr.toLong() * b.count, kr, b.count, c.duT, n, rows.items, c.part)
+            c.cublas.gemm(false, false, kr, b.dim, b.count, c.part, 0, b.count, rows.vectors, 0, b.dim, c.gA, b.column.toLong(), dx, alpha = b.scale)
         }
         if (!aOnCard || h > 0) c.gA.download(gA, 0, 0, kr * dx)
     }
@@ -235,7 +254,7 @@ internal class Ensemble(
      * most. THE SEARCHES ON THE CARD when the features are there and it has room for their vectors —
      * the weights A written and read there, never leaving it; else in the main memory.
      */
-    fun fit(starts: List<FloatArray>, maxSteps: Int, stop: () -> Boolean): Fits = Blas.wide {
+    fun fit(starts: List<FloatArray>, maxSteps: Int, stop: () -> Boolean): Fits = onTheCard { Blas.wide {
         val c = onCard
         if (c != null) {
             SearchOnCard(c.cublas).use { space ->
@@ -256,7 +275,7 @@ internal class Ensemble(
         }
         searchesOnCard = false
         fitIn(List(count) { Search(OnHost, size, maxSteps) }, points, grads, aOnCard = false, starts, stop)
-    }
+    } }
 
     /** Every model fitted by its search of [searches], its point written into [places] and its gradient read from [gradients] of its slot. */
     private fun <V> fitIn(
@@ -536,7 +555,7 @@ internal class Ensemble(
      * [Bilinear.heldOutLoss] takes them — of the weights [fitted] ([Bilinear]'s layout), into [into]
      * and, of the values no item outside the fold has, [unseen].
      */
-    fun heldOut(fitted: List<FloatArray>, into: List<Bilinear.Held>, unseen: List<Bilinear.Held>) = Blas.wide {
+    fun heldOut(fitted: List<FloatArray>, into: List<Bilinear.Held>, unseen: List<Bilinear.Held>) = onTheCard { Blas.wide {
         active = count
         for (model in 0 until count) {
             slotModel[model] = model
@@ -567,13 +586,13 @@ internal class Ensemble(
                 }
             }
         }
-    }
+    } }
 
     /**
      * The loss and the gradient of every model at [thetas] ([Bilinear]'s layout) in one step of the
      * products: what [Bilinear.lossAndGradient] gives each — the measure this is checked against.
      */
-    internal fun lossesAndGradients(thetas: List<FloatArray>): Pair<FloatArray, List<FloatArray>> = Blas.wide {
+    internal fun lossesAndGradients(thetas: List<FloatArray>): Pair<FloatArray, List<FloatArray>> = onTheCard { Blas.wide {
         active = count
         for (model in 0 until count) {
             slotModel[model] = model
@@ -587,7 +606,7 @@ internal class Ensemble(
             grads[model].read(own)
             standard(own.toArray())
         }
-    }
+    } }
 
     /** Weights of [Bilinear]'s layout — A (dx × rank), B (dz × rank), E (m × rank), biases, the pair's — in this one's: each transposed. */
     private fun ordered(theta: FloatArray): FloatArray {

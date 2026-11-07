@@ -190,6 +190,15 @@ so a value the site gave it that nothing else supports comes out unlikely, and a
 work does not move its own chances. The rank and the penalty are chosen by the held-out loss —
 the strongest penalty within one standard error of the least.
 
+An input block holds the rows of the works that have it alone (`InputBlock`: the vectors and the
+work of each row), as the products read them — of the 75 630 works of fanfics.me the notes are of
+46, the cover of 10 217, and no row of zeros is multiplied. A pass over every work (a reading of the
+catalogue, a refit) puts its inputs on the card once, for every facet of the chain, and frees them
+at its end (`FacetData.WorksRead`); there the suggester makes both products — the works'
+coordinates and their scores — and chooses what every work is shown with
+(`SuggestionScores.shown`, `features.cu`), bringing back the few chosen, never a row of every value.
+Without a card the same is made in the main memory.
+
 The facets the model works out — the kinds, the universes, the main and the secondary characters,
 the pairings, the tags, the languages — are worked out IN A CHAIN, in the order of the schema: each
 reads as its context the values the site and the user give of every other facet, and the values

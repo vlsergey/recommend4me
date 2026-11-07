@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.onnx
 
+import io.github.vlsergey.recommend4me.matrix.CardSource
+import io.github.vlsergey.recommend4me.matrix.Cublas
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -21,4 +23,9 @@ class OnnxAutoConfiguration {
         @Value("\${recommend4me.gpu:false}") gpu: Boolean,
         @Value("\${recommend4me.cuda-dir:\${recommend4me.data-dir}/cuda}") cudaDir: String,
     ): Onnx = Onnx(Path.of(modelsDir), gpu, Path.of(cudaDir))
+
+    /** The products' library on the card, of the runtime's own CUDA libraries: none on the CPU. */
+    @Bean
+    @ConditionalOnMissingBean
+    fun cardSource(onnx: Onnx): CardSource = CardSource { onnx.cudaLibraries()?.let(Cublas::open) }
 }

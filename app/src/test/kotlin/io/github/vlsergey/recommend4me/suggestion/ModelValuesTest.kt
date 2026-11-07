@@ -17,10 +17,12 @@ class ModelValuesTest {
         return (likely + others.take((ModelValues.OFFERED - likely.size).coerceAtLeast(0))).toSet()
     }
 
-    /** [ModelValues.open] of every value's [chances], or of the [allowed] alone scored apart, as the values chosen. */
-    private fun opened(chances: FloatArray, allowed: IntArray?, closed: Set<Int>, of: SuggestionScores = ModelValues.CHANCES, scores: FloatArray = chances): Set<Int> {
+    /** [SuggestionScores.choose] of every value's [chances], or of the [allowed] alone scored apart, as the values chosen. */
+    private fun opened(chances: FloatArray, allowed: IntArray?, closed: Set<Int>, half: Float = ModelValues.CHANCES.half, scores: FloatArray = chances): Set<Int> {
         val asked = allowed?.let { a -> FloatArray(a.size) { scores[a[it]] } } ?: scores
-        return ModelValues.open(asked, allowed, closed.sorted().toIntArray(), of).map { allowed?.get(it) ?: it }.toSet()
+        val shown = SuggestionScores.choose(asked, allowed, closed.sorted().toIntArray(), ModelValues.OFFERED, half)
+        shown.places.forEachIndexed { k, p -> assertEquals(asked[p], shown.scores[k], "the score of place $p") }
+        return shown.places.map { allowed?.get(it) ?: it }.toSet()
     }
 
     @Test
@@ -37,27 +39,17 @@ class ModelValuesTest {
     }
 
     @Test
-    fun `chosen of the scores the chances are made of, the same as of the chances, a chance made of the likely alone`() {
+    fun `chosen of the scores the chances are made of, the same as of the chances, no chance made`() {
         val random = Random(1)
-        var made = 0
-        val sigmoid = object : SuggestionScores {
-            override fun of(rows: IntArray): List<FloatArray> = error("Of scores alone")
-            override fun chance(score: Float): Float {
-                made++
-                return 1f / (1f + exp(-score))
-            }
-            override val half: Float get() = 0f
-        }
+        fun sigmoid(score: Float) = 1f / (1f + exp(-score))
         repeat(5_000) {
             val size = random.nextInt(1, 60)
             // Scores apart enough that their chances are apart too
             val scores = FloatArray(size) { (random.nextInt(-400, 400) / 50f) }.distinct().toFloatArray()
-            val chances = FloatArray(scores.size) { sigmoid.chance(scores[it]) }
+            val chances = FloatArray(scores.size) { sigmoid(scores[it]) }
             val allowed = if (random.nextBoolean()) null else (scores.indices).shuffled(random).take(random.nextInt(scores.size + 1)).toIntArray()
             val closed = (scores.indices).shuffled(random).take(random.nextInt(scores.size / 2 + 1)).toSet()
-            made = 0
-            assertEquals(byTheRule(chances, allowed, closed), opened(chances, allowed, closed, sigmoid, scores), "scores ${scores.toList()}, allowed ${allowed?.toList()}, closed $closed")
-            assertEquals(scores.indices.count { (allowed == null || it in allowed) && scores[it] > 0f }, made, "chances made")
+            assertEquals(byTheRule(chances, allowed, closed), opened(chances, allowed, closed, 0f, scores), "scores ${scores.toList()}, allowed ${allowed?.toList()}, closed $closed")
         }
     }
 

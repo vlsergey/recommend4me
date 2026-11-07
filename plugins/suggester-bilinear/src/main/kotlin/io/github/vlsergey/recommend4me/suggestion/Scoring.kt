@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Blas
+import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Simd
 import java.io.ByteArrayInputStream
@@ -12,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.stream.IntStream
 import org.slf4j.LoggerFactory
+import kotlin.concurrent.withLock
 
 private val log = LoggerFactory.getLogger(Scoring::class.java)
 
@@ -68,6 +71,7 @@ internal class Scoring(
                 }
             }
         }
+        scores.close()
         val n = task.itemCount.coerceAtLeast(1)
         return Scoring(design, rank, valueKeys, a, pair, vt, bias, FloatArray(m) { (sums[it] / n).toFloat() })
     }
@@ -80,15 +84,26 @@ internal class Scoring(
      */
     fun on(task: SuggestionTask): SuggestionScores = Scored(task)
 
+    /** Every fold's A side by side, as the products of the coordinates read them: of a feature its row, the folds' [rank] each one after another. */
+    private val stacked: FloatArray = FloatArray(design.itemWidth * rank * BilinearSuggester.FOLDS).also { out ->
+        val width = rank * BilinearSuggester.FOLDS
+        for (f in a.indices) for (c in 0 until design.itemWidth) for (q in 0 until rank) out[c * width + f * rank + q] = a[f][c * rank + q]
+    }
+
     /**
      * THE SCORES OF THE ITEMS OF ONE TASK. Every item's coordinates by the model of every fold made
      * at the first asking, of one product of the whole task with the folds' A side by side: of the
-     * items' own vectors where the task holds them, none gathered — a chunk of rows gathered, a fold
-     * apart, copied gigabytes of vectors for every facet. A row's scores of the values asked alone —
-     * the characters of a work's universes, not every character — the rows asking the same values
-     * scored together; the chance made of a score only when it is asked for.
+     * items' own vectors where the task holds them — the rows of the items that have a block — none
+     * gathered. A row's scores of the values asked alone — the characters of a work's universes, not
+     * every character — the rows asking the same values scored together; the chance made of a score
+     * only when it is asked for.
+     *
+     * ON THE CARD WHEN THE TASK'S INPUTS ARE THERE ([InputBlock.card]): the coordinates made there and
+     * kept there — brought over too, for the few values asked of a row — and what every row is shown
+     * with chosen there ([shown]): of the tags of fanfics.me 8 894 scores a work made where they are
+     * chosen, the few chosen brought back. Freed by [close], or with the task's inputs at the latest.
      */
-    private inner class Scored(private val task: SuggestionTask) : SuggestionScores {
+    internal inner class Scored(private val task: SuggestionTask) : SuggestionScores {
         private val m = valueKeys.size
         private val folds = BilinearSuggester.FOLDS
         private val width = rank * folds
@@ -100,32 +115,62 @@ internal class Scoring(
         /** Every item's fold, of its id. */
         private val foldOf: IntArray by lazy { IntArray(task.itemCount) { Problem.foldOf(task.itemIds[it], folds) } }
 
-        /** Every item's coordinates by every fold's model: a row an item, the folds' [rank] each side by side. */
+        private val features: ItemFeatures by lazy { design.features(task) }
+
+        /** The card the task's every block of the layout is on, with the kernels of the features; null: the main memory. */
+        private var card: OnCard? = run {
+            val blocks = features.blocks
+            val cublas = blocks.firstOrNull()?.card?.cublas ?: return@run null
+            if (rank > FeatureKernels.MAX_RANK || blocks.any { it.card?.cublas !== cublas }) return@run null
+            val kernels = FeatureKernels.of(cublas) ?: return@run null
+            runCatching { cublas.lock.withLock { OnCard(cublas, kernels) } }
+                .onFailure { log.warn("no room on the card for the scores of {} items of {} values: they are made in the main memory", task.itemCount, m) }
+                .getOrNull()?.also { c -> blocks.forEach { it.card!!.alongside(c) } }
+        }
+
+        /** Every item's coordinates by every fold's model, in the main memory: a row an item, the folds' [rank] each side by side. */
         private val coordinates: Floats by lazy {
             val started = System.nanoTime()
-            val stacked = FloatArray(design.itemWidth * width)
-            for (f in 0 until folds) for (c in 0 until design.itemWidth) for (q in 0 until rank) stacked[c * width + f * rank + q] = a[f][c * rank + q]
-            // One product of the whole task, the library's threads on every physical core ([Blas.wide]): on its one
-            // thread the features of the 75 630 works of fanfics.me took half a second a facet
-            Floats(task.itemCount * width).also { out ->
-                val features = design.features(task, IntArray(task.itemCount) { it })
+            val out = Floats(task.itemCount * width)
+            val c = card
+            val made = c?.let { runCatching { it.cublas.lock.withLock { it.coordinates(out) } }.getOrNull() }
+            if (made == null) {
+                c?.let { dropCard() }
                 val weights = Floats.of(stacked)
                 val laid = System.nanoTime()
                 features.onesTimes(weights, width, out)
                 val summed = System.nanoTime()
-                Blas.wide { features.blocksTimes(weights, width, out) }
-                if (task.itemCount >= LOGGED) {
-                    val present = task.inputs.associate { it.name to it.present.count { p -> p } }
-                    log.info(
-                        "the coordinates of {} items of {} values, {} features, {} folds of rank {}: the weights and features laid out in {} ms; " +
-                            "the ones, {} an item, summed in {} ms; the blocks {} multiplied in {} ms",
-                        task.itemCount, m, design.itemWidth, folds, rank, (laid - started) / 1_000_000,
-                        "%.1f".format(features.ones.sumOf { it.size }.toDouble() / task.itemCount), (summed - laid) / 1_000_000,
-                        design.blocks.joinToString(", ", "[", "]") { "${it.name} ${it.dim} of ${present[it.name] ?: 0}" },
-                        (System.nanoTime() - summed) / 1_000_000,
-                    )
-                }
-            }
+                // The library's threads on every physical core ([Blas.wide]): on its one thread the features of the
+                // 75 630 works of fanfics.me took half a second a facet
+                Blas.wide { features.blocksTimes(weights, width, out, features.scratchOf(width)) }
+                if (task.itemCount >= LOGGED) log.info(
+                    "the coordinates of {} items of {} values, {} features, {} folds of rank {}, in the main memory: the weights laid out in {} ms; " +
+                        "the ones, {} an item, summed in {} ms; the blocks {} multiplied in {} ms",
+                    task.itemCount, m, design.itemWidth, folds, rank, (laid - started) / 1_000_000, onesPerItem(), (summed - laid) / 1_000_000,
+                    blocksTold(), (System.nanoTime() - summed) / 1_000_000,
+                )
+            } else if (task.itemCount >= LOGGED) log.info(
+                "the coordinates of {} items of {} values, {} features, {} folds of rank {}, on the card: the weights and ones sent in {} ms, " +
+                    "the ones, {} an item, summed and the blocks {} multiplied and brought over in {} ms",
+                task.itemCount, m, design.itemWidth, folds, rank, made[0], onesPerItem(), blocksTold(), made[1],
+            )
+            out
+        }
+
+        private fun onesPerItem() = "%.1f".format(features.ones.sumOf { it.size }.toDouble() / task.itemCount.coerceAtLeast(1))
+
+        private fun blocksTold(): String {
+            val names = design.blocks.indices.associate { design.blockOffsets[it] to design.blocks[it].name }
+            return features.blocks.joinToString(", ", "[", "]") { b -> "${names[b.mark]} ${b.dim} of ${b.count}" }
+        }
+
+        /** Whether the scores are made on the card. */
+        internal val onTheCard: Boolean get() = card != null
+
+        /** The card given up — no room on it, a kernel that failed — and freed: the main memory's from now on. */
+        private fun dropCard() {
+            card?.close()
+            card = null
         }
 
         /**
@@ -154,10 +199,26 @@ internal class Scoring(
             scored(rows, columns, chances = false, scratch = true, put = each)
         }
 
+        /** On the card when the coordinates are there and it chooses as many ([FeatureKernels.MAX_LEAST]); else of the rows handed over. */
+        override fun shown(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>, least: Int): List<Shown> {
+            require(columns.size == rows.size && closed.size == rows.size) { "${columns.size} sets of values, ${closed.size} closed of ${rows.size} rows" }
+            coordinates
+            val c = card
+            if (c != null && least <= FeatureKernels.MAX_LEAST) {
+                runCatching { c.cublas.lock.withLock { c.shown(rows, columns, closed, least) } }.onSuccess { return it }.onFailure { e ->
+                    log.warn("what {} rows are shown with not chosen on the card ({}): in the main memory from now on", rows.size, e.message ?: e.javaClass.simpleName)
+                    dropCard()
+                }
+            }
+            return super.shown(rows, columns, closed, least)
+        }
+
         override fun chance(score: Float): Float = Bilinear.sigmoid(score)
 
         /** σ(0) is one half, and σ never falls. */
         override val half: Float get() = 0f
+
+        override fun close() = dropCard()
 
         /**
          * Every row of [rows] scored of its values of [columns] (null: every value), or its chances, handed
@@ -258,7 +319,160 @@ internal class Scoring(
             }
             if (cols == null) making.addAndGet(System.nanoTime() - made)
         }
+
+        /**
+         * THE SCORING'S NUMBERS ON THE CARD: every item's coordinates ([u], made there by [coordinates]),
+         * every fold's values' coordinates, shifts and example weight, every item's fold; and the rooms
+         * of what a choosing sends and takes back, grown as asked. Under the card's lock, every call.
+         */
+        private inner class OnCard(val cublas: Cublas, val kernels: CudaKernels) : AutoCloseable {
+            private val made = ArrayList<AutoCloseable>()
+            private val rooms = HashMap<String, Cublas.DeviceBytes>()
+            private var closed = false
+
+            private fun floats(count: Long): Cublas.DeviceFloats = (cublas.allocate(maxOf(1L, count)) ?: throw NoRoom()).also { made += it }
+
+            /** The room [name], of [bytes] at least: kept for the next choosing, grown to twice when it is not enough. */
+            private fun room(name: String, bytes: Long): Cublas.DeviceBytes {
+                val have = rooms[name]
+                if (have != null && have.bytes >= bytes) return have
+                have?.close()
+                return (cublas.allocateBytes(maxOf(bytes, 2 * (have?.bytes ?: 0), 64)) ?: throw NoRoom()).also { rooms[name] = it }
+            }
+
+            private fun ints(name: String, values: IntArray) = room(name, values.size.toLong() * Int.SIZE_BYTES).also { it.upload(values) }
+
+            private val u = floats(task.itemCount.toLong() * width)
+            private val vts = floats(folds.toLong() * rank * m).also { d -> for (f in 0 until folds) d.upload(Floats.of(vt[f]), 0, f.toLong() * rank * m, rank * m) }
+            private val shifts = floats(folds.toLong() * m).also { d ->
+                for (f in 0 until folds) d.upload(Floats.of(FloatArray(m) { bias[f][it] + pair[f][1] }), 0, f.toLong() * m, m)
+            }
+            private val examples = room("examples", folds.toLong() * Float.SIZE_BYTES).also { it.upload(FloatArray(folds) { f -> pair[f][0] }) }
+            private val folded = (cublas.allocateBytes(task.itemCount.toLong() * Int.SIZE_BYTES) ?: throw NoRoom()).also { made += it; it.upload(foldOf) }
+
+            // The time of the choosing, summed over its calls: told once every item was shown
+            private var sending = 0L
+            private var choosing = 0L
+            private var taking = 0L
+            private var shownRows = 0
+
+            /**
+             * Every item's coordinates made in [u] — the ones summed of the stacked weights, every block's rows
+             * multiplied and carried onto their items' rows — and brought over into [out]. The milliseconds of
+             * the sending, and of the products with the bringing.
+             */
+            fun coordinates(out: Floats): LongArray {
+                val started = System.nanoTime()
+                val n = task.itemCount
+                val weights = floats(stacked.size.toLong()).also { it.upload(Floats.of(stacked), 0, 0, stacked.size) }
+                val (at, flat) = features.onesFlat()
+                val onesAt = ints("onesAt", at)
+                val ones = ints("ones", flat)
+                val part = floats(features.widest.toLong() * width)
+                val sent = System.nanoTime()
+                kernels.launch("ones_rows", n.toLong() * width, n, width, onesAt, ones, weights, u)
+                features.blocks.forEach { b ->
+                    val rows = b.card!!
+                    cublas.gemm(false, false, b.count, width, b.dim, rows.vectors, 0, b.dim, weights, b.column.toLong() * width, width, part, 0, width, alpha = b.scale)
+                    kernels.launch("scatter_rows", b.count.toLong() * width, b.count, width, part, rows.items, u)
+                }
+                // Brought over: the copy waits for the products before it
+                u.download(out, 0, 0, n * width)
+                val multiplied = System.nanoTime()
+                // The weights and the block's part are of the products alone
+                weights.close()
+                part.close()
+                made.remove(weights)
+                made.remove(part)
+                return longArrayOf((sent - started) / 1_000_000, (multiplied - sent) / 1_000_000)
+            }
+
+            /** [SuggestionScores.shown] on the card ([FeatureKernels], `shown_count` and `shown_likely`). */
+            fun shown(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>, least: Int): List<Shown> {
+                check(!this.closed) { "the scores on the card are freed" }
+                val started = System.nanoTime()
+                val count = rows.size
+                if (count == 0) return emptyList()
+                // Every array of values once, every row by where its array begins (-1: every value)
+                val arrays = IdentityHashMap<IntArray, Int>()
+                var total = 0
+                val colAt = IntArray(count)
+                val colLen = IntArray(count)
+                columns.forEachIndexed { r, cols ->
+                    if (cols == null) colAt[r] = -1 else {
+                        colAt[r] = arrays.getOrPut(cols) { total.also { total += cols.size } }
+                        colLen[r] = cols.size
+                    }
+                }
+                val cols = IntArray(total).also { flat -> arrays.forEach { (a, at) -> a.copyInto(flat, at) } }
+                fun flat(lists: (Int) -> IntArray): Pair<IntArray, IntArray> {
+                    val at = IntArray(count + 1)
+                    for (r in 0 until count) at[r + 1] = at[r] + lists(r).size
+                    val all = IntArray(at[count])
+                    for (r in 0 until count) lists(r).copyInto(all, at[r])
+                    return at to all
+                }
+                val (closedAt, closedAll) = flat { closed[it] }
+                val (exAt, exAll) = flat { task.examples[rows[it]] }
+                val args = arrayOf<Any>(
+                    ints("item", rows), folded, u, width, rank, vts, shifts, examples, m,
+                    ints("colAt", colAt), ints("colLen", colLen), ints("cols", cols), ints("closedAt", closedAt), ints("closed", closedAll),
+                    ints("exAt", exAt), ints("ex", exAll), half,
+                )
+                val likely = room("likely", count.toLong() * Int.SIZE_BYTES)
+                val topPlace = room("topPlace", count.toLong() * maxOf(least, 1) * Int.SIZE_BYTES)
+                val topScore = room("topScore", count.toLong() * maxOf(least, 1) * Float.SIZE_BYTES)
+                val topCount = room("topCount", count.toLong() * Int.SIZE_BYTES)
+                val sent = System.nanoTime()
+                // A block of the kernel's threads a row
+                kernels.launch("shown_count", count.toLong() * CudaKernels.BLOCK, *args, least, likely, topPlace, topScore, topCount)
+                val likelyOf = likely.ints(count)
+                val outAt = IntArray(count)
+                for (r in 1 until count) outAt[r] = outAt[r - 1] + likelyOf[r - 1]
+                val allLikely = outAt[count - 1] + likelyOf[count - 1]
+                val outPlace = room("outPlace", allLikely.toLong() * Int.SIZE_BYTES)
+                val outScore = room("outScore", allLikely.toLong() * Float.SIZE_BYTES)
+                if (allLikely > 0) kernels.launch("shown_likely", count.toLong() * CudaKernels.BLOCK, *args, ints("outAt", outAt), outPlace, outScore)
+                val chosen = System.nanoTime()
+                val places = outPlace.ints(allLikely)
+                val scores = outScore.floats(allLikely)
+                val takenOf = topCount.ints(count)
+                val tops = topPlace.ints(count * least)
+                val topScores = topScore.floats(count * least)
+                val out = List(count) { r ->
+                    val many = likelyOf[r]
+                    val others = minOf(takenOf[r], (least - many).coerceAtLeast(0))
+                    val p = IntArray(many + others)
+                    val s = FloatArray(many + others)
+                    places.copyInto(p, 0, outAt[r], outAt[r] + many)
+                    scores.copyInto(s, 0, outAt[r], outAt[r] + many)
+                    tops.copyInto(p, many, r * least, r * least + others)
+                    topScores.copyInto(s, many, r * least, r * least + others)
+                    Shown(p, s)
+                }
+                val taken = System.nanoTime()
+                sending += sent - started
+                choosing += chosen - sent
+                taking += taken - chosen
+                shownRows += count
+                if (shownRows == task.itemCount && task.itemCount >= LOGGED) log.info(
+                    "what {} items of {} values are shown with, chosen on the card: sent in {} ms, chosen in {} ms, brought back in {} ms",
+                    task.itemCount, m, sending / 1_000_000, choosing / 1_000_000, taking / 1_000_000,
+                )
+                return out
+            }
+
+            override fun close() {
+                if (closed) return
+                closed = true
+                made.forEach { it.close() }
+                rooms.values.forEach { it.close() }
+            }
+        }
     }
+
+    /** No room on the card for what a scoring needs there: it is the main memory's. */
+    private class NoRoom : RuntimeException("no room on the card")
 
     /** Every value's weight over the works as a whole: its share of the works fitted on ([shares]); none of a scoring kept before they were. */
     fun weights(): DoubleArray? = shares?.let { s -> DoubleArray(s.size) { s[it].toDouble() } }

@@ -21,7 +21,7 @@ class KnnSuggesterTest {
         }
         return SuggestionTask(
             itemIds = List(n) { "w$it" },
-            inputs = listOf(InputBlock("text:annotation", texts, BooleanArray(n) { true })),
+            inputs = listOf(InputBlock.of("text:annotation", texts, BooleanArray(n) { true })),
             values = Matrix(2, 4),
             valueKeys = listOf("v0", "v1"),
             assigned = List(n) { intArrayOf(it % 2) },

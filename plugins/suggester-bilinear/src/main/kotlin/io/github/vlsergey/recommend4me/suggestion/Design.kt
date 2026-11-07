@@ -15,30 +15,29 @@ import kotlin.math.sqrt
  * to stop it. Uncentred, it is near nought along what was learnt, and judged by the base rates; the
  * part all texts share is learnt as a bias. By the vectors' own length, not by how far they
  * spread: a block nearly the same for every item would be stretched without end. An item without
- * the block: zeros, and its mark of having the block off. ([center] is kept nought: the layout of
- * a kept model reads the same.)
+ * the block: no vector, and its mark of having the block off. (A centre of nought is kept in the
+ * layout's bytes, as a kept model wrote it; one of any other is a layout no longer read.)
  */
-class BlockScale(val name: String, val center: FloatArray, val scale: Float) {
-    val dim: Int get() = center.size
-
+class BlockScale(val name: String, val dim: Int, val scale: Float) {
     companion object {
-        fun of(block: InputBlock): BlockScale? {
-            val d = block.vectors.cols
-            val rows = block.present.indices.filter { block.present[it] }
-            if (rows.isEmpty() || d == 0) return null
-            val held = block.vectors.held
-            val center = FloatArray(d)
+        /** Of the rows [rows] of [vectors] — every row when null; null of none, or of vectors of no length. */
+        fun of(name: String, vectors: Matrix, rows: IntArray? = null): BlockScale? {
+            val d = vectors.cols
+            val count = rows?.size ?: vectors.rows
+            if (count == 0 || d == 0) return null
+            val held = vectors.held
             var length = 0.0
-            rows.forEach { i ->
+            for (k in 0 until count) {
+                val i = rows?.get(k) ?: k
                 var s = 0.0
                 for (q in 0 until d) {
-                    val c = held[block.vectors.row(i) + q]
+                    val c = held[vectors.row(i) + q]
                     s += c * c
                 }
                 length += sqrt(s)
             }
-            length /= rows.size
-            return BlockScale(block.name, center, if (length > 0) (sqrt(d.toDouble()) / length).toFloat() else 1f)
+            length /= count
+            return BlockScale(name, d, if (length > 0) (sqrt(d.toDouble()) / length).toFloat() else 1f)
         }
     }
 }
@@ -88,41 +87,32 @@ class Design(
     }
 
     /**
-     * The features of the [rows] of the task ([ItemFeatures]): of every row of the task, its blocks
-     * the task's own matrices — of an item without a block its row nought, as the task makes them —
-     * nothing copied; of some rows, their vectors gathered. A block of a layout kept when the
-     * vectors were centred: gathered and centred.
+     * The features of every item of the task ([ItemFeatures]): its blocks the task's own — the rows
+     * of the items that have them, on the card too when the task's are there — nothing copied.
      */
-    internal fun features(task: SuggestionTask, rows: IntArray): ItemFeatures {
+    internal fun features(task: SuggestionTask): ItemFeatures {
+        val n = task.itemCount
         val byName = task.inputs.associateBy { it.name }
-        val every = rows.size == task.itemCount && rows.indices.all { rows[it] == it }
+        // Of every item, how many blocks of the layout it has: their marks among its ones
+        val marked = IntArray(n)
         val dense = blocks.indices.mapNotNull { k ->
-            val scale = blocks[k]
-            val block = byName[scale.name] ?: return@mapNotNull null
-            val centred = scale.center.any { it != 0f }
-            val vectors = if (every && !centred) block.vectors else Matrix(rows.size, scale.dim).also { out ->
-                rows.forEachIndexed { r, i ->
-                    if (!block.present[i]) return@forEachIndexed
-                    out.held.copy(block.vectors.held, block.vectors.row(i), out.row(r), scale.dim)
-                    if (centred) for (q in 0 until scale.dim) out.held[out.row(r) + q] = out.held[out.row(r) + q] - scale.center[q]
-                }
-            }
-            ItemFeatures.Dense(vectors, blockOffsets[k] + 1, scale.scale)
+            val block = byName[blocks[k].name] ?: return@mapNotNull null
+            block.rows.forEach { marked[it]++ }
+            ItemFeatures.Dense(block.vectors, block.rows, blockOffsets[k], blocks[k].scale, block.card)
         }
-        val presence = blocks.map { byName[it.name]?.present }
         // The task's context keys as columns of this layout
         val base = 1 + blocks.sumOf { 1 + it.dim }
         val columns = IntArray(task.contextCount) { contextIndex[task.contextKeys[it]]?.let { c -> base + c } ?: -1 }
         // The constant, the marks of the blocks the item has, its values of the other facets each once: in
         // an array of its own, no list of boxed numbers made of every item
-        val ones = Array(rows.size) { r ->
-            val i = rows[r]
-            val context = task.context[i]
-            val own = IntArray(1 + blocks.size + context.size)
-            var at = 1
-            for (k in blocks.indices) if (presence[k]?.get(i) == true) own[at++] = blockOffsets[k]
+        val filled = IntArray(n) { 1 }
+        val ones = Array(n) { i -> IntArray(1 + marked[i] + task.context[i].size) }
+        dense.forEach { b -> b.items.forEach { i -> ones[i][filled[i]++] = b.mark } }
+        for (i in 0 until n) {
+            val own = ones[i]
+            var at = filled[i]
             val marks = at
-            for (c in context) {
+            for (c in task.context[i]) {
                 val column = columns[c]
                 if (column < 0) continue
                 var seen = false
@@ -132,9 +122,9 @@ class Design(
                 }
                 if (!seen) own[at++] = column
             }
-            if (at == own.size) own else own.copyOf(at)
+            if (at < own.size) ones[i] = own.copyOf(at)
         }
-        return ItemFeatures(rows.size, itemWidth, dense, ones)
+        return ItemFeatures(n, itemWidth, dense, ones)
     }
 
     /** The features of every value of the task, in its order. */
@@ -150,7 +140,7 @@ class Design(
             task.values.held.take(name, 0, task.values.row(v), nameDim)
             if (names != null && name.any { it != 0f }) {
                 row[1] = 1f
-                for (q in 0 until nameDim) row[2 + q] = (name[q] - names.center[q]) * names.scale
+                for (q in 0 until nameDim) row[2 + q] = name[q] * names.scale
             }
             var at = 2 + nameDim
             groupings.forEachIndexed { k, (g, keys) ->
@@ -233,11 +223,10 @@ class Design(
     companion object {
         /** The layout of a task: its blocks some item has, its context, its values' names and groups. */
         fun of(task: SuggestionTask): Design {
-            val names = BlockScale.of(InputBlock("names", task.values, BooleanArray(task.valueCount) { v ->
-                (0 until task.values.cols).any { task.values.held[task.values.row(v) + it] != 0f }
-            }))
+            val named = (0 until task.valueCount).filter { v -> (0 until task.values.cols).any { task.values.held[task.values.row(v) + it] != 0f } }
+            val names = BlockScale.of("names", task.values, named.toIntArray())
             return Design(
-                task.inputs.mapNotNull { BlockScale.of(it) }, task.contextKeys, names, task.values.cols,
+                task.inputs.mapNotNull { BlockScale.of(it.name, it.vectors) }, task.contextKeys, names, task.values.cols,
                 task.groupings.map { it.name to it.groups }, task.valueKeys,
             )
         }
@@ -251,16 +240,19 @@ class Design(
             return Design(blocks, context, names, nameDim, groupings, readStrings(input))
         }
 
+        /** The name, the scale and a centre of nought of the block's length: the bytes of a layout as written when blocks were centred. */
         private fun writeScale(out: DataOutputStream, s: BlockScale) {
             out.writeUTF(s.name)
             out.writeFloat(s.scale)
-            writeFloats(out, s.center)
+            writeFloats(out, FloatArray(s.dim))
         }
 
         private fun readScale(input: DataInputStream): BlockScale {
             val name = input.readUTF()
             val scale = input.readFloat()
-            return BlockScale(name, readFloats(input), scale)
+            val center = readFloats(input)
+            check(center.all { it == 0f }) { "$name: a layout of centred vectors, no longer read" }
+            return BlockScale(name, center.size, scale)
         }
 
         /**

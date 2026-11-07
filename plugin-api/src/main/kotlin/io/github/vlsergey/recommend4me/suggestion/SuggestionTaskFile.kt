@@ -16,11 +16,12 @@ import java.util.zip.GZIPOutputStream
  */
 object SuggestionTaskFile {
     /**
-     * 6: no counts of the values' names in the items' texts; 5: the arrays of the allowed once each,
+     * 7: an input block of the items that have it alone, with the item of every row; 6: no counts of
+     * the values' names in the items' texts; 5: the arrays of the allowed once each,
      * the barred at the end; 4: the drafts and their weight at the end; 3: the names' texts a matrix,
      * their arrays of values once each; 2 and 1 read too, their counts passed over.
      */
-    private const val FORMAT = 6
+    private const val FORMAT = 7
 
     fun write(task: SuggestionTask, file: Path) {
         Files.createDirectories(file.parent)
@@ -31,8 +32,7 @@ object SuggestionTaskFile {
             task.inputs.forEach { b ->
                 out.writeUTF(b.name)
                 matrix(out, b.vectors)
-                out.writeInt(b.present.size)
-                b.present.forEach(out::writeBoolean)
+                ints(out, b.rows)
             }
             matrix(out, task.values)
             strings(out, task.valueKeys)
@@ -76,7 +76,8 @@ object SuggestionTaskFile {
         val inputs = List(input.readInt()) {
             val name = input.readUTF()
             val vectors = matrix(input)
-            InputBlock(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
+            // The formats before 7: a row of every item, and whether it has the block
+            if (format >= 7) InputBlock(name, vectors, ints(input)) else InputBlock.of(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
         }
         val values = matrix(input)
         val valueKeys = strings(input)

@@ -9,6 +9,7 @@ import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.lang.invoke.MethodHandle
 import java.nio.file.Path
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.math.abs
 
 private val log = LoggerFactory.getLogger(Cublas::class.java)
@@ -38,6 +39,13 @@ class Cublas private constructor(
     private val dir: Path,
     private val runtime: SymbolLookup,
 ) {
+    /**
+     * HELD BY WHOEVER WORKS ON THE CARD, for as long as the work: one thread at a time on its one
+     * handle and its [scalars]. The computations run one at a time (the queue), and a fitting holds it
+     * through; a scoring of every work holds it while it multiplies.
+     */
+    val lock = ReentrantLock()
+
     /** The scalars a call hands over and takes back — α, β, a dot's result: one place for them, made once; one thread at a time. */
     private val scalars: MemorySegment = Arena.global().allocate(ValueLayout.JAVA_FLOAT, 4)
 
@@ -105,6 +113,22 @@ class Cublas private constructor(
             val into = a.allocate(ValueLayout.JAVA_DOUBLE, n.toLong())
             copyBytes(into, address, n.toLong() * Double.SIZE_BYTES, DEVICE_TO_HOST)
             into.toArray(ValueLayout.JAVA_DOUBLE)
+        }
+
+        /** The first [n] ints. */
+        fun ints(n: Int): IntArray = Arena.ofConfined().use { a ->
+            if (n == 0) return IntArray(0)
+            val into = a.allocate(ValueLayout.JAVA_INT, n.toLong())
+            copyBytes(into, address, n.toLong() * Int.SIZE_BYTES, DEVICE_TO_HOST)
+            into.toArray(ValueLayout.JAVA_INT)
+        }
+
+        /** The first [n] floats. */
+        fun floats(n: Int): FloatArray = Arena.ofConfined().use { a ->
+            if (n == 0) return FloatArray(0)
+            val into = a.allocate(ValueLayout.JAVA_FLOAT, n.toLong())
+            copyBytes(into, address, n.toLong() * Float.SIZE_BYTES, DEVICE_TO_HOST)
+            into.toArray(ValueLayout.JAVA_FLOAT)
         }
 
         /** Every byte made nought. */
