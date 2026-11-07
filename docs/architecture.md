@@ -276,7 +276,7 @@ is a kind of the other's, and under it the other way round, with the way up — 
 catalogue" on the card reads its entries and every level above them again, what was kept shown
 meanwhile.
 
-Under the list of tags the screen shows the offers of the tags' graph (`Tags.hierarchyOffers`),
+Under the list of tags the screen shows the offers of the tags' graph (`HierarchyOffers`),
 read apart and again by its own button: a tag under another as above; two tags bound to one entry
 merged; a new tag of an entry no tag is bound to, above the tags that meet there first — of the
 entries both of two tags are a kind of, the nearest to the farther of the two; where a tag is bound

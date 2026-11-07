@@ -64,7 +64,9 @@ import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
 import io.github.vlsergey.recommend4me.tag.TagCatalogue
+import io.github.vlsergey.recommend4me.tag.TagCataloguesController
 import io.github.vlsergey.recommend4me.tag.TagEntry
+import io.github.vlsergey.recommend4me.tag.TagRenaming
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.TagVectors
 import io.github.vlsergey.recommend4me.tag.Tags
@@ -380,8 +382,10 @@ class SiteTest {
     @Autowired lateinit var recommendations: Recommendations
     @Autowired lateinit var comparisons: ScorerComparisons
     @Autowired lateinit var tagsApi: TagsController
+    @Autowired lateinit var tagCataloguesApi: TagCataloguesController
     @Autowired lateinit var catalogueReader: CatalogueReader
     @Autowired lateinit var tagService: Tags
+    @Autowired lateinit var tagRenaming: TagRenaming
     @Autowired lateinit var tagVectors: TagVectors
     @Autowired lateinit var tagsByText: TagsByTextController
     @Autowired lateinit var textTags: TextTags
@@ -394,18 +398,18 @@ class SiteTest {
 
     /**
      * The texts' vectors made, and what the background makes of the tags made now: their works counted and kept
-     * ([Tags.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
+     * ([TagRenaming.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
      */
     private fun refresh(store: SourceStore) = inBackground {
         textVectors.refresh(store, "asked")
-        tagService.scope()?.let { tagService.rename(it, it.facet) }
+        tagService.scope()?.let { tagRenaming.rename(it, it.facet) }
         tagVectors.fill()
     }
 
     /** The offers of the tags' graph as worked out with the names of the tags, after the quiet — here at once. */
     private fun offers(): List<HierarchyOffer> {
-        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
-        return tagsApi.listHierarchyOffers().body!!.offers
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
+        return tagCataloguesApi.listHierarchyOffers().body!!.offers
     }
 
     /**
@@ -506,9 +510,9 @@ class SiteTest {
         )
         // Its paragraphs encoded, as the background encodes them: the line of stars is none
         val encoder = WordsEncoder()
-        store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
+        store.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
             val texts = Paragraphs.of(part.content)
-            store.parts.saveParagraphVectors(
+            store.parts.paragraphs.saveParagraphVectors(
                 part.itemId,
                 part.partId,
                 Paragraphs.keyOf(encoder.id),
@@ -552,9 +556,9 @@ class SiteTest {
                 )
             ),
         )
-        store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
+        store.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
             val texts = Paragraphs.of(part.content)
-            store.parts.saveParagraphVectors(
+            store.parts.paragraphs.saveParagraphVectors(
                 part.itemId,
                 part.partId,
                 Paragraphs.keyOf(encoder.id),
@@ -774,7 +778,7 @@ class SiteTest {
         )
         // As it was: the entry is the other tests'
         corrections.uncorrectFacet("site", "x1", "tags", made.key)
-        tagsApi.bindTagEntry(TagEntryRequest(made.key, "fake", "E2", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(made.key, "fake", "E2", false))
 
         // The prediction is told part by part, each part with its features; a page of the site gets the parts alone
         (3..8).forEach { k ->
@@ -1451,7 +1455,7 @@ class SiteTest {
         // Merged: the site's tags of the other bound to this one, the other no more. The word answered
         // at once, the names and the counts worked out in the queue after the quiet — here at once
         assertEquals(hulls, tagsApi.relateTags(TagRelationRequest(hulls, starhulls, TagRelation.MERGED)).body!!.key)
-        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
         val merged = tagsApi.getTag(hulls).body!!
         assertEquals(hulls, merged.key)
         assertEquals(setOf("hulls", "starhulls"), merged.variants.map { it.tag }.toSet())
@@ -1491,15 +1495,15 @@ class SiteTest {
         assertEquals(TagNameRule.LIKED, tagsApi.nameTag(TagNameRequest(hulls)).body!!.rule)
 
         // Bound to an entry of a catalogue, found by the user: named by its label in the user's first language
-        val entries = tagsApi.findTagEntries("hull").body!!
+        val entries = tagCataloguesApi.findTagEntries("hull").body!!
         assertEquals(listOf("fake" to "E1"), entries.map { it.catalogue to it.entry })
         assertEquals(emptyList(), entries.single().tags)
-        val bound = tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", true)).body!!
+        val bound = tagCataloguesApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", true)).body!!
         assertEquals("Корпус" to TagNameRule.CATALOGUE, bound.name to bound.rule)
         assertEquals(setOf("Hull", "Корпус", "Ship hull"), bound.catalogueEntries.single().names.toSet())
         assertEquals(
             listOf(hulls to "Корпус"),
-            tagsApi.findTagEntries("E1").body!!.single().tags.map { it.key to it.name },
+            tagCataloguesApi.findTagEntries("E1").body!!.single().tags.map { it.key to it.name },
         )
         // Found by any name of its entry, in any language
         assertTrue(tagsApi.listTags("ship hull", null, null, null, 0, 10).body!!.tags.any { it.key == hulls })
@@ -1538,7 +1542,7 @@ class SiteTest {
         // A second entry besides: the one bound first still names it; the descriptions of the site's tag's page first,
         // then of each entry
         stores.source("site")!!.items.describeFacetValues(Books.TAG.key, mapOf("hulls" to "The hulls of ships"))
-        val both = tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E2", true)).body!!
+        val both = tagCataloguesApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E2", true)).body!!
         assertEquals(listOf("E1", "E2"), both.catalogueEntries.map { it.entry })
         assertEquals("Корпус", both.name)
         assertEquals(
@@ -1549,17 +1553,17 @@ class SiteTest {
         assertEquals(TagNameRule.EXPLICIT, tagsApi.nameTag(TagNameRequest(hulls, "Корпуса")).body!!.rule)
         tagsApi.nameTag(TagNameRequest(hulls))
         // The first no more: the other names it; bound to none, the sites' names again
-        val second = tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", false)).body!!
+        val second = tagCataloguesApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", false)).body!!
         assertEquals(listOf("E2"), second.catalogueEntries.map { it.entry })
         assertEquals("Судно", second.name)
-        val unbound = tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E2", false)).body!!
+        val unbound = tagCataloguesApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E2", false)).body!!
         assertEquals(emptyList(), unbound.catalogueEntries)
         assertEquals(TagNameRule.LIKED, unbound.rule)
 
         // A hull is a kind of vessel in the catalogue: the tag of the vessel offered above the hulls, the hulls under
         // it
-        tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", true))
-        tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E2", true))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", true))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E2", true))
         val offered = tagsApi.getTag(hulls).body!!.catalogueOffers.single()
         assertEquals(
             Triple(cargo, TagRelation.PARENT, listOf("Корпус", "Судно")),
@@ -1570,7 +1574,7 @@ class SiteTest {
             tagsApi.getTag(cargo).body!!.catalogueOffers.map { it.tag.key to it.relation },
         )
         // Read again from the card: the same entries, the same offer
-        assertEquals(listOf("E1"), tagsApi.refreshTagEntries(hulls).body!!.catalogueEntries.map { it.entry })
+        assertEquals(listOf("E1"), tagCataloguesApi.refreshTagEntries(hulls).body!!.catalogueEntries.map { it.entry })
         // The page's offers: the hulls under the cargo; no new tag above both, where the cargo's own entry is
         val page = offers()
         val link = page.single()
@@ -1581,25 +1585,25 @@ class SiteTest {
         assertEquals(emptyList(), tagsApi.getTag(hulls).body!!.catalogueOffers)
         tagsApi.relateTags(TagRelationRequest(hulls, cargo, TagRelation.NONE))
         // A hull and a sail are kinds of craft, the nearest they both are: a new tag of it offered above both, made
-        tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E2", false))
-        tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E4", true))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E2", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E4", true))
         val above = offers().single()
         assertEquals(
             Triple(HierarchyOfferKind.NEW_PARENT, "E3", setOf(hulls, cargo)),
             Triple(above.kind, above.entry, above.tags.map { it.key }.toSet()),
         )
         // Said too general: still listed, as rejected — the screen hides it unless asked — and taken back
-        tagsApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E3", true))
+        tagCataloguesApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E3", true))
         assertEquals(listOf(true), offers().map { it.rejected })
-        tagsApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E3", false))
+        tagCataloguesApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E3", false))
         assertEquals(listOf(false), offers().map { it.rejected })
-        val craft = tagsApi.createTagAbove(TagAboveRequest("fake", "E3", above.tags.map { it.key })).body!!
+        val craft = tagCataloguesApi.createTagAbove(TagAboveRequest("fake", "E3", above.tags.map { it.key })).body!!
         assertEquals("Аппарат", craft.name)
         assertEquals(setOf(hulls, cargo), craft.children.map { it.key }.toSet())
         assertEquals(emptyList(), offers())
         tagsApi.relateTags(TagRelationRequest(craft.key, hulls, TagRelation.NONE))
         tagsApi.relateTags(TagRelationRequest(craft.key, cargo, TagRelation.NONE))
-        tagsApi.bindTagEntry(TagEntryRequest(craft.key, "fake", "E3", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(craft.key, "fake", "E3", false))
         // A tag of the entry's name there already, bound to it not: that tag offered above both, not a new one
         tagsApi.nameTag(TagNameRequest(craft.key, "Аппарат"))
         val bind = offers().single()
@@ -1608,7 +1612,7 @@ class SiteTest {
             Triple(bind.kind, bind.existing?.key, bind.tags.map { it.key }.toSet()),
         )
         val boundAbove =
-            tagsApi.createTagAbove(TagAboveRequest("fake", "E3", bind.tags.map { it.key }, craft.key)).body!!
+            tagCataloguesApi.createTagAbove(TagAboveRequest("fake", "E3", bind.tags.map { it.key }, craft.key)).body!!
         assertEquals(craft.key to listOf("E3"), boundAbove.key to boundAbove.catalogueEntries.map { it.entry })
         assertEquals(setOf(hulls, cargo), boundAbove.children.map { it.key }.toSet())
         // The hulls put under the cargo too: right under the craft over the cargo's head — offered to be taken away
@@ -1618,32 +1622,32 @@ class SiteTest {
         tagsApi.relateTags(TagRelationRequest(hulls, cargo, TagRelation.NONE))
         tagsApi.relateTags(TagRelationRequest(craft.key, hulls, TagRelation.NONE))
         tagsApi.relateTags(TagRelationRequest(craft.key, cargo, TagRelation.NONE))
-        tagsApi.bindTagEntry(TagEntryRequest(craft.key, "fake", "E3", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(craft.key, "fake", "E3", false))
 
         // A vessel said too general: the craft, more general still, offered above the hull and the sail no more
         fun newAbove() =
             offers().filter { it.kind == HierarchyOfferKind.NEW_PARENT || it.kind == HierarchyOfferKind.BIND_PARENT }
         assertEquals(listOf("E3"), newAbove().map { it.entry })
-        tagsApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E2", true))
+        tagCataloguesApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E2", true))
         assertEquals(emptyList(), newAbove())
-        tagsApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E2", false))
+        tagCataloguesApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E2", false))
         assertEquals(listOf("E3"), newAbove().map { it.entry })
 
         // A hull and a keel meet at the vessel: offered above them — but not once the craft, above the
         // vessel, is above the two already: the vessel would say nothing the craft does not
-        tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E4", false))
-        tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E6", true))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E4", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E6", true))
         assertEquals(
             listOf("E2" to setOf(hulls, cargo)),
             newAbove().map { it.entry to it.tags.map { t -> t.key }.toSet() },
         )
-        tagsApi.createTagAbove(TagAboveRequest("fake", "E3", listOf(hulls, cargo), craft.key))
+        tagCataloguesApi.createTagAbove(TagAboveRequest("fake", "E3", listOf(hulls, cargo), craft.key))
         assertEquals(emptyList(), newAbove())
         tagsApi.relateTags(TagRelationRequest(craft.key, hulls, TagRelation.NONE))
         tagsApi.relateTags(TagRelationRequest(craft.key, cargo, TagRelation.NONE))
-        tagsApi.bindTagEntry(TagEntryRequest(craft.key, "fake", "E3", false))
-        tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", false))
-        tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E6", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(craft.key, "fake", "E3", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", false))
+        tagCataloguesApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E6", false))
 
         // Both site's tags merged rows of it; one taken out, to a new tag of its own; the answer stays with the tag
         fun rows() = tagsApi.listSimilarTags(hulls, null, 0, 50, null, null).body!!.tags
@@ -1658,7 +1662,7 @@ class SiteTest {
         val takenOut = tagsApi.bindSiteTag(TagBindingRequest("site", "starhulls")).body!!
         assertTrue(takenOut.key != hulls && takenOut.key != starhulls, "a new tag ${takenOut.key}")
         // Counted in the queue after the quiet — here at once
-        inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
         val out = tagsApi.getTag(takenOut.key).body!!
         assertEquals(2, out.works)
         assertEquals(listOf("hulls"), tagsApi.getTag(hulls).body!!.variants.map { it.tag })
@@ -1767,7 +1771,7 @@ class SiteTest {
                 .single { it.name == "Пустота" }
                 .key,
         )
-        assertEquals("Пустота", type.tags.explicitNames()[TagRepository.idOf(void)])
+        assertEquals("Пустота", type.tags.stats.explicitNames()[TagRepository.idOf(void)])
         corrections.correctFacet("site", "t3", FacetCorrection(facet = "tags", added = true, name = "пустота"))
         assertEquals(
             void,

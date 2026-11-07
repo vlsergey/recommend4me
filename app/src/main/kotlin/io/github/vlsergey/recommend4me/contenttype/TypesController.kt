@@ -13,8 +13,10 @@ import io.github.vlsergey.recommend4me.api.model.TextInfo
 import io.github.vlsergey.recommend4me.api.model.TextRole as ApiTextRole
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.model.FeatureNames
+import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.Source
+import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
@@ -32,65 +34,7 @@ class TypesController(private val stores: Stores) : TypesApi {
                     ContentTypeInfo(
                         id = type.id,
                         universes = type.universes,
-                        sources =
-                            t.sources.map { store ->
-                                val s = store.source
-                                val schema = store.schema
-                                SourceInfo(
-                                    id = s.id,
-                                    homepage = s.homepage,
-                                    modes = s.modes.map { ApiSourceMode.valueOf(it.name) },
-                                    texts =
-                                        schema.texts.map {
-                                            TextInfo(
-                                                it.key,
-                                                I18nKeys.textLabel(s.id, it.key),
-                                                it.spoiler,
-                                                it.role?.let { r -> ApiTextRole.valueOf(r.name) },
-                                            )
-                                        },
-                                    facets =
-                                        schema.facets.map {
-                                            FacetInfo(
-                                                id = FeatureNames.facetId(s, it),
-                                                key = it.key,
-                                                labelKey = I18nKeys.facetLabel(s.id, it),
-                                                filter = it.filter,
-                                                onCard = it.onCard,
-                                                suggest = it.suggest,
-                                                infer = it.infer,
-                                                editable = it.editable,
-                                                original = it.original,
-                                                originalFacet = it.originalFacet,
-                                                role = it.role?.let { r -> ApiFacetRole.valueOf(r.name) },
-                                            )
-                                        },
-                                    numbers =
-                                        schema.numbers.map {
-                                            NumberInfo(
-                                                FeatureNames.numberId(s, it),
-                                                it.key,
-                                                I18nKeys.numberLabel(s.id, it),
-                                                NumberInfo.Scale.valueOf(it.scale.name),
-                                                it.role?.let { r -> ApiNumberRole.valueOf(r.name) },
-                                            )
-                                        },
-                                    versioned = schema.versioned,
-                                    picturesTell = schema.picturesTell,
-                                    reviewsLabelKey =
-                                        if (schema.reviews) I18nKeys.qualified(s.id, I18nKeys.REVIEWS) else null,
-                                    partsLabelKey =
-                                        if (schema.parts) I18nKeys.qualified(s.id, I18nKeys.PARTS) else null,
-                                    signals =
-                                        s.signals.map { def ->
-                                            SignalInfo(
-                                                def.key,
-                                                I18nKeys.signalLabel(s.id, def),
-                                                def.values.associateWith { I18nKeys.signalValueLabel(s.id, def, it) },
-                                            )
-                                        },
-                                )
-                            },
+                        sources = t.sources.map(::sourceInfo),
                         // A standard number of several sources is one: one sorting, one filter ([ContentType.numbers])
                         numbers =
                             t.sources
@@ -106,6 +50,65 @@ class TypesController(private val stores: Stores) : TypesApi {
                                 .distinctBy { it.id },
                     )
                 }
+        )
+
+    /** What a source knows of its items: its texts, facets, numbers and signals, each with the key of its words. */
+    private fun sourceInfo(store: SourceStore): SourceInfo {
+        val s = store.source
+        val schema = store.schema
+        return SourceInfo(
+            id = s.id,
+            homepage = s.homepage,
+            modes = s.modes.map { ApiSourceMode.valueOf(it.name) },
+            texts =
+                schema.texts.map {
+                    TextInfo(
+                        it.key,
+                        I18nKeys.textLabel(s.id, it.key),
+                        it.spoiler,
+                        it.role?.let { r -> ApiTextRole.valueOf(r.name) },
+                    )
+                },
+            facets = schema.facets.map { facetInfo(s, it) },
+            numbers =
+                schema.numbers.map {
+                    NumberInfo(
+                        FeatureNames.numberId(s, it),
+                        it.key,
+                        I18nKeys.numberLabel(s.id, it),
+                        NumberInfo.Scale.valueOf(it.scale.name),
+                        it.role?.let { r -> ApiNumberRole.valueOf(r.name) },
+                    )
+                },
+            versioned = schema.versioned,
+            picturesTell = schema.picturesTell,
+            reviewsLabelKey = if (schema.reviews) I18nKeys.qualified(s.id, I18nKeys.REVIEWS) else null,
+            partsLabelKey = if (schema.parts) I18nKeys.qualified(s.id, I18nKeys.PARTS) else null,
+            signals =
+                s.signals.map { def ->
+                    SignalInfo(
+                        def.key,
+                        I18nKeys.signalLabel(s.id, def),
+                        def.values.associateWith { I18nKeys.signalValueLabel(s.id, def, it) },
+                    )
+                },
+        )
+    }
+
+    /** A facet of the source [s] as the interface is built of it. */
+    private fun facetInfo(s: Source, def: FacetDef) =
+        FacetInfo(
+            id = FeatureNames.facetId(s, def),
+            key = def.key,
+            labelKey = I18nKeys.facetLabel(s.id, def),
+            filter = def.filter,
+            onCard = def.onCard,
+            suggest = def.suggest,
+            infer = def.infer,
+            editable = def.editable,
+            original = def.original,
+            originalFacet = def.originalFacet,
+            role = def.role?.let { r -> ApiFacetRole.valueOf(r.name) },
         )
 
     private fun numberInfo(source: Source, def: NumberDef) =

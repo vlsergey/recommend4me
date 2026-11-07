@@ -33,6 +33,7 @@ import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.downloadsPages
 import io.github.vlsergey.recommend4me.tag.NamedTag
+import io.github.vlsergey.recommend4me.tag.TagFinding
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.work.WorkEvents
 import java.net.URI
@@ -68,6 +69,7 @@ class ItemsController(
     private val workEvents: WorkEvents,
     private val searchQuality: io.github.vlsergey.recommend4me.search.SearchQuality,
     private val tags: Tags,
+    private val tagFinding: TagFinding,
     /** The user's languages: of an entry of a catalogue, its label and description in the first that has them. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) : ItemsApi {
@@ -141,17 +143,18 @@ class ItemsController(
         if (store.schema.facet(facet) == null) return ResponseEntity.notFound().build()
         val piece = query?.trim()?.lowercase().orEmpty()
         val wanted = limit.coerceIn(1, 500)
-        // A facet of tags: the normalized tags, found by the names on this site, on any, then by meaning ([Tags.find]);
+        // A facet of tags: the normalized tags, found by the names on this site, on any, then by meaning
+        // ([TagFinding.find]);
         // when none goes by the name typed, the entries of the catalogues after them — a new tag each
-        // ([Tags.findOrNew])
+        // ([TagFinding.findOrNew])
         if (facet in store.tagFacets) {
             val scope = tags.scope() ?: return ResponseEntity.notFound().build()
             fun use(t: NamedTag) = FacetValueUse(t.stats.key, t.name.name, t.stats.counts.works, null)
             // A tag the user ignores is not offered to add
             if (piece.isEmpty())
-                return ResponseEntity.ok(tags.list(scope, facet, null, ignored = false).take(wanted).map(::use))
+                return ResponseEntity.ok(tags.list(scope, null, ignored = false).take(wanted).map(::use))
             return ResponseEntity.ok(
-                tags.findOrNew(scope, facet, store.id, piece, wanted).mapNotNull { f ->
+                tagFinding.findOrNew(scope, store.id, piece, wanted).mapNotNull { f ->
                     f.tag?.let(::use)
                         ?: f.entry?.let { e ->
                             FacetValueUse(

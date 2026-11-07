@@ -1015,7 +1015,7 @@ class Recommendations(
         if (model.layout.offsetOf(SetKind.PARTS.key) == null) return emptyMap()
         val embedding =
             type.embeddings.find(SetKind.PARTS)?.takeIf { it.encoder == encoder.id }?.embedding ?: return emptyMap()
-        val byPart = type.source(key.source)!!.parts.windowsByPart(key.id, encoder.id)
+        val byPart = type.source(key.source)!!.parts.windows.windowsByPart(key.id, encoder.id)
         if (byPart.isEmpty()) return emptyMap()
         val parts = byPart.keys.toList()
         val windows = parts.flatMap { byPart.getValue(it) }

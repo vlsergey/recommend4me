@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.textvector
 
-import io.github.vlsergey.recommend4me.database.source.tables.references.PHRASE_VECTOR
 import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_VECTOR
 import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_WINDOW
 import io.github.vlsergey.recommend4me.database.streamed
@@ -12,8 +11,8 @@ import org.jooq.impl.DSL
 
 /**
  * The vectors of the texts of one source's items, kept with the hash of the text and the encoder that made them: a text
- * is encoded again when it or the encoder changed, and vectors of another encoder are never read. And the vectors of
- * short texts — reviews, phrases — by the key of the text, so a text is encoded once.
+ * is encoded again when it or the encoder changed, and vectors of another encoder are never read. The windows of the
+ * long texts are kept by [windows]; the vectors of short texts — reviews, phrases — by [phrases].
  */
 class TextVectorRepository(private val db: DSLContext) {
 
@@ -23,6 +22,12 @@ class TextVectorRepository(private val db: DSLContext) {
      * first one's row, which its own check did not see.
      */
     private val writing = ReentrantLock()
+
+    /** The windows of the long texts, written under the same lock. */
+    val windows = TextWindowRepository(db, writing)
+
+    /** The vectors of short texts by their keys, written under the same lock. */
+    val phrases = PhraseVectorRepository(db, writing)
 
     /** The hash of every stored vector of [encoder]: (item, text key) to hash. */
     fun hashes(encoder: String, itemId: String? = null): Map<Pair<String, String>, String> =
@@ -41,8 +46,8 @@ class TextVectorRepository(private val db: DSLContext) {
             .fetchSet { it.value1()!! to it.value2()!! }
 
     /**
-     * The text's vector; the windows of the text it had before are of another text, and go ([saveWindows] makes them
-     * anew).
+     * The text's vector; the windows of the text it had before are of another text, and go
+     * ([TextWindowRepository.saveWindows] makes them anew).
      */
     fun save(itemId: String, textKey: String, encoder: String, hash: String, vector: FloatArray) {
         val packed = Vectors.half(vector)
@@ -71,64 +76,6 @@ class TextVectorRepository(private val db: DSLContext) {
     fun delete(itemId: String, textKey: String) {
         db.deleteFrom(TEXT_WINDOW).where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey)).execute()
         db.deleteFrom(TEXT_VECTOR).where(TEXT_VECTOR.ITEM_ID.eq(itemId), TEXT_VECTOR.TEXT_KEY.eq(textKey)).execute()
-    }
-
-    /**
-     * How many windows the text whose vector is stored has ([count]), and the vectors of them in order when more than
-     * one — a text of one window is its vector alone.
-     */
-    fun saveWindows(itemId: String, textKey: String, count: Int, windows: List<FloatArray>) = writing.withLock {
-        db.transaction { c ->
-            val tx = c.dsl()
-            tx.deleteFrom(TEXT_WINDOW).where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey)).execute()
-            if (count > 1)
-                windows.forEachIndexed { i, v ->
-                    tx.insertInto(TEXT_WINDOW)
-                        .set(TEXT_WINDOW.ITEM_ID, itemId)
-                        .set(TEXT_WINDOW.TEXT_KEY, textKey)
-                        .set(TEXT_WINDOW.WINDOW_NO, i)
-                        .set(TEXT_WINDOW.VEC, Vectors.half(v))
-                        .execute()
-                }
-            tx.update(TEXT_VECTOR)
-                .set(TEXT_VECTOR.WINDOWS, count)
-                .where(TEXT_VECTOR.ITEM_ID.eq(itemId), TEXT_VECTOR.TEXT_KEY.eq(textKey))
-                .execute()
-        }
-    }
-
-    /**
-     * The texts of keys [keys] whose vector by [encoder] is stored and whose windows are not counted yet, at most
-     * [limit]: (item, text key).
-     */
-    fun withoutWindows(encoder: String, keys: Collection<String>, limit: Int): List<Pair<String, String>> =
-        if (keys.isEmpty()) emptyList()
-        else
-            db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY)
-                .from(TEXT_VECTOR)
-                .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.WINDOWS.isNull, TEXT_VECTOR.TEXT_KEY.`in`(keys))
-                .limit(limit)
-                .fetch { it.value1()!! to it.value2()!! }
-
-    /**
-     * The windows of the texts of the items [ids] that have more than one, by [encoder]: item to text key to windows in
-     * order.
-     */
-    fun windowsOf(ids: Collection<String>, encoder: String): Map<String, Map<String, List<FloatArray>>> {
-        val out = HashMap<String, MutableMap<String, MutableList<FloatArray>>>()
-        ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(TEXT_WINDOW.ITEM_ID, TEXT_WINDOW.TEXT_KEY, TEXT_WINDOW.VEC)
-                .from(TEXT_WINDOW)
-                .join(TEXT_VECTOR)
-                .on(TEXT_VECTOR.ITEM_ID.eq(TEXT_WINDOW.ITEM_ID), TEXT_VECTOR.TEXT_KEY.eq(TEXT_WINDOW.TEXT_KEY))
-                .where(TEXT_WINDOW.ITEM_ID.`in`(chunk), TEXT_VECTOR.ENCODER.eq(encoder))
-                .orderBy(TEXT_WINDOW.ITEM_ID, TEXT_WINDOW.TEXT_KEY, TEXT_WINDOW.WINDOW_NO)
-                .fetch {
-                    out.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } +=
-                        Vectors.fromHalf(it.value3()!!)
-                }
-        }
-        return out
     }
 
     /** Vectors of the items [ids] by [encoder]: item to text key to vector. */
@@ -161,52 +108,24 @@ class TextVectorRepository(private val db: DSLContext) {
         action: (itemId: String, key: String, halves: ByteArray) -> Unit,
     ) {
         if (keys.isEmpty()) return
+        val marks = keys.joinToString(",") { "?" }
         db.streamed(
-            "SELECT item_id, text_key, vec FROM text_vector WHERE encoder = ? AND text_key IN (${keys.joinToString(",") { "?" }})",
+            "SELECT item_id, text_key, vec FROM text_vector WHERE encoder = ? AND text_key IN ($marks)",
             listOf(encoder) + keys,
         ) { r ->
-            action(r.getString(1), r.getString(2), r.getBytes(3))
+            action(r.getString(ITEM_COLUMN), r.getString(KEY_COLUMN), r.getBytes(VECTOR_COLUMN))
         }
     }
 
     fun count(encoder: String): Int = db.fetchCount(TEXT_VECTOR, TEXT_VECTOR.ENCODER.eq(encoder))
 
-    // --- Short texts ---
-
-    /** The stored vectors by [encoder] of the texts whose keys are given. */
-    fun phrases(keys: Collection<Long>, encoder: String): Map<Long, FloatArray> {
-        val out = HashMap<Long, FloatArray>()
-        keys.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(PHRASE_VECTOR.TEXT_KEY, PHRASE_VECTOR.VEC)
-                .from(PHRASE_VECTOR)
-                .where(PHRASE_VECTOR.TEXT_KEY.`in`(chunk), PHRASE_VECTOR.ENCODER.eq(encoder))
-                .fetch { out[it.value1()!!] = Vectors.fromHalf(it.value2()!!) }
-        }
-        return out
-    }
-
-    /** Stores vectors of short texts; one of another encoder under the same key is replaced. */
-    fun savePhrases(rows: List<Pair<Long, FloatArray>>, encoder: String) {
-        rows.chunked(BATCH).forEach { chunk ->
-            val merges =
-                db.batch(
-                    chunk.map { (key, v) ->
-                        val packed = Vectors.half(v)
-                        db.insertInto(PHRASE_VECTOR)
-                            .set(PHRASE_VECTOR.TEXT_KEY, key)
-                            .set(PHRASE_VECTOR.ENCODER, encoder)
-                            .set(PHRASE_VECTOR.VEC, packed)
-                            .onDuplicateKeyUpdate()
-                            .set(PHRASE_VECTOR.ENCODER, encoder)
-                            .set(PHRASE_VECTOR.VEC, packed)
-                    }
-                )
-            // The same phrase met by two encodings at once races as a text's vector does
-            writing.withLock { merges.execute() }
-        }
-    }
-
     companion object {
-        private const val BATCH = 1000
+        /** The rows read or written by one statement: the length of a query's list, not a meaning. */
+        internal const val BATCH = 1000
+
+        /** The columns of the streamed query, by their place in it. */
+        private const val ITEM_COLUMN = 1
+        private const val KEY_COLUMN = 2
+        private const val VECTOR_COLUMN = 3
     }
 }

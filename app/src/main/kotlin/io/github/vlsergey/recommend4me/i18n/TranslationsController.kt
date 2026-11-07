@@ -24,21 +24,22 @@ class TranslationsController(private val plugins: Plugins) {
 
     @GetMapping("/i18n/{namespace}/{language}.json")
     fun translations(@PathVariable namespace: String, @PathVariable language: String): ResponseEntity<ByteArray> {
-        if (!NAME.matches(namespace) || language !in I18nKeys.LANGUAGES) return ResponseEntity.notFound().build()
-        val bytes =
-            if (namespace == I18nKeys.STANDARD) {
-                javaClass.classLoader.getResourceAsStream("static/i18n/${I18nKeys.STANDARD}/$language.json")?.use {
-                    it.readBytes()
-                }
-            } else {
-                pluginOf(namespace)
-                    ?.javaClass
-                    ?.classLoader
-                    ?.getResourceAsStream("i18n/$namespace.$language.json")
-                    ?.use { it.readBytes() }
-            } ?: return ResponseEntity.notFound().build()
-        return ResponseEntity.ok().contentType(JSON).cacheControl(CacheControl.noCache()).body(bytes)
+        val bytes = if (NAME.matches(namespace) && language in I18nKeys.LANGUAGES) read(namespace, language) else null
+        return bytes?.let { ResponseEntity.ok().contentType(JSON).cacheControl(CacheControl.noCache()).body(it) }
+            ?: ResponseEntity.notFound().build()
     }
+
+    /** The words of [namespace] in [language]: the build's own, or a plugin's; null when it has none. */
+    private fun read(namespace: String, language: String): ByteArray? =
+        if (namespace == I18nKeys.STANDARD) {
+            javaClass.classLoader.getResourceAsStream("static/i18n/${I18nKeys.STANDARD}/$language.json")?.use {
+                it.readBytes()
+            }
+        } else {
+            pluginOf(namespace)?.javaClass?.classLoader?.getResourceAsStream("i18n/$namespace.$language.json")?.use {
+                it.readBytes()
+            }
+        }
 
     /**
      * The plugin whose id is [namespace]: a source, a scorer, a catalogue of universes, or any other kind with words of

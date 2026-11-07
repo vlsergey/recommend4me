@@ -169,7 +169,7 @@ class SourceStore(
             return keys.mapNotNull { k -> StandardLanguages.NAMES[k]?.let { k to it } }.toMap()
         if (facet in tagFacets) {
             // The tags as the user and every site name them ([TagRepository]); one the user made up, by the source
-            val shown = tags.shown(keys)
+            val shown = tags.stats.shown(keys)
             val rest = keys.filter { it !in shown }
             return (if (rest.isEmpty()) emptyMap() else items.facetNames(facet, rest)) + shown
         }
@@ -193,7 +193,7 @@ class SourceStore(
     /** The name of every value of a facet the source or the dictionary names. */
     fun names(facet: String): Map<String, String> {
         // The normalized tags alone: the source's names of the facet are of the sites' keys it had before them
-        if (facet in tagFacets) return tags.shown(null)
+        if (facet in tagFacets) return tags.stats.shown(null)
         // Every language, a work in it or not yet: a value to answer by
         if (StandardLanguages.ofLanguages(facet)) return StandardLanguages.NAMES
         return dictionaryNames?.of(facet, null) {
@@ -243,7 +243,7 @@ class SourceStore(
     fun hierarchies(): Map<String, TagHierarchy> {
         if (tagFacets.isEmpty()) return emptyMap()
         // One tree of tags for every facet of tags: read once
-        val tree = TagHierarchy(tags.parents())
+        val tree = TagHierarchy(tags.relations.parents())
         return if (tree.empty) emptyMap() else tagFacets.associateWith { tree }
     }
 

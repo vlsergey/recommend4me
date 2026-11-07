@@ -48,6 +48,8 @@ class Captures(private val stores: Stores, private val contexts: SourceContexts)
     fun patterns(): Map<String, List<String>> =
         tracking().associate { s -> s.id to s.source.capturePatterns.map { it.pattern } }
 
+    // A source's parser is a plugin reading a site's page: it may fail any way, and the page is kept all the same
+    @Suppress("TooGenericExceptionCaught")
     fun capture(url: String, sent: String): Captured {
         val store =
             tracking().firstOrNull { s -> s.source.capturePatterns.any { it.matches(url) } }
@@ -104,6 +106,8 @@ class Captures(private val stores: Stores, private val contexts: SourceContexts)
     /** The kept pages read by an older parser, read again. */
     @Order(1)
     @EventListener(ApplicationReadyEvent::class)
+    // A source's parser is a plugin reading a site's page: one page it fails on any way leaves the others to be read
+    @Suppress("TooGenericExceptionCaught")
     fun reparse() {
         stores.sources.forEach { s ->
             val version = s.source.parserVersion

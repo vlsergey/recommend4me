@@ -68,31 +68,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
     fun sync(documents: Sequence<SearchDocument>): Int {
         val kept =
             lock.withLock {
-                val reader = DirectoryReader.open(writer)
-                try {
+                DirectoryReader.open(writer).use { reader ->
                     if (reader.indexCommit.userData[FORMAT_KEY] != FORMAT.toString() || reader.numDocs() == 0) null
-                    else {
-                        // Of the items' documents alone, found by their kind: not every passage's read too
-                        val wanted = setOf(ID, FINGERPRINT)
-                        HashMap<String, Long>().also { out ->
-                            for (leaf in reader.leaves()) {
-                                val r = leaf.reader()
-                                val live = r.liveDocs
-                                val stored = r.storedFields()
-                                val items = r.postings(ITEM_TERM) ?: continue
-                                var doc = items.nextDoc()
-                                while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                                    if (live == null || live.get(doc)) {
-                                        val d = stored.document(doc, wanted)
-                                        d.getField(FINGERPRINT)?.numericValue()?.toLong()?.let { out[d.get(ID)] = it }
-                                    }
-                                    doc = items.nextDoc()
-                                }
-                            }
-                        }
-                    }
-                } finally {
-                    reader.close()
+                    else fingerprintsOf(reader)
                 }
             } ?: return rebuild(documents)
         val seen = HashSet<String>()
@@ -112,6 +90,30 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         return written
     }
 
+    /**
+     * The fingerprint of every item's document of the index [reader] reads, by the item's id: of the items' documents
+     * alone, found by their kind — not every passage's read too.
+     */
+    private fun fingerprintsOf(reader: DirectoryReader): Map<String, Long> {
+        val wanted = setOf(ID, FINGERPRINT)
+        val out = HashMap<String, Long>()
+        for (leaf in reader.leaves()) {
+            val r = leaf.reader()
+            val live = r.liveDocs
+            val stored = r.storedFields()
+            val items = r.postings(ITEM_TERM) ?: continue
+            var doc = items.nextDoc()
+            while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+                if (live == null || live.get(doc)) {
+                    val d = stored.document(doc, wanted)
+                    d.getField(FINGERPRINT)?.numericValue()?.toLong()?.let { out[d.get(ID)] = it }
+                }
+                doc = items.nextDoc()
+            }
+        }
+        return out
+    }
+
     /** Rebuilds the index from [documents]; searches use the old one until it is done. */
     fun rebuild(documents: Sequence<SearchDocument>): Int {
         val fresh = dir.resolveSibling(dir.fileName.toString() + ".new")
@@ -119,17 +121,21 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         val next = open(fresh)
         lock.withLock { building = next }
         var count = 0
+        // A rebuild that fails leaves no trace: its writer closed, its folder removed, the failure thrown on
+        var built = false
         try {
             documents.forEach {
                 next.updateDocuments(idTerm(it.key), documents(it))
                 count++
             }
             commit(next)
-        } catch (e: Exception) {
-            lock.withLock { building = null }
-            next.close()
-            fresh.toFile().deleteRecursively()
-            throw e
+            built = true
+        } finally {
+            if (!built) {
+                lock.withLock { building = null }
+                next.close()
+                fresh.toFile().deleteRecursively()
+            }
         }
         lock.withLock {
             building = null
@@ -308,17 +314,24 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         fun fieldName(field: SearchField): String =
             ((if (field.naming) "n" else "") + (if (field.counted) "c" else "")).ifEmpty { "t" } +
                 "." +
-                Math.round(field.weight * 100) +
+                Math.round(field.weight * HUNDREDTHS) +
                 "." +
                 field.group
 
         private val MARKS = Regex("[nct]+")
 
+        /** The weight in a field's name is in hundredths. */
+        private const val HUNDREDTHS = 100
+
+        /** The parts of a field's name: its marks, its weight, its key. */
+        private const val NAME_PARTS = 3
+
         private fun textField(name: String): IndexedField? {
-            val parts = name.split('.', limit = 3)
-            if (parts.size < 3 || !MARKS.matches(parts[0])) return null
-            val weight = parts[1].toIntOrNull() ?: return null
-            return IndexedField(name, parts[2], weight / 100f, 'n' in parts[0], 'c' in parts[0])
+            val parts = name.split('.', limit = NAME_PARTS)
+            val weight = parts.takeIf { it.size == NAME_PARTS && MARKS.matches(it[0]) }?.get(1)?.toIntOrNull()
+            return weight?.let {
+                IndexedField(name, parts[2], it / HUNDREDTHS.toFloat(), 'n' in parts[0], 'c' in parts[0])
+            }
         }
 
         private fun idTerm(key: ItemKey) = Term(ID, key.toString())
@@ -384,7 +397,10 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             var n = 0.0
             for (x in v) n += x.toDouble() * x
             n = kotlin.math.sqrt(n)
-            return if (n > 1e-9) FloatArray(v.size) { (v[it] / n).toFloat() } else v
+            return if (n > LEAST_NORM) FloatArray(v.size) { (v[it] / n).toFloat() } else v
         }
+
+        /** The least length a vector is made of unit length from: a shorter one has no direction to keep. */
+        private const val LEAST_NORM = 1e-9
     }
 }

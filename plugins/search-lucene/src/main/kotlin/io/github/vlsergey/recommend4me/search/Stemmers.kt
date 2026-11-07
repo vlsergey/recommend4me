@@ -244,7 +244,9 @@ object Stemmers {
                 analyzer: Analyzer,
                 fieldName: String,
                 components: Analyzer.TokenStreamComponents,
-            ) {}
+            ) {
+                // Nothing kept: every call makes a stream of its own
+            }
         }
 
     /** The payload of a word written with a capital: one byte, 1. */

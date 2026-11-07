@@ -24,9 +24,9 @@ private val log = LoggerFactory.getLogger(TagVectors::class.java)
 /**
  * THE VECTORS OF THE TAGS, MADE IN THE BACKGROUND: of every normalized tag that has none by the text encoder in use —
  * found by a join, not by reading every tag — one of every name of it, its sites' tags' and its entries', kept in the
- * dictionaries ([TagRepository.vectors]): a tag is alike by the best of its names, so a synonym added finds more and
- * blurs nothing. A tag whose names change loses its vectors there ([TagRepository.forgetVectors]) and is made again
- * here.
+ * dictionaries ([TagVectorRepository.vectors]): a tag is alike by the best of its names, so a synonym added finds more
+ * and blurs nothing. A tag whose names change loses its vectors there ([TagVectorRepository.forgetVectors]) and is made
+ * again here.
  *
  * Made after any change of the tags — the user's word on them, the sites' tags bound as works come — once the changes
  * have paused, and five minutes after the start. The screen of the tags reads the vectors kept; a tag without one yet
@@ -46,72 +46,49 @@ class TagVectors(
 
     @EventListener(ApplicationReadyEvent::class) fun start() = schedule(START_DELAY_SECONDS, "start")
 
-    @EventListener fun tagsChanged(event: TagsChanged) = schedule(QUIET_SECONDS, "tags")
+    @EventListener(TagsChanged::class) fun tagsChanged() = schedule(QUIET_SECONDS, "tags")
 
     /** Works came or changed: their sites' tags bound to tags ([TagNormalization]), maybe new ones. */
-    @EventListener fun itemsChanged(event: ItemsChanged) = schedule(QUIET_SECONDS, "items")
+    @EventListener(ItemsChanged::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")
 
     /**
      * A site named the synonyms of its tags: bound to their tags at once ([TagNormalization]), each a name more of its
      * tag.
      */
-    @EventListener fun synonymsSet(event: SynonymsSet) = schedule(QUIET_SECONDS, "synonyms")
+    @EventListener(SynonymsSet::class) fun synonymsSet() = schedule(QUIET_SECONDS, "synonyms")
 
     /** The vectors made after the quiet; the [reason], a key the interface words, told in the queue of the works. */
     private fun schedule(delaySeconds: Long, reason: String) {
         workload.plan(VECTORS, Instant.now().plusSeconds(delaySeconds), reason)
-        val next =
-            scheduler.schedule(
-                {
-                    try {
-                        workload.run(VECTORS) { fill() }
-                    } catch (e: Exception) {
-                        log.warn("The vectors of the tags were not made: {}", e.message, e)
-                    }
-                },
-                delaySeconds,
-                TimeUnit.SECONDS,
-            )
+        val next = scheduler.schedule({ fillInBackground() }, delaySeconds, TimeUnit.SECONDS)
         pending.getAndSet(next)?.cancel(false)
     }
 
+    /** The vectors made in the queue of the works: a task of the background, which logs what fails. */
+    // The background's loop: whatever fails is told in the log, and the next change plans it again
+    @Suppress("TooGenericExceptionCaught")
+    private fun fillInBackground() {
+        try {
+            workload.run(VECTORS) { fill() }
+        } catch (e: Exception) {
+            log.warn("The vectors of the tags were not made: {}", e.message, e)
+        }
+    }
+
     /** Makes the vector of every tag that has none by the encoder in use; how many were made. */
-    fun fill(): Int {
-        val encoder = plugins.textEncoder() ?: return 0
-        val scope = normalization.scope() ?: return 0
+    fun fill(): Int =
+        plugins.textEncoder()?.let { encoder -> normalization.scope()?.let { scope -> fill(scope, encoder) } } ?: 0
+
+    private fun fill(scope: TagScope, encoder: TextEncoder): Int {
         val plugin = plugins.pluginOf(encoder)
-        val missing = scope.tags.withoutVectors(plugin, encoder.id).toSet()
+        val missing = scope.tags.vectors.withoutVectors(plugin, encoder.id).toSet()
         if (missing.isEmpty()) return 0
         val started = System.currentTimeMillis()
-        // The names of the sites' tags of every tag without a vector, one read of each source; their
-        // vectors those the sources keep of short texts, the ones not kept encoded now
-        val sites = scope.tags.bindings().filterValues { it in missing }
-        val ofTag = HashMap<Long, MutableList<FloatArray>>()
-        scope.sources.forEach { s ->
-            val siteFacet = normalization.siteFacetOf(s, scope.facet) ?: return@forEach
-            val own = sites.filterKeys { it.source == s.id }
-            if (own.isEmpty()) return@forEach
-            val names = s.names(siteFacet)
-            val written = own.keys.associateWith { (names[it.tag] ?: it.tag).trim() }.filterValues { it.isNotEmpty() }
-            val vectors = phrases.of(s, written.values.distinct())
-            written.forEach { (site, name) ->
-                vectors[name]?.let { ofTag.getOrPut(own.getValue(site)) { ArrayList() } += it }
-            }
-        }
-        // The names of the entries they are bound to, every language's: no site's, encoded here
-        val bound = scope.tags.entriesOfTags().filterKeys { it in missing }
-        val kept = scope.tags.keptEntries(bound.values.flatten().toSet())
-        val entryNames = bound.mapValues { (_, refs) ->
-            refs.flatMap { kept[it]?.let { e -> e.labels.values + e.aliases.values.flatten() }.orEmpty() }.distinct()
-        }
-        val encoded = encode(encoder, entryNames.values.flatten().distinct())
-        entryNames.forEach { (tag, names) ->
-            names.forEach { name -> encoded[name]?.let { ofTag.getOrPut(tag) { ArrayList() } += it } }
-        }
+        val ofTag = TagNameVectors(scope, encoder, normalization, phrases).of(missing)
         // Every tag without a vector is kept with one — of no name, an empty one — not asked again till its names
         // change
         missing.chunked(KEEP).forEach { chunk ->
-            scope.tags.keepVectors(
+            scope.tags.vectors.keepVectors(
                 plugin,
                 encoder.id,
                 chunk.associateWith { tag -> ofTag[tag].orEmpty().mapNotNull(::unit) },
@@ -127,14 +104,6 @@ class TagVectors(
         return missing.size
     }
 
-    private fun encode(encoder: TextEncoder, texts: List<String>): Map<String, FloatArray> {
-        val out = HashMap<String, FloatArray>()
-        texts.chunked(KEEP).forEach { chunk ->
-            chunk.zip(encoder.encode(chunk)).forEach { (text, v) -> v?.let { out[text] = it } }
-        }
-        return out
-    }
-
     @PreDestroy
     fun shutdown() {
         scheduler.shutdownNow()
@@ -147,7 +116,7 @@ class TagVectors(
         /** The quiet after a change: a page is sent several times as it grows, the user answers in a row. */
         private const val QUIET_SECONDS = 10L
 
-        /** Tags written, and names encoded, at once. */
+        /** Tags written at once. */
         private const val KEEP = 500
 
         /** The making of the vectors, as the queue of the works tells it. */

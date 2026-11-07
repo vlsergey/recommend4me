@@ -130,10 +130,13 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         var n = 0.0
         for (x in v) n += x.toDouble() * x
         n = sqrt(n)
-        return if (n > 1e-9) FloatArray(v.size) { (v[it] / n).toFloat() } else v
+        return if (n > LEAST_NORM) FloatArray(v.size) { (v[it] / n).toFloat() } else v
     }
 
     companion object {
+        /** The least length a vector is made of unit length from: a shorter one has no direction to keep. */
+        private const val LEAST_NORM = 1e-9
+
         /** Stored with every vector: vectors of another encoder are of another space and are made again. */
         const val ENCODER = "bge-m3"
         const val MODEL = "bge-m3-fp16.onnx"

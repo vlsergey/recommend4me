@@ -51,7 +51,7 @@ class SetVectorRepository(private val db: DSLContext) {
      */
     fun ofMany(ids: Collection<String>, current: Map<SetKind, Long>): Map<String, Map<String, FloatArray>> {
         val out = HashMap<String, MutableMap<String, FloatArray>>()
-        ids.distinct().chunked(500).forEach { chunk ->
+        ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(SET_VECTOR.ITEM_ID, SET_VECTOR.KIND, SET_VECTOR.EMBEDDING_ID, SET_VECTOR.VEC)
                 .from(SET_VECTOR)
                 .where(SET_VECTOR.ITEM_ID.`in`(chunk))
@@ -67,8 +67,19 @@ class SetVectorRepository(private val db: DSLContext) {
     /** Every stored vector by the directions in use, streamed: (item, block key, vector). */
     fun forEach(current: Map<SetKind, Long>, action: (itemId: String, key: String, vector: FloatArray) -> Unit) =
         db.streamed("SELECT item_id, kind, embedding_id, vec FROM set_vector", emptyList()) { r ->
-            val kind = SetKind.valueOf(r.getString(2))
-            if (current[kind] == (r.getObject(3) as Number?)?.toLong())
-                action(r.getString(1), kind.key, Vectors.unpack(r.getBytes(4)))
+            val kind = SetKind.valueOf(r.getString(KIND_COLUMN))
+            if (current[kind] == (r.getObject(EMBEDDING_COLUMN) as Number?)?.toLong())
+                action(r.getString(ITEM_COLUMN), kind.key, Vectors.unpack(r.getBytes(VECTOR_COLUMN)))
         }
+
+    private companion object {
+        /** The items read by one statement: the length of a query's list, not a meaning. */
+        const val BATCH = 500
+
+        /** The columns of the streamed query, by their place in it. */
+        const val ITEM_COLUMN = 1
+        const val KIND_COLUMN = 2
+        const val EMBEDDING_COLUMN = 3
+        const val VECTOR_COLUMN = 4
+    }
 }

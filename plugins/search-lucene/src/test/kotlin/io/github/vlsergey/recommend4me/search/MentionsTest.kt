@@ -46,7 +46,8 @@ class MentionsTest {
             doc(
                 "1",
                 "ru",
-                "Гарри Поттера не было дома. Поттер вернулся к вечеру, и Гарри сел у огня. Рон Уизли пришёл позже. Уизли шумели.",
+                "Гарри Поттера не было дома. Поттер вернулся к вечеру, и Гарри сел у огня. " +
+                    "Рон Уизли пришёл позже. Уизли шумели.",
                 "Джинни молчала. гарри — не имя здесь.",
             ),
             // English stemmed as English, the capital told apart; the site's tags count, the values given do not
@@ -148,7 +149,7 @@ class MentionsTest {
     }
 
     @Test
-    fun `an asking of names but some values counts as one of those names alone, the names read once for every asking of them`() {
+    fun `an asking of names but some values counts as those names alone, the names read once for every asking`() {
         val docs =
             listOf(
                 doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),

@@ -56,25 +56,38 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
 
     override fun prepare(image: BufferedImage): Prepared {
         val (h, w) = sizeFor(image.height, image.width)
-        val rgb = ByteArray(image.width * image.height * 3)
+        val rgb = ByteArray(image.width * image.height * CHANNELS)
         val argb = image.getRGB(0, 0, image.width, image.height, null, 0, image.width)
         for (i in argb.indices) {
-            rgb[i * 3] = (argb[i] shr 16).toByte()
-            rgb[i * 3 + 1] = (argb[i] shr 8).toByte()
-            rgb[i * 3 + 2] = argb[i].toByte()
+            rgb[i * CHANNELS] = (argb[i] shr RED_SHIFT).toByte()
+            rgb[i * CHANNELS + 1] = (argb[i] shr GREEN_SHIFT).toByte()
+            rgb[i * CHANNELS + 2] = argb[i].toByte()
         }
-        val resized = Resample.u8(rgb, image.width, image.height, 3, w, h)
+        val resized = Resample.u8(rgb, image.width, image.height, CHANNELS, w, h)
         val rows = h / PATCH
         val cols = w / PATCH
         val patches = FloatArray(rows * cols * PATCH_VALUES)
-        var at = 0
-        for (pr in 0 until rows) for (pc in 0 until cols) {
-            for (y in 0 until PATCH) for (x in 0 until PATCH) {
-                val pixel = ((pr * PATCH + y) * w + pc * PATCH + x) * 3
-                for (c in 0 until 3) patches[at++] = (resized[pixel + c].toInt() and 0xff) / 127.5f - 1f
-            }
-        }
+        for (pr in 0 until rows) for (pc in 0 until cols) patch(
+            resized,
+            w,
+            pr,
+            pc,
+            patches,
+            (pr * cols + pc) * PATCH_VALUES,
+        )
         return Prepared(rows, cols, patches)
+    }
+
+    /**
+     * The patch of row [pr] and column [pc] of the picture [resized] of width [w], its values put in [patches] from
+     * [at] on, pixel by pixel, a channel each, of 0..255 made −1..1.
+     */
+    private fun patch(resized: ByteArray, w: Int, pr: Int, pc: Int, patches: FloatArray, at: Int) {
+        var to = at
+        for (y in 0 until PATCH) for (x in 0 until PATCH) {
+            val pixel = ((pr * PATCH + y) * w + pc * PATCH + x) * CHANNELS
+            for (c in 0 until CHANNELS) patches[to++] = (resized[pixel + c].toInt() and UNSIGNED_BYTE) / HALF_BYTE - 1f
+        }
     }
 
     /** Unit vectors of prepared pictures, [BATCH] at a time on half the cores, [GPU_BATCH] on the card. */
@@ -140,7 +153,7 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
         var n = 0.0
         for (x in v) n += x.toDouble() * x
         n = sqrt(n)
-        return if (n > 1e-9) FloatArray(v.size) { (v[it] / n).toFloat() } else v
+        return if (n > LEAST_NORM) FloatArray(v.size) { (v[it] / n).toFloat() } else v
     }
 
     companion object {
@@ -152,7 +165,23 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
         const val PATCH = 16
         const val MAX_PATCHES = 256
         private const val GRID = 16
-        private const val PATCH_VALUES = PATCH * PATCH * 3
+
+        /** The channels of a pixel: red, green, blue. */
+        private const val CHANNELS = 3
+
+        /** Where the red and the green of a pixel stand in its ARGB bits. */
+        private const val RED_SHIFT = 16
+        private const val GREEN_SHIFT = 8
+
+        /** A byte's bits read as a number of 0..255, not of its sign. */
+        private const val UNSIGNED_BYTE = 0xff
+
+        /** Half the range of a channel: 0..255 divided by it and less one is −1..1, as the model was trained. */
+        private const val HALF_BYTE = 127.5f
+
+        /** The least length a vector is made of unit length from: a shorter one has no direction to keep. */
+        private const val LEAST_NORM = 1e-9
+        private const val PATCH_VALUES = PATCH * PATCH * CHANNELS
         private const val BATCH = 8
 
         /** A card is fed many pictures at once: one run costs it little more than one picture. */

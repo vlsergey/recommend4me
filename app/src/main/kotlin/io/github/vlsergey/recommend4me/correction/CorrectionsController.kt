@@ -16,6 +16,7 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
+import io.github.vlsergey.recommend4me.tag.TagEntries
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.work.WorkEvents
 import java.time.Instant
@@ -48,6 +49,7 @@ class CorrectionsController(
     private val events: ApplicationEventPublisher,
     private val workEvents: WorkEvents,
     private val tags: Tags,
+    private val tagEntries: TagEntries,
     private val answering: Answering,
 ) : CorrectionsApi {
 
@@ -92,7 +94,7 @@ class CorrectionsController(
                                 "No tags to make one of ${e.catalogue}:${e.entry}",
                             )
                     try {
-                        tags.tagOfEntry(scope, c.facet, e.catalogue, e.entry)
+                        tagEntries.tagOfEntry(scope, c.facet, e.catalogue, e.entry)
                     } catch (x: NoSuchElementException) {
                         throw Refusal.NO_VALUE.refuse(
                             HttpStatus.BAD_REQUEST,

@@ -1,0 +1,74 @@
+package io.github.vlsergey.recommend4me.textvector
+
+import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_VECTOR
+import io.github.vlsergey.recommend4me.database.source.tables.references.TEXT_WINDOW
+import io.github.vlsergey.recommend4me.vector.Vectors
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
+import org.jooq.DSLContext
+
+/**
+ * The windows of the long texts of one source's items: how many a text whose vector is kept has, and of one of more
+ * than one the vector of every window — what the search finds a piece of a long text by. Written under the lock of the
+ * texts' vectors ([writing]): a text's vector and its windows are written by one at a time.
+ */
+class TextWindowRepository(private val db: DSLContext, private val writing: ReentrantLock) {
+
+    /**
+     * How many windows the text whose vector is stored has ([count]), and the vectors of them in order when more than
+     * one — a text of one window is its vector alone.
+     */
+    fun saveWindows(itemId: String, textKey: String, count: Int, windows: List<FloatArray>) = writing.withLock {
+        db.transaction { c ->
+            val tx = c.dsl()
+            tx.deleteFrom(TEXT_WINDOW).where(TEXT_WINDOW.ITEM_ID.eq(itemId), TEXT_WINDOW.TEXT_KEY.eq(textKey)).execute()
+            if (count > 1)
+                windows.forEachIndexed { i, v ->
+                    tx.insertInto(TEXT_WINDOW)
+                        .set(TEXT_WINDOW.ITEM_ID, itemId)
+                        .set(TEXT_WINDOW.TEXT_KEY, textKey)
+                        .set(TEXT_WINDOW.WINDOW_NO, i)
+                        .set(TEXT_WINDOW.VEC, Vectors.half(v))
+                        .execute()
+                }
+            tx.update(TEXT_VECTOR)
+                .set(TEXT_VECTOR.WINDOWS, count)
+                .where(TEXT_VECTOR.ITEM_ID.eq(itemId), TEXT_VECTOR.TEXT_KEY.eq(textKey))
+                .execute()
+        }
+    }
+
+    /**
+     * The texts of keys [keys] whose vector by [encoder] is stored and whose windows are not counted yet, at most
+     * [limit]: (item, text key).
+     */
+    fun withoutWindows(encoder: String, keys: Collection<String>, limit: Int): List<Pair<String, String>> =
+        if (keys.isEmpty()) emptyList()
+        else
+            db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY)
+                .from(TEXT_VECTOR)
+                .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.WINDOWS.isNull, TEXT_VECTOR.TEXT_KEY.`in`(keys))
+                .limit(limit)
+                .fetch { it.value1()!! to it.value2()!! }
+
+    /**
+     * The windows of the texts of the items [ids] that have more than one, by [encoder]: item to text key to windows in
+     * order.
+     */
+    fun windowsOf(ids: Collection<String>, encoder: String): Map<String, Map<String, List<FloatArray>>> {
+        val out = HashMap<String, MutableMap<String, MutableList<FloatArray>>>()
+        ids.distinct().chunked(TextVectorRepository.BATCH).forEach { chunk ->
+            db.select(TEXT_WINDOW.ITEM_ID, TEXT_WINDOW.TEXT_KEY, TEXT_WINDOW.VEC)
+                .from(TEXT_WINDOW)
+                .join(TEXT_VECTOR)
+                .on(TEXT_VECTOR.ITEM_ID.eq(TEXT_WINDOW.ITEM_ID), TEXT_VECTOR.TEXT_KEY.eq(TEXT_WINDOW.TEXT_KEY))
+                .where(TEXT_WINDOW.ITEM_ID.`in`(chunk), TEXT_VECTOR.ENCODER.eq(encoder))
+                .orderBy(TEXT_WINDOW.ITEM_ID, TEXT_WINDOW.TEXT_KEY, TEXT_WINDOW.WINDOW_NO)
+                .fetch {
+                    out.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } +=
+                        Vectors.fromHalf(it.value3()!!)
+                }
+        }
+        return out
+    }
+}

@@ -197,7 +197,7 @@ internal class FacetVocabularies(private val stores: Stores) {
             }
         }
         // A tag is read by its name as the user and the sites name it ([TagRepository])
-        store.tags.shown(values.keys).forEach { (key, name) -> values[key] = name }
+        store.tags.stats.shown(values.keys).forEach { (key, name) -> values[key] = name }
         val bound = store.tags.bindingsOf(store.id)
         val own = HashMap<String, List<String>>()
         store.items.forEachFacet(from.key) { id, keys ->

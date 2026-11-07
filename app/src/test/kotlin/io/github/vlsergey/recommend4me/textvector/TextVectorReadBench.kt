@@ -2,6 +2,8 @@ package io.github.vlsergey.recommend4me.textvector
 
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.PreparedStatement
+import java.sql.ResultSet
 import java.util.concurrent.Executors
 import kotlin.test.Test
 import org.jooq.SQLDialect
@@ -76,6 +78,14 @@ class TextVectorReadBench {
     fun `the vectors of the texts read every way`() {
         assumeTrue(file != null, "no file to read: RECOMMEND4ME_H2_BENCH")
         val encoder = "bge-m3"
+        oneQuery(encoder)
+        aKeyAThread(encoder)
+        notCompressed(encoder)
+        readAgain(encoder)
+    }
+
+    /** The texts read by one query, by jOOQ as the application reads them and by JDBC of every setting. */
+    private fun oneQuery(encoder: String) {
         timed(
             "jOOQ fetchLazy, as the application",
             read = { (c) ->
@@ -106,6 +116,10 @@ class TextVectorReadBench {
                 plain(c, "SELECT item_id, text_key, vec FROM text_vector", null)
             },
         )
+    }
+
+    /** The texts read a text key a query, every query on a thread and a connection of its own. */
+    private fun aKeyAThread(encoder: String) {
         val pool = Executors.newFixedThreadPool(keys.size)
         try {
             timed(
@@ -119,7 +133,8 @@ class TextVectorReadBench {
                                 pool.submit<Pair<Int, Long>> {
                                     plain(
                                         cs[k],
-                                        "SELECT item_id, text_key, vec FROM text_vector WHERE encoder = ? AND text_key = '$key'",
+                                        "SELECT item_id, text_key, vec FROM text_vector " +
+                                            "WHERE encoder = ? AND text_key = '$key'",
                                         encoder,
                                     )
                                 }
@@ -131,33 +146,21 @@ class TextVectorReadBench {
         } finally {
             pool.shutdown()
         }
-        // The same rows in a file of their own, not compressed: what the unpacking of the pages costs
+    }
+
+    /** The same rows in a file of their own, not compressed: what the unpacking of the pages costs. */
+    private fun notCompressed(encoder: String) {
         val plainFile = file + "-plain"
         java.io.File("$plainFile.mv.db").delete()
         DriverManager.getConnection("jdbc:h2:file:${plainFile.replace('\\', '/')};COMPRESS=FALSE", "sa", "").use { to ->
             to.createStatement().use {
                 it.execute(
-                    "CREATE TABLE text_vector (item_id VARCHAR(200) NOT NULL, text_key VARCHAR(100) NOT NULL, encoder VARCHAR(100) NOT NULL, vec BINARY VARYING NOT NULL, PRIMARY KEY (item_id, text_key))"
+                    "CREATE TABLE text_vector (item_id VARCHAR(200) NOT NULL, text_key VARCHAR(100) NOT NULL, " +
+                        "encoder VARCHAR(100) NOT NULL, vec BINARY VARYING NOT NULL, PRIMARY KEY (item_id, text_key))"
                 )
             }
             to.autoCommit = false
-            open(";LAZY_QUERY_EXECUTION=TRUE").use { from ->
-                from.prepareStatement("SELECT item_id, text_key, encoder, vec FROM text_vector").use { s ->
-                    s.fetchSize = 2000
-                    to.prepareStatement("INSERT INTO text_vector VALUES (?, ?, ?, ?)").use { insert ->
-                        s.executeQuery().use { r ->
-                            var k = 0
-                            while (r.next()) {
-                                for (c in 1..3) insert.setString(c, r.getString(c))
-                                insert.setBytes(4, r.getBytes(4))
-                                insert.addBatch()
-                                if (++k % 1000 == 0) insert.executeBatch()
-                            }
-                            insert.executeBatch()
-                        }
-                    }
-                }
-            }
+            open(";LAZY_QUERY_EXECUTION=TRUE").use { from -> copied(from, to) }
             to.commit()
             to.createStatement().use { it.execute("SHUTDOWN COMPACT") }
         }
@@ -178,8 +181,32 @@ class TextVectorReadBench {
                 }
             }
         println("JDBC, lazy, a file not compressed: ${millis.joinToString(" / ")} ms")
+    }
 
-        // The pages kept by H2 after a first reading: the second and third of one connection, of other text
+    /** Every row of the texts' vectors of [from] written into [to], a batch at a time. */
+    private fun copied(from: Connection, to: Connection) {
+        from.prepareStatement("SELECT item_id, text_key, encoder, vec FROM text_vector").use { s ->
+            s.fetchSize = 2000
+            to.prepareStatement("INSERT INTO text_vector VALUES (?, ?, ?, ?)").use { insert ->
+                s.executeQuery().use { r -> inserted(r, insert) }
+            }
+        }
+    }
+
+    /** Every row of [r] given to [insert], a thousand a batch. */
+    private fun inserted(r: ResultSet, insert: PreparedStatement) {
+        var k = 0
+        while (r.next()) {
+            for (c in 1..3) insert.setString(c, r.getString(c))
+            insert.setBytes(4, r.getBytes(4))
+            insert.addBatch()
+            if (++k % 1000 == 0) insert.executeBatch()
+        }
+        insert.executeBatch()
+    }
+
+    /** The pages kept by H2 after a first reading: the second and third of one connection, of other text. */
+    private fun readAgain(encoder: String) {
         open(";LAZY_QUERY_EXECUTION=TRUE;CACHE_SIZE=1048576").use { c ->
             val millis =
                 (1..3).map { k ->

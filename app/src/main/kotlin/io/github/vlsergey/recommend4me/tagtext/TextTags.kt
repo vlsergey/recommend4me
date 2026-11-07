@@ -84,12 +84,12 @@ class TextTags(
         val facet = store.tagFacets.firstOrNull() ?: return null
         val encoder = plugins.textEncoder() ?: return TextTagList(pending = false, fitted = false, tags = emptyList())
         val model = models.read()
-        val paragraphs = store.parts.paragraphVectors(itemId, Paragraphs.keyOf(encoder.id))
-        val waiting = store.parts.paragraphsPending(itemId, Paragraphs.keyOf(encoder.id))
+        val paragraphs = store.parts.paragraphs.paragraphVectors(itemId, Paragraphs.keyOf(encoder.id))
+        val waiting = store.parts.paragraphs.paragraphsPending(itemId, Paragraphs.keyOf(encoder.id))
         if (paragraphs.isEmpty()) return TextTagList(waiting, model != null, emptyList())
         val started = System.currentTimeMillis()
         val left = leftOut(store, facet, itemId)
-        val vectors = store.tags.vectors(plugins.pluginOf(encoder), encoder.id).filterKeys { it !in left }
+        val vectors = store.tags.vectors.vectors(plugins.pluginOf(encoder), encoder.id).filterKeys { it !in left }
         if (vectors.isEmpty()) return TextTagList(waiting, model != null, emptyList())
         // A paragraph answered on for a tag, of any cutting, by the hash of its text
         val answered = store.tagTextAnswers.ofItem(itemId).mapNotNull { a -> a.hash?.let { a.tag to it } }.toSet()
@@ -249,10 +249,12 @@ class TextTags(
         val facet = store.tagFacets.firstOrNull() ?: return false
         val tag = key.toLongOrNull() ?: return false
         val encoder = plugins.textEncoder() ?: return false
-        val found = store.parts.paragraph(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id)) ?: return false
+        val found =
+            store.parts.paragraphs.paragraph(itemId, partId, paragraph, Paragraphs.keyOf(encoder.id)) ?: return false
         val vector = found.vector
         val names =
-            store.tags.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id).takeIf { it.isNotEmpty() } ?: return false
+            store.tags.vectors.vectorsOf(tag, plugins.pluginOf(encoder), encoder.id).takeIf { it.isNotEmpty() }
+                ?: return false
         val closeness = names.maxOf { name -> name.indices.sumOf { (name[it] * vector[it]).toDouble() } }
         val now = Instant.now()
         store.tagTextAnswers.answer(

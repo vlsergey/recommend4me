@@ -24,6 +24,7 @@ tags:
   - name: suggestions
   - name: universes
   - name: tags
+  - name: tagCatalogues
   - name: tagsByText
   - name: pairings
   - name: marking
@@ -1939,7 +1940,7 @@ paths:
 
   /api/tags/entries:
     get:
-      tags: [tags]
+      tags: [tagCatalogues]
       operationId: findTagEntries
       summary: The entries of the catalogues of tags (Wikidata) a text may stand for - an id or a page's address, the entry itself
       parameters:
@@ -1962,7 +1963,7 @@ paths:
 
   /api/tags/entry:
     put:
-      tags: [tags]
+      tags: [tagCatalogues]
       operationId: bindTagEntry
       summary: Binds the tag to an entry of a catalogue besides the ones it is, or no more to it; the label of the one bound first names the tag unless the user named it
       requestBody:
@@ -1983,7 +1984,7 @@ paths:
 
   /api/tags/hierarchy-offers:
     get:
-      tags: [tags]
+      tags: [tagCatalogues]
       operationId: listHierarchyOffers
       summary: >
         The offers of the tags' graph by the catalogues - a tag under another, two tags of one entry merged, a new tag
@@ -2001,7 +2002,7 @@ paths:
 
   /api/tags/too-general:
     put:
-      tags: [tags]
+      tags: [tagCatalogues]
       operationId: judgeTagEntryTooGeneral
       summary: >
         The user's word that an entry of a catalogue is too general to be a tag above others - a tag of it is offered
@@ -2020,7 +2021,7 @@ paths:
 
   /api/tags/above:
     post:
-      tags: [tags]
+      tags: [tagCatalogues]
       operationId: createTagAbove
       summary: A new tag bound to an entry of a catalogue - named by its label - or a tag there already, put above the tags given
       requestBody:
@@ -2041,7 +2042,7 @@ paths:
 
   /api/tags/entries/refresh:
     post:
-      tags: [tags]
+      tags: [tagCatalogues]
       operationId: refreshTagEntries
       summary: Reads the entries the tag is bound to of their catalogues again - names, descriptions, what they are a kind of
       parameters:

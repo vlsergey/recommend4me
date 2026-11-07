@@ -319,7 +319,7 @@ class Authors(
             val names = s.names(facet, ofKey.keys)
             ofKey.forEach { (key, id) -> if ((names[key] ?: key).lowercase().contains(needle)) out += id }
         }
-        val kept = type.tags.keptEntries(bound.values.flatten().toSet())
+        val kept = type.tags.entries.keptEntries(bound.values.flatten().toSet())
         bound.forEach { (id, refs) ->
             if (
                 refs.any { ref ->
@@ -399,7 +399,7 @@ class Authors(
 
     /** The entries [bound] as kept, by the author. */
     private fun entryInfos(type: TypeStore, bound: Map<Long, List<TagEntryRef>>): Map<Long, List<TagEntryInfo>> {
-        val kept = type.tags.keptEntries(bound.values.flatten().toSet())
+        val kept = type.tags.entries.keptEntries(bound.values.flatten().toSet())
         return bound.mapValues { (_, refs) ->
             refs.mapNotNull { ref ->
                 kept[ref]?.let { e ->
@@ -522,7 +522,7 @@ class Authors(
         }
         val source = plugins.tagCatalogues.firstOrNull { it.id == catalogue } ?: return false
         val read = source.entries(listOf(entry), languages).firstOrNull() ?: return false
-        type.tags.keepEntry(catalogue, read, now)
+        type.tags.entries.keepEntry(catalogue, read, now)
         type.authors.bindEntry(id, TagEntryRef(catalogue, read.id), true, now)
         log.info("author {} bound to {}:{} ({})", id, catalogue, read.id, read.labels.first())
         return true

@@ -41,30 +41,32 @@ class PartVectors(
 
     fun running(): Boolean = busy
 
-    @EventListener fun partsSaved(event: PartsSaved) = synchronized(wake) { wake.notifyAll() }
+    @EventListener(PartsSaved::class) fun partsSaved() = synchronized(wake) { wake.notifyAll() }
 
-    @Order(5)
+    @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         worker.execute {
             while (!stopping) {
-                if (pending() > 0) {
-                    try {
-                        // Every part waiting encoded in one work of the queue of the computations, not a batch apart
-                        workload.run(Work("partVectors"), mapOf("parts" to 1)) {
-                            while (!stopping && encodeSome() > 0) continue
-                        }
-                    } catch (e: Exception) {
-                        log.error("parts were not encoded", e)
-                    }
-                }
+                if (pending() > 0) encodeWaiting()
                 busy = false
                 try {
-                    synchronized(wake) { wake.wait(TimeUnit.MINUTES.toMillis(10)) }
+                    synchronized(wake) { wake.wait(TimeUnit.MINUTES.toMillis(WAKE_MINUTES)) }
                 } catch (_: InterruptedException) {
                     return@execute
                 }
             }
+        }
+    }
+
+    /** Every part waiting encoded in one work of the queue of the computations, not a batch apart. */
+    // The worker's loop: whatever fails is told in the log, and the parts are looked for again on the next wake
+    @Suppress("TooGenericExceptionCaught")
+    private fun encodeWaiting() {
+        try {
+            workload.run(Work("partVectors"), mapOf("parts" to 1)) { while (!stopping && encodeSome() > 0) continue }
+        } catch (e: Exception) {
+            log.error("parts were not encoded", e)
         }
     }
 
@@ -73,25 +75,25 @@ class PartVectors(
         val encoder = plugins.textEncoder() ?: return 0
         var done = 0
         stores.sources.forEach { s ->
-            val todo = s.parts.toEncode(encoder.id, BATCH)
+            val todo = s.parts.windows.toEncode(encoder.id, BATCH)
             if (todo.isEmpty()) return@forEach
             busy = true
             val windows = encoder.encodeWindows(todo.map { it.content })
             todo.forEachIndexed { i, part ->
-                s.parts.saveVectors(part.itemId, part.partId, encoder.id, part.hash, windows[i])
+                s.parts.windows.saveVectors(part.itemId, part.partId, encoder.id, part.hash, windows[i])
             }
             // The works searched by the meaning of their chapters' windows: indexed again with them
             events.publishEvent(TextVectorsChanged(s.id, todo.map { it.itemId }.distinct()))
             done += todo.size
         }
         stores.sources.forEach { s ->
-            val todo = s.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), BATCH)
+            val todo = s.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), BATCH)
             if (todo.isEmpty()) return@forEach
             busy = true
             todo.forEach { part ->
                 val texts = Paragraphs.of(part.content)
                 val vectors = texts.chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
-                s.parts.saveParagraphVectors(
+                s.parts.paragraphs.saveParagraphVectors(
                     part.itemId,
                     part.partId,
                     Paragraphs.keyOf(encoder.id),
@@ -108,7 +110,8 @@ class PartVectors(
     fun pending(): Int =
         plugins.textEncoder()?.let { e ->
             stores.sources.sumOf {
-                it.parts.countToEncode(e.id) + it.parts.countParagraphsToEncode(Paragraphs.keyOf(e.id))
+                it.parts.windows.countToEncode(e.id) +
+                    it.parts.paragraphs.countParagraphsToEncode(Paragraphs.keyOf(e.id))
             }
         } ?: 0
 
@@ -126,5 +129,11 @@ class PartVectors(
 
         /** Paragraphs per encoder call: a chapter is hundreds of them. */
         private const val PARAGRAPHS = 256
+
+        /** Its step of the start: after the texts' vectors begin (3), before the sets' vectors (6). */
+        private const val START_ORDER = 5
+
+        /** The longest sleep of the worker between two looks for parts to encode: a part saved wakes it at once. */
+        private const val WAKE_MINUTES = 10L
     }
 }

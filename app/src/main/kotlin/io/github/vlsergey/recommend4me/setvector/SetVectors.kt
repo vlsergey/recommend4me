@@ -1,19 +1,15 @@
 package io.github.vlsergey.recommend4me.setvector
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.review.ReviewRepository
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.textvector.PhraseVectors
-import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
 import java.time.Duration
-import java.time.Instant
 import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -29,15 +25,14 @@ private val log = LoggerFactory.getLogger(SetVectors::class.java)
  * vector of every review, read whole) and the windows of its text, kept in its source database and made again, in the
  * background, when a set grows. The graded works first, then from the top of the recommendations down.
  *
- * THE DIRECTIONS ARE FITTED ONCE per content type, on a sample of its catalogue, and kept: fitted again, they would
- * make every stored vector a vector of another space. They are fitted again only when the encoder of the members
- * changes; the vectors carry the id of the directions they are of.
+ * THE DIRECTIONS ARE FITTED ONCE per content type, on a sample of its catalogue, and kept ([SetDirections]); the
+ * members of the sets are read by [SetMembers].
  */
 @Service
 class SetVectors(
     private val stores: Stores,
-    private val plugins: Plugins,
-    private val phrases: PhraseVectors,
+    private val sets: SetMembers,
+    private val directions: SetDirections,
     private val contexts: SourceContexts,
     private val events: ApplicationEventPublisher,
     private val workload: Workload,
@@ -61,21 +56,11 @@ class SetVectors(
     val total: Int
         get() = totalNow
 
-    @Order(6)
+    @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         worker.execute {
-            while (!stopping) {
-                try {
-                    doneNow = 0
-                    totalNow = 0
-                    stores.types.forEach { refresh(it) }
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    return@execute
-                } catch (e: Exception) {
-                    log.error("set vectors were not made", e)
-                }
+            while (!stopping && refreshAll()) {
                 busy = false
                 try {
                     Thread.sleep(PAUSE.toMillis())
@@ -86,43 +71,21 @@ class SetVectors(
         }
     }
 
-    /** The encoder the members of a kind of sets are encoded by. */
-    private fun encoderOf(kind: SetKind): String? =
-        when (kind) {
-            SetKind.SCREENS -> plugins.imageEncoder()?.id
-            SetKind.REVIEWS,
-            SetKind.PARTS -> plugins.textEncoder()?.id
-        }
-
-    /** How many members every item's set of [kind] has now. */
-    private fun sizes(s: SourceStore, kind: SetKind, encoder: String): Map<String, Int> =
-        when (kind) {
-            SetKind.SCREENS -> s.pictures.screenshotCounts(encoder)
-            SetKind.REVIEWS -> s.reviews.counts()
-            SetKind.PARTS -> s.parts.windowCounts(encoder)
-        }
-
-    private fun members(
-        s: SourceStore,
-        kind: SetKind,
-        encoder: String,
-        ids: List<String>,
-    ): Map<String, List<FloatArray>> =
-        when (kind) {
-            SetKind.SCREENS -> s.pictures.screenshots(ids, encoder)
-            SetKind.REVIEWS -> {
-                val texts = s.reviews.textsOf(ids).mapValues { (_, list) -> list.distinct() }
-                val encoded = phrases.of(s, texts.values.flatten().toSet())
-                texts.mapValues { (_, list) -> list.mapNotNull { encoded[it] } }
-            }
-            SetKind.PARTS -> s.parts.windows(ids, encoder)
-        }
-
-    private fun sample(s: SourceStore, kind: SetKind, encoder: String, n: Int): List<FloatArray> =
-        when (kind) {
-            SetKind.SCREENS -> s.pictures.sample(n, encoder)
-            SetKind.REVIEWS -> s.reviews.sample(n).distinct().let { texts -> phrases.of(s, texts).values.toList() }
-            SetKind.PARTS -> s.parts.sample(n, encoder)
+    /** One pass over every type; false when the worker was interrupted, to stop. */
+    // The worker's loop: whatever fails is told in the log, and the next pass tries again
+    @Suppress("TooGenericExceptionCaught")
+    private fun refreshAll(): Boolean =
+        try {
+            doneNow = 0
+            totalNow = 0
+            stores.types.forEach { refresh(it) }
+            true
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        } catch (e: Exception) {
+            log.error("set vectors were not made", e)
+            true
         }
 
     /**
@@ -131,109 +94,115 @@ class SetVectors(
      * computation, not a request.
      */
     fun ofWork(type: TypeStore, items: List<ItemKey>): Map<String, FloatArray> {
-        val out = HashMap<String, FloatArray>()
-        for (kind in SetKind.entries) {
-            val encoder = encoderOf(kind) ?: continue
-            val embedding = type.embeddings.find(kind)?.takeIf { it.encoder == encoder } ?: continue
-            val all =
-                items.groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-                    type.source(source)?.let { s -> members(s, kind, encoder, ids).values.flatten() }.orEmpty()
+        val bySource = items.groupBy({ it.source }, { it.id })
+        return SetKind.entries
+            .mapNotNull { kind ->
+                val encoder = sets.encoderOf(kind)
+                val embedding = encoder?.let { e -> type.embeddings.find(kind)?.takeIf { it.encoder == e } }
+                embedding?.let { used ->
+                    val all = bySource.flatMap { (source, ids) ->
+                        type
+                            .source(source)
+                            ?.let { s -> sets.members(s, kind, used.encoder, ids).values.flatten() }
+                            .orEmpty()
+                    }
+                    used.embedding.of(all)?.let { kind.key to it }
                 }
-            embedding.embedding.of(all)?.let { out[kind.key] = it }
-        }
-        return out
+            }
+            .toMap()
     }
 
     /** Fits the missing directions of a type, then makes the vectors of every item whose set grew. */
     fun refresh(type: TypeStore): Int {
-        var made = 0
-        var unannounced = 0
-        var announcedAt = System.currentTimeMillis()
-        for (kind in SetKind.entries) {
-            val encoder = encoderOf(kind) ?: continue
-            val embedding = embeddingOf(type, kind, encoder) ?: continue
-            for (s in type.sources) {
-                val have = sizes(s, kind, encoder)
-                if (have.isEmpty()) continue
-                val stored = s.setVectors.sources(kind, embedding.id)
-                val todoSet = have.filter { (id, n) -> n > 0 && stored[id] != n }.keys
-                if (todoSet.isEmpty()) continue
-                busy = true
-                val todo = contexts.of(s.id).itemsInOrder().filter { it in todoSet }
-                totalNow += todo.size
-                log.info("{}: making {} vectors of {} items", s.id, kind.key, todo.size)
-                workload.run(Work("setVectors", source = s.id, facet = kind.key), mapOf("setsGrew" to todo.size)) {
-                    for (ids in todo.chunked(CHUNK)) {
-                        if (stopping) break
-                        val sets = members(s, kind, encoder, ids)
-                        ids.forEach { id ->
-                            embedding.embedding.of(sets[id].orEmpty())?.let {
-                                s.setVectors.save(id, kind, embedding.id, have.getValue(id), it)
-                            }
-                        }
-                        made += ids.size
-                        doneNow += ids.size
-                        unannounced += ids.size
-                        // The model learns the new vectors as they come, not once at the end of hours
-                        if (
-                            unannounced >= ANNOUNCE_EVERY ||
-                                System.currentTimeMillis() - announcedAt >= ANNOUNCE_AFTER.toMillis()
-                        ) {
-                            events.publishEvent(SetVectorsChanged(type.id, unannounced))
-                            unannounced = 0
-                            announcedAt = System.currentTimeMillis()
-                        }
-                    }
-                }
-                if (stopping) return made
-            }
-        }
-        if (unannounced > 0) events.publishEvent(SetVectorsChanged(type.id, unannounced))
-        return made
+        val pass = Pass(type.id)
+        val stopped = SetKind.entries.any { kind -> refreshKind(type, kind, pass) }
+        if (!stopped) pass.announceRest()
+        return pass.made
     }
 
     /**
-     * The directions of a kind in use, fitted now when there are none of [encoder] and enough of a catalogue to fit
-     * them on.
+     * The vectors of the sets of [kind] made of every source of [type] whose sets grew, by the directions in use —
+     * fitted first when missing; true when the worker is stopping, the pass to end.
      */
-    /**
-     * The directions of the kind of sets, fitted on what the catalogue has: on every member while it has no more than
-     * [SAMPLE], else on that many drawn at random. Fitted again whenever that number changes — the catalogue grew — and
-     * then every item's set is made again by them. None while the catalogue has fewer than two members: one has no
-     * spread to find a direction in.
-     */
-    private fun embeddingOf(type: TypeStore, kind: SetKind, encoder: String): StoredEmbedding? {
-        val have = type.sources.associateWith { s -> sizes(s, kind, encoder).values.sum() }
-        val total = have.values.sum()
-        val members = minOf(total, SAMPLE)
-        val stored = type.embeddings.find(kind)?.takeIf { it.encoder == encoder }
-        // Directions fitted before the number was kept were fitted on a full sample: still so while the catalogue fills
-        // one
-        val fittedOn = stored?.members ?: if (stored != null && total >= SAMPLE) SAMPLE else null
-        if (stored != null && fittedOn == members) return stored
-        if (members < 2) return stored
-        // Every source gives its share of the sample, all it has while the catalogue is within it
-        val sample =
-            have
-                .filterValues { it > 0 }
-                .flatMap { (s, n) ->
-                    sample(s, kind, encoder, if (total <= SAMPLE) n else (SAMPLE.toLong() * n / total).toInt())
-                }
-        if (sample.size < 2) return stored
-        val embedding =
-            workload.run(Work("setDirections", type = type.id, facet = kind.key), mapOf("catalogueGrew" to 1)) {
-                SetEmbedding.fit(sample, minOf(SetEmbedding.DIRECTIONS, sample.size - 1))
+    private fun refreshKind(type: TypeStore, kind: SetKind, pass: Pass): Boolean {
+        val encoder = sets.encoderOf(kind)
+        val embedding = encoder?.let { directions.inUse(type, kind, it) }
+        return encoder != null &&
+            embedding != null &&
+            type.sources.any { s -> refreshSource(s, kind, encoder, embedding, pass) && stopping }
+    }
+
+    /** The vectors of the sets of [kind] made of every item of [s] whose set grew; whether there was any. */
+    private fun refreshSource(
+        s: SourceStore,
+        kind: SetKind,
+        encoder: String,
+        embedding: StoredEmbedding,
+        pass: Pass,
+    ): Boolean {
+        val have = sets.sizes(s, kind, encoder)
+        val stored = if (have.isEmpty()) emptyMap() else s.setVectors.sources(kind, embedding.id)
+        val todoSet = have.filter { (id, n) -> n > 0 && stored[id] != n }.keys
+        if (todoSet.isEmpty()) return false
+        busy = true
+        val todo = contexts.of(s.id).itemsInOrder().filter { it in todoSet }
+        totalNow += todo.size
+        log.info("{}: making {} vectors of {} items", s.id, kind.key, todo.size)
+        workload.run(Work("setVectors", source = s.id, facet = kind.key), mapOf("setsGrew" to todo.size)) {
+            for (ids in todo.chunked(CHUNK)) {
+                if (stopping) break
+                save(s, kind, embedding, have, ids)
+                pass.count(ids.size)
             }
-        val id = Vectors.keyOf("${type.id}:${kind.name}:$encoder:${System.nanoTime()}")
-        type.embeddings.save(kind, id, encoder, embedding, members, Instant.now())
-        log.info(
-            "{}: {} directions of {} fitted on {} members",
-            type.id,
-            embedding.directions.size,
-            kind.key,
-            sample.size,
-        )
-        return StoredEmbedding(id, encoder, embedding, members)
+        }
+        return true
+    }
+
+    /** The vectors of the sets of [kind] of the items [ids] made and kept, each with the size [have] of its set. */
+    private fun save(
+        s: SourceStore,
+        kind: SetKind,
+        embedding: StoredEmbedding,
+        have: Map<String, Int>,
+        ids: List<String>,
+    ) {
+        val made = sets.members(s, kind, embedding.encoder, ids)
+        ids.forEach { id ->
+            embedding.embedding.of(made[id].orEmpty())?.let {
+                s.setVectors.save(id, kind, embedding.id, have.getValue(id), it)
+            }
+        }
+    }
+
+    /** One pass of the making of a type's vectors: how many were made, and those not told to the model yet. */
+    private inner class Pass(private val type: String) {
+        var made = 0
+            private set
+
+        private var unannounced = 0
+        private var announcedAt = System.currentTimeMillis()
+
+        /**
+         * [n] vectors more made; the model learns the new vectors as they come, not once at the end of hours: told of
+         * them every [ANNOUNCE_EVERY] or after [ANNOUNCE_AFTER].
+         */
+        fun count(n: Int) {
+            made += n
+            doneNow += n
+            unannounced += n
+            if (
+                unannounced >= ANNOUNCE_EVERY || System.currentTimeMillis() - announcedAt >= ANNOUNCE_AFTER.toMillis()
+            ) {
+                events.publishEvent(SetVectorsChanged(type, unannounced))
+                unannounced = 0
+                announcedAt = System.currentTimeMillis()
+            }
+        }
+
+        /** The vectors made since the model was last told, told at the end of the pass. */
+        fun announceRest() {
+            if (unannounced > 0) events.publishEvent(SetVectorsChanged(type, unannounced))
+        }
     }
 
     @PreDestroy
@@ -243,9 +212,10 @@ class SetVectors(
     }
 
     companion object {
-        /** The members of the catalogue held at once to fit directions on: memory, not meaning. */
-        private const val SAMPLE = 20_000
         private const val CHUNK = 200
+
+        /** Its step of the start: after the parts' vectors (5), before the jobs (10). */
+        private const val START_ORDER = 6
         private const val ANNOUNCE_EVERY = 2_000
         private val ANNOUNCE_AFTER: Duration = Duration.ofMinutes(5)
         private val PAUSE: Duration = Duration.ofMinutes(10)

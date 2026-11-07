@@ -4,9 +4,9 @@ import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 
 /**
- * THE TAGS UNDER OTHER TAGS, the user's word ([TagRepository.parents]): a work with a tag has every tag above it —
- * shown on its card, read by the model; a work the user said has not a tag has not any tag under it either — not shown,
- * the model told so. The user's "has not" of a tag above wins over a "has" of a tag under it.
+ * THE TAGS UNDER OTHER TAGS, the user's word ([TagRelationRepository.parents]): a work with a tag has every tag above
+ * it — shown on its card, read by the model; a work the user said has not a tag has not any tag under it either — not
+ * shown, the model told so. The user's "has not" of a tag above wins over a "has" of a tag under it.
  */
 class TagHierarchy(private val parents: Map<String, Set<String>>) {
     private val children: Map<String, Set<String>> =

@@ -82,7 +82,7 @@ class BgeReranker(private val onnx: Onnx) : TextReranker {
 
     /** The logit of every pair, read in batches of pairs of a length alike. */
     private fun read(pairs: List<Pair<LongArray, LongArray>>): FloatArray {
-        fun length(k: Int) = pairs[k].first.size + pairs[k].second.size + 4
+        fun length(k: Int) = pairs[k].first.size + pairs[k].second.size + SPECIAL
         val out = FloatArray(pairs.size)
         val order = pairs.indices.sortedBy(::length)
         val wantsTypes = TOKEN_TYPES in onnx.inputNames(MODEL)
@@ -130,8 +130,11 @@ class BgeReranker(private val onnx: Onnx) : TextReranker {
         /** The pieces read at once: the reach of XLM-RoBERTa's positions as the model was trained. */
         private const val REACH = 512
 
+        /** The special pieces of a pair: <s> first </s></s> second </s>. */
+        private const val SPECIAL = 4
+
         /** What one text may take of the [REACH]: all of it but the four special pieces of a pair. */
-        private const val TEXT = REACH - 4
+        private const val TEXT = REACH - SPECIAL
 
         /** The tokens of each text of a pair of two texts: two of them and four special ones make at most [REACH]. */
         private const val SIDE = TEXT / 2

@@ -112,36 +112,11 @@ class SetEmbedding(val center: FloatArray, val directions: List<FloatArray>, val
             sample.forEachIndexed { i, v -> for (k in 0 until d) x[i * d + k] = v[k] - center[k] }
             val covariance = Floats(d * d)
             Blas.transposedProduct(x, d, n, d, x, d, covariance)
-
-            // Orthogonal iteration: Q ← orthonormalised(C·Q)
-            val random = Random(0)
-            var q = Array(count) { DoubleArray(d) { random.nextDouble() - 0.5 } }
-            orthonormalise(q)
             val qs = Floats(d * count)
             val cq = Floats(d * count)
-            // A step's move: the largest change of a component, its sign as the previous one's (a
-            // component and its negation are the same direction). The iteration stops once a step
-            // moves the components no less than the step before: they are where the floats can take them
-            var moved = Double.MAX_VALUE
-            while (true) {
-                for (s in 0 until count) for (k in 0 until d) qs[k * count + s] = q[s][k].toFloat()
-                Blas.product(covariance, d, d, d, qs, count, cq)
-                val next = Array(count) { s -> DoubleArray(d) { k -> cq[k * count + s].toDouble() } }
-                orthonormalise(next)
-                var move = 0.0
-                for (s in 0 until count) {
-                    var dot = 0.0
-                    for (k in 0 until d) dot += next[s][k] * q[s][k]
-                    val sign = if (dot < 0) -1.0 else 1.0
-                    for (k in 0 until d) move = max(move, abs(next[s][k] - sign * q[s][k]))
-                }
-                q = next
-                if (move >= moved) break
-                moved = move
-            }
+            val q = components(covariance, d, count, qs, cq)
             // The spread along each: √(qᵀCq / n)
-            for (s in 0 until count) for (k in 0 until d) qs[k * count + s] = q[s][k].toFloat()
-            Blas.product(covariance, d, d, d, qs, count, cq)
+            times(covariance, q, d, qs, cq)
             val scales =
                 FloatArray(count) { s ->
                     var r = 0.0
@@ -149,6 +124,52 @@ class SetEmbedding(val center: FloatArray, val directions: List<FloatArray>, val
                     sqrt(max(r / n, 1e-12)).toFloat()
                 }
             return SetEmbedding(center, q.map { v -> FloatArray(d) { v[it].toFloat() } }, scales)
+        }
+
+        /**
+         * The first [count] principal components of the [covariance] of dimension [d], by orthogonal iteration: Q ←
+         * orthonormalised(C·Q), from a random start, until a step moves them no less than the step before — they are
+         * where the floats can take them. [qs] and [cq] are the products' room.
+         */
+        private fun components(covariance: Floats, d: Int, count: Int, qs: Floats, cq: Floats): Array<DoubleArray> {
+            val random = Random(0)
+            var q = Array(count) { DoubleArray(d) { random.nextDouble() - 0.5 } }
+            orthonormalise(q)
+            var moved = Double.MAX_VALUE
+            while (true) {
+                times(covariance, q, d, qs, cq)
+                val next = Array(count) { s -> DoubleArray(d) { k -> cq[k * count + s].toDouble() } }
+                orthonormalise(next)
+                val move = moveOf(next, q)
+                q = next
+                if (move >= moved) break
+                moved = move
+            }
+            return q
+        }
+
+        /**
+         * C·Q into [cq]: the [covariance] of dimension [d] times the components [q], laid in [qs] component by column.
+         */
+        private fun times(covariance: Floats, q: Array<DoubleArray>, d: Int, qs: Floats, cq: Floats) {
+            val count = q.size
+            for (s in 0 until count) for (k in 0 until d) qs[k * count + s] = q[s][k].toFloat()
+            Blas.product(covariance, d, d, d, qs, count, cq)
+        }
+
+        /**
+         * A step's move from [q] to [next]: the largest change of a component, its sign as the previous one's (a
+         * component and its negation are the same direction).
+         */
+        private fun moveOf(next: Array<DoubleArray>, q: Array<DoubleArray>): Double {
+            var move = 0.0
+            for (s in q.indices) {
+                var dot = 0.0
+                for (k in q[s].indices) dot += next[s][k] * q[s][k]
+                val sign = if (dot < 0) -1.0 else 1.0
+                for (k in q[s].indices) move = max(move, abs(next[s][k] - sign * q[s][k]))
+            }
+            return move
         }
 
         /** Gram–Schmidt, in place, in order: the first vector keeps its direction. */
@@ -161,9 +182,12 @@ class SetEmbedding(val center: FloatArray, val directions: List<FloatArray>, val
                 }
                 var norm = 0.0
                 for (x in vs[i]) norm += x * x
-                norm = sqrt(max(norm, 1e-24))
+                norm = sqrt(max(norm, LEAST_SQUARED_NORM))
                 for (k in vs[i].indices) vs[i][k] /= norm
             }
         }
+
+        /** The least squared norm a vector is divided by: one of nought stays nought rather than not a number. */
+        private const val LEAST_SQUARED_NORM = 1e-24
     }
 }

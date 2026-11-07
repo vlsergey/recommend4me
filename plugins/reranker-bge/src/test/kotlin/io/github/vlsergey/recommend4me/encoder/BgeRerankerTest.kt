@@ -19,7 +19,8 @@ class BgeRerankerTest {
             reranker.score(
                 listOf(
                     liked to
-                        "A boy reborn into a world of sorcery is mocked at the mage school as talentless, then trains until he surpasses everyone.",
+                        "A boy reborn into a world of sorcery is mocked at the mage school as talentless, " +
+                            "then trains until he surpasses everyone.",
                     liked to "Уютная история о пекарне в маленьком городке: рецепты, соседи и неспешная любовь.",
                     liked to "Космический флот ведёт войну с роем инопланетян; адмирал собирает экипаж из штрафников.",
                 )

@@ -373,7 +373,7 @@ internal class FacetData(
             store.textVectors.hashes(encoder.id).forEach { (k, hash) ->
                 hashes.getOrPut(k.first) { ArrayList() } += hash
             }
-            val windowCounts = store.parts.windowCounts(encoder.id)
+            val windowCounts = store.parts.windows.windowCounts(encoder.id)
             val fingerprints =
                 LongArray(ids.size) { i ->
                     val id = ids[i]
