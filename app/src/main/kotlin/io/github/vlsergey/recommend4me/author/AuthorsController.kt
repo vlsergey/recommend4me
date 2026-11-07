@@ -13,7 +13,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class AuthorsController(private val authors: Authors) : AuthorsApi {
+class AuthorsController(private val authors: Authors, private val offers: AuthorOffers) : AuthorsApi {
 
     override fun listAuthors(
         type: String,
@@ -35,7 +35,7 @@ class AuthorsController(private val authors: Authors) : AuthorsApi {
         offset: Int,
         limit: Int,
     ): ResponseEntity<AuthorOfferPage> =
-        authors.offers(type, said, author, offset, limit)?.let { ResponseEntity.ok(it) }
+        offers.offers(type, said, author, offset, limit)?.let { ResponseEntity.ok(it) }
             ?: ResponseEntity.notFound().build()
 
     override fun answerAuthors(authorAnswer: AuthorAnswer): ResponseEntity<Unit> {

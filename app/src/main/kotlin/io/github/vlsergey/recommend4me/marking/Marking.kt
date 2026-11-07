@@ -19,8 +19,6 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
-import kotlin.math.abs
-import kotlin.math.ln
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 
@@ -73,18 +71,24 @@ class Marking(
      */
     private fun scope(s: SourceStore, characters: List<String>?, universesOf: Map<String, Set<String>>): Set<String> {
         val every = s.items.keys().map { it.id }.toSet()
-        if (characters.isNullOrEmpty()) return every
-        val def = s.schema.facet(UniverseFacet.KEY) ?: return emptySet()
-        val needed = characters.map { universesOf[it].orEmpty() }
-        if (needed.any { it.isEmpty() }) return emptySet()
-        val shown = list.valuesOf(s, def, s.corrections.allFacets().groupBy { it.itemId })
-        return every
-            .filter { id -> shown[id].orEmpty().toSet().let { own -> needed.all { u -> u.any { it in own } } } }
-            .toSet()
+        val def = s.schema.facet(UniverseFacet.KEY)
+        val needed = characters.orEmpty().map { universesOf[it].orEmpty() }
+        return when {
+            characters.isNullOrEmpty() -> every
+            def == null || needed.any { it.isEmpty() } -> emptySet()
+            else -> {
+                val shown = list.valuesOf(s, def, s.corrections.allFacets().groupBy { it.itemId })
+                every
+                    .filter { id -> shown[id].orEmpty().toSet().let { own -> needed.all { u -> u.any { it in own } } } }
+                    .toSet()
+            }
+        }
     }
 
-    /** A work of the table: where it is, its chance, the user's word on it. */
-    private class Row(val store: SourceStore, val id: String, val chance: Double?, val answer: MarkVerdict?)
+    /**
+     * What is asked of the table: of the value of the facet, the works answered on it or the open ones, in an order.
+     */
+    private class Asked(val facet: String, val value: String, val answered: Boolean, val order: MarkingOrder)
 
     fun works(
         facet: String,
@@ -99,85 +103,55 @@ class Marking(
         val universesOf =
             if (characters.isNullOrEmpty()) emptyMap()
             else stores.types.first { it.type.universes }.universes.characterUniverses()
+        val asked = Asked(facet, value, answered, order)
         // The works answered "has it" or "not", where the answers change told by them: of the open ones, their chances
         // made with the rest
-        val judged = ArrayList<Row>()
-        val rows = sources.flatMap { s ->
-            val answers =
-                s.corrections
-                    .allFacets()
-                    .filter { it.facet == facet && it.key == value }
-                    .associate { it.itemId to if (it.added) MarkVerdict.YES else MarkVerdict.NO }
-            val unknown =
-                s.unknowns.ofFacet(facet).filter { it.key == value }.associate { it.itemId to MarkVerdict.UNKNOWN }
-            val said = unknown + answers
-            val ids = if (answered) said.keys else scope(s, characters, universesOf) - said.keys
-            val chances =
-                suggestions.chancesOfValue(
-                    s,
-                    if (order == MarkingOrder.DISPUTED && !answered) ids + answers.keys else ids,
-                    facet,
-                    value,
-                )
-            if (order == MarkingOrder.DISPUTED)
-                answers.forEach { (id, verdict) -> judged += Row(s, id, chances[id], verdict) }
-            ids.map { Row(s, it, chances[it], said[it]) }
-        }
-        val likeliest = compareByDescending<Row> { it.chance ?: -1.0 }.thenBy { it.store.id }.thenBy { it.id }
-        val sorted =
-            when (order) {
-                MarkingOrder.LIKELY -> rows.sortedWith(likeliest)
-                MarkingOrder.DISPUTED -> {
-                    val boundary = boundary(judged)
-                    rows.sortedWith(
-                        compareBy<Row> { r -> r.chance?.let { abs(logit(it) - boundary) } ?: Double.MAX_VALUE }
-                            .then(likeliest)
-                    )
-                }
-                MarkingOrder.CONTRADICTORY ->
-                    rows.sortedWith(
-                        compareByDescending<Row> { r ->
-                                r.chance?.let { c -> r.answer?.let { disbelief(c, it) } } ?: -1.0
-                            }
-                            .then(likeliest)
-                    )
-            }
+        val judged = ArrayList<MarkingRow>()
+        val rows = sources.flatMap { s -> rowsOf(s, asked, judged) { scope(s, characters, universesOf) } }
+        val sorted = MarkingOrdering.sorted(rows, judged, order)
         val page = sorted.drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, 500))
         return MarkedWorks(total = sorted.size, works = described(page))
     }
 
-    /** The chance on the scale a logistic model adds up on. */
-    private fun logit(chance: Double): Double =
-        chance.coerceIn(LEAST_CHANCE, 1 - LEAST_CHANCE).let { ln(it / (1 - it)) }
-
     /**
-     * Where on the scale of [logit] the user's answers on the value change: between the mean of the works answered "has
-     * it" and of those answered "not". Nearly every work a model learns from is one not answered, so that even a work
-     * worth asking about may have a chance of some percent: what is in doubt is told by the answers, not by a half — a
-     * half while either kind is missing.
+     * The rows of the source's works [asked] of — those answered on the value, or those [open] to it not answered —
+     * with their chances; of the order of the disputed, its works answered "has it" or "not" added to [judged].
      */
-    private fun boundary(judged: List<Row>): Double {
-        val has = judged.filter { it.answer == MarkVerdict.YES }.mapNotNull { it.chance?.let(::logit) }
-        val not = judged.filter { it.answer == MarkVerdict.NO }.mapNotNull { it.chance?.let(::logit) }
-        return if (has.isEmpty() || not.isEmpty()) 0.0 else (has.average() + not.average()) / 2
+    private fun rowsOf(
+        s: SourceStore,
+        asked: Asked,
+        judged: MutableList<MarkingRow>,
+        open: () -> Set<String>,
+    ): List<MarkingRow> {
+        val answers =
+            s.corrections
+                .allFacets()
+                .filter { it.facet == asked.facet && it.key == asked.value }
+                .associate { it.itemId to if (it.added) MarkVerdict.YES else MarkVerdict.NO }
+        val unknown =
+            s.unknowns
+                .ofFacet(asked.facet)
+                .filter { it.key == asked.value }
+                .associate { it.itemId to MarkVerdict.UNKNOWN }
+        val said = unknown + answers
+        val ids = if (asked.answered) said.keys else open() - said.keys
+        val disputed = asked.order == MarkingOrder.DISPUTED
+        val chances =
+            suggestions.chancesOfValue(
+                s,
+                if (disputed && !asked.answered) ids + answers.keys else ids,
+                asked.facet,
+                asked.value,
+            )
+        if (disputed) answers.forEach { (id, verdict) -> judged += MarkingRow(s, id, chances[id], verdict) }
+        return ids.map { MarkingRow(s, it, chances[it], said[it]) }
     }
-
-    /**
-     * How little the model believes the user's [answer]: of "has it" the chance the work has it not, of "not" the
-     * chance it has; of "unclear", none.
-     */
-    private fun disbelief(chance: Double, answer: MarkVerdict): Double? =
-        when (answer) {
-            MarkVerdict.YES -> 1 - chance
-            MarkVerdict.NO -> chance
-            MarkVerdict.UNKNOWN -> null
-        }
 
     /**
      * The rows as the table shows them: each source's works read in one go, with the other items of each work and the
      * line of its pairings and characters of each of them.
      */
-    private fun described(rows: List<Row>): List<MarkedWork> {
+    private fun described(rows: List<MarkingRow>): List<MarkedWork> {
         val clusters = rows.map { stores.typeOf(it.store.id) }.distinct().associateWith { works.of(it) }
         val others = rows.associate { r ->
             (r.store.id to r.id) to
@@ -259,11 +233,6 @@ class Marking(
             }
         }
         return out
-    }
-
-    private companion object {
-        /** The least chance [logit] takes: a nought or a one would lie at no finite place. */
-        const val LEAST_CHANCE = 1e-12
     }
 
     /** The work of the source, the facet of its layer; refused or none as [works] refuses them. */

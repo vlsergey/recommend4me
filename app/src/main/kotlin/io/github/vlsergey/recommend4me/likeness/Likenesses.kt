@@ -90,7 +90,7 @@ class Likenesses(private val plugins: Plugins, private val phrases: PhraseVector
         val store = type.source(key.source) ?: return@buildMap
         plugins.imageEncoder()?.let { encoder ->
             stored.pictures
-                .rowOf(key, store.pictures.positioned(key.id, encoder.id).map { (p, v) -> p.toString() to v })
+                .rowOf(key, store.pictures.analysed.positioned(key.id, encoder.id).map { (p, v) -> p.toString() to v })
                 ?.let { row -> put(MarkLikeness.PICTURES, stored.pictures.vector(row) { it.owner == key }) }
         }
         if (stored.reviews.marks.isNotEmpty()) {
@@ -165,14 +165,14 @@ class Likenesses(private val plugins: Plugins, private val phrases: PhraseVector
             .map { it.match.item }
             .distinct()
             .forEach { key ->
-                type.source(key.source)?.pictures?.positioned(key.id, encoder)?.forEach { (p, v) ->
+                type.source(key.source)?.pictures?.analysed?.positioned(key.id, encoder)?.forEach { (p, v) ->
                     named[ThingRef(key, p.toString())] = v
                 }
             }
         val marks =
             type.sources.flatMap { s ->
                 val marks = s.marks.pictureMarks()
-                val vectors = s.pictures.vectorsOf(marks.map { it.itemId to it.position }, encoder)
+                val vectors = s.pictures.analysed.vectorsOf(marks.map { it.itemId to it.position }, encoder)
                 marks.mapNotNull { m ->
                     val (url, v) = vectors[m.itemId to m.position] ?: return@mapNotNull null
                     // A picture whose address changed is another one: the mark is not its
@@ -184,7 +184,7 @@ class Likenesses(private val plugins: Plugins, private val phrases: PhraseVector
             }
         return MarkLikeness.of(marks, center) { action ->
             type.sources.forEach { s ->
-                s.pictures.forEachItem(encoder) { id, list ->
+                s.pictures.analysed.forEachItem(encoder) { id, list ->
                     action(ItemKey(s.id, id), list.map { (p, v) -> p.toString() to v })
                 }
             }

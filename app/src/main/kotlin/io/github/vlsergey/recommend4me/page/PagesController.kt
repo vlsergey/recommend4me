@@ -43,15 +43,9 @@ class PagesController(
 ) : PagesApi {
 
     /** The source whose site the address is on: one that wants the page, or one of the same host. */
-    private fun sourceOf(url: String): SourceStore? {
-        stores.sources
-            .firstOrNull { s -> s.source.capturePatterns.any { it.matches(url) } }
-            ?.let {
-                return it
-            }
-        val host = hostOf(url) ?: return null
-        return stores.sources.firstOrNull { hostOf(it.source.homepage) == host }
-    }
+    private fun sourceOf(url: String): SourceStore? =
+        stores.sources.firstOrNull { s -> s.source.capturePatterns.any { it.matches(url) } }
+            ?: hostOf(url)?.let { host -> stores.sources.firstOrNull { hostOf(it.source.homepage) == host } }
 
     override fun getPage(url: String): ResponseEntity<PageView> {
         val store = sourceOf(url) ?: return ResponseEntity.notFound().build()

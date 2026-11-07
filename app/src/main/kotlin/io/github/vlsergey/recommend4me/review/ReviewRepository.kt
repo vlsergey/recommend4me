@@ -26,8 +26,8 @@ class ReviewRepository(private val db: DSLContext) {
             val key = textKeyOf(r.content)
             db.insertInto(REVIEW)
                 .set(REVIEW.ITEM_ID, itemId)
-                .set(REVIEW.REVIEW_ID, r.id.take(100))
-                .set(REVIEW.AUTHOR, r.author?.take(300))
+                .set(REVIEW.REVIEW_ID, r.id.take(ID_LENGTH))
+                .set(REVIEW.AUTHOR, r.author?.take(AUTHOR_LENGTH))
                 .set(REVIEW.STARS, r.stars)
                 .set(REVIEW.CONTENT, r.content)
                 .set(REVIEW.POSTED_AT, r.postedAt)
@@ -91,7 +91,7 @@ class ReviewRepository(private val db: DSLContext) {
             .on(PHRASE_VECTOR.TEXT_KEY.eq(REVIEW.TEXT_KEY))
             .where(PHRASE_VECTOR.ENCODER.eq(encoder))
             .orderBy(REVIEW.ITEM_ID)
-            .fetchSize(5000)
+            .fetchSize(FETCH_ROWS)
             .fetchLazy()
             .use { cursor ->
                 cursor.forEach {
@@ -105,8 +105,6 @@ class ReviewRepository(private val db: DSLContext) {
             }
         current?.let { action(it, list.toList()) }
     }
-
-    fun count(): Int = db.fetchCount(REVIEW)
 
     /** Reviews with a text and its key: those whose vector the model can find. A range, which the index answers. */
     fun countKeyed(): Int = db.fetchCount(REVIEW, REVIEW.TEXT_KEY.ge(Long.MIN_VALUE))
@@ -128,21 +126,17 @@ class ReviewRepository(private val db: DSLContext) {
             .fetch { textOf(it.value1()!!) }
             .filter { it.isNotEmpty() }
 
-    /** The texts of the reviews whose text has no vector by [encoder] yet, at most [limit]. */
-    fun unencoded(encoder: String, limit: Int): List<String> =
-        db.select(REVIEW.CONTENT)
-            .from(REVIEW)
-            .where(REVIEW.TEXT_KEY.isNotNull)
-            .andNotExists(
-                DSL.selectOne()
-                    .from(PHRASE_VECTOR)
-                    .where(PHRASE_VECTOR.TEXT_KEY.eq(REVIEW.TEXT_KEY), PHRASE_VECTOR.ENCODER.eq(encoder))
-            )
-            .limit(limit)
-            .fetch { textOf(it.value1()!!) }
-
     companion object {
         private const val BATCH = 500
+
+        /** The longest id of a review its column holds. */
+        private const val ID_LENGTH = 100
+
+        /** The longest name of a review's author its column holds. */
+        private const val AUTHOR_LENGTH = 300
+
+        /** The rows read from the database at a time while streaming: memory, not meaning. */
+        private const val FETCH_ROWS = 5000
 
         /**
          * A review as the model reads it: WHOLE, one vector — an opinion is read with what is said around it ("the NTR

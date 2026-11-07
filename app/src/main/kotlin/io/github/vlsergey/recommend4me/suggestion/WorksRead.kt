@@ -225,7 +225,7 @@ private fun inputs(
         readTexts = counted(0)
         afterTexts = System.nanoTime()
         imageEncoder?.let { e ->
-            store.pictures.forEachItemHalves(e) { id, block, v ->
+            store.pictures.itemVectors.forEachItemHalves(e) { id, block, v ->
                 read++
                 halves(id, block, v)
             }
@@ -248,7 +248,7 @@ private fun inputs(
         readTexts = counted(0)
         afterTexts = System.nanoTime()
         imageEncoder?.let { e ->
-            store.pictures.itemHalvesOf(ids, e).forEach { (id, own) ->
+            store.pictures.itemVectors.itemHalvesOf(ids, e).forEach { (id, own) ->
                 own.forEach { (block, v) ->
                     read++
                     halves(id, block, v)

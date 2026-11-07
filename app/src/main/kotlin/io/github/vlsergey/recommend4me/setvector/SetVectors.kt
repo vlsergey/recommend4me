@@ -97,7 +97,7 @@ class SetVectors(
     /** How many members every item's set of [kind] has now. */
     private fun sizes(s: SourceStore, kind: SetKind, encoder: String): Map<String, Int> =
         when (kind) {
-            SetKind.SCREENS -> s.pictures.screenshotCounts(encoder)
+            SetKind.SCREENS -> s.pictures.analysed.screenshotCounts(encoder)
             SetKind.REVIEWS -> s.reviews.counts()
             SetKind.PARTS -> s.parts.windowCounts(encoder)
         }
@@ -109,7 +109,7 @@ class SetVectors(
         ids: List<String>,
     ): Map<String, List<FloatArray>> =
         when (kind) {
-            SetKind.SCREENS -> s.pictures.screenshots(ids, encoder)
+            SetKind.SCREENS -> s.pictures.analysed.screenshots(ids, encoder)
             SetKind.REVIEWS -> {
                 val texts = s.reviews.textsOf(ids).mapValues { (_, list) -> list.distinct() }
                 val encoded = phrases.of(s, texts.values.flatten().toSet())
@@ -120,7 +120,7 @@ class SetVectors(
 
     private fun sample(s: SourceStore, kind: SetKind, encoder: String, n: Int): List<FloatArray> =
         when (kind) {
-            SetKind.SCREENS -> s.pictures.sample(n, encoder)
+            SetKind.SCREENS -> s.pictures.analysed.sample(n, encoder)
             SetKind.REVIEWS -> s.reviews.sample(n).distinct().let { texts -> phrases.of(s, texts).values.toList() }
             SetKind.PARTS -> s.parts.sample(n, encoder)
         }

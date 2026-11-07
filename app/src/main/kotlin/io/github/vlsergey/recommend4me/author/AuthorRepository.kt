@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.N
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_AUTHOR_DISTINCT
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_AUTHOR_ENTRY
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_AUTHOR
-import io.github.vlsergey.recommend4me.tag.TagEntryRef
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -18,6 +17,9 @@ data class SiteAuthorRef(val source: String, val author: String)
  * the user bound them to.
  */
 class AuthorRepository(private val db: DSLContext) {
+
+    /** The entries of the catalogues the authors are bound to. */
+    val entries = AuthorEntryRepository(db)
 
     /** The authors of the [source] and the normalized authors they are bound to: the site's key to the id. */
     fun bindingsOf(source: String): Map<String, Long> =
@@ -183,33 +185,8 @@ class AuthorRepository(private val db: DSLContext) {
 
     fun exists(id: Long): Boolean = db.fetchExists(NORMALIZED_AUTHOR, NORMALIZED_AUTHOR.ID.eq(id))
 
-    // --- The entries of a catalogue the authors are bound to ---
-
-    /** Every author bound to entries of the catalogues: their id to the entries, the one bound first first. */
-    fun entries(): Map<Long, List<TagEntryRef>> {
-        val e = NORMALIZED_AUTHOR_ENTRY
-        return db.select(e.AUTHOR, e.CATALOGUE, e.ENTRY)
-            .from(e)
-            .orderBy(e.BOUND_AT, e.CATALOGUE, e.ENTRY)
-            .fetch()
-            .groupBy({ it.value1()!! }, { TagEntryRef(it.value2()!!, it.value3()!!) })
-    }
-
-    /** The author [id] bound to the entry [ref] besides the ones they are — or, [bound] false, no more to it. */
-    fun bindEntry(id: Long, ref: TagEntryRef, bound: Boolean, now: Instant) {
-        val e = NORMALIZED_AUTHOR_ENTRY
-        if (bound)
-            db.insertInto(e)
-                .set(e.AUTHOR, id)
-                .set(e.CATALOGUE, ref.catalogue)
-                .set(e.ENTRY, ref.entry)
-                .set(e.BOUND_AT, now)
-                .onDuplicateKeyIgnore()
-                .execute()
-        else db.deleteFrom(e).where(e.AUTHOR.eq(id), e.CATALOGUE.eq(ref.catalogue), e.ENTRY.eq(ref.entry)).execute()
-    }
-
     companion object {
+        /** The authors read by one query at most: a list of keys in a query, not a meaning. */
         private const val BATCH = 1000
 
         /** The value of a normalized author among the values of the works: its id. */

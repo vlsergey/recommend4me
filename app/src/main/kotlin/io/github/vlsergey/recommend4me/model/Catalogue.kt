@@ -163,7 +163,7 @@ class CatalogueReader(
             }
             if (imageEncoder != null) {
                 count = 0
-                s.pictures.forEachItemVector(imageEncoder.id) { id, block, v ->
+                s.pictures.itemVectors.forEachItemVector(imageEncoder.id) { id, block, v ->
                     put(id, block, v)
                     if (v.size == centerSum!!.size) {
                         for (k in v.indices) centerSum[k] += v[k].toDouble()
@@ -417,7 +417,7 @@ class CatalogueReader(
                 }
             }
             plugins.imageEncoder()?.let { encoder ->
-                s.pictures.itemVectorsOf(ids, encoder.id).forEach { (id, blocks) ->
+                s.pictures.itemVectors.itemVectorsOf(ids, encoder.id).forEach { (id, blocks) ->
                     blocks.forEach { (b, v) -> put(id, b, v) }
                 }
             }

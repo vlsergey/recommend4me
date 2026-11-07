@@ -95,7 +95,7 @@ class Works(private val stores: Stores) {
     }
 
     /** The items [event] names that are there bound at once, before anything reads the works. */
-    @Order(-200)
+    @Order(BIND_FIRST)
     @EventListener
     fun itemsChanged(event: ItemsChanged) {
         val s = stores.source(event.source) ?: return
@@ -103,7 +103,7 @@ class Works(private val stores: Stores) {
     }
 
     /** Before anything reads the works: every item bound. */
-    @Order(-200)
+    @Order(BIND_FIRST)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.sources.forEach { s -> bind(s, s.items.keys().associate { it.id to it.version }) }
@@ -112,5 +112,8 @@ class Works(private val stores: Stores) {
     companion object {
         /** Above any number of values a work has: the characters of its texts come first. */
         private const val FIELDS_AT_MOST = 100_000L
+
+        /** The place of the binding among the listeners: the first, before anything reads the works. */
+        private const val BIND_FIRST = -200
     }
 }

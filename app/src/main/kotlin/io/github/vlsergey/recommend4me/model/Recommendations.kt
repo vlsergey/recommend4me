@@ -918,7 +918,7 @@ class Recommendations(
         stored: TypeLikeness,
     ): Map<Int, Double> {
         val encoder = plugins.imageEncoder() ?: return emptyMap()
-        val pictures = type.source(key.source)!!.pictures.positioned(key.id, encoder.id)
+        val pictures = type.source(key.source)!!.pictures.analysed.positioned(key.id, encoder.id)
         if (pictures.isEmpty()) return emptyMap()
         val screenSet = type.embeddings.find(SetKind.SCREENS)?.takeIf { it.encoder == encoder.id }?.embedding
         val others =
@@ -1040,7 +1040,9 @@ class Recommendations(
         val row =
             stored.pictures.rowOf(
                 key,
-                type.source(key.source)!!.pictures.positioned(key.id, encoder.id).map { (p, v) -> p.toString() to v },
+                type.source(key.source)!!.pictures.analysed.positioned(key.id, encoder.id).map { (p, v) ->
+                    p.toString() to v
+                },
             ) ?: return emptyList()
         return stored.pictures.matches(key, row, MATCHES_SHOWN)
     }

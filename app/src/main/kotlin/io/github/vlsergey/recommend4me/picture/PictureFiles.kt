@@ -67,10 +67,20 @@ class PictureFiles(sourceFolder: Path) {
 
         /** An ISO-BMFF file whose `ftyp` brand is `avif` (still) or `avis` (sequence). */
         fun isAvif(bytes: ByteArray): Boolean {
-            if (bytes.size < 12 || String(bytes, 4, 4, Charsets.ISO_8859_1) != "ftyp") return false
-            val brand = String(bytes, 8, 4, Charsets.ISO_8859_1)
+            if (bytes.size < BRAND_AT + WORD || String(bytes, TYPE_AT, WORD, Charsets.ISO_8859_1) != "ftyp")
+                return false
+            val brand = String(bytes, BRAND_AT, WORD, Charsets.ISO_8859_1)
             return brand == "avif" || brand == "avis"
         }
+
+        /** The bytes of a word of an ISO-BMFF header: a box's size, its type, a brand. */
+        private const val WORD = 4
+
+        /** Where the type of the first box stands, after its size. */
+        private const val TYPE_AT = 4
+
+        /** Where the major brand of the `ftyp` box stands, after its size and type. */
+        private const val BRAND_AT = 8
 
         private fun decodeAvif(bytes: ByteArray): BufferedImage =
             AvifImageReader.open(bytes).use { reader ->

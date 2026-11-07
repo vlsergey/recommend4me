@@ -74,7 +74,7 @@ own; "one work" merges two. A translation and a part stay two works, related.
 - **Of the site's item, in its source:** its own data and texts, parts, pictures, reviews and the marks
   on them, the answers on the paragraphs of its text.
 - **New data about a work** goes on the normalized work, never on an item, and travels in
-  `WorkRepository.merge` and `takeOut`.
+  `WorkMembership.merge` and `takeOut`.
 
 ## An area that reads itself again lets the user choose how often
 

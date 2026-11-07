@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.correction
 
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.work.WorkPairJournal
+import io.github.vlsergey.recommend4me.work.WorkRelations
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
 
@@ -31,7 +32,7 @@ class TypeLinkRepository(
         val before = word(a, b, now)
         val x = works.of(a, now)
         val y = works.of(b, now)
-        if (x != y) works.merge(maxOf(x, y), minOf(x, y), now, single)
+        if (x != y) works.membership.merge(maxOf(x, y), minOf(x, y), now, single)
         journal.write(a, b, SAME, before, now)
     }
 
@@ -43,7 +44,7 @@ class TypeLinkRepository(
     /** Of a work holding both, [b] taken out; false of two works. */
     private fun takeOut(a: ItemKey, b: ItemKey, now: Instant): Boolean {
         if (works.of(a, now) != works.of(b, now)) return false
-        works.takeOut(b, now)
+        works.membership.takeOut(b, now)
         return true
     }
 
@@ -59,14 +60,14 @@ class TypeLinkRepository(
     private fun say(a: ItemKey, b: ItemKey, kind: String, now: Instant) {
         val before = word(a, b, now)
         takeOut(a, b, now)
-        works.say(works.of(a, now), works.of(b, now), kind, now)
+        works.relations.say(works.of(a, now), works.of(b, now), kind, now)
         journal.write(a, b, kind, before, now)
     }
 
     /** The word on the works of the two taken back. */
     fun takeBack(a: ItemKey, b: ItemKey, now: Instant) {
         val before = word(a, b, now)
-        works.takeBack(works.of(a, now), works.of(b, now))
+        works.relations.takeBack(works.of(a, now), works.of(b, now))
         journal.write(a, b, null, before, now)
     }
 
@@ -74,7 +75,7 @@ class TypeLinkRepository(
     fun word(a: ItemKey, b: ItemKey, now: Instant): String? {
         val x = works.of(a, now)
         val y = works.of(b, now)
-        return if (x == y) SAME else works.word(x, y)
+        return if (x == y) SAME else works.relations.word(x, y)
     }
 
     /** The word on every pair of items now, as [word] tells it, read in one go: of an item bound to no work, none. */
@@ -88,11 +89,11 @@ class TypeLinkRepository(
                     works.ofItems(source, keys.map { it.id }).map { (id, work) -> ItemKey(source, id) to work }
                 }
                 .toMap()
-        val words = works.words()
+        val words = works.relations.words()
         return pairs.associateWith { (a, b) ->
             val x = bound[a] ?: return@associateWith null
             val y = bound[b] ?: return@associateWith null
-            if (x == y) SAME else words[WorkRepository.pair(x, y)]
+            if (x == y) SAME else words[WorkRelations.pair(x, y)]
         }
     }
 
@@ -107,7 +108,7 @@ class TypeLinkRepository(
 
     /** Every word on two works as said of every pair of their items. */
     private fun said(): Map<Pair<ItemKey, ItemKey>, String> {
-        val words = works.words()
+        val words = works.relations.words()
         val items = works.itemsOf(words.keys.flatMap { it.toList() }, sources)
         val out = HashMap<Pair<ItemKey, ItemKey>, String>()
         words.forEach { (pair, kind) ->
@@ -120,7 +121,7 @@ class TypeLinkRepository(
     fun ordered(a: ItemKey, b: ItemKey): Pair<ItemKey, ItemKey> = if (a.toString() < b.toString()) a to b else b to a
 
     /** The item removed from the library. */
-    fun forget(key: ItemKey) = works.forget(key)
+    fun forget(key: ItemKey) = works.membership.forget(key)
 
     companion object {
         const val SAME = "SAME"
