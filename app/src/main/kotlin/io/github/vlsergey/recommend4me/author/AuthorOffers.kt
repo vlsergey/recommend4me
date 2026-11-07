@@ -6,7 +6,7 @@ import io.github.vlsergey.recommend4me.api.model.AuthorSaid
 import io.github.vlsergey.recommend4me.api.model.AuthorSide
 import io.github.vlsergey.recommend4me.api.model.AuthorWorkPair
 import io.github.vlsergey.recommend4me.duplicate.DuplicateAnswer
-import io.github.vlsergey.recommend4me.duplicate.Duplicates
+import io.github.vlsergey.recommend4me.duplicate.PairAnswers
 import io.github.vlsergey.recommend4me.duplicate.PairModels
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component
 class AuthorOffers(
     private val stores: Stores,
     private val works: Works,
-    private val duplicates: Duplicates,
+    private val answers: PairAnswers,
     private val sides: AuthorSides,
     private val models: PairModels,
 ) {
@@ -117,7 +117,7 @@ class AuthorOffers(
      * nothing.
      */
     private fun workPairs(type: TypeStore): List<WorkPair> {
-        val said = duplicates.said(type)
+        val said = answers.said(type)
         val chances = models.of(type)
         val out = ArrayList<WorkPair>()
         val kept = type.duplicates.all()

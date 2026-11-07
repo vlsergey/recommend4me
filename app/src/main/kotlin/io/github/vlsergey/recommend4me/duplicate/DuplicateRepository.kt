@@ -52,6 +52,9 @@ class DuplicateSearch(
     val model: String?,
     val same: ByteArray?,
     val series: ByteArray?,
+    /** When the models were last fitted, and how long it took; none of models fitted before it was kept. */
+    val fittedAt: Instant? = null,
+    val fitMillis: Long? = null,
 )
 
 /** The candidates of the last search of the content type, in its model database: made anew whole by every search. */
@@ -88,15 +91,22 @@ class DuplicateRepository(private val db: DSLContext) {
             .set(DUPLICATE_SEARCH.MODEL, search.model)
             .set(DUPLICATE_SEARCH.SAME_MODEL, search.same)
             .set(DUPLICATE_SEARCH.SERIES_MODEL, search.series)
+            .set(DUPLICATE_SEARCH.FITTED_AT, search.fittedAt)
+            .set(DUPLICATE_SEARCH.FIT_MILLIS, search.fitMillis)
             .execute()
     }
 
-    /** The models of the user's answers fitted anew by the plugin of pairs [model], of the candidates as they are. */
-    fun keepModels(model: String, same: ByteArray?, series: ByteArray?) {
+    /**
+     * The models of the user's answers fitted anew by the plugin of pairs [model], of the candidates as they are, at
+     * [fittedAt] in [millis].
+     */
+    fun keepModels(model: String, same: ByteArray?, series: ByteArray?, fittedAt: Instant, millis: Long) {
         db.update(DUPLICATE_SEARCH)
             .set(DUPLICATE_SEARCH.MODEL, model)
             .set(DUPLICATE_SEARCH.SAME_MODEL, same)
             .set(DUPLICATE_SEARCH.SERIES_MODEL, series)
+            .set(DUPLICATE_SEARCH.FITTED_AT, fittedAt)
+            .set(DUPLICATE_SEARCH.FIT_MILLIS, millis)
             .where(DUPLICATE_SEARCH.ID.eq(1))
             .execute()
     }
@@ -104,7 +114,16 @@ class DuplicateRepository(private val db: DSLContext) {
     /** The last search; null when there was none. */
     fun search(): DuplicateSearch? =
         db.selectFrom(DUPLICATE_SEARCH).fetchOne()?.let {
-            DuplicateSearch(it.madeAt!!, it.encoder!!, it.works!!, it.model, it.sameModel, it.seriesModel)
+            DuplicateSearch(
+                it.madeAt!!,
+                it.encoder!!,
+                it.works!!,
+                it.model,
+                it.sameModel,
+                it.seriesModel,
+                it.fittedAt,
+                it.fitMillis,
+            )
         }
 
     /** Every candidate: of some hundred thousand, read for one request and let go. */

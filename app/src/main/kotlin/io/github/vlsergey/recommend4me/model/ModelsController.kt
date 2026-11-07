@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.api.model.MethodQuality
 import io.github.vlsergey.recommend4me.api.model.ModelQuality
 import io.github.vlsergey.recommend4me.api.model.ModelState
 import io.github.vlsergey.recommend4me.api.model.ModelTrial
+import io.github.vlsergey.recommend4me.duplicate.PairModelStates
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
@@ -21,9 +22,9 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * THE MODELS OF A CONTENT TYPE, for the page of the models: the model of the grades, the model of interest, and the
- * model of every facet the application works out of every source — each with how it was last fitted, read from what is
- * kept of it.
+ * THE MODELS OF A CONTENT TYPE, for the page of the models: the model of the grades, the model of interest, the model
+ * of every facet the application works out of every source, and the models of the pairs of duplicates — each with how
+ * it was last fitted, read from what is kept of it.
  */
 @RestController
 class ModelsController(
@@ -32,6 +33,7 @@ class ModelsController(
     private val comparisons: FacetComparisons,
     private val plugins: Plugins,
     private val stores: Stores,
+    private val pairs: PairModelStates,
 ) : ModelsApi {
 
     override fun listModels(type: String): ResponseEntity<List<ModelState>> {
@@ -39,7 +41,9 @@ class ModelsController(
         val scorers = plugins.scorers.map { it.id }
         val summary = recommendations.summary(type)
         return ResponseEntity.ok(
-            listOf(gradeModel(summary, scorers), interestModel(type, summary, scorers)) + facetModels(typeStore)
+            listOf(gradeModel(summary, scorers), interestModel(type, summary, scorers)) +
+                facetModels(typeStore) +
+                listOfNotNull(pairs.of(typeStore))
         )
     }
 

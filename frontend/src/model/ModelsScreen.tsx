@@ -23,8 +23,9 @@ const modelsKey = (type: string) => ["models", type];
 const EVERY_MS = 5000;
 
 /**
- * THE MODELS OF A CONTENT TYPE, ONE CARD EACH: the model of the grades, the model of interest, and
- * the model of every facet the application works out of every source. Each tells how it was last
+ * THE MODELS OF A CONTENT TYPE, ONE CARD EACH: the model of the grades, the model of interest, the
+ * models of the pairs of duplicates, and the model of every facet the application works out of every
+ * source. Each tells how it was last
  * fitted — when, how long it took, with what quality, which settings were chosen among which tried
  * — and lets the user fit it again, or search its method and settings anew, for this model alone.
  */
@@ -43,6 +44,7 @@ export function ModelsScreen({ type }: { type: ContentTypeInfo }) {
   const interest = list.find((m) => m.kind === "INTEREST");
   const facets = list.filter(isFacetModel);
   const sources = [...new Set(facets.map((m) => m.source))];
+  const pairs = list.find((m) => m.kind === "PAIRS");
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6">
@@ -58,6 +60,7 @@ export function ModelsScreen({ type }: { type: ContentTypeInfo }) {
       <WorkQueue />
       {grade && <GradeCard type={type} m={grade} />}
       {interest && <InterestCard type={type} m={interest} />}
+      {pairs && <PairsCard type={type} m={pairs} />}
       {sources.map((source) => (
         <section key={source} className="flex flex-col gap-2">
           <h2 className="text-base font-semibold">{t("ModelsScreen.facetsOf", { source: sourceTitle(source) })}</h2>
@@ -158,6 +161,74 @@ function InterestCard({ type, m }: { type: ContentTypeInfo; m: ModelState }) {
           )}
           <AsyncButton size="sm" variant="outline" onClick={train} disabled={m.running} icon={<RefreshCwIcon />}>
             {t("ModelsScreen.retrain")}
+          </AsyncButton>
+        </>
+      }
+    />
+  );
+}
+
+/** The answers the models of the pairs learn from, in the order of the buttons of the pairs. */
+const PAIR_ANSWERS = ["SAME", "DIFFERENT", "SERIES", "TRANSLATION", "PARTIAL"] as const;
+
+/**
+ * The models of the pairs of duplicates — of one work and of one series —, by one plugin that also looks
+ * for the pairs: the plugin chosen among those installed (the pairs looked for anew by it), the answers
+ * they learnt from by the word, fitted again or the pairs looked for anew on asking.
+ */
+function PairsCard({ type, m }: { type: ContentTypeInfo; m: ModelState }) {
+  const { t } = useTranslation("model");
+  const queryClient = useQueryClient();
+  const changed = () => queryClient.invalidateQueries({ queryKey: modelsKey(type.id) });
+  const choose = useMutation({
+    mutationFn: async (method: string) => {
+      ensureOk(await api.PUT("/api/types/{type}/models/pairs/method", { params: { path: { type: type.id } }, body: { method } }));
+    },
+    onSuccess: changed,
+  });
+  const fit = async () => {
+    ensureOk(await api.POST("/api/types/{type}/models/pairs/fit", { params: { path: { type: type.id } } }));
+    await changed();
+  };
+  const search = async () => {
+    ensureOk(await api.POST("/api/types/{type}/duplicates/search", { params: { path: { type: type.id } } }));
+    await changed();
+  };
+  const answers = m.answers ?? {};
+  const byWord = PAIR_ANSWERS.filter((a) => answers[a])
+    .map((a) => `${t(`ModelsScreen.answer.${a}`)} ${number(answers[a])}`)
+    .join(", ");
+  return (
+    <ModelCard
+      title={t("ModelsScreen.pairs")}
+      hint={t("ModelsScreen.pairsHint")}
+      m={m}
+      method={m.method ? scorerTitle(m.method) : undefined}
+      examples={m.items !== undefined ? `${t("ModelsScreen.answers", { count: m.items })}: ${byWord}` : undefined}
+      actions={
+        <>
+          {(m.methods ?? []).length > 1 && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={t("ModelsScreen.pairMethodHint")}>
+              {t("ModelsScreen.pairMethod")}
+              <select
+                value={m.method ?? ""}
+                disabled={m.running || choose.isPending}
+                onChange={(e) => choose.mutate(e.target.value)}
+                className="h-8 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
+              >
+                {(m.methods ?? []).map((id) => (
+                  <option key={id} value={id}>
+                    {scorerTitle(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <AsyncButton size="sm" variant="outline" onClick={fit} disabled={m.running} icon={<RefreshCwIcon />} title={t("ModelsScreen.pairFitHint")}>
+            {t("ModelsScreen.retrain")}
+          </AsyncButton>
+          <AsyncButton size="sm" variant="outline" onClick={search} disabled={m.running} icon={<SearchCheckIcon />} title={t("ModelsScreen.pairSearchHint")}>
+            {t("ModelsScreen.pairSearch")}
           </AsyncButton>
         </>
       }

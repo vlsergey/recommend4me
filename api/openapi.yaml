@@ -2333,6 +2333,38 @@ paths:
         '404':
           description: No such type, source, facet or method
 
+  /api/types/{type}/models/pairs/method:
+    put:
+      tags: [duplicates]
+      operationId: choosePairMethod
+      summary: Makes a plugin of pairs the one the pairs of duplicates of the type are looked for and compared by, and looks for them anew by it in the background, its models fitted with them
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MethodChoice'
+      responses:
+        '204':
+          description: Chosen; the search planned
+        '404':
+          description: No such type or plugin
+
+  /api/types/{type}/models/pairs/fit:
+    post:
+      tags: [duplicates]
+      operationId: fitPairModels
+      summary: Fits the models of the pairs of duplicates of the type again on the pairs kept, in the background
+      parameters:
+        - $ref: '#/components/parameters/Type'
+      responses:
+        '204':
+          description: Planned
+        '404':
+          description: No such type
+
   /api/types/{type}/model/worth:
     post:
       tags: [model]
@@ -4230,10 +4262,11 @@ components:
       properties:
         id:
           type: string
-          description: '"grade", "interest", or "facet:<source>:<facet>"'
+          description: '"grade", "interest", "facet:<source>:<facet>", or "pairs"'
         kind:
           type: string
-          enum: [GRADE, INTEREST, FACET]
+          enum: [GRADE, INTEREST, FACET, PAIRS]
+          description: The model of the grades, of interest, of a facet of a source, or the models of the pairs of duplicates - of one work and of one series, by one plugin that also looks for the pairs
         source:
           type: string
           description: Of a facet's model, the source
@@ -4274,6 +4307,11 @@ components:
         positives:
           type: integer
           description: Of the model of interest, the works marked interesting; the rest of items not
+        answers:
+          type: object
+          description: Of the models of the pairs, the pairs answered on that they learn from, by the word (SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES); items is all of them
+          additionalProperties:
+            type: integer
         tried:
           type: array
           description: Every setting tried by the search that chose them, with the quality it held out

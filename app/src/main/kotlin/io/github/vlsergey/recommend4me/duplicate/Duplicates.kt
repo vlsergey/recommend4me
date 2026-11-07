@@ -6,15 +6,12 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkEvents
-import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -23,28 +20,6 @@ import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(Duplicates::class.java)
-
-/**
- * The user's word on a pair: one work; different works; or related works ([related]) — one the TRANSLATION of the
- * other, one holding a PARTIAL of the other's text (a site's fewer chapters, a collection), two works of one SERIES
- * (the volumes of a cycle) — not linked, each its own grade and interest. A translation and a part are left out of the
- * model of one work ([PairModels.fit]): a translation's authors differ while its tags and description are the other's —
- * neither one work nor two; two works of one series are two works, and what the model of a series learns from.
- */
-enum class DuplicateAnswer {
-    SAME,
-    DIFFERENT,
-    TRANSLATION,
-    PARTIAL,
-    SERIES;
-
-    /**
-     * Related works, kept by their kind ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]): not
-     * linked.
-     */
-    val related: Boolean
-        get() = this == TRANSLATION || this == PARTIAL || this == SERIES
-}
 
 /**
  * THE WORKS OF DIFFERENT SITES THAT MAY BE ONE WORK, and the user's word on each pair. A search ([search]), in the
@@ -62,7 +37,7 @@ enum class DuplicateAnswer {
  *
  * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work, and how likely it is one series of works, are models
  * of the user's answers over how alike its layers are — a plugin's ([PairModel], [PairModels]) — fitted at every search
- * and a few seconds after the answers ([answered]); the search keeps of every work the pair every model finds
+ * and a few seconds after the answers ([PairFitting]); the search keeps of every work the pair every model finds
  * likeliest, every pair scored by both at once, on the card when there is one. The pairs are shown by the score by the
  * formula of the list (the prediction times the chance of interest) of the work the pair was found for times that
  * chance: a likely pair of a work the user would read first ([DuplicatePages]); the words on pairs are kept in a
@@ -73,9 +48,10 @@ class Duplicates(
     private val stores: Stores,
     private val plugins: Plugins,
     private val workload: Workload,
-    private val works: Works,
     private val workEvents: WorkEvents,
     private val models: PairModels,
+    private val answers: PairAnswers,
+    private val fitting: PairFitting,
     /** The card, when the launch asks for it: the search made there. */
     private val cards: ObjectProvider<CardSource>,
 ) {
@@ -86,14 +62,21 @@ class Duplicates(
     /** The types whose search is planned or running. */
     private val searching: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
-    /** The types whose model of the answers is to be fitted again, put off by every answer till they are quiet. */
-    private val fitting = ConcurrentHashMap<String, ScheduledFuture<*>>()
-
     /**
      * Whether a search of the type is planned or running: the pairs are to come. A fitting after an answer is not told:
      * nothing is read for an answer.
      */
     fun isSearching(type: TypeStore) = type.id in searching
+
+    /**
+     * The plugin of pairs [id] made the type's, and the pairs looked for anew by it, its models fitted with them: the
+     * models another plugin packed it reads none of. False of no such plugin.
+     */
+    fun chooseModel(type: TypeStore, id: String): Boolean {
+        if (!models.choose(type.id, id)) return false
+        plan(type, "model chosen", asked = true)
+        return true
+    }
 
     /** Every type of several sites never searched yet: searched once, in the background. */
     @Order(START_ORDER)
@@ -131,9 +114,9 @@ class Duplicates(
      */
     private fun search(type: TypeStore) {
         val encoder = plugins.textEncoder()?.id ?: return
-        val model = models.model() ?: return
+        val model = models.model(type.id) ?: return
         val started = System.currentTimeMillis()
-        val said = said(type)
+        val said = answers.said(type)
         val search = TypeSearch.read(type, encoder, said)
         val read = System.currentTimeMillis() - started
         val kept = models.of(type)
@@ -146,9 +129,19 @@ class Duplicates(
             )
         val compared = System.currentTimeMillis() - started
         val fitted = PairModels.fit(model, found.values, said)
+        val now = Instant.now()
         type.duplicates.replace(
             found.values,
-            DuplicateSearch(Instant.now(), encoder, search.works, model.id, fitted.same?.pack(), fitted.series?.pack()),
+            DuplicateSearch(
+                now,
+                encoder,
+                search.works,
+                model.id,
+                fitted.same?.pack(),
+                fitted.series?.pack(),
+                now,
+                System.currentTimeMillis() - started - compared,
+            ),
         )
         log.info(
             "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs in {} ms " +
@@ -164,78 +157,6 @@ class Duplicates(
             System.currentTimeMillis() - started - compared,
             fitted.same != null,
             fitted.series != null,
-        )
-    }
-
-    /**
-     * The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different,
-     * related.
-     */
-    fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> {
-        val out = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
-        type.links.distincts().forEach { out[it] = DuplicateAnswer.DIFFERENT }
-        type.links.relations().forEach { (pair, kind) ->
-            runCatching { DuplicateAnswer.valueOf(kind) }.getOrNull()?.takeIf { it.related }?.let { out[pair] = it }
-        }
-        works.of(type).linkedWorks().forEach { members ->
-            members.forEachIndexed { k, a ->
-                members
-                    .drop(k + 1)
-                    .filter { it.source != a.source }
-                    .forEach { b -> out[type.links.ordered(a, b)] = DuplicateAnswer.SAME }
-            }
-        }
-        return out
-    }
-
-    /**
-     * The model of the answers fitted again a few seconds after the last answer, of the pairs kept as they are: in the
-     * queue of the computations, ahead of the background's works — the user's answer asked for it, and the pairs are
-     * shown in its order as soon as it is kept.
-     */
-    private fun answered(type: TypeStore) {
-        val work = Work("duplicatesModel", type = type.id)
-        workload.plan(work, Instant.now().plusSeconds(QUIET_SECONDS), "answer")
-        fitting.compute(type.id) { _, before ->
-            before?.cancel(false)
-            worker.schedule(
-                {
-                    // The boundary of the worker's thread: whatever the fitting throws is logged, the type let go of
-                    @Suppress("TooGenericExceptionCaught")
-                    try {
-                        workload.run(work, asked = true) { fitAnew(type) }
-                    } catch (e: Exception) {
-                        log.warn("{}: the model of the duplicates was not fitted: {}", type.id, e.message, e)
-                    } finally {
-                        fitting.remove(type.id)
-                    }
-                },
-                QUIET_SECONDS,
-                TimeUnit.SECONDS,
-            )
-        }
-    }
-
-    /**
-     * The models of the answers fitted anew on the pairs kept as they are, and kept: none without a plugin of pairs.
-     */
-    private fun fitAnew(type: TypeStore) {
-        val model = models.model() ?: return
-        val started = System.currentTimeMillis()
-        val said = said(type)
-        val pairs = type.duplicates.all()
-        val fitted = PairModels.fit(model, pairs, said)
-        type.duplicates.keepModels(model.id, fitted.same?.pack(), fitted.series?.pack())
-        log.info(
-            "{}: the models of the pairs fitted on {} pairs, {} said one work, {} one series, {} related otherwise, " +
-                "{} different, in {} ms",
-            type.id,
-            pairs.size,
-            said.values.count { it == DuplicateAnswer.SAME },
-            said.values.count { it == DuplicateAnswer.SERIES },
-            said.values.count { it.related && it != DuplicateAnswer.SERIES },
-            said.values.count { it == DuplicateAnswer.DIFFERENT },
-            System.currentTimeMillis() - started,
         )
     }
 
@@ -256,7 +177,7 @@ class Duplicates(
             DuplicateAnswer.DIFFERENT -> type.links.distinct(a, b, now)
             else -> type.links.relate(a, b, verdict.name, now)
         }
-        answered(type)
+        fitting.afterAnswer(type)
         return true
     }
 
@@ -271,7 +192,7 @@ class Duplicates(
         val pair = type.links.ordered(a, b)
         if (pair in type.links.relations() || pair in type.links.distincts()) type.links.takeBack(a, b, now)
         else type.links.unlink(a, b, now)
-        answered(type)
+        fitting.afterAnswer(type)
     }
 
     @PreDestroy
@@ -285,8 +206,5 @@ class Duplicates(
          * data the search reads.
          */
         private const val START_ORDER = 20
-
-        /** The quiet after the last answer before the model of the answers is fitted again. */
-        private const val QUIET_SECONDS = 3L
     }
 }

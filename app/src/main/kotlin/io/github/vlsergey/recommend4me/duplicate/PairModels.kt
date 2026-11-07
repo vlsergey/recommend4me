@@ -56,24 +56,34 @@ class PairChances(val same: FittedPairModel, val series: FittedPairModel?, val l
 class PairModels(private val plugins: Plugins, private val settings: Settings) {
 
     /**
-     * The plugin of pairs in use: the one named by the setting `duplicates.model`, else the first; null when none is
-     * installed — no pair is looked for then.
+     * The plugin of pairs a content type's pairs are looked for and compared by: the one named by the setting
+     * `duplicates.model.<type>`, else the first; null when none is installed — no pair is looked for then.
      */
-    fun model(): PairModel? =
-        plugins.pairModels.firstOrNull { it.id == settings.get("duplicates.model") } ?: plugins.pairModels.firstOrNull()
+    fun model(typeId: String): PairModel? =
+        plugins.pairModels.firstOrNull { it.id == settings.get(setting(typeId)) } ?: plugins.pairModels.firstOrNull()
+
+    /** The plugin of pairs [id] made the one of the type; false of no such plugin. */
+    fun choose(typeId: String, id: String): Boolean {
+        if (plugins.pairModels.none { it.id == id }) return false
+        settings.set(setting(typeId), id)
+        return true
+    }
 
     /**
      * The models kept of the [type], unpacked by the plugin in use when it made them; else the model before any answer
      * of one work, and none of a series. Null without a plugin of pairs.
      */
     fun of(type: TypeStore): PairChances? {
-        val model = model() ?: return null
+        val model = model(type.id) ?: return null
         val search = type.duplicates.search()?.takeIf { it.model == model.id }
         val same = search?.same?.let(model::unpack)
         return PairChances(same ?: model.prior(), search?.series?.let(model::unpack), same != null)
     }
 
     companion object {
+        /** The setting the plugin of pairs of a content type is named by. */
+        fun setting(typeId: String) = "duplicates.model.$typeId"
+
         /**
          * The models of the user's answers on the [pairs] ([said]) fitted by the [model]: of one work, every pair not
          * answered on a likely different one, a pair said one series a different one, the translations and the parts

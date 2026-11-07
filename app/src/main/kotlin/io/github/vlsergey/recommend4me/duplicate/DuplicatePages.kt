@@ -38,6 +38,7 @@ class DuplicatePages(
     private val stores: Stores,
     private val works: Works,
     private val duplicates: Duplicates,
+    private val answers: PairAnswers,
     private val views: DuplicateViews,
     private val sizes: WorkSizes,
     private val models: PairModels,
@@ -59,7 +60,7 @@ class DuplicatePages(
     fun page(typeId: String, choice: PairChoice, offset: Int, limit: Int): DuplicatePage? {
         val type = stores.type(typeId) ?: return null
         val sort = choice.sort
-        val said = duplicates.said(type)
+        val said = answers.said(type)
         val search = type.duplicates.search()
         val chances = models.of(type)
         val kept = type.duplicates.all()
@@ -153,7 +154,7 @@ class DuplicatePages(
                 // Found by several items of the work, the other is one: the likeliest pair of them, an answer going
                 // across the work
                 .distinctBy { if (it.pair.first in own) it.pair.second else it.pair.first }
-        return views.pairs(type, duplicates.said(type), found)
+        return views.pairs(type, answers.said(type), found)
     }
 
     /**

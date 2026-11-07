@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.DuplicateVerdict
+import io.github.vlsergey.recommend4me.api.model.MethodChoice
 import io.github.vlsergey.recommend4me.api.model.WorkPairJournalPage
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
@@ -20,6 +21,7 @@ class DuplicatesController(
     private val duplicates: Duplicates,
     private val pages: DuplicatePages,
     private val journal: DuplicateJournal,
+    private val fitting: PairFitting,
 ) : DuplicatesApi {
 
     override fun getDuplicates(
@@ -45,6 +47,18 @@ class DuplicatesController(
         val store = stores.type(type) ?: return ResponseEntity.notFound().build()
         duplicates.plan(store, "asked", asked = true)
         return ResponseEntity.accepted().build()
+    }
+
+    override fun choosePairMethod(type: String, methodChoice: MethodChoice): ResponseEntity<Unit> {
+        val store = stores.type(type) ?: return ResponseEntity.notFound().build()
+        return if (duplicates.chooseModel(store, methodChoice.method)) ResponseEntity.noContent().build()
+        else ResponseEntity.notFound().build()
+    }
+
+    override fun fitPairModels(type: String): ResponseEntity<Unit> {
+        val store = stores.type(type) ?: return ResponseEntity.notFound().build()
+        fitting.now(store)
+        return ResponseEntity.noContent().build()
     }
 
     override fun answerDuplicate(type: String, duplicateAnswer: ApiDuplicateAnswer): ResponseEntity<Unit> {
