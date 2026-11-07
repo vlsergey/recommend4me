@@ -24,9 +24,9 @@ class PairChancesTest {
         val different = (10 until 20).map { pair(it, 0.2f) }
         val chances = PairChances(byTitle, null, true)
         val said = (same.map { it.pair to true } + different.map { it.pair to false }).toMap()
-        val boundary = chances.boundary(same + different) { said[it.pair] }
+        val boundary = chances.boundary(same + different, chances::logit) { said[it.pair] }
         assertTrue(boundary > chances.logit(pair(100, 0.2f)) && boundary < chances.logit(pair(100, 0.9f)), "$boundary")
-        assertEquals(0.0, chances.boundary(same) { said[it.pair] })
+        assertEquals(0.0, chances.boundary(same, chances::logit) { said[it.pair] })
     }
 
     @Test
@@ -76,5 +76,35 @@ class PairChancesTest {
         val chances = PairChances(byTitle, null, false)
         assertEquals(null, chances.series(pair(1, 0.5f)))
         assertEquals(0.5, chances.same(pair(1, 0.5f)), 1e-9)
+    }
+
+    @Test
+    fun `the boundary of one series stands on the chance of one series, none without its model`() {
+        // The chance of one work by the title, of one series by its complement: the two scales apart
+        val bySeries =
+            object : FittedPairModel {
+                override fun chance(layers: PairLayers) = 1 - layers.title.toDouble()
+
+                override fun pack() = ByteArray(0)
+            }
+        val series = (0 until 10).map { pair(it, 0.1f) }
+        val other = (10 until 20).map { pair(it, 0.7f) }
+        val said = (series.map { it.pair to true } + other.map { it.pair to false }).toMap()
+        val chances = PairChances(byTitle, bySeries, true)
+        val boundary = chances.boundary(series + other, chances::seriesLogit) { said[it.pair] }
+        assertTrue(
+            boundary < chances.seriesLogit(pair(100, 0.1f))!! && boundary > chances.seriesLogit(pair(100, 0.7f))!!,
+            "$boundary",
+        )
+        val none = PairChances(byTitle, null, true)
+        assertEquals(0.0, none.boundary(series + other, none::seriesLogit) { said[it.pair] })
+    }
+
+    @Test
+    fun `the open pairs hold the answered ones of the words chosen, the answered every answered one`() {
+        val open = PairChoice(false, setOf(DuplicateAnswer.DIFFERENT))
+        assertTrue(open.holds(null) && open.holds(DuplicateAnswer.DIFFERENT) && !open.holds(DuplicateAnswer.SAME))
+        val answered = PairChoice(true, setOf(DuplicateAnswer.DIFFERENT))
+        assertTrue(!answered.holds(null) && answered.holds(DuplicateAnswer.SAME))
     }
 }

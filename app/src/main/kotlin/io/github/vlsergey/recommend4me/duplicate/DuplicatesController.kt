@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.api.model.DuplicateAnswer as ApiDuplicate
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
+import io.github.vlsergey.recommend4me.api.model.DuplicateVerdict
 import io.github.vlsergey.recommend4me.api.model.WorkPairJournalPage
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
@@ -27,8 +28,10 @@ class DuplicatesController(
         offset: Int,
         limit: Int,
         sort: DuplicateSort,
+        also: List<DuplicateVerdict>?,
     ): ResponseEntity<DuplicatePage> {
-        val page = pages.page(type, answered, offset, limit, sort) ?: return ResponseEntity.notFound().build()
+        val choice = PairChoice(answered, also.orEmpty().map { DuplicateAnswer.valueOf(it.name) }.toSet(), sort)
+        val page = pages.page(type, choice, offset, limit) ?: return ResponseEntity.notFound().build()
         // A search or a fitting planned or running: what there is, the page asks again
         return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
     }

@@ -54,8 +54,17 @@ const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | 
   { verdict: "SERIES", icon: <LibraryBigIcon />, word: "series" },
 ];
 
-/** What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default; or the chance of one series alone. */
-const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE", "SERIES", "UNCERTAIN"];
+/**
+ * What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default; or
+ * the chance of one series alone; or, of the pairs in doubt, those nearest where the answers change, of one work or of one series.
+ */
+const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE", "SERIES", "UNCERTAIN", "UNCERTAIN_SERIES"];
+
+/** The sorts whose order says nothing of the work, or is a chance shown already: no priority shown. */
+const NO_PRIORITY: DuplicateSort[] = ["SERIES", "UNCERTAIN", "UNCERTAIN_SERIES"];
+
+/** The words a pair answered on may be shown with among the open ones, by the words of their buttons. */
+const ALSO: { verdict: Verdict; word: "same" | "different" | "translation" | "partial" | "series" }[] = [...VERDICTS, ...RELATED];
 
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
@@ -80,13 +89,16 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const [limit, setLimit] = useState(PAGE);
   const [every, setEvery] = useRefresh("duplicates.refresh", EVERY_MS);
   const [sort, setSort] = usePref<DuplicateSort>("duplicates.sort", "FORMULA");
+  // Of the open pairs, the words of the answered ones shown with them: those said different looked through again by the chance of one series, say
+  const [also, setAlso] = usePref<Verdict[]>("duplicates.also", []);
+  const alsoNow = tab === "open" ? also : [];
   const [searchPressed, setSearchPressed] = useState(false);
   const queryClient = useQueryClient();
   const list = useQuery({
-    queryKey: [...duplicatesKey(type.id), answered, limit, sort],
+    queryKey: [...duplicatesKey(type.id), answered, limit, sort, alsoNow],
     enabled: tab !== "journal",
     queryFn: async (): Promise<DuplicatePage> => {
-      const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { answered, offset: 0, limit, sort } } });
+      const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { answered, offset: 0, limit, sort, also: alsoNow } } });
       if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
       return result.data;
     },
@@ -111,20 +123,18 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   };
   /**
    * The word [verdict] on [p] (none: taken back) kept, shown in the pairs read before. A word is on the two
-   * works, so every pair of them shown takes it at once ([afterWord]): of the open ones, every such row
-   * leaves, the works of the rest as the word left them; of the answered ones, every such row shows the
-   * new word — a word taken back, they leave. Nothing read again for it: the pairs are read as often as
-   * chosen ([RefreshSelect]) — a list read after every answer moved the rows, locking them, between two
-   * presses of the user (user, 2026-10-30).
+   * works, so every pair of them shown takes it at once ([afterWord]): a word the list shows — of the open
+   * ones none or one of [also], of the answered ones any — every such row shows it where it stands; another,
+   * every such row leaves, the works of the rest as the word left them. Nothing read again for it: the
+   * pairs are read as often as chosen ([RefreshSelect]) — a list read after every answer moved the rows,
+   * locking them, between two presses of the user (user, 2026-10-30).
    */
   const settle = (p: DuplicatePair, verdict: Verdict | undefined) => {
     const rows = calm.shown ?? [];
     const touched = sharing(p, rows);
-    if (!answered || verdict === undefined) {
-      calm.change((list) => afterWord(p, verdict, list));
-      calm.remove(touched.map(rowOf));
-    } else
-      queryClient.setQueriesData<DuplicatePage>({ queryKey: duplicatesKey(type.id) }, (page) => page && { ...page, pairs: afterWord(p, verdict, page.pairs) });
+    const stays = answered ? verdict !== undefined : verdict === undefined || alsoNow.includes(verdict);
+    calm.change((list) => afterWord(p, verdict, list));
+    if (!stays) calm.remove(touched.map(rowOf));
     changed(touched);
   };
   const answer = async (p: DuplicatePair, verdict: Verdict) => {
@@ -214,6 +224,25 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
           </>
         )}
       </div>
+      {tab === "open" && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" title={t("DuplicatesScreen.alsoHint")}>
+          {t("DuplicatesScreen.also")}
+          {ALSO.map(({ verdict, word }) => (
+            <label key={verdict} className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={also.includes(verdict)}
+                onChange={() => {
+                  setAlso(also.includes(verdict) ? also.filter((v) => v !== verdict) : ALSO.map((a) => a.verdict).filter((v) => v === verdict || also.includes(v)));
+                  setLimit(PAGE);
+                }}
+                className="size-3.5"
+              />
+              {t(`PairRow.${word}`)}
+            </label>
+          ))}
+        </div>
+      )}
       {tab === "journal" ? (
         <PairJournal type={type} />
       ) : (
@@ -255,7 +284,7 @@ function PairRow({
 }: {
   pair: DuplicatePair;
   rowRef: (e: HTMLElement | null) => void;
-  /** Of the pairs in doubt the order says nothing of the work: no priority shown. */
+  /** Of the pairs in doubt the order says nothing of the work, of one series it is a chance shown: no priority shown ([NO_PRIORITY]). */
   sort: DuplicateSort;
   /** The rows moving: the buttons shown disabled, the reason no press is taken. */
   locked: boolean;
@@ -288,8 +317,7 @@ function PairRow({
             {t("PairRow.size", { value: percent(p.size) })}
           </span>
         )}
-        {/* Of the pairs in doubt the order says nothing of the work; of the sort by one series it is that chance, shown already */}
-        {sort !== "UNCERTAIN" && sort !== "SERIES" && p.priority != null && p.priority > 0 && (
+        {!NO_PRIORITY.includes(sort) && p.priority != null && p.priority > 0 && (
           // Of the sort by size the priority is words: a whole number, not a score of two digits
           <span className="tabular-nums" title={t(sort === "SIZE" ? "PairRow.prioritySizeHint" : "PairRow.priorityHint")}>
             {t("PairRow.priority", { value: sort === "SIZE" ? number(Math.round(p.priority)) : p.priority.toFixed(2) })}

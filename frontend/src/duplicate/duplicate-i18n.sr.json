@@ -1,4 +1,6 @@
 {
+  "DuplicatesScreen.also": "Prikaži i označene kao:",
+  "DuplicatesScreen.alsoHint": "Parovi sa ovim odgovorima prikazuju se uz parove bez odgovora — na primer, da se označeni kao „Različiti” pregledaju ponovo po verovatnoći istog ciklusa. Izbor se pamti u pregledaču",
   "DuplicatesScreen.answered": "Sa odgovorom",
   "DuplicatesScreen.description": "Za svako delo — najverovatniji par sa svakog drugog sajta: porede se sva polja zajednička sajtovima, osim samog teksta — naslov, opis, oznake, univerzumi, likovi, parovi, status i druge vrednosti, veličina. Prvo parovi gde je ocena po formuli dela za koje je par tražen, pomnožena verovatnoćom da je to jedno delo, viša. „Jedno delo” ih povezuje kao u prozoru dela: ocena i interesovanje postaju zajednički. „Različita” — par se više ne nudi. Odgovori uče model verovatnoće.",
   "DuplicatesScreen.failed": "Parovi nisu pročitani: {{error}}",
@@ -27,7 +29,8 @@
   "DuplicatesScreen.sortBy.INTEREST": "podudaranje × interesovanje",
   "DuplicatesScreen.sortBy.SERIES": "isti ciklus",
   "DuplicatesScreen.sortBy.SIZE": "podudaranje × veličina",
-  "DuplicatesScreen.sortBy.UNCERTAIN": "sporni parovi",
+  "DuplicatesScreen.sortBy.UNCERTAIN": "sporni: isti rad",
+  "DuplicatesScreen.sortBy.UNCERTAIN_SERIES": "sporni: isti ciklus",
   "DuplicatesScreen.sortHint": "Čime se množi verovatnoća jednog dela: interesovanjem i predviđenom ocenom dela za koje je par tražen (kad su dela našla jedno drugo — većim od dva). Izbor se pamti u pregledaču",
   "DuplicatesScreen.title": "Duplikati na različitim sajtovima",
   "DuplicatesScreen.total_few": "{{count, number}} para",

@@ -596,6 +596,15 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/DuplicateSort'
+        - name: also
+          in: query
+          description: Of the pairs not answered on ("answered" false), the pairs answered with these words too, shown among them - the pairs said different works looked through again by the chance of one series, say; none of the answered ones
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/DuplicateVerdict'
       responses:
         '200':
           description: The pairs
@@ -5314,7 +5323,7 @@ components:
 
     DuplicateSort:
       type: string
-      enum: [FORMULA, CHANCE, INTEREST, GRADE, SIZE, SERIES, UNCERTAIN]
+      enum: [FORMULA, CHANCE, INTEREST, GRADE, SIZE, SERIES, UNCERTAIN, UNCERTAIN_SERIES]
       default: FORMULA
       description: >
         What the chance a pair is one work is multiplied by, of the work the pair was found for (of both, the larger):
@@ -5324,7 +5333,13 @@ components:
         their sites or worked out of their characters (of one known, its own; of neither, nought). SERIES - no such
         product: the chance the pair is two works of one series alone, the likeliest first. UNCERTAIN - no
         such product: the pairs nearest where the user's answers change from different to one work first, whose
-        answer teaches the model most
+        answer teaches the model most. UNCERTAIN_SERIES - the same of the chance of one series: the pairs nearest
+        where the user's answers change from any other to one series first
+
+    DuplicateVerdict:
+      type: string
+      enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
+      description: A word on a pair - one work, different works, one the translation of the other, one a part of the other, two works of one series
 
     DuplicateFacet:
       type: object

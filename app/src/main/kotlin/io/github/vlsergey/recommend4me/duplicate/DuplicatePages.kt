@@ -17,6 +17,19 @@ import org.springframework.stereotype.Component
 internal const val MAX_PAGE = 200
 
 /**
+ * Which pairs a page holds and in what order: those not answered on, with those answered with the words [also] — or,
+ * [answered], every pair answered on — by the [sort].
+ */
+class PairChoice(
+    val answered: Boolean,
+    val also: Set<DuplicateAnswer> = emptySet(),
+    val sort: DuplicateSort = DuplicateSort.FORMULA,
+) {
+    /** Whether a pair of the [answer] (none: not answered on) is among the chosen. */
+    fun holds(answer: DuplicateAnswer?): Boolean = if (answered) answer != null else answer == null || answer in also
+}
+
+/**
  * THE PAIRS AS THEY ARE LOOKED THROUGH: a page of the pairs of a type in the order the user chose ([page]), and the
  * pairs of one work ([ofItem]).
  */
@@ -30,25 +43,22 @@ class DuplicatePages(
     private val models: PairModels,
 ) {
     /**
-     * A page of the pairs of the type: not [answered] — those neither linked (by any way, through other works too) nor
-     * said to be different — or answered, the works linked across the sites and those said to be different. The first
-     * by the chance the pair is one work, by the model of the answers, times what the [sort] says of the work the pair
-     * was found for ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list (the
+     * A page of the pairs of the type the [choice] holds: those not answered on — neither linked (by any way, through
+     * other works too) nor said to be different or related — with those answered with the words it names too, or the
+     * answered ones, the works linked across the sites and those said to be different or related. The first by the
+     * chance the pair is one work, by the model of the answers, times what the [sort] says of the work the pair was
+     * found for ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list (the
      * prediction times the chance of interest: a work the user would read first), its chance of interest, its predicted
      * grade, or nothing — a work of a high score, the likeliest of many works of another site, does not lift every pair
      * of them; equal, the likelier pair first. Or times the pair's own mean size ([DuplicateSort.SIZE]): the long works
      * first. Or by the chance the pair is one series of works ([DuplicateSort.SERIES]). Or, of the pairs in doubt
      * ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairChances.boundary]): what an
-     * answer teaches the model most. Every pair read for the request and let go. Null of no such type.
+     * answer teaches the model most; or the same of the chance of one series ([DuplicateSort.UNCERTAIN_SERIES]). Every
+     * pair read for the request and let go. Null of no such type.
      */
-    fun page(
-        typeId: String,
-        answered: Boolean,
-        offset: Int,
-        limit: Int,
-        sort: DuplicateSort = DuplicateSort.FORMULA,
-    ): DuplicatePage? {
+    fun page(typeId: String, choice: PairChoice, offset: Int, limit: Int): DuplicatePage? {
         val type = stores.type(typeId) ?: return null
+        val sort = choice.sort
         val said = duplicates.said(type)
         val search = type.duplicates.search()
         val chances = models.of(type)
@@ -57,17 +67,10 @@ class DuplicatePages(
         val words =
             if (sort != DuplicateSort.SIZE) emptyMap()
             else wordsOf(type, (kept.map { it.pair } + said.keys).flatMap { listOf(it.first, it.second) }.toSet())
-        val boundary =
-            if (sort == DuplicateSort.UNCERTAIN)
-                chances?.boundary(kept) { c ->
-                    said[c.pair]
-                        ?.takeIf { it == DuplicateAnswer.SAME || it == DuplicateAnswer.DIFFERENT }
-                        ?.let { it == DuplicateAnswer.SAME }
-                } ?: 0.0
-            else 0.0
+        val boundary = boundaryOf(sort, chances, kept, said)
         val ranking = Ranking(sort, chances, worthOf(type, sort), words, boundary)
         val rows =
-            if (!answered) kept.filter { it.pair !in said }.map { ranking.ranked(it.pair, it) }
+            if (!choice.answered) kept.filter { choice.holds(said[it.pair]) }.map { ranking.ranked(it.pair, it) }
             else kept.associateBy { it.pair }.let { byPair -> said.keys.map { ranking.ranked(it, byPair[it]) } }
         val sorted =
             rows.sortedWith(
@@ -85,6 +88,32 @@ class DuplicatePages(
             learnt = chances?.learnt == true,
         )
     }
+
+    /**
+     * Where the user's answers change, of a sort of the pairs in doubt: of one work, between those said one work and
+     * those said different, the translations and the parts left out as the model of one work leaves them; of one
+     * series, between those said one series and those given any other word, as the model of a series learns them.
+     * Nought of any other sort, or without a model.
+     */
+    private fun boundaryOf(
+        sort: DuplicateSort,
+        chances: PairChances?,
+        kept: Collection<DuplicateCandidate>,
+        said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+    ): Double =
+        when (sort) {
+            DuplicateSort.UNCERTAIN ->
+                chances?.boundary(kept, chances::logit) { c ->
+                    said[c.pair]
+                        ?.takeIf { it == DuplicateAnswer.SAME || it == DuplicateAnswer.DIFFERENT }
+                        ?.let { it == DuplicateAnswer.SAME }
+                }
+            DuplicateSort.UNCERTAIN_SERIES ->
+                chances?.boundary(kept, chances::seriesLogit) { c ->
+                    said[c.pair]?.let { it == DuplicateAnswer.SERIES }
+                }
+            else -> null
+        } ?: 0.0
 
     /**
      * What the [sort] says of every work: of the prediction (not below nought) and the chance of interest (the user's
@@ -152,7 +181,8 @@ private fun DuplicateSort.worth(grade: Double, interest: Double): Double =
         DuplicateSort.CHANCE,
         DuplicateSort.SIZE,
         DuplicateSort.SERIES,
-        DuplicateSort.UNCERTAIN -> 1.0
+        DuplicateSort.UNCERTAIN,
+        DuplicateSort.UNCERTAIN_SERIES -> 1.0
     }
 
 /**
@@ -175,7 +205,8 @@ private class Ranking(
             when (sort) {
                 DuplicateSort.CHANCE -> chance ?: 0.0
                 DuplicateSort.SERIES -> series ?: 0.0
-                DuplicateSort.UNCERTAIN -> doubt(layers)
+                DuplicateSort.UNCERTAIN,
+                DuplicateSort.UNCERTAIN_SERIES -> doubt(layers)
                 DuplicateSort.SIZE -> size(pair) * (chance ?: 0.0)
                 DuplicateSort.FORMULA,
                 DuplicateSort.INTEREST,
@@ -184,10 +215,14 @@ private class Ranking(
         return Ranked(pair, layers, chance, series, priority)
     }
 
-    /** How near the pair of [layers] is to where the user's answers change: one at it, less the farther. */
+    /**
+     * How near the pair of [layers] is to where the user's answers change, on the scale of the chance the sort is of:
+     * one at it, less the farther; none without that chance.
+     */
     private fun doubt(layers: DuplicateCandidate?): Double {
         if (layers == null || chances == null) return 0.0
-        return 1 / (1 + abs(chances.logit(layers) - boundary))
+        val at = if (sort == DuplicateSort.UNCERTAIN_SERIES) chances.seriesLogit(layers) else chances.logit(layers)
+        return at?.let { 1 / (1 + abs(it - boundary)) } ?: 0.0
     }
 
     /** The mean of the two works' sizes, of those known: of a work of no size known, the other's alone. */

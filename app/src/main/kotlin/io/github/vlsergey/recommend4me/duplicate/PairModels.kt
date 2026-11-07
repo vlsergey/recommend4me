@@ -18,24 +18,33 @@ class PairChances(val same: FittedPairModel, val series: FittedPairModel?, val l
     fun series(c: DuplicateCandidate): Double? = series?.chance(c.layers)
 
     /** The chance the pair is one work on the scale a logistic model adds up on. */
-    fun logit(c: DuplicateCandidate): Double =
-        same(c).coerceIn(LEAST_CHANCE, 1 - LEAST_CHANCE).let { ln(it / (1 - it)) }
+    fun logit(c: DuplicateCandidate): Double = scale(same(c))
+
+    /** The chance the pair is one series on the scale of [logit]; none without a model of one series. */
+    fun seriesLogit(c: DuplicateCandidate): Double? = series(c)?.let(::scale)
 
     /**
-     * Where on the scale of [logit] the user's answers change: between the mean of the [pairs] said one work and of
-     * those said not ([said], null of one not answered). Nearly every pair the model learns from is an unanswered one,
-     * so that even a pair worth asking about has a chance of some percent: what is in doubt is told by the answers, not
-     * by a half. Nought with neither kind of answer.
+     * Where on the scale of the chance [at] — [logit], [seriesLogit] — the user's answers change: between the mean of
+     * the [pairs] said to be of its kind and of those said not ([said], null of one not answered). Nearly every pair a
+     * model learns from is an unanswered one, so that even a pair worth asking about has a chance of some percent: what
+     * is in doubt is told by the answers, not by a half. Nought with neither kind of answer.
      */
-    fun boundary(pairs: Collection<DuplicateCandidate>, said: (DuplicateCandidate) -> Boolean?): Double {
-        val same = pairs.filter { said(it) == true }.map(::logit)
-        val different = pairs.filter { said(it) == false }.map(::logit)
-        return if (same.isEmpty() || different.isEmpty()) 0.0 else (same.average() + different.average()) / 2
+    fun boundary(
+        pairs: Collection<DuplicateCandidate>,
+        at: (DuplicateCandidate) -> Double?,
+        said: (DuplicateCandidate) -> Boolean?,
+    ): Double {
+        val yes = pairs.filter { said(it) == true }.mapNotNull(at)
+        val no = pairs.filter { said(it) == false }.mapNotNull(at)
+        return if (yes.isEmpty() || no.isEmpty()) 0.0 else (yes.average() + no.average()) / 2
     }
 
     private companion object {
         /** A chance of nought or one has no place on the scale of [logit]. */
         const val LEAST_CHANCE = 1e-12
+
+        /** The [chance] on the scale a logistic model adds up on. */
+        fun scale(chance: Double): Double = chance.coerceIn(LEAST_CHANCE, 1 - LEAST_CHANCE).let { ln(it / (1 - it)) }
     }
 }
 
