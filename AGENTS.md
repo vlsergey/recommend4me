@@ -106,3 +106,20 @@ the card's products against the processor's, a multiply and an add fused or not 
 only the last digits of a result is taken for speed. A test of such an implementation compares
 within those digits, never bit by bit. This is of how an algorithm is computed, not of which one:
 the model, its loss, what it reads and the rule it chooses by are chosen for what they give.
+
+## A file is of one thing, a few hundred lines
+
+No file of the sources is longer than 600 lines — Kotlin's own conventions keep a file to "a few
+hundred lines", detekt's LargeClass begins at 600. The build checks it before it compiles
+(`checkFileLength` of every Kotlin module, `checkScriptLength` of the web interface and the
+extension; `build-logic/src/main/kotlin/FileLength.kt`).
+
+**A file too long is split by meaning, never by its length.** Each new file is about one thing — an
+entity, a step, a purpose the reader names ("the dictionaries of the facets", "the choice of what a
+work is shown with"), named after it and holding all of it: never "part 2", never a cut where the
+lines ran out, never a bag of helpers. If the honest name of a piece is a kind of code rather than a
+thing it is about, the cut is wrong.
+
+The files longer already are named in `config/file-length.txt` with the lines each had then: such a
+file never grows, a change in it splits it by meaning as it goes, and it leaves the list once it is
+short. No file is added to the list.

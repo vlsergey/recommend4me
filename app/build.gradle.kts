@@ -152,8 +152,23 @@ val npmInstall = tasks.register<Exec>("npmInstall") {
     outputs.dir(frontendDir.dir("node_modules"))
 }
 
+// No file of the web interface's or of the extension's sources longer than it may be (FileLength), checked
+// before they are built — the Kotlin of every module is checked by its own convention
+val checkScriptLength = tasks.register("checkScriptLength") {
+    val sources = files(
+        // Not the types generated of the API (src/api/schema.d.ts): no one writes them
+        fileTree(frontendDir.dir("src")) { include("**/*.ts", "**/*.tsx", "**/*.js"); exclude("api/schema.d.ts") },
+        fileTree(rootProject.layout.projectDirectory.dir("browser-extension/extension")) { include("**/*.js") },
+    )
+    val root = rootProject.projectDir
+    inputs.files(sources)
+    inputs.files(rootProject.file(FileLength.KNOWN)).optional()
+    doLast { FileLength.check(root, sources.files) }
+}
+tasks.named("check") { dependsOn(checkScriptLength) }
+
 val buildFrontend = tasks.register<Exec>("buildFrontend") {
-    dependsOn(npmInstall)
+    dependsOn(npmInstall, checkScriptLength)
     workingDir = frontendDir.asFile
     commandLine(npm(), "run", "build")
     inputs.dir(frontendDir.dir("src"))

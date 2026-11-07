@@ -26,6 +26,17 @@ kotlin {
     }
 }
 
+// No file of the module's sources longer than it may be ([FileLength]): checked before anything is compiled
+val checkFileLength = tasks.register("checkFileLength") {
+    val sources = fileTree("src") { include("**/*.kt", "**/*.kts", "**/*.java") }
+    val root = rootProject.projectDir
+    inputs.files(sources)
+    inputs.files(rootProject.file(FileLength.KNOWN)).optional()
+    doLast { FileLength.check(root, sources.files) }
+}
+tasks.named("compileKotlin") { dependsOn(checkFileLength) }
+tasks.named("check") { dependsOn(checkFileLength) }
+
 dependencies {
     "testImplementation"(platform(catalog.findLibrary("spring-boot-bom").get()))
     "testImplementation"(catalog.findLibrary("kotlin-test").get())

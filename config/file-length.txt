@@ -1,0 +1,15 @@
+# The files longer than 600 lines (FileLength): each with the lines it had when it was named here.
+# Such a file never grows; split by what its parts are about, it leaves the list. No file is added.
+browser-extension/extension/page.js 2258
+app/src/main/kotlin/io/github/vlsergey/recommend4me/suggestion/FacetSuggestions.kt 1829
+app/src/main/kotlin/io/github/vlsergey/recommend4me/tag/Tags.kt 1221
+app/src/test/kotlin/io/github/vlsergey/recommend4me/SiteTest.kt 1216
+frontend/src/tag/TagsScreen.tsx 1168
+app/src/main/kotlin/io/github/vlsergey/recommend4me/model/Recommendations.kt 994
+frontend/src/universe/FanficSection.tsx 971
+app/src/main/kotlin/io/github/vlsergey/recommend4me/duplicate/Duplicates.kt 849
+app/src/test/kotlin/io/github/vlsergey/recommend4me/TwoSitesTest.kt 815
+plugins/search-lucene/src/main/kotlin/io/github/vlsergey/recommend4me/search/LuceneSearch.kt 663
+plugins/suggester-bilinear/src/main/kotlin/io/github/vlsergey/recommend4me/suggestion/Ensemble.kt 663
+plugins/suggester-bilinear/src/main/kotlin/io/github/vlsergey/recommend4me/suggestion/Scoring.kt 610
+frontend/src/universe/Universes.tsx 605
