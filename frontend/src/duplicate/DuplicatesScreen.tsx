@@ -63,8 +63,14 @@ const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE"
 /** The sorts whose order says nothing of the work, or is a chance shown already: no priority shown. */
 const NO_PRIORITY: DuplicateSort[] = ["SERIES", "UNCERTAIN", "UNCERTAIN_SERIES"];
 
-/** The words a pair answered on may be shown with among the open ones, by the words of their buttons. */
-const ALSO: { verdict: Verdict; word: "same" | "different" | "translation" | "partial" | "series" }[] = [...VERDICTS, ...RELATED];
+/** The answer of a pair the list is chosen by: a word, or none ("NONE"). */
+type Shown = Verdict | "NONE";
+
+/** The answers the pairs shown are chosen by, each a checkbox: none first, then the words, by the words of their buttons. */
+const SHOWN = [
+  { shown: "NONE" as Shown, word: "DuplicatesScreen.open" as const },
+  ...[...VERDICTS, ...RELATED].map((v) => ({ shown: v.verdict as Shown, word: `PairRow.${v.word}` as const })),
+];
 
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
@@ -78,27 +84,28 @@ const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.f
  * one work (linked, its grade and interest shared, as the work's window links them), different works,
  * or — behind a drop-down — related ones: a translation, a part (not linked, each its own grade); never
  * offered again. The answers of one work and different works teach the model of the chances, fitted
- * again a few seconds after them. The answered ones apart, their word changed or taken back there; every
- * word said and taken back in the journal, the newest undone there ([PairJournal]). The pairs are looked for in
+ * again a few seconds after them. The pairs shown are chosen by their answer — none, or any of the words,
+ * each a checkbox kept in the browser: the pairs said different alone, by the chance of one series, say —
+ * a word changed or taken back where it stands; every word said and taken back in the journal, the newest undone there ([PairJournal]). The pairs are looked for in
  * the background, on the first start and when asked anew here.
  */
 export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const { t } = useTranslation("duplicate");
-  const [tab, setTab] = useState<"open" | "answered" | "journal">("open");
-  const answered = tab === "answered";
+  const [tab, setTab] = useState<"pairs" | "journal">("pairs");
   const [limit, setLimit] = useState(PAGE);
   const [every, setEvery] = useRefresh("duplicates.refresh", EVERY_MS);
   const [sort, setSort] = usePref<DuplicateSort>("duplicates.sort", "FORMULA");
-  // Of the open pairs, the words of the answered ones shown with them: those said different looked through again by the chance of one series, say
-  const [also, setAlso] = usePref<Verdict[]>("duplicates.also", []);
-  const alsoNow = tab === "open" ? also : [];
+  // The answers the pairs shown are chosen by: the pairs not answered on at first
+  const [chosen, setChosen] = usePref<Shown[]>("duplicates.shown", ["NONE"]);
+  const open = chosen.includes("NONE");
+  const answers = chosen.filter((c): c is Verdict => c !== "NONE");
   const [searchPressed, setSearchPressed] = useState(false);
   const queryClient = useQueryClient();
   const list = useQuery({
-    queryKey: [...duplicatesKey(type.id), answered, limit, sort, alsoNow],
+    queryKey: [...duplicatesKey(type.id), open, answers, limit, sort],
     enabled: tab !== "journal",
     queryFn: async (): Promise<DuplicatePage> => {
-      const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { answered, offset: 0, limit, sort, also: alsoNow } } });
+      const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { open, answers, offset: 0, limit, sort } } });
       if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
       return result.data;
     },
@@ -123,16 +130,15 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   };
   /**
    * The word [verdict] on [p] (none: taken back) kept, shown in the pairs read before. A word is on the two
-   * works, so every pair of them shown takes it at once ([afterWord]): a word the list shows — of the open
-   * ones none or one of [also], of the answered ones any — every such row shows it where it stands; another,
-   * every such row leaves, the works of the rest as the word left them. Nothing read again for it: the
+   * works, so every pair of them shown takes it at once ([afterWord]): an answer the list is chosen by
+   * ([chosen]), every such row shows it where it stands; another, every such row leaves, the works of the rest as the word left them. Nothing read again for it: the
    * pairs are read as often as chosen ([RefreshSelect]) — a list read after every answer moved the rows,
    * locking them, between two presses of the user (user, 2026-10-30).
    */
   const settle = (p: DuplicatePair, verdict: Verdict | undefined) => {
     const rows = calm.shown ?? [];
     const touched = sharing(p, rows);
-    const stays = answered ? verdict !== undefined : verdict === undefined || alsoNow.includes(verdict);
+    const stays = chosen.includes(verdict ?? "NONE");
     calm.change((list) => afterWord(p, verdict, list));
     if (!stays) calm.remove(touched.map(rowOf));
     changed(touched);
@@ -173,8 +179,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
           }}
         >
           <TabsList>
-            <TabsTrigger value="open">{t("DuplicatesScreen.open")}</TabsTrigger>
-            <TabsTrigger value="answered">{t("DuplicatesScreen.answered")}</TabsTrigger>
+            <TabsTrigger value="pairs">{t("DuplicatesScreen.pairs")}</TabsTrigger>
             <TabsTrigger value="journal" title={t("DuplicatesScreen.journalHint")}>
               {t("DuplicatesScreen.journal")}
             </TabsTrigger>
@@ -224,21 +229,21 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
           </>
         )}
       </div>
-      {tab === "open" && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" title={t("DuplicatesScreen.alsoHint")}>
-          {t("DuplicatesScreen.also")}
-          {ALSO.map(({ verdict, word }) => (
-            <label key={verdict} className="flex items-center gap-1">
+      {tab === "pairs" && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" title={t("DuplicatesScreen.shownHint")}>
+          {t("DuplicatesScreen.shown")}
+          {SHOWN.map(({ shown: c, word }) => (
+            <label key={c} className="flex items-center gap-1">
               <input
                 type="checkbox"
-                checked={also.includes(verdict)}
+                checked={chosen.includes(c)}
                 onChange={() => {
-                  setAlso(also.includes(verdict) ? also.filter((v) => v !== verdict) : ALSO.map((a) => a.verdict).filter((v) => v === verdict || also.includes(v)));
+                  setChosen(chosen.includes(c) ? chosen.filter((v) => v !== c) : SHOWN.map((a) => a.shown).filter((v) => v === c || chosen.includes(v)));
                   setLimit(PAGE);
                 }}
                 className="size-3.5"
               />
-              {t(`PairRow.${word}`)}
+              {t(word)}
             </label>
           ))}
         </div>
@@ -250,7 +255,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
           {list.isLoading && <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.loading")}</p>}
           {list.isError && <p className="text-sm text-destructive">{t("DuplicatesScreen.failed", { error: list.error.message })}</p>}
           {data && shown.length === 0 && !data.pending && (
-            <p className="text-sm text-muted-foreground">{t(answered ? "DuplicatesScreen.noneAnswered" : data.searchedAt ? "DuplicatesScreen.none" : "DuplicatesScreen.neverSearched")}</p>
+            <p className="text-sm text-muted-foreground">{t(!data.searchedAt ? "DuplicatesScreen.neverSearched" : chosen.length === 1 && open ? "DuplicatesScreen.none" : "DuplicatesScreen.noneChosen")}</p>
           )}
           {shown.length > 0 && (
             <ul className={cn("flex flex-col gap-2", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>

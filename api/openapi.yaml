@@ -572,16 +572,18 @@ paths:
         other site likeliest one work with it - compared by every field every site has alike, the text
         aside - no threshold, every pair kept. Ordered by the chance the pair is one work, by the model
         of the user's answers, times what the sort says of the work the pair was found for (of both, the
-        larger). "answered" false: the pairs not answered on - neither one work (linked, by any way) nor
-        said to be different; true: those answered on. 202 while a search or a fitting of the model of
+        larger). The pairs shown by their answer: "open" those not answered on - neither one work (linked,
+        by any way) nor said to be different or related -, "answers" those answered with these words; the
+        pairs said different alone, by the chance of one series, say. 202 while a search or a fitting of the model of
         the answers is planned or running: what there is, the page asks again.
       parameters:
         - $ref: '#/components/parameters/Type'
-        - name: answered
+        - name: open
           in: query
+          description: The pairs not answered on are shown
           schema:
             type: boolean
-            default: false
+            default: true
         - name: offset
           in: query
           schema:
@@ -596,9 +598,9 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/DuplicateSort'
-        - name: also
+        - name: answers
           in: query
-          description: Of the pairs not answered on ("answered" false), the pairs answered with these words too, shown among them - the pairs said different works looked through again by the chance of one series, say; none of the answered ones
+          description: The pairs answered with these words are shown; none of them when not given
           style: form
           explode: true
           schema:

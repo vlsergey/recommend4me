@@ -101,10 +101,11 @@ class PairChancesTest {
     }
 
     @Test
-    fun `the open pairs hold the answered ones of the words chosen, the answered every answered one`() {
-        val open = PairChoice(false, setOf(DuplicateAnswer.DIFFERENT))
-        assertTrue(open.holds(null) && open.holds(DuplicateAnswer.DIFFERENT) && !open.holds(DuplicateAnswer.SAME))
-        val answered = PairChoice(true, setOf(DuplicateAnswer.DIFFERENT))
-        assertTrue(!answered.holds(null) && answered.holds(DuplicateAnswer.SAME))
+    fun `a page holds the pairs of the answers chosen, those not answered on as one of them`() {
+        val different = PairChoice(false, setOf(DuplicateAnswer.DIFFERENT))
+        assertTrue(!different.holds(null) && different.holds(DuplicateAnswer.DIFFERENT))
+        assertTrue(!different.holds(DuplicateAnswer.SAME) && !different.holds(DuplicateAnswer.SERIES))
+        val open = PairChoice(true)
+        assertTrue(open.holds(null) && !open.holds(DuplicateAnswer.DIFFERENT))
     }
 }

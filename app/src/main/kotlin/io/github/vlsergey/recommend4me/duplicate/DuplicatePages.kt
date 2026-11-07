@@ -17,16 +17,16 @@ import org.springframework.stereotype.Component
 internal const val MAX_PAGE = 200
 
 /**
- * Which pairs a page holds and in what order: those not answered on, with those answered with the words [also] — or,
- * [answered], every pair answered on — by the [sort].
+ * Which pairs a page holds and in what order: by their answer — [open], those not answered on; those answered with the
+ * words [answers] — by the [sort].
  */
 class PairChoice(
-    val answered: Boolean,
-    val also: Set<DuplicateAnswer> = emptySet(),
+    val open: Boolean,
+    val answers: Set<DuplicateAnswer> = emptySet(),
     val sort: DuplicateSort = DuplicateSort.FORMULA,
 ) {
     /** Whether a pair of the [answer] (none: not answered on) is among the chosen. */
-    fun holds(answer: DuplicateAnswer?): Boolean = if (answered) answer != null else answer == null || answer in also
+    fun holds(answer: DuplicateAnswer?): Boolean = if (answer == null) open else answer in answers
 }
 
 /**
@@ -43,18 +43,18 @@ class DuplicatePages(
     private val models: PairModels,
 ) {
     /**
-     * A page of the pairs of the type the [choice] holds: those not answered on — neither linked (by any way, through
-     * other works too) nor said to be different or related — with those answered with the words it names too, or the
-     * answered ones, the works linked across the sites and those said to be different or related. The first by the
-     * chance the pair is one work, by the model of the answers, times what the [sort] says of the work the pair was
-     * found for ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list (the
-     * prediction times the chance of interest: a work the user would read first), its chance of interest, its predicted
-     * grade, or nothing — a work of a high score, the likeliest of many works of another site, does not lift every pair
-     * of them; equal, the likelier pair first. Or times the pair's own mean size ([DuplicateSort.SIZE]): the long works
-     * first. Or by the chance the pair is one series of works ([DuplicateSort.SERIES]). Or, of the pairs in doubt
-     * ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairChances.boundary]): what an
-     * answer teaches the model most; or the same of the chance of one series ([DuplicateSort.UNCERTAIN_SERIES]). Every
-     * pair read for the request and let go. Null of no such type.
+     * A page of the pairs of the type the [choice] holds by their answer: those not answered on — neither linked (by
+     * any way, through other works too) nor said to be different or related —, those answered with the words it names —
+     * the works linked across the sites, those said to be different or related, found by the last search or not. The
+     * first by the chance the pair is one work, by the model of the answers, times what the [sort] says of the work the
+     * pair was found for ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list
+     * (the prediction times the chance of interest: a work the user would read first), its chance of interest, its
+     * predicted grade, or nothing — a work of a high score, the likeliest of many works of another site, does not lift
+     * every pair of them; equal, the likelier pair first. Or times the pair's own mean size ([DuplicateSort.SIZE]): the
+     * long works first. Or by the chance the pair is one series of works ([DuplicateSort.SERIES]). Or, of the pairs in
+     * doubt ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairChances.boundary]): what
+     * an answer teaches the model most; or the same of the chance of one series ([DuplicateSort.UNCERTAIN_SERIES]).
+     * Every pair read for the request and let go. Null of no such type.
      */
     fun page(typeId: String, choice: PairChoice, offset: Int, limit: Int): DuplicatePage? {
         val type = stores.type(typeId) ?: return null
@@ -69,9 +69,11 @@ class DuplicatePages(
             else wordsOf(type, (kept.map { it.pair } + said.keys).flatMap { listOf(it.first, it.second) }.toSet())
         val boundary = boundaryOf(sort, chances, kept, said)
         val ranking = Ranking(sort, chances, worthOf(type, sort), words, boundary)
+        val byPair = kept.associateBy { it.pair }
+        val open = if (choice.holds(null)) kept.filter { it.pair !in said } else emptyList()
         val rows =
-            if (!choice.answered) kept.filter { choice.holds(said[it.pair]) }.map { ranking.ranked(it.pair, it) }
-            else kept.associateBy { it.pair }.let { byPair -> said.keys.map { ranking.ranked(it, byPair[it]) } }
+            open.map { ranking.ranked(it.pair, it) } +
+                said.filterValues(choice::holds).keys.map { ranking.ranked(it, byPair[it]) }
         val sorted =
             rows.sortedWith(
                 compareByDescending<Ranked> { it.priority }

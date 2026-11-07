@@ -24,13 +24,13 @@ class DuplicatesController(
 
     override fun getDuplicates(
         type: String,
-        answered: Boolean,
+        open: Boolean,
         offset: Int,
         limit: Int,
         sort: DuplicateSort,
-        also: List<DuplicateVerdict>?,
+        answers: List<DuplicateVerdict>?,
     ): ResponseEntity<DuplicatePage> {
-        val choice = PairChoice(answered, also.orEmpty().map { DuplicateAnswer.valueOf(it.name) }.toSet(), sort)
+        val choice = PairChoice(open, answers.orEmpty().map { DuplicateAnswer.valueOf(it.name) }.toSet(), sort)
         val page = pages.page(type, choice, offset, limit) ?: return ResponseEntity.notFound().build()
         // A search or a fitting planned or running: what there is, the page asks again
         return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
