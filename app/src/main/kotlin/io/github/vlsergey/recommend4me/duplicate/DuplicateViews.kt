@@ -130,6 +130,9 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
     private val statusNames = namesOf(statusFacet)
     private val itemSizes = sizes.ofItems(type, s, ids, s.items.numbersOf(ids), fields)
 
+    // The normalized work of every item: a word on a pair is on the two works, the screen settles every pair of them
+    private val works = s.works.ofItems(s.id, ids)
+
     /** The names of the values of the [facet] the works have, by their keys; none of no such facet. */
     private fun namesOf(facet: String?): Map<String, String> =
         facet?.let { f -> s.names(f, facets.values.flatMap { it[f].orEmpty() }.distinct()) }.orEmpty()
@@ -148,6 +151,7 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
             DuplicateWork(
                 source = s.id,
                 item = id,
+                work = works[id],
                 title = Corrected.title(head.title, written),
                 url = head.url,
                 authors = authors.map { authorNames[it] ?: it },

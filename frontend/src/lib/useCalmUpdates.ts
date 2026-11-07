@@ -102,6 +102,9 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
     });
   };
 
+  /** The rows shown changed in their places, as a word kept changes them ([f] keeps every row's key): nothing moves. */
+  const change = (f: (list: T[]) => T[]) => setShown((list) => list && f(list));
+
   // The rows of the list changed: each moved from where it stood to where it stands, a new one faded in
   // biome-ignore lint/correctness/useExhaustiveDependencies: run once the list changed is drawn; it reads the rows' elements, [shown] is only when
   useLayoutEffect(() => {
@@ -127,5 +130,5 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
     if (e) rows.current.set(key, e);
     else rows.current.delete(key);
   };
-  return { shown, locked, remove, rowRef };
+  return { shown, locked, remove, change, rowRef };
 }

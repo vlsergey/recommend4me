@@ -77,4 +77,41 @@ class TypeLinkRepositoryTest {
             assertEquals(emptySet(), links.distincts())
         }
     }
+
+    @Test
+    fun `a word on two works reaches every item of them, those linked after it too`() {
+        Database("dictionaries", folder.resolve("dictionaries"), "dictionaries").use { dictionaries ->
+            val links =
+                TypeLinkRepository(
+                    WorkRepository(dictionaries.dsl),
+                    WorkPairJournal(dictionaries.dsl),
+                    listOf("a", "b", "c"),
+                )
+            val now = Instant.now()
+            fun said(x: ItemKey, y: ItemKey) =
+                links.relations()[links.ordered(x, y)]
+                    ?: "DIFFERENT".takeIf { links.ordered(x, y) in links.distincts() }
+            val a1 = ItemKey("a", "1")
+            val b1 = ItemKey("b", "1")
+            val c1 = ItemKey("c", "1")
+            val c2 = ItemKey("c", "2")
+            links.link(a1, b1, now)
+            links.relate(a1, c1, "SERIES", now)
+            links.distinct(b1, c2, now)
+            assertEquals("SERIES", said(b1, c1))
+            assertEquals("DIFFERENT", said(a1, c2))
+
+            // An item linked to a work after the word: the word is on it too, of either side
+            val b2 = ItemKey("b", "2")
+            links.link(b2, c1, now)
+            assertEquals("SERIES", said(a1, b2))
+            assertEquals("SERIES", said(b1, b2))
+
+            // Taken out of its work by a word, an item takes no word of the work with it
+            links.distinct(c1, b2, now)
+            assertEquals("DIFFERENT", said(c1, b2))
+            assertEquals("SERIES", said(a1, c1))
+            assertEquals(null, said(a1, b2))
+        }
+    }
 }

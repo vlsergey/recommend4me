@@ -10,6 +10,7 @@ import type { Corrections } from "@/correction/useCorrections";
 import { percent } from "@/i18n/format";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import { itemKey } from "@/item/lists";
+import { afterWord } from "./pairWorks";
 
 type Verdict = NonNullable<DuplicatePair["answer"]>;
 
@@ -50,10 +51,9 @@ export function WorkDuplicates({ type, item, sites, corrections }: { type: Conte
   });
   if (pairs.isLoading) return <Skeleton className="h-16 w-full" />;
   if (!pairs.data || pairs.data.length === 0) return null;
+  /** The word on [p] kept: every pair here of the same two works has it at once, a word being on the works ([afterWord]). */
   const answered = (p: DuplicatePair, answer: Verdict | undefined) =>
-    queryClient.setQueryData<DuplicatePair[]>(duplicatesKey(item), (all) =>
-      all?.map((q) => (sameItem(q.first, p.first) && sameItem(q.second, p.second) ? { ...q, answer } : q)),
-    );
+    queryClient.setQueryData<DuplicatePair[]>(duplicatesKey(item), (all) => all && afterWord(p, answer, all));
   const answer = async (p: DuplicatePair, other: ItemRef, verdict: Verdict) => {
     if (verdict === "SAME") await corrections.link(other);
     else ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { first: ref(p.first), second: ref(p.second), verdict } }));

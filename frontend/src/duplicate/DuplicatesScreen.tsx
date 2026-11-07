@@ -17,6 +17,7 @@ import { useCalmUpdates } from "@/lib/useCalmUpdates";
 import { pressKeys } from "@/lib/pressKeys";
 import { usePref } from "@/lib/usePref";
 import { PairJournal } from "./PairJournal";
+import { afterWord, sharing } from "./pairWorks";
 import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
 
@@ -100,28 +101,36 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   }, [data]);
   const calm = useCalmUpdates(data?.pairs, rowOf, sameRow);
   const shown = calm.shown ?? [];
-  /** What else shows the works' links marked out of date, read when next opened: nothing is read now. */
-  const changed = (p: DuplicatePair) => {
-    queryClient.invalidateQueries({ queryKey: itemKey(p.first), refetchType: "none" });
-    queryClient.invalidateQueries({ queryKey: itemKey(p.second), refetchType: "none" });
+  /** What else shows the links of the works of the [pairs] marked out of date, read when next opened: nothing is read now. */
+  const changed = (pairs: DuplicatePair[]) => {
+    pairs.forEach((p) => {
+      queryClient.invalidateQueries({ queryKey: itemKey(p.first), refetchType: "none" });
+      queryClient.invalidateQueries({ queryKey: itemKey(p.second), refetchType: "none" });
+    });
     queryClient.invalidateQueries({ queryKey: [ITEMS], refetchType: "none" });
   };
   /**
-   * The user's word on a pair: once kept, the row leaves — or, of the answered ones, shows the new word
-   * in the pairs read before. Nothing read again for it: the pairs are read as often as chosen
-   * ([RefreshSelect]) — a list read after every answer moved the rows, locking them, between two
+   * The word [verdict] on [p] (none: taken back) kept, shown in the pairs read before. A word is on the two
+   * works, so every pair of them shown takes it at once ([afterWord]): of the open ones, every such row
+   * leaves, the works of the rest as the word left them; of the answered ones, every such row shows the
+   * new word — a word taken back, they leave. Nothing read again for it: the pairs are read as often as
+   * chosen ([RefreshSelect]) — a list read after every answer moved the rows, locking them, between two
    * presses of the user (user, 2026-10-30).
    */
+  const settle = (p: DuplicatePair, verdict: Verdict | undefined) => {
+    const rows = calm.shown ?? [];
+    const touched = sharing(p, rows);
+    if (!answered || verdict === undefined) {
+      calm.change((list) => afterWord(p, verdict, list));
+      calm.remove(touched.map(rowOf));
+    } else
+      queryClient.setQueriesData<DuplicatePage>({ queryKey: duplicatesKey(type.id) }, (page) => page && { ...page, pairs: afterWord(p, verdict, page.pairs) });
+    changed(touched);
+  };
   const answer = async (p: DuplicatePair, verdict: Verdict) => {
     ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { ...refs(p), verdict } }));
-    if (!answered) calm.remove([rowOf(p)]);
-    else
-      queryClient.setQueriesData<DuplicatePage>({ queryKey: duplicatesKey(type.id) }, (page) =>
-        page && { ...page, pairs: page.pairs.map((q) => (rowOf(q) === rowOf(p) ? { ...q, answer: verdict } : q)) },
-      );
-    changed(p);
+    settle(p, verdict);
   };
-  /** The word taken back: once kept, the row leaves the answered ones. */
   const unanswer = async (p: DuplicatePair) => {
     const { first, second } = refs(p);
     ensureOk(
@@ -129,8 +138,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
         params: { path: { type: type.id }, query: { source: first.source, item: first.item, otherSource: second.source, otherItem: second.item } },
       }),
     );
-    calm.remove([rowOf(p)]);
-    changed(p);
+    settle(p, undefined);
   };
   const search = async () => {
     ensureOk(await api.POST("/api/types/{type}/duplicates/search", { params: { path: { type: type.id } } }));

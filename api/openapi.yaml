@@ -5346,6 +5346,10 @@ components:
           type: string
         item:
           type: string
+        work:
+          type: integer
+          format: int64
+          description: The normalized work the item is of, as read - a word on a pair is a word on the two works, of every item of them alike; none of an item no longer there (the journal)
         title:
           type: string
         url:
