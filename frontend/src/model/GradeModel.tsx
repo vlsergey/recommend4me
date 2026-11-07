@@ -109,10 +109,10 @@ function Ladder({ type, ladder }: { type: ContentTypeInfo; ladder: GradeOnScale[
       <h4 className="mb-1 text-sm font-semibold">{t("Ladder.title")}</h4>
       <p className="mb-3 text-xs text-muted-foreground">{t("Ladder.about")}</p>
       <div className="relative mx-3 mt-2 mb-14 h-1.5 rounded-full bg-muted">
-        {[...points.values()].map((group, i) => {
+        {[...points].map(([point, group], i) => {
           const at = Math.min(100, Math.max(0, group[0].score * 10));
           return (
-            <div key={i} className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${at}%` }}>
+            <div key={point} className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${at}%` }}>
               <div className="flex -space-x-1">
                 {group.map((l) => (
                   <span key={l.grade} className={cn("size-3.5 rounded-full ring-2 ring-background", GRADE_DOT[l.grade])} />

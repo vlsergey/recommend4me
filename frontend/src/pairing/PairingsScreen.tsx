@@ -60,7 +60,8 @@ export function PairingsScreen({ type, selected }: { type: ContentTypeInfo; sele
   const one = useQuery({
     queryKey: [PAIRINGS, "one", selected],
     enabled: selected !== undefined,
-    queryFn: async () => unwrap(await api.GET("/api/pairings/one", { params: { query: { pairing: selected! } } })),
+    // Run only with a pairing chosen ([enabled]): none chosen reads none
+    queryFn: async () => (selected === undefined ? null : unwrap(await api.GET("/api/pairings/one", { params: { query: { pairing: selected } } }))),
   });
   const chosen = one.data;
   return (
@@ -68,7 +69,16 @@ export function PairingsScreen({ type, selected }: { type: ContentTypeInfo; sele
       <aside className="flex min-w-0 flex-col gap-2">
         <h2 className="text-lg font-semibold">{t("PairingsScreen.title")}</h2>
         <NewPairing type={type} onChosen={(key) => navigate({ kind: "pairings", pairing: key })} />
-        <Input type="search" value={filter} onChange={(e) => (setFilter(e.target.value), setLimit(SHOWN))} placeholder={t("PairingsScreen.filter")} className="h-8" />
+        <Input
+          type="search"
+          value={filter}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            setLimit(SHOWN);
+          }}
+          placeholder={t("PairingsScreen.filter")}
+          className="h-8"
+        />
         <Tabs value={order} onValueChange={(v) => setOrder(v as Order)}>
           <TabsList>
             <TabsTrigger value="weight" title={t("PairingsScreen.byWeightHint")}>
@@ -203,7 +213,8 @@ function NewPairing({ type, onChosen }: { type: ContentTypeInfo; onChosen: (key:
         className="self-start"
         disabled={!first || !second}
         onClick={() => {
-          const key = pairingKey(first!.key, second!.key);
+          if (!first || !second) return;
+          const key = pairingKey(first.key, second.key);
           close();
           onChosen(key);
         }}

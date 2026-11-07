@@ -34,6 +34,7 @@ export function LinkSearch({ type, summary, corrections }: { type: ContentTypeIn
   const linked = (s: ItemRef) => summary.linked.some((l) => sameItem(l, s));
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: not a control itself; it only keeps the keys typed in its search from reaching the screen around it
     <div className="mt-2 flex flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />

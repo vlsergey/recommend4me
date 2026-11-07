@@ -62,7 +62,7 @@ export function FieldEditor({
 }) {
   const { t } = useTranslation("correction");
   const [draft, setDraft] = useState(value);
-  const invalid = numeric ? draft.trim() === "" || !isFinite(Number(draft.replace(",", "."))) : false;
+  const invalid = numeric ? draft.trim() === "" || !Number.isFinite(Number(draft.replace(",", "."))) : false;
   const save = async () => {
     await onSave(numeric ? String(Number(draft.replace(",", "."))) : draft);
     onClose();
@@ -80,9 +80,11 @@ export function FieldEditor({
     }
   };
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: not a control itself; it only keeps a press inside the editor from reaching the card or row it stands in
     <div className={cn("flex flex-col gap-2", className)} onClick={(e) => e.stopPropagation()}>
       {multiline ? (
         <textarea
+          // biome-ignore lint/a11y/noAutofocus: the editor opens on the user's own press of its pencil, and what they do next is type
           autoFocus
           rows={Math.min(16, Math.max(4, draft.split("\n").length + 1))}
           value={draft}

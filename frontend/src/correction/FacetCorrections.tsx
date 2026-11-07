@@ -63,7 +63,8 @@ export function FieldBlock({
   // The work's values the user has not answered on — not those only offered, nor those it has by a tag under them
   const open = facet?.values.filter((v) => !decided(v) && !v.offered && !v.implied) ?? [];
   const confirmAll = async () => {
-    for (const v of open) await corrections!.setFacet(facet!.facet, { key: v.key }, true);
+    if (!corrections || !facet) return;
+    for (const v of open) await corrections.setFacet(facet.facet, { key: v.key }, true);
   };
   return (
     <section data-field={field} className="flex scroll-mt-24 flex-col gap-1">
@@ -180,7 +181,7 @@ export function FacetLine({
 /** The quiet line before the offers that came after the work was opened. */
 export function LaterOffers() {
   const { t } = useTranslation("correction");
-  return <span className="mx-0.5 h-4 w-px self-center bg-border" title={t("LaterOffers.title")} aria-label={t("LaterOffers.title")} role="separator" />;
+  return <hr className="mx-0.5 h-4 w-px self-center border-0 bg-border" title={t("LaterOffers.title")} aria-label={t("LaterOffers.title")} aria-orientation="vertical" />;
 }
 
 /** A button by a line of values — "✓ all", 🔍, "…": as high as a chip, a finger's size on a touch screen. */
@@ -246,7 +247,7 @@ export function MoreCandidates({
     settled &&
     likeliest.length < now.limit &&
     rest.length <= likeliestStep * presses &&
-    (!byText || (named.length < now.named! && restNamed.length <= namedStep * presses));
+    (now.named === undefined || (named.length < now.named && restNamed.length <= namedStep * presses));
   // The press reads the next ones and shows them once they are there: the button is at work while
   // ITS press is ([AsyncButton]) — never while the candidates are read anew after answers, which
   // waits for the work's chances
@@ -343,7 +344,7 @@ export function FacetValue({
     >
       {mine && <CheckIcon className="size-3 text-yes" aria-label={t("FacetValue.yourAnswerYes")} />}
       {/* Given by a tag under it: marked as such, not by a chance of its own */}
-      {value.implied && !value.corrected && <span className="text-muted-foreground" aria-label={t("FacetValue.fromSubtag")}>↑</span>}
+      {value.implied && !value.corrected && <span className="text-muted-foreground" role="img" aria-label={t("FacetValue.fromSubtag")}>↑</span>}
       <span className={cn(removed && "line-through")}>
         {actions && corrections ? (
           <ValueName asked={asked} corrections={corrections} tag={tagLink === true}>
@@ -389,12 +390,15 @@ function AddFacetValue({ source, corrections, word = "", onClose }: { source: So
   const known = useQuery({
     queryKey: ["facet-values", source.id, facet?.key, query],
     enabled: facet !== undefined,
+    // Run only with a facet ([enabled]): no facet reads none
     queryFn: async () =>
-      unwrap(
-        await api.GET("/api/sources/{source}/facets/{facet}/values", {
-          params: { path: { source: source.id, facet: facet!.key }, query: { query: query || undefined, limit: OFFERED } },
-        }),
-      ),
+      facet
+        ? unwrap(
+            await api.GET("/api/sources/{source}/facets/{facet}/values", {
+              params: { path: { source: source.id, facet: facet.key }, query: { query: query || undefined, limit: OFFERED } },
+            }),
+          )
+        : [],
     // The offers do not blink away at every letter
     placeholderData: keepPreviousData,
   });
@@ -415,6 +419,7 @@ function AddFacetValue({ source, corrections, word = "", onClose }: { source: So
   };
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: not a control itself; it only keeps the keys typed in its fields from reaching the screen around it
     <div className="mt-1 flex flex-col gap-2 rounded-lg border border-dashed p-2" onKeyDown={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         {facets.length === 1 ? t("AddFacetValue.headingOf", { facet: label(facet.labelKey) }) : t("AddFacetValue.heading")}

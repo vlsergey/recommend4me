@@ -78,7 +78,7 @@ function Folded({ title, children }: { title: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <section className="flex flex-col gap-3">
-      <button className="inline-flex items-center gap-1 border-b pb-0.5 text-left text-sm font-semibold hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
+      <button type="button" className="inline-flex items-center gap-1 border-b pb-0.5 text-left text-sm font-semibold hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
         <ChevronDownIcon className={open ? "size-4" : "size-4 -rotate-90"} />
         {title}
       </button>

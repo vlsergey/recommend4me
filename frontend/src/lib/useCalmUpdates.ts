@@ -79,10 +79,9 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
     later(MOVE_MS + SETTLE_MS, release);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the list read alone; [take] is made anew at every drawing, and the key and the likeness are the caller's way of comparing, not a reason to compare again
   useEffect(() => {
     if (incoming) take(incoming);
-    // The list read alone: the key and the likeness are the caller's way of comparing, not a reason to compare again
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incoming]);
 
   /** The rows [keys] answered on: faded where they stand, the rows after them moved up, the list locked meanwhile. */
@@ -104,6 +103,7 @@ export function useCalmUpdates<T>(incoming: T[] | undefined, keyOf: (row: T) => 
   };
 
   // The rows of the list changed: each moved from where it stood to where it stands, a new one faded in
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once the list changed is drawn; it reads the rows' elements, [shown] is only when
   useLayoutEffect(() => {
     const was = before.current;
     if (!was) return;

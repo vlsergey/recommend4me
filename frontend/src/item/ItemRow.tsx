@@ -26,6 +26,7 @@ export const ItemRow = forwardRef<HTMLElement, ItemViewProps>(function ItemRow({
     .flatMap((f) => f.values.filter((v) => v.corrected !== "REMOVED").map(valueName))
     .join(" · ");
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the board's own keys open the selected work, Enter or Space (ItemBoard)
     <article
       ref={ref}
       onClick={onOpen}

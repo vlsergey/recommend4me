@@ -14,6 +14,7 @@ import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
+import { pressKeys } from "@/lib/pressKeys";
 import { usePref } from "@/lib/usePref";
 import { PairJournal } from "./PairJournal";
 import { useRefresh } from "@/lib/useRefresh";
@@ -146,7 +147,13 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
         <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.description")}</p>
       </header>
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={tab} onValueChange={(v) => (setTab(v as typeof tab), setLimit(PAGE))}>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            setTab(v as typeof tab);
+            setLimit(PAGE);
+          }}
+        >
           <TabsList>
             <TabsTrigger value="open">{t("DuplicatesScreen.open")}</TabsTrigger>
             <TabsTrigger value="answered">{t("DuplicatesScreen.answered")}</TabsTrigger>
@@ -349,12 +356,16 @@ function WorkSide({ work: w }: { work: DuplicateWork }) {
       {(w.description || w.universeLine) && (
         // Text to select and copy: unfolded or folded by a press that selects nothing. The site's own line of
         // the characters and pairings after the description, folded with it: one flow of lines, clamped together
+        // biome-ignore lint/a11y/useSemanticElements: text to select and copy, which a button's text cannot be
         <div
+          role="button"
+          tabIndex={0}
           className={cn("cursor-pointer text-sm whitespace-pre-line select-text text-muted-foreground", !whole && "line-clamp-4")}
           title={t(whole ? "WorkSide.fold" : "WorkSide.unfold")}
           onClick={() => {
             if (!window.getSelection()?.toString()) setWhole(!whole);
           }}
+          onKeyDown={pressKeys(() => setWhole(!whole))}
         >
           {w.description}
           {w.description && w.universeLine && "\n"}

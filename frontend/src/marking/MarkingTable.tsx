@@ -13,6 +13,7 @@ import { itemHref } from "@/item/itemHash";
 import { SiteLinks } from "@/item/pieces";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
+import { pressKeys } from "@/lib/pressKeys";
 import { usePref } from "@/lib/usePref";
 import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
@@ -107,7 +108,13 @@ export function MarkingTable({
   return (
     <div className={cn("flex min-h-0 flex-col gap-3", className)}>
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={tab} onValueChange={(v) => (setAnswered(v === "answered"), setLimit(PAGE))}>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            setAnswered(v === "answered");
+            setLimit(PAGE);
+          }}
+        >
           <TabsList>
             <TabsTrigger value="open">{t("MarkingTable.open")}</TabsTrigger>
             <TabsTrigger value="answered">{t("MarkingTable.answered")}</TabsTrigger>
@@ -221,12 +228,16 @@ function WorkRow({
       ))}
       {w.description && (
         // Text to select and copy: unfolded or folded by a press that selects nothing
+        // biome-ignore lint/a11y/useSemanticElements: text to select and copy, which a button's text cannot be
         <div
+          role="button"
+          tabIndex={0}
           className={cn("cursor-pointer text-sm whitespace-pre-line select-text text-muted-foreground", !whole && "line-clamp-3")}
           title={t(whole ? "MarkingTable.fold" : "MarkingTable.unfold")}
           onClick={() => {
             if (!window.getSelection()?.toString()) setWhole(!whole);
           }}
+          onKeyDown={pressKeys(() => setWhole(!whole))}
         >
           {w.description}
         </div>

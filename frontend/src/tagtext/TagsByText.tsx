@@ -204,6 +204,7 @@ function TagRow({
         </div>
       </div>
       {/* Text to select and copy: unfolded or folded by a press that selects nothing */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: text to select and copy, folded by a press alone as the extension's quote is (page.js byTextRow); keys for it would be a change of both */}
       <div
         className={cn("cursor-pointer text-sm whitespace-pre-line select-text", !whole && "line-clamp-6")}
         title={t(whole ? "TagsByText.fold" : "TagsByText.unfold")}

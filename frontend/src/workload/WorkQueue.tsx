@@ -57,6 +57,7 @@ export function WorkQueue() {
       {works.length > 0 && (
         <ul className="flex flex-col divide-y text-sm">
           {works.map((w, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a work of the queue has no id, and two alike in every field can stand in it: the place tells them apart
             <WorkRow key={`${w.state}:${w.what}:${w.type}:${w.source}:${w.facet}:${w.item}:${w.since}:${i}`} w={w} />
           ))}
         </ul>
@@ -107,7 +108,8 @@ function Times({ w }: { w: QueuedWork }) {
   const expected = expectedMillis !== undefined ? t("WorkQueue.expected", { span: span(expectedMillis, t) }) : t("WorkQueue.noEstimate");
   switch (w.state) {
     case "FINISHED":
-      return t("WorkQueue.finished", { time: formatTime(w.ended), span: span(new Date(w.ended!).getTime() - since, t) });
+      // A work done says when it ended; without that, no span
+      return t("WorkQueue.finished", { time: formatTime(w.ended), span: w.ended ? span(new Date(w.ended).getTime() - since, t) : "" });
     case "RUNNING": {
       const began = t("WorkQueue.began", { time: formatTime(w.since), span: span(Date.now() - since, t) });
       if (expectedMillis === undefined) return `${began} · ${t("WorkQueue.noEstimate")}`;
