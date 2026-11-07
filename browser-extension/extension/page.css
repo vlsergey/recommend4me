@@ -4,7 +4,7 @@
  * so the site's look is touched only where the user corrected something.
  */
 
-/* The colours, light; dark on a page of a dark background — the site's own, not the system's (page.js pageIsDark) */
+/* The colours, light; dark on a page of a dark background — the site's own, not the system's (page-view.js pageIsDark) */
 :root {
   --r4m-bg: #ffffff;
   --r4m-fg: #1f2328;

@@ -11,13 +11,19 @@
  */
 function pageHtml() {
   const copy = document.documentElement.cloneNode(true);
-  copy.querySelectorAll("[data-r4m], [data-r4m-style]").forEach((e) => e.remove());
+  copy.querySelectorAll("[data-r4m], [data-r4m-style]").forEach((e) => {
+    e.remove();
+  });
   copy
     .querySelectorAll(".r4m-removed, .r4m-doubted, .r4m-marked")
-    .forEach((e) => e.classList.remove("r4m-removed", "r4m-doubted", "r4m-marked"));
+    .forEach((e) => {
+      e.classList.remove("r4m-removed", "r4m-doubted", "r4m-marked");
+    });
   copy
     .querySelectorAll('script, meta[name*="csrf" i], meta[name*="token" i], input[name*="csrf" i], input[name*="token" i]')
-    .forEach((e) => e.remove());
+    .forEach((e) => {
+      e.remove();
+    });
   return copy.outerHTML;
 }
 
@@ -26,6 +32,7 @@ function pageHtml() {
  * {type: "capture"} — the background script of the extension, or the userscript's stand-in for it.
  * What page.js puts into the page is not counted as growth either.
  */
+// biome-ignore lint/correctness/noUnusedVariables: called by background.js (put into the page after this file) and by userscript.js
 function watchPage() {
   if (window.__recommend4meWatching) return;
   window.__recommend4meWatching = true;

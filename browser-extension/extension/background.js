@@ -35,7 +35,7 @@ async function wanted(url) {
         patterns = (await response.json()).flatMap((p) => p.patterns.map((re) => new RegExp(`^(?:${re})$`)));
         patternsAt = Date.now();
       }
-    } catch (e) {
+    } catch {
       // The application is not running: nothing is wanted until it is
       patterns = [];
       patternsAt = Date.now() - PATTERNS_TTL + 30 * 1000;
@@ -46,6 +46,31 @@ async function wanted(url) {
 
 // watchPage and pageHtml — what is put into a wanted page — are in watch.js, shared with the
 // userscript: the file is put into the page first, the call after it
+
+/**
+ * The scripts of the site as the application's interface, in the order given to a page: the
+ * extension's words, the parts of page.js — each taking what those before it give — and page.js,
+ * which starts it, last. The userscript for Safari puts them together in the same order
+ * (UserScriptController.PAGE_PARTS).
+ */
+const PAGE_SCRIPTS = [
+  "i18n.js",
+  "page-application.js",
+  "page-view.js",
+  "page-changes.js",
+  "page-values.js",
+  "page-candidates.js",
+  "page-scale.js",
+  "page-add-field.js",
+  "page-site-words.js",
+  "page-tags-by-text.js",
+  "page-facets.js",
+  "page-panel.js",
+  "page-marks.js",
+  "page-cards.js",
+  "page-paging.js",
+  "page.js",
+];
 
 async function inject(tabId, url) {
   const { enabled, decorate } = await loadSettings();
@@ -61,7 +86,7 @@ async function inject(tabId, url) {
   if (!decorate) return;
   try {
     await browser.scripting.insertCSS({ target: { tabId }, files: ["page.css"] });
-    await browser.scripting.executeScript({ target: { tabId }, files: ["i18n.js", "page.js"] });
+    await browser.scripting.executeScript({ target: { tabId }, files: PAGE_SCRIPTS });
   } catch (e) {
     console.warn("recommend4me: cannot show the work on", url, e);
   }
@@ -83,7 +108,7 @@ browser.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
         window.__recommend4meWatching = false;
       },
     });
-  } catch (e) {
+  } catch {
     // The page is gone
   }
   inject(details.tabId, details.url);
@@ -135,7 +160,9 @@ const fetching = new Set();
 async function fetchWanted(tabId, wanted) {
   const fresh = wanted.filter((w) => !fetching.has(w.url));
   if (!fresh.length) return;
-  fresh.forEach((w) => fetching.add(w.url));
+  fresh.forEach((w) => {
+    fetching.add(w.url);
+  });
   try {
     const [{ result }] = await browser.scripting.executeScript({
       target: { tabId },
@@ -149,7 +176,7 @@ async function fetchWanted(tabId, wanted) {
               ? { method: "POST", body: new URLSearchParams(w.form), headers: { "X-Requested-With": "XMLHttpRequest" } }
               : {});
             if (response.ok) answers.push({ url: w.url, text: await response.text() });
-          } catch (e) {
+          } catch {
             // Not answered: asked again with a later page
           }
           await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -161,7 +188,9 @@ async function fetchWanted(tabId, wanted) {
   } catch (e) {
     console.warn("recommend4me: cannot make the site's requests", e);
   } finally {
-    fresh.forEach((w) => fetching.delete(w.url));
+    fresh.forEach((w) => {
+      fetching.delete(w.url);
+    });
   }
 }
 
@@ -196,7 +225,7 @@ async function call(message, sender) {
     let data = null;
     try {
       data = text ? JSON.parse(text) : null;
-    } catch (e) {
+    } catch {
       data = null;
     }
     if (!response.ok) return { ok: false, status: response.status, ...problemOf(data, response.status) };
