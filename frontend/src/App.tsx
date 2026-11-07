@@ -106,6 +106,8 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
   const [storedRanges, setRanges] = usePref<NumberRanges>(`ranges:${type.id}`, {});
   const ranges = useMemo(() => validRanges(type, storedRanges), [type, storedRanges]);
   const [searchInput, setSearchInput] = useState("");
+  // A word still being put together by an input method (Chinese, Japanese, a phone's keyboard): not searched till it is done
+  const [composing, setComposing] = useState(false);
   const [search, setSearch] = useState("");
   // What the list tells of itself: its number, and whether a new list is being asked for — by the search or another change
   const [listed, setListed] = useState<ListState>({ pending: false, searching: false });
@@ -135,11 +137,19 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
 
   // The line searched once the typing has paused for SEARCH_SETTLE_MS — at once on Enter: a line
   // searched is a second or two of the reranker reading every work found, and every half-typed word
-  // was one ("s", "spa", "space" — each read whole)
+  // was one ("s", "spa", "space" — each read whole). A line cleared is no search: the list back at once.
+  // Nothing while an input method puts a word together: the pause counts from the word done. A search
+  // given up for a newer one is cancelled ([ItemBoard]), not left to run
   useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput.trim()), SEARCH_SETTLE_MS);
+    if (composing) return;
+    const line = searchInput.trim();
+    if (!line) {
+      setSearch("");
+      return;
+    }
+    const t = setTimeout(() => setSearch(line), SEARCH_SETTLE_MS);
     return () => clearTimeout(t);
-  }, [searchInput]);
+  }, [searchInput, composing]);
 
   // After a retraining the list is NOT re-sorted under the cursor; a button offers it instead
   const model = useModel(type.id);
@@ -278,7 +288,11 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
               ref={searchRef}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
+              onCompositionStart={() => setComposing(true)}
+              onCompositionEnd={() => setComposing(false)}
               onKeyDown={(e) => {
+                // The keys of an input method's word are its own: Enter chooses the word, Escape drops it
+                if (e.nativeEvent.isComposing) return;
                 if (e.key === "Escape") {
                   setSearchInput("");
                   e.currentTarget.blur();

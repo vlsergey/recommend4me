@@ -62,9 +62,12 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
   const list = useInfiniteQuery({
     queryKey: [ITEMS, type.id, view, sort, search, facetChoices, sources, ranges],
     initialPageParam: 0,
-    queryFn: async ({ pageParam }) =>
+    // A list given up — another search, filter or order asked for — is cancelled, its request aborted: a
+    // search is seconds of the reranker, and those left to run piled up behind the one waited for
+    queryFn: async ({ pageParam, signal }) =>
       unwrap(
         await api.POST("/api/types/{type}/items", {
+          signal,
           params: { path: { type: type.id } },
           body: {
             view,
