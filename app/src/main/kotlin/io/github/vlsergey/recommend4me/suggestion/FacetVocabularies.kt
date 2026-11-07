@@ -15,6 +15,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.search.NamesAsked
 import io.github.vlsergey.recommend4me.search.SearchProvider
 import java.util.IdentityHashMap
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The values of a facet of the universes besides the items' own, with the text their names are
@@ -276,9 +277,9 @@ internal class FacetVocabularies(private val stores: Stores) {
                 }
                 // What a work may have: one set for every work of the same universes — of a large universe
                 // thousands of characters, not a copy a work — its own characters of the other facet barred
-                val unions = HashMap<Set<String>, Set<String>>()
+                val unions = ConcurrentHashMap<Set<String>, Set<String>>()
                 fun mayOf(id: String) = universes[id].orEmpty().toSet().let { us ->
-                    unions.getOrPut(us) { us.flatMap { ofUniverse[it].orEmpty() }.toSet() + UniverseFacet.ORIGINAL_CHARACTERS.keys }
+                    unions.computeIfAbsent(us) { us.flatMap { ofUniverse[it].orEmpty() }.toSet() + UniverseFacet.ORIGINAL_CHARACTERS.keys }
                 }
                 val barred = { id: String -> out(id).filterTo(HashSet()) { it in mayOf(id) && it !in UniverseFacet.ORIGINAL_CHARACTERS } }
                 if (light) return Vocabulary(emptyMap(), allowed = ::mayOf, names = named, barred = barred)

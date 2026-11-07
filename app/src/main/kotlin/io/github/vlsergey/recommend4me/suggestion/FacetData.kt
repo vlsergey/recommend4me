@@ -12,6 +12,7 @@ import io.github.vlsergey.recommend4me.universe.LayerDraft
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.laps.Laps
 import java.util.IdentityHashMap
+import java.util.stream.IntStream
 
 /**
  * Everything of one facet of a source a suggester is handed, read in one pass per table: every
@@ -215,28 +216,39 @@ internal class FacetData(
             }
 
             fun indices(list: Collection<String>) = list.mapNotNull { index[it] }.distinct().toIntArray()
+
+            // EVERY WORK'S ARRAYS MADE SIDE BY SIDE ON EVERY CORE: each of its own work alone, of what is read
+            // already — of fanfics.me's 75 630 works a work after another was 650 ms of the six facets
+            fun <T> ofEvery(make: (Int) -> T): List<T> {
+                val out = arrayOfNulls<Any>(ids.size)
+                IntStream.range(0, ids.size).parallel().forEach { out[it] = make(it) }
+                @Suppress("UNCHECKED_CAST")
+                return out.asList() as List<T>
+            }
             val grouped = groupings?.invoke(values).orEmpty()
             // An item whose values of the facet are all named: every other value rejected by the user's word
             val allNamed = BooleanArray(ids.size) { facet.key in complete[ids[it]].orEmpty() }
-            val assigned = ids.map { indices(corrected[it]?.get(facet.key).orEmpty()) }
+            val assigned = ofEvery { i -> indices(corrected[ids[i]]?.get(facet.key).orEmpty()) }
             laps.lap("task: assigned")
             // What is learnt from, not what is judged: no names when the item [only] is judged by the weights fitted last
             val (hintValues, hintTexts) = if (only != null || kept != null) emptyList<String>() to Matrix(0, 0) else hints(store, facet.key, hintNames, encoder)
             // The names of values of the task: every one, but of a dictionary's value the task lacks
             val named = hintValues.indices.filter { index[hintValues[it]] != null }
-            val confirmed = ids.map { id -> indices(answers[id].orEmpty().filter { it.facet == facet.key && it.added }.map { it.key }) }
-            val rejected = ids.mapIndexed { i, id ->
+            val confirmed = ofEvery { i -> indices(answers[ids[i]].orEmpty().filter { it.facet == facet.key && it.added }.map { it.key }) }
+            val rejected = ofEvery { i ->
                 if (allNamed[i]) assigned[i].toHashSet().let { own -> values.indices.filter { it !in own }.toIntArray() }
-                else indices(answers[id].orEmpty().filter { it.facet == facet.key && !it.added }.map { it.key })
+                else indices(answers[ids[i]].orEmpty().filter { it.facet == facet.key && !it.added }.map { it.key })
             }
             laps.lap("task: answered")
-            // One array for every work of the same: of a universe's thousands of characters, made once
-            val allowedOf = IdentityHashMap<Set<String>, IntArray>().let { made -> ids.map { id -> allowed?.invoke(id)?.let { a -> made.getOrPut(a) { indices(a) } } } }
+            // One array for every work of the same: of a universe's thousands of characters, made once — the
+            // works' sets asked side by side, their arrays made a set at a time
+            val allowedSets = ofEvery { i -> allowed?.invoke(ids[i]) }
+            val allowedOf = IdentityHashMap<Set<String>, IntArray>().let { made -> allowedSets.map { a -> a?.let { made.getOrPut(it) { indices(it) } } } }
             laps.lap("task: allowed")
-            val barredOf = ids.map { id -> barred?.invoke(id)?.let(::indices) ?: IntArray(0) }
+            val barredOf = ofEvery { i -> barred?.invoke(ids[i])?.let(::indices) ?: IntArray(0) }
             laps.lap("task: barred")
-            val examplesOf = ids.map { id -> examples?.invoke(id)?.let(::indices) ?: IntArray(0) }
-            val draftsOf = ids.map { id -> indices(drafted[id].orEmpty()) }
+            val examplesOf = ofEvery { i -> examples?.invoke(ids[i])?.let(::indices) ?: IntArray(0) }
+            val draftsOf = ofEvery { i -> indices(drafted[ids[i]].orEmpty()) }
             laps.lap("task: examples and drafts")
             val task = SuggestionTask(
                 itemIds = ids,
@@ -272,7 +284,8 @@ internal class FacetData(
             )
             laps.lap("task: made")
             // The item's own values: neither the site's examples nor the drafts
-            val held = if (examples == null && drafted.isEmpty()) task.assigned else ids.map { id ->
+            val held = if (examples == null && drafted.isEmpty()) task.assigned else ofEvery { i ->
+                val id = ids[i]
                 indices(TagHierarchy.corrected(site[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets)[facet.key].orEmpty())
             }
             laps.lap("task: held")
