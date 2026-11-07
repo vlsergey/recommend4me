@@ -4,6 +4,9 @@ import io.github.vlsergey.recommend4me.matrix.Floats
 import kotlin.math.exp
 import kotlin.math.ln
 
+/** The chance of an equal pair taken either way round: a half. */
+private const val EITHER_WAY = 0.5
+
 /**
  * WHAT A RANKING IS LEARNT FROM: the pairs of rows of a [RankingTask] whose order is known.
  *
@@ -43,8 +46,8 @@ class RankingPairs(
         for (p in first.indices) {
             val s = (z[first[p]] - z[second[p]]).toDouble()
             // −½ log σ(s) − ½ log σ(−s): least at s = 0
-            loss += equalWeight * 0.5 * (softplus(-s) + softplus(s))
-            val r = equalWeight * (sigmoid(s) - 0.5)
+            loss += equalWeight * EITHER_WAY * (softplus(-s) + softplus(s))
+            val r = equalWeight * (sigmoid(s) - EITHER_WAY)
             dz[first[p]] = dz[first[p]] + r.toFloat()
             dz[second[p]] = dz[second[p]] - r.toFloat()
         }

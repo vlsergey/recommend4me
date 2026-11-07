@@ -35,26 +35,16 @@ internal class Fetched(
 internal class PictureFetching(private val contexts: SourceContexts) {
 
     /** The original of a picture from one of its addresses, and the address; or the last failure, of none. */
-    private class Original(val bytes: Pair<ByteArray, String>?, val address: String?, val error: PictureException?)
-
-    /** The picture downloaded and prepared; whatever fails, the picture's error. */
-    @Suppress("TooGenericExceptionCaught")
-    fun fetch(job: PictureJob, encoder: ImageEncoder): Fetched =
-        try {
-            download(job, encoder)
-        } catch (e: Exception) {
-            // A boundary: the downloads run the source's plugin for the headers of every address, and one picture
-            // failing in any way is that picture's error to be tried again — never the end of the analysis of all
-            Fetched(job, null, null, null, e.message ?: e.javaClass.simpleName)
-        }
+    private class Original(val bytes: Pair<ByteArray, String>?, val address: String?, val error: Exception?)
 
     /** The original, the preview and what the encoder needs of the picture; a failed download its error. */
-    private fun download(job: PictureJob, encoder: ImageEncoder): Fetched {
+    fun fetch(job: PictureJob, encoder: ImageEncoder): Fetched {
         val original = original(job)
         val bytes = original.bytes
         return if (bytes == null) {
             val error = original.error?.let { it.message ?: it.javaClass.simpleName } ?: "no address"
-            Fetched(job, null, null, null, error, lasting = original.error?.status == HttpURLConnection.HTTP_NOT_FOUND)
+            val gone = (original.error as? PictureException)?.status == HttpURLConnection.HTTP_NOT_FOUND
+            Fetched(job, null, null, null, error, lasting = gone)
         } else {
             val preview = preview(job, bytes, original.address)
             if (job.picture.analyzed) Fetched(job, bytes, preview, null, null)
@@ -66,12 +56,15 @@ internal class PictureFetching(private val contexts: SourceContexts) {
     private fun headers(job: PictureJob, url: String) = job.store.source.pictureHeaders(url, contexts.of(job.store.id))
 
     /** The original from the first of the picture's addresses that gives it. */
+    @Suppress("TooGenericExceptionCaught")
     private fun original(job: PictureJob): Original {
-        var lastError: PictureException? = null
+        var lastError: Exception? = null
         for (address in job.store.source.pictureAddresses(job.picture.url)) {
             try {
                 return Original(PictureDownloader.fetch(address, headers(job, address)), address, null)
-            } catch (e: PictureException) {
+            } catch (e: Exception) {
+                // A boundary: the addresses are tried in turn, and whatever fails at one — the source's plugin making
+                // its headers, the request, the host — leaves it to the next
                 lastError = e
             }
         }
@@ -82,6 +75,7 @@ internal class PictureFetching(private val contexts: SourceContexts) {
      * The preview to keep: none when one is on disk, the [original] when it came from the picture's own address, else
      * the picture's own address downloaded — the original standing for it when that fails.
      */
+    @Suppress("TooGenericExceptionCaught")
     private fun preview(job: PictureJob, original: Pair<ByteArray, String>, used: String?): Pair<ByteArray, String>? {
         val picture = job.picture
         return try {
@@ -90,7 +84,9 @@ internal class PictureFetching(private val contexts: SourceContexts) {
                 used == picture.url -> original
                 else -> PictureDownloader.fetch(picture.url, headers(job, picture.url))
             }
-        } catch (e: PictureException) {
+        } catch (e: Exception) {
+            // A boundary: whatever fails — the source's plugin making the headers, the request, the host — the
+            // original is the preview
             log.debug("preview {} was not downloaded, the original stands for it: {}", picture.url, e.message)
             original
         }

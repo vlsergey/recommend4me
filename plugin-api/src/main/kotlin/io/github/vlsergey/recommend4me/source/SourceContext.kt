@@ -65,8 +65,11 @@ interface SiteSignals {
  * page shows to be empty — a block the work's header has not. A block it could not find, a page that is not the work's
  * (an error page answered with 200, a changed markup), says nothing: nothing of it is written, as nothing is known to
  * be gone.
+ *
+ * Its items' facets are its [ItemFacetStore], their reviews its [ItemReviewStore], the parts of their text its
+ * [ItemPartStore].
  */
-interface ItemStore {
+interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore {
     /** Creates or updates an item; true when it is new or its version changed. */
     fun upsert(item: ItemHead, now: Instant): Boolean
 
@@ -77,6 +80,26 @@ interface ItemStore {
     /** The newest [ItemHead.updatedAt] of the catalogue. */
     fun latestUpdate(): Instant?
 
+    /** Sets numbers of the item; a null takes one away. Numbers not named stay. */
+    fun setNumbers(itemId: String, numbers: Map<String, Double?>)
+
+    /** Sets texts of the item; a null or blank takes one away. Texts not named stay. */
+    fun setTexts(itemId: String, texts: Map<String, String?>)
+
+    fun texts(itemId: String): Map<String, String>
+
+    /**
+     * The item's pictures as the site lists them now, position 0 the cover. A picture whose address changed is a new
+     * picture: its files and vector are forgotten.
+     */
+    fun setPictures(itemId: String, urls: List<String?>)
+}
+
+/**
+ * THE FACETS OF A SOURCE'S ITEMS — the values the site gives each, and what it says of the values themselves: their
+ * names, descriptions and synonyms. A part of [ItemStore], written as a page says it.
+ */
+interface ItemFacetStore {
     /** Replaces the item's values of one facet. */
     fun setFacet(itemId: String, facet: String, values: List<FacetValue>)
 
@@ -101,21 +124,10 @@ interface ItemStore {
 
     /** Every item's keys of one facet, streamed. */
     fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit)
+}
 
-    /** Sets numbers of the item; a null takes one away. Numbers not named stay. */
-    fun setNumbers(itemId: String, numbers: Map<String, Double?>)
-
-    /** Sets texts of the item; a null or blank takes one away. Texts not named stay. */
-    fun setTexts(itemId: String, texts: Map<String, String?>)
-
-    fun texts(itemId: String): Map<String, String>
-
-    /**
-     * The item's pictures as the site lists them now, position 0 the cover. A picture whose address changed is a new
-     * picture: its files and vector are forgotten.
-     */
-    fun setPictures(itemId: String, urls: List<String?>)
-
+/** THE REVIEWS OF A SOURCE'S ITEMS, as the site shows them ([ReviewData]). A part of [ItemStore]. */
+interface ItemReviewStore {
     /** Stores reviews of the item, a known one updated; none is deleted. */
     fun saveReviews(itemId: String, reviews: List<ReviewData>)
 
@@ -123,7 +135,10 @@ interface ItemStore {
 
     /** The texts of the item's stored reviews, by id: a review read whole is not replaced by its excerpt. */
     fun reviewContents(itemId: String): Map<String, String>
+}
 
+/** THE PARTS OF THE TEXT OF A SOURCE'S ITEMS — its chapters ([PartData]). A part of [ItemStore]. */
+interface ItemPartStore {
     /** Stores parts of the item's text, a known one updated; none is deleted. */
     fun saveParts(itemId: String, parts: List<PartData>)
 

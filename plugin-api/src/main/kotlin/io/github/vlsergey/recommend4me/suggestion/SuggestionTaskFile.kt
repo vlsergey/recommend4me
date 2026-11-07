@@ -2,6 +2,10 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.ints
+import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.lists
+import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.matrix
+import io.github.vlsergey.recommend4me.suggestion.TaskFileArrays.strings
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.nio.file.Files
@@ -23,6 +27,24 @@ object SuggestionTaskFile {
      * passed over.
      */
     private const val FORMAT = 7
+
+    /** The format since which an input block holds the items that have it alone, with the item of every row. */
+    private const val ROWS_OF_ITEMS = 7
+
+    /** The format since which the counts of the values' names in the items' texts are not written. */
+    private const val NO_NAME_COUNTS = 6
+
+    /** The format since which the arrays of the allowed are written once each, and the barred at the end. */
+    private const val ALLOWED_ONCE = 5
+
+    /** The format since which the drafts and their weight are at the end. */
+    private const val DRAFTS = 4
+
+    /** The format since which the names' texts are a matrix, their arrays of values once each. */
+    private const val HINT_MATRIX = 3
+
+    /** The format whose arrays a name is judged among hold its own value too; the first held its rivals alone. */
+    private const val HINT_WITH_VALUE = 2
 
     fun write(task: SuggestionTask, file: Path) {
         Files.createDirectories(file.parent)
@@ -76,56 +98,24 @@ object SuggestionTaskFile {
             val format = input.readInt()
             check(format in 1..FORMAT) { "$file: not a task of format $FORMAT or before it" }
             val itemIds = strings(input)
-            val inputs =
-                List(input.readInt()) {
-                    val name = input.readUTF()
-                    val vectors = matrix(input)
-                    // The formats before 7: a row of every item, and whether it has the block
-                    if (format >= 7) InputBlock(name, HalfMatrix.of(vectors), ints(input))
-                    else InputBlock.of(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
-                }
+            val inputs = inputs(input, format)
             val values = matrix(input)
             val valueKeys = strings(input)
-            val (assigned, confirmed, rejected, context, examples) = List(5) { lists(input) }
+            val assigned = lists(input)
+            val confirmed = lists(input)
+            val rejected = lists(input)
+            val context = lists(input)
+            val examples = lists(input)
             val contextKeys = strings(input)
-            // The formats before 6: the counts of the values' names in the items' texts, which no model reads now
-            if (format < 6)
-                repeat(input.readInt()) {
-                    val size = input.readInt()
-                    repeat(maxOf(size, 0) * 2) { input.readInt() }
-                }
-            val allowed =
-                if (format >= 5) {
-                    val arrays = List(input.readInt()) { ints(input) }
-                    List(input.readInt()) { input.readInt().takeIf { it >= 0 }?.let(arrays::get) }
-                } else List(input.readInt()) { if (input.readBoolean()) ints(input) else null }
+            if (format < NO_NAME_COUNTS) skipNameCounts(input)
+            val allowed = allowed(input, format)
             val groupings = List(input.readInt()) { ValueGrouping(input.readUTF(), strings(input), lists(input)) }
             val lackWeight = input.readDouble()
-            val (hints, hintTexts) =
-                if (format >= 3) {
-                    val among = List(input.readInt()) { ints(input) }
-                    List(input.readInt()) { NameHint(input.readInt(), among[input.readInt()]) } to matrix(input)
-                } else {
-                    // The formats before it: a vector with every name, and the values it is judged among —
-                    // of the first its rivals alone — an array of every name
-                    val read =
-                        List(input.readInt()) {
-                            val vector = FloatArray(input.readInt()) { input.readFloat() }
-                            val value = input.readInt()
-                            val among =
-                                ints(input).let {
-                                    if (format == 2) it else (it + value).distinct().sorted().toIntArray()
-                                }
-                            vector to NameHint(value, among)
-                        }
-                    val texts = Matrix(read.size, read.firstOrNull()?.first?.size ?: 0)
-                    read.forEachIndexed { k, (vector, _) -> texts.held.put(vector, 0, texts.row(k), texts.cols) }
-                    read.map { it.second } to texts
-                }
+            val (hints, hintTexts) = hints(input, format)
             // The formats before 4 had no drafts
-            val drafts = if (format >= 4) lists(input) else List(itemIds.size) { IntArray(0) }
-            val draftWeight = if (format >= 4) input.readDouble() else 1.0
-            val barred = if (format >= 5) lists(input) else List(itemIds.size) { IntArray(0) }
+            val drafts = if (format >= DRAFTS) lists(input) else List(itemIds.size) { IntArray(0) }
+            val draftWeight = if (format >= DRAFTS) input.readDouble() else 1.0
+            val barred = if (format >= ALLOWED_ONCE) lists(input) else List(itemIds.size) { IntArray(0) }
             SuggestionTask(
                 itemIds,
                 inputs,
@@ -148,55 +138,53 @@ object SuggestionTaskFile {
             )
         }
 
-    private fun strings(out: DataOutputStream, list: List<String>) {
-        out.writeInt(list.size)
-        list.forEach(out::writeUTF)
-    }
-
-    private fun strings(input: DataInputStream): List<String> = List(input.readInt()) { input.readUTF() }
-
-    private fun ints(out: DataOutputStream, a: IntArray) {
-        out.writeInt(a.size)
-        a.forEach(out::writeInt)
-    }
-
-    private fun ints(input: DataInputStream): IntArray = IntArray(input.readInt()) { input.readInt() }
-
-    private fun lists(out: DataOutputStream, list: List<IntArray>) {
-        out.writeInt(list.size)
-        list.forEach { ints(out, it) }
-    }
-
-    private fun lists(input: DataInputStream): List<IntArray> = List(input.readInt()) { ints(input) }
-
-    private fun matrix(out: DataOutputStream, m: Matrix) {
-        out.writeInt(m.rows)
-        out.writeInt(m.cols)
-        val row = FloatArray(m.cols)
-        for (i in 0 until m.rows) {
-            m.held.take(row, 0, m.row(i), m.cols)
-            row.forEach(out::writeFloat)
+    /** The input blocks of the items, as the [format] wrote them. */
+    private fun inputs(input: DataInputStream, format: Int): List<InputBlock> =
+        List(input.readInt()) {
+            val name = input.readUTF()
+            val vectors = matrix(input)
+            // The formats before 7: a row of every item, and whether it has the block
+            if (format >= ROWS_OF_ITEMS) InputBlock(name, HalfMatrix.of(vectors), ints(input))
+            else InputBlock.of(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
         }
-    }
 
-    /** Of half precision, written as single: the file reads the same of either. */
-    private fun matrix(out: DataOutputStream, m: HalfMatrix) {
-        out.writeInt(m.rows)
-        out.writeInt(m.cols)
-        val row = FloatArray(m.cols)
-        for (i in 0 until m.rows) {
-            m.take(i, row)
-            row.forEach(out::writeFloat)
+    /**
+     * Passes over what the formats before 6 wrote: the counts of the values' names in the items' texts, which no model
+     * reads now.
+     */
+    private fun skipNameCounts(input: DataInputStream) =
+        repeat(input.readInt()) {
+            val size = input.readInt()
+            repeat(maxOf(size, 0) * 2) { input.readInt() }
         }
-    }
 
-    private fun matrix(input: DataInputStream): Matrix {
-        val m = Matrix(input.readInt(), input.readInt())
-        val row = FloatArray(m.cols)
-        for (i in 0 until m.rows) {
-            for (j in row.indices) row[j] = input.readFloat()
-            m.held.put(row, 0, m.row(i), m.cols)
+    /** The values every item is allowed (null: every value), as the [format] wrote them. */
+    private fun allowed(input: DataInputStream, format: Int): List<IntArray?> =
+        if (format >= ALLOWED_ONCE) {
+            val arrays = List(input.readInt()) { ints(input) }
+            List(input.readInt()) { input.readInt().takeIf { it >= 0 }?.let(arrays::get) }
+        } else List(input.readInt()) { if (input.readBoolean()) ints(input) else null }
+
+    /** The names of the values learnt from and their texts' vectors, as the [format] wrote them. */
+    private fun hints(input: DataInputStream, format: Int): Pair<List<NameHint>, Matrix> =
+        if (format >= HINT_MATRIX) {
+            val among = List(input.readInt()) { ints(input) }
+            List(input.readInt()) { NameHint(input.readInt(), among[input.readInt()]) } to matrix(input)
+        } else {
+            // The formats before it: a vector with every name, and the values it is judged among —
+            // of the first its rivals alone — an array of every name
+            val read =
+                List(input.readInt()) {
+                    val vector = FloatArray(input.readInt()) { input.readFloat() }
+                    val value = input.readInt()
+                    val among =
+                        ints(input).let {
+                            if (format == HINT_WITH_VALUE) it else (it + value).distinct().sorted().toIntArray()
+                        }
+                    vector to NameHint(value, among)
+                }
+            val texts = Matrix(read.size, read.firstOrNull()?.first?.size ?: 0)
+            read.forEachIndexed { k, (vector, _) -> texts.held.put(vector, 0, texts.row(k), texts.cols) }
+            read.map { it.second } to texts
         }
-        return m
-    }
 }

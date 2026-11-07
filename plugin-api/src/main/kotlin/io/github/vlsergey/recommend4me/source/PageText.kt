@@ -69,8 +69,24 @@ object PageText {
             Regex("(\\d[\\d ]*)\\s*$word").find(it)?.groupValues?.get(1)?.replace(" ", "")?.toLongOrNull()
         }
 
+    /** The stem of May, "мая": the beginning of "март" too. */
+    private const val MAY_STEM = "ма"
+
     private val MONTHS =
-        listOf("январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр")
+        listOf(
+            "январ",
+            "феврал",
+            "март",
+            "апрел",
+            MAY_STEM,
+            "июн",
+            "июл",
+            "август",
+            "сентябр",
+            "октябр",
+            "ноябр",
+            "декабр",
+        )
 
     /**
      * A date written for a Russian reader — "2 августа 2026 г., 17:55", "04.08.2026" — as a moment in Moscow time; null
@@ -78,20 +94,34 @@ object PageText {
      */
     fun russianDate(text: String?, zone: ZoneId = ZoneId.of("Europe/Moscow")): Instant? {
         val t = text?.trim()?.lowercase() ?: return null
-        Regex("(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})").find(t)?.let { m ->
-            val (d, mo, y) = m.destructured
-            return LocalDate.of(y.toInt(), mo.toInt(), d.toInt()).atStartOfDay(zone).toInstant()
-        }
-        val m = Regex("(\\d{1,2})\\s+([а-яё]+)\\s+(\\d{4})(?:\\D+(\\d{1,2}):(\\d{2}))?").find(t) ?: return null
-        val month = m.groupValues[2]
-        // "ма" stands for "мая": tried last, as "март" begins the same way
-        val index =
-            MONTHS.withIndex().filter { it.value != "ма" }.firstOrNull { month.startsWith(it.value) }?.index
-                ?: if (month.startsWith("ма")) 4 else return null
-        val hour = m.groupValues[4].toIntOrNull() ?: 0
-        val minute = m.groupValues[5].toIntOrNull() ?: 0
-        return LocalDateTime.of(m.groupValues[3].toInt(), index + 1, m.groupValues[1].toInt(), hour, minute)
-            .atZone(zone)
-            .toInstant()
+        val dotted = Regex("(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})").find(t)
+        return if (dotted != null) {
+            val (d, mo, y) = dotted.destructured
+            LocalDate.of(y.toInt(), mo.toInt(), d.toInt()).atStartOfDay(zone).toInstant()
+        } else wordedDate(t, zone)
     }
+
+    /** A date written in words — "2 августа 2026 г., 17:55" — of a lowercase [text]; null when it is not one. */
+    private fun wordedDate(text: String, zone: ZoneId): Instant? {
+        val m =
+            Regex(
+                    "(?<day>\\d{1,2})\\s+(?<month>[а-яё]+)\\s+(?<year>\\d{4})" +
+                        "(?:\\D+(?<hour>\\d{1,2}):(?<minute>\\d{2}))?"
+                )
+                .find(text) ?: return null
+        fun group(name: String) = m.groups[name]?.value
+        val hour = group("hour")?.toIntOrNull() ?: 0
+        val minute = group("minute")?.toIntOrNull() ?: 0
+        return monthOf(group("month")!!)?.let { index ->
+            LocalDateTime.of(group("year")!!.toInt(), index + 1, group("day")!!.toInt(), hour, minute)
+                .atZone(zone)
+                .toInstant()
+        }
+    }
+
+    /** The index among [MONTHS] of a month's name as a date writes it ("августа"); null when it is none. */
+    private fun monthOf(month: String): Int? =
+        // "ма" stands for "мая": tried last, as "март" begins the same way
+        MONTHS.withIndex().filter { it.value != MAY_STEM }.firstOrNull { month.startsWith(it.value) }?.index
+            ?: MONTHS.indexOf(MAY_STEM).takeIf { month.startsWith(MAY_STEM) }
 }

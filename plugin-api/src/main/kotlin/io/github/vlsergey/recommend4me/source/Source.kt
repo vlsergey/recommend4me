@@ -36,9 +36,10 @@ val Source.downloadsPages: Boolean
  * A site the works come from. Implemented by a plugin and declared as a Spring bean.
  *
  * Everything a source learns it writes through the [SourceContext] it is handed: the generic data of its items into the
- * application's tables, anything else into tables of its own ([migrations]) in the same source database.
+ * application's tables, anything else into tables of its own ([migrations]) in the same source database. The pages the
+ * browser sends it are its [BrowserTracking], how its pictures are downloaded its [SitePictures].
  */
-interface Source {
+interface Source : BrowserTracking, SitePictures {
     /**
      * Stable: the name of the source's folder, of its databases and the first half of every item key; and the namespace
      * of its words, which the plugin carries in every language of the interface
@@ -117,33 +118,6 @@ interface Source {
     val pageDecor: PageDecor?
         get() = null
 
-    // --- Browser tracking ---
-
-    /** The addresses of the pages the source wants from the browser, matched against the whole URL. */
-    val capturePatterns: List<Regex>
-        get() = emptyList()
-
-    /**
-     * Raised when the source reads its pages differently: every kept page ([SourceContext.keepPage]) is handed to
-     * [capture] again on the next start.
-     */
-    val parserVersion: Int
-        get() = 1
-
-    /**
-     * Reads a page the browser sent — or one kept before, read again after the parser changed — and writes what it
-     * says. Returns the items it touched.
-     */
-    fun capture(page: CapturedPage, context: SourceContext): List<String> = emptyList()
-
-    /**
-     * The requests of the site that bring what it says [tags] — keys of its [facet] — mean, made for the application by
-     * the browser from a page of the site the user has open (a site that checks its visitors lets the user's browser
-     * in, not the application), and sent back as captured pages under their [WantedPage.url], read by [capture]. Empty:
-     * the site does not describe them, or the source reads it otherwise.
-     */
-    fun describing(facet: String, tags: List<String>): List<WantedPage> = emptyList()
-
     // --- Scraping ---
 
     /** Runs a job of [mode] (not [SourceMode.BROWSER]) to its end, cancelled or failed. */
@@ -175,17 +149,6 @@ interface Source {
 
     /** Called when the application stops. */
     fun stop() {}
-
-    // --- Pictures ---
-
-    /**
-     * Where a picture of an item is downloaded from, the best first: an original before the preview it was listed by.
-     * The application tries them in order.
-     */
-    fun pictureAddresses(url: String): List<String> = listOf(url)
-
-    /** Headers of a picture download: a referer, a user agent. */
-    fun pictureHeaders(url: String, context: SourceContext): Map<String, String> = emptyMap()
 }
 
 /**

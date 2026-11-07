@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
-import java.io.IOException
 import java.nio.file.Path
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -95,6 +94,7 @@ class PictureService(
      * The preview of a picture that has none, one request at a time: another may have downloaded it meanwhile, else it
      * is downloaded now and kept; the browser sent to the picture's address when it fails.
      */
+    @Suppress("TooGenericExceptionCaught")
     private fun previewNow(store: SourceStore, key: ItemKey, position: Int): Served? {
         val again = store.pictures.find(key.id, position, null)
         return when {
@@ -110,7 +110,10 @@ class PictureService(
                     val file = store.files.save(key.id, "$position-preview", bytes, type)
                     store.pictures.saveFiles(key.id, position, file, again.fullFile)
                     Served.File(store.files.path(file), type)
-                } catch (e: IOException) {
+                } catch (e: Exception) {
+                    // A boundary: the preview is the picture's own address at worst — whatever fails on the way, the
+                    // source's plugin making its headers, the download, the files or the database keeping it, the
+                    // browser is sent there
                     log.warn("preview {} was not downloaded: {}", again.url, e.message)
                     Served.Redirect(again.url)
                 }

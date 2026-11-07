@@ -91,10 +91,12 @@ class CardRows(
          */
         fun put(card: Cublas, vectors: HalfMatrix, items: IntArray): CardRows? {
             val halves = card.allocateBytes(vectors.rows.toLong() * vectors.cols * 2) ?: return null
-            val ints = card.allocateBytes(items.size.toLong() * Int.SIZE_BYTES) ?: return null.also { halves.close() }
-            halves.upload(vectors, 0, vectors.rows)
-            ints.upload(items)
-            return CardRows(card, halves, ints, items.size, vectors.cols)
+            val ints = card.allocateBytes(items.size.toLong() * Int.SIZE_BYTES) ?: null.also { halves.close() }
+            return ints?.let {
+                halves.upload(vectors, 0, vectors.rows)
+                it.upload(items)
+                CardRows(card, halves, it, items.size, vectors.cols)
+            }
         }
     }
 }
@@ -220,7 +222,8 @@ class SuggestionTask(
                 context.size == itemCount &&
                 allowed.size == itemCount
         ) {
-            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${allowed.size} allowed"
+            "$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, " +
+                "${context.size} contexts, ${allowed.size} allowed"
         }
         require(
             groupings.all { g ->
@@ -420,31 +423,66 @@ fun interface SuggestionScores : AutoCloseable {
          * set asked of every value in five passes, a facet of thousands of characters over tens of thousands of works
          * took half a minute.
          */
-        fun choose(scores: FloatArray, allowed: IntArray?, closed: IntArray, least: Int, half: Float): Shown {
-            val likely = ArrayList<Int>()
-            val others = IntArray(least)
-            var kept = 0
-            fun value(p: Int) = allowed?.get(p) ?: p
-            fun shut(p: Int) = closed.binarySearch(value(p)) >= 0
-            fun before(p: Int, other: Int) =
-                scores[p] > scores[other] || scores[p] == scores[other] && value(p) < value(other)
-            for (p in scores.indices) {
-                if (scores[p] > half) {
-                    if (!shut(p)) likely += p
-                    continue
-                }
-                if (least == 0 || kept == least && !before(p, others[least - 1]) || shut(p)) continue
-                var at = minOf(kept, least - 1)
-                while (at > 0 && before(p, others[at - 1])) {
-                    others[at] = others[at - 1]
-                    at--
-                }
-                others[at] = p
-                if (kept < least) kept++
+        fun choose(scores: FloatArray, allowed: IntArray?, closed: IntArray, least: Int, half: Float): Shown =
+            RowChoice(scores, allowed, closed, least).shown(half)
+    }
+}
+
+/**
+ * The choosing of one row ([SuggestionScores.choose]): of a row's [scores] — of the values [allowed], in their order
+ * (null: of every value, by its place) — the likely ones and the best [least] of the rest, none of the [closed].
+ */
+private class RowChoice(
+    private val scores: FloatArray,
+    private val allowed: IntArray?,
+    private val closed: IntArray,
+    private val least: Int,
+) {
+    /** The likely values' places, in their order. */
+    private val likely = ArrayList<Int>()
+
+    /** The best of the rest kept so far, the better first: [kept] of them. */
+    private val others = IntArray(least)
+    private var kept = 0
+
+    /** The places shown and their scores: the likely, then as many of the rest as make [least] with them. */
+    fun shown(half: Float): Shown {
+        for (p in scores.indices) {
+            if (scores[p] > half) {
+                if (!shut(p)) likely += p
+            } else if (wouldStay(p) && !shut(p)) {
+                keep(p)
             }
-            val places = (likely + others.take(minOf(kept, (least - likely.size).coerceAtLeast(0)))).toIntArray()
-            return Shown(places, FloatArray(places.size) { scores[places[it]] })
         }
+        val places = (likely + others.take(minOf(kept, (least - likely.size).coerceAtLeast(0)))).toIntArray()
+        return Shown(places, FloatArray(places.size) { scores[places[it]] })
+    }
+
+    /** The value at the place [p] of the row. */
+    private fun value(p: Int) = allowed?.get(p) ?: p
+
+    /** Whether the value at [p] is one the row may not be shown with. */
+    private fun shut(p: Int) = closed.binarySearch(value(p)) >= 0
+
+    /** Whether [p] goes before [other]: a higher score, of equal scores the lower value. */
+    private fun before(p: Int, other: Int) =
+        scores[p] > scores[other] || scores[p] == scores[other] && value(p) < value(other)
+
+    /**
+     * Whether an unlikely [p] would stay among the best of the rest: there is room yet, or it goes before the last
+     * kept. Asked before [shut], the cheaper first.
+     */
+    private fun wouldStay(p: Int) = least > 0 && (kept < least || before(p, others[least - 1]))
+
+    /** Puts [p] in its place among the rest kept, the last of them falling off when there is no room. */
+    private fun keep(p: Int) {
+        var at = minOf(kept, least - 1)
+        while (at > 0 && before(p, others[at - 1])) {
+            others[at] = others[at - 1]
+            at--
+        }
+        others[at] = p
+        if (kept < least) kept++
     }
 }
 
