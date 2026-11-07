@@ -1706,17 +1706,49 @@ internal class FacetData(
                 blocks.getOrPut(block) { Gathered(ids.size, bytes.size / 2) }.putHalves(i, bytes)
             }
             val texts = TextVectors.blocks(store.id, store.schema).mapValues { it.value.first }
+            // Where the time goes, of a pass over every work: every kind of vector read, the blocks laid out, put on the card
+            val started = System.nanoTime()
+            var read = 0
+            fun counted(before: Int) = read - before
+            val readTexts: Int
+            val readPictures: Int
+            val readSets: Int
+            val afterTexts: Long
+            val afterPictures: Long
             if (only == null) {
-                store.textVectors.forEachHalves(encoder.id, texts.keys) { id, key, v -> halves(id, texts.getValue(key), v) }
-                imageEncoder?.let { e -> store.pictures.forEachItemHalves(e) { id, block, v -> halves(id, block, v) } }
-                store.setVectors.forEach(sets) { id, block, v -> put(id, block, v) }
+                store.textVectors.forEachHalves(encoder.id, texts.keys) { id, key, v -> read++; halves(id, texts.getValue(key), v) }
+                readTexts = counted(0)
+                afterTexts = System.nanoTime()
+                imageEncoder?.let { e -> store.pictures.forEachItemHalves(e) { id, block, v -> read++; halves(id, block, v) } }
+                readPictures = counted(readTexts)
+                afterPictures = System.nanoTime()
+                store.setVectors.forEach(sets) { id, block, v -> read++; put(id, block, v) }
             } else {
-                store.textVectors.halvesOf(ids, encoder.id).forEach { (id, own) -> own.forEach { (key, v) -> texts[key]?.let { halves(id, it, v) } } }
-                imageEncoder?.let { e -> store.pictures.itemHalvesOf(ids, e).forEach { (id, own) -> own.forEach { (block, v) -> halves(id, block, v) } } }
-                store.setVectors.ofMany(ids, sets).forEach { (id, own) -> own.forEach { (block, v) -> put(id, block, v) } }
+                store.textVectors.halvesOf(ids, encoder.id).forEach { (id, own) -> own.forEach { (key, v) -> texts[key]?.let { read++; halves(id, it, v) } } }
+                readTexts = counted(0)
+                afterTexts = System.nanoTime()
+                imageEncoder?.let { e -> store.pictures.itemHalvesOf(ids, e).forEach { (id, own) -> own.forEach { (block, v) -> read++; halves(id, block, v) } } }
+                readPictures = counted(readTexts)
+                afterPictures = System.nanoTime()
+                store.setVectors.ofMany(ids, sets).forEach { (id, own) -> own.forEach { (block, v) -> read++; put(id, block, v) } }
             }
-            return blocks.map { (name, gathered) -> gathered.block(name, card) }
+            readSets = counted(readTexts + readPictures)
+            val afterSets = System.nanoTime()
+            val laid = blocks.map { (name, gathered) -> name to gathered.laidOut() }
+            val afterLaying = System.nanoTime()
+            val out = laid.map { (name, l) -> InputBlock(name, l.first, l.second, card?.let { Gathered.onCard(it, name, l.first, l.second) }) }
+            if (ids.size >= LOGGED_INPUTS) log.info(
+                "{}: the inputs of {} works, {} MB: the texts' {} vectors read in {} ms, the pictures' {} in {} ms, the sets' {} in {} ms; " +
+                    "the {} blocks laid out in {} ms{}",
+                store.id, ids.size, out.sumOf { it.vectors.rows.toLong() * it.dim * 2 } / (1 shl 20),
+                readTexts, (afterTexts - started) / 1_000_000, readPictures, (afterPictures - afterTexts) / 1_000_000, readSets, (afterSets - afterPictures) / 1_000_000,
+                out.size, (afterLaying - afterSets) / 1_000_000, if (card == null) "" else ", put on the card in ${(System.nanoTime() - afterLaying) / 1_000_000} ms",
+            )
+            return out
         }
+
+        /** The works of a pass from which the time of reading its inputs is told in the log: of a pass over a source, not of a page. */
+        private const val LOGGED_INPUTS = 1000
 
         /**
          * The vectors of the values' names as queries — of [known]'s texts for those it has — encoded

@@ -45,13 +45,12 @@ internal class Gathered(items: Int, private val dim: Int) {
         return k
     }
 
-    /** The block laid out whole, its rows one after another, and — given the [card] — put there; the chunks let go. */
-    fun block(name: String, card: Cublas?): InputBlock {
+    /** The block laid out whole, its rows one after another, with the item of each; the chunks let go. */
+    fun laidOut(): Pair<HalfMatrix, IntArray> {
         val vectors = HalfMatrix(count, dim)
         chunks.forEachIndexed { c, chunk -> vectors.copyRows(chunk, 0, c * CHUNK, minOf(CHUNK, count - c * CHUNK)) }
         chunks.clear()
-        val items = rows.copyOf(count)
-        return InputBlock(name, vectors, items, card?.let { onCard(it, name, vectors, items) })
+        return vectors to rows.copyOf(count)
     }
 
     companion object {
