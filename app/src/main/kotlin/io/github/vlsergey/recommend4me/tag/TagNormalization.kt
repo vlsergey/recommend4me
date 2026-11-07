@@ -6,19 +6,19 @@ import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.work.WorkClusters
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
-import java.time.Instant
 
 private val log = LoggerFactory.getLogger(TagNormalization::class.java)
 
 /**
- * WHAT THE TAGS ARE READ OVER: every source of every content type with a layer of tags learnt from
- * its site's tags — books and games alike — and the one dictionary of them ([tags]); [facet] the
- * key of the layer, one of every type (the standard tags).
+ * WHAT THE TAGS ARE READ OVER: every source of every content type with a layer of tags learnt from its site's tags —
+ * books and games alike — and the one dictionary of them ([tags]); [facet] the key of the layer, one of every type (the
+ * standard tags).
  */
 class TagScope(val sources: List<SourceStore>, val tags: TagRepository, val facet: String) {
     /** The content types the tags are of: told when the tags change, their models trained again. */
@@ -34,18 +34,19 @@ class TagScope(val sources: List<SourceStore>, val tags: TagRepository, val face
 }
 
 /**
- * EVERY SITE'S TAG IS BOUND TO A NORMALIZED TAG ([TagRepository]). A site's tag seen first is bound
- * to the normalized tag the site's tags of its name are bound to — "Магия" of one site and "магия"
- * of another one tag — when there is exactly one such; else to a new normalized tag of its own. A
- * synonym the site names of one of its tags ([ItemStore.setFacetValueSynonyms][io.github.vlsergey.recommend4me.source.ItemStore.setFacetValueSynonyms])
- * is a site's tag of its own bound to the tag that one is bound to — once that one is bound, by a
- * work that has it. From then on the user binds it: merges tags, takes one out.
+ * EVERY SITE'S TAG IS BOUND TO A NORMALIZED TAG ([TagRepository]). A site's tag seen first is bound to the normalized
+ * tag the site's tags of its name are bound to — "Магия" of one site and "магия" of another one tag — when there is
+ * exactly one such; else to a new normalized tag of its own. A synonym the site names of one of its tags
+ * ([ItemStore.setFacetValueSynonyms][io.github.vlsergey.recommend4me.source.ItemStore.setFacetValueSynonyms]) is a
+ * site's tag of its own bound to the tag that one is bound to — once that one is bound, by a work that has it. From
+ * then on the user binds it: merges tags, takes one out.
  */
 @Component
 class TagNormalization(private val stores: Stores) {
 
     /** The facet of the layer learnt from the sites' tags of a source; null for a source without one. */
-    private fun layerOf(s: SourceStore): String? = s.schema.facets.firstOrNull { it.editable && it.examplesFrom != null }?.key
+    private fun layerOf(s: SourceStore): String? =
+        s.schema.facets.firstOrNull { it.editable && it.examplesFrom != null }?.key
 
     /** Every source of every type with a layer of tags; null when none has one. */
     fun scope(): TagScope? {
@@ -55,7 +56,8 @@ class TagNormalization(private val stores: Stores) {
     }
 
     /** The site's facet of tags of a source, the layer's [facet] learnt from it; null for a source without one. */
-    fun siteFacetOf(s: SourceStore, facet: String): String? = s.schema.facets.firstOrNull { it.key == facet }?.examplesFrom
+    fun siteFacetOf(s: SourceStore, facet: String): String? =
+        s.schema.facets.firstOrNull { it.key == facet }?.examplesFrom
 
     /** Every site's tag not bound yet bound now; how many. */
     fun bindNew(): Int {
@@ -64,8 +66,8 @@ class TagNormalization(private val stores: Stores) {
     }
 
     /**
-     * The site's tags of the works [event] names bound at once, before anything reads the works: a
-     * work captured is read with its tags.
+     * The site's tags of the works [event] names bound at once, before anything reads the works: a work captured is
+     * read with its tags.
      */
     @Order(-100)
     @EventListener
@@ -86,22 +88,27 @@ class TagNormalization(private val stores: Stores) {
     }
 
     /**
-     * The site's tags [keysOf] gives of every source bound, the ones not bound yet — of whichever
-     * type: a name of a site of games and of one of books one tag — and every synonym not bound yet
-     * of a site's tag bound; how many. One at a time: two at once would make two tags of one name.
+     * The site's tags [keysOf] gives of every source bound, the ones not bound yet — of whichever type: a name of a
+     * site of games and of one of books one tag — and every synonym not bound yet of a site's tag bound; how many. One
+     * at a time: two at once would make two tags of one name.
      */
     @Synchronized
     private fun bind(scope: TagScope, keysOf: (SourceStore, String) -> Set<String>): Int {
         val bound = scope.tags.bindings()
         val sites = scope.sources.mapNotNull { s -> siteFacetOf(s, scope.facet)?.let { s to it } }
-        val fresh = sites.associate { (s, f) -> s.id to keysOf(s, f).filter { SiteTagRef(s.id, it) !in bound } }.filterValues { it.isNotEmpty() }
+        val fresh =
+            sites
+                .associate { (s, f) -> s.id to keysOf(s, f).filter { SiteTagRef(s.id, it) !in bound } }
+                .filterValues { it.isNotEmpty() }
         val synonyms = sites.associate { (s, f) -> s.id to s.items.facetSynonyms(f) }
         if (fresh.isEmpty() && synonyms.values.all { of -> of.isEmpty() }) return 0
         val now = Instant.now()
         val namesOf = sites.associate { (s, f) -> s.id to s.names(f) }
         // The normalized tags every name is bound to, of every site
         val byName = HashMap<String, MutableSet<Long>>()
-        bound.forEach { (ref, id) -> byName.getOrPut(LayerValues.keyOf(namesOf[ref.source]?.get(ref.tag) ?: ref.tag)) { HashSet() } += id }
+        bound.forEach { (ref, id) ->
+            byName.getOrPut(LayerValues.keyOf(namesOf[ref.source]?.get(ref.tag) ?: ref.tag)) { HashSet() } += id
+        }
         var made = 0
         val boundNow = HashMap<SiteTagRef, Long>()
         fun idOf(ref: SiteTagRef) = bound[ref] ?: boundNow[ref]
@@ -112,10 +119,13 @@ class TagNormalization(private val stores: Stores) {
                 val written = (names[key] ?: key).trim()
                 val name = LayerValues.keyOf(written)
                 // A synonym of a tag bound already is that tag; else as any tag, by its name
-                val id = of[key]?.let { idOf(SiteTagRef(source, it)) } ?: byName[name]?.singleOrNull() ?: scope.tags.create().also {
-                    byName.getOrPut(name) { HashSet() } += it
-                    scope.tags.showAs(it, ShownName(written, NameRule.ALL))
-                }
+                val id =
+                    of[key]?.let { idOf(SiteTagRef(source, it)) }
+                        ?: byName[name]?.singleOrNull()
+                        ?: scope.tags.create().also {
+                            byName.getOrPut(name) { HashSet() } += it
+                            scope.tags.showAs(it, ShownName(written, NameRule.ALL))
+                        }
                 scope.tags.bind(SiteTagRef(source, key), id, now)
                 boundNow[SiteTagRef(source, key)] = id
                 made++

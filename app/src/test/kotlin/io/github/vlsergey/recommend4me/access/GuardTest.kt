@@ -1,37 +1,48 @@
 package io.github.vlsergey.recommend4me.access
 
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import org.springframework.boot.env.YamlPropertySourceLoader
 import org.springframework.core.env.StandardEnvironment
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.mock.web.MockFilterChain
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 /**
- * Who may ask the application: an address of this machine or of a network it is opened to, by a
- * name of ours — never a foreign name pointed at our address — and a write only from our page or
- * an extension.
+ * Who may ask the application: an address of this machine or of a network it is opened to, by a name of ours — never a
+ * foreign name pointed at our address — and a write only from our page or an extension.
  */
 class GuardTest {
 
-    private val guard = Guard(
-        AccessSettings(
-            StandardEnvironment().apply {
-                val yaml = "recommend4me:\n  access:\n    networks: [100.64.0.0/10]\n    hosts: [.ts.net, my-box]\n"
-                YamlPropertySourceLoader().load("personal", ByteArrayResource(yaml.toByteArray())).forEach { propertySources.addFirst(it) }
-            },
-        ),
-    )
+    private val guard =
+        Guard(
+            AccessSettings(
+                StandardEnvironment().apply {
+                    val yaml = "recommend4me:\n  access:\n    networks: [100.64.0.0/10]\n    hosts: [.ts.net, my-box]\n"
+                    YamlPropertySourceLoader().load("personal", ByteArrayResource(yaml.toByteArray())).forEach {
+                        propertySources.addFirst(it)
+                    }
+                }
+            )
+        )
 
-    /** The status the guard answers [method] [host] from [from] with, the Origin [origin] sent; 200 when it lets it pass. */
-    private fun status(method: String = "GET", host: String = "localhost", from: String = "127.0.0.1", origin: String? = null): Int {
-        val request = MockHttpServletRequest(method, "/api/types").apply {
-            remoteAddr = from
-            serverName = host
-            origin?.let { addHeader("Origin", it) }
-        }
+    /**
+     * The status the guard answers [method] [host] from [from] with, the Origin [origin] sent; 200 when it lets it
+     * pass.
+     */
+    private fun status(
+        method: String = "GET",
+        host: String = "localhost",
+        from: String = "127.0.0.1",
+        origin: String? = null,
+    ): Int {
+        val request =
+            MockHttpServletRequest(method, "/api/types").apply {
+                remoteAddr = from
+                serverName = host
+                origin?.let { addHeader("Origin", it) }
+            }
         val response = MockHttpServletResponse()
         guard.doFilter(request, response, MockFilterChain())
         return response.status

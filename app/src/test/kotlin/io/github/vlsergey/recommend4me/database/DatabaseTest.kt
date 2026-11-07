@@ -1,9 +1,5 @@
 package io.github.vlsergey.recommend4me.database
 
-import org.h2.engine.SessionLocal
-import org.h2.jdbc.JdbcConnection
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.DriverManager
@@ -13,12 +9,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.h2.engine.SessionLocal
+import org.h2.jdbc.JdbcConnection
+import org.jooq.impl.DSL
+import org.junit.jupiter.api.io.TempDir
 
 /** A file compacted while it is open: what a run of writes left unused is given back, the data kept. */
 class DatabaseTest {
 
-    @TempDir
-    lateinit var folder: Path
+    @TempDir lateinit var folder: Path
 
     @Test
     fun `a file mostly unused is compacted while open, what is used kept`() {
@@ -73,12 +72,18 @@ class DatabaseTest {
             db.dsl.batch("INSERT INTO junk VALUES (?, ?)").bind(6, written[1]).bind(7, written[2]).execute()
             db.dsl.transaction { c -> DSL.using(c).execute("UPDATE junk SET data = ? WHERE id = 4", written[3]) }
             // Neither the LOBs of a session nor those of a table: H2's own maps of them all empty
-            val lobs = db.dsl.connectionResult { c ->
-                val mv = (c.unwrap(JdbcConnection::class.java).session as SessionLocal).database.store.mvStore
-                mv.mapNames.filter { it.startsWith("lob") || it.startsWith("tempLob") }.associateWith { mv.openMap<Any, Any>(it).sizeAsLong() }
-            }
+            val lobs =
+                db.dsl.connectionResult { c ->
+                    val mv = (c.unwrap(JdbcConnection::class.java).session as SessionLocal).database.store.mvStore
+                    mv.mapNames
+                        .filter { it.startsWith("lob") || it.startsWith("tempLob") }
+                        .associateWith { mv.openMap<Any, Any>(it).sizeAsLong() }
+                }
             assertTrue(lobs.isNotEmpty() && lobs.values.all { it == 0L }, "lobs $lobs")
-            val read = db.dsl.fetch("SELECT id, data FROM junk ORDER BY id").associate { it.get(0, Int::class.java) to it.get(1, ByteArray::class.java) }
+            val read =
+                db.dsl.fetch("SELECT id, data FROM junk ORDER BY id").associate {
+                    it.get(0, Int::class.java) to it.get(1, ByteArray::class.java)
+                }
             // Every row's bytes as written: the one updated of its new ones
             val expected = listOf(0, 1, 2, 3, 3, 0, 1, 2).map { written[it] }
             assertEquals((0..7).toList(), read.keys.sorted())
@@ -89,36 +94,52 @@ class DatabaseTest {
     @Test
     fun `a file mostly unused is written anew before it is opened, what is used kept`() {
         val file = folder.resolve("ratings")
-        Database("test", file, "ratings").use { }
+        Database("test", file, "ratings").use {}
         // Closed without compacting: the file as a run of writes leaves it
-        DriverManager.getConnection("jdbc:h2:file:${file.toAbsolutePath()};COMPRESS=TRUE;MAX_COMPACT_TIME=0", "sa", "").use { c ->
-            c.createStatement().use { it.execute("CREATE TABLE junk (id INT PRIMARY KEY, data VARBINARY(100000))") }
-            val random = Random(3)
-            c.prepareStatement("INSERT INTO junk VALUES (?, ?)").use { s ->
-                repeat(900) { i -> s.setInt(1, i); s.setBytes(2, random.nextBytes(100_000)); s.executeUpdate() }
+        DriverManager.getConnection("jdbc:h2:file:${file.toAbsolutePath()};COMPRESS=TRUE;MAX_COMPACT_TIME=0", "sa", "")
+            .use { c ->
+                c.createStatement().use { it.execute("CREATE TABLE junk (id INT PRIMARY KEY, data VARBINARY(100000))") }
+                val random = Random(3)
+                c.prepareStatement("INSERT INTO junk VALUES (?, ?)").use { s ->
+                    repeat(900) { i ->
+                        s.setInt(1, i)
+                        s.setBytes(2, random.nextBytes(100_000))
+                        s.executeUpdate()
+                    }
+                }
+                c.createStatement().use { it.execute("DELETE FROM junk WHERE id < 890") }
             }
-            c.createStatement().use { it.execute("DELETE FROM junk WHERE id < 890") }
-        }
         // What is kept, read before: byte for byte the same after
-        val kept = DriverManager.getConnection("jdbc:h2:file:${file.toAbsolutePath()};MAX_COMPACT_TIME=0", "sa", "").use { c ->
-            c.createStatement().use { st ->
-                st.executeQuery("SELECT id, data FROM junk ORDER BY id").use { r -> generateSequence { if (r.next()) r.getInt(1) to r.getBytes(2) else null }.toList() }
+        val kept =
+            DriverManager.getConnection("jdbc:h2:file:${file.toAbsolutePath()};MAX_COMPACT_TIME=0", "sa", "").use { c ->
+                c.createStatement().use { st ->
+                    st.executeQuery("SELECT id, data FROM junk ORDER BY id").use { r ->
+                        generateSequence { if (r.next()) r.getInt(1) to r.getBytes(2) else null }.toList()
+                    }
+                }
             }
-        }
         val mvFile = folder.resolve("ratings.mv.db")
         val before = Files.size(mvFile)
         assertTrue(before > 64L shl 20, "before $before")
         Database("test", file, "ratings").use { db ->
             val after = Files.size(mvFile)
             assertTrue(after < before / 2, "from $before to $after")
-            val read = db.dsl.fetch("SELECT id, data FROM junk ORDER BY id").map { it.get(0, Int::class.java) to it.get(1, ByteArray::class.java) }
+            val read =
+                db.dsl.fetch("SELECT id, data FROM junk ORDER BY id").map {
+                    it.get(0, Int::class.java) to it.get(1, ByteArray::class.java)
+                }
             assertEquals((890..899).toList(), kept.map { it.first })
             assertEquals(kept.map { it.first }, read.map { it.first })
-            kept.zip(read).forEach { (k, r) -> assertTrue(k.second.size == 100_000 && k.second.contentEquals(r.second), "row ${k.first}: ${k.second.size} and ${r.second.size} bytes") }
+            kept.zip(read).forEach { (k, r) ->
+                assertTrue(
+                    k.second.size == 100_000 && k.second.contentEquals(r.second),
+                    "row ${k.first}: ${k.second.size} and ${r.second.size} bytes",
+                )
+            }
         }
         // Written anew once: of a file mostly used, nothing
         val rewritten = Files.size(mvFile)
-        Database("test", file, "ratings").use { }
+        Database("test", file, "ratings").use {}
         assertTrue(Files.size(mvFile) <= rewritten + (1L shl 20), "again ${Files.size(mvFile)}, was $rewritten")
     }
 
@@ -131,7 +152,9 @@ class DatabaseTest {
         /** The share of live pages in the file's chunks, percent, below which the deleted rows are let go. */
         const val RELEASED = 20
 
-        /** The passes of compaction after the first, at most: as many as the application makes in an hour and a quarter. */
+        /**
+         * The passes of compaction after the first, at most: as many as the application makes in an hour and a quarter.
+         */
         const val PASSES = 5
     }
 }

@@ -32,13 +32,13 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * archiveofourown.org — the Archive of Our Own: fan works in every language. Read in the browser
- * and seen by the extension — the cards of every list, a work's header, its chapters, the comments
- * shown — and a work's whole page downloaded by the application itself when the user asks for it
- * (or grades a work known only by its card): one request, never a crawl of the catalogue.
+ * archiveofourown.org — the Archive of Our Own: fan works in every language. Read in the browser and seen by the
+ * extension — the cards of every list, a work's header, its chapters, the comments shown — and a work's whole page
+ * downloaded by the application itself when the user asks for it (or grades a work known only by its card): one
+ * request, never a crawl of the catalogue.
  *
- * The site's tags are its word: the fandoms, the relationships and the characters wrangled by its
- * volunteers, which the application works the universes, characters and pairings out from.
+ * The site's tags are its word: the fandoms, the relationships and the characters wrangled by its volunteers, which the
+ * application works the universes, characters and pairings out from.
  */
 class Ao3 : Source {
     override val id = ID
@@ -46,41 +46,45 @@ class Ao3 : Source {
     override val homepage = BASE
     override val modes = setOf(SourceMode.BROWSER, SourceMode.PAGE)
 
-    override val schema = SourceSchema(
-        facets = listOf(
-            Books.AUTHOR.asFacet(AUTHOR),
-            Books.FANDOM.asFacet(FANDOM),
-            AgeRating.SITE.asFacet(),
-            Books.DIRECTION.asFacet(CATEGORY),
-            Books.STATUS.asFacet(STATUS),
-            StandardLanguages.LANGUAGE.asFacet(LANGUAGE),
-            Books.TAG.asFacet(TAG),
-            // The relationships and the characters as the site's tags name them, one field: the
-            // application works the characters and pairings of the universes out of them
-            Books.PAIRINGS.asFacet(PAIRING),
-            FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
-        ),
-        numbers = listOf(
-            StandardNumbers.WORDS.asNumber(WORDS),
-            Books.PARTS.asNumber(PARTS),
-            // Kudos are the site's likes: one number with every site's
-            StandardNumbers.LIKES.asNumber(KUDOS),
-            NumberDef(BOOKMARKS, NumberScale.LOG),
-            // Hits are the site's views
-            StandardNumbers.VIEWS.asNumber(HITS),
-            NumberDef(COMMENTS, NumberScale.LOG),
-        ),
-        texts = listOf(
-            TextDef(ANNOTATION, block = "text:annotation", searchWeight = 0.6f, role = TextRole.DESCRIPTION),
-            TextDef(NOTES, block = "text:notes", searchWeight = 0.5f, role = TextRole.NOTES),
-            TextDef(PAIRINGS_LINE, searchWeight = 0.7f, searchByMeaning = true),
-        ),
-        reviews = true,
-        parts = true,
-        universeLine = PAIRINGS_LINE,
-        // A work of the fandom "Original Work" is an original one
-        kindFrom = FANDOM,
-    )
+    override val schema =
+        SourceSchema(
+            facets =
+                listOf(
+                    Books.AUTHOR.asFacet(AUTHOR),
+                    Books.FANDOM.asFacet(FANDOM),
+                    AgeRating.SITE.asFacet(),
+                    Books.DIRECTION.asFacet(CATEGORY),
+                    Books.STATUS.asFacet(STATUS),
+                    StandardLanguages.LANGUAGE.asFacet(LANGUAGE),
+                    Books.TAG.asFacet(TAG),
+                    // The relationships and the characters as the site's tags name them, one field: the
+                    // application works the characters and pairings of the universes out of them
+                    Books.PAIRINGS.asFacet(PAIRING),
+                    FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
+                ),
+            numbers =
+                listOf(
+                    StandardNumbers.WORDS.asNumber(WORDS),
+                    Books.PARTS.asNumber(PARTS),
+                    // Kudos are the site's likes: one number with every site's
+                    StandardNumbers.LIKES.asNumber(KUDOS),
+                    NumberDef(BOOKMARKS, NumberScale.LOG),
+                    // Hits are the site's views
+                    StandardNumbers.VIEWS.asNumber(HITS),
+                    NumberDef(COMMENTS, NumberScale.LOG),
+                ),
+            texts =
+                listOf(
+                    TextDef(ANNOTATION, block = "text:annotation", searchWeight = 0.6f, role = TextRole.DESCRIPTION),
+                    TextDef(NOTES, block = "text:notes", searchWeight = 0.5f, role = TextRole.NOTES),
+                    TextDef(PAIRINGS_LINE, searchWeight = 0.7f, searchByMeaning = true),
+                ),
+            reviews = true,
+            parts = true,
+            universeLine = PAIRINGS_LINE,
+            // A work of the fandom "Original Work" is an original one
+            kindFrom = FANDOM,
+        )
 
     /** 2: the category a standard direction, with ficbook's. 3: the warnings among the site's tags. */
     override val parserVersion = 3
@@ -88,25 +92,25 @@ class Ao3 : Source {
     /** Its own changes of the values kept: the direction made a standard one, the warnings tags. */
     override val migrations = listOf("classpath:db/ao3")
 
-    override val capturePatterns = listOf(
-        Regex("https://archiveofourown\\.org/(works|tags|users|series|collections|bookmarks)([/?#].*)?"),
-    )
+    override val capturePatterns =
+        listOf(Regex("https://archiveofourown\\.org/(works|tags|users|series|collections|bookmarks)([/?#].*)?"))
 
     /** A character's tag on the site (P8419 "Archive of Our Own tag"): what its works name the character by. */
     override val catalogueProperties = mapOf(WIKIDATA to setOf(AO3_TAG))
 
     /**
-     * The work's characters, pairings and universes drafted from its tags, by their tags on the site
-     * (P8419): every character a tag names — alone, of a romantic relationship "A/B", of a platonic
-     * one "A & B" — among the main characters; a romantic relationship of two, a pairing; a fandom,
-     * its universe.
+     * The work's characters, pairings and universes drafted from its tags, by their tags on the site (P8419): every
+     * character a tag names — alone, of a romantic relationship "A/B", of a platonic one "A & B" — among the main
+     * characters; a romantic relationship of two, a pairing; a fandom, its universe.
      */
     override fun draft(facets: Map<String, List<FacetValue>>, lookup: CatalogueLookup): List<LayerDraft> {
         fun one(found: Set<String>) = found.singleOrNull()
         val out = ArrayList<LayerDraft>()
         facets[FANDOM].orEmpty().forEach { f ->
             val written = f.name ?: f.key
-            one(lookup.universes(WIKIDATA, AO3_TAG, written))?.let { out += LayerDraft(UniverseFacets.UNIVERSE, it, written) }
+            one(lookup.universes(WIKIDATA, AO3_TAG, written))?.let {
+                out += LayerDraft(UniverseFacets.UNIVERSE, it, written)
+            }
         }
         facets[PAIRING].orEmpty().forEach { p ->
             val written = p.name ?: p.key
@@ -115,45 +119,54 @@ class Ao3 : Source {
             val characters = names.map { one(lookup.characters(WIKIDATA, AO3_TAG, it)) }
             characters.filterNotNull().forEach { out += LayerDraft(UniverseFacets.CHARACTERS, it, written) }
             if (romantic && characters.size == 2 && characters.all { it != null } && characters[0] != characters[1]) {
-                out += LayerDraft(UniverseFacets.PAIRINGS, UniverseFacets.pairing(characters[0]!!, characters[1]!!), written)
+                out +=
+                    LayerDraft(
+                        UniverseFacets.PAIRINGS,
+                        UniverseFacets.pairing(characters[0]!!, characters[1]!!),
+                        written,
+                    )
             }
         }
         return out.distinct()
     }
 
-    override val signals = listOf(
-        // Kudos is the site's "I liked it"
-        Books.LIKED.asSignal(),
-        SignalDef(SIGNAL_BOOKMARKED, setOf(Books.YES.key)),
-        SignalDef(SIGNAL_SUBSCRIBED, setOf(Books.YES.key)),
-        SignalDef(SIGNAL_LATER, setOf(Books.YES.key)),
-    )
+    override val signals =
+        listOf(
+            // Kudos is the site's "I liked it"
+            Books.LIKED.asSignal(),
+            SignalDef(SIGNAL_BOOKMARKED, setOf(Books.YES.key)),
+            SignalDef(SIGNAL_SUBSCRIBED, setOf(Books.YES.key)),
+            SignalDef(SIGNAL_LATER, setOf(Books.YES.key)),
+        )
 
     override fun itemUrl(itemId: String) = "$BASE/works/$itemId"
 
     /** A chapter's own page, by its id; the text of a work of one chapter is on the work's page. */
-    override fun partUrl(itemId: String, partId: String) = if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/works/$itemId/chapters/$partId"
+    override fun partUrl(itemId: String, partId: String) =
+        if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/works/$itemId/chapters/$partId"
 
     /** An author's own page, by their login. */
     override fun valueUrl(facet: String, key: String, name: String) = if (facet == AUTHOR) "$BASE/users/$key" else null
 
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
-    override val pageDecor = PageDecor(
-        panelAfter = "dl.work.meta",
-        // The language closes the site's tags on every work: the work's tags and the worked out
-        // universes, characters and pairings go in lines of their own after it
-        facets = listOf(
-            FacetDecor(Books.TAGS.key, after = AFTER_TAGS),
-            FacetDecor(UniverseFacets.UNIVERSE, after = AFTER_TAGS),
-            FacetDecor(UniverseFacets.CHARACTERS, after = AFTER_TAGS),
-            FacetDecor(UniverseFacets.SECONDARY_CHARACTERS, after = AFTER_TAGS),
-            FacetDecor(UniverseFacets.PAIRINGS, after = AFTER_TAGS),
-        ),
-        reviews = ReviewDecor("li.comment[id^='comment_']", idPrefix = "comment_"),
-        // A work's card in every list — its works, a search, the bookmarks, a series, the history
-        cards = CardDecor("li.blurb", "h4.heading a[href^='/works/']"),
-    )
+    override val pageDecor =
+        PageDecor(
+            panelAfter = "dl.work.meta",
+            // The language closes the site's tags on every work: the work's tags and the worked out
+            // universes, characters and pairings go in lines of their own after it
+            facets =
+                listOf(
+                    FacetDecor(Books.TAGS.key, after = AFTER_TAGS),
+                    FacetDecor(UniverseFacets.UNIVERSE, after = AFTER_TAGS),
+                    FacetDecor(UniverseFacets.CHARACTERS, after = AFTER_TAGS),
+                    FacetDecor(UniverseFacets.SECONDARY_CHARACTERS, after = AFTER_TAGS),
+                    FacetDecor(UniverseFacets.PAIRINGS, after = AFTER_TAGS),
+                ),
+            reviews = ReviewDecor("li.comment[id^='comment_']", idPrefix = "comment_"),
+            // A work's card in every list — its works, a search, the bookmarks, a series, the history
+            cards = CardDecor("li.blurb", "h4.heading a[href^='/works/']"),
+        )
 
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = Ao3Pages(context).read(page)
 
@@ -179,8 +192,8 @@ class Ao3 : Source {
     private var lastRequest: Instant = Instant.EPOCH
 
     /**
-     * One request at a time, [PAUSE] apart — the site's own asking of anything automated (its post
-     * on the data dump, 2021: a delay between requests, "bot" in the user agent).
+     * One request at a time, [PAUSE] apart — the site's own asking of anything automated (its post on the data dump,
+     * 2021: a delay between requests, "bot" in the user agent).
      */
     @Synchronized
     private fun <T> paced(request: () -> T): T {
@@ -208,11 +221,16 @@ class Ao3 : Source {
         /** A work's page and its chapters. */
         private val ITEM_ADDRESS = Regex("^https?://(?:www\\.)?archiveofourown\\.org/works/(\\d+)(?:[/?#]|$)")
 
-        private val http: HttpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(20)).build()
+        private val http: HttpClient =
+            HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(20))
+                .build()
         private val TIMEOUT: Duration = Duration.ofSeconds(60)
 
         /** Says what asks, as the site asks a bot to: one page of a work at its reader's request. */
-        private const val USER_AGENT = "recommend4me-bot (a personal recommender; one work's page at its user's request)"
+        private const val USER_AGENT =
+            "recommend4me-bot (a personal recommender; one work's page at its user's request)"
 
         private val PAUSE: Duration = Duration.ofSeconds(5)
 

@@ -19,13 +19,25 @@ class WordsPerCharTest {
         assertEquals(2, WordCount.of("Глава 12"))
     }
 
-    /** Works of 20 000 characters: Russian ones of 0.15 words a character, English ones of 0.18, one author's shorter by a tenth; noise of a percent. */
-    private fun examples(random: Random = Random(7)): List<SizeExample> = List(300) { i ->
-        val english = i % 5 == 0
-        val concise = i % 7 == 0
-        val ratio = (if (english) 0.18 else 0.15) * (if (concise) 0.9 else 1.0) * exp(0.01 * random.nextGaussian())
-        SizeExample(listOfNotNull(if (english) "language:en" else "language:ru", "source:a", if (concise) "author:1" else "author:$i".takeIf { i % 2 == 0 }), 20_000.0 * ratio, 20_000.0)
-    }
+    /**
+     * Works of 20 000 characters: Russian ones of 0.15 words a character, English ones of 0.18, one author's shorter by
+     * a tenth; noise of a percent.
+     */
+    private fun examples(random: Random = Random(7)): List<SizeExample> =
+        List(300) { i ->
+            val english = i % 5 == 0
+            val concise = i % 7 == 0
+            val ratio = (if (english) 0.18 else 0.15) * (if (concise) 0.9 else 1.0) * exp(0.01 * random.nextGaussian())
+            SizeExample(
+                listOfNotNull(
+                    if (english) "language:en" else "language:ru",
+                    "source:a",
+                    if (concise) "author:1" else "author:$i".takeIf { i % 2 == 0 },
+                ),
+                20_000.0 * ratio,
+                20_000.0,
+            )
+        }
 
     @Test
     fun `the language and the author tell the ratio`() {
@@ -33,7 +45,10 @@ class WordsPerCharTest {
         fun ratio(vararg features: String) = exp(model.log(features.toList()))
         assertTrue(abs(ratio("language:ru", "source:a") - 0.15) < 0.002, ratio("language:ru", "source:a").toString())
         assertTrue(abs(ratio("language:en", "source:a") - 0.18) < 0.002, ratio("language:en", "source:a").toString())
-        assertTrue(ratio("language:ru", "source:a", "author:1") < 0.141, ratio("language:ru", "source:a", "author:1").toString())
+        assertTrue(
+            ratio("language:ru", "source:a", "author:1") < 0.141,
+            ratio("language:ru", "source:a", "author:1").toString(),
+        )
     }
 
     @Test

@@ -27,8 +27,8 @@ class Network(cidr: String) {
 }
 
 /**
- * Who may reach the application, by address: this machine itself, and the [networks] the personal
- * configuration names. No one else — the local network neither, unless named: there is no password.
+ * Who may reach the application, by address: this machine itself, and the [networks] the personal configuration names.
+ * No one else — the local network neither, unless named: there is no password.
  */
 class Addresses(private val networks: List<Network>) {
 
@@ -39,7 +39,8 @@ class Addresses(private val networks: List<Network>) {
 
     /** The addresses of this machine's adapters inside the [networks], as they are now. */
     fun own(): List<InetAddress> =
-        NetworkInterface.networkInterfaces().toList()
+        NetworkInterface.networkInterfaces()
+            .toList()
             .filter { runCatching { it.isUp }.getOrDefault(false) }
             .flatMap { it.inetAddresses.toList() }
             .filter { a -> !a.isLoopbackAddress && networks.any { it.contains(a) } }
@@ -48,14 +49,15 @@ class Addresses(private val networks: List<Network>) {
 
     companion object {
         /**
-         * The address as written, without brackets and zone; a dual-stack socket reports an address of
-         * the fourth family as "::ffff:100.64.0.1". Null for what is not an address literal — no name
-         * is looked up.
+         * The address as written, without brackets and zone; a dual-stack socket reports an address of the fourth
+         * family as "::ffff:100.64.0.1". Null for what is not an address literal — no name is looked up.
          */
         fun parse(ip: String?): InetAddress? {
             val h = ip.orEmpty().trim('[', ']').lowercase().substringBefore('%').removePrefix("::ffff:")
             if (h.isEmpty()) return null
-            val literal = h.all { it.isDigit() || it == '.' } || (h.contains(':') && h.all { it.isDigit() || it in 'a'..'f' || it == ':' || it == '.' })
+            val literal =
+                h.all { it.isDigit() || it == '.' } ||
+                    (h.contains(':') && h.all { it.isDigit() || it in 'a'..'f' || it == ':' || it == '.' })
             return if (literal) runCatching { InetAddress.getByName(h) }.getOrNull() else null
         }
     }

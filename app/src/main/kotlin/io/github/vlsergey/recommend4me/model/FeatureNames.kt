@@ -1,14 +1,14 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
+import io.github.vlsergey.recommend4me.likeness.MarkLikeness
 import io.github.vlsergey.recommend4me.picture.PictureRepository
 import io.github.vlsergey.recommend4me.setvector.SetKind
-import io.github.vlsergey.recommend4me.likeness.MarkLikeness
-import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.textvector.TextVectors
 
 /**
  * The names of the model's features, and what the user is shown of them.
@@ -41,10 +41,10 @@ object FeatureNames {
     fun isCategorical(feature: String) = feature.substringBefore(':') in setOf("facet", "prev", "source")
 
     /**
-     * What the user is shown of a feature, by keys of the interface's words: the label of a facet
-     * with the value's name ("standard:facet.tag" and "стелс"), of a standard value by its key; the
-     * label of a number, of a text, of a block of the input ("standard:model.cover"). [sources]
-     * give the facets, numbers and texts; the names of facet values are read from their sources.
+     * What the user is shown of a feature, by keys of the interface's words: the label of a facet with the value's name
+     * ("standard:facet.tag" and "стелс"), of a standard value by its key; the label of a number, of a text, of a block
+     * of the input ("standard:model.cover"). [sources] give the facets, numbers and texts; the names of facet values
+     * are read from their sources.
      */
     fun labels(features: Collection<String>, sources: List<SourceStore>): Map<String, FeatureLabel> {
         val facetLabels = HashMap<String, String>()
@@ -52,33 +52,49 @@ object FeatureNames {
         val blockLabels = HashMap<String, String>()
         sources.forEach { s ->
             s.schema.facets.forEach { facetLabels.putIfAbsent(facetId(s.source, it), I18nKeys.facetLabel(s.id, it)) }
-            s.schema.numbers.forEach { numberLabels.putIfAbsent(numberId(s.source, it), I18nKeys.numberLabel(s.id, it)) }
-            TextVectors.blocks(s.id, s.schema).values.forEach { (block, label) -> blockLabels.putIfAbsent(block, label) }
+            s.schema.numbers.forEach {
+                numberLabels.putIfAbsent(numberId(s.source, it), I18nKeys.numberLabel(s.id, it))
+            }
+            TextVectors.blocks(s.id, s.schema).values.forEach { (block, label) ->
+                blockLabels.putIfAbsent(block, label)
+            }
         }
-        // The names of the facet values and the keys of those of the application's own, asked of every source that has the facet
+        // The names of the facet values and the keys of those of the application's own, asked of every source that has
+        // the facet
         val wanted = features.mapNotNull(::parseFacet).groupBy({ it.first }, { it.second })
         val names = HashMap<Pair<String, String>, String>()
         val nameKeys = HashMap<Pair<String, String>, String>()
         // The names the user gave values, each source's corrections read once: facet to its named corrections
-        val named = if (wanted.isEmpty()) emptyMap() else sources.associateWith { s -> s.corrections.allFacets().filter { it.name != null }.groupBy { it.facet } }
+        val named =
+            if (wanted.isEmpty()) emptyMap()
+            else
+                sources.associateWith { s -> s.corrections.allFacets().filter { it.name != null }.groupBy { it.facet } }
         wanted.forEach { (facetId, keys) ->
             sources.forEach { s ->
-                s.schema.facets.filter { facetId(s.source, it) == facetId }.forEach { def ->
-                    s.names(def.key, keys).forEach { (key, name) -> names.putIfAbsent(facetId to key, name) }
-                    keys.forEach { key -> s.nameKey(def.key, key)?.let { nameKeys.putIfAbsent(facetId to key, it) } }
-                    named.getValue(s)[def.key].orEmpty().forEach { names.putIfAbsent(facetId to it.key, it.name!!) }
-                }
+                s.schema.facets
+                    .filter { facetId(s.source, it) == facetId }
+                    .forEach { def ->
+                        s.names(def.key, keys).forEach { (key, name) -> names.putIfAbsent(facetId to key, name) }
+                        keys.forEach { key ->
+                            s.nameKey(def.key, key)?.let { nameKeys.putIfAbsent(facetId to key, it) }
+                        }
+                        named.getValue(s)[def.key].orEmpty().forEach { names.putIfAbsent(facetId to it.key, it.name!!) }
+                    }
             }
         }
         return features.associateWith { feature ->
             parseFacet(feature)?.let { (facetId, key) ->
                 FeatureLabel(facetLabels[facetId] ?: facetId, names[facetId to key] ?: key, nameKeys[facetId to key])
-            } ?: when (feature.substringBefore(':')) {
-                "num" -> FeatureLabel(numberLabels[feature.removePrefix("num:")] ?: feature)
-                "prev" -> FeatureLabel(PREVIOUS_LABEL, feature.removePrefix("prev:"))
-                "source" -> feature.removePrefix("source:").let { id -> FeatureLabel(SOURCE_LABEL, id, I18nKeys.qualified(id, I18nKeys.TITLE)) }
-                else -> FeatureLabel(BLOCKS[feature] ?: blockLabels[feature] ?: feature)
             }
+                ?: when (feature.substringBefore(':')) {
+                    "num" -> FeatureLabel(numberLabels[feature.removePrefix("num:")] ?: feature)
+                    "prev" -> FeatureLabel(PREVIOUS_LABEL, feature.removePrefix("prev:"))
+                    "source" ->
+                        feature.removePrefix("source:").let { id ->
+                            FeatureLabel(SOURCE_LABEL, id, I18nKeys.qualified(id, I18nKeys.TITLE))
+                        }
+                    else -> FeatureLabel(BLOCKS[feature] ?: blockLabels[feature] ?: feature)
+                }
         }
     }
 
@@ -89,21 +105,26 @@ object FeatureNames {
     const val REVIEWS = "part:reviews"
 
     /**
-     * The key of the label of a part of an explanation: the facet's label for "facet:<id>", the
-     * model's word for the joined parts, the feature's own label for a single block.
+     * The key of the label of a part of an explanation: the facet's label for "facet:<id>", the model's word for the
+     * joined parts, the feature's own label for a single block.
      */
     fun partLabels(parts: Collection<String>, sources: List<SourceStore>): Map<String, String> {
         val facetLabels = HashMap<String, String>()
-        sources.forEach { s -> s.schema.facets.forEach { facetLabels.putIfAbsent("facet:" + facetId(s.source, it), I18nKeys.facetLabel(s.id, it)) } }
+        sources.forEach { s ->
+            s.schema.facets.forEach {
+                facetLabels.putIfAbsent("facet:" + facetId(s.source, it), I18nKeys.facetLabel(s.id, it))
+            }
+        }
         val single = labels(parts.filter { !it.startsWith("facet:") && !it.startsWith("part:") }, sources)
         return parts.associateWith { part ->
-            facetLabels[part] ?: when (part) {
-                PREVIOUS -> PREVIOUS_LABEL
-                SOURCE -> SOURCE_LABEL
-                PICTURES -> model("pictures")
-                REVIEWS -> model("reviews")
-                else -> single[part]?.labelKey ?: part
-            }
+            facetLabels[part]
+                ?: when (part) {
+                    PREVIOUS -> PREVIOUS_LABEL
+                    SOURCE -> SOURCE_LABEL
+                    PICTURES -> model("pictures")
+                    REVIEWS -> model("reviews")
+                    else -> single[part]?.labelKey ?: part
+                }
         }
     }
 
@@ -114,24 +135,27 @@ object FeatureNames {
     private val SOURCE_LABEL = model("source")
 
     /** The keys of the labels of the blocks of the model's input that are not a source's texts. */
-    private val BLOCKS = mapOf(
-        PictureRepository.COVER to model("cover"),
-        PictureRepository.SCREENS to model("screens"),
-        SetKind.SCREENS.key to model("screensOneByOne"),
-        SetKind.REVIEWS.key to model("reviewsOneByOne"),
-        SetKind.PARTS.key to model("textFragments"),
-        MarkLikeness.PICTURES to model("likePictures"),
-        MarkLikeness.REVIEWS to model("likeReviews"),
-    )
+    private val BLOCKS =
+        mapOf(
+            PictureRepository.COVER to model("cover"),
+            PictureRepository.SCREENS to model("screens"),
+            SetKind.SCREENS.key to model("screensOneByOne"),
+            SetKind.REVIEWS.key to model("reviewsOneByOne"),
+            SetKind.PARTS.key to model("textFragments"),
+            MarkLikeness.PICTURES to model("likePictures"),
+            MarkLikeness.REVIEWS to model("likeReviews"),
+        )
 
     /** Every key of the standard namespace a feature or a part of the model's input is labelled by. */
-    val STANDARD_KEYS: Set<String> = setOf(PREVIOUS_LABEL, SOURCE_LABEL, model("pictures"), model("reviews"), TextVectors.TITLE_LABEL) + BLOCKS.values
+    val STANDARD_KEYS: Set<String> =
+        setOf(PREVIOUS_LABEL, SOURCE_LABEL, model("pictures"), model("reviews"), TextVectors.TITLE_LABEL) +
+            BLOCKS.values
 }
 
 /**
- * What the user is shown of a feature, by keys of the interface's words: the key of the label of
- * what it is of — a facet, a number, a block of the input, the previous grade, the source — and of
- * a feature of one value that value as the data names it ([value]), or the key of its name
- * ([valueKey]: a standard value, an original character, a source's title).
+ * What the user is shown of a feature, by keys of the interface's words: the key of the label of what it is of — a
+ * facet, a number, a block of the input, the previous grade, the source — and of a feature of one value that value as
+ * the data names it ([value]), or the key of its name ([valueKey]: a standard value, an original character, a source's
+ * title).
  */
 data class FeatureLabel(val labelKey: String, val value: String? = null, val valueKey: String? = null)

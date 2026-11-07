@@ -7,16 +7,15 @@ import java.nio.ByteOrder
 import java.util.Random
 
 /**
- * GRADIENT BOOSTED TREES FOR RANKING (LambdaMART without the Δ of a measure: the gradients of the
- * pairwise logistic loss, as RankNet's): the score is a sum of small trees, each learnt on what
- * the trees before it put in the wrong order. A tree splits by one feature at a time, so it finds
- * what counts only together — a tag only with a long text, a picture only on a site — by itself.
+ * GRADIENT BOOSTED TREES FOR RANKING (LambdaMART without the Δ of a measure: the gradients of the pairwise logistic
+ * loss, as RankNet's): the score is a sum of small trees, each learnt on what the trees before it put in the wrong
+ * order. A tree splits by one feature at a time, so it finds what counts only together — a tag only with a long text, a
+ * picture only on a site — by itself.
  *
- * Learnt from the same pairs ([RankingPairs]) by the same loss as the line. Every tree is grown by
- * Newton's step (as in XGBoost): the gain of a split and the value of a leaf from the first and the
- * second derivatives of the loss by the scores of its rows, with an L2 penalty [L2] on the leaves.
- * Trees of [DEPTH] levels, every leaf with [LEAST_ROWS] rows at least, a [SHARE] of the features
- * a tree, shrunk by [RATE]: the usual settings of boosting on few rows.
+ * Learnt from the same pairs ([RankingPairs]) by the same loss as the line. Every tree is grown by Newton's step (as in
+ * XGBoost): the gain of a split and the value of a leaf from the first and the second derivatives of the loss by the
+ * scores of its rows, with an L2 penalty [L2] on the leaves. Trees of [DEPTH] levels, every leaf with [LEAST_ROWS] rows
+ * at least, a [SHARE] of the features a tree, shrunk by [RATE]: the usual settings of boosting on few rows.
  *
  * The parameter is the number of trees: the fewer, the more cautious.
  */
@@ -31,7 +30,8 @@ class BoostingScorer : Scorer {
     /** The most trees grown once; a fit of fewer is its first trees — the same trees a fit of them alone grows. */
     override fun fitEach(task: RankingTask, rows: IntArray, parameters: List<Double>): List<FittedScorer> {
         if (parameters.isEmpty()) return emptyList()
-        val forest = fit(task.x, rows.distinct().toIntArray(), RankingPairs.of(task, rows), parameters.maxOf { it.toInt() })
+        val forest =
+            fit(task.x, rows.distinct().toIntArray(), RankingPairs.of(task, rows), parameters.maxOf { it.toInt() })
         return parameters.map { Forest(forest.features, forest.trees.subList(0, it.toInt())) }
     }
 
@@ -81,8 +81,8 @@ class BoostingScorer : Scorer {
 }
 
 /**
- * Grows the trees on the rows [learnt]: every feature's rows sorted by its value once, for the
- * whole fit; a node finds its best split by one pass over every feature's sorted rows.
+ * Grows the trees on the rows [learnt]: every feature's rows sorted by its value once, for the whole fit; a node finds
+ * its best split by one pass over every feature's sorted rows.
  */
 internal class Grower(private val x: Matrix, private val learnt: IntArray) {
     private val d = x.cols
@@ -91,12 +91,13 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
     private val node = IntArray(m)
 
     /** The rows' features, a row of [learnt] a row: read straight, not through the matrix's segment. */
-    private val values: Array<FloatArray> = Array(m) { k -> FloatArray(d).also { x.held.take(it, 0, x.row(learnt[k]), d) } }
+    private val values: Array<FloatArray> =
+        Array(m) { k -> FloatArray(d).also { x.held.take(it, 0, x.row(learnt[k]), d) } }
 
     /**
-     * For every feature, the positions in [learnt] in the order of its value, of equal values the
-     * first first: every position and its value one number sorted — the value's bits made to order
-     * as the floats do, above the position — not a list of boxed numbers a feature.
+     * For every feature, the positions in [learnt] in the order of its value, of equal values the first first: every
+     * position and its value one number sorted — the value's bits made to order as the floats do, above the position —
+     * not a list of boxed numbers a feature.
      */
     internal val sorted: Array<IntArray> = run {
         val keyed = LongArray(m)
@@ -111,7 +112,8 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
     }
 
     fun grow(g: DoubleArray, h: DoubleArray, random: Random): Tree {
-        val features = (0 until d).filter { random.nextDouble() < BoostingScorer.SHARE }.ifEmpty { listOf(random.nextInt(d)) }
+        val features =
+            (0 until d).filter { random.nextDouble() < BoostingScorer.SHARE }.ifEmpty { listOf(random.nextInt(d)) }
         val nodes = ArrayList<Node>()
         node.fill(0)
         nodes += Node()
@@ -134,8 +136,11 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
             if (level.isEmpty()) break
             inLevel.fill(false)
             level.forEach { inLevel[it] = true }
-            sumG.fill(0.0); sumH.fill(0.0); rowsOf.fill(0)
-            gain.fill(0.0); feature.fill(-1)
+            sumG.fill(0.0)
+            sumH.fill(0.0)
+            rowsOf.fill(0)
+            gain.fill(0.0)
+            feature.fill(-1)
             for (k in 0 until m) {
                 val n = node[k]
                 if (!inLevel[n]) continue
@@ -144,20 +149,27 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
                 rowsOf[n]++
             }
             for (f in features) {
-                leftG.fill(0.0); leftH.fill(0.0); leftRows.fill(0)
+                leftG.fill(0.0)
+                leftH.fill(0.0)
+                leftRows.fill(0)
                 for (k in sorted[f]) {
                     val n = node[k]
                     if (!inLevel[n]) continue
                     val value = values[k][f]
                     val lr = leftRows[n]
                     // A split between two different values, both sides big enough
-                    if (lr >= BoostingScorer.LEAST_ROWS && rowsOf[n] - lr >= BoostingScorer.LEAST_ROWS && value > lastValue[n]) {
+                    if (
+                        lr >= BoostingScorer.LEAST_ROWS &&
+                            rowsOf[n] - lr >= BoostingScorer.LEAST_ROWS &&
+                            value > lastValue[n]
+                    ) {
                         val gl = leftG[n]
                         val hl = leftH[n]
                         val gr = sumG[n] - gl
                         val hr = sumH[n] - hl
-                        val gained = gl * gl / (hl + BoostingScorer.L2) + gr * gr / (hr + BoostingScorer.L2) -
-                            sumG[n] * sumG[n] / (sumH[n] + BoostingScorer.L2)
+                        val gained =
+                            gl * gl / (hl + BoostingScorer.L2) + gr * gr / (hr + BoostingScorer.L2) -
+                                sumG[n] * sumG[n] / (sumH[n] + BoostingScorer.L2)
                         if (gained > gain[n]) {
                             gain[n] = gained
                             feature[n] = f
@@ -196,10 +208,14 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
             leafG[node[k]] += g[learnt[k]]
             leafH[node[k]] += h[learnt[k]]
         }
-        nodes.forEachIndexed { n, it -> if (it.left < 0) it.value = (-BoostingScorer.RATE * leafG[n] / (leafH[n] + BoostingScorer.L2)).toFloat() }
+        nodes.forEachIndexed { n, it ->
+            if (it.left < 0) it.value = (-BoostingScorer.RATE * leafG[n] / (leafH[n] + BoostingScorer.L2)).toFloat()
+        }
         return Tree(
-            IntArray(nodes.size) { nodes[it].feature }, FloatArray(nodes.size) { nodes[it].threshold },
-            IntArray(nodes.size) { nodes[it].left }, FloatArray(nodes.size) { nodes[it].value },
+            IntArray(nodes.size) { nodes[it].feature },
+            FloatArray(nodes.size) { nodes[it].threshold },
+            IntArray(nodes.size) { nodes[it].left },
+            FloatArray(nodes.size) { nodes[it].value },
         )
     }
 
@@ -241,10 +257,16 @@ class Forest(val features: Int, val trees: List<Tree>) : FittedScorer {
         fun unpack(bytes: ByteArray): Forest {
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
             val features = buffer.getInt()
-            val trees = List(buffer.getInt()) {
-                val n = buffer.getInt()
-                Tree(IntArray(n) { buffer.getInt() }, FloatArray(n) { buffer.getFloat() }, IntArray(n) { buffer.getInt() }, FloatArray(n) { buffer.getFloat() })
-            }
+            val trees =
+                List(buffer.getInt()) {
+                    val n = buffer.getInt()
+                    Tree(
+                        IntArray(n) { buffer.getInt() },
+                        FloatArray(n) { buffer.getFloat() },
+                        IntArray(n) { buffer.getInt() },
+                        FloatArray(n) { buffer.getFloat() },
+                    )
+                }
             return Forest(features, trees)
         }
     }

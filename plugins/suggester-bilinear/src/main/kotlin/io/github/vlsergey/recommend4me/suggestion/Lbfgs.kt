@@ -8,15 +8,13 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * The minimum of a smooth function by limited-memory BFGS (Nocedal & Wright, "Numerical
- * Optimization", algorithms 7.4 and 7.5): the last [HISTORY] steps and changes of the gradient
- * stand for the inverse Hessian; each step is searched back from the full one until the function
- * falls enough (Armijo).
+ * The minimum of a smooth function by limited-memory BFGS (Nocedal & Wright, "Numerical Optimization", algorithms 7.4
+ * and 7.5): the last [HISTORY] steps and changes of the gradient stand for the inverse Hessian; each step is searched
+ * back from the full one until the function falls enough (Armijo).
  *
- * In single precision, as the model is. [f] writes the gradient at its point into its second
- * argument and answers the value there. The search stops when the value falls by less than a
- * float can tell of it ([RESOLUTION]), when the gradient is nought, when a step no longer moves
- * the point, or after [maxSteps] steps.
+ * In single precision, as the model is. [f] writes the gradient at its point into its second argument and answers the
+ * value there. The search stops when the value falls by less than a float can tell of it ([RESOLUTION]), when the
+ * gradient is nought, when a step no longer moves the point, or after [maxSteps] steps.
  */
 object Lbfgs {
     /** The steps remembered: Nocedal & Wright advise 3 to 20; the middle of it. */
@@ -29,7 +27,12 @@ object Lbfgs {
     private val RESOLUTION = Math.ulp(1f)
 
     /** [stop]: asked before every step; once it says yes the search is given up with a [CancellationException]. */
-    fun minimize(start: FloatArray, maxSteps: Int, stop: () -> Boolean = { false }, f: (FloatArray, FloatArray) -> Float): FloatArray {
+    fun minimize(
+        start: FloatArray,
+        maxSteps: Int,
+        stop: () -> Boolean = { false },
+        f: (FloatArray, FloatArray) -> Float,
+    ): FloatArray {
         val n = start.size
         val x = start.copyOf()
         val g = FloatArray(n)
@@ -50,7 +53,9 @@ object Lbfgs {
                 alphas[k] = rhos[k] * dot(steps[k], d)
                 axpy(-alphas[k], changes[k], d)
             }
-            val gamma = if (steps.isEmpty()) 1f / gNorm else dot(steps.last(), changes.last()) / dot(changes.last(), changes.last())
+            val gamma =
+                if (steps.isEmpty()) 1f / gNorm
+                else dot(steps.last(), changes.last()) / dot(changes.last(), changes.last())
             for (i in 0 until n) d[i] *= gamma
             for (k in steps.indices) {
                 val beta = rhos[k] * dot(changes[k], d)
@@ -60,7 +65,9 @@ object Lbfgs {
             var slope = dot(g, d)
             if (slope >= 0) {
                 // Not a descent: the history is forgotten, the gradient followed
-                steps.clear(); changes.clear(); rhos.clear()
+                steps.clear()
+                changes.clear()
+                rhos.clear()
                 for (i in 0 until n) d[i] = -g[i] / gNorm
                 slope = dot(g, d)
             }
@@ -79,8 +86,14 @@ object Lbfgs {
             // Only a step of positive curvature stands for the Hessian
             val sy = dot(s, y)
             if (sy > 0f) {
-                steps.addLast(s); changes.addLast(y); rhos.addLast(1f / sy)
-                if (steps.size > HISTORY) { steps.removeFirst(); changes.removeFirst(); rhos.removeFirst() }
+                steps.addLast(s)
+                changes.addLast(y)
+                rhos.addLast(1f / sy)
+                if (steps.size > HISTORY) {
+                    steps.removeFirst()
+                    changes.removeFirst()
+                    rhos.removeFirst()
+                }
             }
             val fell = fx - fNext
             next.copyInto(x)
@@ -104,8 +117,8 @@ object Lbfgs {
 }
 
 /**
- * WHERE A SEARCH'S VECTORS LIE, and what it does with them ([Search]): the main memory ([OnHost]),
- * or the card's ([SearchOnCard]). Each of [size] numbers, made once for the whole search.
+ * WHERE A SEARCH'S VECTORS LIE, and what it does with them ([Search]): the main memory ([OnHost]), or the card's
+ * ([SearchOnCard]). Each of [size] numbers, made once for the whole search.
  */
 internal interface Space<V> {
     fun make(size: Int): V
@@ -157,8 +170,8 @@ internal interface Place<V> {
 }
 
 /**
- * Where the numbers of one model's point — or its gradient — lie among the products of many: its
- * pieces, each [count] numbers at [at] of [floats], read one after another as one vector ([Search]).
+ * Where the numbers of one model's point — or its gradient — lie among the products of many: its pieces, each [count]
+ * numbers at [at] of [floats], read one after another as one vector ([Search]).
  */
 internal class Pieces(val floats: Array<Floats>, val at: IntArray, val count: IntArray) : Place<Floats> {
     val size = count.sum()
@@ -190,12 +203,11 @@ internal class Pieces(val floats: Array<Floats>, val at: IntArray, val count: In
 }
 
 /**
- * ONE MODEL'S SEARCH FOR ITS MINIMUM, A POINT AT A TIME ([Lbfgs.minimize] as steps of its own): it
- * names the point it wants the function at ([propose]) and is told what the function is there
- * ([answer]) — so that many models' points are worked out in one product of them all, the slowest
- * model's every step not holding up the rest. The same algorithm in single precision, its numbers
- * in its [space] — the main memory or the card's: the point, the gradient, the direction, the
- * remembered steps and changes, made once for the whole search and reused — nothing made a step.
+ * ONE MODEL'S SEARCH FOR ITS MINIMUM, A POINT AT A TIME ([Lbfgs.minimize] as steps of its own): it names the point it
+ * wants the function at ([propose]) and is told what the function is there ([answer]) — so that many models' points are
+ * worked out in one product of them all, the slowest model's every step not holding up the rest. The same algorithm in
+ * single precision, its numbers in its [space] — the main memory or the card's: the point, the gradient, the direction,
+ * the remembered steps and changes, made once for the whole search and reused — nothing made a step.
  */
 internal class Search<V>(private val space: Space<V>, private val size: Int, private val maxSteps: Int) {
     /** The point reached: the minimum once [done]. */
@@ -272,8 +284,8 @@ internal class Search<V>(private val space: Space<V>, private val size: Int, pri
     }
 
     /**
-     * The next direction: minus the gradient times the inverse Hessian the remembered steps stand
-     * for (two loops, algorithm 7.4), the step back to one; false when the gradient is nought.
+     * The next direction: minus the gradient times the inverse Hessian the remembered steps stand for (two loops,
+     * algorithm 7.4), the step back to one; false when the gradient is nought.
      */
     private fun direction(): Boolean {
         val gNorm = sqrt(space.dot(g, g, size))
@@ -284,10 +296,12 @@ internal class Search<V>(private val space: Space<V>, private val size: Int, pri
             alphas[r] = rhos[k] * space.dot(steps[k], d, size)
             space.axpy(-alphas[r], changes[k], d, size)
         }
-        val gamma = if (remembered == 0) 1f / gNorm else {
-            val k = (oldest + remembered - 1) % Lbfgs.MEMORY
-            space.dot(steps[k], changes[k], size) / space.dot(changes[k], changes[k], size)
-        }
+        val gamma =
+            if (remembered == 0) 1f / gNorm
+            else {
+                val k = (oldest + remembered - 1) % Lbfgs.MEMORY
+                space.dot(steps[k], changes[k], size) / space.dot(changes[k], changes[k], size)
+            }
         space.scale(gamma, d, size)
         for (r in 0 until remembered) {
             val k = (oldest + r) % Lbfgs.MEMORY

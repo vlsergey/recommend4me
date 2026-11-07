@@ -11,17 +11,32 @@ class BlasTest {
     fun `the library is loaded with one thread, as its own C runtime reads the environment`() {
         assertTrue(Blas.on, "OpenBLAS must load")
         val windows = System.getProperty("os.name").startsWith("Windows")
-        val read = java.lang.foreign.Arena.ofConfined().use { arena ->
-            val linker = java.lang.foreign.Linker.nativeLinker()
-            val getenv = (if (windows) java.lang.foreign.SymbolLookup.libraryLookup("msvcrt", arena) else linker.defaultLookup()).find("getenv").orElseThrow()
-            val at = linker.downcallHandle(getenv, java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.ADDRESS, java.lang.foreign.ValueLayout.ADDRESS))
-                .invokeWithArguments(arena.allocateFrom("OPENBLAS_NUM_THREADS")) as java.lang.foreign.MemorySegment
-            if (at.address() == 0L) null else at.reinterpret(16).getString(0)
-        }
+        val read =
+            java.lang.foreign.Arena.ofConfined().use { arena ->
+                val linker = java.lang.foreign.Linker.nativeLinker()
+                val getenv =
+                    (if (windows) java.lang.foreign.SymbolLookup.libraryLookup("msvcrt", arena)
+                        else linker.defaultLookup())
+                        .find("getenv")
+                        .orElseThrow()
+                val at =
+                    linker
+                        .downcallHandle(
+                            getenv,
+                            java.lang.foreign.FunctionDescriptor.of(
+                                java.lang.foreign.ValueLayout.ADDRESS,
+                                java.lang.foreign.ValueLayout.ADDRESS,
+                            ),
+                        )
+                        .invokeWithArguments(arena.allocateFrom("OPENBLAS_NUM_THREADS"))
+                        as java.lang.foreign.MemorySegment
+                if (at.address() == 0L) null else at.reinterpret(16).getString(0)
+            }
         assertEquals(System.getenv("OPENBLAS_NUM_THREADS") ?: "1", read)
     }
 
     private val random = Random(1)
+
     private fun floats(n: Int) = Floats.of(FloatArray(n) { random.nextFloat() - 0.5f })
 
     @Test

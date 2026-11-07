@@ -8,29 +8,29 @@ import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
-import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
-import org.springframework.context.event.EventListener
-import org.springframework.stereotype.Component
 import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.sqrt
+import org.slf4j.LoggerFactory
+import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.event.EventListener
+import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(TagVectors::class.java)
 
 /**
- * THE VECTORS OF THE TAGS, MADE IN THE BACKGROUND: of every normalized tag that has none by the text
- * encoder in use — found by a join, not by reading every tag — one of every name of it, its sites'
- * tags' and its entries', kept in the dictionaries ([TagRepository.vectors]): a tag is alike by the
- * best of its names, so a synonym added finds more and blurs nothing. A tag whose names change loses
- * its vectors there ([TagRepository.forgetVectors]) and is made again here.
+ * THE VECTORS OF THE TAGS, MADE IN THE BACKGROUND: of every normalized tag that has none by the text encoder in use —
+ * found by a join, not by reading every tag — one of every name of it, its sites' tags' and its entries', kept in the
+ * dictionaries ([TagRepository.vectors]): a tag is alike by the best of its names, so a synonym added finds more and
+ * blurs nothing. A tag whose names change loses its vectors there ([TagRepository.forgetVectors]) and is made again
+ * here.
  *
- * Made after any change of the tags — the user's word on them, the sites' tags bound as works come
- * — once the changes have paused, and five minutes after the start. The screen of the tags reads the
- * vectors kept; a tag without one yet is alike nothing for a while.
+ * Made after any change of the tags — the user's word on them, the sites' tags bound as works come — once the changes
+ * have paused, and five minutes after the start. The screen of the tags reads the vectors kept; a tag without one yet
+ * is alike nothing for a while.
  */
 @Component
 class TagVectors(
@@ -39,33 +39,39 @@ class TagVectors(
     private val phrases: PhraseVectors,
     private val workload: Workload,
 ) {
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "tag-vectors").apply { isDaemon = true } }
+    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "tag-vectors").apply { isDaemon = true }
+    }
     private val pending = AtomicReference<ScheduledFuture<*>?>()
 
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() = schedule(START_DELAY_SECONDS, "start")
+    @EventListener(ApplicationReadyEvent::class) fun start() = schedule(START_DELAY_SECONDS, "start")
 
-    @EventListener
-    fun tagsChanged(event: TagsChanged) = schedule(QUIET_SECONDS, "tags")
+    @EventListener fun tagsChanged(event: TagsChanged) = schedule(QUIET_SECONDS, "tags")
 
     /** Works came or changed: their sites' tags bound to tags ([TagNormalization]), maybe new ones. */
-    @EventListener
-    fun itemsChanged(event: ItemsChanged) = schedule(QUIET_SECONDS, "items")
+    @EventListener fun itemsChanged(event: ItemsChanged) = schedule(QUIET_SECONDS, "items")
 
-    /** A site named the synonyms of its tags: bound to their tags at once ([TagNormalization]), each a name more of its tag. */
-    @EventListener
-    fun synonymsSet(event: SynonymsSet) = schedule(QUIET_SECONDS, "synonyms")
+    /**
+     * A site named the synonyms of its tags: bound to their tags at once ([TagNormalization]), each a name more of its
+     * tag.
+     */
+    @EventListener fun synonymsSet(event: SynonymsSet) = schedule(QUIET_SECONDS, "synonyms")
 
     /** The vectors made after the quiet; the [reason], a key the interface words, told in the queue of the works. */
     private fun schedule(delaySeconds: Long, reason: String) {
         workload.plan(VECTORS, Instant.now().plusSeconds(delaySeconds), reason)
-        val next = scheduler.schedule({
-            try {
-                workload.run(VECTORS) { fill() }
-            } catch (e: Exception) {
-                log.warn("The vectors of the tags were not made: {}", e.message, e)
-            }
-        }, delaySeconds, TimeUnit.SECONDS)
+        val next =
+            scheduler.schedule(
+                {
+                    try {
+                        workload.run(VECTORS) { fill() }
+                    } catch (e: Exception) {
+                        log.warn("The vectors of the tags were not made: {}", e.message, e)
+                    }
+                },
+                delaySeconds,
+                TimeUnit.SECONDS,
+            )
         pending.getAndSet(next)?.cancel(false)
     }
 
@@ -88,23 +94,44 @@ class TagVectors(
             val names = s.names(siteFacet)
             val written = own.keys.associateWith { (names[it.tag] ?: it.tag).trim() }.filterValues { it.isNotEmpty() }
             val vectors = phrases.of(s, written.values.distinct())
-            written.forEach { (site, name) -> vectors[name]?.let { ofTag.getOrPut(own.getValue(site)) { ArrayList() } += it } }
+            written.forEach { (site, name) ->
+                vectors[name]?.let { ofTag.getOrPut(own.getValue(site)) { ArrayList() } += it }
+            }
         }
         // The names of the entries they are bound to, every language's: no site's, encoded here
         val bound = scope.tags.entriesOfTags().filterKeys { it in missing }
         val kept = scope.tags.keptEntries(bound.values.flatten().toSet())
-        val entryNames = bound.mapValues { (_, refs) -> refs.flatMap { kept[it]?.let { e -> e.labels.values + e.aliases.values.flatten() }.orEmpty() }.distinct() }
+        val entryNames = bound.mapValues { (_, refs) ->
+            refs.flatMap { kept[it]?.let { e -> e.labels.values + e.aliases.values.flatten() }.orEmpty() }.distinct()
+        }
         val encoded = encode(encoder, entryNames.values.flatten().distinct())
-        entryNames.forEach { (tag, names) -> names.forEach { name -> encoded[name]?.let { ofTag.getOrPut(tag) { ArrayList() } += it } } }
-        // Every tag without a vector is kept with one — of no name, an empty one — not asked again till its names change
-        missing.chunked(KEEP).forEach { chunk -> scope.tags.keepVectors(plugin, encoder.id, chunk.associateWith { tag -> ofTag[tag].orEmpty().mapNotNull(::unit) }) }
-        log.info("Vectors of {} tags made by {} ({}) in {} ms", missing.size, encoder.id, plugin, System.currentTimeMillis() - started)
+        entryNames.forEach { (tag, names) ->
+            names.forEach { name -> encoded[name]?.let { ofTag.getOrPut(tag) { ArrayList() } += it } }
+        }
+        // Every tag without a vector is kept with one — of no name, an empty one — not asked again till its names
+        // change
+        missing.chunked(KEEP).forEach { chunk ->
+            scope.tags.keepVectors(
+                plugin,
+                encoder.id,
+                chunk.associateWith { tag -> ofTag[tag].orEmpty().mapNotNull(::unit) },
+            )
+        }
+        log.info(
+            "Vectors of {} tags made by {} ({}) in {} ms",
+            missing.size,
+            encoder.id,
+            plugin,
+            System.currentTimeMillis() - started,
+        )
         return missing.size
     }
 
     private fun encode(encoder: TextEncoder, texts: List<String>): Map<String, FloatArray> {
         val out = HashMap<String, FloatArray>()
-        texts.chunked(KEEP).forEach { chunk -> chunk.zip(encoder.encode(chunk)).forEach { (text, v) -> v?.let { out[text] = it } } }
+        texts.chunked(KEEP).forEach { chunk ->
+            chunk.zip(encoder.encode(chunk)).forEach { (text, v) -> v?.let { out[text] = it } }
+        }
         return out
     }
 
@@ -132,7 +159,10 @@ class TagVectors(
             return FloatArray(v.size) { v[it] / norm }
         }
 
-        /** How alike two sets of names are: the best cosine of a name of one and a name of the other; nought of an empty one. */
+        /**
+         * How alike two sets of names are: the best cosine of a name of one and a name of the other; nought of an empty
+         * one.
+         */
         fun likeness(a: List<FloatArray>, b: List<FloatArray>): Double =
             a.maxOfOrNull { x -> b.maxOfOrNull { y -> x.indices.sumOf { (x[it] * y[it]).toDouble() } } ?: 0.0 } ?: 0.0
     }

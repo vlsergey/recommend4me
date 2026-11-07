@@ -1,8 +1,8 @@
 package io.github.vlsergey.recommend4me.source
 
-import org.jooq.DSLContext
 import java.nio.file.Path
 import java.time.Instant
+import org.jooq.DSLContext
 
 /** What the application hands a source to work with. */
 interface SourceContext {
@@ -23,8 +23,8 @@ interface SourceContext {
     val folder: Path
 
     /**
-     * Keeps a page — a captured one, or one the source downloaded — so it can be read again when
-     * the parser changes ([Source.parserVersion]); a page kept again under the same address replaces it.
+     * Keeps a page — a captured one, or one the source downloaded — so it can be read again when the parser changes
+     * ([Source.parserVersion]); a page kept again under the same address replaces it.
      */
     fun keepPage(url: String, html: String, itemId: String?)
 
@@ -41,13 +41,14 @@ interface SourceContext {
 /** Settings of one source, kept by the application. */
 interface SourceSettings {
     fun get(key: String): String?
+
     fun set(key: String, value: String?)
 }
 
 /**
- * The user's own actions on the site, as its pages show them — liked, in the library on a shelf,
- * read to some chapter, bookmarked. Kept with the user's grades, never with the scrape; shown, and
- * never read by the model: they are the user's verdict on the work ([SignalDef]).
+ * The user's own actions on the site, as its pages show them — liked, in the library on a shelf, read to some chapter,
+ * bookmarked. Kept with the user's grades, never with the scrape; shown, and never read by the model: they are the
+ * user's verdict on the work ([SignalDef]).
  */
 interface SiteSignals {
     /** Sets the [signal] of the item to [value]; null takes it away. */
@@ -60,10 +61,10 @@ interface SiteSignals {
 /**
  * The generic data of a source's items, written by the source, read by the application.
  *
- * A PAGE SAYS ONLY WHAT IT SHOWS: a parser writes what it found, and an empty list, a null or a
- * blank only for what the page shows to be empty — a block the work's header has not. A block it
- * could not find, a page that is not the work's (an error page answered with 200, a changed
- * markup), says nothing: nothing of it is written, as nothing is known to be gone.
+ * A PAGE SAYS ONLY WHAT IT SHOWS: a parser writes what it found, and an empty list, a null or a blank only for what the
+ * page shows to be empty — a block the work's header has not. A block it could not find, a page that is not the work's
+ * (an error page answered with 200, a changed markup), says nothing: nothing of it is written, as nothing is known to
+ * be gone.
  */
 interface ItemStore {
     /** Creates or updates an item; true when it is new or its version changed. */
@@ -82,14 +83,16 @@ interface ItemStore {
     /** The names of facet values the items name by key; a name given before is replaced. */
     fun nameFacetValues(facet: String, names: Map<String, String>)
 
-    /** What the site says the facet's values mean — a tag's own page describing it — by key; a description given before is replaced. */
+    /**
+     * What the site says the facet's values mean — a tag's own page describing it — by key; a description given before
+     * is replaced.
+     */
     fun describeFacetValues(facet: String, descriptions: Map<String, String>)
 
     /**
-     * The other names the site gives facet values — the synonyms of a tag of ficbook — by the
-     * value's key: each synonym (its key to its name) a value of its own, named, and the same thing
-     * as the value — a site's tag bound to the tag the value is. The synonyms given before of the
-     * values given are replaced.
+     * The other names the site gives facet values — the synonyms of a tag of ficbook — by the value's key: each synonym
+     * (its key to its name) a value of its own, named, and the same thing as the value — a site's tag bound to the tag
+     * the value is. The synonyms given before of the values given are replaced.
      */
     fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>)
 
@@ -108,8 +111,8 @@ interface ItemStore {
     fun texts(itemId: String): Map<String, String>
 
     /**
-     * The item's pictures as the site lists them now, position 0 the cover. A picture whose
-     * address changed is a new picture: its files and vector are forgotten.
+     * The item's pictures as the site lists them now, position 0 the cover. A picture whose address changed is a new
+     * picture: its files and vector are forgotten.
      */
     fun setPictures(itemId: String, urls: List<String?>)
 

@@ -10,9 +10,9 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(DeclaredSignals::class.java)
 
 /**
- * A SOURCE'S SIGNALS ARE THOSE IT DECLARES: on start the values of a signal the source no longer
- * declares — renamed, made a standard one — are removed and told of. The source sets them anew
- * from its pages under their new names when it reads them again.
+ * A SOURCE'S SIGNALS ARE THOSE IT DECLARES: on start the values of a signal the source no longer declares — renamed,
+ * made a standard one — are removed and told of. The source sets them anew from its pages under their new names when it
+ * reads them again.
  */
 @Component
 class DeclaredSignals(private val stores: Stores) {

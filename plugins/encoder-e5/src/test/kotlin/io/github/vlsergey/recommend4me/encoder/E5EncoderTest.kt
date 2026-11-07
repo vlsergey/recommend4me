@@ -2,11 +2,11 @@ package io.github.vlsergey.recommend4me.encoder
 
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class E5EncoderTest {
 
@@ -17,12 +17,15 @@ class E5EncoderTest {
     @Test
     fun `a Russian query finds the English text about the same`() {
         assumeTrue(textVec.ready(), "multilingual-e5 files are not in the models folder")
-        val (dragons, college) = textVec.encode(
-            listOf(
-                "An epic fantasy adventure: you ride dragons, fight knights and explore a magic kingdom.",
-                "A romance at college: you date your classmates, attend lectures and go to parties.",
-            )
-        ).map { it!! }
+        val (dragons, college) =
+            textVec
+                .encode(
+                    listOf(
+                        "An epic fantasy adventure: you ride dragons, fight knights and explore a magic kingdom.",
+                        "A romance at college: you date your classmates, attend lectures and go to parties.",
+                    )
+                )
+                .map { it!! }
         val dragonsQuery = textVec.encode(listOf("фэнтези с драконами"), TextKind.QUERY).single()!!
         val collegeQuery = textVec.encode(listOf("студенческая жизнь в университете"), TextKind.QUERY).single()!!
 

@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(PhraseVectors::class.java)
 
 /**
- * Vectors of short texts — whole reviews, phrases of the search's snippets — kept in a source's
- * database by the key of the text, so a text is encoded once.
+ * Vectors of short texts — whole reviews, phrases of the search's snippets — kept in a source's database by the key of
+ * the text, so a text is encoded once.
  */
 @Component
 class PhraseVectors(private val plugins: Plugins) {
@@ -27,10 +27,14 @@ class PhraseVectors(private val plugins: Plugins) {
     }
 
     /**
-     * The vectors of the texts kept already, nothing encoded now: a reader that can do without the
-     * rest for a while — they are encoded in the background — and must not wait for them.
+     * The vectors of the texts kept already, nothing encoded now: a reader that can do without the rest for a while —
+     * they are encoded in the background — and must not wait for them.
      */
-    fun cached(store: SourceStore, texts: Collection<String>, encoder: TextEncoder? = encoder()): Map<String, FloatArray> {
+    fun cached(
+        store: SourceStore,
+        texts: Collection<String>,
+        encoder: TextEncoder? = encoder(),
+    ): Map<String, FloatArray> {
         encoder ?: return emptyMap()
         val keyed = texts.distinct().associateBy(Vectors::keyOf)
         val vectors = store.textVectors.phrases(keyed.keys, encoder.id)
@@ -46,7 +50,13 @@ class PhraseVectors(private val plugins: Plugins) {
             store.textVectors.savePhrases(rows.map { (text, v) -> Vectors.keyOf(text) to v }, encoder.id)
             rows.forEach { (text, v) -> out[text] = Vectors.fromHalf(Vectors.half(v)) }
         }
-        if (texts.size > PART) log.info("{}: {} short texts encoded in {} s", store.id, texts.size, (System.currentTimeMillis() - started) / 1000)
+        if (texts.size > PART)
+            log.info(
+                "{}: {} short texts encoded in {} s",
+                store.id,
+                texts.size,
+                (System.currentTimeMillis() - started) / 1000,
+            )
         return out
     }
 

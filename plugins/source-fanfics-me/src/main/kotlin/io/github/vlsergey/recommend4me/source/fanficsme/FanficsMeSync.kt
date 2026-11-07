@@ -7,20 +7,20 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.BASE
 import io.github.vlsergey.recommend4me.source.fanficsme.FanficsMe.Companion.FANDOM
-import org.slf4j.LoggerFactory
 import java.time.Instant
+import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(FanficsMeSync::class.java)
 
 /**
- * The jobs of fanfics.me, by the site's search of every work ([LIST]: every direction, the latest
- * updated first) — twenty cards a page, each with all the work's header says but its text.
+ * The jobs of fanfics.me, by the site's search of every work ([LIST]: every direction, the latest updated first) —
+ * twenty cards a page, each with all the work's header says but its text.
  *
- * UPDATES — from the first page down until the works updated before the last time, then what the
- * site's genres and warnings mean. SCRAPE_ALL — every page of the search from where the last run
- * stopped, the updates that came out meanwhile, then what the genres, the warnings and the events
- * of every fandom of the works mean. A work's own page — its text, its comments — is read only when
- * the user asks for it, or grades a work known by its card alone ([FanficsMe.refresh]).
+ * UPDATES — from the first page down until the works updated before the last time, then what the site's genres and
+ * warnings mean. SCRAPE_ALL — every page of the search from where the last run stopped, the updates that came out
+ * meanwhile, then what the genres, the warnings and the events of every fandom of the works mean. A work's own page —
+ * its text, its comments — is read only when the user asks for it, or grades a work known by its card alone
+ * ([FanficsMe.refresh]).
  */
 class FanficsMeSync(private val context: SourceContext, private val client: FanficsMeClient) {
     private val pages = FanficsMePages(context)
@@ -30,7 +30,8 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
             SourceMode.UPDATES -> updates(job)
             SourceMode.SCRAPE_ALL -> whole(job)
             // Not jobs: the pages the browser sends, a page asked for alone
-            SourceMode.BROWSER, SourceMode.PAGE -> Unit
+            SourceMode.BROWSER,
+            SourceMode.PAGE -> Unit
         }
     }
 
@@ -74,7 +75,10 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
         log.info("the whole catalogue is read: {} pages, {} works", total, context.items.count())
     }
 
-    /** From the first page down until a work updated before [knownUntil] — the list is ordered by the time of the update. */
+    /**
+     * From the first page down until a work updated before [knownUntil] — the list is ordered by the time of the
+     * update.
+     */
     private fun readFromTop(job: Job, maxPages: Int, knownUntil: Instant?) {
         job.phase("feed", total = maxPages)
         for (page in 1..maxPages) {
@@ -82,7 +86,9 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
             val read = readList(page)
             job.found(read.fresh)
             job.progress(page)
-            val reachedKnown = knownUntil != null && read.ids.any { id -> context.items.find(id)?.updatedAt?.isBefore(knownUntil) == true }
+            val reachedKnown =
+                knownUntil != null &&
+                    read.ids.any { id -> context.items.find(id)?.updatedAt?.isBefore(knownUntil) == true }
             if (reachedKnown || read.ids.isEmpty() || page >= (read.totalPages ?: page)) break
         }
         job.checkpoint()
@@ -110,13 +116,16 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
     }
 
     /**
-     * The events of every fandom the works are of, in its encyclopedia, the fandoms of the most works
-     * first: what each event means. Resumed where the last run stopped.
+     * The events of every fandom the works are of, in its encyclopedia, the fandoms of the most works first: what each
+     * event means. Resumed where the last run stopped.
      */
     private fun readKeywords(job: Job) {
         val works = HashMap<String, Int>()
         context.items.forEachFacet(FANDOM) { _, keys -> keys.forEach { works.merge(it, 1, Int::plus) } }
-        val fandoms = works.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).map { it.key }
+        val fandoms =
+            works.entries.sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key }).map {
+                it.key
+            }
         var next = job.state(NEXT_FANDOM)?.toIntOrNull() ?: 0
         job.state(TOTAL_FANDOMS, fandoms.size.toString())
         job.phase("dictionary", total = fandoms.size, processed = next)
@@ -161,15 +170,20 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
         private const val COMPLETE = "complete"
 
         /**
-         * How far the whole catalogue is: the search page by page, then the events of the fandoms;
-         * complete once a whole scrape came to its end.
+         * How far the whole catalogue is: the search page by page, then the events of the fandoms; complete once a
+         * whole scrape came to its end.
          */
         fun progress(context: SourceContext): ScrapeProgress {
             val items = context.items.count()
             val next = context.jobState(NEXT_PAGE)?.toIntOrNull()
             if (context.jobState(CATALOGUE_DONE) == "true") {
                 val total = context.jobState(TOTAL_FANDOMS)?.toIntOrNull() ?: 0
-                return ScrapeProgress("dictionary", context.jobState(NEXT_FANDOM)?.toIntOrNull() ?: 0, total, complete = false)
+                return ScrapeProgress(
+                    "dictionary",
+                    context.jobState(NEXT_FANDOM)?.toIntOrNull() ?: 0,
+                    total,
+                    complete = false,
+                )
             }
             if (next != null) {
                 val total = context.jobState(TOTAL_PAGES)?.toIntOrNull() ?: next

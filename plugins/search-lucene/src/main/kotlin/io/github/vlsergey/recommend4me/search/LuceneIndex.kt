@@ -1,6 +1,13 @@
 package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.item.ItemKey
+import java.nio.ByteBuffer
+import java.nio.file.Files
+import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
+import kotlin.io.path.exists
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
 import org.apache.lucene.document.Document
@@ -9,7 +16,6 @@ import org.apache.lucene.document.KnnFloatVectorField
 import org.apache.lucene.document.StoredField
 import org.apache.lucene.document.StringField
 import org.apache.lucene.document.TextField
-import org.apache.lucene.search.TermQuery
 import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.FieldInfos
 import org.apache.lucene.index.IndexWriter
@@ -20,36 +26,30 @@ import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
+import org.apache.lucene.search.TermQuery
 import org.apache.lucene.store.FSDirectory
-import java.nio.ByteBuffer
-import java.nio.file.Files
-import java.security.MessageDigest
-import java.nio.file.Path
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
-import kotlin.io.path.exists
 
 /**
- * The index of one content type on disk: of every item a document of its fields — a field per
- * [SearchField], searched by words — and a document of every passage of its texts ([SearchPassage]),
- * its vector searched by meaning; all of them under the item's [ID], replaced and removed together.
+ * The index of one content type on disk: of every item a document of its fields — a field per [SearchField], searched
+ * by words — and a document of every passage of its texts ([SearchPassage]), its vector searched by meaning; all of
+ * them under the item's [ID], replaced and removed together.
  *
- * THE WEIGHT OF A FIELD IS IN ITS NAME — `<marks>.<weight in hundredths>.<key>`, the marks `n` of a
- * field that names the item, `c` of the work's own words ([SearchField.counted]), `t` of neither —
- * so a search reads which fields there are and what each weighs from the index itself, whatever
- * source wrote them. Every passage's vector is in the one field [VECTOR].
+ * THE WEIGHT OF A FIELD IS IN ITS NAME — `<marks>.<weight in hundredths>.<key>`, the marks `n` of a field that names
+ * the item, `c` of the work's own words ([SearchField.counted]), `t` of neither — so a search reads which fields there
+ * are and what each weighs from the index itself, whatever source wrote them. Every passage's vector is in the one
+ * field [VECTOR].
  *
- * EVERY TEXT STEMMED BEFORE IT IS PUT IN, ONCE, as written in its language ([TextLanguages],
- * [Stemmers]) — one field of it, no copy by another language (user, 2026-10-16): every word as its
- * stem at its place, marked when written with a capital ([Stemmers.CAPITAL]).
+ * EVERY TEXT STEMMED BEFORE IT IS PUT IN, ONCE, as written in its language ([TextLanguages], [Stemmers]) — one field of
+ * it, no copy by another language (user, 2026-10-16): every word as its stem at its place, marked when written with a
+ * capital ([Stemmers.CAPITAL]).
  *
- * MADE ANEW BESIDE THE OLD ONE: a rebuild writes into a folder of its own while the searches use
- * the index as it was, then takes its place; what is updated meanwhile goes into both.
+ * MADE ANEW BESIDE THE OLD ONE: a rebuild writes into a folder of its own while the searches use the index as it was,
+ * then takes its place; what is updated meanwhile goes into both.
  *
- * KEPT BETWEEN THE RUNS (user, 2026-10-17): every item's document carries the fingerprint of what it
- * was made of ([fingerprint]), the index the version of how its documents are made ([FORMAT]); on a
- * start the documents are read and only those whose fingerprint changed written again ([sync]), not
- * every text stemmed and its language told anew. An index of another version is made anew.
+ * KEPT BETWEEN THE RUNS (user, 2026-10-17): every item's document carries the fingerprint of what it was made of
+ * ([fingerprint]), the index the version of how its documents are made ([FORMAT]); on a start the documents are read
+ * and only those whose fingerprint changed written again ([sync]), not every text stemmed and its language told anew.
+ * An index of another version is made anew.
  */
 class LuceneIndex(private val dir: Path) : AutoCloseable {
 
@@ -61,39 +61,40 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
     private var building: IndexWriter? = null
 
     /**
-     * The index brought to [documents], every item of the type: the items whose fingerprint changed
-     * or that are new written, those gone removed; answers how many were written. Made anew whole
-     * when it is of another [FORMAT], or empty.
+     * The index brought to [documents], every item of the type: the items whose fingerprint changed or that are new
+     * written, those gone removed; answers how many were written. Made anew whole when it is of another [FORMAT], or
+     * empty.
      */
     fun sync(documents: Sequence<SearchDocument>): Int {
-        val kept = lock.withLock {
-            val reader = DirectoryReader.open(writer)
-            try {
-                if (reader.indexCommit.userData[FORMAT_KEY] != FORMAT.toString() || reader.numDocs() == 0) null
-                else {
-                    // Of the items' documents alone, found by their kind: not every passage's read too
-                    val wanted = setOf(ID, FINGERPRINT)
-                    HashMap<String, Long>().also { out ->
-                        for (leaf in reader.leaves()) {
-                            val r = leaf.reader()
-                            val live = r.liveDocs
-                            val stored = r.storedFields()
-                            val items = r.postings(ITEM_TERM) ?: continue
-                            var doc = items.nextDoc()
-                            while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                                if (live == null || live.get(doc)) {
-                                    val d = stored.document(doc, wanted)
-                                    d.getField(FINGERPRINT)?.numericValue()?.toLong()?.let { out[d.get(ID)] = it }
+        val kept =
+            lock.withLock {
+                val reader = DirectoryReader.open(writer)
+                try {
+                    if (reader.indexCommit.userData[FORMAT_KEY] != FORMAT.toString() || reader.numDocs() == 0) null
+                    else {
+                        // Of the items' documents alone, found by their kind: not every passage's read too
+                        val wanted = setOf(ID, FINGERPRINT)
+                        HashMap<String, Long>().also { out ->
+                            for (leaf in reader.leaves()) {
+                                val r = leaf.reader()
+                                val live = r.liveDocs
+                                val stored = r.storedFields()
+                                val items = r.postings(ITEM_TERM) ?: continue
+                                var doc = items.nextDoc()
+                                while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+                                    if (live == null || live.get(doc)) {
+                                        val d = stored.document(doc, wanted)
+                                        d.getField(FINGERPRINT)?.numericValue()?.toLong()?.let { out[d.get(ID)] = it }
+                                    }
+                                    doc = items.nextDoc()
                                 }
-                                doc = items.nextDoc()
                             }
                         }
                     }
+                } finally {
+                    reader.close()
                 }
-            } finally {
-                reader.close()
-            }
-        } ?: return rebuild(documents)
+            } ?: return rebuild(documents)
         val seen = HashSet<String>()
         var written = 0
         documents.forEach { doc ->
@@ -178,8 +179,17 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
     /** How many items the index has: their documents of fields, not their passages. */
     fun items(searcher: IndexSearcher): Int = searcher.count(TermQuery(Term(KIND, ITEM)))
 
-    /** A text field of the index: its name there, its key in the documents, its weight, whether it names the item, whether it is the work's own words. */
-    data class IndexedField(val name: String, val key: String, val weight: Float, val naming: Boolean, val counted: Boolean)
+    /**
+     * A text field of the index: its name there, its key in the documents, its weight, whether it names the item,
+     * whether it is the work's own words.
+     */
+    data class IndexedField(
+        val name: String,
+        val key: String,
+        val weight: Float,
+        val naming: Boolean,
+        val counted: Boolean,
+    )
 
     override fun close() = lock.withLock {
         searchers.close()
@@ -204,9 +214,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         const val FINGERPRINT = "fingerprint"
 
         /**
-         * The version of how the documents are made — the fields, the stemming, the marks — kept with
-         * every commit: an index of another is made anew. 2: every text stemmed as its language, the
-         * paragraphs of the work's own words marked, the fingerprints kept.
+         * The version of how the documents are made — the fields, the stemming, the marks — kept with every commit: an
+         * index of another is made anew. 2: every text stemmed as its language, the paragraphs of the work's own words
+         * marked, the fingerprints kept.
          */
         const val FORMAT = 2
         private const val FORMAT_KEY = "format"
@@ -218,9 +228,8 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         }
 
         /**
-         * What a document is made of, as a number: its language, every field — its key, its name, its
-         * weight, how it is read, its values — and every passage with its vector. Equal of a work
-         * unchanged since it was indexed.
+         * What a document is made of, as a number: its language, every field — its key, its name, its weight, how it is
+         * read, its values — and every passage with its vector. Equal of a work unchanged since it was indexed.
          */
         fun fingerprint(doc: SearchDocument): Long {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -230,24 +239,39 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             }
             put(doc.language.orEmpty())
             doc.fields.forEach { f ->
-                put(f.key); put(f.name); put(f.group); put(f.weight.toString())
+                put(f.key)
+                put(f.name)
+                put(f.group)
+                put(f.weight.toString())
                 put("" + f.list + f.naming + f.counted)
                 f.values.forEach(::put)
             }
             doc.passages.forEach { p ->
-                put(p.field); put(p.from.toString()); put(p.to.toString())
-                p.vector?.let { v -> ByteBuffer.allocate(v.size * Float.SIZE_BYTES).also { it.asFloatBuffer().put(v) }.array().let(digest::update) }
+                put(p.field)
+                put(p.from.toString())
+                put(p.to.toString())
+                p.vector?.let { v ->
+                    ByteBuffer.allocate(v.size * Float.SIZE_BYTES)
+                        .also { it.asFloatBuffer().put(v) }
+                        .array()
+                        .let(digest::update)
+                }
             }
             return ByteBuffer.wrap(digest.digest(), 0, Long.SIZE_BYTES).long
         }
 
-        /** What an item's document is: the term of the documents of items alone, not of their passages, and their query. */
+        /**
+         * What an item's document is: the term of the documents of items alone, not of their passages, and their query.
+         */
         val ITEM_TERM = Term(KIND, ITEM)
         val ITEMS = TermQuery(ITEM_TERM)
 
         /** The languages the own words of [doc] are stemmed as ([TextLanguages]), in order. */
         fun languagesOf(doc: SearchDocument): List<String> =
-            doc.fields.flatMap { f -> f.values.filter { it.isNotBlank() }.map { TextLanguages.of(it, doc.language) } }.distinct().sorted()
+            doc.fields
+                .flatMap { f -> f.values.filter { it.isNotBlank() }.map { TextLanguages.of(it, doc.language) } }
+                .distinct()
+                .sorted()
 
         /** Where a passage is: its field's key, its characters from and until in the field's text. */
         const val PASSAGE_FIELD = "p.field"
@@ -255,9 +279,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         const val PASSAGE_TO = "p.to"
 
         /**
-         * The writer's: the texts come stemmed already, each as its language ([documents]); what it
-         * tells is the gap between two values of one field — two tags, two attributes are not one
-         * phrase — and it stems as English what is ever given it unstemmed.
+         * The writer's: the texts come stemmed already, each as its language ([documents]); what it tells is the gap
+         * between two values of one field — two tags, two attributes are not one phrase — and it stems as English what
+         * is ever given it unstemmed.
          */
         val analyzer: Analyzer = Stemmers.analyzer(Stemmers.DEFAULT)
 
@@ -267,7 +291,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         /** The words of a [text] of the [language] as the index has them: their stems. */
         fun tokens(text: String, language: String): List<String> = tokens(text, Stemmers.analyzer(language))
 
-        /** The words of a [text] as the [analyzer] of its language reads them: of many texts, one analyzer for them all. */
+        /**
+         * The words of a [text] as the [analyzer] of its language reads them: of many texts, one analyzer for them all.
+         */
         fun tokens(text: String, analyzer: Analyzer): List<String> {
             val out = ArrayList<String>()
             analyzer.tokenStream("", text).use { stream ->
@@ -280,7 +306,11 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         }
 
         fun fieldName(field: SearchField): String =
-            ((if (field.naming) "n" else "") + (if (field.counted) "c" else "")).ifEmpty { "t" } + "." + Math.round(field.weight * 100) + "." + field.group
+            ((if (field.naming) "n" else "") + (if (field.counted) "c" else "")).ifEmpty { "t" } +
+                "." +
+                Math.round(field.weight * 100) +
+                "." +
+                field.group
 
         private val MARKS = Regex("[nct]+")
 
@@ -295,7 +325,10 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
 
         private fun open(dir: Path): IndexWriter {
             if (!dir.exists()) Files.createDirectories(dir)
-            return IndexWriter(FSDirectory.open(dir), IndexWriterConfig(analyzer).setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND))
+            return IndexWriter(
+                FSDirectory.open(dir),
+                IndexWriterConfig(analyzer).setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND),
+            )
         }
 
         /** The documents of an item: of its fields, and of every passage of it with a vector. */
@@ -304,37 +337,45 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             // Every value stemmed as its language: a stream of its own each, of an analyzer that reuses none
             val stemmers = HashMap<String, Analyzer>()
             val used = sortedSetOf<String>()
-            val fields = Document().apply {
-                add(StringField(ID, id, Field.Store.YES))
-                add(StringField(KIND, ITEM, Field.Store.NO))
-                doc.fields.forEach { field ->
-                    val name = fieldName(field)
-                    field.values.filter { it.isNotBlank() }.forEach { value ->
-                        val language = TextLanguages.of(value, doc.language).also { used += it }
-                        val stream = stemmers.getOrPut(language) { Stemmers.analyzer(language, reuse = false) }.tokenStream(name, value)
-                        // The work's own words with the marks their paragraphs begin with: two names in one paragraph are told by them
-                        add(TextField(name, if (field.counted) ParagraphMarks(stream, value) else stream))
-                    }
-                }
-                // The languages its texts were stemmed as: what a name looked for in them is read as
-                add(StoredField(LANGUAGES, used.joinToString(",")))
-                add(StoredField(FINGERPRINT, fingerprint(doc)))
-            }
-            val passages = doc.passages.mapNotNull { p ->
-                val vector = p.vector ?: return@mapNotNull null
-                // A piece of no phrase — "-", a changelog of dates — says nothing, and its vector lies
-                // near every query: the same few items were found by meaning whatever was looked for
-                val text = p.text(doc) ?: return@mapNotNull null
-                if (Phrases.split(text).isEmpty()) return@mapNotNull null
+            val fields =
                 Document().apply {
                     add(StringField(ID, id, Field.Store.YES))
-                    add(StringField(KIND, PASSAGE, Field.Store.NO))
-                    add(StoredField(PASSAGE_FIELD, p.field))
-                    add(StoredField(PASSAGE_FROM, p.from))
-                    add(StoredField(PASSAGE_TO, p.to))
-                    add(KnnFloatVectorField(VECTOR, unit(vector), VectorSimilarityFunction.DOT_PRODUCT))
+                    add(StringField(KIND, ITEM, Field.Store.NO))
+                    doc.fields.forEach { field ->
+                        val name = fieldName(field)
+                        field.values
+                            .filter { it.isNotBlank() }
+                            .forEach { value ->
+                                val language = TextLanguages.of(value, doc.language).also { used += it }
+                                val stream =
+                                    stemmers
+                                        .getOrPut(language) { Stemmers.analyzer(language, reuse = false) }
+                                        .tokenStream(name, value)
+                                // The work's own words with the marks their paragraphs begin with: two names in one
+                                // paragraph are told by them
+                                add(TextField(name, if (field.counted) ParagraphMarks(stream, value) else stream))
+                            }
+                    }
+                    // The languages its texts were stemmed as: what a name looked for in them is read as
+                    add(StoredField(LANGUAGES, used.joinToString(",")))
+                    add(StoredField(FINGERPRINT, fingerprint(doc)))
                 }
-            }
+            val passages =
+                doc.passages.mapNotNull { p ->
+                    val vector = p.vector ?: return@mapNotNull null
+                    // A piece of no phrase — "-", a changelog of dates — says nothing, and its vector lies
+                    // near every query: the same few items were found by meaning whatever was looked for
+                    val text = p.text(doc) ?: return@mapNotNull null
+                    if (Phrases.split(text).isEmpty()) return@mapNotNull null
+                    Document().apply {
+                        add(StringField(ID, id, Field.Store.YES))
+                        add(StringField(KIND, PASSAGE, Field.Store.NO))
+                        add(StoredField(PASSAGE_FIELD, p.field))
+                        add(StoredField(PASSAGE_FROM, p.from))
+                        add(StoredField(PASSAGE_TO, p.to))
+                        add(KnnFloatVectorField(VECTOR, unit(vector), VectorSimilarityFunction.DOT_PRODUCT))
+                    }
+                }
             return listOf(fields) + passages
         }
 

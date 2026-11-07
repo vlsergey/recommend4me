@@ -1,0 +1,31 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:LuceneIndex.kt:LuceneIndex$fun sync: Int</ID>
+    <ID>CyclomaticComplexMethod:LuceneSearch.kt:LuceneSearch$private fun named: List&lt;Map&lt;ItemKey, List&lt;FoundIn&gt;&gt;&gt;</ID>
+    <ID>CyclomaticComplexMethod:NameMatcher.kt:NameMatcher$fun found: List&lt;Found&gt;</ID>
+    <ID>EmptyFunctionBlock:Stemmers.kt:Stemmers.&lt;no name provided&gt;${}</ID>
+    <ID>LongMethod:LuceneSearch.kt:LuceneSearch$private fun named: List&lt;Map&lt;ItemKey, List&lt;FoundIn&gt;&gt;&gt;</ID>
+    <ID>MagicNumber:LuceneIndex.kt:LuceneIndex.Companion$100</ID>
+    <ID>MagicNumber:LuceneIndex.kt:LuceneIndex.Companion$100f</ID>
+    <ID>MagicNumber:LuceneIndex.kt:LuceneIndex.Companion$1e-9</ID>
+    <ID>MagicNumber:LuceneIndex.kt:LuceneIndex.Companion$3</ID>
+    <ID>MagicNumber:LuceneSearch.kt:LuceneSearch$3</ID>
+    <ID>MagicNumber:LuceneSearch.kt:SnippetFormatter$3</ID>
+    <ID>MaxLineLength:MentionsTest.kt:MentionsTest$"Гарри Поттера не было дома. Поттер вернулся к вечеру, и Гарри сел у огня. Рон Уизли пришёл позже. Уизли шумели."</ID>
+    <ID>MaxLineLength:MentionsTest.kt:MentionsTest$fun</ID>
+    <ID>MaxLineLength:StemmersTest.kt:StemmersTest$"держа в руках молот, а за ним потянулись остальные. Никто не знал, чего хочет зверь, но все понимали, что "</ID>
+    <ID>NestedBlockDepth:NameMatcher.kt:NameMatcher$fun found: List&lt;Found&gt;</ID>
+    <ID>ReturnCount:LineLanguages.kt:LineLanguages$fun of: String</ID>
+    <ID>ReturnCount:LuceneIndex.kt:LuceneIndex.Companion$private fun textField: IndexedField?</ID>
+    <ID>ReturnCount:LuceneSearch.kt:LuceneSearch$override fun matches: Map&lt;ItemKey, SearchMatch&gt;</ID>
+    <ID>ReturnCount:LuceneSearch.kt:LuceneSearch$private fun byWords: Map&lt;ItemKey, Double&gt;</ID>
+    <ID>ReturnCount:LuceneSearch.kt:LuceneSearch$private fun snippet: Triple&lt;SearchField, Snippet, Boolean&gt;?</ID>
+    <ID>ReturnCount:NameMatcher.kt:NameMatcher$fun wordAt: NamedWord?</ID>
+    <ID>ReturnCount:NameMatcher.kt:NameMatcher.Base.Language$fun single: Pattern?</ID>
+    <ID>ReturnCount:ParagraphMarks.kt:ParagraphMarks$override fun incrementToken: Boolean</ID>
+    <ID>TooGenericExceptionCaught:LuceneIndex.kt:LuceneIndex$e: Exception</ID>
+    <ID>TooManyFunctions:LuceneSearch.kt:LuceneSearch : SearchProviderAutoCloseable</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.matrix
 
-import org.slf4j.LoggerFactory
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -11,21 +10,23 @@ import java.lang.invoke.MethodHandle
 import java.nio.file.Path
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.math.abs
+import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(Cublas::class.java)
 
 /**
- * THE MATRIX PRODUCTS ON THE NVIDIA CARD: cuBLAS, called straight through the foreign function
- * interface of the JDK — the CUDA runtime's own libraries ([open] is handed their folder, the very
- * ones ONNX Runtime has loaded), no binding of a library besides. What OpenBLAS is to the processor:
- * `sgemm` of row-major matrices, here kept in the card's memory ([DeviceFloats]) — a fitting puts its
- * gigabyte and a half of the items' features there once and multiplies them there every step.
+ * THE MATRIX PRODUCTS ON THE NVIDIA CARD: cuBLAS, called straight through the foreign function interface of the JDK —
+ * the CUDA runtime's own libraries ([open] is handed their folder, the very ones ONNX Runtime has loaded), no binding
+ * of a library besides. What OpenBLAS is to the processor: `sgemm` of row-major matrices, here kept in the card's
+ * memory ([DeviceFloats]) — a fitting puts its gigabyte and a half of the items' features there once and multiplies
+ * them there every step.
  *
- * One handle for the process, used by one thread at a time: the fittings run one at a time (the
- * queue of the computations). Opened once; a card the libraries cannot use — no card, the libraries
- * missing, a product that comes out wrong — leaves it closed, and the products are the processor's.
+ * One handle for the process, used by one thread at a time: the fittings run one at a time (the queue of the
+ * computations). Opened once; a card the libraries cannot use — no card, the libraries missing, a product that comes
+ * out wrong — leaves it closed, and the products are the processor's.
  */
-class Cublas private constructor(
+class Cublas
+private constructor(
     private val cudaMalloc: MethodHandle,
     private val cudaFree: MethodHandle,
     private val cudaMemcpy: MethodHandle,
@@ -40,43 +41,59 @@ class Cublas private constructor(
     private val runtime: SymbolLookup,
 ) {
     /**
-     * HELD BY WHOEVER WORKS ON THE CARD, for as long as the work: one thread at a time on its one
-     * handle and its [scalars]. The computations run one at a time (the queue), and a fitting holds it
-     * through; a scoring of every work holds it while it multiplies.
+     * HELD BY WHOEVER WORKS ON THE CARD, for as long as the work: one thread at a time on its one handle and its
+     * [scalars]. The computations run one at a time (the queue), and a fitting holds it through; a scoring of every
+     * work holds it while it multiplies.
      */
     val lock = ReentrantLock()
 
-    /** The scalars a call hands over and takes back — α, β, a dot's result: one place for them, made once; one thread at a time. */
+    /**
+     * The scalars a call hands over and takes back — α, β, a dot's result: one place for them, made once; one thread at
+     * a time.
+     */
     private val scalars: MemorySegment = Arena.global().allocate(ValueLayout.JAVA_FLOAT, 4)
 
     private val cudaMallocHost: MethodHandle by lazy {
-        Linker.nativeLinker().downcallHandle(runtime.find("cudaMallocHost").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG))
+        Linker.nativeLinker()
+            .downcallHandle(
+                runtime.find("cudaMallocHost").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
+            )
     }
     private val cudaFreeHost: MethodHandle by lazy {
-        Linker.nativeLinker().downcallHandle(runtime.find("cudaFreeHost").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS))
+        Linker.nativeLinker()
+            .downcallHandle(
+                runtime.find("cudaFreeHost").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS),
+            )
     }
 
     /**
-     * BYTES OF THE MAIN MEMORY THE CARD COPIES FROM AND INTO AT ITS OWN SPEED: page-locked
-     * (`cudaMallocHost`) — a copy of the ordinary memory goes through a buffer of the driver first.
-     * Of what a kernel is handed and gives back, laid out here and sent at once. Freed by [close].
+     * BYTES OF THE MAIN MEMORY THE CARD COPIES FROM AND INTO AT ITS OWN SPEED: page-locked (`cudaMallocHost`) — a copy
+     * of the ordinary memory goes through a buffer of the driver first. Of what a kernel is handed and gives back, laid
+     * out here and sent at once. Freed by [close].
      */
     inner class Pinned(val bytes: Long) : AutoCloseable {
-        val segment: MemorySegment = Arena.ofConfined().use { a ->
-            val out = a.allocate(ValueLayout.ADDRESS)
-            check((cudaMallocHost.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) { "no page-locked memory of $bytes bytes" }
-            out.get(ValueLayout.ADDRESS, 0).reinterpret(bytes.coerceAtLeast(1))
-        }
+        val segment: MemorySegment =
+            Arena.ofConfined().use { a ->
+                val out = a.allocate(ValueLayout.ADDRESS)
+                check((cudaMallocHost.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) {
+                    "no page-locked memory of $bytes bytes"
+                }
+                out.get(ValueLayout.ADDRESS, 0).reinterpret(bytes.coerceAtLeast(1))
+            }
         private var closed = false
 
         /** [from] written [at] bytes on. */
         fun put(at: Long, from: IntArray) = MemorySegment.copy(from, 0, segment, ValueLayout.JAVA_INT, at, from.size)
 
         /** [n] ints [at] bytes on. */
-        fun ints(at: Long, n: Int): IntArray = IntArray(n).also { if (n > 0) MemorySegment.copy(segment, ValueLayout.JAVA_INT, at, it, 0, n) }
+        fun ints(at: Long, n: Int): IntArray =
+            IntArray(n).also { if (n > 0) MemorySegment.copy(segment, ValueLayout.JAVA_INT, at, it, 0, n) }
 
         /** [n] floats [at] bytes on. */
-        fun floats(at: Long, n: Int): FloatArray = FloatArray(n).also { if (n > 0) MemorySegment.copy(segment, ValueLayout.JAVA_FLOAT, at, it, 0, n) }
+        fun floats(at: Long, n: Int): FloatArray =
+            FloatArray(n).also { if (n > 0) MemorySegment.copy(segment, ValueLayout.JAVA_FLOAT, at, it, 0, n) }
 
         override fun close() {
             if (closed) return
@@ -90,11 +107,14 @@ class Cublas private constructor(
 
     /** Floats in the card's memory: [count] of them. Freed by [close]. */
     inner class DeviceFloats(val count: Long) : AutoCloseable {
-        val address: MemorySegment = Arena.ofConfined().use { a ->
-            val out = a.allocate(ValueLayout.ADDRESS)
-            check((cudaMalloc.invokeExact(out, count * Float.SIZE_BYTES) as Int) == 0) { "the card has no room for $count floats" }
-            out.get(ValueLayout.ADDRESS, 0)
-        }
+        val address: MemorySegment =
+            Arena.ofConfined().use { a ->
+                val out = a.allocate(ValueLayout.ADDRESS)
+                check((cudaMalloc.invokeExact(out, count * Float.SIZE_BYTES) as Int) == 0) {
+                    "the card has no room for $count floats"
+                }
+                out.get(ValueLayout.ADDRESS, 0)
+            }
         private var closed = false
 
         /** [n] numbers of [from] at [fromAt] written at [at]: from the main memory to the card. */
@@ -106,7 +126,8 @@ class Cublas private constructor(
             copy(into.seg.asSlice(intoAt.toLong() * Float.SIZE_BYTES), at(at), n.toLong(), DEVICE_TO_HOST)
 
         /** [n] numbers of [from] at [fromAt] written at [at]: on the card, nothing through the main memory. */
-        fun copyFrom(from: DeviceFloats, fromAt: Long, at: Long, n: Int) = copy(at(at), from.at(fromAt), n.toLong(), DEVICE_TO_DEVICE)
+        fun copyFrom(from: DeviceFloats, fromAt: Long, at: Long, n: Int) =
+            copy(at(at), from.at(fromAt), n.toLong(), DEVICE_TO_DEVICE)
 
         fun at(k: Long): MemorySegment = MemorySegment.ofAddress(address.address() + k * Float.SIZE_BYTES)
 
@@ -121,38 +142,63 @@ class Cublas private constructor(
     }
 
     /**
-     * Bytes in the card's memory, of numbers other than the floats of [DeviceFloats]: the ints a
-     * kernel indexes by, the doubles it sums into. Freed by [close].
+     * Bytes in the card's memory, of numbers other than the floats of [DeviceFloats]: the ints a kernel indexes by, the
+     * doubles it sums into. Freed by [close].
      */
     inner class DeviceBytes(val bytes: Long) : AutoCloseable {
-        val address: MemorySegment = Arena.ofConfined().use { a ->
-            val out = a.allocate(ValueLayout.ADDRESS)
-            check((cudaMalloc.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) { "the card has no room for $bytes bytes" }
-            out.get(ValueLayout.ADDRESS, 0)
-        }
+        val address: MemorySegment =
+            Arena.ofConfined().use { a ->
+                val out = a.allocate(ValueLayout.ADDRESS)
+                check((cudaMalloc.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) {
+                    "the card has no room for $bytes bytes"
+                }
+                out.get(ValueLayout.ADDRESS, 0)
+            }
         private var closed = false
 
         /** The ints of [from] written from the start. */
-        fun upload(from: IntArray) = Arena.ofConfined().use { a ->
-            if (from.isNotEmpty()) copyBytes(address, a.allocateFrom(ValueLayout.JAVA_INT, *from), from.size.toLong() * Int.SIZE_BYTES, HOST_TO_DEVICE)
-        }
+        fun upload(from: IntArray) =
+            Arena.ofConfined().use { a ->
+                if (from.isNotEmpty())
+                    copyBytes(
+                        address,
+                        a.allocateFrom(ValueLayout.JAVA_INT, *from),
+                        from.size.toLong() * Int.SIZE_BYTES,
+                        HOST_TO_DEVICE,
+                    )
+            }
 
         /** The floats of [from] written from the start. */
-        fun upload(from: FloatArray) = Arena.ofConfined().use { a ->
-            if (from.isNotEmpty()) copyBytes(address, a.allocateFrom(ValueLayout.JAVA_FLOAT, *from), from.size.toLong() * Float.SIZE_BYTES, HOST_TO_DEVICE)
-        }
+        fun upload(from: FloatArray) =
+            Arena.ofConfined().use { a ->
+                if (from.isNotEmpty())
+                    copyBytes(
+                        address,
+                        a.allocateFrom(ValueLayout.JAVA_FLOAT, *from),
+                        from.size.toLong() * Float.SIZE_BYTES,
+                        HOST_TO_DEVICE,
+                    )
+            }
 
         /** The longs of [from] written from the start. */
-        fun upload(from: LongArray) = Arena.ofConfined().use { a ->
-            if (from.isNotEmpty()) copyBytes(address, a.allocateFrom(ValueLayout.JAVA_LONG, *from), from.size.toLong() * Long.SIZE_BYTES, HOST_TO_DEVICE)
-        }
+        fun upload(from: LongArray) =
+            Arena.ofConfined().use { a ->
+                if (from.isNotEmpty())
+                    copyBytes(
+                        address,
+                        a.allocateFrom(ValueLayout.JAVA_LONG, *from),
+                        from.size.toLong() * Long.SIZE_BYTES,
+                        HOST_TO_DEVICE,
+                    )
+            }
 
         /** The first [n] doubles. */
-        fun doubles(n: Int): DoubleArray = Arena.ofConfined().use { a ->
-            val into = a.allocate(ValueLayout.JAVA_DOUBLE, n.toLong())
-            copyBytes(into, address, n.toLong() * Double.SIZE_BYTES, DEVICE_TO_HOST)
-            into.toArray(ValueLayout.JAVA_DOUBLE)
-        }
+        fun doubles(n: Int): DoubleArray =
+            Arena.ofConfined().use { a ->
+                val into = a.allocate(ValueLayout.JAVA_DOUBLE, n.toLong())
+                copyBytes(into, address, n.toLong() * Double.SIZE_BYTES, DEVICE_TO_HOST)
+                into.toArray(ValueLayout.JAVA_DOUBLE)
+            }
 
         /** The rows [fromRow] to [fromRow] + [count] of [from], half precision as they are, written [at] bytes on. */
         fun upload(from: HalfMatrix, fromRow: Int, count: Int, at: Long = 0) {
@@ -170,20 +216,22 @@ class Cublas private constructor(
         }
 
         /** The first [n] ints. */
-        fun ints(n: Int): IntArray = Arena.ofConfined().use { a ->
-            if (n == 0) return IntArray(0)
-            val into = a.allocate(ValueLayout.JAVA_INT, n.toLong())
-            copyBytes(into, address, n.toLong() * Int.SIZE_BYTES, DEVICE_TO_HOST)
-            into.toArray(ValueLayout.JAVA_INT)
-        }
+        fun ints(n: Int): IntArray =
+            Arena.ofConfined().use { a ->
+                if (n == 0) return IntArray(0)
+                val into = a.allocate(ValueLayout.JAVA_INT, n.toLong())
+                copyBytes(into, address, n.toLong() * Int.SIZE_BYTES, DEVICE_TO_HOST)
+                into.toArray(ValueLayout.JAVA_INT)
+            }
 
         /** The first [n] floats. */
-        fun floats(n: Int): FloatArray = Arena.ofConfined().use { a ->
-            if (n == 0) return FloatArray(0)
-            val into = a.allocate(ValueLayout.JAVA_FLOAT, n.toLong())
-            copyBytes(into, address, n.toLong() * Float.SIZE_BYTES, DEVICE_TO_HOST)
-            into.toArray(ValueLayout.JAVA_FLOAT)
-        }
+        fun floats(n: Int): FloatArray =
+            Arena.ofConfined().use { a ->
+                if (n == 0) return FloatArray(0)
+                val into = a.allocate(ValueLayout.JAVA_FLOAT, n.toLong())
+                copyBytes(into, address, n.toLong() * Float.SIZE_BYTES, DEVICE_TO_HOST)
+                into.toArray(ValueLayout.JAVA_FLOAT)
+            }
 
         /** Every byte made nought. */
         fun zero() = memset(address, bytes)
@@ -210,19 +258,24 @@ class Cublas private constructor(
     }
 
     /**
-     * Kernels of one's own, the CUDA C of [source] compiled for this card ([CudaKernels]): those
-     * named [names]. Null when they cannot be — no NVRTC beside the libraries, a source the
-     * compiler refuses — said in the log; the caller's work stays on the processor.
+     * Kernels of one's own, the CUDA C of [source] compiled for this card ([CudaKernels]): those named [names]. Null
+     * when they cannot be — no NVRTC beside the libraries, a source the compiler refuses — said in the log; the
+     * caller's work stays on the processor.
      */
-    fun kernels(source: String, names: List<String>): CudaKernels? = try {
-        CudaKernels.compile(dir, runtime, source, names)
-    } catch (e: Throwable) {
-        log.warn("kernels of their own not made for the card ({}): that work stays on the processor", e.message ?: e.javaClass.simpleName)
-        null
-    }
+    fun kernels(source: String, names: List<String>): CudaKernels? =
+        try {
+            CudaKernels.compile(dir, runtime, source, names)
+        } catch (e: Throwable) {
+            log.warn(
+                "kernels of their own not made for the card ({}): that work stays on the processor",
+                e.message ?: e.javaClass.simpleName,
+            )
+            null
+        }
 
     /** [n] floats copied. */
-    private fun copy(dst: MemorySegment, src: MemorySegment, n: Long, kind: Int) = copyBytes(dst, src, n * Float.SIZE_BYTES, kind)
+    private fun copy(dst: MemorySegment, src: MemorySegment, n: Long, kind: Int) =
+        copyBytes(dst, src, n * Float.SIZE_BYTES, kind)
 
     private fun copyBytes(dst: MemorySegment, src: MemorySegment, bytes: Long, kind: Int) {
         val status = cudaMemcpy.invokeExact(dst, src, bytes, kind) as Int
@@ -230,21 +283,48 @@ class Cublas private constructor(
     }
 
     /**
-     * `c = alpha · op(a) · op(b) + beta · c` of row-major matrices on the card, as [Blas.gemm]: op(a) m × k,
-     * op(b) k × n, c m × n. cuBLAS reads column-major, where the row-major c is cᵀ = op(b)ᵀ op(a)ᵀ:
-     * the two sides handed over swapped, each with its own leading dimension.
+     * `c = alpha · op(a) · op(b) + beta · c` of row-major matrices on the card, as [Blas.gemm]: op(a) m × k, op(b) k ×
+     * n, c m × n. cuBLAS reads column-major, where the row-major c is cᵀ = op(b)ᵀ op(a)ᵀ: the two sides handed over
+     * swapped, each with its own leading dimension.
      */
     fun gemm(
-        transA: Boolean, transB: Boolean, m: Int, n: Int, k: Int,
-        a: DeviceFloats, aAt: Long, lda: Int, b: DeviceFloats, bAt: Long, ldb: Int, c: DeviceFloats, cAt: Long, ldc: Int, beta: Float = 0f, alpha: Float = 1f,
+        transA: Boolean,
+        transB: Boolean,
+        m: Int,
+        n: Int,
+        k: Int,
+        a: DeviceFloats,
+        aAt: Long,
+        lda: Int,
+        b: DeviceFloats,
+        bAt: Long,
+        ldb: Int,
+        c: DeviceFloats,
+        cAt: Long,
+        ldc: Int,
+        beta: Float = 0f,
+        alpha: Float = 1f,
     ) {
         if (m == 0 || n == 0) return
         scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 0, alpha)
         scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 1, beta)
-        val status = cublasSgemm.invokeExact(
-            handle, if (transB) OP_T else OP_N, if (transA) OP_T else OP_N, n, m, k,
-            scalar(0), b.at(bAt), ldb, a.at(aAt), lda, scalar(1), c.at(cAt), ldc,
-        ) as Int
+        val status =
+            cublasSgemm.invokeExact(
+                handle,
+                if (transB) OP_T else OP_N,
+                if (transA) OP_T else OP_N,
+                n,
+                m,
+                k,
+                scalar(0),
+                b.at(bAt),
+                ldb,
+                a.at(aAt),
+                lda,
+                scalar(1),
+                c.at(cAt),
+                ldc,
+            ) as Int
         check(status == 0) { "a product on the card failed: cuBLAS status $status" }
     }
 
@@ -282,48 +362,112 @@ class Cublas private constructor(
         private var tried = false
 
         /**
-         * cuBLAS of the libraries in [dir] — cudart64_12 and cublas64_12 — opened once for the
-         * process and checked by a product of its own against the processor's; null when it cannot
-         * be, said once in the log.
+         * cuBLAS of the libraries in [dir] — cudart64_12 and cublas64_12 — opened once for the process and checked by a
+         * product of its own against the processor's; null when it cannot be, said once in the log.
          */
         @Synchronized
         fun open(dir: Path): Cublas? {
             if (tried) return opened
             tried = true
-            opened = try {
-                val linker = Linker.nativeLinker()
-                val runtime = SymbolLookup.libraryLookup(dir.resolve("cudart64_12.dll"), Arena.global())
-                val blas = SymbolLookup.libraryLookup(dir.resolve("cublas64_12.dll"), Arena.global())
-                fun handleOf(lookup: SymbolLookup, name: String, descriptor: FunctionDescriptor) =
-                    linker.downcallHandle(lookup.find(name).orElseThrow { IllegalStateException("no $name") }, descriptor)
-                val int = ValueLayout.JAVA_INT
-                val address = ValueLayout.ADDRESS
-                val cublasCreate = handleOf(blas, "cublasCreate_v2", FunctionDescriptor.of(int, address))
-                val handle = Arena.ofConfined().use { a ->
-                    val out = a.allocate(address)
-                    check((cublasCreate.invokeExact(out) as Int) == 0) { "cuBLAS was not opened" }
-                    out.get(address, 0)
+            opened =
+                try {
+                    val linker = Linker.nativeLinker()
+                    val runtime = SymbolLookup.libraryLookup(dir.resolve("cudart64_12.dll"), Arena.global())
+                    val blas = SymbolLookup.libraryLookup(dir.resolve("cublas64_12.dll"), Arena.global())
+                    fun handleOf(lookup: SymbolLookup, name: String, descriptor: FunctionDescriptor) =
+                        linker.downcallHandle(
+                            lookup.find(name).orElseThrow { IllegalStateException("no $name") },
+                            descriptor,
+                        )
+                    val int = ValueLayout.JAVA_INT
+                    val address = ValueLayout.ADDRESS
+                    val cublasCreate = handleOf(blas, "cublasCreate_v2", FunctionDescriptor.of(int, address))
+                    val handle =
+                        Arena.ofConfined().use { a ->
+                            val out = a.allocate(address)
+                            check((cublasCreate.invokeExact(out) as Int) == 0) { "cuBLAS was not opened" }
+                            out.get(address, 0)
+                        }
+                    Cublas(
+                            cudaMalloc =
+                                handleOf(
+                                    runtime,
+                                    "cudaMalloc",
+                                    FunctionDescriptor.of(int, address, ValueLayout.JAVA_LONG),
+                                ),
+                            cudaFree = handleOf(runtime, "cudaFree", FunctionDescriptor.of(int, address)),
+                            cudaMemcpy =
+                                handleOf(
+                                    runtime,
+                                    "cudaMemcpy",
+                                    FunctionDescriptor.of(int, address, address, ValueLayout.JAVA_LONG, int),
+                                ),
+                            cublasSgemm =
+                                handleOf(
+                                    blas,
+                                    "cublasSgemm_v2",
+                                    FunctionDescriptor.of(
+                                        int,
+                                        address,
+                                        int,
+                                        int,
+                                        int,
+                                        int,
+                                        int,
+                                        address,
+                                        address,
+                                        int,
+                                        address,
+                                        int,
+                                        address,
+                                        address,
+                                        int,
+                                    ),
+                                ),
+                            cublasSdot =
+                                handleOf(
+                                    blas,
+                                    "cublasSdot_v2",
+                                    FunctionDescriptor.of(int, address, int, address, int, address, int, address),
+                                ),
+                            cublasSaxpy =
+                                handleOf(
+                                    blas,
+                                    "cublasSaxpy_v2",
+                                    FunctionDescriptor.of(int, address, int, address, address, int, address, int),
+                                ),
+                            cublasSscal =
+                                handleOf(
+                                    blas,
+                                    "cublasSscal_v2",
+                                    FunctionDescriptor.of(int, address, int, address, address, int),
+                                ),
+                            cudaMemset =
+                                handleOf(
+                                    runtime,
+                                    "cudaMemset",
+                                    FunctionDescriptor.of(int, address, int, ValueLayout.JAVA_LONG),
+                                ),
+                            handle = handle,
+                            dir = dir,
+                            runtime = runtime,
+                        )
+                        .takeIf { it.checked() }
+                        .also {
+                            if (it == null)
+                                log.warn(
+                                    "cuBLAS in {} computes a product wrong: the products stay on the processor",
+                                    dir,
+                                )
+                        }
+                } catch (e: Throwable) {
+                    log.warn(
+                        "no cuBLAS in {} ({}): the products stay on the processor",
+                        dir,
+                        e.message ?: e.javaClass.simpleName,
+                    )
+                    null
                 }
-                Cublas(
-                    cudaMalloc = handleOf(runtime, "cudaMalloc", FunctionDescriptor.of(int, address, ValueLayout.JAVA_LONG)),
-                    cudaFree = handleOf(runtime, "cudaFree", FunctionDescriptor.of(int, address)),
-                    cudaMemcpy = handleOf(runtime, "cudaMemcpy", FunctionDescriptor.of(int, address, address, ValueLayout.JAVA_LONG, int)),
-                    cublasSgemm = handleOf(
-                        blas, "cublasSgemm_v2",
-                        FunctionDescriptor.of(int, address, int, int, int, int, int, address, address, int, address, int, address, address, int),
-                    ),
-                    cublasSdot = handleOf(blas, "cublasSdot_v2", FunctionDescriptor.of(int, address, int, address, int, address, int, address)),
-                    cublasSaxpy = handleOf(blas, "cublasSaxpy_v2", FunctionDescriptor.of(int, address, int, address, address, int, address, int)),
-                    cublasSscal = handleOf(blas, "cublasSscal_v2", FunctionDescriptor.of(int, address, int, address, address, int)),
-                    cudaMemset = handleOf(runtime, "cudaMemset", FunctionDescriptor.of(int, address, int, ValueLayout.JAVA_LONG)),
-                    handle = handle,
-                    dir = dir,
-                    runtime = runtime,
-                ).takeIf { it.checked() }.also { if (it == null) log.warn("cuBLAS in {} computes a product wrong: the products stay on the processor", dir) }
-            } catch (e: Throwable) {
-                log.warn("no cuBLAS in {} ({}): the products stay on the processor", dir, e.message ?: e.javaClass.simpleName)
-                null
-            }
             if (opened != null) log.info("matrix products of the fittings go through cuBLAS of {}", dir)
             return opened
         }

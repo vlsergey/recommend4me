@@ -5,6 +5,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class KernelAutoConfiguration {
-    @Bean
-    fun kernelScorer(): Scorer = KernelScorer()
+    @Bean fun kernelScorer(): Scorer = KernelScorer()
 }

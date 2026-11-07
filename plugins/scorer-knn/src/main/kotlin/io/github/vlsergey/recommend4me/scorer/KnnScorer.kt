@@ -9,10 +9,9 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * THE k NEAREST RATED WORKS — a baseline: a work scores the mean grade of the [k][Knn.k] rated
- * works most alike it by the cosine of their rows of features, each weighed by its likeness. It
- * learns nothing; what it shows is how far the features alone, without a learnt weighing, tell
- * the works the user likes.
+ * THE k NEAREST RATED WORKS — a baseline: a work scores the mean grade of the [k][Knn.k] rated works most alike it by
+ * the cosine of their rows of features, each weighed by its likeness. It learns nothing; what it shows is how far the
+ * features alone, without a learnt weighing, tell the works the user likes.
  *
  * The parameter is k; the most cautious — the most neighbours, the smoothest — first.
  */
@@ -46,7 +45,13 @@ class KnnScorer : Scorer {
     }
 
     /** The rated rows ([columns], d × n, of unit length) with their [grades]. */
-    class Knn(private val d: Int, private val n: Int, private val columns: FloatArray, private val grades: FloatArray, val k: Int) : FittedScorer {
+    class Knn(
+        private val d: Int,
+        private val n: Int,
+        private val columns: FloatArray,
+        private val grades: FloatArray,
+        val k: Int,
+    ) : FittedScorer {
 
         private val held = Floats.of(columns)
 

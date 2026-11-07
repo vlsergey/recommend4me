@@ -12,11 +12,6 @@ import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import jakarta.annotation.PreDestroy
-import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
-import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.Order
-import org.springframework.stereotype.Service
 import java.nio.file.Path
 import java.time.Duration
 import java.time.Instant
@@ -26,26 +21,36 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import org.slf4j.LoggerFactory
+import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.event.EventListener
+import org.springframework.core.annotation.Order
+import org.springframework.stereotype.Service
 
 private val log = LoggerFactory.getLogger(PictureService::class.java)
 
-data class PictureStatus(val total: Int, val analyzed: Int, val failed: Int, val running: Boolean, val perMinute: Double?)
+data class PictureStatus(
+    val total: Int,
+    val analyzed: Int,
+    val failed: Int,
+    val running: Boolean,
+    val perMinute: Double?,
+)
 
 /** A picture to serve: a local file, or the address of the original to send the browser to. */
 sealed interface Served {
     data class File(val path: Path, val contentType: String) : Served
+
     data class Redirect(val url: String) : Served
 }
 
 /**
- * The pictures of the items of every source: the cover (position 0) and every screenshot, analysed
- * by the picture encoder from the ORIGINAL in the background, without end: every picture of the
- * graded works first, then the other items from the top of the recommendations down, every picture
- * of an item at once; the sources share the work.
+ * The pictures of the items of every source: the cover (position 0) and every screenshot, analysed by the picture
+ * encoder from the ORIGINAL in the background, without end: every picture of the graded works first, then the other
+ * items from the top of the recommendations down, every picture of an item at once; the sources share the work.
  *
- * WHAT IS KEPT FOLLOWS THE GRADES: the vector and a preview always, the original only for works
- * graded "can be played" or more — graded so later, the originals are downloaded again; graded
- * lower, they are deleted.
+ * WHAT IS KEPT FOLLOWS THE GRADES: the vector and a preview always, the original only for works graded "can be played"
+ * or more — graded so later, the originals are downloaded again; graded lower, they are deleted.
  */
 @Service
 class PictureService(
@@ -55,20 +60,23 @@ class PictureService(
     private val recommendations: Recommendations,
 ) {
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "pictures").apply { isDaemon = true } }
-    private val downloads = Executors.newFixedThreadPool(PARALLEL_DOWNLOADS) { r -> Thread(r, "picture-download").apply { isDaemon = true } }
+    private val downloads =
+        Executors.newFixedThreadPool(PARALLEL_DOWNLOADS) { r ->
+            Thread(r, "picture-download").apply { isDaemon = true }
+        }
     private val wake = Object()
     private val serving = ReentrantLock()
 
-    @Volatile
-    private var running = false
+    @Volatile private var running = false
 
-    @Volatile
-    private var stopping = false
+    @Volatile private var stopping = false
 
     private val doneSinceStart = AtomicInteger()
     private var startedAt = 0L
 
-    /** The pictures of the work changed hands, or its grades changed: keep or drop its originals, and look at the queue. */
+    /**
+     * The pictures of the work changed hands, or its grades changed: keep or drop its originals, and look at the queue.
+     */
     @EventListener
     fun gradesChanged(event: GradesChanged) {
         val store = stores.source(event.source) ?: return
@@ -99,12 +107,17 @@ class PictureService(
             return picture.fullFile?.let { Served.File(store.files.path(it), PictureFiles.contentType(it)) }
                 ?: Served.Redirect(store.source.pictureAddresses(picture.url).firstOrNull() ?: picture.url)
         }
-        picture.previewFile?.let { return Served.File(store.files.path(it), PictureFiles.contentType(it)) }
+        picture.previewFile?.let {
+            return Served.File(store.files.path(it), PictureFiles.contentType(it))
+        }
         return serving.withLock {
             val again = store.pictures.find(key.id, position, null) ?: return@withLock null
-            again.previewFile?.let { return@withLock Served.File(store.files.path(it), PictureFiles.contentType(it)) }
+            again.previewFile?.let {
+                return@withLock Served.File(store.files.path(it), PictureFiles.contentType(it))
+            }
             try {
-                val (bytes, type) = PictureDownloader.fetch(again.url, store.source.pictureHeaders(again.url, contexts.of(store.id)))
+                val (bytes, type) =
+                    PictureDownloader.fetch(again.url, store.source.pictureHeaders(again.url, contexts.of(store.id)))
                 val file = store.files.save(key.id, "$position-preview", bytes, type)
                 store.pictures.saveFiles(key.id, position, file, again.fullFile)
                 Served.File(store.files.path(file), type)
@@ -122,10 +135,13 @@ class PictureService(
             try {
                 stores.sources.forEach { s ->
                     plugins.imageEncoder()?.let { encoder ->
-                        s.pictures.itemsWithoutVectors(encoder.id).takeIf { it.isNotEmpty() }?.let { ids ->
-                            s.pictures.refreshItemVectors(ids, encoder.id)
-                            log.info("{}: vectors of the pictures of {} items made", s.id, ids.size)
-                        }
+                        s.pictures
+                            .itemsWithoutVectors(encoder.id)
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { ids ->
+                                s.pictures.refreshItemVectors(ids, encoder.id)
+                                log.info("{}: vectors of the pictures of {} items made", s.id, ids.size)
+                            }
                     }
                 }
                 startedAt = System.currentTimeMillis()
@@ -151,31 +167,38 @@ class PictureService(
     )
 
     /**
-     * The next pictures of every source, sharing [limit] among the sources that have work: the
-     * graded works' first, then by prediction, then the newest.
+     * The next pictures of every source, sharing [limit] among the sources that have work: the graded works' first,
+     * then by prediction, then the newest.
      */
     private fun pending(encoder: ImageEncoder, limit: Int, skip: Set<Pair<String, Pair<String, Int>>>): List<Job> {
-        val perSource = stores.sources.map { s ->
-            val best = s.ratings.all().groupBy { it.itemId }.mapValues { (_, list) -> list.maxOf { it.grade } }
-            val keep = best.filterValues { it >= KEEP_FROM }.keys
-            val graded = s.pictures.pendingOf(best.keys.sorted(), encoder.id, keep, limit)
-            val rest = if (graded.size >= limit) emptyList() else {
-                val todo = s.pictures.itemsWithPending(encoder.id) - best.keys
-                val predictions = stores.typeOf(s.id).models.predictions(s.id)
-                val order = todo.sortedByDescending { predictions[it] ?: Double.NEGATIVE_INFINITY }.take(limit)
-                s.pictures.pendingOf(order, encoder.id, emptySet(), limit - graded.size)
-            }
-            (graded + rest).filter { (s.id to (it.itemId to it.position)) !in skip }.map { Job(s, it, it.itemId in keep) }
-        }.filter { it.isNotEmpty() }
+        val perSource =
+            stores.sources
+                .map { s ->
+                    val best = s.ratings.all().groupBy { it.itemId }.mapValues { (_, list) -> list.maxOf { it.grade } }
+                    val keep = best.filterValues { it >= KEEP_FROM }.keys
+                    val graded = s.pictures.pendingOf(best.keys.sorted(), encoder.id, keep, limit)
+                    val rest =
+                        if (graded.size >= limit) emptyList()
+                        else {
+                            val todo = s.pictures.itemsWithPending(encoder.id) - best.keys
+                            val predictions = stores.typeOf(s.id).models.predictions(s.id)
+                            val order =
+                                todo.sortedByDescending { predictions[it] ?: Double.NEGATIVE_INFINITY }.take(limit)
+                            s.pictures.pendingOf(order, encoder.id, emptySet(), limit - graded.size)
+                        }
+                    (graded + rest)
+                        .filter { (s.id to (it.itemId to it.position)) !in skip }
+                        .map { Job(s, it, it.itemId in keep) }
+                }
+                .filter { it.isNotEmpty() }
         if (perSource.isEmpty()) return emptyList()
         val share = (limit / perSource.size).coerceAtLeast(1)
         return perSource.flatMap { it.take(share) }.take(limit)
     }
 
     /**
-     * The downloads stream: up to [WINDOW] pictures are being downloaded and decoded at any time,
-     * and the encoder takes whatever is ready, up to [BATCH] at once. No batch waits for its
-     * slowest picture.
+     * The downloads stream: up to [WINDOW] pictures are being downloaded and decoded at any time, and the encoder takes
+     * whatever is ready, up to [BATCH] at once. No batch waits for its slowest picture.
      */
     private fun loop() {
         val sinceRetrain = HashMap<String, Int>()
@@ -196,11 +219,16 @@ class PictureService(
             }
             if (inFlight.isEmpty()) {
                 running = false
-                sinceRetrain.filterValues { it > 0 }.keys.forEach { recommendations.scheduleRetrain(it, "pictures", byUser = false) }
+                sinceRetrain
+                    .filterValues { it > 0 }
+                    .keys
+                    .forEach { recommendations.scheduleRetrain(it, "pictures", byUser = false) }
                 sinceRetrain.clear()
                 // Woken by new pictures, or when the first failed one is due to be tried again
                 val retry = stores.sources.mapNotNull { it.pictures.nextRetry() }.minOrNull()
-                val wait = retry?.let { (it.toEpochMilli() - System.currentTimeMillis()).coerceIn(1, IDLE_MILLIS) } ?: IDLE_MILLIS
+                val wait =
+                    retry?.let { (it.toEpochMilli() - System.currentTimeMillis()).coerceIn(1, IDLE_MILLIS) }
+                        ?: IDLE_MILLIS
                 synchronized(wake) { wake.wait(wait) }
                 continue
             }
@@ -218,10 +246,13 @@ class PictureService(
             analyse(batch, encoder).forEach { (type, n) -> sinceRetrain.merge(type, n, Int::plus) }
             batch.forEach { inFlight -= it.job.store.id to (it.job.picture.itemId to it.job.picture.position) }
             // The model learns from the pictures as they come, not once at the end of days
-            sinceRetrain.filterValues { it >= RETRAIN_EVERY }.keys.forEach {
-                recommendations.scheduleRetrain(it, "pictures", byUser = false)
-                sinceRetrain[it] = 0
-            }
+            sinceRetrain
+                .filterValues { it >= RETRAIN_EVERY }
+                .keys
+                .forEach {
+                    recommendations.scheduleRetrain(it, "pictures", byUser = false)
+                    sinceRetrain[it] = 0
+                }
         }
     }
 
@@ -246,24 +277,34 @@ class PictureService(
             val error = lastError?.let { it.message ?: it.javaClass.simpleName } ?: "no address"
             return Fetched(job, null, null, null, error, lasting = (lastError as? PictureException)?.status == 404)
         }
-        val preview = try {
-            when {
-                picture.previewFile != null -> null
-                used == picture.url -> original
-                else -> PictureDownloader.fetch(picture.url, headers(picture.url))
+        val preview =
+            try {
+                when {
+                    picture.previewFile != null -> null
+                    used == picture.url -> original
+                    else -> PictureDownloader.fetch(picture.url, headers(picture.url))
+                }
+            } catch (e: Exception) {
+                // The preview is the original then
+                original
             }
-        } catch (e: Exception) {
-            // The preview is the original then
-            original
-        }
         if (picture.analyzed) return Fetched(job, original, preview, null, null)
         // Decoding and preparing run here, in parallel, and leave the encoder's thread to the encoder
-        val prepared = try {
-            PictureFiles.decode(original.first)?.let(encoder::prepare)
-        } catch (e: Exception) {
-            return Fetched(job, original, preview, null, "cannot decode ${original.second}: ${e.message ?: e.javaClass.simpleName}", lasting = true)
-        }
-        return if (prepared == null) Fetched(job, original, preview, null, "cannot decode ${original.second}: no reader", lasting = true)
+        val prepared =
+            try {
+                PictureFiles.decode(original.first)?.let(encoder::prepare)
+            } catch (e: Exception) {
+                return Fetched(
+                    job,
+                    original,
+                    preview,
+                    null,
+                    "cannot decode ${original.second}: ${e.message ?: e.javaClass.simpleName}",
+                    lasting = true,
+                )
+            }
+        return if (prepared == null)
+            Fetched(job, original, preview, null, "cannot decode ${original.second}: no reader", lasting = true)
         else Fetched(job, original, preview, prepared, null)
     }
 
@@ -271,11 +312,19 @@ class PictureService(
     private fun analyse(fetched: List<Fetched>, encoder: ImageEncoder): Map<String, Int> {
         val started = System.nanoTime()
         val failedAt = Instant.now()
-        fetched.filter { it.error != null }.forEach {
-            val p = it.job.picture
-            val failures = p.failures + 1
-            it.job.store.pictures.saveError(p.itemId, p.position, it.error!!, failures, if (it.lasting) null else RETRIES.nextAttempt(failedAt, failures))
-        }
+        fetched
+            .filter { it.error != null }
+            .forEach {
+                val p = it.job.picture
+                val failures = p.failures + 1
+                it.job.store.pictures.saveError(
+                    p.itemId,
+                    p.position,
+                    it.error!!,
+                    failures,
+                    if (it.lasting) null else RETRIES.nextAttempt(failedAt, failures),
+                )
+            }
         val toAnalyze = fetched.filter { it.prepared != null }
         val vectors = if (toAnalyze.isEmpty()) emptyList() else encoder.encode(toAnalyze.map { it.prepared!! })
         val byJob = toAnalyze.indices.associate { toAnalyze[it].job to vectors[it] }
@@ -286,23 +335,32 @@ class PictureService(
             val job = f.job
             if (!job.picture.analyzed && job !in byJob) continue
             val p = job.picture
-            val previewFile = p.previewFile ?: f.preview?.let { (bytes, type) -> job.store.files.save(p.itemId, "${p.position}-preview", bytes, type) }
-            val fullFile = if (job.keep) p.fullFile ?: job.store.files.save(p.itemId, "${p.position}", original.first, original.second) else null
+            val previewFile =
+                p.previewFile
+                    ?: f.preview?.let { (bytes, type) ->
+                        job.store.files.save(p.itemId, "${p.position}-preview", bytes, type)
+                    }
+            val fullFile =
+                if (job.keep)
+                    p.fullFile ?: job.store.files.save(p.itemId, "${p.position}", original.first, original.second)
+                else null
             job.store.pictures.saveAnalysis(p.itemId, p.position, byJob[job], encoder.id, previewFile, fullFile, now)
             if (byJob[job] != null) made.merge(job.store.type, 1, Int::plus)
         }
         doneSinceStart.addAndGet(byJob.size)
         log.info(
             "{} pictures: {} analysed, {} failed; encoder {} s",
-            fetched.size, byJob.size, fetched.count { it.error != null }, "%.1f".format((System.nanoTime() - started) / 1e9),
+            fetched.size,
+            byJob.size,
+            fetched.count { it.error != null },
+            "%.1f".format((System.nanoTime() - started) / 1e9),
         )
         return made
     }
 
     fun signal() = synchronized(wake) { wake.notifyAll() }
 
-    @EventListener
-    fun picturesListed(event: PicturesListed) = signal()
+    @EventListener fun picturesListed(event: PicturesListed) = signal()
 
     @PreDestroy
     fun shutdown() {
@@ -328,7 +386,10 @@ class PictureService(
         private const val PARALLEL_DOWNLOADS = 24
         private const val IDLE_MILLIS = 10 * 60_000L
 
-        /** A picture whose download failed tried again a second after, then twice as late every time, without end (user, 2026-10-21). */
+        /**
+         * A picture whose download failed tried again a second after, then twice as late every time, without end (user,
+         * 2026-10-21).
+         */
         private val RETRIES = Backoff(first = Duration.ofSeconds(1), factor = 2.0)
 
         /** New picture vectors between retrainings. */

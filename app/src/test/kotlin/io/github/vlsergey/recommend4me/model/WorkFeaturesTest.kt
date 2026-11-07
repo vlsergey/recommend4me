@@ -13,8 +13,16 @@ class WorkFeaturesTest {
 
     @Test
     fun `a work of two items has what either has, of a number both have the mean, the version of the item that names it`() {
-        val first = CatalogueItem(a, "v1", Instant.ofEpochSecond(10), setOf("tag:x", "source:alpha"), mapOf("words" to 10f, "only" to 3f))
-        val second = CatalogueItem(b, "v2", Instant.ofEpochSecond(20), setOf("tag:y", "source:beta"), mapOf("words" to 20f))
+        val first =
+            CatalogueItem(
+                a,
+                "v1",
+                Instant.ofEpochSecond(10),
+                setOf("tag:x", "source:alpha"),
+                mapOf("words" to 10f, "only" to 3f),
+            )
+        val second =
+            CatalogueItem(b, "v2", Instant.ofEpochSecond(20), setOf("tag:y", "source:beta"), mapOf("words" to 20f))
         val work = WorkFeatures.item(a, listOf(first, second))
         assertEquals(a, work.key)
         assertEquals("v1", work.version)

@@ -3,12 +3,12 @@ package io.github.vlsergey.recommend4me.source.ficbook
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
-import org.jsoup.Jsoup
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.jsoup.Jsoup
 
 /** The extension finds on the site's pages what the application knows of them. */
 class FicbookDecorTest {
@@ -63,10 +63,14 @@ class FicbookDecorTest {
     fun `every card of a list links to its work`() {
         val html = page("fandom-originals.html")
         val context = MemorySourceContext()
-        val captured = source.capture(CapturedPage("https://ficbook.net/fanfiction/no_fandom/originals", html, now), context)
+        val captured =
+            source.capture(CapturedPage("https://ficbook.net/fanfiction/no_fandom/originals", html, now), context)
         val doc = Jsoup.parse(html, "https://ficbook.net/fanfiction/no_fandom/originals")
         val cards = decor.cards!!
-        val linked = doc.select(cards.selector).mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }.mapNotNull(source::itemIdOf)
+        val linked =
+            doc.select(cards.selector)
+                .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
+                .mapNotNull(source::itemIdOf)
         assertTrue(linked.containsAll(captured), "$linked hold $captured")
     }
 }

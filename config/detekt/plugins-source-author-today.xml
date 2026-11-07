@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CyclomaticComplexMethod:AuthorTodayPages.kt:AuthorTodayPages$private fun cards: List&lt;String&gt;</ID>
+    <ID>CyclomaticComplexMethod:AuthorTodayPages.kt:AuthorTodayPages$private fun work: String?</ID>
+    <ID>LongMethod:AuthorTodayPages.kt:AuthorTodayPages$private fun work: String?</ID>
+    <ID>MaxLineLength:AuthorToday.kt:AuthorToday$"https://author\\.today/(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"</ID>
+    <ID>MaxLineLength:AuthorTodayPages.kt:AuthorTodayPages.Companion$"name: 'like-button', params: \\{targetId: \\d+, likeCount: (\\d+), type: 'Work', disabled: \\w+, voteId: ([^}\\s]+)\\s*}"</ID>
+    <ID>MaxLineLength:AuthorTodayPagesTest.kt:AuthorTodayPagesTest$"&lt;div id=\"text-container\" class=\"text-container\"&gt;&lt;h1&gt;Глава 1. Прикрывая тылы&lt;/h1&gt;&lt;p&gt;&lt;em&gt;55 сутки, север Дуата&lt;/em&gt;&lt;/p&gt;&lt;p&gt;Гуам давно меня заметил.&lt;/p&gt;&lt;/div&gt;"</ID>
+    <ID>MaxLineLength:AuthorTodayPagesTest.kt:AuthorTodayPagesTest$"&lt;html&gt;&lt;head&gt;&lt;title&gt;Книга Ученик Белого Дьявола - 9, Глава 1. Прикрывая тылы, Джон Голд читать онлайн&lt;/title&gt;&lt;/head&gt;"</ID>
+    <ID>ReturnCount:AuthorTodayPages.kt:AuthorTodayPages$private fun reader: String?</ID>
+    <ID>ReturnCount:AuthorTodayPages.kt:AuthorTodayPages$private fun review: String?</ID>
+    <ID>ReturnCount:AuthorTodayPages.kt:AuthorTodayPages$private fun status: FacetValue?</ID>
+    <ID>ReturnCount:AuthorTodayPages.kt:AuthorTodayPages$private fun work: String?</ID>
+    <ID>TooManyFunctions:AuthorTodayPages.kt:AuthorTodayPages</ID>
+  </CurrentIssues>
+</SmellBaseline>

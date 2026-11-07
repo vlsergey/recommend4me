@@ -1,10 +1,10 @@
 package io.github.vlsergey.recommend4me.matrix
 
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /** Kernels of one's own compiled for the card and run there; skipped without the card's libraries. */
 class CudaKernelsTest {
@@ -14,7 +14,9 @@ class CudaKernelsTest {
         val dir = Path.of(System.getenv("LOCALAPPDATA") ?: "", "recommend4me", "cuda")
         assumeTrue(Files.exists(dir.resolve("nvrtc64_120_0.dll")), "no CUDA libraries with NVRTC")
         // Loaded before cuBLAS, which needs them, as the application's ONNX Runtime loads them: by full path
-        listOf("cudart64_12.dll", "cublasLt64_12.dll").forEach { System.load(dir.resolve(it).toAbsolutePath().toString()) }
+        listOf("cudart64_12.dll", "cublasLt64_12.dll").forEach {
+            System.load(dir.resolve(it).toAbsolutePath().toString())
+        }
         val cublas = Cublas.open(dir)
         assumeTrue(cublas != null, "no card")
         val kernels = cublas!!.kernels(SOURCE, listOf("scaled_sum"))!!
@@ -38,7 +40,8 @@ class CudaKernelsTest {
     }
 
     private companion object {
-        val SOURCE = """
+        val SOURCE =
+            """
             extern "C" __global__ void scaled_sum(float* x, const int* index, int n, float c, double* sum) {
                 int k = blockIdx.x * blockDim.x + threadIdx.x;
                 if (k >= n) return;
@@ -46,6 +49,7 @@ class CudaKernelsTest {
                 x[at] = c * x[at];
                 atomicAdd(sum, (double) x[at]);
             }
-        """.trimIndent()
+            """
+                .trimIndent()
     }
 }

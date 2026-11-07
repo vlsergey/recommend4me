@@ -4,10 +4,9 @@ import io.github.vlsergey.recommend4me.source.Source
 import tools.jackson.databind.json.JsonMapper
 
 /**
- * THE CHECK OF A PLUGIN'S TRANSLATIONS, for its tests: its namespace's files —
- * `i18n/<namespace>.<language>.json` among its resources, one flat object of a key to its text —
- * in every language of the interface ([I18nKeys.LANGUAGES]), each with exactly the same keys, none
- * blank; and of a source, every key it needs ([I18nKeys.requiredKeys]).
+ * THE CHECK OF A PLUGIN'S TRANSLATIONS, for its tests: its namespace's files — `i18n/<namespace>.<language>.json` among
+ * its resources, one flat object of a key to its text — in every language of the interface ([I18nKeys.LANGUAGES]), each
+ * with exactly the same keys, none blank; and of a source, every key it needs ([I18nKeys.requiredKeys]).
  */
 object Translations {
     private val json = JsonMapper.builder().build()
@@ -45,5 +44,6 @@ object Translations {
         problems(source.id, I18nKeys.requiredKeys(source), source.javaClass.classLoader)
 
     /** What is wrong with the translations of a plugin of one title alone — a scorer, a catalogue. */
-    fun titleProblems(namespace: String, loader: ClassLoader): List<String> = problems(namespace, setOf(I18nKeys.TITLE), loader)
+    fun titleProblems(namespace: String, loader: ClassLoader): List<String> =
+        problems(namespace, setOf(I18nKeys.TITLE), loader)
 }

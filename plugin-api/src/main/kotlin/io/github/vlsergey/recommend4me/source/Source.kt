@@ -13,33 +13,36 @@ enum class SourceMode {
     UPDATES,
 
     /**
-     * The pages the user opens in the browser, sent by the extension: the application itself
-     * requests nothing from the site.
+     * The pages the user opens in the browser, sent by the extension: the application itself requests nothing from the
+     * site.
      */
     BROWSER,
 
-    /** One work's page downloaded by the application when the user asks for it ([Source.refresh]): no catalogue, no job. */
+    /**
+     * One work's page downloaded by the application when the user asks for it ([Source.refresh]): no catalogue, no job.
+     */
     PAGE,
 }
 
 /** The modes that are jobs over the catalogue, run in the background. */
-val SourceMode.job: Boolean get() = this == SourceMode.SCRAPE_ALL || this == SourceMode.UPDATES
+val SourceMode.job: Boolean
+    get() = this == SourceMode.SCRAPE_ALL || this == SourceMode.UPDATES
 
 /** Whether the application downloads a work's page itself: by [SourceMode.PAGE], or by a job's own requests. */
-val Source.downloadsPages: Boolean get() = modes.any { it == SourceMode.PAGE || it.job }
+val Source.downloadsPages: Boolean
+    get() = modes.any { it == SourceMode.PAGE || it.job }
 
 /**
  * A site the works come from. Implemented by a plugin and declared as a Spring bean.
  *
- * Everything a source learns it writes through the [SourceContext] it is handed: the generic
- * data of its items into the application's tables, anything else into tables of its own
- * ([migrations]) in the same source database.
+ * Everything a source learns it writes through the [SourceContext] it is handed: the generic data of its items into the
+ * application's tables, anything else into tables of its own ([migrations]) in the same source database.
  */
 interface Source {
     /**
-     * Stable: the name of the source's folder, of its databases and the first half of every item
-     * key; and the namespace of its words, which the plugin carries in every language of the
-     * interface ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]) — its title among them.
+     * Stable: the name of the source's folder, of its databases and the first half of every item key; and the namespace
+     * of its words, which the plugin carries in every language of the interface
+     * ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]) — its title among them.
      */
     val id: String
 
@@ -53,84 +56,91 @@ interface Source {
     val modes: Set<SourceMode>
 
     /**
-     * Flyway locations of the source's own tables in its source database, e.g.
-     * `classpath:db/f95zone`. They are migrated with a history table of their own.
+     * Flyway locations of the source's own tables in its source database, e.g. `classpath:db/f95zone`. They are
+     * migrated with a history table of their own.
      */
-    val migrations: List<String> get() = emptyList()
+    val migrations: List<String>
+        get() = emptyList()
 
-    val settings: List<SettingDef> get() = emptyList()
+    val settings: List<SettingDef>
+        get() = emptyList()
 
     /** The page of the item on the site. */
     fun itemUrl(itemId: String): String
 
     /**
-     * The page of a part of the item — a chapter — on the site, [partId] as the source keeps it
-     * ([PartData.id]): where a passage of its text is read in place. The item's own page of a
-     * source whose parts have none of their own.
+     * The page of a part of the item — a chapter — on the site, [partId] as the source keeps it ([PartData.id]): where
+     * a passage of its text is read in place. The item's own page of a source whose parts have none of their own.
      */
     fun partUrl(itemId: String, partId: String): String = itemUrl(itemId)
 
     /**
-     * The page of a value of the source's [facet] on the site, [key] and [name] as the source wrote
-     * them ([FacetValue]): of an author, the author's own page, else the site's search of the works
-     * by them; null when the site has neither.
+     * The page of a value of the source's [facet] on the site, [key] and [name] as the source wrote them
+     * ([FacetValue]): of an author, the author's own page, else the site's search of the works by them; null when the
+     * site has neither.
      */
     fun valueUrl(facet: String, key: String, name: String): String? = null
 
     /**
-     * The item a page of the site is about — a work's page, a chapter of it, its reviews — or null
-     * when the address is not one item's. The extension shows the item's panel on such a page, and
-     * a card linking to it gets the item's prediction.
+     * The item a page of the site is about — a work's page, a chapter of it, its reviews — or null when the address is
+     * not one item's. The extension shows the item's panel on such a page, and a card linking to it gets the item's
+     * prediction.
      */
     fun itemIdOf(url: String): String? = null
 
     /** The user's own actions on the site the source reads ([SiteSignals]). */
-    val signals: List<SignalDef> get() = emptyList()
+    val signals: List<SignalDef>
+        get() = emptyList()
 
     /** The messages its jobs may leave the user ([Job.message]), by their keys: their words are among the source's. */
-    val messages: Set<String> get() = emptySet()
+    val messages: Set<String>
+        get() = emptySet()
 
     /**
-     * The statements of the catalogues of universes the source wants of every character, by the
-     * catalogue's id: `"wikidata" to setOf("P8419")` — a character's tag on Archive of Our Own.
-     * The characters of every universe are asked for with them ([UniverseCharacter.properties][io.github.vlsergey.recommend4me.universe.UniverseCharacter.properties]).
+     * The statements of the catalogues of universes the source wants of every character, by the catalogue's id:
+     * `"wikidata" to setOf("P8419")` — a character's tag on Archive of Our Own. The characters of every universe are
+     * asked for with them
+     * ([UniverseCharacter.properties][io.github.vlsergey.recommend4me.universe.UniverseCharacter.properties]).
      */
-    val catalogueProperties: Map<String, Set<String>> get() = emptyMap()
+    val catalogueProperties: Map<String, Set<String>>
+        get() = emptyMap()
 
     /**
-     * The values of the application's layer the source drafts of a work from its own values on the
-     * site ([facets]: the site's facet to its values, keys and names as written) through the
-     * dictionary ([lookup]): the characters its tags name, their pairings, its universes. Only what
-     * matches exactly one value of the dictionary; none of a source that drafts nothing.
+     * The values of the application's layer the source drafts of a work from its own values on the site ([facets]: the
+     * site's facet to its values, keys and names as written) through the dictionary ([lookup]): the characters its tags
+     * name, their pairings, its universes. Only what matches exactly one value of the dictionary; none of a source that
+     * drafts nothing.
      */
     fun draft(facets: Map<String, List<FacetValue>>, lookup: CatalogueLookup): List<LayerDraft> = emptyList()
 
     /** How the extension marks the site's pages up; null — it does not. */
-    val pageDecor: PageDecor? get() = null
+    val pageDecor: PageDecor?
+        get() = null
 
     // --- Browser tracking ---
 
     /** The addresses of the pages the source wants from the browser, matched against the whole URL. */
-    val capturePatterns: List<Regex> get() = emptyList()
+    val capturePatterns: List<Regex>
+        get() = emptyList()
 
     /**
-     * Raised when the source reads its pages differently: every kept page ([SourceContext.keepPage])
-     * is handed to [capture] again on the next start.
+     * Raised when the source reads its pages differently: every kept page ([SourceContext.keepPage]) is handed to
+     * [capture] again on the next start.
      */
-    val parserVersion: Int get() = 1
+    val parserVersion: Int
+        get() = 1
 
     /**
-     * Reads a page the browser sent — or one kept before, read again after the parser changed —
-     * and writes what it says. Returns the items it touched.
+     * Reads a page the browser sent — or one kept before, read again after the parser changed — and writes what it
+     * says. Returns the items it touched.
      */
     fun capture(page: CapturedPage, context: SourceContext): List<String> = emptyList()
 
     /**
-     * The requests of the site that bring what it says [tags] — keys of its [facet] — mean, made for
-     * the application by the browser from a page of the site the user has open (a site that checks
-     * its visitors lets the user's browser in, not the application), and sent back as captured pages
-     * under their [WantedPage.url], read by [capture]. Empty: the site does not describe them, or the
-     * source reads it otherwise.
+     * The requests of the site that bring what it says [tags] — keys of its [facet] — mean, made for the application by
+     * the browser from a page of the site the user has open (a site that checks its visitors lets the user's browser
+     * in, not the application), and sent back as captured pages under their [WantedPage.url], read by [capture]. Empty:
+     * the site does not describe them, or the source reads it otherwise.
      */
     fun describing(facet: String, tags: List<String>): List<WantedPage> = emptyList()
 
@@ -141,8 +151,8 @@ interface Source {
         throw UnsupportedOperationException("$id does not scrape")
 
     /**
-     * Downloads the item's page again now — the button of a single item, or a work the user has
-     * just graded whose details are missing. Returns false when the source cannot.
+     * Downloads the item's page again now — the button of a single item, or a work the user has just graded whose
+     * details are missing. Returns false when the source cannot.
      */
     fun refresh(itemId: String, context: SourceContext): Boolean = false
 
@@ -150,16 +160,16 @@ interface Source {
     fun needsRefresh(itemId: String, context: SourceContext): Boolean = false
 
     /**
-     * How far the whole catalogue is loaded ([SourceMode.SCRAPE_ALL]): what it is doing and how much
-     * of it is done, across restarts; null — the source does not tell.
+     * How far the whole catalogue is loaded ([SourceMode.SCRAPE_ALL]): what it is doing and how much of it is done,
+     * across restarts; null — the source does not tell.
      */
     fun scrapeProgress(context: SourceContext): ScrapeProgress? = null
 
     // --- Background work of its own ---
 
     /**
-     * Called once the application is up: a source may start background work of its own here (the
-     * reviews of f95zone read without end), on threads of its own, until [stop].
+     * Called once the application is up: a source may start background work of its own here (the reviews of f95zone
+     * read without end), on threads of its own, until [stop].
      */
     fun start(context: SourceContext) {}
 
@@ -169,8 +179,8 @@ interface Source {
     // --- Pictures ---
 
     /**
-     * Where a picture of an item is downloaded from, the best first: an original before the
-     * preview it was listed by. The application tries them in order.
+     * Where a picture of an item is downloaded from, the best first: an original before the preview it was listed by.
+     * The application tries them in order.
      */
     fun pictureAddresses(url: String): List<String> = listOf(url)
 
@@ -179,16 +189,15 @@ interface Source {
 }
 
 /**
- * How far a scrape of the whole catalogue has got: [stage] — what it does now or would do next
- * ("feed", "details"); [done] of [total] in it; [complete] — the catalogue is loaded and only
- * updates are left.
+ * How far a scrape of the whole catalogue has got: [stage] — what it does now or would do next ("feed", "details");
+ * [done] of [total] in it; [complete] — the catalogue is loaded and only updates are left.
  */
 class ScrapeProgress(val stage: String, val done: Int, val total: Int, val complete: Boolean)
 
 /**
- * A request of the site the browser makes for a source ([Source.describing]): [url] asked, with
- * [form] sent as the body of a POST, or as a GET without one; what it answers is sent back as a
- * captured page under [url] — its address, a capture pattern of the source matches it.
+ * A request of the site the browser makes for a source ([Source.describing]): [url] asked, with [form] sent as the body
+ * of a POST, or as a GET without one; what it answers is sent back as a captured page under [url] — its address, a
+ * capture pattern of the source matches it.
  */
 data class WantedPage(val url: String, val form: Map<String, String>? = null)
 

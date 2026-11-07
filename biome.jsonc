@@ -1,0 +1,22 @@
+// THE RULES OF THE SCRIPTS (AGENTS.md): of the web interface and of the extension, Biome's recommended rules as Biome
+// has them; below only what this project sets otherwise. A linter alone: the files are not formatted by it.
+{
+  "$schema": "./frontend/node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    // Not the types generated of the API: no one writes them
+    "includes": ["frontend/src/**", "browser-extension/extension/**/*.js", "!frontend/src/api/schema.d.ts"]
+  },
+  "formatter": { "enabled": false },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        // No file longer than 600 lines: a file too long is split by meaning, never by its length
+        "noExcessiveLinesPerFile": { "level": "error", "options": { "maxLines": 600 } }
+      }
+    }
+  }
+}

@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.universe
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
-import tools.jackson.databind.json.JsonMapper
 import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.util.Collections
@@ -12,10 +11,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import tools.jackson.databind.json.JsonMapper
 
 /**
- * What the catalogue makes of Wikidata's answers, without Wikidata: a local server answers as its
- * API does, and remembers what it was asked.
+ * What the catalogue makes of Wikidata's answers, without Wikidata: a local server answers as its API does, and
+ * remembers what it was asked.
  */
 class WikidataAnswersTest {
 
@@ -31,16 +31,17 @@ class WikidataAnswersTest {
     fun start() {
         server.createContext("/w/api.php") { exchange -> answer(exchange) }
         server.start()
-        catalogue = WikidataCatalogue(JsonMapper.builder().build(), api = "http://127.0.0.1:${server.address.port}/w/api.php")
+        catalogue =
+            WikidataCatalogue(JsonMapper.builder().build(), api = "http://127.0.0.1:${server.address.port}/w/api.php")
     }
 
-    @AfterTest
-    fun stop() = server.stop(0)
+    @AfterTest fun stop() = server.stop(0)
 
     private fun answer(exchange: HttpExchange) {
-        val query = exchange.requestURI.rawQuery.split('&').associate { p ->
-            p.substringBefore('=') to URLDecoder.decode(p.substringAfter('=', ""), Charsets.UTF_8)
-        }
+        val query =
+            exchange.requestURI.rawQuery.split('&').associate { p ->
+                p.substringBefore('=') to URLDecoder.decode(p.substringAfter('=', ""), Charsets.UTF_8)
+            }
         asked += query
         failures.removeFirstOrNull()?.let { (status, headers) ->
             headers.forEach { (k, v) -> exchange.responseHeaders.add(k, v) }
@@ -48,11 +49,12 @@ class WikidataAnswersTest {
             exchange.close()
             return
         }
-        val body = when (query["action"]) {
-            "wbgetentities" -> entities(query.getValue("ids").split('|'), claims = query["props"] == "claims")
-            "wbsearchentities" -> """{"search":[{"id":"Q2"},{"id":"Q3"}]}"""
-            else -> "{}"
-        }
+        val body =
+            when (query["action"]) {
+                "wbgetentities" -> entities(query.getValue("ids").split('|'), claims = query["props"] == "claims")
+                "wbsearchentities" -> """{"search":[{"id":"Q2"},{"id":"Q3"}]}"""
+                else -> "{}"
+            }
         val bytes = body.toByteArray()
         exchange.responseHeaders.add("Content-Type", "application/json")
         exchange.sendResponseHeaders(200, bytes.size.toLong())
@@ -60,23 +62,24 @@ class WikidataAnswersTest {
     }
 
     /**
-     * The entities asked: Q404 is missing; every other has an English and a Russian label, an alias,
-     * a description, and its classes — Q10 is a subclass of Q11 and, deprecated, of Q12, a fictional
-     * analog of Q13, and of itself.
+     * The entities asked: Q404 is missing; every other has an English and a Russian label, an alias, a description, and
+     * its classes — Q10 is a subclass of Q11 and, deprecated, of Q12, a fictional analog of Q13, and of itself.
      */
-    private fun entities(ids: List<String>, claims: Boolean): String = ids.joinToString(",", """{"entities":{""", "}}") { id ->
-        if (id == "Q404") return@joinToString """"$id":{"id":"$id","missing":""}"""
-        if (claims) {
-            fun claim(property: String, value: String, rank: String = "normal") =
-                """{"rank":"$rank","mainsnak":{"property":"$property","datavalue":{"value":{"id":"$value"}}}}"""
-            val own = if (id == "Q10") {
-                """"P279":[${claim("P279", "Q11")},${claim("P279", "Q12", "deprecated")},${claim("P279", "Q10")}],"P1074":[${claim("P1074", "Q13")}],"P31":[${claim("P31", "Q99")}]"""
-            } else ""
-            """"$id":{"id":"$id","claims":{$own}}"""
-        } else {
-            """"$id":{"id":"$id","labels":{"en":{"value":"Thing $id"},"ru":{"value":"Вещь $id"}},"aliases":{"en":[{"value":"Alias $id"}]},"descriptions":{"en":{"value":"About $id"}}}"""
+    private fun entities(ids: List<String>, claims: Boolean): String =
+        ids.joinToString(",", """{"entities":{""", "}}") { id ->
+            if (id == "Q404") return@joinToString """"$id":{"id":"$id","missing":""}"""
+            if (claims) {
+                fun claim(property: String, value: String, rank: String = "normal") =
+                    """{"rank":"$rank","mainsnak":{"property":"$property","datavalue":{"value":{"id":"$value"}}}}"""
+                val own =
+                    if (id == "Q10") {
+                        """"P279":[${claim("P279", "Q11")},${claim("P279", "Q12", "deprecated")},${claim("P279", "Q10")}],"P1074":[${claim("P1074", "Q13")}],"P31":[${claim("P31", "Q99")}]"""
+                    } else ""
+                """"$id":{"id":"$id","claims":{$own}}"""
+            } else {
+                """"$id":{"id":"$id","labels":{"en":{"value":"Thing $id"},"ru":{"value":"Вещь $id"}},"aliases":{"en":[{"value":"Alias $id"}]},"descriptions":{"en":{"value":"About $id"}}}"""
+            }
         }
-    }
 
     private val languages = listOf("ru", "en")
 
@@ -125,13 +128,18 @@ class WikidataAnswersTest {
         val otherSex = character("Q2", "Gwen Stacy", CharacterSex.MALE)
         val elsewhere = character("Q3", "Gwen Stacy", CharacterSex.FEMALE)
         val unstated = character("Q4", "Gwen Stacy", null)
-        val kept = WikidataCatalogue.withoutVersions(
-            listOf(comics, films, spiderWoman, verse, renamed, otherSex, elsewhere, unstated),
-            mapOf(
-                "Q98454800" to setOf("Q945817"), "Q119806001" to setOf("Q20979395"),
-                "Q1" to setOf("Q945817"), "Q2" to setOf("Q945817"), "Q3" to setOf("Q404"), "Q4" to setOf("Q945817"),
-            ),
-        )
+        val kept =
+            WikidataCatalogue.withoutVersions(
+                listOf(comics, films, spiderWoman, verse, renamed, otherSex, elsewhere, unstated),
+                mapOf(
+                    "Q98454800" to setOf("Q945817"),
+                    "Q119806001" to setOf("Q20979395"),
+                    "Q1" to setOf("Q945817"),
+                    "Q2" to setOf("Q945817"),
+                    "Q3" to setOf("Q404"),
+                    "Q4" to setOf("Q945817"),
+                ),
+            )
         // The films' and the Spider-Verse's Gwen go by the names of the ones they are based on, and one of a
         // sex not stated is no other; a version of another name, another sex, or based on an entry outside
         // the universe stays
@@ -143,13 +151,34 @@ class WikidataAnswersTest {
 
     @Test
     fun `a chain of versions brings its names to the first that is no version, a circle of them stays as it is`() {
-        fun character(id: String, label: String) = UniverseCharacter(id, mapOf("en" to label), emptyMap(), emptyMap(), "", languages)
+        fun character(id: String, label: String) =
+            UniverseCharacter(id, mapOf("en" to label), emptyMap(), emptyMap(), "", languages)
         val book = character("Q10", "Harry Potter")
-        val film = UniverseCharacter("Q11", mapOf("en" to "Harry Potter", "ru" to "Гарри Поттер"), emptyMap(), emptyMap(), "", languages)
-        val game = UniverseCharacter("Q12", mapOf("en" to "Harry Potter"), mapOf("en" to listOf("The Boy Who Lived")), emptyMap(), "", languages)
+        val film =
+            UniverseCharacter(
+                "Q11",
+                mapOf("en" to "Harry Potter", "ru" to "Гарри Поттер"),
+                emptyMap(),
+                emptyMap(),
+                "",
+                languages,
+            )
+        val game =
+            UniverseCharacter(
+                "Q12",
+                mapOf("en" to "Harry Potter"),
+                mapOf("en" to listOf("The Boy Who Lived")),
+                emptyMap(),
+                "",
+                languages,
+            )
         val a = character("Q20", "Twin")
         val b = character("Q21", "Twin")
-        val kept = WikidataCatalogue.withoutVersions(listOf(book, film, game, a, b), mapOf("Q11" to setOf("Q10"), "Q12" to setOf("Q11"), "Q20" to setOf("Q21"), "Q21" to setOf("Q20")))
+        val kept =
+            WikidataCatalogue.withoutVersions(
+                listOf(book, film, game, a, b),
+                mapOf("Q11" to setOf("Q10"), "Q12" to setOf("Q11"), "Q20" to setOf("Q21"), "Q21" to setOf("Q20")),
+            )
         assertEquals(listOf("Q10", "Q20", "Q21"), kept.map { it.id })
         assertEquals(listOf("Harry Potter", "Гарри Поттер", "The Boy Who Lived").toSet(), kept.first().names.toSet())
     }

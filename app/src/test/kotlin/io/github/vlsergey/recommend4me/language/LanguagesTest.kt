@@ -32,12 +32,21 @@ class LanguagesTest {
         val games = FacetDef(StandardLanguages.KEY, infer = true)
         fun chance(key: String, p: Double) = Chance("1", StandardLanguages.KEY, key, false, p)
         val chances = mapOf(StandardLanguages.KEY to mapOf("ru" to chance("ru", 0.9), "en" to chance("en", 0.7)))
-        assertEquals(listOf("ru"), ModelValues.of(SourceSchema(listOf(books)), emptyMap(), chances)[StandardLanguages.KEY])
-        assertEquals(listOf("ru", "en"), ModelValues.of(SourceSchema(listOf(games)), emptyMap(), chances)[StandardLanguages.KEY])
+        assertEquals(
+            listOf("ru"),
+            ModelValues.of(SourceSchema(listOf(books)), emptyMap(), chances)[StandardLanguages.KEY],
+        )
+        assertEquals(
+            listOf("ru", "en"),
+            ModelValues.of(SourceSchema(listOf(games)), emptyMap(), chances)[StandardLanguages.KEY],
+        )
 
         val answered = listOf(FacetCorrection("1", StandardLanguages.KEY, "uk", true, null))
         val given = mapOf(StandardLanguages.KEY to listOf("ru"))
-        assertEquals(listOf("uk"), Corrected.facets(given, answered, setOf(StandardLanguages.KEY))[StandardLanguages.KEY])
+        assertEquals(
+            listOf("uk"),
+            Corrected.facets(given, answered, setOf(StandardLanguages.KEY))[StandardLanguages.KEY],
+        )
         assertEquals(listOf("ru", "uk"), Corrected.facets(given, answered)[StandardLanguages.KEY])
     }
 }

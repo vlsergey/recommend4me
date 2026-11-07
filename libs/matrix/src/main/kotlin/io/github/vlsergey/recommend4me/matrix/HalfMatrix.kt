@@ -7,10 +7,10 @@ import java.nio.ByteOrder
 import java.util.stream.IntStream
 
 /**
- * ROW-MAJOR ROWS OF HALF-PRECISION NUMBERS (IEEE fp16) in one off-heap block: the vectors of the
- * texts and the pictures as the database keeps them, two bytes a number — half the memory of
- * [Matrix], half of what goes to the card. A product reads them as single precision: a run of rows
- * at a time made floats ([floats]), on the card by a kernel of its own.
+ * ROW-MAJOR ROWS OF HALF-PRECISION NUMBERS (IEEE fp16) in one off-heap block: the vectors of the texts and the pictures
+ * as the database keeps them, two bytes a number — half the memory of [Matrix], half of what goes to the card. A
+ * product reads them as single precision: a run of rows at a time made floats ([floats]), on the card by a kernel of
+ * its own.
  *
  * The memory belongs to the garbage collector (`Arena.ofAuto`), as [Floats]'.
  */
@@ -28,7 +28,10 @@ class HalfMatrix(val rows: Int, val cols: Int) {
         for (q in 0 until cols) seg.setAtIndex(HALF, at + q, java.lang.Float.floatToFloat16(v[q]))
     }
 
-    /** Row [i] made of [bytes]: [cols] half-precision numbers, little-endian, as the database keeps them — copied as they are. */
+    /**
+     * Row [i] made of [bytes]: [cols] half-precision numbers, little-endian, as the database keeps them — copied as
+     * they are.
+     */
     fun putHalves(i: Int, bytes: ByteArray) {
         require(bytes.size == cols * 2) { "${bytes.size} bytes of a row of $cols" }
         MemorySegment.copy(MemorySegment.ofArray(bytes), 0, seg, row(i) * 2, bytes.size.toLong())
@@ -46,7 +49,10 @@ class HalfMatrix(val rows: Int, val cols: Int) {
         MemorySegment.copy(from.seg, from.row(fromRow) * 2, seg, row(atRow) * 2, count.toLong() * cols * 2)
     }
 
-    /** The rows [fromRow] to [fromRow] + [count] as single precision, into [into] from its start: a row on a core of its own. */
+    /**
+     * The rows [fromRow] to [fromRow] + [count] as single precision, into [into] from its start: a row on a core of its
+     * own.
+     */
     fun floats(fromRow: Int, count: Int, into: Floats) {
         IntStream.range(0, count).parallel().forEach { r ->
             val at = row(fromRow + r)
@@ -56,7 +62,8 @@ class HalfMatrix(val rows: Int, val cols: Int) {
     }
 
     /** The bytes of the rows [fromRow] to [fromRow] + [count]: what is sent to the card. */
-    internal fun slice(fromRow: Int, count: Int): MemorySegment = seg.asSlice(row(fromRow) * 2, count.toLong() * cols * 2)
+    internal fun slice(fromRow: Int, count: Int): MemorySegment =
+        seg.asSlice(row(fromRow) * 2, count.toLong() * cols * 2)
 
     /** The rows [indices] gathered into a new matrix. */
     fun gather(indices: IntArray): HalfMatrix {
@@ -70,7 +77,9 @@ class HalfMatrix(val rows: Int, val cols: Int) {
 
         init {
             // The database's bytes copied as they are: little-endian, as the memory of the machines this runs on
-            check(ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) { "half-precision rows copied as bytes need a little-endian machine" }
+            check(ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+                "half-precision rows copied as bytes need a little-endian machine"
+            }
         }
 
         /** The rows [indices] of [m] in half precision. */

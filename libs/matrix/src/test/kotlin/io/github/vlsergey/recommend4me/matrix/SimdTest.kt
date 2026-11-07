@@ -39,12 +39,13 @@ class SimdTest {
         val scale = 1f / 7
         var loss = 0.0
         var slope = 0.0
-        val slopes = DoubleArray(n) { j ->
-            val z = (row[j] + shift[j]).toDouble()
-            val e = exp(-abs(z))
-            loss += max(z, 0.0) + ln1p(e)
-            ((if (z >= 0) 1 / (1 + e) else e / (1 + e)) * scale).also { slope += it }
-        }
+        val slopes =
+            DoubleArray(n) { j ->
+                val z = (row[j] + shift[j]).toDouble()
+                val e = exp(-abs(z))
+                loss += max(z, 0.0) + ln1p(e)
+                ((if (z >= 0) 1 / (1 + e) else e / (1 + e)) * scale).also { slope += it }
+            }
         val sums = FloatArray(2)
         Simd.logisticRow(row, shift, n, scale, sums)
         assertTrue(abs(sums[0] - loss) < 1e-4 * loss, "loss ${sums[0]} vs $loss")
@@ -64,18 +65,22 @@ class SimdTest {
             val scale = 1f / 3
             var loss = 0.0
             var slope = 0.0
-            val expected = DoubleArray(n) { j ->
-                val z = (row[j] + shift[j]).toDouble()
-                val e = exp(-abs(z))
-                loss += w[j] * (max(z, 0.0) + ln1p(e) - y[j] * z)
-                (w[j] * ((if (z >= 0) 1 / (1 + e) else e / (1 + e)) - y[j]) * scale).also { slope += it }
-            }
+            val expected =
+                DoubleArray(n) { j ->
+                    val z = (row[j] + shift[j]).toDouble()
+                    val e = exp(-abs(z))
+                    loss += w[j] * (max(z, 0.0) + ln1p(e) - y[j] * z)
+                    (w[j] * ((if (z >= 0) 1 / (1 + e) else e / (1 + e)) - y[j]) * scale).also { slope += it }
+                }
             val slopes = FloatArray(n)
             val sums = FloatArray(2)
             Simd.weightedLogisticRow(row, shift, w, y, n, scale, slopes, sums)
             assertTrue(abs(sums[0] - loss) < 1e-4 * abs(loss) + 1e-5, "n=$n loss ${sums[0]} vs $loss")
             assertTrue(abs(sums[1] - slope) < 1e-4 * abs(slope) + 1e-5, "n=$n slope ${sums[1]} vs $slope")
-            for (j in 0 until n) assertTrue(abs(slopes[j] - expected[j]) < 1e-6, "n=$n slope $j: ${slopes[j]} vs ${expected[j]}")
+            for (j in 0 until n) assertTrue(
+                abs(slopes[j] - expected[j]) < 1e-6,
+                "n=$n slope $j: ${slopes[j]} vs ${expected[j]}",
+            )
         }
     }
 

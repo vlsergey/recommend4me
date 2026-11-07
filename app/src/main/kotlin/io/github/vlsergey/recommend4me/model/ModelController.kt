@@ -5,25 +5,25 @@ import io.github.vlsergey.recommend4me.api.model.GradeOnScale
 import io.github.vlsergey.recommend4me.api.model.ModelCandidate
 import io.github.vlsergey.recommend4me.api.model.ModelInfo
 import io.github.vlsergey.recommend4me.api.model.ModelMetrics
-import io.github.vlsergey.recommend4me.api.model.ScorerChoice
-import io.github.vlsergey.recommend4me.api.model.ScorerInfo
 import io.github.vlsergey.recommend4me.api.model.ModelWorth as ApiModelWorth
 import io.github.vlsergey.recommend4me.api.model.PartWorth as ApiPartWorth
+import io.github.vlsergey.recommend4me.api.model.ScorerChoice
+import io.github.vlsergey.recommend4me.api.model.ScorerComparison as ApiScorerComparison
+import io.github.vlsergey.recommend4me.api.model.ScorerInfo
+import io.github.vlsergey.recommend4me.api.model.ScorerQuality as ApiScorerQuality
 import io.github.vlsergey.recommend4me.api.model.WeighedGroup as ApiWeighedGroup
 import io.github.vlsergey.recommend4me.api.model.Weighing as ApiWeighing
 import io.github.vlsergey.recommend4me.api.model.WeighingFold as ApiWeighingFold
-import io.github.vlsergey.recommend4me.api.model.ScorerComparison as ApiScorerComparison
-import io.github.vlsergey.recommend4me.api.model.ScorerQuality as ApiScorerQuality
 import io.github.vlsergey.recommend4me.item.toApi
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Grades
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.Stores
+import java.time.Instant
+import java.time.ZoneOffset
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
-import java.time.Instant
-import java.time.ZoneOffset
 
 @RestController
 class ModelController(
@@ -48,7 +48,11 @@ class ModelController(
     override fun chooseScorer(type: String, scorerChoice: ScorerChoice): ResponseEntity<ModelInfo> {
         if (stores.type(type) == null) return ResponseEntity.notFound().build()
         if (!recommendations.chooseScorer(type, scorerChoice.scorer)) {
-            throw Refusal.NO_SCORER.refuse(HttpStatus.BAD_REQUEST, "There is no scorer '${scorerChoice.scorer}'", "scorer" to scorerChoice.scorer)
+            throw Refusal.NO_SCORER.refuse(
+                HttpStatus.BAD_REQUEST,
+                "There is no scorer '${scorerChoice.scorer}'",
+                "scorer" to scorerChoice.scorer,
+            )
         }
         return ResponseEntity.ok(recommendations.summary(type).toApi(type))
     }
@@ -67,22 +71,32 @@ class ModelController(
     override fun chooseInterestScorer(type: String, scorerChoice: ScorerChoice): ResponseEntity<Unit> {
         if (stores.type(type) == null) return ResponseEntity.notFound().build()
         if (!recommendations.chooseInterestScorer(type, scorerChoice.scorer)) {
-            throw Refusal.NO_SCORER.refuse(HttpStatus.BAD_REQUEST, "There is no scorer '${scorerChoice.scorer}'", "scorer" to scorerChoice.scorer)
+            throw Refusal.NO_SCORER.refuse(
+                HttpStatus.BAD_REQUEST,
+                "There is no scorer '${scorerChoice.scorer}'",
+                "scorer" to scorerChoice.scorer,
+            )
         }
         return ResponseEntity.noContent().build()
     }
 
-    private fun ScorerComparison.toApi() = ApiScorerComparison(
-        startedAt = startedAt.atOffset(ZoneOffset.UTC),
-        grades = grades,
-        scorers = scorers.map { s ->
-            ApiScorerQuality(
-                scorer = s.scorer, state = ApiScorerQuality.State.valueOf(s.state.name),
-                candidates = s.candidates.map { it.toApi() }, error = s.error, millis = s.millis, chosen = s.chosen?.toApi(),
-            )
-        },
-        finishedAt = finishedAt?.atOffset(ZoneOffset.UTC),
-    )
+    private fun ScorerComparison.toApi() =
+        ApiScorerComparison(
+            startedAt = startedAt.atOffset(ZoneOffset.UTC),
+            grades = grades,
+            scorers =
+                scorers.map { s ->
+                    ApiScorerQuality(
+                        scorer = s.scorer,
+                        state = ApiScorerQuality.State.valueOf(s.state.name),
+                        candidates = s.candidates.map { it.toApi() },
+                        error = s.error,
+                        millis = s.millis,
+                        chosen = s.chosen?.toApi(),
+                    )
+                },
+            finishedAt = finishedAt?.atOffset(ZoneOffset.UTC),
+        )
 
     override fun measurePartWorth(type: String): ResponseEntity<Unit> {
         if (stores.type(type) == null) return ResponseEntity.notFound().build()
@@ -101,7 +115,7 @@ class ModelController(
                 grades = worth.grades,
                 parts = worth.parts.map { ApiPartWorth(it.part, it.labelKey, it.features, it.metrics?.toApi()) },
                 full = worth.full?.toApi(),
-            ),
+            )
         )
     }
 
@@ -125,21 +139,35 @@ class ModelController(
                 grades = w.grades,
                 groups = w.groups.map { ApiWeighedGroup(it.part, it.labelKey, it.columns, it.weight) },
                 folds = w.folds.map { f -> ApiWeighingFold(f.baseline, f.weighed, f.weights.toList()) },
-                baseline = baseline, baselineSe = baselineSe, weighed = weighed, weighedSe = weighedSe, gain = gain, gainSe = gainSe,
+                baseline = baseline,
+                baselineSe = baselineSe,
+                weighed = weighed,
+                weighedSe = weighedSe,
+                gain = gain,
+                gainSe = gainSe,
                 onAll = w.onAll?.toApi(),
-            ),
+            )
         )
     }
 
     private fun RankingResult.toApi() = ModelCandidate(parameter, metrics.toApi())
 
-    private fun RankingMetrics.toApi() = ModelMetrics(folds = folds, concordance = concordance, concordanceSe = concordanceSe, spearman = spearman, auc = auc)
+    private fun RankingMetrics.toApi() =
+        ModelMetrics(
+            folds = folds,
+            concordance = concordance,
+            concordanceSe = concordanceSe,
+            spearman = spearman,
+            auc = auc,
+        )
 
     private fun ModelSummary.toApi(typeId: String): ModelInfo {
         val meta = meta
         // What the strongest features are shown by: their facets' and values' names as they are now
         val top = meta?.topPositive.orEmpty() + meta?.topNegative.orEmpty()
-        val labels = if (top.isEmpty()) emptyMap() else FeatureNames.labels(top.map { it.feature }, stores.type(typeId)!!.sources)
+        val labels =
+            if (top.isEmpty()) emptyMap()
+            else FeatureNames.labels(top.map { it.feature }, stores.type(typeId)!!.sources)
         fun Contribution.toApi() = LabelledContribution(this, labels.getValue(feature)).toApi()
         return ModelInfo(
             trained = meta != null,
@@ -151,9 +179,10 @@ class ModelController(
             scorers = plugins.scorers.map { ScorerInfo(it.id) },
             trainedAt = meta?.let { Instant.ofEpochMilli(it.trainedAtMillis).atOffset(ZoneOffset.UTC) },
             parameter = meta?.parameter,
-            ladder = meta?.scale()?.grades().orEmpty().toSortedMap().map { (grade, score) ->
-                GradeOnScale(grade, score, meta!!.ratingCounts[grade - Grades.MIN])
-            },
+            ladder =
+                meta?.scale()?.grades().orEmpty().toSortedMap().map { (grade, score) ->
+                    GradeOnScale(grade, score, meta!!.ratingCounts[grade - Grades.MIN])
+                },
             ratingCounts = ratingCounts.toList(),
             features = meta?.layout()?.width ?: 0,
             metrics = meta?.metrics?.toApi(),

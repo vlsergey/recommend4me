@@ -1,21 +1,25 @@
 package io.github.vlsergey.recommend4me.source.fanficsme
 
-import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
+import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(FanficsMeClient::class.java)
 
 /**
- * The requests of fanfics.me: one at a time, [PAUSE] apart, saying what asks. A request the site
- * fails — an error of its own, a timeout — is asked again after a wait, [ATTEMPTS] times in all.
+ * The requests of fanfics.me: one at a time, [PAUSE] apart, saying what asks. A request the site fails — an error of
+ * its own, a timeout — is asked again after a wait, [ATTEMPTS] times in all.
  */
 class FanficsMeClient {
-    private val http: HttpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(20)).build()
+    private val http: HttpClient =
+        HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(20))
+            .build()
 
     /** When the last request was sent: the next waits out [PAUSE] after it. */
     private var lastRequest: Instant = Instant.EPOCH
@@ -29,10 +33,15 @@ class FanficsMeClient {
             val wait = Duration.between(Instant.now(), lastRequest.plus(PAUSE))
             if (!wait.isNegative) Thread.sleep(wait.toMillis())
             try {
-                val response = http.send(
-                    HttpRequest.newBuilder(URI(url)).timeout(TIMEOUT).header("User-Agent", USER_AGENT).GET().build(),
-                    HttpResponse.BodyHandlers.ofString(),
-                )
+                val response =
+                    http.send(
+                        HttpRequest.newBuilder(URI(url))
+                            .timeout(TIMEOUT)
+                            .header("User-Agent", USER_AGENT)
+                            .GET()
+                            .build(),
+                        HttpResponse.BodyHandlers.ofString(),
+                    )
                 when (response.statusCode()) {
                     200 -> return response.body()
                     404 -> return null

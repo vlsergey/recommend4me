@@ -6,17 +6,17 @@ import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import jakarta.annotation.PreDestroy
+import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
-import java.util.concurrent.Executors
 
 private val log = LoggerFactory.getLogger(GradedItemRefresh::class.java)
 
 /**
- * The page of a work the user has just graded, downloaded at once when its source can and the work
- * lacks its details — not when a scrape reaches it hours later. A graded work without its texts
- * teaches the model nothing about texts, and worse, teaches it that missing texts mean a grade.
+ * The page of a work the user has just graded, downloaded at once when its source can and the work lacks its details —
+ * not when a scrape reaches it hours later. A graded work without its texts teaches the model nothing about texts, and
+ * worse, teaches it that missing texts mean a grade.
  */
 @Service
 class GradedItemRefresh(
@@ -25,7 +25,9 @@ class GradedItemRefresh(
     private val textVectors: TextVectors,
     private val recommendations: Recommendations,
 ) {
-    private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "graded-refresh").apply { isDaemon = true } }
+    private val executor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "graded-refresh").apply { isDaemon = true }
+    }
 
     @EventListener
     fun gradesChanged(event: GradesChanged) {

@@ -16,7 +16,8 @@ class QuotesTest {
 
         val filler = "слово ".repeat(200)
         val long = filler + "Гермиона пришла. " + filler
-        val quote = Quotes.of(TextPlace(part = 2), long, listOf(filler.length until filler.length + "Гермиона".length)).single()
+        val quote =
+            Quotes.of(TextPlace(part = 2), long, listOf(filler.length until filler.length + "Гермиона".length)).single()
         assert(quote.text.length < 500) { quote.text }
         assert(quote.text.startsWith("… ") && quote.text.endsWith(" …")) { quote.text }
         assertEquals(listOf("Гермиона"), quote.highlights.map { quote.text.substring(it) })

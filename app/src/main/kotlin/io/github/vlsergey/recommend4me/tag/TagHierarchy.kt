@@ -4,16 +4,19 @@ import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 
 /**
- * THE TAGS UNDER OTHER TAGS, the user's word ([TagRepository.parents]): a work with a tag has every
- * tag above it — shown on its card, read by the model; a work the user said has not a tag has not
- * any tag under it either — not shown, the model told so. The user's "has not" of a tag above wins
- * over a "has" of a tag under it.
+ * THE TAGS UNDER OTHER TAGS, the user's word ([TagRepository.parents]): a work with a tag has every tag above it —
+ * shown on its card, read by the model; a work the user said has not a tag has not any tag under it either — not shown,
+ * the model told so. The user's "has not" of a tag above wins over a "has" of a tag under it.
  */
 class TagHierarchy(private val parents: Map<String, Set<String>>) {
     private val children: Map<String, Set<String>> =
-        parents.flatMap { (c, ps) -> ps.map { it to c } }.groupBy({ it.first }, { it.second }).mapValues { it.value.toSet() }
+        parents
+            .flatMap { (c, ps) -> ps.map { it to c } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { it.value.toSet() }
 
-    val empty: Boolean get() = parents.isEmpty()
+    val empty: Boolean
+        get() = parents.isEmpty()
 
     fun parentsOf(tag: String): Set<String> = parents[tag].orEmpty()
 
@@ -26,10 +29,9 @@ class TagHierarchy(private val parents: Map<String, Set<String>>) {
     fun descendants(tag: String): Set<String> = walk(tag, children)
 
     /**
-     * [items] in their order, but every one of them above another before it: a tag above a tag is
-     * shown before it, its own place by its chance kept otherwise — the likeliest first, of a
-     * parent less likely than its child the parent put just before the child. [key] tells an
-     * item's tag.
+     * [items] in their order, but every one of them above another before it: a tag above a tag is shown before it, its
+     * own place by its chance kept otherwise — the likeliest first, of a parent less likely than its child the parent
+     * put just before the child. [key] tells an item's tag.
      */
     fun <T> parentsFirst(items: List<T>, key: (T) -> String): List<T> {
         if (empty || items.size < 2) return items
@@ -58,9 +60,9 @@ class TagHierarchy(private val parents: Map<String, Set<String>>) {
     }
 
     /**
-     * The user's answers on the tags of a [facet] with what they say of the others: a "has" of a tag,
-     * a "has" of every tag above it; a "has not", a "has not" of every tag under it — over any "has"
-     * of one. The answers of the other facets as they are.
+     * The user's answers on the tags of a [facet] with what they say of the others: a "has" of a tag, a "has" of every
+     * tag above it; a "has not", a "has not" of every tag under it — over any "has" of one. The answers of the other
+     * facets as they are.
      */
     fun expand(facet: String, corrections: List<FacetCorrection>): List<FacetCorrection> {
         val own = corrections.filter { it.facet == facet }
@@ -71,12 +73,17 @@ class TagHierarchy(private val parents: Map<String, Set<String>>) {
         val impliedAdded = added.flatMap { ancestors(it.key) }.toSet() - rejected - said
         val impliedRejected = rejected - own.filter { !it.added }.map { it.key }.toSet()
         val itemId = own.first().itemId
-        return corrections.filter { it.facet != facet } + added +
+        return corrections.filter { it.facet != facet } +
+            added +
             impliedAdded.map { FacetCorrection(itemId, facet, it, true, null) } +
-            own.filter { !it.added } + impliedRejected.map { FacetCorrection(itemId, facet, it, false, null) }
+            own.filter { !it.added } +
+            impliedRejected.map { FacetCorrection(itemId, facet, it, false, null) }
     }
 
-    /** A work's tags with every tag above them, but those the user said it has not — [rejected], with every tag under them. */
+    /**
+     * A work's tags with every tag above them, but those the user said it has not — [rejected], with every tag under
+     * them.
+     */
     fun close(keys: List<String>, rejected: Set<String>): List<String> {
         if (empty) return keys
         val kept = keys.filter { it !in rejected }
@@ -84,17 +91,20 @@ class TagHierarchy(private val parents: Map<String, Set<String>>) {
     }
 
     /** What the hierarchy is, for a fingerprint of what is learnt from it. */
-    fun signature(): String = parents.entries.sortedBy { it.key }.joinToString(";") { (c, ps) -> c + ">" + ps.sorted().joinToString(",") }
+    fun signature(): String =
+        parents.entries.sortedBy { it.key }.joinToString(";") { (c, ps) -> c + ">" + ps.sorted().joinToString(",") }
 
     companion object {
         val NONE = TagHierarchy(emptyMap())
 
         /**
-         * An item's values of every facet, the user's answers applied ([Corrected.facets]) — of the
-         * facets of tags, with what the tags above and under say ([hierarchies]: facet to its tags').
+         * An item's values of every facet, the user's answers applied ([Corrected.facets]) — of the facets of tags,
+         * with what the tags above and under say ([hierarchies]: facet to its tags').
          */
         fun corrected(
-            values: Map<String, List<String>>, corrections: List<FacetCorrection>, hierarchies: Map<String, TagHierarchy>,
+            values: Map<String, List<String>>,
+            corrections: List<FacetCorrection>,
+            hierarchies: Map<String, TagHierarchy>,
             /** The facets of one value: a value the user added takes the place of every other ([Corrected.facets]). */
             single: Set<String> = emptySet(),
         ): Map<String, List<String>> {

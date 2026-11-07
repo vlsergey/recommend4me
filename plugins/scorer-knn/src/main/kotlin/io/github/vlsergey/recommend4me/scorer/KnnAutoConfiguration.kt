@@ -5,6 +5,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class KnnAutoConfiguration {
-    @Bean
-    fun knnScorer(): Scorer = KnnScorer()
+    @Bean fun knnScorer(): Scorer = KnnScorer()
 }

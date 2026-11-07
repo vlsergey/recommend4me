@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:FacetSuggester.kt:SuggestionScores.Companion$least == 0 || kept == least &amp;&amp; !before(p, others[least - 1]) || shut(p)</ID>
+    <ID>CyclomaticComplexMethod:FacetSuggester.kt:SuggestionScores.Companion$fun choose: Shown</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:SuggestionTaskFile.kt:SuggestionTaskFile$val (assigned, confirmed, rejected, context, examples) = List(5) { lists(input) }</ID>
+    <ID>LongMethod:SuggestionTaskFile.kt:SuggestionTaskFile$fun read: SuggestionTask</ID>
+    <ID>LoopWithTooManyJumpStatements:FacetSuggester.kt:SuggestionScores.Companion$for</ID>
+    <ID>MagicNumber:PageText.kt:PageText$3</ID>
+    <ID>MagicNumber:RankingPairs.kt:RankingPairs$0.5</ID>
+    <ID>MagicNumber:SuggestionTaskFile.kt:SuggestionTaskFile$3</ID>
+    <ID>MagicNumber:SuggestionTaskFile.kt:SuggestionTaskFile$5</ID>
+    <ID>MagicNumber:SuggestionTaskFile.kt:SuggestionTaskFile$6</ID>
+    <ID>MaxLineLength:FacetSuggester.kt:SuggestionTask$"$itemCount assigned, ${confirmed.size} confirmed, ${rejected.size} rejected, ${context.size} contexts, ${allowed.size} allowed"</ID>
+    <ID>ReturnCount:FacetSuggester.kt:CardRows.Companion$fun put: CardRows?</ID>
+    <ID>ReturnCount:PageText.kt:PageText$fun russianDate: Instant?</ID>
+    <ID>TooManyFunctions:I18nKeys.kt:I18nKeys</ID>
+    <ID>TooManyFunctions:Source.kt:Source</ID>
+    <ID>TooManyFunctions:SourceContext.kt:ItemStore</ID>
+  </CurrentIssues>
+</SmellBaseline>

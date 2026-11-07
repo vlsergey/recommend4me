@@ -1,10 +1,12 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 /*
- * Every Kotlin module: JDK 25, the Vector API, JUnit 5.
+ * Every Kotlin module: JDK 25, the Vector API, JUnit 5; its code formatted by ktfmt and checked by detekt.
  */
 plugins {
     id("org.jetbrains.kotlin.jvm")
+    id("dev.detekt")
+    id("com.diffplug.spotless")
 }
 
 val catalog = the<VersionCatalogsExtension>().named("libs")
@@ -26,16 +28,30 @@ kotlin {
     }
 }
 
-// No file of the module's sources longer than it may be ([FileLength]): checked before anything is compiled
-val checkFileLength = tasks.register("checkFileLength") {
-    val sources = fileTree("src") { include("**/*.kt", "**/*.kts", "**/*.java") }
-    val root = rootProject.projectDir
-    inputs.files(sources)
-    inputs.files(rootProject.file(FileLength.KNOWN)).optional()
-    doLast { FileLength.check(root, sources.files) }
+// THE FORM OF THE CODE (AGENTS.md): ktfmt, kotlinlang's style, lines of 120 at most — `spotlessApply` formats,
+// `spotlessCheck` fails what is not formatted so
+spotless {
+    kotlin {
+        target("src/**/*.kt")
+        ktfmt(catalog.findVersion("ktfmt").get().requiredVersion).kotlinlangStyle().configure { it.setMaxWidth(120) }
+    }
+    kotlinGradle {
+        target("*.gradle.kts")
+        ktfmt(catalog.findVersion("ktfmt").get().requiredVersion).kotlinlangStyle().configure { it.setMaxWidth(120) }
+    }
 }
-tasks.named("compileKotlin") { dependsOn(checkFileLength) }
-tasks.named("check") { dependsOn(checkFileLength) }
+
+// THE RULES OF THE CODE (AGENTS.md): detekt's default profile, what config/detekt.yml sets otherwise
+// alone, of the module's sources and tests. Before the tests, with the form: every test run checks both
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.file("config/detekt.yml"))
+    // FOR A WHILE: what broke the default profile when it was turned on (2026-11-07), being fixed a rule after
+    // another; a module's file goes once nothing is left in it
+    baseline = rootProject.file("config/detekt/${project.path.removePrefix(":").replace(':', '-')}.xml")
+    parallel = true
+}
+tasks.withType<Test>().configureEach { dependsOn(tasks.named("detekt"), tasks.named("spotlessCheck")) }
 
 dependencies {
     "testImplementation"(platform(catalog.findLibrary("spring-boot-bom").get()))

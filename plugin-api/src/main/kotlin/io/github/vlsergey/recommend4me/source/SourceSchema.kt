@@ -5,47 +5,54 @@ import io.github.vlsergey.recommend4me.contenttype.StandardNumber
 import io.github.vlsergey.recommend4me.contenttype.StandardSignal
 
 /**
- * What a source knows of its items beyond the title, and how the application uses each thing.
- * Everything is by its key: what the user is shown it by are words of the interface — of the
- * source's own namespace, or the standard one ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]).
+ * What a source knows of its items beyond the title, and how the application uses each thing. Everything is by its key:
+ * what the user is shown it by are words of the interface — of the source's own namespace, or the standard one
+ * ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]).
  */
 class SourceSchema(
     val facets: List<FacetDef> = emptyList(),
     val numbers: List<NumberDef> = emptyList(),
     val texts: List<TextDef> = emptyList(),
-    /** The source keeps the opinions of other people as reviews; its name of them ("Reviews", "Comments") is its word "reviews". */
+    /**
+     * The source keeps the opinions of other people as reviews; its name of them ("Reviews", "Comments") is its word
+     * "reviews".
+     */
     val reviews: Boolean = false,
     /** The source keeps the text of a work in parts; its name of them ("Chapters") is its word "parts". */
     val parts: Boolean = false,
-    /** Whether an item has a version that changes (a game's release) or is the same work whatever is added to it (a book). */
+    /**
+     * Whether an item has a version that changes (a game's release) or is the same work whatever is added to it (a
+     * book).
+     */
     val versioned: Boolean = false,
     /**
-     * The key of the text ([texts]) where the site writes the characters and pairings of a work as
-     * its author pleases (ficbook's "Пэйринг и персонажи"): shown above the characters and pairings the
-     * application works out of it ([UniverseFacets][io.github.vlsergey.recommend4me.universe.UniverseFacets]).
+     * The key of the text ([texts]) where the site writes the characters and pairings of a work as its author pleases
+     * (ficbook's "Пэйринг и персонажи"): shown above the characters and pairings the application works out of it
+     * ([UniverseFacets][io.github.vlsergey.recommend4me.universe.UniverseFacets]).
      */
     val universeLine: String? = null,
     /**
-     * The key of the facet ([facets]) the site tells by whether a work is fan fiction or an original
-     * one (ficbook's fandoms, "Ориджиналы" among them; author.today's genres, "Фанфик" among them):
-     * shown above the kind of the work's universe the application keeps.
+     * The key of the facet ([facets]) the site tells by whether a work is fan fiction or an original one (ficbook's
+     * fandoms, "Ориджиналы" among them; author.today's genres, "Фанфик" among them): shown above the kind of the work's
+     * universe the application keeps.
      */
     val kindFrom: String? = null,
     /**
-     * The pictures of a work tell what it is — a game's screenshots — and are shown before its
-     * texts; otherwise its cover is a picture beside them (a book's).
+     * The pictures of a work tell what it is — a game's screenshots — and are shown before its texts; otherwise its
+     * cover is a picture beside them (a book's).
      */
     val picturesTell: Boolean = false,
 ) {
     fun facet(key: String): FacetDef? = facets.firstOrNull { it.key == key }
+
     fun number(key: String): NumberDef? = numbers.firstOrNull { it.key == key }
+
     fun text(key: String): TextDef? = texts.firstOrNull { it.key == key }
 }
 
 /**
- * A categorical property of items: tags, an engine, a status, a developer, a fandom. An item has
- * any number of values of a facet; a value has a stable key and a name to show (they may be the
- * same).
+ * A categorical property of items: tags, an engine, a status, a developer, a fandom. An item has any number of values
+ * of a facet; a value has a stable key and a name to show (they may be the same).
  */
 class FacetDef(
     val key: String,
@@ -54,76 +61,82 @@ class FacetDef(
     /** The model reads it: every value seen in at least two rated works is a feature. */
     val feature: Boolean = true,
     /**
-     * Facets of different sources of one content type with the same [shared] key are one facet for
-     * the model and the filters ("author", "tag"); null — the facet is the source's alone.
+     * Facets of different sources of one content type with the same [shared] key are one facet for the model and the
+     * filters ("author", "tag"); null — the facet is the source's alone.
      */
     val shared: String? = null,
     /** How much a match of a search in its values says of the item, 0 — not searched. */
     val searchWeight: Float = 0f,
     /** Shown on the card of an item. */
     val onCard: Boolean = false,
-    /** The facet names who made the work — the author, the developer: a search for the whole name finds the work first. */
+    /**
+     * The facet names who made the work — the author, the developer: a search for the whole name finds the work first.
+     */
     val names: Boolean = false,
-    /** The items without a value of it are a line of the filter (a game with no status is "in development"), named by the source's word "facet.<key>.none". */
+    /**
+     * The items without a value of it are a line of the filter (a game with no status is "in development"), named by
+     * the source's word "facet.<key>.none".
+     */
     val none: Boolean = false,
     /**
-     * The values a work should have are worked out from its text and its other values, and shown
-     * to the user to confirm or reject — for tags a site leaves to its authors, who set them
-     * carelessly or not at all.
+     * The values a work should have are worked out from its text and its other values, and shown to the user to confirm
+     * or reject — for tags a site leaves to its authors, who set them carelessly or not at all.
      */
     val suggest: Boolean = false,
     /**
-     * The values of the facet are worked out from the work's texts and its other values and given
-     * to it as its own — the site's values are only examples to learn from (pairings and
-     * characters a site leaves to its authors to write as they please). The values the site gives
-     * that do not fit are shown marked; the user corrects the worked out ones as any other.
+     * The values of the facet are worked out from the work's texts and its other values and given to it as its own —
+     * the site's values are only examples to learn from (pairings and characters a site leaves to its authors to write
+     * as they please). The values the site gives that do not fit are shown marked; the user corrects the worked out
+     * ones as any other.
      */
     val infer: Boolean = false,
-    /** The key of a text ([TextDef]) holding the facet's values as the site writes them: shown above the worked out values, and read by the suggester. */
+    /**
+     * The key of a text ([TextDef]) holding the facet's values as the site writes them: shown above the worked out
+     * values, and read by the suggester.
+     */
     val original: String? = null,
     /** What the facet tells of the work, for the card to put it where it decides; null — one among the rest. */
     val role: FacetRole? = null,
     /** The standard facet of the content type this one is ([StandardFacet.asFacet]); null — the source's own. */
     val standard: StandardFacet? = null,
     /**
-     * The facet is of the application's layer over the sources — the standard values worked out for
-     * every work, the universe, the characters — and its values are corrected: the user's answers
-     * are a patch of the source, whoever reads it. A facet of the site is the site's word as it is:
-     * shown, read by the model, never corrected.
+     * The facet is of the application's layer over the sources — the standard values worked out for every work, the
+     * universe, the characters — and its values are corrected: the user's answers are a patch of the source, whoever
+     * reads it. A facet of the site is the site's word as it is: shown, read by the model, never corrected.
      */
     val editable: Boolean = false,
     /**
-     * The key of a facet of the site whose values are this one's examples, matched by their names —
-     * the site's tags of the standard tags: the model learns from them, a value the site has raises
-     * the chance of the work's, one it lacks says little ([SuggestionTask.lackWeight][io.github.vlsergey.recommend4me.suggestion.SuggestionTask.lackWeight]).
+     * The key of a facet of the site whose values are this one's examples, matched by their names — the site's tags of
+     * the standard tags: the model learns from them, a value the site has raises the chance of the work's, one it lacks
+     * says little ([SuggestionTask.lackWeight][io.github.vlsergey.recommend4me.suggestion.SuggestionTask.lackWeight]).
      */
     val examplesFrom: String? = null,
     /**
-     * Of a facet of the layer: the key of the facet of the site that is the site's own word on it —
-     * its tags of the work's tags, its fandoms of the universes, its line of pairings and characters
-     * of the characters — shown right above it, to answer by; null when the site has none.
+     * Of a facet of the layer: the key of the facet of the site that is the site's own word on it — its tags of the
+     * work's tags, its fandoms of the universes, its line of pairings and characters of the characters — shown right
+     * above it, to answer by; null when the site has none.
      */
     val originalFacet: String? = null,
     /**
-     * A work has one value of it at most — the language of a book: of the values the model works out
-     * the likeliest alone is given, and a value the user adds takes the place of every other.
+     * A work has one value of it at most — the language of a book: of the values the model works out the likeliest
+     * alone is given, and a value the user adds takes the place of every other.
      */
     val single: Boolean = false,
     /**
-     * The user may say the work's values of it are all named — the languages of a game: the others
-     * are then not offered and count as rejected for the model; the button "No other values".
+     * The user may say the work's values of it are all named — the languages of a game: the others are then not offered
+     * and count as rejected for the model; the button "No other values".
      */
     val completable: Boolean = false,
     /**
-     * Of a facet of one value the model works out ([single], [infer]): every work has one — the age
-     * rating — the likeliest given however likely, not only one more likely than not.
+     * Of a facet of one value the model works out ([single], [infer]): every work has one — the age rating — the
+     * likeliest given however likely, not only one more likely than not.
      */
     val required: Boolean = false,
 )
 
 /**
- * What a facet tells of a work. The card of a work is the same for every source: the facts that
- * decide whether to read or play it first, the rest on demand — and a role says which are which.
+ * What a facet tells of a work. The card of a work is the same for every source: the facts that decide whether to read
+ * or play it first, the rest on demand — and a role says which are which.
  */
 enum class FacetRole {
     /** Who made the work: the author, the developer — their other works are shown with the user's grades. */
@@ -142,9 +155,8 @@ enum class FacetRole {
     CONTENT,
 
     /**
-     * The site's own word on what the application works out for every work — its tags, its
-     * fandoms, its pairings and characters as the site writes them: shown first, above the values
-     * the user answers on, to answer by.
+     * The site's own word on what the application works out for every work — its tags, its fandoms, its pairings and
+     * characters as the site writes them: shown first, above the values the user answers on, to answer by.
      */
     ORIGINAL,
 }
@@ -197,9 +209,9 @@ class NumberDef(
 /**
  * A text of an item: an overview, an annotation, a changelog.
  *
- * Every text with a [block] is encoded by the text encoder and its vector is a block of the
- * model's input under that key: two sources' annotations of one content type share
- * `text:annotation`. A text without one is shown and searched only.
+ * Every text with a [block] is encoded by the text encoder and its vector is a block of the model's input under that
+ * key: two sources' annotations of one content type share `text:annotation`. A text without one is shown and searched
+ * only.
  */
 class TextDef(
     val key: String,
@@ -214,10 +226,10 @@ class TextDef(
 )
 
 /**
- * A kind of the user's own actions on the site ([SiteSignals]) and the values of it the interface
- * names ([values], by the value as the source writes it); a value not named is shown as it is.
- * Shown, NEVER READ BY THE MODEL: what the user did with a work — read it, liked it, shelved it,
- * reacted to it, hid it, followed it — is their verdict on it, the very thing the grades teach.
+ * A kind of the user's own actions on the site ([SiteSignals]) and the values of it the interface names ([values], by
+ * the value as the source writes it); a value not named is shown as it is. Shown, NEVER READ BY THE MODEL: what the
+ * user did with a work — read it, liked it, shelved it, reacted to it, hid it, followed it — is their verdict on it,
+ * the very thing the grades teach.
  */
 class SignalDef(
     val key: String,
@@ -238,4 +250,7 @@ class SettingDef(
     val hint: Boolean = false,
 )
 
-enum class SettingKind { TEXT, NUMBER }
+enum class SettingKind {
+    TEXT,
+    NUMBER,
+}

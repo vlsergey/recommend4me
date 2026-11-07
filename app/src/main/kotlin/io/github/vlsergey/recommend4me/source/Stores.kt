@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.source
 
-import io.github.vlsergey.recommend4me.tagtext.TagTextAnswerRepository
+import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.capture.CapturedPageRepository
 import io.github.vlsergey.recommend4me.capture.WantedPageRepository
 import io.github.vlsergey.recommend4me.contenttype.ContentType
@@ -8,11 +8,10 @@ import io.github.vlsergey.recommend4me.contenttype.StandardFacet
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.CorrectionRepository
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
-import io.github.vlsergey.recommend4me.work.WorkPairJournal
-import io.github.vlsergey.recommend4me.work.WorkRepository
 import io.github.vlsergey.recommend4me.correction.UnknownRepository
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.draft.DraftRepository
+import io.github.vlsergey.recommend4me.duplicate.DuplicateRepository
 import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.InterestRepository
@@ -28,69 +27,81 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
 import io.github.vlsergey.recommend4me.rating.RatingRepository
 import io.github.vlsergey.recommend4me.review.ReviewRepository
+import io.github.vlsergey.recommend4me.search.SearchJudgmentRepository
+import io.github.vlsergey.recommend4me.search.SearchScoreRepository
 import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
 import io.github.vlsergey.recommend4me.setvector.SetVectorRepository
 import io.github.vlsergey.recommend4me.signal.SignalRepository
 import io.github.vlsergey.recommend4me.size.WorkSizeRepository
 import io.github.vlsergey.recommend4me.suggestion.SuggestionRepository
 import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
-import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
-import io.github.vlsergey.recommend4me.duplicate.DuplicateRepository
-import io.github.vlsergey.recommend4me.author.AuthorRepository
-import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.tag.TagRepository
+import io.github.vlsergey.recommend4me.tagtext.TagTextAnswerRepository
+import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
+import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseNames
 import io.github.vlsergey.recommend4me.universe.UniverseRepository
-import io.github.vlsergey.recommend4me.search.SearchJudgmentRepository
-import io.github.vlsergey.recommend4me.search.SearchScoreRepository
+import io.github.vlsergey.recommend4me.work.WorkPairJournal
+import io.github.vlsergey.recommend4me.work.WorkRepository
+import java.nio.file.Path
+import java.util.concurrent.locks.ReentrantLock
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
-import java.nio.file.Path
-import java.util.concurrent.locks.ReentrantLock
 
 /** Everything of one source: its plugin, its folder and the repositories over its three database files. */
 class SourceStore(
-    val source: Source, contentType: ContentType, val folder: Path, databases: Databases, events: ApplicationEventPublisher,
+    val source: Source,
+    contentType: ContentType,
+    val folder: Path,
+    databases: Databases,
+    events: ApplicationEventPublisher,
     /** The user's languages, their first first. */
     languages: List<String>,
 ) {
-    val id: String get() = source.id
-    val type: String get() = source.contentType
+    val id: String
+        get() = source.id
+
+    val type: String
+        get() = source.contentType
 
     /**
-     * What the application knows of the source's items: the source's own schema — the site's word,
-     * never corrected — and the application's layer over it, which the user corrects: the universe
-     * of fan fiction, the standard facets of the content type worked out for every work.
+     * What the application knows of the source's items: the source's own schema — the site's word, never corrected —
+     * and the application's layer over it, which the user corrects: the universe of fan fiction, the standard facets of
+     * the content type worked out for every work.
      */
     val schema: SourceSchema = run {
-        val layer = (if (contentType.universes) UniverseFacet.defs(source.schema) else emptyList()) +
-            contentType.layer.map { standard ->
-                fun keyOf(of: StandardFacet?) = of?.let { o -> source.schema.facets.firstOrNull { it.standard === o }?.key }
-                val examples = keyOf(standard.examples)
-                standard.asLayerFacet(examplesFrom = examples, originalFacet = examples ?: keyOf(standard.original))
-            }
-        if (layer.isEmpty()) source.schema else SourceSchema(
-            facets = source.schema.facets + layer,
-            numbers = source.schema.numbers,
-            texts = source.schema.texts,
-            reviews = source.schema.reviews,
-            parts = source.schema.parts,
-            versioned = source.schema.versioned,
-            universeLine = source.schema.universeLine,
-            kindFrom = source.schema.kindFrom,
-            picturesTell = source.schema.picturesTell,
-        )
+        val layer =
+            (if (contentType.universes) UniverseFacet.defs(source.schema) else emptyList()) +
+                contentType.layer.map { standard ->
+                    fun keyOf(of: StandardFacet?) = of?.let { o ->
+                        source.schema.facets.firstOrNull { it.standard === o }?.key
+                    }
+                    val examples = keyOf(standard.examples)
+                    standard.asLayerFacet(examplesFrom = examples, originalFacet = examples ?: keyOf(standard.original))
+                }
+        if (layer.isEmpty()) source.schema
+        else
+            SourceSchema(
+                facets = source.schema.facets + layer,
+                numbers = source.schema.numbers,
+                texts = source.schema.texts,
+                reviews = source.schema.reviews,
+                parts = source.schema.parts,
+                versioned = source.schema.versioned,
+                universeLine = source.schema.universeLine,
+                kindFrom = source.schema.kindFrom,
+                picturesTell = source.schema.picturesTell,
+            )
     }
 
     private val dbs = databases.of(source.id)
 
     /**
-     * One writer of what the site says at a time: a page the extension sends and a job's or a
-     * refresh's download of the same work write the same rows, and a read-then-write of each — or
-     * H2's MERGE of two at once — breaks a key. Taken by every write of the source's context, a few
-     * milliseconds each; the parsing and the downloading stay outside it.
+     * One writer of what the site says at a time: a page the extension sends and a job's or a refresh's download of the
+     * same work write the same rows, and a read-then-write of each — or H2's MERGE of two at once — breaks a key. Taken
+     * by every write of the source's context, a few milliseconds each; the parsing and the downloading stay outside it.
      */
     val writing = ReentrantLock()
 
@@ -124,22 +135,38 @@ class SourceStore(
     val signals = SignalRepository(dbs.ratings.dsl)
 
     /** What is worked out of the source's facets, in the model database of its content type. */
-    /** The drafts of the layer of the source's works ([LayerDrafts][io.github.vlsergey.recommend4me.draft.LayerDrafts]), in the model database of its content type. */
+    /**
+     * The drafts of the layer of the source's works ([LayerDrafts][io.github.vlsergey.recommend4me.draft.LayerDrafts]),
+     * in the model database of its content type.
+     */
     val drafts = DraftRepository(databases.model(source.contentType), source.id)
 
     val suggestions = SuggestionRepository(databases.model(source.contentType), source.id)
 
-    /** The names of the layer of universes: the dictionary's of the content type, whatever the source; none for a type without universes. */
-    private val dictionaryNames = if (contentType.universes) UniverseNames(UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))) else null
+    /**
+     * The names of the layer of universes: the dictionary's of the content type, whatever the source; none for a type
+     * without universes.
+     */
+    private val dictionaryNames =
+        if (contentType.universes)
+            UniverseNames(
+                UniverseRepository(
+                    databases.dictionaries.dsl,
+                    languages,
+                    CatalogueRenameRepository(databases.preferences.dsl),
+                )
+            )
+        else null
 
     /**
-     * What the values [keys] of a facet are shown by: of the layer of universes, as the dictionary
-     * names them ([UniverseNames]); of any other facet, as the source does.
+     * What the values [keys] of a facet are shown by: of the layer of universes, as the dictionary names them
+     * ([UniverseNames]); of any other facet, as the source does.
      */
     fun names(facet: String, keys: Collection<String>): Map<String, String> {
         if (keys.isEmpty()) return emptyMap()
         // A language by its code, named as the model reads it ([StandardLanguages])
-        if (StandardLanguages.ofLanguages(facet)) return keys.mapNotNull { k -> StandardLanguages.NAMES[k]?.let { k to it } }.toMap()
+        if (StandardLanguages.ofLanguages(facet))
+            return keys.mapNotNull { k -> StandardLanguages.NAMES[k]?.let { k to it } }.toMap()
         if (facet in tagFacets) {
             // The tags as the user and every site name them ([TagRepository]); one the user made up, by the source
             val shown = tags.shown(keys)
@@ -149,11 +176,17 @@ class SourceStore(
         return dictionaryNames?.of(facet, keys) { items.facetNames(facet, it!!) } ?: items.facetNames(facet, keys)
     }
 
-    /** What the catalogue says of the values [keys] of a facet of universes or characters: key to description; none of any other. */
+    /**
+     * What the catalogue says of the values [keys] of a facet of universes or characters: key to description; none of
+     * any other.
+     */
     fun descriptions(facet: String, keys: Collection<String>): Map<String, String> =
         if (keys.isEmpty()) emptyMap() else dictionaryNames?.descriptions(facet, keys).orEmpty()
 
-    /** Every name the catalogue knows the values [keys] of a facet of characters by, for a search by any of them: key to names; none of any other facet. */
+    /**
+     * Every name the catalogue knows the values [keys] of a facet of characters by, for a search by any of them: key to
+     * names; none of any other facet.
+     */
     fun allNames(facet: String, keys: Collection<String>): Map<String, List<String>> =
         if (keys.isEmpty()) emptyMap() else dictionaryNames?.allNames(facet, keys).orEmpty()
 
@@ -163,32 +196,44 @@ class SourceStore(
         if (facet in tagFacets) return tags.shown(null)
         // Every language, a work in it or not yet: a value to answer by
         if (StandardLanguages.ofLanguages(facet)) return StandardLanguages.NAMES
-        return dictionaryNames?.of(facet, null) { if (it == null) items.facetNames(facet) else items.facetNames(facet, it) } ?: items.facetNames(facet)
+        return dictionaryNames?.of(facet, null) {
+            if (it == null) items.facetNames(facet) else items.facetNames(facet, it)
+        } ?: items.facetNames(facet)
     }
 
     /**
-     * The key of the words the value [key] of a facet is SHOWN by, when it is a value of the
-     * application's own — a standard value ("standard:facet.status.value.finished"), an original
-     * character ("standard:character.oc-female"); null of any other, shown by its name. Its name
-     * ([names]) keeps one language all the same: the model and the search read it.
+     * The key of the words the value [key] of a facet is SHOWN by, when it is a value of the application's own — a
+     * standard value ("standard:facet.status.value.finished"), an original character ("standard:character.oc-female");
+     * null of any other, shown by its name. Its name ([names]) keeps one language all the same: the model and the
+     * search read it.
      */
     fun nameKey(facet: String, key: String): String? =
-        schema.facet(facet)?.let { I18nKeys.standardValue(it, key) } ?: UniverseFacet.originalCharacterKey(key) ?: languageKey(facet, key)
+        schema.facet(facet)?.let { I18nKeys.standardValue(it, key) }
+            ?: UniverseFacet.originalCharacterKey(key)
+            ?: languageKey(facet, key)
 
-    /** Of a language of the layer or of a site, the key it is shown by in the interface's language ([I18nKeys.language]). */
+    /**
+     * Of a language of the layer or of a site, the key it is shown by in the interface's language
+     * ([I18nKeys.language]).
+     */
     private fun languageKey(facet: String, key: String): String? {
         val standard = schema.facet(facet)?.standard ?: return null
         val language = StandardLanguages.ofLanguages(standard.key) || standard === StandardLanguages.LANGUAGE
         return if (language && key in StandardLanguages.NAMES) I18nKeys.language(key) else null
     }
 
-    /** The user's word on the sites' free tags of the content type: merged, named, told apart — every source's alike. */
+    /**
+     * The user's word on the sites' free tags of the content type: merged, named, told apart — every source's alike.
+     */
     val tags = TagRepository(databases.dictionaries.dsl)
 
     /** The normalized authors: the authors of every site bound to them. */
     val authors = AuthorRepository(databases.dictionaries.dsl)
 
-    /** The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the user added takes the place of every other. */
+    /**
+     * The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the
+     * user added takes the place of every other.
+     */
     val singleFacets: Set<String> = schema.facets.filter { it.single }.map { it.key }.toSet()
 
     /** The facets of the layer learnt from the sites' tags by their names: the tags the user merges and names. */
@@ -203,7 +248,8 @@ class SourceStore(
     }
 
     /** The tags the user ignores of every facet of tags that has any, read now: facet to their keys. */
-    fun ignoredTags(): Map<String, Set<String>> = tags.ignored().takeIf { it.isNotEmpty() }?.let { ignored -> tagFacets.associateWith { ignored } }.orEmpty()
+    fun ignoredTags(): Map<String, Set<String>> =
+        tags.ignored().takeIf { it.isNotEmpty() }?.let { ignored -> tagFacets.associateWith { ignored } }.orEmpty()
 
     /** The source database, for the source's own tables. */
     val sourceDsl = dbs.source.dsl
@@ -211,13 +257,18 @@ class SourceStore(
 
 /** Everything of one content type: its sources, the links across them, what is learnt. */
 class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases: Databases, languages: List<String>) {
-    val id: String get() = type.id
+    val id: String
+        get() = type.id
 
-    val links = TypeLinkRepository(
-        WorkRepository(databases.dictionaries.dsl), WorkPairJournal(databases.dictionaries.dsl), sources.map { it.id },
-        sources.flatMapTo(HashSet()) { it.singleFacets },
-    )
-    val universes = UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
+    val links =
+        TypeLinkRepository(
+            WorkRepository(databases.dictionaries.dsl),
+            WorkPairJournal(databases.dictionaries.dsl),
+            sources.map { it.id },
+            sources.flatMapTo(HashSet()) { it.singleFacets },
+        )
+    val universes =
+        UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
     val authors = AuthorRepository(databases.dictionaries.dsl)
@@ -234,14 +285,21 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
 /** The stores of every source and content type. */
 @Component
 class Stores(
-    plugins: Plugins, databases: Databases, folder: DataFolder, events: ApplicationEventPublisher,
+    plugins: Plugins,
+    databases: Databases,
+    folder: DataFolder,
+    events: ApplicationEventPublisher,
     /** The user's languages, their first first: what the texts of the dictionaries are shown in. */
     @Value("\${recommend4me.languages:ru,en}") languages: List<String>,
 ) {
 
-    val sources: List<SourceStore> = plugins.sources.map { SourceStore(it, plugins.type(it.contentType)!!, folder.source(it.id), databases, events, languages) }
+    val sources: List<SourceStore> =
+        plugins.sources.map {
+            SourceStore(it, plugins.type(it.contentType)!!, folder.source(it.id), databases, events, languages)
+        }
 
-    val types: List<TypeStore> = plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases, languages) }
+    val types: List<TypeStore> =
+        plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases, languages) }
 
     fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
 

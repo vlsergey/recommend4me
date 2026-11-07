@@ -4,13 +4,13 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * The triangle resampler as PIL and torch do it, ported from local-ai-chroma-enf-lora's
- * `images/Resample.kt`: for a shrink the filter widens with the factor (antialiasing), for a
- * stretch it stays one pixel wide, and every output pixel is a normalised weighted sum of its span.
+ * The triangle resampler as PIL and torch do it, ported from local-ai-chroma-enf-lora's `images/Resample.kt`: for a
+ * shrink the filter widens with the factor (antialiasing), for a stretch it stays one pixel wide, and every output
+ * pixel is a normalised weighted sum of its span.
  *
- * Two flavours, because SigLIP2 NaFlex wants two exact answers: the picture resized as the image
- * processor resizes it (8-bit, PIL's fixed-point rounding), and the positional grid resized as
- * the model resizes it (float, torch's antialiased bilinear interpolation).
+ * Two flavours, because SigLIP2 NaFlex wants two exact answers: the picture resized as the image processor resizes it
+ * (8-bit, PIL's fixed-point rounding), and the positional grid resized as the model resizes it (float, torch's
+ * antialiased bilinear interpolation).
  */
 object Resample {
     private const val PRECISION = 22
@@ -49,14 +49,15 @@ object Resample {
     }
 
     /** PIL's normalize_coeffs_8bpc: the weights as fixed-point integers. */
-    private fun fixed(w: DoubleArray): IntArray = IntArray(w.size) { x ->
-        val v = w[x] * (1 shl PRECISION)
-        if (w[x] < 0) (v - 0.5).toInt() else (v + 0.5).toInt()
-    }
+    private fun fixed(w: DoubleArray): IntArray =
+        IntArray(w.size) { x ->
+            val v = w[x] * (1 shl PRECISION)
+            if (w[x] < 0) (v - 0.5).toInt() else (v + 0.5).toInt()
+        }
 
     /**
-     * An 8-bit interleaved picture (`ch` channels) resized to outW×outH as PIL's
-     * Image.resize(BILINEAR) does it: the horizontal pass, then the vertical, each rounded to bytes.
+     * An 8-bit interleaved picture (`ch` channels) resized to outW×outH as PIL's Image.resize(BILINEAR) does it: the
+     * horizontal pass, then the vertical, each rounded to bytes.
      */
     fun u8(src: ByteArray, w: Int, h: Int, ch: Int, outW: Int, outH: Int): ByteArray {
         var cur = src
@@ -103,8 +104,8 @@ object Resample {
     private fun clip8(v: Long): Byte = (if (v >= 255) 255 else if (v <= 0) 0 else v.toInt()).toByte()
 
     /**
-     * Float planes (`ch` planes of h×w) resized to outW×outH as torch's antialiased bilinear
-     * interpolation does it — the same weights, float arithmetic, no rounding between the passes.
+     * Float planes (`ch` planes of h×w) resized to outW×outH as torch's antialiased bilinear interpolation does it —
+     * the same weights, float arithmetic, no rounding between the passes.
      */
     fun f32(src: FloatArray, w: Int, h: Int, ch: Int, outW: Int, outH: Int): FloatArray {
         var cur = src

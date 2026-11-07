@@ -5,13 +5,13 @@ import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.util.Random
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class BilinearTest {
 
@@ -21,12 +21,17 @@ class BilinearTest {
         val n = 12
         val d = 6
         val m = 4
-        fun block(name: String, every: Int) = Matrix(n, d).let { b ->
-            val present = BooleanArray(n) { it % every != 0 }
-            for (i in 0 until n) if (present[i]) b.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, b.row(i), d)
-            InputBlock.of(name, b, present)
-        }
-        val names = Matrix(m, d).also { v -> for (j in 0 until m) v.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, v.row(j), d) }
+        fun block(name: String, every: Int) =
+            Matrix(n, d).let { b ->
+                val present = BooleanArray(n) { it % every != 0 }
+                for (i in 0 until n) if (present[i])
+                    b.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, b.row(i), d)
+                InputBlock.of(name, b, present)
+            }
+        val names =
+            Matrix(m, d).also { v ->
+                for (j in 0 until m) v.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, v.row(j), d)
+            }
         return SuggestionTask(
             itemIds = List(n) { "i$it" },
             inputs = listOf(block("text:title", 5), block("text:annotation", 3)),
@@ -40,7 +45,10 @@ class BilinearTest {
             lackWeight = 0.5,
             examples = List(n) { i -> if (i % 2 == 0) intArrayOf(i % m) else IntArray(0) },
             hints = IntArray(m) { it }.let { all -> List(6) { k -> NameHint(k % m, all) } },
-            hintTexts = Matrix(6, d).also { t -> for (k in 0 until 6) t.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, t.row(k), d) },
+            hintTexts =
+                Matrix(6, d).also { t ->
+                    for (k in 0 until 6) t.held.put(FloatArray(d) { random.nextGaussian().toFloat() }, 0, t.row(k), d)
+                },
             // Values some items may have, one array for them all, one of them barred to an item; a draft not confirmed
             allowed = intArrayOf(2, 0, 1).let { shared -> List(n) { i -> if (i % 3 == 1) shared else null } },
             barred = List(n) { i -> if (i == 7) intArrayOf(0) else IntArray(0) },
@@ -60,11 +68,17 @@ class BilinearTest {
             val label = FloatArray(m)
             if (task.assigned[i].isNotEmpty()) {
                 val allowed = task.allowed[i]?.toSet()
-                for (v in 0 until m) if ((allowed == null || v in allowed) && v !in task.barred[i]) weight[v] = task.lackWeight.toFloat()
+                for (v in 0 until m) if ((allowed == null || v in allowed) && v !in task.barred[i])
+                    weight[v] = task.lackWeight.toFloat()
             }
             task.rejected[i].forEach { weight[it] = 1f }
-            task.assigned[i].forEach { weight[it] = 1f; label[it] = 1f }
-            task.drafts[i].forEach { if (label[it] > 0f && it !in task.confirmed[i]) weight[it] = task.draftWeight.toFloat() }
+            task.assigned[i].forEach {
+                weight[it] = 1f
+                label[it] = 1f
+            }
+            task.drafts[i].forEach {
+                if (label[it] > 0f && it !in task.confirmed[i]) weight[it] = task.draftWeight.toFloat()
+            }
             val expected = (0 until m).filter { weight[it] != 0f }.map { Triple(it, weight[it], label[it]) }
             val read = ArrayList<Triple<Int, Float, Float>>()
             pairs.forEach(i) { v, w, y -> read += Triple(v, w, y) }
@@ -101,15 +115,30 @@ class BilinearTest {
     @Test
     fun `every model in one product has the loss and the gradient it has alone, without names`() {
         val t = task()
-        val task = SuggestionTask(
-            t.itemIds, t.inputs, t.values, t.valueKeys, t.assigned, t.confirmed, t.rejected, t.context, t.contextKeys,
-            t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
-        )
+        val task =
+            SuggestionTask(
+                t.itemIds,
+                t.inputs,
+                t.values,
+                t.valueKeys,
+                t.assigned,
+                t.confirmed,
+                t.rejected,
+                t.context,
+                t.contextKeys,
+                t.allowed,
+                t.groupings,
+                t.lackWeight,
+                t.examples,
+                emptyList(),
+                Matrix(0, 0),
+                t.drafts,
+                t.draftWeight,
+            )
         compareTogether(task)
     }
 
-    @Test
-    fun `every model in one product has the loss and the gradient it has alone`() = compareTogether(task())
+    @Test fun `every model in one product has the loss and the gradient it has alone`() = compareTogether(task())
 
     @Test
     fun `every model in one product on the card has the loss and the gradient it has alone`() {
@@ -127,7 +156,8 @@ class BilinearTest {
         val lambdas = floatArrayOf(0.1f, 0.01f, 0.001f, 0.01f)
         val folds = intArrayOf(0, 1, 2, 4)
         val ensemble = Ensemble(problem, rank, lambdas, folds, card)
-        if (card != null) assertTrue(ensemble.featuresOnCard && ensemble.pairsOnCardUsed, "the features or the pairs not on the card")
+        if (card != null)
+            assertTrue(ensemble.featuresOnCard && ensemble.pairsOnCardUsed, "the features or the pairs not on the card")
         val alone = Bilinear(problem, rank)
         val random = Random(17)
         val thetas = List(lambdas.size) { FloatArray(alone.size) { (random.nextGaussian() * 0.3).toFloat() } }
@@ -140,19 +170,22 @@ class BilinearTest {
             val worst = abs(grad[at] - gradients[k][at]) / max(1e-4f, abs(grad[at]))
             val dx = problem.design.itemWidth * rank
             val dz = problem.design.valueWidth * rank
-            val part = when {
-                at < dx -> "A"
-                at < dx + dz -> "B"
-                at < dx + dz + problem.m * rank -> "E"
-                at < dx + dz + problem.m * rank + problem.m -> "bias"
-                else -> "pair"
-            }
-            assertTrue(worst < 1e-3, "model $k: the worst relative difference of the gradient $worst, at $at of $part: ${grad[at]} alone, ${gradients[k][at]} together")
+            val part =
+                when {
+                    at < dx -> "A"
+                    at < dx + dz -> "B"
+                    at < dx + dz + problem.m * rank -> "E"
+                    at < dx + dz + problem.m * rank + problem.m -> "bias"
+                    else -> "pair"
+                }
+            assertTrue(
+                worst < 1e-3,
+                "model $k: the worst relative difference of the gradient $worst, at $at of $part: ${grad[at]} alone, ${gradients[k][at]} together",
+            )
         }
     }
 
-    @Test
-    fun `models fitted together come out as fitted alone`() = fitTogether(task(), null)
+    @Test fun `models fitted together come out as fitted alone`() = fitTogether(task(), null)
 
     @Test
     fun `models fitted together with their searches on the card come out as fitted alone`() {
@@ -165,8 +198,23 @@ class BilinearTest {
         // And of a task without names: the weights A and their gradient never leave the card
         fitTogether(
             SuggestionTask(
-                t.itemIds, t.inputs, t.values, t.valueKeys, t.assigned, t.confirmed, t.rejected, t.context, t.contextKeys,
-                t.allowed, t.groupings, t.lackWeight, t.examples, emptyList(), Matrix(0, 0), t.drafts, t.draftWeight,
+                t.itemIds,
+                t.inputs,
+                t.values,
+                t.valueKeys,
+                t.assigned,
+                t.confirmed,
+                t.rejected,
+                t.context,
+                t.contextKeys,
+                t.allowed,
+                t.groupings,
+                t.lackWeight,
+                t.examples,
+                emptyList(),
+                Matrix(0, 0),
+                t.drafts,
+                t.draftWeight,
             ),
             cublas,
         )
@@ -184,8 +232,12 @@ class BilinearTest {
         if (card != null) assertTrue(ensemble.searchesOnCard, "the searches not on the card")
         starts.forEachIndexed { k, start ->
             val theta = alone.fit(start, lambdas[k], folds[k])
-            val loss = alone.lossAndGradient(theta, FloatArray(alone.size), lambdas[k]) { problem.foldOf[it] != folds[k] }
-            val together = alone.lossAndGradient(fits.weights[k], FloatArray(alone.size), lambdas[k]) { problem.foldOf[it] != folds[k] }
+            val loss =
+                alone.lossAndGradient(theta, FloatArray(alone.size), lambdas[k]) { problem.foldOf[it] != folds[k] }
+            val together =
+                alone.lossAndGradient(fits.weights[k], FloatArray(alone.size), lambdas[k]) {
+                    problem.foldOf[it] != folds[k]
+                }
             // The same search on floats added in another order: the same minimum to the float's resolution of the loss
             assertTrue(abs(loss - together) < 1e-3 * abs(loss), "model $k: loss $loss alone, $together together")
         }
@@ -202,36 +254,65 @@ class BilinearTest {
         val n = task.itemCount
         // Laid out whole: the constant, every block's mark and its vector times its scale, the values of the context
         val base = 1 + design.blocks.sumOf { 1 + it.dim }
-        val dense = Array(n) { i ->
-            FloatArray(width).also { row ->
-                row[0] = 1f
-                design.blocks.forEachIndexed { k, b ->
-                    val block = task.inputs.first { it.name == b.name }
-                    val slot = block.slots(n)[i]
-                    if (slot < 0) return@forEachIndexed
-                    row[design.blockOffsets[k]] = 1f
-                    for (q in 0 until b.dim) row[design.blockOffsets[k] + 1 + q] = block.vectors[slot, q] * b.scale
+        val dense =
+            Array(n) { i ->
+                FloatArray(width).also { row ->
+                    row[0] = 1f
+                    design.blocks.forEachIndexed { k, b ->
+                        val block = task.inputs.first { it.name == b.name }
+                        val slot = block.slots(n)[i]
+                        if (slot < 0) return@forEachIndexed
+                        row[design.blockOffsets[k]] = 1f
+                        for (q in 0 until b.dim) row[design.blockOffsets[k] + 1 + q] = block.vectors[slot, q] * b.scale
+                    }
+                    task.context[i].forEach { row[base + design.contextKeys.indexOf(task.contextKeys[it])] = 1f }
                 }
-                task.context[i].forEach { row[base + design.contextKeys.indexOf(task.contextKeys[it])] = 1f }
             }
-        }
-        fun close(expected: FloatArray, actual: Floats, what: String) = expected.indices.forEach {
-            assertTrue(abs(expected[it] - actual[it]) < 1e-4f * max(1f, abs(expected[it])), "$what at $it: ${expected[it]}, made ${actual[it]}")
-        }
+        fun close(expected: FloatArray, actual: Floats, what: String) =
+            expected.indices.forEach {
+                assertTrue(
+                    abs(expected[it] - actual[it]) < 1e-4f * max(1f, abs(expected[it])),
+                    "$what at $it: ${expected[it]}, made ${actual[it]}",
+                )
+            }
         val a = FloatArray(width * rank) { random.nextGaussian().toFloat() }
         val du = FloatArray(n * rank) { random.nextGaussian().toFloat() }
         val u = Floats(n * rank).also { x.times(Floats.of(a), rank, it, x.scratchOf(rank)) }
-        close(FloatArray(n * rank) { k -> (0 until width).sumOf { c -> (dense[k / rank][c] * a[c * rank + k % rank]).toDouble() }.toFloat() }, u, "X A")
+        close(
+            FloatArray(n * rank) { k ->
+                (0 until width).sumOf { c -> (dense[k / rank][c] * a[c * rank + k % rank]).toDouble() }.toFloat()
+            },
+            u,
+            "X A",
+        )
         val da = Floats(width * rank).also { x.transposedTimes(Floats.of(du), rank, it, x.scratchOf(rank)) }
-        close(FloatArray(width * rank) { k -> (0 until n).sumOf { i -> (dense[i][k / rank] * du[i * rank + k % rank]).toDouble() }.toFloat() }, da, "Xᵀ dU")
+        close(
+            FloatArray(width * rank) { k ->
+                (0 until n).sumOf { i -> (dense[i][k / rank] * du[i * rank + k % rank]).toDouble() }.toFloat()
+            },
+            da,
+            "Xᵀ dU",
+        )
         // Of two models one under another: Aᵀ and dUᵀ
         val k = 2 * rank
         val aT = FloatArray(k * width) { random.nextGaussian().toFloat() }
         val duT = FloatArray(k * n) { random.nextGaussian().toFloat() }
         val uT = Floats(k * n).also { x.transposedCoordinates(Floats.of(aT), k, it, x.scratchOf(k)) }
-        close(FloatArray(k * n) { t -> (0 until width).sumOf { c -> (aT[t / n * width + c] * dense[t % n][c]).toDouble() }.toFloat() }, uT, "Aᵀ Xᵀ")
+        close(
+            FloatArray(k * n) { t ->
+                (0 until width).sumOf { c -> (aT[t / n * width + c] * dense[t % n][c]).toDouble() }.toFloat()
+            },
+            uT,
+            "Aᵀ Xᵀ",
+        )
         val gA = Floats(k * width).also { x.transposedGradient(Floats.of(duT), k, it, x.scratchOf(k)) }
-        close(FloatArray(k * width) { t -> (0 until n).sumOf { i -> (duT[t / width * n + i] * dense[i][t % width]).toDouble() }.toFloat() }, gA, "dUᵀ X")
+        close(
+            FloatArray(k * width) { t ->
+                (0 until n).sumOf { i -> (duT[t / width * n + i] * dense[i][t % width]).toDouble() }.toFloat()
+            },
+            gA,
+            "dUᵀ X",
+        )
     }
 
     @Test
@@ -251,7 +332,10 @@ class BilinearTest {
             val eps = 1e-2f
             val plus = theta.copyOf().also { it[k] += eps }
             val minus = theta.copyOf().also { it[k] -= eps }
-            val numeric = (model.lossAndGradient(plus, scratch, 0.01f, trains) - model.lossAndGradient(minus, scratch, 0.01f, trains)).toDouble() / (2 * eps)
+            val numeric =
+                (model.lossAndGradient(plus, scratch, 0.01f, trains) -
+                        model.lossAndGradient(minus, scratch, 0.01f, trains))
+                    .toDouble() / (2 * eps)
             worst = max(worst, abs(numeric - grad[k]) / max(1e-3, abs(numeric) + abs(grad[k])))
         }
         assertTrue(worst < 0.02, "the worst relative error $worst")

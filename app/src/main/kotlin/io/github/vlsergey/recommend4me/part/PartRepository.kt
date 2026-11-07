@@ -5,9 +5,9 @@ import io.github.vlsergey.recommend4me.database.source.tables.references.PART_PA
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART_VECTOR
 import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.vector.Vectors
+import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
-import java.time.Instant
 
 data class StoredPart(
     val partId: String,
@@ -24,25 +24,29 @@ class PartToEncode(val itemId: String, val partId: String, val content: String, 
 class PartToCount(val itemId: String, val partId: String, val content: String)
 
 /**
- * The parts of the works' texts — chapters — of one source, and the vector of every window of
- * every part: a long text is a set of vectors rather than their average.
+ * The parts of the works' texts — chapters — of one source, and the vector of every window of every part: a long text
+ * is a set of vectors rather than their average.
  */
 class PartRepository(private val db: DSLContext) {
 
     /**
-     * Stores parts, a known one updated; a part named without its text keeps the text it had, and a
-     * part whose text changed is encoded again.
+     * Stores parts, a known one updated; a part named without its text keeps the text it had, and a part whose text
+     * changed is encoded again.
      */
     fun save(itemId: String, parts: List<PartData>) {
         parts.forEach { p ->
             val id = p.id.take(100)
-            val known = db.select(PART.CONTENT).from(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).fetchOne()
+            val known =
+                db.select(PART.CONTENT).from(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).fetchOne()
             if (known == null) {
                 db.insertInto(PART)
-                    .set(PART.ITEM_ID, itemId).set(PART.PART_ID, id)
+                    .set(PART.ITEM_ID, itemId)
+                    .set(PART.PART_ID, id)
                     // A part whose place the page does not tell goes after the known ones
-                    .set(PART.POSITION, if (p.position >= 0) p.position else UNKNOWN_POSITION).set(PART.TITLE, p.title?.take(1000))
-                    .set(PART.CONTENT, p.content).set(PART.PUBLISHED_AT, p.publishedAt)
+                    .set(PART.POSITION, if (p.position >= 0) p.position else UNKNOWN_POSITION)
+                    .set(PART.TITLE, p.title?.take(1000))
+                    .set(PART.CONTENT, p.content)
+                    .set(PART.PUBLISHED_AT, p.publishedAt)
                     .execute()
                 return@forEach
             }
@@ -51,17 +55,25 @@ class PartRepository(private val db: DSLContext) {
             p.title?.let { update = update.set(PART.TITLE, it.take(1000)) }
             if (p.publishedAt != null) update = update.set(PART.PUBLISHED_AT, p.publishedAt)
             if (p.content != null && p.content != known.value1()) {
-                update = update.set(PART.CONTENT, p.content).setNull(PART.ENCODER).setNull(PART.ENCODED_HASH)
-                    .setNull(PART.PARAGRAPHS_ENCODER).setNull(PART.PARAGRAPHS_HASH)
-                    .setNull(PART.CHARS).setNull(PART.WORDS)
+                update =
+                    update
+                        .set(PART.CONTENT, p.content)
+                        .setNull(PART.ENCODER)
+                        .setNull(PART.ENCODED_HASH)
+                        .setNull(PART.PARAGRAPHS_ENCODER)
+                        .setNull(PART.PARAGRAPHS_HASH)
+                        .setNull(PART.CHARS)
+                        .setNull(PART.WORDS)
             }
             update.where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).execute()
         }
     }
 
     fun ofItem(itemId: String): List<StoredPart> =
-        db.select(PART.PART_ID, PART.POSITION, PART.TITLE, PART.CONTENT.isNotNull, PART.PUBLISHED_AT).from(PART)
-            .where(PART.ITEM_ID.eq(itemId)).orderBy(PART.POSITION)
+        db.select(PART.PART_ID, PART.POSITION, PART.TITLE, PART.CONTENT.isNotNull, PART.PUBLISHED_AT)
+            .from(PART)
+            .where(PART.ITEM_ID.eq(itemId))
+            .orderBy(PART.POSITION)
             .fetch { StoredPart(it.value1()!!, it.value2()!!, it.value3(), it.value4() == true, it.value5()) }
 
     fun text(itemId: String, partId: String): Pair<StoredPart, String>? =
@@ -72,13 +84,19 @@ class PartRepository(private val db: DSLContext) {
 
     /** The texts of every part of the item that has one, streamed in their order, each with its title. */
     fun forEachContent(itemId: String, action: (title: String?, content: String) -> Unit) {
-        db.select(PART.TITLE, PART.CONTENT).from(PART).where(PART.ITEM_ID.eq(itemId), PART.CONTENT.isNotNull).orderBy(PART.POSITION)
-            .fetchSize(1).fetchLazy().use { cursor -> cursor.forEach { action(it.value1(), it.value2()!!) } }
+        db.select(PART.TITLE, PART.CONTENT)
+            .from(PART)
+            .where(PART.ITEM_ID.eq(itemId), PART.CONTENT.isNotNull)
+            .orderBy(PART.POSITION)
+            .fetchSize(1)
+            .fetchLazy()
+            .use { cursor -> cursor.forEach { action(it.value1(), it.value2()!!) } }
     }
 
     /** The parts whose text has no vectors by [encoder] yet, at most [limit]. */
     fun toEncode(encoder: String, limit: Int): List<PartToEncode> =
-        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT).from(PART)
+        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
+            .from(PART)
             .where(PART.CONTENT.isNotNull)
             .and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder)))
             .limit(limit)
@@ -91,19 +109,28 @@ class PartRepository(private val db: DSLContext) {
 
     /** The parts whose text is not counted yet, at most [limit]. */
     fun uncounted(limit: Int): List<PartToCount> =
-        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT).from(PART)
+        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
+            .from(PART)
             .where(PART.CONTENT.isNotNull, PART.CHARS.isNull)
             .limit(limit)
             .fetch { PartToCount(it.value1()!!, it.value2()!!, it.value3()!!) }
 
     fun setCounted(itemId: String, partId: String, chars: Int, words: Int) {
-        db.update(PART).set(PART.CHARS, chars).set(PART.WORDS, words).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).execute()
+        db.update(PART)
+            .set(PART.CHARS, chars)
+            .set(PART.WORDS, words)
+            .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
+            .execute()
     }
 
     /** The words and the characters of the texts kept, every part counted summed, of every item that has any. */
     fun counted(): Map<String, Pair<Double, Double>> =
-        db.select(PART.ITEM_ID, DSL.sum(PART.WORDS), DSL.sum(PART.CHARS)).from(PART).where(PART.CHARS.isNotNull).groupBy(PART.ITEM_ID)
-            .fetch().associate { it.value1()!! to (it.value2()!!.toDouble() to it.value3()!!.toDouble()) }
+        db.select(PART.ITEM_ID, DSL.sum(PART.WORDS), DSL.sum(PART.CHARS))
+            .from(PART)
+            .where(PART.CHARS.isNotNull)
+            .groupBy(PART.ITEM_ID)
+            .fetch()
+            .associate { it.value1()!! to (it.value2()!!.toDouble() to it.value3()!!.toDouble()) }
 
     /** Replaces the vectors of the windows of a part, made by [encoder] of the text of [hash]. */
     fun saveVectors(itemId: String, partId: String, encoder: String, hash: String, windows: List<FloatArray>) {
@@ -112,40 +139,67 @@ class PartRepository(private val db: DSLContext) {
             tx.deleteFrom(PART_VECTOR).where(PART_VECTOR.ITEM_ID.eq(itemId), PART_VECTOR.PART_ID.eq(partId)).execute()
             windows.forEachIndexed { i, v ->
                 tx.insertInto(PART_VECTOR)
-                    .set(PART_VECTOR.ITEM_ID, itemId).set(PART_VECTOR.PART_ID, partId).set(PART_VECTOR.WINDOW_NO, i)
+                    .set(PART_VECTOR.ITEM_ID, itemId)
+                    .set(PART_VECTOR.PART_ID, partId)
+                    .set(PART_VECTOR.WINDOW_NO, i)
                     .set(PART_VECTOR.VEC, Vectors.half(v))
                     .execute()
             }
-            tx.update(PART).set(PART.ENCODER, encoder).set(PART.ENCODED_HASH, hash)
-                .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).execute()
+            tx.update(PART)
+                .set(PART.ENCODER, encoder)
+                .set(PART.ENCODED_HASH, hash)
+                .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
+                .execute()
         }
     }
 
     /** The parts whose paragraphs have no vectors by [encoder] yet, at most [limit]. */
     fun paragraphsToEncode(encoder: String, limit: Int): List<PartToEncode> =
-        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT).from(PART)
+        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
+            .from(PART)
             .where(PART.CONTENT.isNotNull)
             .and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)))
             .limit(limit)
             .fetch { PartToEncode(it.value1()!!, it.value2()!!, it.value3()!!, Vectors.hash(it.value3()!!)) }
 
     fun countParagraphsToEncode(encoder: String): Int =
-        db.fetchCount(PART, PART.CONTENT.isNotNull.and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder))))
+        db.fetchCount(
+            PART,
+            PART.CONTENT.isNotNull.and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder))),
+        )
 
-    /** Replaces the vectors of the paragraphs of a part ([Paragraphs]), made by [encoder] of the text of [hash], each with the hash of its own text ([hashes]). */
-    fun saveParagraphVectors(itemId: String, partId: String, encoder: String, hash: String, paragraphs: List<FloatArray?>, hashes: List<String>) {
+    /**
+     * Replaces the vectors of the paragraphs of a part ([Paragraphs]), made by [encoder] of the text of [hash], each
+     * with the hash of its own text ([hashes]).
+     */
+    fun saveParagraphVectors(
+        itemId: String,
+        partId: String,
+        encoder: String,
+        hash: String,
+        paragraphs: List<FloatArray?>,
+        hashes: List<String>,
+    ) {
         db.transaction { c ->
             val tx = DSL.using(c)
-            tx.deleteFrom(PART_PARAGRAPH_VECTOR).where(PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId), PART_PARAGRAPH_VECTOR.PART_ID.eq(partId)).execute()
+            tx.deleteFrom(PART_PARAGRAPH_VECTOR)
+                .where(PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId), PART_PARAGRAPH_VECTOR.PART_ID.eq(partId))
+                .execute()
             paragraphs.forEachIndexed { i, v ->
                 if (v == null) return@forEachIndexed
                 tx.insertInto(PART_PARAGRAPH_VECTOR)
-                    .set(PART_PARAGRAPH_VECTOR.ITEM_ID, itemId).set(PART_PARAGRAPH_VECTOR.PART_ID, partId).set(PART_PARAGRAPH_VECTOR.PARAGRAPH_NO, i)
-                    .set(PART_PARAGRAPH_VECTOR.VEC, Vectors.half(v)).set(PART_PARAGRAPH_VECTOR.TEXT_HASH, hashes[i])
+                    .set(PART_PARAGRAPH_VECTOR.ITEM_ID, itemId)
+                    .set(PART_PARAGRAPH_VECTOR.PART_ID, partId)
+                    .set(PART_PARAGRAPH_VECTOR.PARAGRAPH_NO, i)
+                    .set(PART_PARAGRAPH_VECTOR.VEC, Vectors.half(v))
+                    .set(PART_PARAGRAPH_VECTOR.TEXT_HASH, hashes[i])
                     .execute()
             }
-            tx.update(PART).set(PART.PARAGRAPHS_ENCODER, encoder).set(PART.PARAGRAPHS_HASH, hash)
-                .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).execute()
+            tx.update(PART)
+                .set(PART.PARAGRAPHS_ENCODER, encoder)
+                .set(PART.PARAGRAPHS_HASH, hash)
+                .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
+                .execute()
         }
     }
 
@@ -154,46 +208,71 @@ class PartRepository(private val db: DSLContext) {
 
     /** Every paragraph's vector by [encoder] of the item's parts, in the parts' order. */
     fun paragraphVectors(itemId: String, encoder: String): List<Paragraph> =
-        db.select(PART_PARAGRAPH_VECTOR.PART_ID, PART_PARAGRAPH_VECTOR.PARAGRAPH_NO, PART_PARAGRAPH_VECTOR.VEC, PART_PARAGRAPH_VECTOR.TEXT_HASH).from(PART_PARAGRAPH_VECTOR)
-            .join(PART).on(PART.ITEM_ID.eq(PART_PARAGRAPH_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_PARAGRAPH_VECTOR.PART_ID))
+        db.select(
+                PART_PARAGRAPH_VECTOR.PART_ID,
+                PART_PARAGRAPH_VECTOR.PARAGRAPH_NO,
+                PART_PARAGRAPH_VECTOR.VEC,
+                PART_PARAGRAPH_VECTOR.TEXT_HASH,
+            )
+            .from(PART_PARAGRAPH_VECTOR)
+            .join(PART)
+            .on(PART.ITEM_ID.eq(PART_PARAGRAPH_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_PARAGRAPH_VECTOR.PART_ID))
             .where(PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId), PART.PARAGRAPHS_ENCODER.eq(encoder))
             .orderBy(PART.POSITION, PART_PARAGRAPH_VECTOR.PARAGRAPH_NO)
             .fetch { Paragraph(it.value1()!!, it.value2()!!, Vectors.fromHalf(it.value3()!!), it.value4()!!) }
 
     /** One paragraph by [encoder], its vector and hash; null when it has none. */
     fun paragraph(itemId: String, partId: String, number: Int, encoder: String): Paragraph? =
-        db.select(PART_PARAGRAPH_VECTOR.VEC, PART_PARAGRAPH_VECTOR.TEXT_HASH).from(PART_PARAGRAPH_VECTOR)
-            .join(PART).on(PART.ITEM_ID.eq(PART_PARAGRAPH_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_PARAGRAPH_VECTOR.PART_ID))
-            .where(PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId), PART_PARAGRAPH_VECTOR.PART_ID.eq(partId), PART_PARAGRAPH_VECTOR.PARAGRAPH_NO.eq(number))
+        db.select(PART_PARAGRAPH_VECTOR.VEC, PART_PARAGRAPH_VECTOR.TEXT_HASH)
+            .from(PART_PARAGRAPH_VECTOR)
+            .join(PART)
+            .on(PART.ITEM_ID.eq(PART_PARAGRAPH_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_PARAGRAPH_VECTOR.PART_ID))
+            .where(
+                PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId),
+                PART_PARAGRAPH_VECTOR.PART_ID.eq(partId),
+                PART_PARAGRAPH_VECTOR.PARAGRAPH_NO.eq(number),
+            )
             .and(PART.PARAGRAPHS_ENCODER.eq(encoder))
             .fetchOne { Paragraph(partId, number, Vectors.fromHalf(it.value1()!!), it.value2()!!) }
 
     /** Whether some part of the item has a text whose paragraphs have no vectors by [encoder] yet. */
     fun paragraphsPending(itemId: String, encoder: String): Boolean =
-        db.fetchExists(PART, PART.ITEM_ID.eq(itemId), PART.CONTENT.isNotNull, PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)))
+        db.fetchExists(
+            PART,
+            PART.ITEM_ID.eq(itemId),
+            PART.CONTENT.isNotNull,
+            PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)),
+        )
 
     /** How many window vectors by [encoder] every item has. */
     fun windowCounts(encoder: String): Map<String, Int> =
-        db.select(PART_VECTOR.ITEM_ID, DSL.count()).from(PART_VECTOR)
-            .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+        db.select(PART_VECTOR.ITEM_ID, DSL.count())
+            .from(PART_VECTOR)
+            .join(PART)
+            .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
             .where(PART.ENCODER.eq(encoder))
             .groupBy(PART_VECTOR.ITEM_ID)
-            .fetch().associate { it.value1()!! to it.value2()!! }
+            .fetch()
+            .associate { it.value1()!! to it.value2()!! }
 
     /** How many window vectors by [encoder] the item has. */
     fun windowCount(itemId: String, encoder: String): Int =
         db.fetchCount(
-            db.select(PART_VECTOR.WINDOW_NO).from(PART_VECTOR)
-                .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
-                .where(PART_VECTOR.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder)),
+            db.select(PART_VECTOR.WINDOW_NO)
+                .from(PART_VECTOR)
+                .join(PART)
+                .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+                .where(PART_VECTOR.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder))
         )
 
     /** Every window vector by [encoder] of the items. */
     fun windows(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> {
         val out = HashMap<String, MutableList<FloatArray>>()
         itemIds.chunked(BATCH).forEach { ids ->
-            db.select(PART_VECTOR.ITEM_ID, PART_VECTOR.VEC).from(PART_VECTOR)
-                .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+            db.select(PART_VECTOR.ITEM_ID, PART_VECTOR.VEC)
+                .from(PART_VECTOR)
+                .join(PART)
+                .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
                 .where(PART_VECTOR.ITEM_ID.`in`(ids), PART.ENCODER.eq(encoder))
                 .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += Vectors.fromHalf(it.value2()!!) }
         }
@@ -204,19 +283,28 @@ class PartRepository(private val db: DSLContext) {
     fun contentsOf(ids: Collection<String>): Map<String, List<Triple<String, String?, String>>> {
         val out = HashMap<String, MutableList<Triple<String, String?, String>>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE, PART.CONTENT).from(PART)
-                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT.isNotNull).orderBy(PART.ITEM_ID, PART.POSITION)
-                .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += Triple(it.value2()!!, it.value3(), it.value4()!!) }
+            db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE, PART.CONTENT)
+                .from(PART)
+                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT.isNotNull)
+                .orderBy(PART.ITEM_ID, PART.POSITION)
+                .fetch {
+                    out.getOrPut(it.value1()!!) { ArrayList() } += Triple(it.value2()!!, it.value3(), it.value4()!!)
+                }
         }
         return out
     }
 
-    /** The titles of every part of the items [ids] that has a text, in their order — the texts not read: item to (part, title). */
+    /**
+     * The titles of every part of the items [ids] that has a text, in their order — the texts not read: item to (part,
+     * title).
+     */
     fun titlesOf(ids: Collection<String>): Map<String, List<Pair<String, String?>>> {
         val out = HashMap<String, MutableList<Pair<String, String?>>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE).from(PART)
-                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT.isNotNull).orderBy(PART.ITEM_ID, PART.POSITION)
+            db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE)
+                .from(PART)
+                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT.isNotNull)
+                .orderBy(PART.ITEM_ID, PART.POSITION)
                 .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! to it.value3() }
         }
         return out
@@ -226,11 +314,16 @@ class PartRepository(private val db: DSLContext) {
     fun windowsByParts(ids: Collection<String>, encoder: String): Map<String, Map<String, List<FloatArray>>> {
         val out = HashMap<String, MutableMap<String, MutableList<FloatArray>>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(PART_VECTOR.ITEM_ID, PART_VECTOR.PART_ID, PART_VECTOR.VEC).from(PART_VECTOR)
-                .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+            db.select(PART_VECTOR.ITEM_ID, PART_VECTOR.PART_ID, PART_VECTOR.VEC)
+                .from(PART_VECTOR)
+                .join(PART)
+                .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
                 .where(PART_VECTOR.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder))
                 .orderBy(PART_VECTOR.ITEM_ID, PART_VECTOR.PART_ID, PART_VECTOR.WINDOW_NO)
-                .fetch { out.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } += Vectors.fromHalf(it.value3()!!) }
+                .fetch {
+                    out.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } +=
+                        Vectors.fromHalf(it.value3()!!)
+                }
         }
         return out
     }
@@ -238,8 +331,10 @@ class PartRepository(private val db: DSLContext) {
     /** The window vectors by [encoder] of the item's parts: part to its windows in order. */
     fun windowsByPart(itemId: String, encoder: String): Map<String, List<FloatArray>> {
         val out = LinkedHashMap<String, MutableList<FloatArray>>()
-        db.select(PART_VECTOR.PART_ID, PART_VECTOR.VEC).from(PART_VECTOR)
-            .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+        db.select(PART_VECTOR.PART_ID, PART_VECTOR.VEC)
+            .from(PART_VECTOR)
+            .join(PART)
+            .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
             .where(PART_VECTOR.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder))
             .orderBy(PART.POSITION, PART_VECTOR.WINDOW_NO)
             .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += Vectors.fromHalf(it.value2()!!) }
@@ -248,10 +343,13 @@ class PartRepository(private val db: DSLContext) {
 
     /** [n] window vectors of the catalogue drawn at random. */
     fun sample(n: Int, encoder: String): List<FloatArray> =
-        db.select(PART_VECTOR.VEC).from(PART_VECTOR)
-            .join(PART).on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
+        db.select(PART_VECTOR.VEC)
+            .from(PART_VECTOR)
+            .join(PART)
+            .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
             .where(PART.ENCODER.eq(encoder))
-            .orderBy(DSL.rand()).limit(n)
+            .orderBy(DSL.rand())
+            .limit(n)
             .fetch { Vectors.fromHalf(it.value1()!!) }
 
     companion object {

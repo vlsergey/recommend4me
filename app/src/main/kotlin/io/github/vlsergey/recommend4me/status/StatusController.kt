@@ -35,8 +35,8 @@ class StatusController(
                     WorkStatus("texts", texts, texts, textVectors.running()),
                     WorkStatus("parts", partsTotal - parts.pending(), partsTotal, parts.running()),
                     WorkStatus("sets", sets.done, sets.total, sets.running()),
-                ),
-            ),
+                )
+            )
         )
     }
 }

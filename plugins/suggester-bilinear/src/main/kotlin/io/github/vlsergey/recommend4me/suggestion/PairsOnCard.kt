@@ -3,28 +3,27 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
-import org.slf4j.LoggerFactory
 import java.util.IdentityHashMap
+import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(PairsOnCard::class.java)
 
 /**
- * THE PAIRS AND THE NAMES OF A FITTING ON THE CARD ([Ensemble] with its items' features there): of
- * every model still searching, a block of rows of items at a time, its scores of them against every
- * value S = U Vᵀ, one product; the loss and the slope of every pair that weighs anything by kernels
- * of our own (`pairs.cu`) — of every value an item merely lacks by what it may have ([SuggestionPairs]),
- * of its own pairs one by one; dU = S V, dV = Sᵀ U and the biases' slopes by three more products. The names' groups by kernels
- * too: their names' and values' coordinates gathered side by side; a tile of a group a block — its
- * scores, losses and slopes, the values' slopes carried back at once; a name's slopes by a warp.
- * What the processor works out between its products in [Ensemble.evaluate], the
- * same to the float's last digits but for the order of the sums: tens of millions of pairs and
- * names a model, a step, in milliseconds.
+ * THE PAIRS AND THE NAMES OF A FITTING ON THE CARD ([Ensemble] with its items' features there): of every model still
+ * searching, a block of rows of items at a time, its scores of them against every value S = U Vᵀ, one product; the loss
+ * and the slope of every pair that weighs anything by kernels of our own (`pairs.cu`) — of every value an item merely
+ * lacks by what it may have ([SuggestionPairs]), of its own pairs one by one; dU = S V, dV = Sᵀ U and the biases'
+ * slopes by three more products. The names' groups by kernels too: their names' and values' coordinates gathered side
+ * by side; a tile of a group a block — its scores, losses and slopes, the values' slopes carried back at once; a name's
+ * slopes by a warp. What the processor works out between its products in [Ensemble.evaluate], the same to the float's
+ * last digits but for the order of the sums: tens of millions of pairs and names a model, a step, in milliseconds.
  *
- * The task's pairs and names put on the card once for the fitting; a step sends the values' and
- * the names' coordinates and the biases there, and takes back the values', the biases' and the
- * names' slopes — the items' coordinates and their slopes never leave it.
+ * The task's pairs and names put on the card once for the fitting; a step sends the values' and the names' coordinates
+ * and the biases there, and takes back the values', the biases' and the names' slopes — the items' coordinates and
+ * their slopes never leave it.
  */
-internal class PairsOnCard private constructor(
+internal class PairsOnCard
+private constructor(
     private val p: Problem,
     private val cublas: Cublas,
     private val kernels: CudaKernels,
@@ -37,6 +36,7 @@ internal class PairsOnCard private constructor(
     private val h = p.hints.size
 
     private fun floats(count: Long) = (cublas.allocate(count) ?: throw NoRoom()).also { made += it }
+
     private fun bytes(count: Long) = (cublas.allocateBytes(count) ?: throw NoRoom()).also { made += it }
 
     /** The card had no room for the task's pairs: they stay on the processor. */
@@ -54,7 +54,10 @@ internal class PairsOnCard private constructor(
     private val bias = floats(count.toLong() * m)
     private val gE = floats(count.toLong() * r * m)
     private val gBias = floats(count.toLong() * m)
-    private val ones = floats(blockRows.toLong()).also { o -> o.upload(Floats(blockRows).also { f -> for (i in 0 until blockRows) f[i] = 1f }, 0, 0, blockRows) }
+    private val ones =
+        floats(blockRows.toLong()).also { o ->
+            o.upload(Floats(blockRows).also { f -> for (i in 0 until blockRows) f[i] = 1f }, 0, 0, blockRows)
+        }
 
     /** Of every model, its three sums: the loss, the slopes of the common bias and of the example. */
     private val sums = bytes(count.toLong() * SUMS * Double.SIZE_BYTES)
@@ -63,14 +66,17 @@ internal class PairsOnCard private constructor(
     // own, as a mask of a bit a value (-1: any) — every array once, however many items share it
     private val lack = bytes(n.toLong() * Float.SIZE_BYTES)
     private val group = bytes(n.toLong() * Int.SIZE_BYTES)
-    private val groupOf = IdentityHashMap<IntArray, Int>().also { made -> p.pairs.may.forEach { a -> if (a != null) made.putIfAbsent(a, made.size) } }
+    private val groupOf =
+        IdentityHashMap<IntArray, Int>().also { made ->
+            p.pairs.may.forEach { a -> if (a != null) made.putIfAbsent(a, made.size) }
+        }
     private val words = (m + 31) / 32
     private val masks = bytes(groupOf.size.toLong() * words * Int.SIZE_BYTES)
 
     /**
-     * Every pair of an item not merely lacked, an entry each — one it has, one the user rejected, a
-     * draft, one barred (weighing nought), one the site gives as an example — by the items in order:
-     * its item, value, weight, label, example; where each item's begin.
+     * Every pair of an item not merely lacked, an entry each — one it has, one the user rejected, a draft, one barred
+     * (weighing nought), one the site gives as an example — by the items in order: its item, value, weight, label,
+     * example; where each item's begin.
      */
     private val firstEntry = LongArray(n + 1)
     private val ownOf = Array(n) { i -> ownEntries(i).also { firstEntry[i + 1] = firstEntry[i] + it.size } }
@@ -82,7 +88,8 @@ internal class PairsOnCard private constructor(
     private val exampleOf = bytes(entries * Float.SIZE_BYTES)
     private val foldOf = bytes(n.toLong() * Int.SIZE_BYTES).also { it.upload(p.foldOf) }
 
-    // The names: their coordinates of every model and their slopes; a group's names against its values, one group after another
+    // The names: their coordinates of every model and their slopes; a group's names against its values, one group after
+    // another
     private val groups = p.hintGroups
     private val namePairs: Long = p.hintPairs
     private val uh = if (h > 0) floats(count.toLong() * r * h) else null
@@ -101,17 +108,21 @@ internal class PairsOnCard private constructor(
     private val values = if (h > 0) bytes(columns.toLong() * Int.SIZE_BYTES) else null
 
     /** The tiles of the groups a block of `names_tile` takes each: the group, its first name, its first value. */
-    private val tileList: IntArray = if (h == 0) IntArray(0) else run {
-        val list = ArrayList<Int>()
-        groups.forEachIndexed { k, group ->
-            for (row in 0 until group.rows.size step TILE_ROWS) for (col in 0 until group.values.size step CudaKernels.BLOCK) {
-                list += k
-                list += row
-                list += col
+    private val tileList: IntArray =
+        if (h == 0) IntArray(0)
+        else
+            run {
+                val list = ArrayList<Int>()
+                groups.forEachIndexed { k, group ->
+                    for (row in 0 until group.rows.size step TILE_ROWS) for (col in
+                        0 until group.values.size step CudaKernels.BLOCK) {
+                        list += k
+                        list += row
+                        list += col
+                    }
+                }
+                list.toIntArray()
             }
-        }
-        list.toIntArray()
-    }
     private val tiles = if (h > 0) bytes(tileList.size.toLong() * Int.SIZE_BYTES) else null
 
     // A model's names' and values' coordinates gathered by the groups, a row of rank numbers each
@@ -120,7 +131,8 @@ internal class PairsOnCard private constructor(
 
     /** The item's own entries, its values ascending, with their weight, label and example. */
     private class Own(val values: IntArray, val weights: FloatArray, val labels: FloatArray, val examples: FloatArray) {
-        val size: Int get() = values.size
+        val size: Int
+            get() = values.size
     }
 
     private fun ownEntries(i: Int): Own {
@@ -128,14 +140,17 @@ internal class PairsOnCard private constructor(
         val own = pairs.own[i]
         val examples = p.exampleValues[i]
         // A pair that weighs nothing, with nothing to take back of one lacked: no entry
-        val values = (own.asList() + examples.asList()).distinct().sorted().filter { v ->
-            val k = own.binarySearch(v)
-            (if (k >= 0) pairs.ownWeight[i][k] else pairs.lacking(i, v)) != 0f || pairs.lacking(i, v) != 0f
-        }
+        val values =
+            (own.asList() + examples.asList()).distinct().sorted().filter { v ->
+                val k = own.binarySearch(v)
+                (if (k >= 0) pairs.ownWeight[i][k] else pairs.lacking(i, v)) != 0f || pairs.lacking(i, v) != 0f
+            }
         val at = values.map { own.binarySearch(it) }
         return Own(
             values.toIntArray(),
-            FloatArray(values.size) { at[it].let { k -> if (k >= 0) pairs.ownWeight[i][k] else pairs.lacking(i, values[it]) } },
+            FloatArray(values.size) {
+                at[it].let { k -> if (k >= 0) pairs.ownWeight[i][k] else pairs.lacking(i, values[it]) }
+            },
             FloatArray(values.size) { at[it].let { k -> if (k >= 0) pairs.ownLabel[i][k] else 0f } },
             FloatArray(values.size) { if (examples.binarySearch(values[it]) >= 0) 1f else 0f },
         )
@@ -145,7 +160,9 @@ internal class PairsOnCard private constructor(
         lack.upload(p.pairs.lack)
         group.upload(IntArray(n) { i -> p.pairs.may[i]?.let(groupOf::getValue) ?: -1 })
         val bits = IntArray(groupOf.size * words)
-        groupOf.forEach { (values, k) -> values.forEach { v -> bits[k * words + v / 32] = bits[k * words + v / 32] or (1 shl (v % 32)) } }
+        groupOf.forEach { (values, k) ->
+            values.forEach { v -> bits[k * words + v / 32] = bits[k * words + v / 32] or (1 shl (v % 32)) }
+        }
         masks.upload(bits)
         val count = entries.toInt()
         val items = IntArray(count)
@@ -209,17 +226,28 @@ internal class PairsOnCard private constructor(
     }
 
     /**
-     * The pairs and the names of the first [k] slots, the model in each by [slotModel]: as
-     * [Ensemble.pairs] and [Ensemble.names] of each. Read: the items' coordinates [uT] on the card,
-     * the values' [vTHost], the biases [biasHost] and the names' coordinates [uhTHost] in the main
-     * memory, the pair's own weights [pair]. Written: the items' slopes [duT] on the card; the
-     * values' [gEHost], the biases' [gBiasHost], the names' [duhTHost] and the pair's own [gPair] in
-     * the main memory; every model's loss, summed and not scaled, into [losses].
+     * The pairs and the names of the first [k] slots, the model in each by [slotModel]: as [Ensemble.pairs] and
+     * [Ensemble.names] of each. Read: the items' coordinates [uT] on the card, the values' [vTHost], the biases
+     * [biasHost] and the names' coordinates [uhTHost] in the main memory, the pair's own weights [pair]. Written: the
+     * items' slopes [duT] on the card; the values' [gEHost], the biases' [gBiasHost], the names' [duhTHost] and the
+     * pair's own [gPair] in the main memory; every model's loss, summed and not scaled, into [losses].
      */
     fun evaluate(
-        k: Int, slotModel: IntArray, heldOut: IntArray, totals: FloatArray,
-        uT: Cublas.DeviceFloats, duT: Cublas.DeviceFloats, pair: Floats,
-        vTHost: Floats, biasHost: Floats, uhTHost: Floats, gEHost: Floats, gBiasHost: Floats, duhTHost: Floats, gPair: Floats, losses: FloatArray,
+        k: Int,
+        slotModel: IntArray,
+        heldOut: IntArray,
+        totals: FloatArray,
+        uT: Cublas.DeviceFloats,
+        duT: Cublas.DeviceFloats,
+        pair: Floats,
+        vTHost: Floats,
+        biasHost: Floats,
+        uhTHost: Floats,
+        gEHost: Floats,
+        gBiasHost: Floats,
+        duhTHost: Floats,
+        gPair: Floats,
+        losses: FloatArray,
     ) {
         val kr = k * r
         vT.upload(vTHost, 0, 0, kr * m)
@@ -247,16 +275,50 @@ internal class PairsOnCard private constructor(
                 g.zero(0, rows.toLong() * m)
                 // Every value an item merely lacks, then its own pairs: what was taken as lacked taken back
                 kernels.launch(
-                    "lacks", rows.toLong() * m, rows, m, from, s, g, lack, group, masks, words,
-                    foldOf, heldOut[model], bias.at(biasAt), common, scale, sumsAt,
+                    "lacks",
+                    rows.toLong() * m,
+                    rows,
+                    m,
+                    from,
+                    s,
+                    g,
+                    lack,
+                    group,
+                    masks,
+                    words,
+                    foldOf,
+                    heldOut[model],
+                    bias.at(biasAt),
+                    common,
+                    scale,
+                    sumsAt,
                 )
                 val first = firstEntry[from]
                 val own = firstEntry[from + rows] - first
                 kernels.launch(
-                    "owns", own, own.toInt(), m, from, s, g,
-                    item.at(first * Int.SIZE_BYTES), value.at(first * Int.SIZE_BYTES), weight.at(first * Float.SIZE_BYTES),
-                    label.at(first * Float.SIZE_BYTES), exampleOf.at(first * Float.SIZE_BYTES),
-                    lack, group, masks, words, foldOf, heldOut[model], bias.at(biasAt), common, example, scale, sumsAt,
+                    "owns",
+                    own,
+                    own.toInt(),
+                    m,
+                    from,
+                    s,
+                    g,
+                    item.at(first * Int.SIZE_BYTES),
+                    value.at(first * Int.SIZE_BYTES),
+                    weight.at(first * Float.SIZE_BYTES),
+                    label.at(first * Float.SIZE_BYTES),
+                    exampleOf.at(first * Float.SIZE_BYTES),
+                    lack,
+                    group,
+                    masks,
+                    words,
+                    foldOf,
+                    heldOut[model],
+                    bias.at(biasAt),
+                    common,
+                    example,
+                    scale,
+                    sumsAt,
                 )
                 // dUᵀ of the block's rows = Vᵀ Gᵀ; dVᵀ += Uᵀ of them · G; the biases' slopes += 1ᵀ G
                 val beta = if (from == 0) 0f else 1f
@@ -279,14 +341,44 @@ internal class PairsOnCard private constructor(
                 kernels.launch("gather", columns.toLong() * r, columns, values, vT.at(vAt), m, r, gv)
                 // The rank of the application's fittings compiled as known: its numbers in registers
                 kernels.launch(
-                    if (r == 16) "names_tile_16" else "names_tile", tileList.size / 3L * CudaKernels.BLOCK,
-                    tiles!!, firstPair, firstRow, firstValue, width, height!!, values, positive!!, gu, gv, m, r,
-                    bias.at(biasAt), common, scale, sn, gE.at(vAt), gBias.at(biasAt), sumsAt,
+                    if (r == 16) "names_tile_16" else "names_tile",
+                    tileList.size / 3L * CudaKernels.BLOCK,
+                    tiles!!,
+                    firstPair,
+                    firstRow,
+                    firstValue,
+                    width,
+                    height!!,
+                    values,
+                    positive!!,
+                    gu,
+                    gv,
+                    m,
+                    r,
+                    bias.at(biasAt),
+                    common,
+                    scale,
+                    sn,
+                    gE.at(vAt),
+                    gBias.at(biasAt),
+                    sumsAt,
                 )
                 // A warp a name
                 kernels.launch(
-                    if (r == 16) "names_rows_16" else "names_rows", names.toLong() * WARP,
-                    names, groupOfRow!!, firstPair, firstRow, firstValue, width, rows, sn, gv, h, r, duh!!.at(slot.toLong() * r * h),
+                    if (r == 16) "names_rows_16" else "names_rows",
+                    names.toLong() * WARP,
+                    names,
+                    groupOfRow!!,
+                    firstPair,
+                    firstRow,
+                    firstValue,
+                    width,
+                    rows,
+                    sn,
+                    gv,
+                    h,
+                    r,
+                    duh!!.at(slot.toLong() * r * h),
                 )
             }
         }
@@ -313,9 +405,12 @@ internal class PairsOnCard private constructor(
         /** The rank a kernel's sums are made for (`MAX_RANK` of `pairs.cu`). */
         private const val MAX_RANK = 64
 
-        private val NAMES = listOf("lacks", "owns", "gather", "names_tile", "names_tile_16", "names_rows", "names_rows_16")
+        private val NAMES =
+            listOf("lacks", "owns", "gather", "names_tile", "names_tile_16", "names_rows", "names_rows_16")
 
-        /** The scores of the pairs held at once, a block of the items' rows against every value: memory, not meaning. */
+        /**
+         * The scores of the pairs held at once, a block of the items' rows against every value: memory, not meaning.
+         */
         private const val BLOCK = 32 shl 20
 
         /** The names of a group a block of `names_tile` takes (`TILE_ROWS` of `pairs.cu`). */
@@ -336,8 +431,8 @@ internal class PairsOnCard private constructor(
         }
 
         /**
-         * The pairs and the names of [p] on the card of [cublas], for [count] models of [rank]; null
-         * when they cannot be — the kernels not made, no room — the processor's then.
+         * The pairs and the names of [p] on the card of [cublas], for [count] models of [rank]; null when they cannot
+         * be — the kernels not made, no room — the processor's then.
          */
         fun open(p: Problem, cublas: Cublas, count: Int, rank: Int): PairsOnCard? {
             if (rank > MAX_RANK) return null
@@ -347,7 +442,12 @@ internal class PairsOnCard private constructor(
                 PairsOnCard(p, cublas, kernels, count, rank, made)
             } catch (e: NoRoom) {
                 made.forEach { it.close() }
-                log.info("no room on the card for the pairs of {} items × {} values and {} names: they stay on the processor", p.n, p.m, p.hints.size)
+                log.info(
+                    "no room on the card for the pairs of {} items × {} values and {} names: they stay on the processor",
+                    p.n,
+                    p.m,
+                    p.hints.size,
+                )
                 null
             }
         }

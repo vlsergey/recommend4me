@@ -6,19 +6,18 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
-import java.time.Instant
 
 private val log = LoggerFactory.getLogger(Works::class.java)
 
 /**
- * Which items are one work: the items of a normalized work of several ([WorkRepository]). An item of
- * no other is a work alone. Read at the start of every operation that needs it — such works are few,
- * made by hand.
+ * Which items are one work: the items of a normalized work of several ([WorkRepository]). An item of no other is a work
+ * alone. Read at the start of every operation that needs it — such works are few, made by hand.
  */
 class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
 
@@ -38,7 +37,12 @@ class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
 
     companion object {
         fun of(groups: List<List<ItemKey>>): WorkClusters =
-            WorkClusters(groups.map { members -> members.sortedBy { it.toString() } }.flatMap { members -> members.map { it to members } }.toMap())
+            WorkClusters(
+                groups
+                    .map { members -> members.sortedBy { it.toString() } }
+                    .flatMap { members -> members.map { it to members } }
+                    .toMap()
+            )
     }
 }
 
@@ -48,9 +52,9 @@ class Works(private val stores: Stores) {
     fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
 
     /**
-     * How much each of the items [keys] says of its work: the characters of its texts, then how many
-     * values its facets have. Of a work of several items the one that says the most is the one shown
-     * for it. Read for the operation: such works are few, and what a site says of them changes.
+     * How much each of the items [keys] says of its work: the characters of its texts, then how many values its facets
+     * have. Of a work of several items the one that says the most is the one shown for it. Read for the operation: such
+     * works are few, and what a site says of them changes.
      */
     fun fullness(type: TypeStore, keys: Collection<ItemKey>): Map<ItemKey, Long> {
         val out = HashMap<ItemKey, Long>()
@@ -60,7 +64,9 @@ class Works(private val stores: Stores) {
             val facets = s.items.facetsOf(ids)
             ids.forEach { id ->
                 val chars = texts[id].orEmpty().values.sumOf { it.length.toLong() }
-                out[ItemKey(source, id)] = chars * FIELDS_AT_MOST + facets[id].orEmpty().values.sumOf { it.size.toLong() }.coerceAtMost(FIELDS_AT_MOST - 1)
+                out[ItemKey(source, id)] =
+                    chars * FIELDS_AT_MOST +
+                        facets[id].orEmpty().values.sumOf { it.size.toLong() }.coerceAtMost(FIELDS_AT_MOST - 1)
             }
         }
         return out
@@ -72,11 +78,16 @@ class Works(private val stores: Stores) {
         return keys.sortedWith(compareByDescending<ItemKey> { fullness[it] ?: 0 }.thenBy { it.source }.thenBy { it.id })
     }
 
-    /** The [items] of the source — id to version — bound if not yet, their versions kept; one at a time: two at once would bind one item twice. */
+    /**
+     * The [items] of the source — id to version — bound if not yet, their versions kept; one at a time: two at once
+     * would bind one item twice.
+     */
     @Synchronized
     private fun bind(s: SourceStore, items: Map<String, String>) {
         val bound = s.works.boundAmong(s.id, items.keys)
-        items.filter { (id, version) -> bound[id].let { it != null && it != version } }.forEach { (id, version) -> s.works.setVersion(ItemKey(s.id, id), version) }
+        items
+            .filter { (id, version) -> bound[id].let { it != null && it != version } }
+            .forEach { (id, version) -> s.works.setVersion(ItemKey(s.id, id), version) }
         val fresh = items - bound.keys
         if (fresh.isEmpty()) return
         s.works.bindNew(s.id, fresh, Instant.now())

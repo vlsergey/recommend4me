@@ -5,6 +5,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class FactorizationAutoConfiguration {
-    @Bean
-    fun factorizationScorer(): Scorer = FactorizationScorer()
+    @Bean fun factorizationScorer(): Scorer = FactorizationScorer()
 }

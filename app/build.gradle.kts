@@ -48,14 +48,17 @@ val migrations = layout.projectDirectory.dir("src/main/resources/db")
 val schemas = listOf("app", "source", "corrections", "ratings", "model", "dictionaries", "preferences")
 
 /**
- * H2 ITSELF READS THE SCHEMA: the generator is given an empty database in memory that runs every
- * migration of the kind in order as it opens, so the statements are parsed by the parser that
- * runs them in the application.
+ * H2 ITSELF READS THE SCHEMA: the generator is given an empty database in memory that runs every migration of the kind
+ * in order as it opens, so the statements are parsed by the parser that runs them in the application.
  */
 fun h2Of(kind: String): String {
-    val scripts = migrations.dir(kind).asFile.listFiles { f -> f.name.matches(Regex("V\\d+__.*\\.sql")) }!!
-        .sortedBy { it.name.substringAfter('V').substringBefore("__").toInt() }
-        .joinToString("\\;") { "RUNSCRIPT FROM '${it.absolutePath.replace('\\', '/')}' CHARSET 'UTF-8'" }
+    val scripts =
+        migrations
+            .dir(kind)
+            .asFile
+            .listFiles { f -> f.name.matches(Regex("V\\d+__.*\\.sql")) }!!
+            .sortedBy { it.name.substringAfter('V').substringBefore("__").toInt() }
+            .joinToString("\\;") { "RUNSCRIPT FROM '${it.absolutePath.replace('\\', '/')}' CHARSET 'UTF-8'" }
     return "jdbc:h2:mem:jooq_$kind;INIT=$scripts"
 }
 
@@ -108,27 +111,29 @@ tasks.matching { it.name.startsWith("jooqCodegen") }.configureEach { inputs.dir(
 val openApiSpec = rootProject.layout.projectDirectory.file("api/openapi.yaml")
 val generatedApiDir = layout.buildDirectory.dir("generated/openapi")
 
-val generateApi = tasks.register<GenerateTask>("generateApi") {
-    generatorName = "kotlin-spring"
-    remoteInputSpec = openApiSpec.asFile.toURI().toString()
-    inputs.file(openApiSpec)
-    outputDir = generatedApiDir
-    apiPackage = "io.github.vlsergey.recommend4me.api"
-    modelPackage = "io.github.vlsergey.recommend4me.api.model"
-    cleanupOutput = true
-    globalProperties = mapOf("apis" to "", "models" to "", "supportingFiles" to "false")
-    configOptions = mapOf(
-        "interfaceOnly" to "true",
-        "skipDefaultInterface" to "true",
-        "useSpringBoot3" to "true",
-        "useTags" to "true",
-        "documentationProvider" to "none",
-        "annotationLibrary" to "none",
-        "useBeanValidation" to "false",
-        "enumPropertyNaming" to "UPPERCASE",
-        "serializationLibrary" to "jackson",
-    )
-}
+val generateApi =
+    tasks.register<GenerateTask>("generateApi") {
+        generatorName = "kotlin-spring"
+        remoteInputSpec = openApiSpec.asFile.toURI().toString()
+        inputs.file(openApiSpec)
+        outputDir = generatedApiDir
+        apiPackage = "io.github.vlsergey.recommend4me.api"
+        modelPackage = "io.github.vlsergey.recommend4me.api.model"
+        cleanupOutput = true
+        globalProperties = mapOf("apis" to "", "models" to "", "supportingFiles" to "false")
+        configOptions =
+            mapOf(
+                "interfaceOnly" to "true",
+                "skipDefaultInterface" to "true",
+                "useSpringBoot3" to "true",
+                "useTags" to "true",
+                "documentationProvider" to "none",
+                "annotationLibrary" to "none",
+                "useBeanValidation" to "false",
+                "enumPropertyNaming" to "UPPERCASE",
+                "serializationLibrary" to "jackson",
+            )
+    }
 
 sourceSets {
     main {
@@ -145,39 +150,49 @@ val frontendDir = rootProject.layout.projectDirectory.dir("frontend")
 
 fun npm(): String = if (System.getProperty("os.name").lowercase().contains("windows")) "npm.cmd" else "npm"
 
-val npmInstall = tasks.register<Exec>("npmInstall") {
-    workingDir = frontendDir.asFile
-    commandLine(npm(), "install", "--no-audit", "--no-fund")
-    inputs.file(frontendDir.file("package.json"))
-    outputs.dir(frontendDir.dir("node_modules"))
-}
+val npmInstall =
+    tasks.register<Exec>("npmInstall") {
+        workingDir = frontendDir.asFile
+        commandLine(npm(), "install", "--no-audit", "--no-fund")
+        inputs.file(frontendDir.file("package.json"))
+        outputs.dir(frontendDir.dir("node_modules"))
+    }
 
-// No file of the web interface's or of the extension's sources longer than it may be (FileLength), checked
-// before they are built — the Kotlin of every module is checked by its own convention
-val checkScriptLength = tasks.register("checkScriptLength") {
-    val sources = files(
-        // Not the types generated of the API (src/api/schema.d.ts): no one writes them
-        fileTree(frontendDir.dir("src")) { include("**/*.ts", "**/*.tsx", "**/*.js"); exclude("api/schema.d.ts") },
-        fileTree(rootProject.layout.projectDirectory.dir("browser-extension/extension")) { include("**/*.js") },
-    )
-    val root = rootProject.projectDir
-    inputs.files(sources)
-    inputs.files(rootProject.file(FileLength.KNOWN)).optional()
-    doLast { FileLength.check(root, sources.files) }
-}
-tasks.named("check") { dependsOn(checkScriptLength) }
+// The rules of the web interface's and of the extension's scripts (biome.json: no file longer than 600 lines),
+// checked by Biome before they are built — the Kotlin of every module by detekt
+val lintScripts =
+    tasks.register<Exec>("lintScripts") {
+        dependsOn(npmInstall)
+        workingDir = frontendDir.asFile
+        commandLine(npm(), "run", "lint")
+        inputs.dir(frontendDir.dir("src"))
+        inputs.dir(rootProject.layout.projectDirectory.dir("browser-extension/extension"))
+        inputs.file(rootProject.layout.projectDirectory.file("biome.jsonc"))
+        // Up to date while none of them changed: a mark of the last check that passed
+        val passed = layout.buildDirectory.file("lint/scripts.passed")
+        outputs.file(passed)
+        doLast {
+            passed.get().asFile.apply {
+                parentFile.mkdirs()
+                writeText("")
+            }
+        }
+    }
 
-val buildFrontend = tasks.register<Exec>("buildFrontend") {
-    dependsOn(npmInstall, checkScriptLength)
-    workingDir = frontendDir.asFile
-    commandLine(npm(), "run", "build")
-    inputs.dir(frontendDir.dir("src"))
-    inputs.file(frontendDir.file("index.html"))
-    inputs.file(frontendDir.file("package.json"))
-    inputs.file(frontendDir.file("vite.config.ts"))
-    inputs.file(openApiSpec)
-    outputs.dir(frontendDir.dir("dist"))
-}
+tasks.named("check") { dependsOn(lintScripts) }
+
+val buildFrontend =
+    tasks.register<Exec>("buildFrontend") {
+        dependsOn(npmInstall)
+        workingDir = frontendDir.asFile
+        commandLine(npm(), "run", "build")
+        inputs.dir(frontendDir.dir("src"))
+        inputs.file(frontendDir.file("index.html"))
+        inputs.file(frontendDir.file("package.json"))
+        inputs.file(frontendDir.file("vite.config.ts"))
+        inputs.file(openApiSpec)
+        outputs.dir(frontendDir.dir("dist"))
+    }
 
 // --- The Firefox extension of the browser tracking mode: a folder of the distribution, extension/ ---
 
@@ -193,7 +208,9 @@ tasks.named<ProcessResources>("processResources") {
 // --- The distribution: lib/ the application, plugins/<name>/ every plugin of this build ---
 
 val pluginProjects = rootProject.subprojects.filter { it.path.startsWith(":plugins:") }
+
 pluginProjects.forEach { evaluationDependsOn(it.path) }
+
 val pluginDists = pluginProjects.map { it.tasks.named("pluginDist") }
 
 /** The Vector API is incubating, and JavaCPP and the off-heap segments call native code. */
@@ -202,7 +219,8 @@ val jvmFlags = listOf("--add-modules", "jdk.incubator.vector", "--enable-native-
 application {
     applicationName = "recommend4me"
     mainClass = "io.github.vlsergey.recommend4me.launcher.LauncherKt"
-    // 12 GB: the pages H2 keeps of every source's file, up to a gigabyte each (Databases.SOURCE_CACHE_MB), beside the 4-5 GB the rest takes
+    // 12 GB: the pages H2 keeps of every source's file, up to a gigabyte each (Databases.SOURCE_CACHE_MB), beside the
+    // 4-5 GB the rest takes
     applicationDefaultJvmArgs = jvmFlags + listOf("-Xmx12g")
 }
 
@@ -222,8 +240,9 @@ tasks.named<JavaExec>("run") {
     dependsOn(pluginDists)
     workingDir = rootDir
     // The plugins of this build, and those of other builds named by -PpluginDirs=<dir>;<dir>
-    val dirs = pluginProjects.map { it.layout.buildDirectory.dir("plugin").get().asFile.absolutePath } +
-        (project.findProperty("pluginDirs") as String?).orEmpty().split(';').filter { it.isNotBlank() }
+    val dirs =
+        pluginProjects.map { it.layout.buildDirectory.dir("plugin").get().asFile.absolutePath } +
+            (project.findProperty("pluginDirs") as String?).orEmpty().split(';').filter { it.isNotBlank() }
     systemProperty("recommend4me.plugin-dirs", dirs.joinToString(File.pathSeparator))
     systemProperty("recommend4me.extension-dir", extensionDir.asFile.absolutePath)
 }

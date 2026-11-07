@@ -6,21 +6,21 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * What a work tells of its age rating for the model: its [features] — its tags, the site it is of —
- * and the steps of the scale its rating is known to lie between, both in ([low], [high]: one step of
- * a rating stated, a few of a bound).
+ * What a work tells of its age rating for the model: its [features] — its tags, the site it is of — and the steps of
+ * the scale its rating is known to lie between, both in ([low], [high]: one step of a rating stated, a few of a bound).
  */
 class RatingExample(val features: List<String>, val low: Int, val high: Int)
 
 /**
- * THE AGE RATING OF A WORK BY WHAT IS KNOWN OF IT — an ordinal logistic model: a work's features
- * add up to how strong it is ([weights], a feature of none nought), and the chance its rating is at
- * most the step k of the scale is σ(threshold_k − that sum), the [thresholds] rising between the
- * [steps] ratings. Learnt from works whose rating is known to lie between two steps — the chance of
- * that span — so a bound a site tells ("18+": NC-17 to NC-21) teaches it as a rating it states does.
+ * THE AGE RATING OF A WORK BY WHAT IS KNOWN OF IT — an ordinal logistic model: a work's features add up to how strong
+ * it is ([weights], a feature of none nought), and the chance its rating is at most the step k of the scale is
+ * σ(threshold_k − that sum), the [thresholds] rising between the [steps] ratings. Learnt from works whose rating is
+ * known to lie between two steps — the chance of that span — so a bound a site tells ("18+": NC-17 to NC-21) teaches it
+ * as a rating it states does.
  */
 class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArray) {
-    val steps: Int get() = thresholds.size + 1
+    val steps: Int
+        get() = thresholds.size + 1
 
     /** How strong a work of these features is. */
     fun strength(features: Collection<String>): Double = features.sumOf { weights[it] ?: 0.0 }
@@ -33,7 +33,10 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
     }
 
     companion object {
-        /** The penalty of every weight, against the loss summed over the works: a feature of a few works stays near nought. */
+        /**
+         * The penalty of every weight, against the loss summed over the works: a feature of a few works stays near
+         * nought.
+         */
         const val LAMBDA = 1.0
 
         private const val ITERATIONS = 400
@@ -45,8 +48,8 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
         fun sigmoid(x: Double): Double = 1.0 / (1.0 + exp(-x))
 
         /**
-         * The model of the scale of [steps] ratings learnt from the [examples], by Adam on the loss
-         * summed with the penalty; null when no example bounds the rating at all.
+         * The model of the scale of [steps] ratings learnt from the [examples], by Adam on the loss summed with the
+         * penalty; null when no example bounds the rating at all.
          */
         fun fit(examples: List<RatingExample>, steps: Int): AgeRatingModel? {
             val useful = examples.filter { it.low > 0 || it.high < steps - 1 }
@@ -91,13 +94,19 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
                 // The thresholds kept rising
                 for (j in 1 until k) theta[n + j] = max(theta[n + j], theta[n + j - 1] + GAP)
             }
-            return AgeRatingModel(features.withIndex().associate { (i, f) -> f to theta[i] }, DoubleArray(k) { theta[n + it] })
+            return AgeRatingModel(
+                features.withIndex().associate { (i, f) -> f to theta[i] },
+                DoubleArray(k) { theta[n + it] },
+            )
         }
 
         /** The loss of the [model] on the [examples]: the mean −log of the chance of their spans. */
-        fun loss(model: AgeRatingModel, examples: List<RatingExample>): Double = examples.map { e ->
-            val p = model.chances(e.features)
-            -ln(max(1e-12, (e.low..e.high).sumOf { p[it] }))
-        }.average()
+        fun loss(model: AgeRatingModel, examples: List<RatingExample>): Double =
+            examples
+                .map { e ->
+                    val p = model.chances(e.features)
+                    -ln(max(1e-12, (e.low..e.high).sumOf { p[it] }))
+                }
+                .average()
     }
 }

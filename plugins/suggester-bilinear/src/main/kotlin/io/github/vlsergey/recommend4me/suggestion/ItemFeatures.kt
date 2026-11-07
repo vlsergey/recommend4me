@@ -7,21 +7,20 @@ import io.github.vlsergey.recommend4me.matrix.Simd
 import java.util.stream.IntStream
 
 /**
- * THE FEATURES OF ITEMS AS THE PRODUCTS READ THEM, NEVER LAID OUT WHOLE: of the layout of a
- * [Design], every input block's vectors as the task holds them — the rows of the items that have it
- * alone ([InputBlock]), in half precision, times the block's scale — and the features that are one
- * or nought — the constant, the marks of having a block, the values of the other facets — as the
- * list of every item's ones. Laid out whole, the 75 621 works of fanfics.me were 27 018 numbers each:
- * two billion, eighteen thousand of them the values of the other facets, all but a few nought; a
+ * THE FEATURES OF ITEMS AS THE PRODUCTS READ THEM, NEVER LAID OUT WHOLE: of the layout of a [Design], every input
+ * block's vectors as the task holds them — the rows of the items that have it alone ([InputBlock]), in half precision,
+ * times the block's scale — and the features that are one or nought — the constant, the marks of having a block, the
+ * values of the other facets — as the list of every item's ones. Laid out whole, the 75 621 works of fanfics.me were 27
+ * 018 numbers each: two billion, eighteen thousand of them the values of the other facets, all but a few nought; a
  * block of a row of every item, its rows of the items without it nought — of the notes 75 584 of 75 630.
  *
- * A block's product is of its own rows, carried onto the items' rows (or columns) after, and the
- * items' taken from them for the products back: [Scratch.part] holds a block's part between the two.
- * Its rows are made single precision [ROWS] at a time for the library to multiply ([Scratch.rows]).
- * Both made once by whoever multiplies, as large as [scratchOf] says.
+ * A block's product is of its own rows, carried onto the items' rows (or columns) after, and the items' taken from them
+ * for the products back: [Scratch.part] holds a block's part between the two. Its rows are made single precision [ROWS]
+ * at a time for the library to multiply ([Scratch.rows]). Both made once by whoever multiplies, as large as [scratchOf]
+ * says.
  *
- * Every product of the items' features goes through here, in both layouts of the weights: A
- * (width × rank) of [Bilinear], Aᵀ (rank × width, models one under another) of [Ensemble].
+ * Every product of the items' features goes through here, in both layouts of the weights: A (width × rank) of
+ * [Bilinear], Aᵀ (rank × width, models one under another) of [Ensemble].
  */
 internal class ItemFeatures(
     /** How many items. */
@@ -33,14 +32,19 @@ internal class ItemFeatures(
     val ones: Array<IntArray>,
 ) {
     /**
-     * A block's vectors, a row of each item of [items] that has it; its mark of having it at [mark]
-     * of the layout, its first coordinate after it, every one times [scale]. [card]: the same rows on
-     * the card, as the task's input holds them there.
+     * A block's vectors, a row of each item of [items] that has it; its mark of having it at [mark] of the layout, its
+     * first coordinate after it, every one times [scale]. [card]: the same rows on the card, as the task's input holds
+     * them there.
      */
     class Dense(val vectors: HalfMatrix, val items: IntArray, val mark: Int, val scale: Float, val card: CardRows?) {
-        val dim: Int get() = vectors.cols
-        val count: Int get() = items.size
-        val column: Int get() = mark + 1
+        val dim: Int
+            get() = vectors.cols
+
+        val count: Int
+            get() = items.size
+
+        val column: Int
+            get() = mark + 1
     }
 
     /** What a product of the blocks needs besides: a block's part of it, and a run of its rows in single precision. */
@@ -53,9 +57,12 @@ internal class ItemFeatures(
     val longest: Int = blocks.maxOfOrNull { it.dim } ?: 0
 
     /** Room for a block's part of a product of [k] coordinates, and for its rows made single precision. */
-    fun scratchOf(k: Int): Scratch = Scratch(Floats(maxOf(1, k * widest)), Floats(maxOf(1, minOf(ROWS, widest) * longest)))
+    fun scratchOf(k: Int): Scratch =
+        Scratch(Floats(maxOf(1, k * widest)), Floats(maxOf(1, minOf(ROWS, widest) * longest)))
 
-    /** Every run of [ROWS] rows of [b] made single precision into [s]'s rows: [work] of its first row and its number. */
+    /**
+     * Every run of [ROWS] rows of [b] made single precision into [s]'s rows: [work] of its first row and its number.
+     */
     private inline fun runs(b: Dense, s: Scratch, work: (Int, Int) -> Unit) {
         var from = 0
         while (from < b.count) {
@@ -89,10 +96,28 @@ internal class ItemFeatures(
         val part = scratch.part
         blocks.forEach { b ->
             runs(b, scratch) { from, count ->
-                Blas.gemm(false, false, count, rank, b.dim, scratch.rows, 0, b.dim, a, b.column * rank, rank, part, from * rank, rank, alpha = b.scale)
+                Blas.gemm(
+                    false,
+                    false,
+                    count,
+                    rank,
+                    b.dim,
+                    scratch.rows,
+                    0,
+                    b.dim,
+                    a,
+                    b.column * rank,
+                    rank,
+                    part,
+                    from * rank,
+                    rank,
+                    alpha = b.scale,
+                )
             }
             // An item once in a block: no two of its rows on one
-            IntStream.range(0, b.count).parallel().forEach { j -> Simd.axpy(1f, part, j * rank, out, b.items[j] * rank, rank) }
+            IntStream.range(0, b.count).parallel().forEach { j ->
+                Simd.axpy(1f, part, j * rank, out, b.items[j] * rank, rank)
+            }
         }
     }
 
@@ -108,7 +133,24 @@ internal class ItemFeatures(
         blocks.forEach { b ->
             IntStream.range(0, b.count).parallel().forEach { j -> part.copy(du, b.items[j] * rank, j * rank, rank) }
             runs(b, scratch) { from, count ->
-                Blas.gemm(true, false, b.dim, rank, count, scratch.rows, 0, b.dim, part, from * rank, rank, out, b.column * rank, rank, beta = 1f, alpha = b.scale)
+                Blas.gemm(
+                    true,
+                    false,
+                    b.dim,
+                    rank,
+                    count,
+                    scratch.rows,
+                    0,
+                    b.dim,
+                    part,
+                    from * rank,
+                    rank,
+                    out,
+                    b.column * rank,
+                    rank,
+                    beta = 1f,
+                    alpha = b.scale,
+                )
             }
         }
     }
@@ -120,7 +162,23 @@ internal class ItemFeatures(
         blocks.forEach { b ->
             val count = b.count
             runs(b, scratch) { from, many ->
-                Blas.gemm(false, true, k, many, b.dim, aT, b.column, width, scratch.rows, 0, b.dim, part, from, count, alpha = b.scale)
+                Blas.gemm(
+                    false,
+                    true,
+                    k,
+                    many,
+                    b.dim,
+                    aT,
+                    b.column,
+                    width,
+                    scratch.rows,
+                    0,
+                    b.dim,
+                    part,
+                    from,
+                    count,
+                    alpha = b.scale,
+                )
             }
             // A row of Uᵀ on a core of its own: the block's columns onto its items'
             IntStream.range(0, k).parallel().forEach { q ->
@@ -144,12 +202,32 @@ internal class ItemFeatures(
             }
             // The block's columns of gA are nought ([onesGradient]): every run added onto them
             runs(b, scratch) { from, many ->
-                Blas.gemm(false, false, k, b.dim, many, part, from, count, scratch.rows, 0, b.dim, gA, b.column, width, beta = 1f, alpha = b.scale)
+                Blas.gemm(
+                    false,
+                    false,
+                    k,
+                    b.dim,
+                    many,
+                    part,
+                    from,
+                    count,
+                    scratch.rows,
+                    0,
+                    b.dim,
+                    gA,
+                    b.column,
+                    width,
+                    beta = 1f,
+                    alpha = b.scale,
+                )
             }
         }
     }
 
-    /** Of the ones alone, Uᵀ = Aᵀ Xᵀ written into [uT]: the blocks' part is added to it after. A row of Aᵀ on a core of its own. */
+    /**
+     * Of the ones alone, Uᵀ = Aᵀ Xᵀ written into [uT]: the blocks' part is added to it after. A row of Aᵀ on a core of
+     * its own.
+     */
     fun onesCoordinates(aT: Floats, k: Int, uT: Floats) {
         IntStream.range(0, k).parallel().forEach { q ->
             val aAt = q * width
@@ -163,8 +241,8 @@ internal class ItemFeatures(
     }
 
     /**
-     * Of the ones alone, dAᵀ = dUᵀ X written into [gA] — the blocks' columns nought, written by
-     * their products after. A row of dAᵀ on a core of its own: none written by two.
+     * Of the ones alone, dAᵀ = dUᵀ X written into [gA] — the blocks' columns nought, written by their products after. A
+     * row of dAᵀ on a core of its own: none written by two.
      */
     fun onesGradient(duT: Floats, k: Int, gA: Floats) {
         IntStream.range(0, k).parallel().forEach { q ->
@@ -179,7 +257,10 @@ internal class ItemFeatures(
         }
     }
 
-    /** Every item's ones one after another, and where each item's begin: of [rows] + 1, the last their number. As a kernel reads them. */
+    /**
+     * Every item's ones one after another, and where each item's begin: of [rows] + 1, the last their number. As a
+     * kernel reads them.
+     */
     fun onesFlat(): Pair<IntArray, IntArray> {
         val at = IntArray(rows + 1)
         for (i in 0 until rows) at[i + 1] = at[i] + ones[i].size

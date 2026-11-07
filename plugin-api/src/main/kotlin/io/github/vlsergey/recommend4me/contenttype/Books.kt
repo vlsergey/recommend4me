@@ -5,8 +5,8 @@ import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 
 /**
- * BOOKS — novels, fan fiction, serials of any site — and their standard facets: what every source
- * of books maps its own facets onto. What the work is about is the text of the role
+ * BOOKS — novels, fan fiction, serials of any site — and their standard facets: what every source of books maps its own
+ * facets onto. What the work is about is the text of the role
  * [DESCRIPTION][io.github.vlsergey.recommend4me.source.TextRole.DESCRIPTION] of every source.
  */
 object Books {
@@ -21,15 +21,18 @@ object Books {
         val FROZEN = StandardValue("frozen", "Заморожено")
     }
 
-    val STATUS = StandardFacet(
-        "status",
-        values = listOf(Status.FINISHED, Status.IN_PROGRESS, Status.FROZEN),
-        role = FacetRole.STATUS, filter = true, onCard = true,
-    )
+    val STATUS =
+        StandardFacet(
+            "status",
+            values = listOf(Status.FINISHED, Status.IN_PROGRESS, Status.FROZEN),
+            role = FacetRole.STATUS,
+            filter = true,
+            onCard = true,
+        )
 
     /**
-     * Whom the work's relationships are between — AO3's category, ficbook's direction: of a site
-     * that says the work has none ("No category", "Не определено"), no value.
+     * Whom the work's relationships are between — AO3's category, ficbook's direction: of a site that says the work has
+     * none ("No category", "Не определено"), no value.
      */
     object Direction {
         val GEN = StandardValue("gen", "Джен")
@@ -41,11 +44,23 @@ object Books {
         val ARTICLE = StandardValue("article", "Статья")
     }
 
-    val DIRECTION = StandardFacet(
-        "direction",
-        values = listOf(Direction.GEN, Direction.HET, Direction.SLASH, Direction.FEMSLASH, Direction.MIXED, Direction.OTHER, Direction.ARTICLE),
-        role = FacetRole.CONTENT, filter = true, onCard = true,
-    )
+    val DIRECTION =
+        StandardFacet(
+            "direction",
+            values =
+                listOf(
+                    Direction.GEN,
+                    Direction.HET,
+                    Direction.SLASH,
+                    Direction.FEMSLASH,
+                    Direction.MIXED,
+                    Direction.OTHER,
+                    Direction.ARTICLE,
+                ),
+            role = FacetRole.CONTENT,
+            filter = true,
+            onCard = true,
+        )
 
     /** The tags as the site writes them ([StandardTags.TAG]). */
     val TAG = StandardTags.TAG
@@ -81,14 +96,34 @@ object Books {
     }
 
     /** The shelf of the user's library on the site the work is on; the shelf of the finished also sets [READ]. */
-    val SHELF = StandardSignal("shelf", listOf(Shelf.READING, Shelf.SAVED, Shelf.FINISHED, Shelf.DISLIKED, Shelf.PURCHASED))
+    val SHELF =
+        StandardSignal("shelf", listOf(Shelf.READING, Shelf.SAVED, Shelf.FINISHED, Shelf.DISLIKED, Shelf.PURCHASED))
 
-    val TYPE = ContentType(
-        id = ID,
-        universes = true,
-        facets = listOf(AUTHOR, STATUS, DIRECTION, UniverseFacets.KIND_FACET, TAG, FANDOM, PAIRINGS, StandardLanguages.LANGUAGE, AgeRating.SITE),
-        layer = listOf(TAGS, StandardLanguages.languages(single = true), AgeRating.RATING),
-        signals = listOf(READ, LIKED, SHELF),
-        numbers = listOf(PARTS, StandardNumbers.WORDS, StandardNumbers.CHARS, StandardNumbers.LIKES, StandardNumbers.VIEWS),
-    )
+    val TYPE =
+        ContentType(
+            id = ID,
+            universes = true,
+            facets =
+                listOf(
+                    AUTHOR,
+                    STATUS,
+                    DIRECTION,
+                    UniverseFacets.KIND_FACET,
+                    TAG,
+                    FANDOM,
+                    PAIRINGS,
+                    StandardLanguages.LANGUAGE,
+                    AgeRating.SITE,
+                ),
+            layer = listOf(TAGS, StandardLanguages.languages(single = true), AgeRating.RATING),
+            signals = listOf(READ, LIKED, SHELF),
+            numbers =
+                listOf(
+                    PARTS,
+                    StandardNumbers.WORDS,
+                    StandardNumbers.CHARS,
+                    StandardNumbers.LIKES,
+                    StandardNumbers.VIEWS,
+                ),
+        )
 }

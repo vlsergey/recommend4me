@@ -13,25 +13,26 @@ import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
- * The image tower of SigLIP2 NaFlex (google/siglip2-so400m-patch16-naflex), exported by
- * tools/export_siglip2_naflex.py into the models folder.
+ * The image tower of SigLIP2 NaFlex (google/siglip2-so400m-patch16-naflex), exported by tools/export_siglip2_naflex.py
+ * into the models folder.
  *
- * THE PICTURE KEEPS ITS PROPORTIONS. It is resized, aspect ratio kept, to the largest size whose
- * 16×16 patches number at most [MAX_PATCHES], and fed as a sequence of patches with a mask: a
- * 1600×400 banner becomes 32×8 patches, not a squeezed square.
+ * THE PICTURE KEEPS ITS PROPORTIONS. It is resized, aspect ratio kept, to the largest size whose 16×16 patches number
+ * at most [MAX_PATCHES], and fed as a sequence of patches with a mask: a 1600×400 banner becomes 32×8 patches, not a
+ * squeezed square.
  *
- * WHAT THE GRAPH CANNOT DO IS DONE HERE: the positional embeddings are a 16×16 grid that the model
- * resizes to every picture's patch grid (antialiased bilinear) — a resize whose size is the data.
- * The grid is read from the export, resized by [Resample.f32] and handed to the graph.
+ * WHAT THE GRAPH CANNOT DO IS DONE HERE: the positional embeddings are a 16×16 grid that the model resizes to every
+ * picture's patch grid (antialiased bilinear) — a resize whose size is the data. The grid is read from the export,
+ * resized by [Resample.f32] and handed to the graph.
  *
- * Preparation follows the image processor: PIL's bilinear resize ([Resample.u8]), pixels to
- * −1…1, patches flattened as (y, x, rgb).
+ * Preparation follows the image processor: PIL's bilinear resize ([Resample.u8]), pixels to −1…1, patches flattened as
+ * (y, x, rgb).
  */
 class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
 
     /** Spatial size of a prepared picture in patches, and its patches, (y, x, rgb), −1…1. */
     class Prepared(val rows: Int, val cols: Int, val patches: FloatArray) : PreparedPicture {
-        val count: Int get() = rows * cols
+        val count: Int
+            get() = rows * cols
     }
 
     /** The positional grid as DIM planes of GRID×GRID, ready for [Resample.f32]. */
@@ -105,14 +106,30 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
                     if (cell < cells) mask[r * n + cell] = 1
                 }
             }
-            val result = onnx.run(
-                MODEL,
-                mapOf(
-                    "patches" to OnnxTensor.createTensor(onnx.env, FloatBuffer.wrap(patches), longArrayOf(b.toLong(), n.toLong(), PATCH_VALUES.toLong())),
-                    "positions" to OnnxTensor.createTensor(onnx.env, FloatBuffer.wrap(positions), longArrayOf(b.toLong(), n.toLong(), DIM.toLong())),
-                    "mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), longArrayOf(b.toLong(), n.toLong())),
-                ),
-            )
+            val result =
+                onnx.run(
+                    MODEL,
+                    mapOf(
+                        "patches" to
+                            OnnxTensor.createTensor(
+                                onnx.env,
+                                FloatBuffer.wrap(patches),
+                                longArrayOf(b.toLong(), n.toLong(), PATCH_VALUES.toLong()),
+                            ),
+                        "positions" to
+                            OnnxTensor.createTensor(
+                                onnx.env,
+                                FloatBuffer.wrap(positions),
+                                longArrayOf(b.toLong(), n.toLong(), DIM.toLong()),
+                            ),
+                        "mask" to
+                            OnnxTensor.createTensor(
+                                onnx.env,
+                                LongBuffer.wrap(mask),
+                                longArrayOf(b.toLong(), n.toLong()),
+                            ),
+                    ),
+                )
             batch.forEachIndexed { r, i -> vectors[i] = unit(result[r]) }
         }
         vectors.forEach { out += it!! }
@@ -145,8 +162,8 @@ class Siglip2Encoder(private val onnx: Onnx) : ImageEncoder {
         val THREADS = max(1, Runtime.getRuntime().availableProcessors() / 2)
 
         /**
-         * The image processor's binary search for the largest scale whose patches, each side
-         * rounded up to a multiple of [PATCH], number at most [MAX_PATCHES]. Returns (height, width).
+         * The image processor's binary search for the largest scale whose patches, each side rounded up to a multiple
+         * of [PATCH], number at most [MAX_PATCHES]. Returns (height, width).
          */
         fun sizeFor(height: Int, width: Int, eps: Double = 1e-5): Pair<Int, Int> {
             fun scaled(scale: Double, size: Int): Int = max(PATCH, (ceil(size * scale / PATCH) * PATCH).toInt())

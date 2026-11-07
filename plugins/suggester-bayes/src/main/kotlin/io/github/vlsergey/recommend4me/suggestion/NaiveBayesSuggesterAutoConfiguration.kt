@@ -5,6 +5,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class NaiveBayesSuggesterAutoConfiguration {
-    @Bean
-    fun naiveBayesSuggester(): FacetSuggester = NaiveBayesSuggester()
+    @Bean fun naiveBayesSuggester(): FacetSuggester = NaiveBayesSuggester()
 }

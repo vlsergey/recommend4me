@@ -9,9 +9,9 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(DeclaredFacets::class.java)
 
 /**
- * A SOURCE'S FACETS ARE THOSE IT DECLARES, with the application's layer over them: on start the
- * values of a facet no longer declared — two merged into one, renamed — are removed and told of.
- * The source sets them anew from its pages under their new names when it reads them again.
+ * A SOURCE'S FACETS ARE THOSE IT DECLARES, with the application's layer over them: on start the values of a facet no
+ * longer declared — two merged into one, renamed — are removed and told of. The source sets them anew from its pages
+ * under their new names when it reads them again.
  */
 @Component
 class DeclaredFacets(private val stores: Stores) {

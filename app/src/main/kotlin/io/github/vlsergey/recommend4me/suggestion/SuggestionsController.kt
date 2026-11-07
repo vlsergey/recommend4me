@@ -1,30 +1,44 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.api.SuggestionsApi
 import io.github.vlsergey.recommend4me.api.model.Candidate
-import io.github.vlsergey.recommend4me.api.model.MentionQuote
-import io.github.vlsergey.recommend4me.api.model.TextRange
 import io.github.vlsergey.recommend4me.api.model.FacetSuggestions as ApiFacetSuggestions
+import io.github.vlsergey.recommend4me.api.model.MentionQuote
 import io.github.vlsergey.recommend4me.api.model.SuggestedValue
+import io.github.vlsergey.recommend4me.api.model.TextRange
+import io.github.vlsergey.recommend4me.i18n.I18nKeys
+import io.github.vlsergey.recommend4me.search.Search
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
-import io.github.vlsergey.recommend4me.search.Search
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
-fun ItemFacetSuggestions.toApi(store: SourceStore) = ApiFacetSuggestions(
-    facet = facet.key,
-    labelKey = I18nKeys.facetLabel(store.id, facet),
-    suggested = store.descriptions(facet.key, suggested.map { it.key }).let { described ->
-        suggested.map { SuggestedValue(it.key, names[it.key] ?: it.key, it.chance, store.nameKey(facet.key, it.key), described[it.key]) }
-    },
-)
+fun ItemFacetSuggestions.toApi(store: SourceStore) =
+    ApiFacetSuggestions(
+        facet = facet.key,
+        labelKey = I18nKeys.facetLabel(store.id, facet),
+        suggested =
+            store.descriptions(facet.key, suggested.map { it.key }).let { described ->
+                suggested.map {
+                    SuggestedValue(
+                        it.key,
+                        names[it.key] ?: it.key,
+                        it.chance,
+                        store.nameKey(facet.key, it.key),
+                        described[it.key],
+                    )
+                }
+            },
+    )
 
 @RestController
-class SuggestionsController(private val stores: Stores, private val suggestions: FacetSuggestions, private val search: Search) : SuggestionsApi {
+class SuggestionsController(
+    private val stores: Stores,
+    private val suggestions: FacetSuggestions,
+    private val search: Search,
+) : SuggestionsApi {
 
     override fun getSuggestions(source: String, item: String): ResponseEntity<List<ApiFacetSuggestions>> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
@@ -39,7 +53,13 @@ class SuggestionsController(private val stores: Stores, private val suggestions:
         return ResponseEntity.noContent().build()
     }
 
-    override fun getCandidates(source: String, item: String, facet: String, limit: Int?, named: Int?): ResponseEntity<List<Candidate>> {
+    override fun getCandidates(
+        source: String,
+        item: String,
+        facet: String,
+        limit: Int?,
+        named: Int?,
+    ): ResponseEntity<List<Candidate>> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         val found = suggestions.candidates(store, item, facet, limit, named) ?: return ResponseEntity.notFound().build()
         // A universe and a character are entries of a catalogue: their pages there, as the dictionary keeps them
@@ -53,34 +73,52 @@ class SuggestionsController(private val stores: Stores, private val suggestions:
             found.candidates.map {
                 val name = found.names[it.key] ?: it.key
                 Candidate(
-                    key = it.key, name = name, nameKey = store.nameKey(facet, it.key),
-                    chance = it.chance, mentions = it.mentions, named = it.named.takeIf { n -> n }, url = pages[it.key], description = described[it.key],
+                    key = it.key,
+                    name = name,
+                    nameKey = store.nameKey(facet, it.key),
+                    chance = it.chance,
+                    mentions = it.mentions,
+                    named = it.named.takeIf { n -> n },
+                    url = pages[it.key],
+                    description = described[it.key],
                     names = named[it.key]?.let { all -> (listOf(name) + all).distinct() },
                 )
-            },
+            }
         )
     }
 
-    override fun getMentions(source: String, item: String, facet: String, value: String): ResponseEntity<List<MentionQuote>> {
+    override fun getMentions(
+        source: String,
+        item: String,
+        facet: String,
+        value: String,
+    ): ResponseEntity<List<MentionQuote>> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (store.items.find(item) == null) return ResponseEntity.notFound().build()
-        val quotes = when (val quoting = suggestions.quoting(store, item, facet, value) ?: return ResponseEntity.notFound().build()) {
-            is Quoting.InIndex -> search.quotes(store, item, quoting.names, quoting.of)
-            is Quoting.Together -> search.quotesTogether(store, item, quoting.names, quoting.a, quoting.b)
-            Quoting.None -> emptyList()
-        }
+        val quotes =
+            when (
+                val quoting = suggestions.quoting(store, item, facet, value) ?: return ResponseEntity.notFound().build()
+            ) {
+                is Quoting.InIndex -> search.quotes(store, item, quoting.names, quoting.of)
+                is Quoting.Together -> search.quotesTogether(store, item, quoting.names, quoting.a, quoting.b)
+                Quoting.None -> emptyList()
+            }
         return ResponseEntity.ok(
             quotes.map { q ->
                 MentionQuote(
-                    text = q.text, highlights = q.highlights.map { TextRange(it.first, it.last + 1) },
-                    labelKey = q.place.labelKey, title = q.place.title, part = q.place.part,
+                    text = q.text,
+                    highlights = q.highlights.map { TextRange(it.first, it.last + 1) },
+                    labelKey = q.place.labelKey,
+                    title = q.place.title,
+                    part = q.place.part,
                 )
-            },
+            }
         )
     }
 
     companion object {
         /** The facets whose values are entries of a catalogue of universes. */
-        private val PAGED = setOf(UniverseFacets.UNIVERSE, UniverseFacets.CHARACTERS, UniverseFacets.SECONDARY_CHARACTERS)
+        private val PAGED =
+            setOf(UniverseFacets.UNIVERSE, UniverseFacets.CHARACTERS, UniverseFacets.SECONDARY_CHARACTERS)
     }
 }

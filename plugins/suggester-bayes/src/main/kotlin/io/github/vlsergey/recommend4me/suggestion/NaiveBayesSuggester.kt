@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -8,25 +7,25 @@ import java.io.DataOutputStream
 import java.util.concurrent.CancellationException
 import kotlin.math.exp
 import kotlin.math.ln
+import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(NaiveBayesSuggester::class.java)
 
 /**
- * NAIVE BAYES OVER THE WORK'S OTHER VALUES: the chance a work has a value from how often the works
- * with each of its other values — its fandom, the site's tags, its author — have it, each told apart
- * as if alone, with the value's own share among the works. Reads no text and no picture: fast, and
- * a measure of how much of a facet the other facets tell by themselves.
+ * NAIVE BAYES OVER THE WORK'S OTHER VALUES: the chance a work has a value from how often the works with each of its
+ * other values — its fandom, the site's tags, its author — have it, each told apart as if alone, with the value's own
+ * share among the works. Reads no text and no picture: fast, and a measure of how much of a facet the other facets tell
+ * by themselves.
  *
  *     logit P(v | i) = ln((N₁ᵥ + α) / (N₀ᵥ + α)) + s · Σ_{c ∈ context(i)} ln( (n₁(c,v) + α·q_c) / (N₁ᵥ + α) · (N₀ᵥ + α) / (n₀(c,v) + α·q_c) )
  *
- * N₁ᵥ, N₀ᵥ: the weights of the pairs of v labelled 1 and 0 ([SuggestionPairs]); n₁(c,v), n₀(c,v)
- * of the works with c; q_c the share of the works with c. The values of the other facets are not
- * independent — a fandom and its pairings say the same twice — so their sum is scaled by [s]; [α]
- * smooths a rare one. Both chosen by the held-out loss of the five folds, the one-standard-error rule
- * preferring the stronger smoothing and the smaller scale.
+ * N₁ᵥ, N₀ᵥ: the weights of the pairs of v labelled 1 and 0 ([SuggestionPairs]); n₁(c,v), n₀(c,v) of the works with c;
+ * q_c the share of the works with c. The values of the other facets are not independent — a fandom and its pairings say
+ * the same twice — so their sum is scaled by [s]; [α] smooths a rare one. Both chosen by the held-out loss of the five
+ * folds, the one-standard-error rule preferring the stronger smoothing and the smaller scale.
  *
- * Its counts are the task's own: a work is scored by the counts of every other work — its own pairs
- * taken out — so nothing is packed but the two settings.
+ * Its counts are the task's own: a work is scored by the counts of every other work — its own pairs taken out — so
+ * nothing is packed but the two settings.
  */
 class NaiveBayesSuggester : FacetSuggester {
 
@@ -50,14 +49,22 @@ class NaiveBayesSuggester : FacetSuggester {
         val chosen = oneStandardError(tried, { it.held }, compareByDescending<Tried> { it.alpha }.thenBy { it.scale })
         log.info(
             "{} items × {} values, {} values of other facets: {}; chosen α={} s={} in {} ms",
-            task.itemCount, task.valueCount, task.contextCount,
+            task.itemCount,
+            task.valueCount,
+            task.contextCount,
             tried.joinToString("; ") { "α=${it.alpha} s=${it.scale}: %.4f ± %.4f".format(it.held.mean, it.held.error) },
-            chosen.alpha, chosen.scale, System.currentTimeMillis() - started,
+            chosen.alpha,
+            chosen.scale,
+            System.currentTimeMillis() - started,
         )
-        val report = FitReport(
-            settings(chosen), chosen.held.mean, chosen.held.error,
-            tried.map { FitTry(settings(it), it.held.mean, it.held.error, it.millis) }, fromScratch = true,
-        )
+        val report =
+            FitReport(
+                settings(chosen),
+                chosen.held.mean,
+                chosen.held.error,
+                tried.map { FitTry(settings(it), it.held.mean, it.held.error, it.millis) },
+                fromScratch = true,
+            )
         return Fitted(chosen.alpha, chosen.scale, report)
     }
 
@@ -71,7 +78,8 @@ class NaiveBayesSuggester : FacetSuggester {
 
     private fun settings(t: Tried) = mapOf(ALPHA to t.alpha.toString(), SCALE to t.scale.toString())
 
-    private class Fitted(val alpha: Double, val scale: Double, override val report: FitReport? = null) : FittedSuggester {
+    private class Fitted(val alpha: Double, val scale: Double, override val report: FitReport? = null) :
+        FittedSuggester {
         override fun on(task: SuggestionTask): SuggestionScores {
             val counts = Counts(task, SuggestionPairs(task))
             return SuggestionScores { rows -> rows.map { counts.chances(it, alpha, scale, exceptOwn = true) } }
@@ -89,20 +97,27 @@ class NaiveBayesSuggester : FacetSuggester {
     }
 
     /**
-     * The weights of the pairs of every value, labelled 1 and 0 — of all the works, and of every
-     * value of the other facets of the works with it. Every work's pairs are a uniform weight over
-     * every value (its lacking ones, when it has any) and the few that differ: the uniform part is
-     * summed apart, so a context's map holds only the values its works have, rejected or were given.
+     * The weights of the pairs of every value, labelled 1 and 0 — of all the works, and of every value of the other
+     * facets of the works with it. Every work's pairs are a uniform weight over every value (its lacking ones, when it
+     * has any) and the few that differ: the uniform part is summed apart, so a context's map holds only the values its
+     * works have, rejected or were given.
      */
-    private class Counts private constructor(
+    private class Counts
+    private constructor(
         val task: SuggestionTask,
         val pairs: SuggestionPairs,
-        /** Of every work, the uniform weight of every value it lacks, and its pairs that differ: value, weight of 0, weight of 1. */
+        /**
+         * Of every work, the uniform weight of every value it lacks, and its pairs that differ: value, weight of 0,
+         * weight of 1.
+         */
         val uniform: FloatArray,
         val sparse: Array<Triple<IntArray, FloatArray, FloatArray>>,
         val included: (Int) -> Boolean,
     ) {
-        constructor(task: SuggestionTask, pairs: SuggestionPairs) : this(task, pairs, uniformOf(task), sparseOf(task, pairs), { true })
+        constructor(
+            task: SuggestionTask,
+            pairs: SuggestionPairs,
+        ) : this(task, pairs, uniformOf(task), sparseOf(task, pairs), { true })
 
         private val m = task.valueCount
         private val n = task.itemCount
@@ -111,7 +126,10 @@ class NaiveBayesSuggester : FacetSuggester {
         val zero = DoubleArray(m)
         val one = DoubleArray(m)
 
-        /** Of every context: the uniform weight of its works, and the sparse weights of 0 and 1 of the values that differ. */
+        /**
+         * Of every context: the uniform weight of its works, and the sparse weights of 0 and 1 of the values that
+         * differ.
+         */
         val contextUniform = DoubleArray(task.contextCount)
         val contextZero = HashMap<Int, HashMap<Int, Double>>()
         val contextOne = HashMap<Int, HashMap<Int, Double>>()
@@ -148,23 +166,25 @@ class NaiveBayesSuggester : FacetSuggester {
         fun without(excluded: (Int) -> Boolean) = Counts(task, pairs, uniform, sparse) { !excluded(it) }
 
         /**
-         * The chance of every value of the work [i], by these counts — its own pairs taken out of
-         * them when [exceptOwn]: a work is not its own witness.
+         * The chance of every value of the work [i], by these counts — its own pairs taken out of them when
+         * [exceptOwn]: a work is not its own witness.
          */
         fun chances(i: Int, alpha: Double, scale: Double, exceptOwn: Boolean): FloatArray {
             val own = exceptOwn && included(i)
             val (values, zeros, ones) = sparse[i]
             val ownZero = HashMap<Int, Double>()
             val ownOne = HashMap<Int, Double>()
-            if (own) values.forEachIndexed { k, v ->
-                ownZero[v] = zeros[k].toDouble()
-                ownOne[v] = ones[k].toDouble()
-            }
+            if (own)
+                values.forEachIndexed { k, v ->
+                    ownZero[v] = zeros[k].toDouble()
+                    ownOne[v] = ones[k].toDouble()
+                }
             val u = if (own) uniform[i].toDouble() else 0.0
             val total = (works - if (own) 1 else 0).coerceAtLeast(1)
             val n0 = DoubleArray(m)
             val n1 = DoubleArray(m)
-            // ln(N₀ᵥ + α) − ln(N₁ᵥ + α): the prior's log odds negated, and the part of every context's term that is the value's alone
+            // ln(N₀ᵥ + α) − ln(N₁ᵥ + α): the prior's log odds negated, and the part of every context's term that is the
+            // value's alone
             val a = DoubleArray(m)
             for (v in 0 until m) {
                 n0[v] = (zero[v] - u - (ownZero[v] ?: 0.0)).coerceAtLeast(0.0)
@@ -205,21 +225,29 @@ class NaiveBayesSuggester : FacetSuggester {
         }
 
         companion object {
-            /** Of every work, the weight every value it lacks has: its lacking weight when it has any value and may have every one. */
+            /**
+             * Of every work, the weight every value it lacks has: its lacking weight when it has any value and may have
+             * every one.
+             */
             // Of a work that may have only some values, the others are counted as lacking too: an
             // approximation of the method's own — what it is judged by ([SuggestionPairs]) is exact
-            fun uniformOf(task: SuggestionTask) = FloatArray(task.itemCount) { i ->
-                if (task.assigned[i].isNotEmpty()) task.lackWeight.toFloat() else 0f
-            }
+            fun uniformOf(task: SuggestionTask) =
+                FloatArray(task.itemCount) { i ->
+                    if (task.assigned[i].isNotEmpty()) task.lackWeight.toFloat() else 0f
+                }
 
             /** Of every work, its pairs that differ from the uniform weight: their weights of 0 and of 1. */
-            fun sparseOf(task: SuggestionTask, pairs: SuggestionPairs): Array<Triple<IntArray, FloatArray, FloatArray>> {
+            fun sparseOf(
+                task: SuggestionTask,
+                pairs: SuggestionPairs,
+            ): Array<Triple<IntArray, FloatArray, FloatArray>> {
                 val uniform = uniformOf(task)
                 return Array(task.itemCount) { i ->
                     val values = ArrayList<Int>()
                     val zeros = ArrayList<Float>()
                     val ones = ArrayList<Float>()
-                    // A pair labelled 1 weighs as 1, and no longer as one lacking; one labelled 0 weighs its own weight instead of the uniform
+                    // A pair labelled 1 weighs as 1, and no longer as one lacking; one labelled 0 weighs its own weight
+                    // instead of the uniform
                     pairs.forEach(i) { v, w, y ->
                         if (y > 0f || w != uniform[i]) {
                             values += v

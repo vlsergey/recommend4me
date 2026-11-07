@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.DuplicatesApi
+import io.github.vlsergey.recommend4me.api.model.DuplicateAnswer as ApiDuplicateAnswer
 import io.github.vlsergey.recommend4me.api.model.DuplicatePage
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
@@ -11,12 +12,17 @@ import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
-import io.github.vlsergey.recommend4me.api.model.DuplicateAnswer as ApiDuplicateAnswer
 
 @RestController
 class DuplicatesController(private val stores: Stores, private val duplicates: Duplicates) : DuplicatesApi {
 
-    override fun getDuplicates(type: String, answered: Boolean, offset: Int, limit: Int, sort: DuplicateSort): ResponseEntity<DuplicatePage> {
+    override fun getDuplicates(
+        type: String,
+        answered: Boolean,
+        offset: Int,
+        limit: Int,
+        sort: DuplicateSort,
+    ): ResponseEntity<DuplicatePage> {
         val page = duplicates.page(type, answered, offset, limit, sort) ?: return ResponseEntity.notFound().build()
         // A search or a fitting planned or running: what there is, the page asks again
         return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
@@ -42,7 +48,13 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
         return ResponseEntity.noContent().build()
     }
 
-    override fun unanswerDuplicate(type: String, source: String, item: String, otherSource: String, otherItem: String): ResponseEntity<Unit> {
+    override fun unanswerDuplicate(
+        type: String,
+        source: String,
+        item: String,
+        otherSource: String,
+        otherItem: String,
+    ): ResponseEntity<Unit> {
         duplicates.unanswer(type, ItemKey(source, item), ItemKey(otherSource, otherItem))
         return ResponseEntity.noContent().build()
     }
@@ -51,7 +63,11 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
         duplicates.journal(type, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun undoDuplicateWord(type: String, id: Long): ResponseEntity<Unit> {
-        if (!duplicates.undo(type, id)) throw Refusal.NOT_UNDOABLE.refuse(HttpStatus.CONFLICT, "Word $id of $type is no word of it, or no longer what its pair has")
+        if (!duplicates.undo(type, id))
+            throw Refusal.NOT_UNDOABLE.refuse(
+                HttpStatus.CONFLICT,
+                "Word $id of $type is no word of it, or no longer what its pair has",
+            )
         return ResponseEntity.noContent().build()
     }
 }

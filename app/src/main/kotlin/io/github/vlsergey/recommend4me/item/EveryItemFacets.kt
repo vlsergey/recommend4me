@@ -4,11 +4,10 @@ import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.source.SourceStore
 
 /**
- * THE VALUES OF THE FACETS OF EVERY ITEM OF A SOURCE, read once by a reading of every work: the
- * site's values by item and facet ([site]), the user's answers by item ([corrections]). Handed to every
- * part of the same reading that reads them — the catalogue, the chain of the facets, the models of
- * facets of their own — not read again by each: of tens of thousands of works a second and more a
- * reading. Lives as long as the reading.
+ * THE VALUES OF THE FACETS OF EVERY ITEM OF A SOURCE, read once by a reading of every work: the site's values by item
+ * and facet ([site]), the user's answers by item ([corrections]). Handed to every part of the same reading that reads
+ * them — the catalogue, the chain of the facets, the models of facets of their own — not read again by each: of tens of
+ * thousands of works a second and more a reading. Lives as long as the reading.
  */
 class EveryItemFacets(
     val site: Map<String, Map<String, List<String>>>,
@@ -18,10 +17,16 @@ class EveryItemFacets(
     val allCorrections: List<FacetCorrection> by lazy { corrections.values.flatten() }
 
     companion object {
-        /** Every value of every facet of every item of the [store], and every answer on them: one pass over each table. */
-        fun read(store: SourceStore): EveryItemFacets = EveryItemFacets(siteOf(store), store.corrections.allFacets().groupBy { it.itemId })
+        /**
+         * Every value of every facet of every item of the [store], and every answer on them: one pass over each table.
+         */
+        fun read(store: SourceStore): EveryItemFacets =
+            EveryItemFacets(siteOf(store), store.corrections.allFacets().groupBy { it.itemId })
 
-        /** Every value of every facet of every item of the [store], by item and facet: one pass over its table, a work's facets in arrays ([WorkFacets]). */
+        /**
+         * Every value of every facet of every item of the [store], by item and facet: one pass over its table, a work's
+         * facets in arrays ([WorkFacets]).
+         */
         fun siteOf(store: SourceStore): Map<String, Map<String, List<String>>> {
             val reading = WorkFacets.Reading()
             store.items.forEachFacetValue(reading::add)

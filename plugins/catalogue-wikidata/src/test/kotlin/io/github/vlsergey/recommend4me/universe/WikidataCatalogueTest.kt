@@ -1,10 +1,10 @@
 package io.github.vlsergey.recommend4me.universe
 
+import kotlin.test.Test
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeEach
 import tools.jackson.databind.json.JsonMapper
-import kotlin.test.Test
-import kotlin.test.assertTrue
 
 /** Against Wikidata itself: run with WIKIDATA_LIVE=1, the build does not depend on the service. */
 class WikidataCatalogueTest {
@@ -12,8 +12,7 @@ class WikidataCatalogueTest {
     private val catalogue = WikidataCatalogue(JsonMapper.builder().build())
     private val languages = listOf("ru", "en")
 
-    @BeforeEach
-    fun live() = assumeTrue(System.getenv("WIKIDATA_LIVE") != null, "WIKIDATA_LIVE is not set")
+    @BeforeEach fun live() = assumeTrue(System.getenv("WIKIDATA_LIVE") != null, "WIKIDATA_LIVE is not set")
 
     @Test
     fun `a name finds its series among the variants`() {
@@ -53,7 +52,13 @@ class WikidataCatalogueTest {
         val neville = characters.first { it.id == "Q190366" }
         val hogwarts = characters.first { it.id == "Q174097" }
         val classes = catalogue.classes((neville.classes + hogwarts.classes).toSet(), languages).associateBy { it.id }
-        assertTrue(neville.classes.any { classes[it]?.character == true }, "Neville: ${neville.classes.map { classes[it]?.name }}")
-        assertTrue(hogwarts.classes.none { classes[it]?.character == true }, "Hogwarts: ${hogwarts.classes.map { classes[it]?.name }}")
+        assertTrue(
+            neville.classes.any { classes[it]?.character == true },
+            "Neville: ${neville.classes.map { classes[it]?.name }}",
+        )
+        assertTrue(
+            hogwarts.classes.none { classes[it]?.character == true },
+            "Hogwarts: ${hogwarts.classes.map { classes[it]?.name }}",
+        )
     }
 }

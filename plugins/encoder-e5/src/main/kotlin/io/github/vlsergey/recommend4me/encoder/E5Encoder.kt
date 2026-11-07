@@ -8,36 +8,42 @@ import java.nio.file.Files
 import kotlin.math.sqrt
 
 /**
- * A MULTILINGUAL sentence encoder: intfloat/multilingual-e5-small as an ONNX graph, 384 numbers,
- * mean-pooled and of unit length. A Russian query and an English overview land in one space —
- * the English-only MiniLM it replaced turned every Russian query into nearly the same vector,
- * and the search answered every one of them with the same games.
+ * A MULTILINGUAL sentence encoder: intfloat/multilingual-e5-small as an ONNX graph, 384 numbers, mean-pooled and of
+ * unit length. A Russian query and an English overview land in one space — the English-only MiniLM it replaced turned
+ * every Russian query into nearly the same vector, and the search answered every one of them with the same games.
  *
- * E5 IS TRAINED WITH PREFIXES: "query: " for what is searched for, "passage: " for what is
- * searched in. The texts of the games are passages; the search line is a query.
+ * E5 IS TRAINED WITH PREFIXES: "query: " for what is searched for, "passage: " for what is searched in. The texts of
+ * the games are passages; the search line is a query.
  *
- * LONG TEXTS ARE READ IN WINDOWS of [WINDOW] tokens (prefix included): every window is encoded
- * on its own, and the text's vector is their mean weighted by length, made unit again.
- * Attention costs the square of the length, so windows shorter than the model's 512 are cheaper.
+ * LONG TEXTS ARE READ IN WINDOWS of [WINDOW] tokens (prefix included): every window is encoded on its own, and the
+ * text's vector is their mean weighted by length, made unit again. Attention costs the square of the length, so windows
+ * shorter than the model's 512 are cheaper.
  */
 class E5Encoder(private val onnx: Onnx) : TextEncoder {
 
-    private val TextKind.prefix: String get() = when (this) {
-        TextKind.QUERY -> "query: "
-        TextKind.PASSAGE -> "passage: "
-    }
+    private val TextKind.prefix: String
+        get() =
+            when (this) {
+                TextKind.QUERY -> "query: "
+                TextKind.PASSAGE -> "passage: "
+            }
 
     private val tokenizer: HuggingFaceTokenizer by lazy {
         val p = onnx.path(TOKENIZER)
         check(Files.isRegularFile(p)) { "The text encoder tokenizer is missing: ${p.toAbsolutePath()}" }
-        HuggingFaceTokenizer.newInstance(p, mapOf("addSpecialTokens" to "false", "truncation" to "false", "padding" to "false"))
+        HuggingFaceTokenizer.newInstance(
+            p,
+            mapOf("addSpecialTokens" to "false", "truncation" to "false", "padding" to "false"),
+        )
     }
 
     /** The ids that open and close every window: <s> and </s> of XLM-RoBERTa. */
     private val bos: Long by lazy { tokenizer.encode("", true, false).ids.first() }
     private val eos: Long by lazy { tokenizer.encode("", true, false).ids.last() }
 
-    private val prefixIds: Map<TextKind, LongArray> by lazy { TextKind.entries.associateWith { pieces(it.prefix.trim()) } }
+    private val prefixIds: Map<TextKind, LongArray> by lazy {
+        TextKind.entries.associateWith { pieces(it.prefix.trim()) }
+    }
 
     override val id = ENCODER
     override val dim = DIM
@@ -76,7 +82,8 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
         if (text.isBlank()) return emptyList()
         val spans = tokenizer.encode(text, false, false).charTokenSpans
         return spans.indices.chunked(room(prefixIds.getValue(TextKind.PASSAGE))).mapNotNull { chunk ->
-            // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that have
+            // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that
+            // have
             val from = chunk.firstNotNullOfOrNull { spans[it] }?.start ?: return@mapNotNull null
             val to = chunk.asReversed().firstNotNullOfOrNull { spans[it] }?.end ?: return@mapNotNull null
             from until to
@@ -87,8 +94,8 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
     private fun room(prefix: LongArray) = WINDOW - 2 - prefix.size
 
     /**
-     * Every window of every text in one list, so windows of different texts share batches, with
-     * the text each is of; at most [limit] windows of a text.
+     * Every window of every text in one list, so windows of different texts share batches, with the text each is of; at
+     * most [limit] windows of a text.
      */
     private fun windowsOf(texts: List<String>, prefix: LongArray, limit: Int): Pair<List<LongArray>, List<Int>> {
         val room = room(prefix)
@@ -105,9 +112,8 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
     }
 
     /**
-     * Vectors of ready windows. Windows are SORTED BY LENGTH before batching: a batch is padded to
-     * its longest window, and mixing a 10-token genre with a 250-token overview would run the
-     * short one through twenty-five times the work.
+     * Vectors of ready windows. Windows are SORTED BY LENGTH before batching: a batch is padded to its longest window,
+     * and mixing a 10-token genre with a 250-token overview would run the short one through twenty-five times the work.
      */
     fun embedIds(windows: List<LongArray>): List<FloatArray> {
         val out = arrayOfNulls<FloatArray>(windows.size)
@@ -124,11 +130,13 @@ class E5Encoder(private val onnx: Onnx) : TextEncoder {
                 }
             }
             val shape = longArrayOf(batch.size.toLong(), len.toLong())
-            val inputs = mutableMapOf(
-                "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
-                "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
-            )
-            if (wantsTypes) inputs[TOKEN_TYPES] = OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size)), shape)
+            val inputs =
+                mutableMapOf(
+                    "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
+                    "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
+                )
+            if (wantsTypes)
+                inputs[TOKEN_TYPES] = OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(LongArray(ids.size)), shape)
             val hidden = onnx.runSequence(MODEL, inputs)
             // Mean pooling over the real tokens, as e5 is trained
             batch.forEachIndexed { r, w ->

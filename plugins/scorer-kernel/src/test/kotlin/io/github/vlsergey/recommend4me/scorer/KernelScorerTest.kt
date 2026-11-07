@@ -27,7 +27,10 @@ class KernelScorerTest {
             val plus = theta.copyOf().also { it[k] += h }
             val minus = theta.copyOf().also { it[k] -= h }
             val numeric = (objective.at(plus, DoubleArray(g.size)) - objective.at(minus, DoubleArray(g.size))) / (2 * h)
-            assertTrue(abs(numeric - g[k]) < 2e-3 * maxOf(1.0, abs(numeric)), "α[$k]: analytic ${g[k]}, numeric $numeric")
+            assertTrue(
+                abs(numeric - g[k]) < 2e-3 * maxOf(1.0, abs(numeric)),
+                "α[$k]: analytic ${g[k]}, numeric $numeric",
+            )
         }
     }
 
@@ -38,17 +41,18 @@ class KernelScorerTest {
         val n = 240
         val d = 6
         val x = Matrix(n, d)
-        val grades = IntArray(n) { i ->
-            for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
-            val s = abs(x.held[i * d] + x.held[i * d + 1])
-            when {
-                s > 1.2f -> 5
-                s > 0.8f -> 4
-                s > 0.5f -> 3
-                s > 0.25f -> 2
-                else -> 1
+        val grades =
+            IntArray(n) { i ->
+                for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
+                val s = abs(x.held[i * d] + x.held[i * d + 1])
+                when {
+                    s > 1.2f -> 5
+                    s > 0.8f -> 4
+                    s > 0.5f -> 3
+                    s > 0.25f -> 2
+                    else -> 1
+                }
             }
-        }
         val ids = LongArray(n) { it.toLong() }
         val task = RankingTask(x, grades, ids, ids)
         val train = IntArray(180) { it }
@@ -86,7 +90,8 @@ class KernelScorerTest {
             for (i in 0 until x.rows) z[i] = (0 until d).sumOf { k -> w[k] * x.held[i * d + k] }.toFloat()
             q.clear()
             pairs.loss(z, q)
-            for (k in 0 until d) w[k] -= 0.5 * ((0 until x.rows).sumOf { i -> q[i] * x.held[i * d + k].toDouble() } / pairs.weight + w[k])
+            for (k in 0 until d) w[k] -=
+                0.5 * ((0 until x.rows).sumOf { i -> q[i] * x.held[i * d + k].toDouble() } / pairs.weight + w[k])
         }
         return FloatArray(x.rows) { i -> (0 until d).sumOf { k -> w[k] * x.held[i * d + k] }.toFloat() }
     }

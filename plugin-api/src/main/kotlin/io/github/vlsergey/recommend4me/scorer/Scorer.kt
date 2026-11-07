@@ -3,11 +3,10 @@ package io.github.vlsergey.recommend4me.scorer
 import io.github.vlsergey.recommend4me.matrix.Matrix
 
 /**
- * The rows a scorer learns from: the features of every rating ([x], a row each), its grade, the
- * work it is of and the item it is of. Two ratings of one work never fall into different folds and
- * are never put in order by their grades. Two items of one work — one book on two sites, linked by
- * the user — are the same work seen twice: compared, they are EQUAL, whatever their grades. Two
- * versions of one item are not compared at all: an update may make a game better.
+ * The rows a scorer learns from: the features of every rating ([x], a row each), its grade, the work it is of and the
+ * item it is of. Two ratings of one work never fall into different folds and are never put in order by their grades.
+ * Two items of one work — one book on two sites, linked by the user — are the same work seen twice: compared, they are
+ * EQUAL, whatever their grades. Two versions of one item are not compared at all: an update may make a game better.
  */
 class RankingTask(val x: Matrix, val grades: IntArray, val works: LongArray, val items: LongArray) {
     init {
@@ -18,16 +17,18 @@ class RankingTask(val x: Matrix, val grades: IntArray, val works: LongArray, val
 }
 
 /**
- * A way of turning the features of a work into a score: the higher, the better the user will like
- * it. Only the ORDER of the scores matters — the application places the grades on 0..10 from the
- * scores of works each fold had not seen.
+ * A way of turning the features of a work into a score: the higher, the better the user will like it. Only the ORDER of
+ * the scores matters — the application places the grades on 0..10 from the scores of works each fold had not seen.
  *
- * The scorer has one parameter (a penalty, a number of neighbours); the application measures
- * every one of [candidates] by cross-validation over works and takes the first — the most
- * cautious — whose quality is within one standard error of the best.
+ * The scorer has one parameter (a penalty, a number of neighbours); the application measures every one of [candidates]
+ * by cross-validation over works and takes the first — the most cautious — whose quality is within one standard error
+ * of the best.
  */
 interface Scorer {
-    /** Stable: kept with the trained model; and the namespace of its title, which the plugin carries ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]). */
+    /**
+     * Stable: kept with the trained model; and the namespace of its title, which the plugin carries
+     * ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]).
+     */
     val id: String
 
     /** The values of the parameter, the most cautious first. */
@@ -37,16 +38,15 @@ interface Scorer {
     val defaultParameter: Double
 
     /**
-     * Learns from the rows [rows] of [task]. Called from many threads at once by the
-     * cross-validation: it should not spread one fit over the cores by itself.
+     * Learns from the rows [rows] of [task]. Called from many threads at once by the cross-validation: it should not
+     * spread one fit over the cores by itself.
      */
     fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer
 
     /**
-     * Learns from the rows [rows] of [task] once with every value of [parameters]: a fit each, in
-     * their order — what the cross-validation asks of every fold. Every value fitted apart by
-     * default, side by side; a scorer whose fit of one value is the beginning of another's — the
-     * first trees of a longer forest — makes them all of one fit.
+     * Learns from the rows [rows] of [task] once with every value of [parameters]: a fit each, in their order — what
+     * the cross-validation asks of every fold. Every value fitted apart by default, side by side; a scorer whose fit of
+     * one value is the beginning of another's — the first trees of a longer forest — makes them all of one fit.
      */
     fun fitEach(task: RankingTask, rows: IntArray, parameters: List<Double>): List<FittedScorer> =
         parameters.parallelStream().map { fit(task, rows, it) }.toList()

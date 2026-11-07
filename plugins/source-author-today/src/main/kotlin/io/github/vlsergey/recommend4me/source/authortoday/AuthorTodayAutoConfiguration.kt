@@ -6,6 +6,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class AuthorTodayAutoConfiguration {
-    @Bean
-    fun authorToday(): Source = AuthorToday()
+    @Bean fun authorToday(): Source = AuthorToday()
 }

@@ -21,10 +21,15 @@ class BackoffTest {
     @Test
     fun `the wait is counted by the settings and kept under the bound if there is one`() {
         val backoff = Backoff(first = Duration.ofMillis(500), factor = 3.0, max = Duration.ofMinutes(1))
-        assertEquals(listOf(500L, 1500L, 4500L, 13500L, 40500L, 60000L, 60000L), (1..7).map { backoff.delayAfter(it).toMillis() })
+        assertEquals(
+            listOf(500L, 1500L, 4500L, 13500L, 40500L, 60000L, 60000L),
+            (1..7).map { backoff.delayAfter(it).toMillis() },
+        )
         assertFailsWith<IllegalArgumentException> { Backoff(first = Duration.ZERO) }
         assertFailsWith<IllegalArgumentException> { Backoff(factor = 0.5) }
-        assertFailsWith<IllegalArgumentException> { Backoff(first = Duration.ofMinutes(2), max = Duration.ofMinutes(1)) }
+        assertFailsWith<IllegalArgumentException> {
+            Backoff(first = Duration.ofMinutes(2), max = Duration.ofMinutes(1))
+        }
     }
 
     @Test

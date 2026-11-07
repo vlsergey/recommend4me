@@ -7,36 +7,58 @@ import kotlin.test.assertEquals
 
 class MentionsTest {
 
-    private val names = mapOf(
-        "harry" to listOf("Гарри Поттер", "Harry Potter"),
-        "ron" to listOf("Рон Уизли"),
-        "ginny" to listOf("Джинни Уизли"),
-        "captain" to listOf("Captain"),
-    )
+    private val names =
+        mapOf(
+            "harry" to listOf("Гарри Поттер", "Harry Potter"),
+            "ron" to listOf("Рон Уизли"),
+            "ginny" to listOf("Джинни Уизли"),
+            "captain" to listOf("Captain"),
+        )
 
-    private fun doc(id: String, language: String, vararg texts: String, tags: List<String> = emptyList(), given: List<String> = emptyList()) = SearchDocument(
-        ItemKey("test", id),
-        listOf(SearchField("title", "title", 1f, listOf("Title $id"), naming = true)) +
-            texts.mapIndexed { i, t -> SearchField("part:$i", "part", 0.5f, listOf(t), group = "parts", counted = true) } +
-            listOfNotNull(
-                tags.takeIf { it.isNotEmpty() }?.let { SearchField("facet.tag", "tag", 0.9f, it, list = true, counted = true) },
-                given.takeIf { it.isNotEmpty() }?.let { SearchField("facet.tag", "tag", 0.9f, it, list = true, group = "facet.tag+given") },
+    private fun doc(
+        id: String,
+        language: String,
+        vararg texts: String,
+        tags: List<String> = emptyList(),
+        given: List<String> = emptyList(),
+    ) =
+        SearchDocument(
+            ItemKey("test", id),
+            listOf(SearchField("title", "title", 1f, listOf("Title $id"), naming = true)) +
+                texts.mapIndexed { i, t ->
+                    SearchField("part:$i", "part", 0.5f, listOf(t), group = "parts", counted = true)
+                } +
+                listOfNotNull(
+                    tags
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { SearchField("facet.tag", "tag", 0.9f, it, list = true, counted = true) },
+                    given
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { SearchField("facet.tag", "tag", 0.9f, it, list = true, group = "facet.tag+given") },
+                ),
+            emptyList(),
+            language,
+        )
+
+    private val documents =
+        listOf(
+            // Every form of a name; a word of a family names nobody; a name of one word only with a capital
+            doc(
+                "1",
+                "ru",
+                "Гарри Поттера не было дома. Поттер вернулся к вечеру, и Гарри сел у огня. Рон Уизли пришёл позже. Уизли шумели.",
+                "Джинни молчала. гарри — не имя здесь.",
             ),
-        emptyList(),
-        language,
-    )
-
-    private val documents = listOf(
-        // Every form of a name; a word of a family names nobody; a name of one word only with a capital
-        doc(
-            "1", "ru",
-            "Гарри Поттера не было дома. Поттер вернулся к вечеру, и Гарри сел у огня. Рон Уизли пришёл позже. Уизли шумели.",
-            "Джинни молчала. гарри — не имя здесь.",
-        ),
-        // English stemmed as English, the capital told apart; the site's tags count, the values given do not
-        doc("2", "en", "The Captain waits. The captain of the guard does not.", tags = listOf("Harry Potter"), given = listOf("Ron Weasley", "Captain")),
-        doc("3", "en", "Nobody is named here at all."),
-    )
+            // English stemmed as English, the capital told apart; the site's tags count, the values given do not
+            doc(
+                "2",
+                "en",
+                "The Captain waits. The captain of the guard does not.",
+                tags = listOf("Harry Potter"),
+                given = listOf("Ron Weasley", "Captain"),
+            ),
+            doc("3", "en", "Nobody is named here at all."),
+        )
 
     @Test
     fun `the works' own words name the values by the rules of the names, counted of the index as of the texts`() {
@@ -50,7 +72,10 @@ class MentionsTest {
                 ),
                 counted,
             )
-            assertEquals(mapOf(ItemKey("test", "2") to mapOf("captain" to 1, "harry" to 1)), search.mentions("books", listOf(ItemKey("test", "2"), ItemKey("test", "3")), names))
+            assertEquals(
+                mapOf(ItemKey("test", "2") to mapOf("captain" to 1, "harry" to 1)),
+                search.mentions("books", listOf(ItemKey("test", "2"), ItemKey("test", "3")), names),
+            )
             // What is counted is what is shown: the places of a value of a work read of its texts again
             documents.forEach { doc ->
                 names.keys.forEach { value ->
@@ -59,29 +84,34 @@ class MentionsTest {
                 }
             }
             val harry = search.places(documents[0], names, listOf("harry"))
-            assertEquals(listOf("Гарри Поттера", "Поттер", "Гарри"), harry.flatMap { p -> p.ranges.map { p.text.substring(it) } })
+            assertEquals(
+                listOf("Гарри Поттера", "Поттер", "Гарри"),
+                harry.flatMap { p -> p.ranges.map { p.text.substring(it) } },
+            )
         }
     }
 
-    private val potter = mapOf(
-        "harry" to listOf("Гарри Поттер", "Harry Potter"),
-        "hermione" to listOf("Гермиона Грейнджер", "Hermione Granger"),
-        "james" to listOf("Джеймс Поттер"),
-        "ron" to listOf("Рон Уизли"),
-        "ginny" to listOf("Джинни Уизли", "Джиневра Уизли"),
-        "c3po" to listOf("Си-Три-Пи-О"),
-        "saw" to listOf("Со Геррера"),
-        "rick" to listOf("Рик Джонс", "Нова"),
-    )
+    private val potter =
+        mapOf(
+            "harry" to listOf("Гарри Поттер", "Harry Potter"),
+            "hermione" to listOf("Гермиона Грейнджер", "Hermione Granger"),
+            "james" to listOf("Джеймс Поттер"),
+            "ron" to listOf("Рон Уизли"),
+            "ginny" to listOf("Джинни Уизли", "Джиневра Уизли"),
+            "c3po" to listOf("Си-Три-Пи-О"),
+            "saw" to listOf("Со Геррера"),
+            "rick" to listOf("Рик Джонс", "Нова"),
+        )
 
     @Test
     fun `the rules of the names, a family name and a function word naming nobody, a word alone only with a capital`() {
-        val docs = listOf(
-            doc("d", "ru", "Гарри посмотрел на Гермиону. Гермионы не было. Гарри Поттер ушёл к Джинни."),
-            doc("f", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался."),
-            doc("w", "ru", "Пришёл со мной о чём-то. Со Геррера и Пи. пи равно трём."),
-            doc("n", "ru", "Однако новый мир — новые правила. Нова улетел."),
-        )
+        val docs =
+            listOf(
+                doc("d", "ru", "Гарри посмотрел на Гермиону. Гермионы не было. Гарри Поттер ушёл к Джинни."),
+                doc("f", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался."),
+                doc("w", "ru", "Пришёл со мной о чём-то. Со Геррера и Пи. пи равно трём."),
+                doc("n", "ru", "Однако новый мир — новые правила. Нова улетел."),
+            )
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", docs.asSequence())
             val counted = search.mentions("books", null, potter)
@@ -94,18 +124,21 @@ class MentionsTest {
 
     @Test
     fun `several askings at once count as each asked apart, every work by its own names`() {
-        val docs = listOf(
-            doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
-            doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри."),
-            doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
-        ) + documents
-        // Without Harry "Поттер" is James's alone: the names of an asking are its own, a word of them not shared with another
-        val asked = listOf(
-            NamesAsked(listOf(ItemKey("test", "a"), ItemKey("test", "c")), potter),
-            NamesAsked(listOf(ItemKey("test", "b"), ItemKey("test", "a")), potter - "harry"),
-            NamesAsked(null, names),
-            NamesAsked(listOf(ItemKey("test", "b")), emptyMap()),
-        )
+        val docs =
+            listOf(
+                doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
+                doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри."),
+                doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
+            ) + documents
+        // Without Harry "Поттер" is James's alone: the names of an asking are its own, a word of them not shared with
+        // another
+        val asked =
+            listOf(
+                NamesAsked(listOf(ItemKey("test", "a"), ItemKey("test", "c")), potter),
+                NamesAsked(listOf(ItemKey("test", "b"), ItemKey("test", "a")), potter - "harry"),
+                NamesAsked(null, names),
+                NamesAsked(listOf(ItemKey("test", "b")), emptyMap()),
+            )
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", docs.asSequence())
             assertEquals(asked.map { search.mentions("books", it.items, it.names) }, search.mentions("books", asked))
@@ -116,23 +149,39 @@ class MentionsTest {
 
     @Test
     fun `an asking of names but some values counts as one of those names alone, the names read once for every asking of them`() {
-        val docs = listOf(
-            doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
-            doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри. Джинни и Рон."),
-            doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
-        ) + documents
+        val docs =
+            listOf(
+                doc("a", "ru", "Гарри посмотрел на Гермиону. Поттер ушёл.\nРон и Гермиона спорили."),
+                doc("b", "ru", "Поттер и Уизли вошли. Джеймс Поттер остался с Гарри. Джинни и Рон."),
+                doc("c", "en", "Harry Potter met Hermione Granger.\nThe Captain waits."),
+            ) + documents
         val keys = listOf("a", "b", "c", "1", "2", "3").map { ItemKey("test", it) }
         // One map of names, every asking leaving out its own: as many askings as works, each of its own few
-        val withouts = listOf(emptySet(), setOf("harry"), setOf("ron", "ginny"), setOf("hermione", "james"), potter.keys - "ron", potter.keys)
-        val asked = withouts.mapIndexed { i, out -> NamesAsked(listOf(keys[i], keys[(i + 1) % keys.size]), potter, out) }
-        val apart = withouts.mapIndexed { i, out -> NamesAsked(listOf(keys[i], keys[(i + 1) % keys.size]), potter - out) }
+        val withouts =
+            listOf(
+                emptySet(),
+                setOf("harry"),
+                setOf("ron", "ginny"),
+                setOf("hermione", "james"),
+                potter.keys - "ron",
+                potter.keys,
+            )
+        val asked = withouts.mapIndexed { i, out ->
+            NamesAsked(listOf(keys[i], keys[(i + 1) % keys.size]), potter, out)
+        }
+        val apart = withouts.mapIndexed { i, out ->
+            NamesAsked(listOf(keys[i], keys[(i + 1) % keys.size]), potter - out)
+        }
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", docs.asSequence())
             assertEquals(search.mentions("books", apart), search.mentions("books", asked))
             assertEquals(search.together("books", apart), search.together("books", asked))
             assertEquals(apart.map { search.mentions("books", it.items, it.names) }, search.mentions("books", asked))
             // Without Harry "Поттер" is James's alone
-            assertEquals(mapOf("james" to 2, "ron" to 1, "ginny" to 1), search.mentions("books", asked)[1][ItemKey("test", "b")])
+            assertEquals(
+                mapOf("james" to 2, "ron" to 1, "ginny" to 1),
+                search.mentions("books", asked)[1][ItemKey("test", "b")],
+            )
         }
     }
 
@@ -143,7 +192,10 @@ class MentionsTest {
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", docs.asSequence())
             val together = search.together("books", null, potter)
-            assertEquals(mapOf(("harry" to "hermione") to 1, ("hermione" to "ron") to 1), together[ItemKey("test", "p")])
+            assertEquals(
+                mapOf(("harry" to "hermione") to 1, ("hermione" to "ron") to 1),
+                together[ItemKey("test", "p")],
+            )
             // Two texts are never one paragraph
             assertEquals(null, together[ItemKey("test", "q")])
             val quoted = search.placesTogether(docs[0], potter, "hermione", "ron").single()

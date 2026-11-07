@@ -1,11 +1,11 @@
 package io.github.vlsergey.recommend4me.rating
 
 /**
- * The user's grade of a work, 1..5: 1 — do not like it, 2 — can be played (read), 3 — liked it on
- * the whole, 4 — very good, 5 — give me more.
+ * The user's grade of a work, 1..5: 1 — do not like it, 2 — can be played (read), 3 — liked it on the whole, 4 — very
+ * good, 5 — give me more.
  *
- * A GRADE IS AN ORDER, NOT A NUMBER: the model learns which of two works is better, and where the
- * grades fall on its 0..10 is what the data says.
+ * A GRADE IS AN ORDER, NOT A NUMBER: the model learns which of two works is better, and where the grades fall on its
+ * 0..10 is what the data says.
  */
 object Grades {
     const val MIN = 1

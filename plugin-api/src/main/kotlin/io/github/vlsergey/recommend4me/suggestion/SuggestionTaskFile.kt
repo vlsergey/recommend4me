@@ -11,16 +11,16 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
 /**
- * A [SuggestionTask] kept in a file whole, as the application handed it to a suggester: a fitting
- * of real data, made again and measured apart from the application — a profile of it, a change
- * of the model tried on it — as often as needed, without waiting for the data to change.
+ * A [SuggestionTask] kept in a file whole, as the application handed it to a suggester: a fitting of real data, made
+ * again and measured apart from the application — a profile of it, a change of the model tried on it — as often as
+ * needed, without waiting for the data to change.
  */
 object SuggestionTaskFile {
     /**
-     * 7: an input block of the items that have it alone, with the item of every row; 6: no counts of
-     * the values' names in the items' texts; 5: the arrays of the allowed once each,
-     * the barred at the end; 4: the drafts and their weight at the end; 3: the names' texts a matrix,
-     * their arrays of values once each; 2 and 1 read too, their counts passed over.
+     * 7: an input block of the items that have it alone, with the item of every row; 6: no counts of the values' names
+     * in the items' texts; 5: the arrays of the allowed once each, the barred at the end; 4: the drafts and their
+     * weight at the end; 3: the names' texts a matrix, their arrays of values once each; 2 and 1 read too, their counts
+     * passed over.
      */
     private const val FORMAT = 7
 
@@ -39,7 +39,8 @@ object SuggestionTaskFile {
             strings(out, task.valueKeys)
             listOf(task.assigned, task.confirmed, task.rejected, task.context, task.examples).forEach { lists(out, it) }
             strings(out, task.contextKeys)
-            // Every array of the allowed once, each item by its number: one of thousands of characters for every work of a universe
+            // Every array of the allowed once, each item by its number: one of thousands of characters for every work
+            // of a universe
             val allowed = IdentityHashMap<IntArray, Int>()
             task.allowed.forEach { a -> if (a != null) allowed.putIfAbsent(a, allowed.size) }
             out.writeInt(allowed.size)
@@ -70,56 +71,82 @@ object SuggestionTaskFile {
         }
     }
 
-    fun read(file: Path): SuggestionTask = DataInputStream(GZIPInputStream(Files.newInputStream(file)).buffered()).use { input ->
-        val format = input.readInt()
-        check(format in 1..FORMAT) { "$file: not a task of format $FORMAT or before it" }
-        val itemIds = strings(input)
-        val inputs = List(input.readInt()) {
-            val name = input.readUTF()
-            val vectors = matrix(input)
-            // The formats before 7: a row of every item, and whether it has the block
-            if (format >= 7) InputBlock(name, HalfMatrix.of(vectors), ints(input)) else InputBlock.of(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
+    fun read(file: Path): SuggestionTask =
+        DataInputStream(GZIPInputStream(Files.newInputStream(file)).buffered()).use { input ->
+            val format = input.readInt()
+            check(format in 1..FORMAT) { "$file: not a task of format $FORMAT or before it" }
+            val itemIds = strings(input)
+            val inputs =
+                List(input.readInt()) {
+                    val name = input.readUTF()
+                    val vectors = matrix(input)
+                    // The formats before 7: a row of every item, and whether it has the block
+                    if (format >= 7) InputBlock(name, HalfMatrix.of(vectors), ints(input))
+                    else InputBlock.of(name, vectors, BooleanArray(input.readInt()) { input.readBoolean() })
+                }
+            val values = matrix(input)
+            val valueKeys = strings(input)
+            val (assigned, confirmed, rejected, context, examples) = List(5) { lists(input) }
+            val contextKeys = strings(input)
+            // The formats before 6: the counts of the values' names in the items' texts, which no model reads now
+            if (format < 6)
+                repeat(input.readInt()) {
+                    val size = input.readInt()
+                    repeat(maxOf(size, 0) * 2) { input.readInt() }
+                }
+            val allowed =
+                if (format >= 5) {
+                    val arrays = List(input.readInt()) { ints(input) }
+                    List(input.readInt()) { input.readInt().takeIf { it >= 0 }?.let(arrays::get) }
+                } else List(input.readInt()) { if (input.readBoolean()) ints(input) else null }
+            val groupings = List(input.readInt()) { ValueGrouping(input.readUTF(), strings(input), lists(input)) }
+            val lackWeight = input.readDouble()
+            val (hints, hintTexts) =
+                if (format >= 3) {
+                    val among = List(input.readInt()) { ints(input) }
+                    List(input.readInt()) { NameHint(input.readInt(), among[input.readInt()]) } to matrix(input)
+                } else {
+                    // The formats before it: a vector with every name, and the values it is judged among —
+                    // of the first its rivals alone — an array of every name
+                    val read =
+                        List(input.readInt()) {
+                            val vector = FloatArray(input.readInt()) { input.readFloat() }
+                            val value = input.readInt()
+                            val among =
+                                ints(input).let {
+                                    if (format == 2) it else (it + value).distinct().sorted().toIntArray()
+                                }
+                            vector to NameHint(value, among)
+                        }
+                    val texts = Matrix(read.size, read.firstOrNull()?.first?.size ?: 0)
+                    read.forEachIndexed { k, (vector, _) -> texts.held.put(vector, 0, texts.row(k), texts.cols) }
+                    read.map { it.second } to texts
+                }
+            // The formats before 4 had no drafts
+            val drafts = if (format >= 4) lists(input) else List(itemIds.size) { IntArray(0) }
+            val draftWeight = if (format >= 4) input.readDouble() else 1.0
+            val barred = if (format >= 5) lists(input) else List(itemIds.size) { IntArray(0) }
+            SuggestionTask(
+                itemIds,
+                inputs,
+                values,
+                valueKeys,
+                assigned,
+                confirmed,
+                rejected,
+                context,
+                contextKeys,
+                allowed,
+                groupings,
+                lackWeight,
+                examples,
+                hints,
+                hintTexts,
+                drafts,
+                draftWeight,
+                barred,
+            )
         }
-        val values = matrix(input)
-        val valueKeys = strings(input)
-        val (assigned, confirmed, rejected, context, examples) = List(5) { lists(input) }
-        val contextKeys = strings(input)
-        // The formats before 6: the counts of the values' names in the items' texts, which no model reads now
-        if (format < 6) repeat(input.readInt()) {
-            val size = input.readInt()
-            repeat(maxOf(size, 0) * 2) { input.readInt() }
-        }
-        val allowed = if (format >= 5) {
-            val arrays = List(input.readInt()) { ints(input) }
-            List(input.readInt()) { input.readInt().takeIf { it >= 0 }?.let(arrays::get) }
-        } else List(input.readInt()) { if (input.readBoolean()) ints(input) else null }
-        val groupings = List(input.readInt()) { ValueGrouping(input.readUTF(), strings(input), lists(input)) }
-        val lackWeight = input.readDouble()
-        val (hints, hintTexts) = if (format >= 3) {
-            val among = List(input.readInt()) { ints(input) }
-            List(input.readInt()) { NameHint(input.readInt(), among[input.readInt()]) } to matrix(input)
-        } else {
-            // The formats before it: a vector with every name, and the values it is judged among —
-            // of the first its rivals alone — an array of every name
-            val read = List(input.readInt()) {
-                val vector = FloatArray(input.readInt()) { input.readFloat() }
-                val value = input.readInt()
-                val among = ints(input).let { if (format == 2) it else (it + value).distinct().sorted().toIntArray() }
-                vector to NameHint(value, among)
-            }
-            val texts = Matrix(read.size, read.firstOrNull()?.first?.size ?: 0)
-            read.forEachIndexed { k, (vector, _) -> texts.held.put(vector, 0, texts.row(k), texts.cols) }
-            read.map { it.second } to texts
-        }
-        // The formats before 4 had no drafts
-        val drafts = if (format >= 4) lists(input) else List(itemIds.size) { IntArray(0) }
-        val draftWeight = if (format >= 4) input.readDouble() else 1.0
-        val barred = if (format >= 5) lists(input) else List(itemIds.size) { IntArray(0) }
-        SuggestionTask(
-            itemIds, inputs, values, valueKeys, assigned, confirmed, rejected, context, contextKeys, allowed, groupings, lackWeight, examples, hints, hintTexts,
-            drafts, draftWeight, barred,
-        )
-    }
 
     private fun strings(out: DataOutputStream, list: List<String>) {
         out.writeInt(list.size)

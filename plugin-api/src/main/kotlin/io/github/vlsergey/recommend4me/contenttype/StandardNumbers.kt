@@ -4,8 +4,8 @@ import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.NumberScale
 
 /**
- * The numbers of every content type: what any site of any kind of works may tell alike — one
- * number to sort, filter and compare by across the sites, whatever each calls it.
+ * The numbers of every content type: what any site of any kind of works may tell alike — one number to sort, filter and
+ * compare by across the sites, whatever each calls it.
  */
 object StandardNumbers {
     /** How many other people liked the work: a site's likes, its kudos, its "liked it". */

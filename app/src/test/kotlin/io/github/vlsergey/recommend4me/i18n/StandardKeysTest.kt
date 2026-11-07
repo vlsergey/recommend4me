@@ -6,16 +6,16 @@ import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
-import tools.jackson.databind.json.JsonMapper
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
+import tools.jackson.databind.json.JsonMapper
 
 /**
  * EVERY KEY OF THE STANDARD NAMESPACE THE SERVER SENDS HAS ITS WORDS: the web interface keeps them
- * (`frontend/src/standard/standard-i18n.en.json`; its compiler checks the other languages against
- * the English). A key the server sends and the interface lacks would be shown as the key itself.
+ * (`frontend/src/standard/standard-i18n.en.json`; its compiler checks the other languages against the English). A key
+ * the server sends and the interface lacks would be shown as the key itself.
  */
 class StandardKeysTest {
 

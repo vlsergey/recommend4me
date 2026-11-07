@@ -7,24 +7,29 @@ import kotlin.math.ln
 /**
  * WHAT A RANKING IS LEARNT FROM: the pairs of rows of a [RankingTask] whose order is known.
  *
- * Rated rows [better] and [worse]: different grades, different works; every pair of works weighs
- * the same. Not every pair of grades: the works graded "do not like it" are most of the rated, and
- * telling them from the rest is most of what a model is for — weighed as one pair of grades of
- * ten, a pair of grades of four works weighed as much.
+ * Rated rows [better] and [worse]: different grades, different works; every pair of works weighs the same. Not every
+ * pair of grades: the works graded "do not like it" are most of the rated, and telling them from the rest is most of
+ * what a model is for — weighed as one pair of grades of ten, a pair of grades of four works weighed as much.
  *
- * And the rows of two items of one work, [first] and [second]: the work on two sites, EQUAL —
- * their loss is least when their scores are the same. A pair of equals weighs [equalWeight]: as
- * much as all the pairs of grades of an average row together, so that the two items of a work are
- * held together as firmly as a work is held in its place.
+ * And the rows of two items of one work, [first] and [second]: the work on two sites, EQUAL — their loss is least when
+ * their scores are the same. A pair of equals weighs [equalWeight]: as much as all the pairs of grades of an average
+ * row together, so that the two items of a work are held together as firmly as a work is held in its place.
  */
-class RankingPairs(val better: IntArray, val worse: IntArray, val first: IntArray, val second: IntArray, val equalWeight: Double) {
+class RankingPairs(
+    val better: IntArray,
+    val worse: IntArray,
+    val first: IntArray,
+    val second: IntArray,
+    val equalWeight: Double,
+) {
     /** The weight of all the pairs together. */
-    val weight: Double get() = better.size + equalWeight * first.size
+    val weight: Double
+        get() = better.size + equalWeight * first.size
 
     /**
-     * The pairwise logistic loss of the scores [z] of the rows — of score(better) − score(worse),
-     * of an equal pair the loss of a pair either way round with the chance of a half — summed;
-     * its derivative by every row's score added to [dz].
+     * The pairwise logistic loss of the scores [z] of the rows — of score(better) − score(worse), of an equal pair the
+     * loss of a pair either way round with the chance of a half — summed; its derivative by every row's score added to
+     * [dz].
      */
     fun loss(z: Floats, dz: Floats): Double {
         var loss = 0.0
@@ -62,17 +67,26 @@ class RankingPairs(val better: IntArray, val worse: IntArray, val first: IntArra
             }
             val first = ArrayList<Int>()
             val second = ArrayList<Int>()
-            subset.groupBy { works[it] }.values.forEach { rows ->
-                for (a in rows) for (b in rows) {
-                    if (items[a] < items[b]) {
-                        first += a
-                        second += b
+            subset
+                .groupBy { works[it] }
+                .values
+                .forEach { rows ->
+                    for (a in rows) for (b in rows) {
+                        if (items[a] < items[b]) {
+                            first += a
+                            second += b
+                        }
                     }
                 }
-            }
             // Every pair of grades is a pair of two graded rows
             val equalWeight = if (subset.isEmpty()) 0.0 else 2.0 * better.size / subset.size
-            return RankingPairs(better.toIntArray(), worse.toIntArray(), first.toIntArray(), second.toIntArray(), equalWeight)
+            return RankingPairs(
+                better.toIntArray(),
+                worse.toIntArray(),
+                first.toIntArray(),
+                second.toIntArray(),
+                equalWeight,
+            )
         }
 
         fun sigmoid(s: Double): Double = 1.0 / (1.0 + exp(-s))

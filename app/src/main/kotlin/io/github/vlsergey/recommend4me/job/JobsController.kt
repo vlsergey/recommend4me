@@ -1,22 +1,23 @@
 package io.github.vlsergey.recommend4me.job
 
 import io.github.vlsergey.recommend4me.api.JobsApi
-import io.github.vlsergey.recommend4me.api.model.JobRequest
 import io.github.vlsergey.recommend4me.api.model.CatalogueProgress
+import io.github.vlsergey.recommend4me.api.model.JobRequest
+import io.github.vlsergey.recommend4me.api.model.JobState as ApiJobState
 import io.github.vlsergey.recommend4me.api.model.JobStatus
+import io.github.vlsergey.recommend4me.api.model.SourceMode as ApiSourceMode
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceMode
-import io.github.vlsergey.recommend4me.source.job
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.job
+import java.time.ZoneOffset
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
-import java.time.ZoneOffset
-import io.github.vlsergey.recommend4me.api.model.JobState as ApiJobState
-import io.github.vlsergey.recommend4me.api.model.SourceMode as ApiSourceMode
 
 @RestController
-class JobsController(private val jobs: Jobs, private val stores: Stores, private val contexts: SourceContexts) : JobsApi {
+class JobsController(private val jobs: Jobs, private val stores: Stores, private val contexts: SourceContexts) :
+    JobsApi {
 
     override fun listJobs(): ResponseEntity<List<JobStatus>> =
         ResponseEntity.ok(stores.sources.filter { s -> s.source.modes.any { it.job } }.map { status(it.id) })
@@ -58,6 +59,8 @@ class JobsController(private val jobs: Jobs, private val stores: Stores, private
     private fun catalogue(source: String): CatalogueProgress? {
         val store = stores.source(source) ?: return null
         if (SourceMode.SCRAPE_ALL !in store.source.modes) return null
-        return store.source.scrapeProgress(contexts.of(source))?.let { CatalogueProgress(it.stage, it.done, it.total, it.complete) }
+        return store.source.scrapeProgress(contexts.of(source))?.let {
+            CatalogueProgress(it.stage, it.done, it.total, it.complete)
+        }
     }
 }

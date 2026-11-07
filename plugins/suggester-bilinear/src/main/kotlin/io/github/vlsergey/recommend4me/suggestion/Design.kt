@@ -8,25 +8,27 @@ import java.nio.ByteBuffer
 import kotlin.math.sqrt
 
 /**
- * How one input block's vectors become features: scaled by √dim over the typical length of the
- * vectors — a coordinate about as large as a one-hot feature — and NOT CENTRED. An item is judged by
- * how alike it is to the items learnt from, not by how it departs from their mean: centred, an item
- * unlike every one of them comes out their opposite (a work of dragons the opposite of the works of
- * space), and the weights learnt of them say the opposite of what they say of those — with no data
- * to stop it. Uncentred, it is near nought along what was learnt, and judged by the base rates; the
- * part all texts share is learnt as a bias. By the vectors' own length, not by how far they
- * spread: a block nearly the same for every item would be stretched without end. An item without
- * the block: no vector, and its mark of having the block off. (A centre of nought is kept in the
- * layout's bytes, as a kept model wrote it; one of any other is a layout no longer read.)
+ * How one input block's vectors become features: scaled by √dim over the typical length of the vectors — a coordinate
+ * about as large as a one-hot feature — and NOT CENTRED. An item is judged by how alike it is to the items learnt from,
+ * not by how it departs from their mean: centred, an item unlike every one of them comes out their opposite (a work of
+ * dragons the opposite of the works of space), and the weights learnt of them say the opposite of what they say of
+ * those — with no data to stop it. Uncentred, it is near nought along what was learnt, and judged by the base rates;
+ * the part all texts share is learnt as a bias. By the vectors' own length, not by how far they spread: a block nearly
+ * the same for every item would be stretched without end. An item without the block: no vector, and its mark of having
+ * the block off. (A centre of nought is kept in the layout's bytes, as a kept model wrote it; one of any other is a
+ * layout no longer read.)
  */
 class BlockScale(val name: String, val dim: Int, val scale: Float) {
     companion object {
         /** Of the rows [rows] of [vectors] — every row when null; null of none, or of vectors of no length. */
         fun of(name: String, vectors: Matrix, rows: IntArray? = null): BlockScale? =
-            of(name, rows?.size ?: vectors.rows, vectors.cols) { k, into -> vectors.held.take(into, 0, vectors.row(rows?.get(k) ?: k), vectors.cols) }
+            of(name, rows?.size ?: vectors.rows, vectors.cols) { k, into ->
+                vectors.held.take(into, 0, vectors.row(rows?.get(k) ?: k), vectors.cols)
+            }
 
         /** Of every row of an input block's [vectors]. */
-        fun of(name: String, vectors: HalfMatrix): BlockScale? = of(name, vectors.rows, vectors.cols) { k, into -> vectors.take(k, into) }
+        fun of(name: String, vectors: HalfMatrix): BlockScale? =
+            of(name, vectors.rows, vectors.cols) { k, into -> vectors.take(k, into) }
 
         /** Of [count] vectors of [d] numbers, each taken by [take]: their typical length. */
         private fun of(name: String, count: Int, d: Int, take: (Int, FloatArray) -> Unit): BlockScale? {
@@ -46,17 +48,15 @@ class BlockScale(val name: String, val dim: Int, val scale: Float) {
 }
 
 /**
- * THE FEATURES OF THE ITEMS AND OF THE VALUES, laid out as on the task the model was fitted on, so
- * that a later task of the same facet — new items, new values, a block an item gained — is read
- * the same way.
+ * THE FEATURES OF THE ITEMS AND OF THE VALUES, laid out as on the task the model was fitted on, so that a later task of
+ * the same facet — new items, new values, a block an item gained — is read the same way.
  *
- * An item: a constant; for every input block, whether the item has it and its centred and scaled
- * vector; a one-hot of every value of its other facets the fitted task knew.
+ * An item: a constant; for every input block, whether the item has it and its centred and scaled vector; a one-hot of
+ * every value of its other facets the fitted task knew.
  *
- * A value: a constant; whether its name is encoded and the name's centred and scaled vector; a
- * one in every group of it in every grouping — a pairing has two, one for each of its characters.
- * What is learnt of a value beyond its name — its own vector and bias — is kept by its key
- * ([valueKeys]).
+ * A value: a constant; whether its name is encoded and the name's centred and scaled vector; a one in every group of it
+ * in every grouping — a pairing has two, one for each of its characters. What is learnt of a value beyond its name —
+ * its own vector and bias — is kept by its key ([valueKeys]).
  */
 class Design(
     val blocks: List<BlockScale>,
@@ -76,33 +76,42 @@ class Design(
     /** Where each block's mark of having it lies among an item's features; its vector follows the mark. */
     val blockOffsets: List<Int> = blocks.runningFold(1) { at, b -> at + 1 + b.dim }.dropLast(1)
 
-    /** The blocks a text of a work is read in — the title, the description, the notes, the site's lines — of vectors of [dim]: indices of [blocks]. */
-    fun textBlocks(dim: Int): List<Int> = blocks.indices.filter { blocks[it].name.startsWith("text:") && blocks[it].dim == dim }
+    /**
+     * The blocks a text of a work is read in — the title, the description, the notes, the site's lines — of vectors of
+     * [dim]: indices of [blocks].
+     */
+    fun textBlocks(dim: Int): List<Int> =
+        blocks.indices.filter { blocks[it].name.startsWith("text:") && blocks[it].dim == dim }
+
     val valueWidth: Int = 2 + nameDim + groupings.sumOf { it.second.size }
 
     /** Whether the task can be read by this layout: its blocks of the same names and its names of the same length. */
     fun reads(task: SuggestionTask): Boolean = task.values.cols == nameDim && readsItems(task)
 
-    /** Whether the items of [task] are read by this layout: every block it knows of the length it knows — whatever its values are. */
+    /**
+     * Whether the items of [task] are read by this layout: every block it knows of the length it knows — whatever its
+     * values are.
+     */
     fun readsItems(task: SuggestionTask): Boolean {
         val dims = blocks.associate { it.name to it.dim }
         return task.inputs.all { b -> dims[b.name]?.let { it == b.vectors.cols } ?: true }
     }
 
     /**
-     * The features of every item of the task ([ItemFeatures]): its blocks the task's own — the rows
-     * of the items that have them, on the card too when the task's are there — nothing copied.
+     * The features of every item of the task ([ItemFeatures]): its blocks the task's own — the rows of the items that
+     * have them, on the card too when the task's are there — nothing copied.
      */
     internal fun features(task: SuggestionTask): ItemFeatures {
         val n = task.itemCount
         val byName = task.inputs.associateBy { it.name }
         // Of every item, how many blocks of the layout it has: their marks among its ones
         val marked = IntArray(n)
-        val dense = blocks.indices.mapNotNull { k ->
-            val block = byName[blocks[k].name] ?: return@mapNotNull null
-            block.rows.forEach { marked[it]++ }
-            ItemFeatures.Dense(block.vectors, block.rows, blockOffsets[k], blocks[k].scale, block.card)
-        }
+        val dense =
+            blocks.indices.mapNotNull { k ->
+                val block = byName[blocks[k].name] ?: return@mapNotNull null
+                block.rows.forEach { marked[it]++ }
+                ItemFeatures.Dense(block.vectors, block.rows, blockOffsets[k], blocks[k].scale, block.card)
+            }
         // The task's context keys as columns of this layout
         val base = 1 + blocks.sumOf { 1 + it.dim }
         val columns = IntArray(task.contextCount) { contextIndex[task.contextKeys[it]]?.let { c -> base + c } ?: -1 }
@@ -159,13 +168,14 @@ class Design(
     }
 
     /** The index in [valueKeys] of every value of the task; -1 for one the fitted task did not have. */
-    fun valueIndices(task: SuggestionTask): IntArray = IntArray(task.valueCount) { valueIndex[task.valueKeys[it]] ?: -1 }
+    fun valueIndices(task: SuggestionTask): IntArray =
+        IntArray(task.valueCount) { valueIndex[task.valueKeys[it]] ?: -1 }
 
     /**
-     * Where every feature of an item of this layout was in the [old] one, and by what its weight
-     * is multiplied there to weigh the same: the constant; a block of the same name and length —
-     * its mark, its coordinates by the ratio of the scales, so a feature times its weight stays as it
-     * was; a value of the context by its key. -1: a feature the old layout had not.
+     * Where every feature of an item of this layout was in the [old] one, and by what its weight is multiplied there to
+     * weigh the same: the constant; a block of the same name and length — its mark, its coordinates by the ratio of the
+     * scales, so a feature times its weight stays as it was; a value of the context by its key. -1: a feature the old
+     * layout had not.
      */
     fun itemFeaturesFrom(old: Design): Pair<IntArray, FloatArray> {
         val at = IntArray(itemWidth) { -1 }
@@ -188,7 +198,10 @@ class Design(
         return at to factor
     }
 
-    /** As [itemFeaturesFrom], of a value's features: the constant, its name's mark and coordinates, its groups by their keys. */
+    /**
+     * As [itemFeaturesFrom], of a value's features: the constant, its name's mark and coordinates, its groups by their
+     * keys.
+     */
     fun valueFeaturesFrom(old: Design): Pair<IntArray, FloatArray> {
         val at = IntArray(valueWidth) { -1 }
         val factor = FloatArray(valueWidth) { 1f }
@@ -203,7 +216,10 @@ class Design(
         var here = 2 + nameDim
         val oldAt = HashMap<Pair<String, String>, Int>()
         var there = 2 + old.nameDim
-        old.groupings.forEach { (g, keys) -> keys.forEachIndexed { k, key -> oldAt[g to key] = there + k }; there += keys.size }
+        old.groupings.forEach { (g, keys) ->
+            keys.forEachIndexed { k, key -> oldAt[g to key] = there + k }
+            there += keys.size
+        }
         groupings.forEach { (g, keys) ->
             keys.forEachIndexed { k, key -> oldAt[g to key]?.let { at[here + k] = it } }
             here += keys.size
@@ -219,18 +235,28 @@ class Design(
         out.writeBoolean(names != null)
         names?.let { writeScale(out, it) }
         out.writeInt(groupings.size)
-        groupings.forEach { (g, keys) -> out.writeUTF(g); writeStrings(out, keys) }
+        groupings.forEach { (g, keys) ->
+            out.writeUTF(g)
+            writeStrings(out, keys)
+        }
         writeStrings(out, valueKeys)
     }
 
     companion object {
         /** The layout of a task: its blocks some item has, its context, its values' names and groups. */
         fun of(task: SuggestionTask): Design {
-            val named = (0 until task.valueCount).filter { v -> (0 until task.values.cols).any { task.values.held[task.values.row(v) + it] != 0f } }
+            val named =
+                (0 until task.valueCount).filter { v ->
+                    (0 until task.values.cols).any { task.values.held[task.values.row(v) + it] != 0f }
+                }
             val names = BlockScale.of("names", task.values, named.toIntArray())
             return Design(
-                task.inputs.mapNotNull { BlockScale.of(it.name, it.vectors) }, task.contextKeys, names, task.values.cols,
-                task.groupings.map { it.name to it.groups }, task.valueKeys,
+                task.inputs.mapNotNull { BlockScale.of(it.name, it.vectors) },
+                task.contextKeys,
+                names,
+                task.values.cols,
+                task.groupings.map { it.name to it.groups },
+                task.valueKeys,
             )
         }
 
@@ -243,7 +269,10 @@ class Design(
             return Design(blocks, context, names, nameDim, groupings, readStrings(input))
         }
 
-        /** The name, the scale and a centre of nought of the block's length: the bytes of a layout as written when blocks were centred. */
+        /**
+         * The name, the scale and a centre of nought of the block's length: the bytes of a layout as written when
+         * blocks were centred.
+         */
         private fun writeScale(out: DataOutputStream, s: BlockScale) {
             out.writeUTF(s.name)
             out.writeFloat(s.scale)
@@ -259,9 +288,9 @@ class Design(
         }
 
         /**
-         * The numbers as one block of bytes, big-endian as [DataOutputStream] writes them: a model of a
-         * facet of thousands of characters is millions of them, and a number at a time through the
-         * compressing stream is most of the time a page waits for a work's chances.
+         * The numbers as one block of bytes, big-endian as [DataOutputStream] writes them: a model of a facet of
+         * thousands of characters is millions of them, and a number at a time through the compressing stream is most of
+         * the time a page waits for a work's chances.
          */
         fun writeFloats(out: DataOutputStream, a: FloatArray) {
             out.writeInt(a.size)
@@ -286,10 +315,11 @@ class Design(
             }
         }
 
-        fun readStrings(input: DataInputStream): List<String> = List(input.readInt()) {
-            val bytes = ByteArray(input.readInt())
-            input.readFully(bytes)
-            String(bytes, Charsets.UTF_8)
-        }
+        fun readStrings(input: DataInputStream): List<String> =
+            List(input.readInt()) {
+                val bytes = ByteArray(input.readInt())
+                input.readFully(bytes)
+                String(bytes, Charsets.UTF_8)
+            }
     }
 }

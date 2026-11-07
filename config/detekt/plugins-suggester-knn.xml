@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LongMethod:KnnSuggester.kt:KnnSuggester.Neighbours.Companion$private fun onCard: Pair&lt;Array&lt;IntArray&gt;, Array&lt;FloatArray&gt;&gt;?</ID>
+    <ID>LoopWithTooManyJumpStatements:KnnSuggester.kt:KnnSuggester.Companion$for</ID>
+    <ID>NestedBlockDepth:KnnSuggester.kt:KnnSuggester.Neighbours.Companion$private fun onCard: Pair&lt;Array&lt;IntArray&gt;, Array&lt;FloatArray&gt;&gt;?</ID>
+    <ID>TooGenericExceptionCaught:KnnSuggester.kt:KnnSuggester.Neighbours.Companion$e: Exception</ID>
+  </CurrentIssues>
+</SmellBaseline>

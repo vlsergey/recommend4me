@@ -1,25 +1,25 @@
 package io.github.vlsergey.recommend4me.picture
 
 import io.github.vlsergey.recommend4me.database.Database
-import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import org.junit.jupiter.api.io.TempDir
 
 /** A picture whose download failed: tried again when it is due, never when it cannot be. */
 class PictureRepositoryTest {
 
-    @TempDir
-    lateinit var folder: Path
+    @TempDir lateinit var folder: Path
 
     @Test
     fun `a failed picture waits till it is due, a lasting failure for ever, a download clears it`() {
         Database("test/source", folder.resolve("source"), "source").use { db ->
             db.dsl.execute(
                 "INSERT INTO item (item_id, url, title, version, updated_at, first_seen_at) VALUES ('i1', 'u', 't', '', ?, ?)",
-                Instant.now(), Instant.now(),
+                Instant.now(),
+                Instant.now(),
             )
             val pictures = PictureRepository(db.dsl)
             pictures.sync("i1", listOf("https://host/0.png", "https://host/1.png"))

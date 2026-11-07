@@ -1,21 +1,20 @@
 package io.github.vlsergey.recommend4me.matrix
 
-import org.bytedeco.javacpp.FloatPointer
 import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import org.bytedeco.javacpp.FloatPointer
 
 /**
- * Floats in ONE COPY read from both sides: our own Vector API loops read the segment,
- * OpenBLAS reads the pointer, and both are the same off-heap memory. Copying an array into
- * native memory for every product costs more than the product itself (the same approach and
- * its measurements come from local-ai-chroma-enf-lora's `embeddings/Floats.kt`).
+ * Floats in ONE COPY read from both sides: our own Vector API loops read the segment, OpenBLAS reads the pointer, and
+ * both are the same off-heap memory. Copying an array into native memory for every product costs more than the product
+ * itself (the same approach and its measurements come from local-ai-chroma-enf-lora's `embeddings/Floats.kt`).
  *
- * The memory belongs to the garbage collector (`Arena.ofAuto`): nothing to close, and nothing
- * freed under a reader still holding it. The pointer lives in this object for that reason — it
- * carries an address and does not keep the memory alive by itself.
+ * The memory belongs to the garbage collector (`Arena.ofAuto`): nothing to close, and nothing freed under a reader
+ * still holding it. The pointer lives in this object for that reason — it carries an address and does not keep the
+ * memory alive by itself.
  */
 class Floats(val count: Int) {
 
@@ -43,13 +42,21 @@ class Floats(val count: Int) {
         MemorySegment.copy(seg, ValueLayout.JAVA_FLOAT, at.toLong() * Float.SIZE_BYTES, into, to, n)
 
     /** [n] numbers of [from] starting at [fromAt], written at [at], without passing through the Java heap. */
-    fun copy(from: Floats, fromAt: Int, at: Int, n: Int) = MemorySegment.copy(
-        from.seg, fromAt.toLong() * Float.SIZE_BYTES, seg, at.toLong() * Float.SIZE_BYTES, n.toLong() * Float.SIZE_BYTES,
-    )
+    fun copy(from: Floats, fromAt: Int, at: Int, n: Int) =
+        MemorySegment.copy(
+            from.seg,
+            fromAt.toLong() * Float.SIZE_BYTES,
+            seg,
+            at.toLong() * Float.SIZE_BYTES,
+            n.toLong() * Float.SIZE_BYTES,
+        )
 
     /** The [n] numbers from [at] on as a buffer over the same memory: handed to a native library without a copy. */
     fun buffer(at: Int, n: Int): FloatBuffer =
-        seg.asSlice(at.toLong() * Float.SIZE_BYTES, n.toLong() * Float.SIZE_BYTES).asByteBuffer().order(ByteOrder.nativeOrder()).asFloatBuffer()
+        seg.asSlice(at.toLong() * Float.SIZE_BYTES, n.toLong() * Float.SIZE_BYTES)
+            .asByteBuffer()
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
 
     /** The numbers at [at] + every one of [indices], into [into] in their order: a sparse row read. */
     fun gather(into: FloatArray, at: Int, indices: IntArray) {

@@ -7,7 +7,9 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration(after = [OnnxAutoConfiguration::class])
 class KnnSuggesterAutoConfiguration {
-    /** The likeness of every work to every other on the card, through the process's one ONNX runtime, when the launch asks for the card. */
-    @Bean
-    fun knnSuggester(onnx: Onnx): FacetSuggester = KnnSuggester(onnx)
+    /**
+     * The likeness of every work to every other on the card, through the process's one ONNX runtime, when the launch
+     * asks for the card.
+     */
+    @Bean fun knnSuggester(onnx: Onnx): FacetSuggester = KnnSuggester(onnx)
 }

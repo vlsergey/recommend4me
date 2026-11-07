@@ -1,15 +1,16 @@
 package io.github.vlsergey.recommend4me.refusal
 
-import org.springframework.http.HttpStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.springframework.http.HttpStatus
 
 /** A refusal reaches the interface as a problem by the key of its words and its values, never as words. */
 class RefusalAnswersTest {
 
     @Test
     fun `a refusal is answered with its status, its key and its values`() {
-        val refused = Refusal.NO_SETTING.refuse(HttpStatus.BAD_REQUEST, "The source x has no setting 'y'", "setting" to "y")
+        val refused =
+            Refusal.NO_SETTING.refuse(HttpStatus.BAD_REQUEST, "The source x has no setting 'y'", "setting" to "y")
         val answer = RefusalAnswers().refused(refused)
         assertEquals(400, answer.statusCode.value())
         val problem = answer.body!!

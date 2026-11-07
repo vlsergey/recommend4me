@@ -1,15 +1,14 @@
 package io.github.vlsergey.recommend4me.source
 
 /**
- * How the browser extension turns the site's own pages into the application's interface: where on
- * a work's page its panel goes — the prediction, the grade, the tags with the suggested ones — and
- * which of the site's own elements it marks up in place: the values of facets, the reviews, the
- * pictures, the cards of the works in a list; and where a list's link to its next page is, by which
- * the extension pages through the whole list by itself.
+ * How the browser extension turns the site's own pages into the application's interface: where on a work's page its
+ * panel goes — the prediction, the grade, the tags with the suggested ones — and which of the site's own elements it
+ * marks up in place: the values of facets, the reviews, the pictures, the cards of the works in a list; and where a
+ * list's link to its next page is, by which the extension pages through the whole list by itself.
  *
- * Everything is CSS selectors over the page as the user sees it. An element of the site is matched
- * to what the application knows by what both see: a facet value by its name (or key), a review by
- * its id, a picture by its address, a card by the link to its work ([Source.itemIdOf]).
+ * Everything is CSS selectors over the page as the user sees it. An element of the site is matched to what the
+ * application knows by what both see: a facet value by its name (or key), a review by its id, a picture by its address,
+ * a card by the link to its work ([Source.itemIdOf]).
  */
 class PageDecor(
     /** On a work's page: the panel goes after the first element this selects; none — it floats in a corner. */
@@ -19,9 +18,9 @@ class PageDecor(
     val pictures: PictureDecor? = null,
     val cards: CardDecor? = null,
     /**
-     * On a list of several pages: the link to the next page; none on its last page. The extension
-     * puts a button by it that has the browser open every next page by itself, each once it is
-     * sent to the application and every card on it shows its prediction.
+     * On a list of several pages: the link to the next page; none on its last page. The extension puts a button by it
+     * that has the browser open every next page by itself, each once it is sent to the application and every card on it
+     * shows its prediction.
      */
     val nextPage: String? = null,
 )
@@ -29,11 +28,11 @@ class PageDecor(
 /**
  * A facet on a work's page, one of two ways:
  *
- * - [values]: the site's own elements of its values. Each is matched to a value by its `title` or
- *   its text against the value's name or key, ignoring case, and gets the user's buttons in place;
- *   the values the user added and the suggested ones are put after the last of them;
- * - [after]: the element after which a line of the facet's values is put whole — for a facet the
- *   application works out ([FacetDef.infer]), whose values are not the site's.
+ * - [values]: the site's own elements of its values. Each is matched to a value by its `title` or its text against the
+ *   value's name or key, ignoring case, and gets the user's buttons in place; the values the user added and the
+ *   suggested ones are put after the last of them;
+ * - [after]: the element after which a line of the facet's values is put whole — for a facet the application works out
+ *   ([FacetDef.infer]), whose values are not the site's.
  */
 class FacetDecor(val facet: String, val values: String? = null, val after: String? = null) {
     init {
@@ -42,8 +41,8 @@ class FacetDecor(val facet: String, val values: String? = null, val after: Strin
 }
 
 /**
- * The reviews on a page: [selector] picks every review, its id is the attribute [idAttribute] with
- * [idPrefix] taken off — as the source keeps it ([ReviewData.id]).
+ * The reviews on a page: [selector] picks every review, its id is the attribute [idAttribute] with [idPrefix] taken off
+ * — as the source keeps it ([ReviewData.id]).
  */
 class ReviewDecor(val selector: String, val idAttribute: String = "id", val idPrefix: String = "")
 

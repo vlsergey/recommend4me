@@ -6,10 +6,9 @@ import io.github.vlsergey.recommend4me.rating.Grades
 import kotlin.math.sqrt
 
 /**
- * What the model reads about an item: dense vectors by block key (its texts, its pictures, its sets,
- * its likeness to the marks), categorical features — "<facet>:<value>", "prev:<grade>",
- * "source:<id>" — and numbers by name, as the source declared them
- * transformed ([NumberScale][io.github.vlsergey.recommend4me.source.NumberScale]).
+ * What the model reads about an item: dense vectors by block key (its texts, its pictures, its sets, its likeness to
+ * the marks), categorical features — "<facet>:<value>", "prev:<grade>", "source:<id>" — and numbers by name, as the
+ * source declared them transformed ([NumberScale][io.github.vlsergey.recommend4me.source.NumberScale]).
  */
 class ItemInput(
     val key: ItemKey,
@@ -29,24 +28,26 @@ sealed interface FeatureGroup {
     val feature: String
 
     data class Vector(val block: String) : FeatureGroup {
-        override val feature get() = block
+        override val feature
+            get() = block
     }
 
     data class Categorical(override val feature: String) : FeatureGroup
+
     data class Numeric(override val feature: String) : FeatureGroup
 }
 
 /**
  * Where the vectors of one block lie: their mean, and the typical distance from it.
  *
- * VECTORS ARE CENTRED. The vectors of a text encoder share a large common part — any two texts
- * have a cosine of 0.7–0.9 — so an uncentred vector is mostly "this text is present", and the
- * model learnt which texts were present rather than what they said. Centred, a missing text is the
- * AVERAGE text and adds nothing, and a present one adds what is particular about it. The pictures'
- * vectors are treated the same way: a work whose pictures are not analysed yet is average.
+ * VECTORS ARE CENTRED. The vectors of a text encoder share a large common part — any two texts have a cosine of 0.7–0.9
+ * — so an uncentred vector is mostly "this text is present", and the model learnt which texts were present rather than
+ * what they said. Centred, a missing text is the AVERAGE text and adds nothing, and a present one adds what is
+ * particular about it. The pictures' vectors are treated the same way: a work whose pictures are not analysed yet is
+ * average.
  *
- * AND SCALED so a coordinate is about as large as a one-hot feature: the typical centred vector is
- * stretched to a length of √dim.
+ * AND SCALED so a coordinate is about as large as a one-hot feature: the typical centred vector is stretched to a
+ * length of √dim.
  */
 class VectorSpread(val center: FloatArray, val spread: Float) {
     companion object {
@@ -57,10 +58,9 @@ class VectorSpread(val center: FloatArray, val spread: Float) {
 }
 
 /**
- * The spreads of the blocks ([VectorSpread]) summed in ONE PASS over the vectors, none of them kept:
- * of every block the sum of its vectors and of their squared lengths — the spread is
- * √(E‖v‖² − ‖E v‖²). The vectors of every work are read as they stream from the files, and only
- * those of the works a training reads are kept ([Catalogue]).
+ * The spreads of the blocks ([VectorSpread]) summed in ONE PASS over the vectors, none of them kept: of every block the
+ * sum of its vectors and of their squared lengths — the spread is √(E‖v‖² − ‖E v‖²). The vectors of every work are read
+ * as they stream from the files, and only those of the works a training reads are kept ([Catalogue]).
  */
 class VectorSpreads {
     private val sums = HashMap<String, DoubleArray>()
@@ -85,7 +85,10 @@ class VectorSpreads {
         val n = counts.getValue(key)
         val center = FloatArray(sum.size) { (sum[it] / n).toFloat() }
         val centerSquare = sum.sumOf { (it / n) * (it / n) }
-        VectorSpread(center, sqrt((squares.getValue(key) / n - centerSquare).coerceAtLeast(0.0)).toFloat().coerceAtLeast(1e-6f))
+        VectorSpread(
+            center,
+            sqrt((squares.getValue(key) / n - centerSquare).coerceAtLeast(0.0)).toFloat().coerceAtLeast(1e-6f),
+        )
     }
 }
 
@@ -120,7 +123,8 @@ class FeatureLayout(
     fun offsetOf(block: String): Int? = blockIndex[block]?.let { blockOffsets[it] }
 
     /** Writes the input into row [row] of [into]; the group [without] is left out (the average). */
-    fun write(input: ItemInput, into: Matrix, row: Int, without: FeatureGroup? = null) = write(input, into, row, listOfNotNull(without))
+    fun write(input: ItemInput, into: Matrix, row: Int, without: FeatureGroup? = null) =
+        write(input, into, row, listOfNotNull(without))
 
     /** Writes the input into row [row] of [into]; the groups [without] are left out (the average). */
     fun write(input: ItemInput, into: Matrix, row: Int, without: Collection<FeatureGroup>) {
@@ -166,7 +170,11 @@ class FeatureLayout(
         /** Categorical features seen in at least this many graded works; rarer ones cannot generalise. */
         const val MIN_SUPPORT = 2
 
-        fun of(rated: Collection<ItemInput>, spreads: Map<String, VectorSpread>, numbers: Map<String, NumberSpread>): FeatureLayout {
+        fun of(
+            rated: Collection<ItemInput>,
+            spreads: Map<String, VectorSpread>,
+            numbers: Map<String, NumberSpread>,
+        ): FeatureLayout {
             val support = HashMap<String, Int>()
             rated.forEach { input -> input.categorical.forEach { support.merge(it, 1, Int::plus) } }
             val names = (support.filter { it.value >= MIN_SUPPORT }.keys + ItemInput.PREVIOUS_GRADES).toSortedSet()
@@ -177,11 +185,13 @@ class FeatureLayout(
         fun numberSpreads(inputs: Collection<ItemInput>): Map<String, NumberSpread> {
             val values = HashMap<String, MutableList<Float>>()
             inputs.forEach { input -> input.numeric.forEach { (k, v) -> values.getOrPut(k) { ArrayList() } += v } }
-            return values.filterValues { it.size >= 2 }.mapValues { (_, list) ->
-                val mean = list.average()
-                val sd = sqrt(list.sumOf { (it - mean) * (it - mean) } / list.size).coerceAtLeast(1e-6)
-                NumberSpread(mean.toFloat(), sd.toFloat())
-            }
+            return values
+                .filterValues { it.size >= 2 }
+                .mapValues { (_, list) ->
+                    val mean = list.average()
+                    val sd = sqrt(list.sumOf { (it - mean) * (it - mean) } / list.size).coerceAtLeast(1e-6)
+                    NumberSpread(mean.toFloat(), sd.toFloat())
+                }
         }
     }
 }

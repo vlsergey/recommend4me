@@ -9,7 +9,8 @@ import kotlin.test.assertTrue
 /** A work's chances of a facet in an array read as a map of them by value, alike to one made as a table. */
 class FewChancesTest {
 
-    private val chances = listOf("a" to 0.9, "b" to 0.2, "c" to 0.6).map { (k, c) -> Chance("w", "tags", k, had = k == "a", chance = c) }
+    private val chances =
+        listOf("a" to 0.9, "b" to 0.2, "c" to 0.6).map { (k, c) -> Chance("w", "tags", k, had = k == "a", chance = c) }
 
     @Test
     fun `read by value as a table of the same chances`() {

@@ -1,40 +1,44 @@
 package io.github.vlsergey.recommend4me.matrix
 
+import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
+import java.nio.ByteOrder
 import jdk.incubator.vector.DoubleVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import org.slf4j.LoggerFactory
-import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout
-import java.nio.ByteOrder
 
 private val log = LoggerFactory.getLogger(Simd::class.java)
 
 /**
- * Inner loops written for the wide registers (Vector API), ported from local-ai-chroma-enf-lora's
- * `student/Simd.kt`. Multiplication and addition are fused: the results differ from the plain
- * loops in the last digits, which is accepted for speed.
+ * Inner loops written for the wide registers (Vector API), ported from local-ai-chroma-enf-lora's `student/Simd.kt`.
+ * Multiplication and addition are fused: the results differ from the plain loops in the last digits, which is accepted
+ * for speed.
  *
- * The module is incubating, so the JVM must load it (`--add-modules jdk.incubator.vector`, which
- * the launcher and the tests pass). Started without it, the plain loops run instead.
+ * The module is incubating, so the JVM must load it (`--add-modules jdk.incubator.vector`, which the launcher and the
+ * tests pass). Started without it, the plain loops run instead.
  */
 object Simd {
 
-    val on: Boolean = try {
-        val width = Probe.width()
-        log.info("wide registers are on: {} floats at a time", width)
-        width > 1
-    } catch (e: Throwable) {
-        log.warn("no wide registers ({}), plain loops are used; start the JVM with --add-modules jdk.incubator.vector", e.javaClass.simpleName)
-        false
-    }
+    val on: Boolean =
+        try {
+            val width = Probe.width()
+            log.info("wide registers are on: {} floats at a time", width)
+            width > 1
+        } catch (e: Throwable) {
+            log.warn(
+                "no wide registers ({}), plain loops are used; start the JVM with --add-modules jdk.incubator.vector",
+                e.javaClass.simpleName,
+            )
+            false
+        }
 
     private val ORDER = ByteOrder.nativeOrder()
     private const val SUMS = 4
 
     /**
-     * `Σ a[i + k] · b[j + k]` for k under [n]. Four sums at once, added up at the end: a single
-     * sum waits for its own last fused multiply-add on every step.
+     * `Σ a[i + k] · b[j + k]` for k under [n]. Four sums at once, added up at the end: a single sum waits for its own
+     * last fused multiply-add on every step.
      */
     fun dot(a: Floats, i: Int, b: Floats, j: Int, n: Int): Float {
         var k = 0
@@ -71,33 +75,50 @@ object Simd {
     }
 
     /**
-     * The logistic loss of a row of scores, every one against the label nought: for each `z =
-     * row[j] + shift[j]` under [n], `softplus(z)` is summed into `sums[0]`, and `σ(z)·scale` — the
-     * slope of the loss, scaled — is written over `row[j]` and summed into `sums[1]`. In single
-     * precision, the exponent and the logarithm of a lane's worth at once: a large universe makes
-     * tens of millions of these a step of a fitting.
+     * The logistic loss of a row of scores, every one against the label nought: for each `z = row[j] + shift[j]` under
+     * [n], `softplus(z)` is summed into `sums[0]`, and `σ(z)·scale` — the slope of the loss, scaled — is written over
+     * `row[j]` and summed into `sums[1]`. In single precision, the exponent and the logarithm of a lane's worth at
+     * once: a large universe makes tens of millions of these a step of a fitting.
      */
     fun logisticRow(row: FloatArray, shift: FloatArray, n: Int, scale: Float, sums: FloatArray) {
         val seg = MemorySegment.ofArray(row)
         logistic(seg, 0, shift, null, null, n, scale, seg, 0, sums)
     }
 
-    /** [logisticRow] of the row of [n] scores at [at] of [m], in place: read and written where they lie, not copied out and back. */
+    /**
+     * [logisticRow] of the row of [n] scores at [at] of [m], in place: read and written where they lie, not copied out
+     * and back.
+     */
     fun logisticRow(m: Floats, at: Int, shift: FloatArray, n: Int, scale: Float, sums: FloatArray) =
         logistic(m.seg, at, shift, null, null, n, scale, m.seg, at, sums)
 
     /**
-     * The weighted logistic loss of a row of scores against its labels: for each `z = row[j] +
-     * shift[j]` under [n], `w[j]·(softplus(z) − y[j]·z)` is summed into `sums[0]`, and the slope
-     * `w[j]·(σ(z) − y[j])·scale` is written into `slopes[j]` and summed into `sums[1]`. A pair of
-     * weight nought adds nothing and has the slope nought.
+     * The weighted logistic loss of a row of scores against its labels: for each `z = row[j] + shift[j]` under [n],
+     * `w[j]·(softplus(z) − y[j]·z)` is summed into `sums[0]`, and the slope `w[j]·(σ(z) − y[j])·scale` is written into
+     * `slopes[j]` and summed into `sums[1]`. A pair of weight nought adds nothing and has the slope nought.
      */
-    fun weightedLogisticRow(row: FloatArray, shift: FloatArray, w: FloatArray, y: FloatArray, n: Int, scale: Float, slopes: FloatArray, sums: FloatArray) =
-        logistic(MemorySegment.ofArray(row), 0, shift, w, y, n, scale, MemorySegment.ofArray(slopes), 0, sums)
+    fun weightedLogisticRow(
+        row: FloatArray,
+        shift: FloatArray,
+        w: FloatArray,
+        y: FloatArray,
+        n: Int,
+        scale: Float,
+        slopes: FloatArray,
+        sums: FloatArray,
+    ) = logistic(MemorySegment.ofArray(row), 0, shift, w, y, n, scale, MemorySegment.ofArray(slopes), 0, sums)
 
     private fun logistic(
-        seg: MemorySegment, at: Int, shift: FloatArray, w: FloatArray?, y: FloatArray?, n: Int, scale: Float,
-        out: MemorySegment, outAt: Int, sums: FloatArray,
+        seg: MemorySegment,
+        at: Int,
+        shift: FloatArray,
+        w: FloatArray?,
+        y: FloatArray?,
+        n: Int,
+        scale: Float,
+        out: MemorySegment,
+        outAt: Int,
+        sums: FloatArray,
     ) {
         val bytes = Float.SIZE_BYTES.toLong()
         var loss = 0f
@@ -111,7 +132,9 @@ object Simd {
             val full = sp.loopBound(n)
             var j = 0
             while (j < full) {
-                val z = FloatVector.fromMemorySegment(sp, seg, (at + j) * bytes, ORDER).add(FloatVector.fromArray(sp, shift, j))
+                val z =
+                    FloatVector.fromMemorySegment(sp, seg, (at + j) * bytes, ORDER)
+                        .add(FloatVector.fromArray(sp, shift, j))
                 val label = y?.let { FloatVector.fromArray(sp, it, j) }
                 val weight = w?.let { FloatVector.fromArray(sp, it, j) }
                 lane(z, label, weight, one, scale) { l, d ->
@@ -129,34 +152,52 @@ object Simd {
                 loss += scalar(seg, at, k, shift, w, y, scale, out, outAt)
                 slope += out.getAtIndex(ValueLayout.JAVA_FLOAT, (outAt + k).toLong())
             }
-        } else for (j in 0 until n) {
-            loss += scalar(seg, at, j, shift, w, y, scale, out, outAt)
-            slope += out.getAtIndex(ValueLayout.JAVA_FLOAT, (outAt + j).toLong())
-        }
+        } else
+            for (j in 0 until n) {
+                loss += scalar(seg, at, j, shift, w, y, scale, out, outAt)
+                slope += out.getAtIndex(ValueLayout.JAVA_FLOAT, (outAt + j).toLong())
+            }
         sums[0] += loss
         sums[1] += slope
     }
 
     /**
-     * The score at `at + j` one number at a time — [logistic] without the wide registers: its slope
-     * written at `outAt + j` (read in place first: the score and the slope may be one number), its loss answered.
+     * The score at `at + j` one number at a time — [logistic] without the wide registers: its slope written at `outAt +
+     * j` (read in place first: the score and the slope may be one number), its loss answered.
      */
-    private fun scalar(seg: MemorySegment, at: Int, j: Int, shift: FloatArray, w: FloatArray?, y: FloatArray?, scale: Float, out: MemorySegment, outAt: Int): Float {
+    private fun scalar(
+        seg: MemorySegment,
+        at: Int,
+        j: Int,
+        shift: FloatArray,
+        w: FloatArray?,
+        y: FloatArray?,
+        scale: Float,
+        out: MemorySegment,
+        outAt: Int,
+    ): Float {
         val z = seg.getAtIndex(ValueLayout.JAVA_FLOAT, (at + j).toLong()) + shift[j]
         val e = kotlin.math.exp(-kotlin.math.abs(z))
         val label = y?.get(j) ?: 0f
         val weight = w?.get(j) ?: 1f
-        out.setAtIndex(ValueLayout.JAVA_FLOAT, (outAt + j).toLong(), weight * ((if (z >= 0) 1 / (1 + e) else e / (1 + e)) - label) * scale)
+        out.setAtIndex(
+            ValueLayout.JAVA_FLOAT,
+            (outAt + j).toLong(),
+            weight * ((if (z >= 0) 1 / (1 + e) else e / (1 + e)) - label) * scale,
+        )
         return weight * (kotlin.math.max(z, 0f) + kotlin.math.ln1p(e) - label * z)
     }
 
     /**
-     * The loss and the slope of a lane's worth of scores [z] against the [label]s (nought when
-     * none), each pair weighed by its [weight] (one when none): softplus and sigmoid from one
-     * exponent, handed to [take].
+     * The loss and the slope of a lane's worth of scores [z] against the [label]s (nought when none), each pair weighed
+     * by its [weight] (one when none): softplus and sigmoid from one exponent, handed to [take].
      */
     private inline fun lane(
-        z: FloatVector, label: FloatVector?, weight: FloatVector?, one: FloatVector, scale: Float,
+        z: FloatVector,
+        label: FloatVector?,
+        weight: FloatVector?,
+        one: FloatVector,
+        scale: Float,
         take: (loss: FloatVector, slope: FloatVector) -> Unit,
     ) {
         val e = z.abs().neg().lanewise(VectorOperators.EXP)
@@ -189,8 +230,10 @@ object Simd {
             while (k < fourBound) {
                 acc0 = FloatVector.fromArray(sp, a, k).fma(FloatVector.fromArray(sp, b, k), acc0)
                 acc1 = FloatVector.fromArray(sp, a, k + width).fma(FloatVector.fromArray(sp, b, k + width), acc1)
-                acc2 = FloatVector.fromArray(sp, a, k + 2 * width).fma(FloatVector.fromArray(sp, b, k + 2 * width), acc2)
-                acc3 = FloatVector.fromArray(sp, a, k + 3 * width).fma(FloatVector.fromArray(sp, b, k + 3 * width), acc3)
+                acc2 =
+                    FloatVector.fromArray(sp, a, k + 2 * width).fma(FloatVector.fromArray(sp, b, k + 2 * width), acc2)
+                acc3 =
+                    FloatVector.fromArray(sp, a, k + 3 * width).fma(FloatVector.fromArray(sp, b, k + 3 * width), acc3)
                 k += SUMS * width
             }
             s = acc0.add(acc1).add(acc2.add(acc3)).reduceLanes(VectorOperators.ADD)
@@ -221,10 +264,10 @@ object Simd {
     }
 
     /**
-     * `out[k] = base[k] + Σ_q c[cAt + q] · x[q · stride + k]` for q under [count], k under `out.size`: a row
-     * of a product of [count] coordinates by a side of them laid out row after row ([stride] apart), made
-     * in one pass — every lane's worth of [out] summed in the wide registers over all the rows of [x] and
-     * written once, not [count] passes of [axpy] over it, nor a product written whole and copied after.
+     * `out[k] = base[k] + Σ_q c[cAt + q] · x[q · stride + k]` for q under [count], k under `out.size`: a row of a
+     * product of [count] coordinates by a side of them laid out row after row ([stride] apart), made in one pass —
+     * every lane's worth of [out] summed in the wide registers over all the rows of [x] and written once, not [count]
+     * passes of [axpy] over it, nor a product written whole and copied after.
      */
     fun combine(c: FloatArray, cAt: Int, count: Int, x: FloatArray, stride: Int, base: FloatArray, out: FloatArray) {
         val n = out.size
@@ -234,7 +277,8 @@ object Simd {
             val bound = sp.loopBound(n)
             while (k < bound) {
                 var acc = FloatVector.fromArray(sp, base, k)
-                for (q in 0 until count) acc = FloatVector.fromArray(sp, x, q * stride + k).fma(FloatVector.broadcast(sp, c[cAt + q]), acc)
+                for (q in 0 until count) acc =
+                    FloatVector.fromArray(sp, x, q * stride + k).fma(FloatVector.broadcast(sp, c[cAt + q]), acc)
                 acc.intoArray(out, k)
                 k += sp.length()
             }
@@ -299,7 +343,9 @@ object Simd {
             val bound = sp.loopBound(n)
             val cv = FloatVector.broadcast(sp, c)
             while (k < bound) {
-                FloatVector.fromMemorySegment(sp, f.seg, (at + k) * bytes, ORDER).add(cv).intoMemorySegment(f.seg, (at + k) * bytes, ORDER)
+                FloatVector.fromMemorySegment(sp, f.seg, (at + k) * bytes, ORDER)
+                    .add(cv)
+                    .intoMemorySegment(f.seg, (at + k) * bytes, ORDER)
                 k += sp.length()
             }
         }
@@ -324,8 +370,10 @@ object Simd {
             while (k < fourBound) {
                 acc0 = DoubleVector.fromArray(sp, a, k).fma(DoubleVector.fromArray(sp, b, k), acc0)
                 acc1 = DoubleVector.fromArray(sp, a, k + width).fma(DoubleVector.fromArray(sp, b, k + width), acc1)
-                acc2 = DoubleVector.fromArray(sp, a, k + 2 * width).fma(DoubleVector.fromArray(sp, b, k + 2 * width), acc2)
-                acc3 = DoubleVector.fromArray(sp, a, k + 3 * width).fma(DoubleVector.fromArray(sp, b, k + 3 * width), acc3)
+                acc2 =
+                    DoubleVector.fromArray(sp, a, k + 2 * width).fma(DoubleVector.fromArray(sp, b, k + 2 * width), acc2)
+                acc3 =
+                    DoubleVector.fromArray(sp, a, k + 3 * width).fma(DoubleVector.fromArray(sp, b, k + 3 * width), acc3)
                 k += SUMS * width
             }
             s = acc0.add(acc1).add(acc2.add(acc3)).reduceLanes(VectorOperators.ADD)
@@ -357,8 +405,8 @@ object Simd {
 }
 
 /**
- * The question «are the registers there» asked in a class of its own: without the module the
- * answer is a linkage error, which must be thrown inside a call to be caught.
+ * The question «are the registers there» asked in a class of its own: without the module the answer is a linkage error,
+ * which must be thrown inside a call to be caught.
  */
 private object Probe {
     fun width(): Int = FloatVector.SPECIES_PREFERRED.length()

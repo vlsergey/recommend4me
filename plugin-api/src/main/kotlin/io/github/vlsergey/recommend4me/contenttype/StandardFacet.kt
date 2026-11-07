@@ -8,15 +8,14 @@ import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SignalDef
 
 /**
- * A FACET EVERY SOURCE OF A CONTENT TYPE FILLS ALIKE — the author, the status, the tags: one facet
- * for the model, the filters and the card, whichever site a work is from. A source declares its
- * facet as the standard one ([asFacet]) and maps the site's values onto it first of all: of a facet
- * with [values] — the status of a book — only those, by their keys, the application leaving out any
- * other; of a facet without, any value as the site writes it (an author, a tag), the same value of
- * two sites under one key.
+ * A FACET EVERY SOURCE OF A CONTENT TYPE FILLS ALIKE — the author, the status, the tags: one facet for the model, the
+ * filters and the card, whichever site a work is from. A source declares its facet as the standard one ([asFacet]) and
+ * maps the site's values onto it first of all: of a facet with [values] — the status of a book — only those, by their
+ * keys, the application leaving out any other; of a facet without, any value as the site writes it (an author, a tag),
+ * the same value of two sites under one key.
  *
- * Its label and the names of its values are words of the interface's standard namespace, by its
- * [key] ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]).
+ * Its label and the names of its values are words of the interface's standard namespace, by its [key]
+ * ([I18nKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys]).
  */
 class StandardFacet(
     val key: String,
@@ -28,61 +27,98 @@ class StandardFacet(
     val names: Boolean = false,
     val searchWeight: Float = 0f,
     val suggest: Boolean = false,
-    /** Of the layer ([ContentType.layer]): the values are worked out for every work and given to it ([FacetDef.infer]). */
+    /**
+     * Of the layer ([ContentType.layer]): the values are worked out for every work and given to it ([FacetDef.infer]).
+     */
     val infer: Boolean = false,
-    /** Of the layer: the standard facet of the sites whose values are this one's examples, by their names ([FacetDef.examplesFrom]). */
+    /**
+     * Of the layer: the standard facet of the sites whose values are this one's examples, by their names
+     * ([FacetDef.examplesFrom]).
+     */
     val examples: StandardFacet? = null,
     /** A work has one value of it at most ([FacetDef.single]). */
     val single: Boolean = false,
     /** The user may say the work's values of it are all named ([FacetDef.completable]). */
     val completable: Boolean = false,
-    /** Of the layer: the standard facet of the sites that is their own word on it, shown right above it and not learnt as examples ([FacetDef.originalFacet]). */
+    /**
+     * Of the layer: the standard facet of the sites that is their own word on it, shown right above it and not learnt
+     * as examples ([FacetDef.originalFacet]).
+     */
     val original: StandardFacet? = null,
-    /** Its [values] are a scale, in their order — the age rating, from G up: filtered from one to another, not one by one. */
+    /**
+     * Its [values] are a scale, in their order — the age rating, from G up: filtered from one to another, not one by
+     * one.
+     */
     val ordered: Boolean = false,
     /** A work always has one value of it ([FacetDef.required]). */
     val required: Boolean = false,
 ) {
-    /** The keys of the values of the scale from [from] to [to], both in; every one of a missing end. Of an [ordered] facet. */
+    /**
+     * The keys of the values of the scale from [from] to [to], both in; every one of a missing end. Of an [ordered]
+     * facet.
+     */
     fun between(from: String?, to: String?): List<String> {
         val keys = values.orEmpty().map { it.key }
         val lo = from?.let(keys::indexOf)?.takeIf { it >= 0 } ?: 0
         val hi = to?.let(keys::indexOf)?.takeIf { it >= 0 } ?: keys.lastIndex
         return if (lo > hi) emptyList() else keys.subList(lo, hi + 1)
     }
+
     /** The value of the key; null when the facet has no such value, or takes any. */
     fun value(key: String): StandardValue? = values?.firstOrNull { it.key == key }
 
     /** The source's facet [key] as this one: its role and use are the standard's. */
-    fun asFacet(key: String = this.key) = FacetDef(
-        key,
-        filter = filter, shared = this.key, searchWeight = searchWeight, onCard = onCard, names = names, suggest = suggest, role = role,
-        standard = this, single = single, completable = completable,
-    )
+    fun asFacet(key: String = this.key) =
+        FacetDef(
+            key,
+            filter = filter,
+            shared = this.key,
+            searchWeight = searchWeight,
+            onCard = onCard,
+            names = names,
+            suggest = suggest,
+            role = role,
+            standard = this,
+            single = single,
+            completable = completable,
+        )
 
     /**
-     * This one as a facet of the application's layer over a source: corrected by the user, worked out
-     * from [examplesFrom] — the key of the source's own facet of [examples] — and the rest.
+     * This one as a facet of the application's layer over a source: corrected by the user, worked out from
+     * [examplesFrom] — the key of the source's own facet of [examples] — and the rest.
      */
-    fun asLayerFacet(examplesFrom: String?, originalFacet: String? = examplesFrom) = FacetDef(
-        key,
-        filter = filter, shared = key, searchWeight = searchWeight, onCard = onCard, names = names, suggest = suggest, infer = infer, role = role,
-        standard = this, editable = true, examplesFrom = examplesFrom, originalFacet = originalFacet, single = single, completable = completable,
-        required = required,
-    )
+    fun asLayerFacet(examplesFrom: String?, originalFacet: String? = examplesFrom) =
+        FacetDef(
+            key,
+            filter = filter,
+            shared = key,
+            searchWeight = searchWeight,
+            onCard = onCard,
+            names = names,
+            suggest = suggest,
+            infer = infer,
+            role = role,
+            standard = this,
+            editable = true,
+            examplesFrom = examplesFrom,
+            originalFacet = originalFacet,
+            single = single,
+            completable = completable,
+            required = required,
+        )
 }
 
 /**
- * A value of a [StandardFacet] with a closed list of them, by its stable key. [modelName] is the
- * name the model and the search read it by — one language, whatever the user reads, the texts
- * encoded once; the user is shown it by its key, in the interface's words.
+ * A value of a [StandardFacet] with a closed list of them, by its stable key. [modelName] is the name the model and the
+ * search read it by — one language, whatever the user reads, the texts encoded once; the user is shown it by its key,
+ * in the interface's words.
  */
 class StandardValue(val key: String, val modelName: String)
 
 /**
- * A NUMBER EVERY SOURCE OF A CONTENT TYPE THAT HAS IT TELLS ALIKE — the chapters of a book: one
- * number for the model and the filters, whichever site a work is from. A source declares its number
- * as the standard one ([asNumber]) under its own key.
+ * A NUMBER EVERY SOURCE OF A CONTENT TYPE THAT HAS IT TELLS ALIKE — the chapters of a book: one number for the model
+ * and the filters, whichever site a work is from. A source declares its number as the standard one ([asNumber]) under
+ * its own key.
  */
 class StandardNumber(
     val key: String,
@@ -92,16 +128,22 @@ class StandardNumber(
     val role: NumberRole? = null,
 ) {
     /** The source's number [key] as this one: its scale and use are the standard's. */
-    fun asNumber(key: String = this.key) = NumberDef(
-        key, scale, sortable = sortable, shared = this.key, role = role, filterable = filterable, standard = this,
-    )
+    fun asNumber(key: String = this.key) =
+        NumberDef(
+            key,
+            scale,
+            sortable = sortable,
+            shared = this.key,
+            role = role,
+            filterable = filterable,
+            standard = this,
+        )
 }
 
 /**
- * A USER'S OWN ACTION ON A SITE EVERY SOURCE OF A CONTENT TYPE TELLS ALIKE — read the work, liked
- * it: one signal for the model and the card, whichever site it was done on. A source sets it under
- * [key] to one of [values], mapping its own marks onto it (a shelf "finished" — read), besides any
- * signal of its own.
+ * A USER'S OWN ACTION ON A SITE EVERY SOURCE OF A CONTENT TYPE TELLS ALIKE — read the work, liked it: one signal for
+ * the model and the card, whichever site it was done on. A source sets it under [key] to one of [values], mapping its
+ * own marks onto it (a shelf "finished" — read), besides any signal of its own.
  */
 class StandardSignal(val key: String, val values: List<StandardValue>) {
     fun asSignal() = SignalDef(key, values.map { it.key }.toSet(), standard = this)

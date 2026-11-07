@@ -1,13 +1,11 @@
 package io.github.vlsergey.recommend4me
 
-import io.github.vlsergey.recommend4me.workload.inBackground
 import com.sun.net.httpserver.HttpServer
 import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
 import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOffer
 import io.github.vlsergey.recommend4me.api.model.AuthorSaid
 import io.github.vlsergey.recommend4me.api.model.CaptureRequest
-import io.github.vlsergey.recommend4me.author.AuthorsController
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.ItemRef
@@ -16,21 +14,20 @@ import io.github.vlsergey.recommend4me.api.model.JobRequest
 import io.github.vlsergey.recommend4me.api.model.Mark
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.api.model.ScorerChoice
-import io.github.vlsergey.recommend4me.api.model.TagRelation
-import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
-import io.github.vlsergey.recommend4me.capture.CaptureController
-import io.github.vlsergey.recommend4me.capture.Captures
 import io.github.vlsergey.recommend4me.api.model.SiteAuthorKey
 import io.github.vlsergey.recommend4me.api.model.SizeNumber
+import io.github.vlsergey.recommend4me.api.model.TagRelation
+import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.author.AuthorRepository
+import io.github.vlsergey.recommend4me.author.AuthorsController
+import io.github.vlsergey.recommend4me.capture.CaptureController
+import io.github.vlsergey.recommend4me.capture.Captures
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
-import io.github.vlsergey.recommend4me.size.WorkSizes
-import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.duplicate.DuplicatesController
-import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsController
 import io.github.vlsergey.recommend4me.job.Jobs
 import io.github.vlsergey.recommend4me.job.JobsController
@@ -39,11 +36,13 @@ import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.settings.SettingsController
+import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.Job
 import io.github.vlsergey.recommend4me.source.JobCancelled
+import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.source.ReviewData
 import io.github.vlsergey.recommend4me.source.SettingDef
 import io.github.vlsergey.recommend4me.source.Source
@@ -57,9 +56,18 @@ import io.github.vlsergey.recommend4me.tag.SiteTagRef
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.tag.TagsController
-import org.junit.jupiter.api.AfterAll
-import org.springframework.context.i18n.LocaleContextHolder
+import io.github.vlsergey.recommend4me.workload.inBackground
+import java.io.File
+import java.net.InetSocketAddress
+import java.time.Instant
+import java.util.Collections
 import java.util.Locale
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -67,21 +75,13 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.core.io.FileSystemResource
-import java.io.File
-import java.net.InetSocketAddress
-import java.time.Instant
-import java.util.Collections
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
- * Two sites of one content type: a site read in the browser ("alpha") and one the application
- * scrapes itself ("beta"). What spans sources — a work on both sites, a tag of both — and what only
- * a scraping site has: jobs, settings, the page of a graded work loaded at once.
+ * Two sites of one content type: a site read in the browser ("alpha") and one the application scrapes itself ("beta").
+ * What spans sources — a work on both sites, a tag of both — and what only a scraping site has: jobs, settings, the
+ * page of a graded work loaded at once.
  */
 @SpringBootTest(properties = ["recommend4me.data-dir=build/test-data/two-sites"])
 class TwoSitesTest {
@@ -95,7 +95,8 @@ class TwoSitesTest {
         /** A picture of a few bytes: the application keeps what the host gives, it does not decode a preview. */
         private val PNG = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 1, 2, 3)
 
-        val pictureBase: String get() = "http://127.0.0.1:${server.address.port}"
+        val pictureBase: String
+            get() = "http://127.0.0.1:${server.address.port}"
 
         @JvmStatic
         @BeforeAll
@@ -115,78 +116,93 @@ class TwoSitesTest {
             server.start()
         }
 
-        @JvmStatic
-        @AfterAll
-        fun stop() = server.stop(0)
+        @JvmStatic @AfterAll fun stop() = server.stop(0)
     }
 
     @TestConfiguration
     class Plugins {
-        @Bean
-        fun alpha(): Source = Alpha()
+        @Bean fun alpha(): Source = Alpha()
 
-        @Bean
-        fun beta(): Source = Beta()
+        @Bean fun beta(): Source = Beta()
 
-        @Bean
-        fun wordsEncoder(): TextEncoder = SiteTest.WordsEncoder()
+        @Bean fun wordsEncoder(): TextEncoder = SiteTest.WordsEncoder()
     }
 
     /**
-     * A site read in the browser: pages "<id>|<title>|<tags>|<annotation>|<picture>|<review>". Its
-     * parser's version can be raised: from version 2 it reads the title in capitals.
+     * A site read in the browser: pages "<id>|<title>|<tags>|<annotation>|<picture>|<review>". Its parser's version can
+     * be raised: from version 2 it reads the title in capitals.
      */
     class Alpha : Source {
         override val id = "alpha"
         override val contentType = "books"
         override val homepage = "https://alpha.example"
-        override val schema = SourceSchema(
-            facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
-            numbers = listOf(StandardNumbers.WORDS.asNumber()),
-            texts = listOf(TextDef("annotation", block = "text:annotation")),
-            reviews = true,
-        )
+        override val schema =
+            SourceSchema(
+                facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
+                numbers = listOf(StandardNumbers.WORDS.asNumber()),
+                texts = listOf(TextDef("annotation", block = "text:annotation")),
+                reviews = true,
+            )
         override val modes = setOf(SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://alpha\\.example/work/.*"))
+
         override fun itemUrl(itemId: String) = "https://alpha.example/work/$itemId"
-        override val parserVersion: Int get() = version
+
+        override val parserVersion: Int
+            get() = version
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
             val parts = page.html.split('|')
             val (id, title, tags, annotation, picture) = parts
             val review = parts[5]
-            context.items.upsert(ItemHead(id, itemUrl(id), if (version >= 2) title.uppercase() else title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")), page.capturedAt)
-            context.items.setFacet(id, Books.TAG.key, tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it) })
+            context.items.upsert(
+                ItemHead(
+                    id,
+                    itemUrl(id),
+                    if (version >= 2) title.uppercase() else title,
+                    updatedAt = Instant.parse("2026-01-01T00:00:00Z"),
+                ),
+                page.capturedAt,
+            )
+            context.items.setFacet(
+                id,
+                Books.TAG.key,
+                tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it) },
+            )
             context.items.setTexts(id, mapOf("annotation" to annotation))
             if (picture.isNotBlank()) context.items.setPictures(id, listOf("$pictureBase/$picture"))
-            if (review.isNotBlank()) context.items.saveReviews(id, listOf(ReviewData("r1", "reader", null, review, null)))
+            if (review.isNotBlank())
+                context.items.saveReviews(id, listOf(ReviewData("r1", "reader", null, review, null)))
             return listOf(id)
         }
 
         companion object {
-            @Volatile
-            var version = 1
+            @Volatile var version = 1
         }
     }
 
     /**
-     * A site the application scrapes: a job of the whole catalogue writes three works and waits till
-     * it is stopped; a job of the updates writes one and ends. The page of a work it is asked to
-     * refresh is "loaded" and remembered.
+     * A site the application scrapes: a job of the whole catalogue writes three works and waits till it is stopped; a
+     * job of the updates writes one and ends. The page of a work it is asked to refresh is "loaded" and remembered.
      */
     class Beta : Source {
         override val id = "beta"
         override val contentType = "books"
         override val homepage = "https://beta.example"
-        override val schema = SourceSchema(
-            facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
-            numbers = listOf(StandardNumbers.CHARS.asNumber()),
-            texts = listOf(TextDef("annotation", block = "text:annotation")),
-        )
+        override val schema =
+            SourceSchema(
+                facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
+                numbers = listOf(StandardNumbers.CHARS.asNumber()),
+                texts = listOf(TextDef("annotation", block = "text:annotation")),
+            )
         override val modes = setOf(SourceMode.SCRAPE_ALL, SourceMode.UPDATES, SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://beta\\.example/work/.*"))
+
         override fun itemUrl(itemId: String) = "https://beta.example/work/$itemId"
-        override fun valueUrl(facet: String, key: String, name: String) = if (facet == Books.AUTHOR.key) "https://beta.example/author/$key" else null
+
+        override fun valueUrl(facet: String, key: String, name: String) =
+            if (facet == Books.AUTHOR.key) "https://beta.example/author/$key" else null
+
         override val settings = listOf(SettingDef("cookie", secret = true), SettingDef("delay", default = "5"))
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
@@ -195,9 +211,23 @@ class TwoSitesTest {
             return listOf(id)
         }
 
-        private fun write(context: SourceContext, id: String, title: String, tags: String, annotation: String, now: Instant) {
-            context.items.upsert(ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")), now)
-            context.items.setFacet(id, Books.TAG.key, tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it) })
+        private fun write(
+            context: SourceContext,
+            id: String,
+            title: String,
+            tags: String,
+            annotation: String,
+            now: Instant,
+        ) {
+            context.items.upsert(
+                ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")),
+                now,
+            )
+            context.items.setFacet(
+                id,
+                Books.TAG.key,
+                tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it) },
+            )
             context.items.setTexts(id, mapOf("annotation" to annotation))
         }
 
@@ -249,11 +279,15 @@ class TwoSitesTest {
     @Autowired lateinit var searchService: io.github.vlsergey.recommend4me.search.Search
     @Autowired lateinit var workSizes: WorkSizes
 
-    private fun alpha(body: String) = captures.capturePage(CaptureRequest("https://alpha.example/work/${body.substringBefore('|')}", body))
-    private fun beta(body: String) = captures.capturePage(CaptureRequest("https://beta.example/work/${body.substringBefore('|')}", body))
+    private fun alpha(body: String) =
+        captures.capturePage(CaptureRequest("https://alpha.example/work/${body.substringBefore('|')}", body))
+
+    private fun beta(body: String) =
+        captures.capturePage(CaptureRequest("https://beta.example/work/${body.substringBefore('|')}", body))
 
     /** The key of the normalized tag the site's tag [tag] of [source] is bound to. */
-    private fun tagOf(source: String, tag: String) = TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef(source, tag)))
+    private fun tagOf(source: String, tag: String) =
+        TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef(source, tag)))
 
     /** Waits up to [seconds] for [condition]; true when it came. */
     private fun waitFor(seconds: Int = 30, condition: () -> Boolean): Boolean {
@@ -282,7 +316,8 @@ class TwoSitesTest {
         assertEquals(SizeNumber(900.0, true), first.words)
         assertEquals(false, first.chars!!.stated)
         assertTrue(first.chars!!.value in 5300.0..5500.0, first.chars.toString())
-        val second = workSizes.ofItems(type, b, listOf("z2"), b.items.numbersOf(listOf("z2")), emptyMap()).getValue("z2")
+        val second =
+            workSizes.ofItems(type, b, listOf("z2"), b.items.numbersOf(listOf("z2")), emptyMap()).getValue("z2")
         assertEquals(SizeNumber(6000.0, true), second.chars)
         assertEquals(false, second.words!!.stated)
         // Of the one example the model has, its ratio
@@ -300,7 +335,11 @@ class TwoSitesTest {
         corrections.linkItem("alpha", "c1", ItemRef("beta", "c2"))
         assertEquals(ItemRef("alpha", "c1"), items.getItem("alpha", "c1").body!!.summary.cover)
         assertEquals(ItemRef("alpha", "c1"), items.getItem("beta", "c2").body!!.summary.cover)
-        assertEquals(0, items.getItem("beta", "c2").body!!.summary.pictureCount, "the pictures of the site's page stay its own")
+        assertEquals(
+            0,
+            items.getItem("beta", "c2").body!!.summary.pictureCount,
+            "the pictures of the site's page stay its own",
+        )
         corrections.unlinkItem("alpha", "c1", "beta", "c2")
     }
 
@@ -324,13 +363,17 @@ class TwoSitesTest {
         alpha("f1|The Harbour|harbour-one|A harbour at dusk||")
         beta("f2|The Harbour|harbour-two|A harbour at dusk")
         corrections.linkItem("alpha", "f1", ItemRef("beta", "f2"))
-        fun field(source: String, item: String) = items.getItem(source, item).body!!.allFacets.single { it.facet == Books.TAGS.key }
+        fun field(source: String, item: String) =
+            items.getItem(source, item).body!!.allFacets.single { it.facet == Books.TAGS.key }
         val one = field("alpha", "f1")
         val other = field("beta", "f2")
         assertEquals(listOf("harbour-one"), one.said.orEmpty().single { it.source == "alpha" }.words.map { it.name })
         assertEquals(listOf("harbour-two"), one.said.orEmpty().single { it.source == "beta" }.words.map { it.name })
         assertEquals(one.said, other.said)
-        assertEquals(one.propertyValues.map { it.key to it.fromSite }.toSet(), other.propertyValues.map { it.key to it.fromSite }.toSet())
+        assertEquals(
+            one.propertyValues.map { it.key to it.fromSite }.toSet(),
+            other.propertyValues.map { it.key to it.fromSite }.toSet(),
+        )
         corrections.unlinkItem("alpha", "f1", "beta", "f2")
     }
 
@@ -343,7 +386,14 @@ class TwoSitesTest {
         val links = stores.type("books")!!.links
         fun key(source: String, id: String) = ItemKey(source, id)
         fun answer(a: ItemKey, b: ItemKey, verdict: io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict) =
-            duplicates.answerDuplicate("books", io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(ItemRef(a.source, a.id), ItemRef(b.source, b.id), verdict))
+            duplicates.answerDuplicate(
+                "books",
+                io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(
+                    ItemRef(a.source, a.id),
+                    ItemRef(b.source, b.id),
+                    verdict,
+                ),
+            )
         fun relation(a: ItemKey, b: ItemKey) = links.relations()[links.ordered(a, b)]
         fun different(a: ItemKey, b: ItemKey) = links.ordered(a, b) in links.distincts()
         val (m1, m2, m3, m4) = listOf(key("alpha", "m1"), key("beta", "m2"), key("beta", "m3"), key("alpha", "m4"))
@@ -368,11 +418,18 @@ class TwoSitesTest {
         answer(m4, m1, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT)
         assertTrue(different(m4, m2), "m4 is different from m1, so from m2, one with it")
         answer(m3, m2, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
-        // m3 joins m1 and m2: m4, different from them, different from m3 as it was; a word of the group's own two taken away
+        // m3 joins m1 and m2: m4, different from them, different from m3 as it was; a word of the group's own two taken
+        // away
         assertTrue(different(m4, m3))
         assertEquals(null, relation(m1, m3))
 
-        for ((a, b) in listOf(m1 to m2, m2 to m3, m4 to m1, m4 to m3)) duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
+        for ((a, b) in listOf(m1 to m2, m2 to m3, m4 to m1, m4 to m3)) duplicates.unanswerDuplicate(
+            "books",
+            a.source,
+            a.id,
+            b.source,
+            b.id,
+        )
     }
 
     @Test
@@ -382,13 +439,26 @@ class TwoSitesTest {
         val links = stores.type("books")!!.links
         val (j1, j2) = ItemKey("alpha", "j1") to ItemKey("beta", "j2")
         fun answer(verdict: io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict) =
-            duplicates.answerDuplicate("books", io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(ItemRef(j1.source, j1.id), ItemRef(j2.source, j2.id), verdict))
-        fun journal() = duplicates.getDuplicateJournal("books", 0, 200).body!!.words.filter { it.first.item == "j1" && it.second.item == "j2" }
+            duplicates.answerDuplicate(
+                "books",
+                io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(
+                    ItemRef(j1.source, j1.id),
+                    ItemRef(j2.source, j2.id),
+                    verdict,
+                ),
+            )
+        fun journal() =
+            duplicates.getDuplicateJournal("books", 0, 200).body!!.words.filter {
+                it.first.item == "j1" && it.second.item == "j2"
+            }
         fun word() = links.word(j1, j2, Instant.now())
 
         answer(io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
         answer(io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT)
-        assertEquals(listOf("DIFFERENT" to "SAME", "SAME" to null), journal().map { it.answer?.name to it.before?.name })
+        assertEquals(
+            listOf("DIFFERENT" to "SAME", "SAME" to null),
+            journal().map { it.answer?.name to it.before?.name },
+        )
         assertEquals(listOf(true, false), journal().map { it.undoable })
         assertEquals("The Well", journal().first().first.title)
 
@@ -425,7 +495,8 @@ class TwoSitesTest {
         val namesake = waitForValue { dictionary.bindingsOf("beta")["ann"] }
         assertTrue(ann != namesake, "one name on two sites is no one author")
 
-        fun offers(said: AuthorSaid = AuthorSaid.OFFERED) = authors.getAuthorOffers("books", said, null, 0, 50).body!!.offers
+        fun offers(said: AuthorSaid = AuthorSaid.OFFERED) =
+            authors.getAuthorOffers("books", said, null, 0, 50).body!!.offers
         fun of(a: Long, b: Long) = offers().firstOrNull { setOf(it.first.id, it.second.id) == setOf(a, b) }
         assertEquals(null, of(ann, annaB), "no work of theirs is known to match")
         // Their works one work: offered, the pair shown, the rest of the works apart
@@ -461,13 +532,27 @@ class TwoSitesTest {
         assertEquals(null, of(ann, annaB))
         assertEquals(emptyList(), offers(AuthorSaid.DIFFERENT))
         assertEquals(listOf(ann to annaB), offers(AuthorSaid.PARTIAL).map { it.first.id to it.second.id })
-        assertEquals(AuthorOffer.Said.PARTIAL, authors.getAuthorOffers("books", AuthorSaid.ALL, annaB, 0, 50).body!!.offers.single().said)
+        assertEquals(
+            AuthorOffer.Said.PARTIAL,
+            authors.getAuthorOffers("books", AuthorSaid.ALL, annaB, 0, 50).body!!.offers.single().said,
+        )
         authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.NONE))
 
         // Every author with works listed, the most works first, by a name of theirs
-        assertEquals(listOf(ann, annaB, namesake), authors.listAuthors("books", AuthorKind.ALL, null, 0, 50).body!!.authors.map { it.id }.sortedWith(compareBy { if (it == ann) 0L else it }))
+        assertEquals(
+            listOf(ann, annaB, namesake),
+            authors
+                .listAuthors("books", AuthorKind.ALL, null, 0, 50)
+                .body!!
+                .authors
+                .map { it.id }
+                .sortedWith(compareBy { if (it == ann) 0L else it }),
+        )
         assertEquals(ann, authors.listAuthors("books", AuthorKind.ALL, null, 0, 1).body!!.authors.single().id)
-        assertEquals(listOf(annaB), authors.listAuthors("books", AuthorKind.ALL, "NA b", 0, 50).body!!.authors.map { it.id })
+        assertEquals(
+            listOf(annaB),
+            authors.listAuthors("books", AuthorKind.ALL, "NA b", 0, 50).body!!.authors.map { it.id },
+        )
         assertEquals(setOf("w1", "w3"), authors.getAuthor("books", ann).body!!.rest.map { it.item }.toSet())
 
         // One writer: merged, offered no more; a site's author taken out is told apart
@@ -475,14 +560,42 @@ class TwoSitesTest {
         assertEquals(ann, dictionary.bindingsOf("beta")["anna-b"])
         assertEquals(null, offers().firstOrNull { it.first.id == ann && it.second.id == ann })
         // A row read before the merge stays good: the author merged away answered on by their site's name
-        assertEquals(204, authors.answerAuthors(AuthorAnswer(betaAnna, betaAnn, AuthorAnswer.Verdict.DIFFERENT)).statusCode.value())
+        assertEquals(
+            204,
+            authors.answerAuthors(AuthorAnswer(betaAnna, betaAnn, AuthorAnswer.Verdict.DIFFERENT)).statusCode.value(),
+        )
         assertEquals(true, stores.type("books")!!.authors.told()[AuthorRepository.pair(ann, namesake)]?.not())
         authors.answerAuthors(AuthorAnswer(betaAnna, betaAnn, AuthorAnswer.Verdict.NONE))
         // Of two who are one by now: one writer needs nothing, different is refused
-        assertEquals(204, authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.SAME)).statusCode.value())
-        assertEquals(Refusal.AUTHORS_ONE, assertThrows<Refused> { authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.DIFFERENT)) }.refusal)
-        assertEquals(404, authors.answerAuthors(AuthorAnswer(alphaAnn, SiteAuthorKey("beta", "nobody"), AuthorAnswer.Verdict.DIFFERENT)).statusCode.value())
-        assertEquals(setOf("ann", "anna-b"), authors.listAuthors("books", AuthorKind.MERGED, null, 0, 50).body!!.authors.single { it.id == ann }.sites.map { it.author }.toSet())
+        assertEquals(
+            204,
+            authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.SAME)).statusCode.value(),
+        )
+        assertEquals(
+            Refusal.AUTHORS_ONE,
+            assertThrows<Refused> {
+                    authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.DIFFERENT))
+                }
+                .refusal,
+        )
+        assertEquals(
+            404,
+            authors
+                .answerAuthors(AuthorAnswer(alphaAnn, SiteAuthorKey("beta", "nobody"), AuthorAnswer.Verdict.DIFFERENT))
+                .statusCode
+                .value(),
+        )
+        assertEquals(
+            setOf("ann", "anna-b"),
+            authors
+                .listAuthors("books", AuthorKind.MERGED, null, 0, 50)
+                .body!!
+                .authors
+                .single { it.id == ann }
+                .sites
+                .map { it.author }
+                .toSet(),
+        )
         authors.takeOutSiteAuthor(ann, "beta", "anna-b")
         val apart = dictionary.bindingsOf("beta").getValue("anna-b")
         assertTrue(apart != ann)
@@ -542,9 +655,13 @@ class TwoSitesTest {
         // The names and the counts worked out in the queue after the quiet — here at once
         inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
         val merged = tags.getTag(waves).body!!
-        assertEquals(setOf(SiteTagRef("alpha", "waves"), SiteTagRef("beta", "breakers")), merged.variants.map { SiteTagRef(it.source, it.tag) }.toSet())
+        assertEquals(
+            setOf(SiteTagRef("alpha", "waves"), SiteTagRef("beta", "breakers")),
+            merged.variants.map { SiteTagRef(it.source, it.tag) }.toSet(),
+        )
         assertEquals(404, tags.getTag(breakers).statusCode.value())
-        fun answers(source: String, item: String) = stores.source(source)!!.corrections.facetsOf(item).filter { it.facet == "tags" }.map { it.key to it.added }
+        fun answers(source: String, item: String) =
+            stores.source(source)!!.corrections.facetsOf(item).filter { it.facet == "tags" }.map { it.key to it.added }
         assertEquals(listOf(waves to true), answers("alpha", "a3"))
         assertEquals(listOf(waves to false), answers("beta", "b3"))
     }
@@ -557,15 +674,19 @@ class TwoSitesTest {
             val id = "race$round"
             val pool = java.util.concurrent.Executors.newFixedThreadPool(threads)
             val start = java.util.concurrent.CountDownLatch(1)
-            val done = (1..threads).map { k ->
-                pool.submit<Unit> {
-                    start.await()
-                    context.items.upsert(ItemHead(id, "https://alpha.example/work/$id", "Race $k", version = "v$k"), Instant.now())
-                    context.items.setFacet(id, Books.TAG.key, listOf(FacetValue("tag$k", "Tag $k")))
-                    context.items.setTexts(id, mapOf("annotation" to "Written by $k"))
-                    context.items.setNumbers(id, mapOf("likes" to k.toDouble()))
+            val done =
+                (1..threads).map { k ->
+                    pool.submit<Unit> {
+                        start.await()
+                        context.items.upsert(
+                            ItemHead(id, "https://alpha.example/work/$id", "Race $k", version = "v$k"),
+                            Instant.now(),
+                        )
+                        context.items.setFacet(id, Books.TAG.key, listOf(FacetValue("tag$k", "Tag $k")))
+                        context.items.setTexts(id, mapOf("annotation" to "Written by $k"))
+                        context.items.setNumbers(id, mapOf("likes" to k.toDouble()))
+                    }
                 }
-            }
             start.countDown()
             done.forEach { it.get() }
             pool.shutdown()
@@ -579,14 +700,28 @@ class TwoSitesTest {
     fun `a universe or a pairing named by a name typed that the dictionary has not is refused, never made a value`() {
         alpha("n1|Wizards|magic|A school of magic||")
         listOf("universe", "pairings").forEach { facet ->
-            val refused = assertThrows<Refused> { corrections.correctFacet("alpha", "n1", FacetCorrection(facet = facet, added = true, name = "Harry Potter")) }
+            val refused =
+                assertThrows<Refused> {
+                    corrections.correctFacet(
+                        "alpha",
+                        "n1",
+                        FacetCorrection(facet = facet, added = true, name = "Harry Potter"),
+                    )
+                }
             assertEquals(Refusal.NOT_IN_DICTIONARY, refused.refusal)
             assertEquals(mapOf("value" to "Harry Potter"), refused.params)
         }
-        assertTrue(stores.source("alpha")!!.corrections.facetsOf("n1").none { it.facet == "universe" || it.facet == "pairings" })
+        assertTrue(
+            stores.source("alpha")!!.corrections.facetsOf("n1").none {
+                it.facet == "universe" || it.facet == "pairings"
+            }
+        )
         // A character may be named as the work names it
         corrections.correctFacet("alpha", "n1", FacetCorrection(facet = "characters", added = true, name = "Neville"))
-        assertEquals(listOf("neville"), stores.source("alpha")!!.corrections.facetsOf("n1").filter { it.facet == "characters" }.map { it.key })
+        assertEquals(
+            listOf("neville"),
+            stores.source("alpha")!!.corrections.facetsOf("n1").filter { it.facet == "characters" }.map { it.key },
+        )
     }
 
     @Test
@@ -603,7 +738,10 @@ class TwoSitesTest {
         tags.relateTags(TagRelationRequest(fleet, gunboats, TagRelation.CHILD))
         // The fleet put under the gunboats: it is above them through the frigates — refused, and the
         // link said of the two before is not taken away by the refused word
-        assertEquals(Refusal.TAG_ABOVE, assertThrows<Refused> { tags.relateTags(TagRelationRequest(gunboats, fleet, TagRelation.CHILD)) }.refusal)
+        assertEquals(
+            Refusal.TAG_ABOVE,
+            assertThrows<Refused> { tags.relateTags(TagRelationRequest(gunboats, fleet, TagRelation.CHILD)) }.refusal,
+        )
         assertTrue(fleet in tags.getTag(gunboats).body!!.parents.map { it.key })
         tags.relateTags(TagRelationRequest(fleet, gunboats, TagRelation.NONE))
         tags.relateTags(TagRelationRequest(frigates, gunboats, TagRelation.NONE))
@@ -620,10 +758,16 @@ class TwoSitesTest {
         // Merged, and stopped before the answers were moved
         val type = stores.type("books")!!
         type.tags.merge(TagRepository.idOf(moorings)!!, TagRepository.idOf(anchors)!!, Instant.now())
-        assertEquals(listOf(moorings to true), stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added })
+        assertEquals(
+            listOf(moorings to true),
+            stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added },
+        )
 
         tagService.start()
-        assertEquals(listOf(anchors to true), stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added })
+        assertEquals(
+            listOf(anchors to true),
+            stores.source("beta")!!.corrections.facetsOf("t5").filter { it.facet == "tags" }.map { it.key to it.added },
+        )
         assertEquals(emptyList(), type.tags.pendingMerges())
     }
 
@@ -638,16 +782,27 @@ class TwoSitesTest {
         tags.relateTags(TagRelationRequest(sailing, yachts, TagRelation.CHILD))
         tags.relateTags(TagRelationRequest(yachts, regatta, TagRelation.CHILD))
 
-        fun relationOf(tag: String, other: String) = tags.listSimilarTags(tag, null, 0, 500, null, null).body!!.tags.single { it.tag.key == other && it.site == null }.relation
+        fun relationOf(tag: String, other: String) =
+            tags
+                .listSimilarTags(tag, null, 0, 500, null, null)
+                .body!!
+                .tags
+                .single { it.tag.key == other && it.site == null }
+                .relation
         assertEquals(TagRelation.CHILD, relationOf(sailing, yachts))
         assertEquals(TagRelation.DESCENDANT, relationOf(sailing, regatta))
         assertEquals(TagRelation.ANCESTOR, relationOf(regatta, sailing))
         assertEquals(TagRelation.PARENT, relationOf(regatta, yachts))
         // Hidden by their filter, the others not
-        val shown = tags.listSimilarTags(sailing, null, 0, 500, null, listOf(TagRelation.DESCENDANT, TagRelation.ANCESTOR)).body!!.tags
+        val shown =
+            tags
+                .listSimilarTags(sailing, null, 0, 500, null, listOf(TagRelation.DESCENDANT, TagRelation.ANCESTOR))
+                .body!!
+                .tags
         assertTrue(shown.none { it.tag.key == regatta && it.site == null } && shown.any { it.tag.key == yachts })
         // Never said of the two themselves
-        val through = assertThrows<Refused> { tags.relateTags(TagRelationRequest(sailing, regatta, TagRelation.DESCENDANT)) }
+        val through =
+            assertThrows<Refused> { tags.relateTags(TagRelationRequest(sailing, regatta, TagRelation.DESCENDANT)) }
         assertEquals(Refusal.TAG_THROUGH, through.refusal)
         tags.relateTags(TagRelationRequest(yachts, regatta, TagRelation.NONE))
         tags.relateTags(TagRelationRequest(sailing, yachts, TagRelation.NONE))
@@ -677,7 +832,14 @@ class TwoSitesTest {
         assertTrue(waitFor { jobs.status("beta").state.name == "CANCELLED" })
 
         // A job of the updates runs to its end and is not remembered
-        assertEquals("RUNNING", jobsApi.startJob("beta", JobRequest(io.github.vlsergey.recommend4me.api.model.SourceMode.UPDATES)).body!!.state.name)
+        assertEquals(
+            "RUNNING",
+            jobsApi
+                .startJob("beta", JobRequest(io.github.vlsergey.recommend4me.api.model.SourceMode.UPDATES))
+                .body!!
+                .state
+                .name,
+        )
         assertTrue(waitFor(120) { jobs.status("beta").state.name == "DONE" }, "state ${jobs.status("beta")}")
         assertEquals(1, jobs.status("beta").newItems)
         assertNull(jobs.resumable("beta"))
@@ -751,8 +913,12 @@ class TwoSitesTest {
 
     @Test
     fun `a source's settings — a secret never sent back, a default shown, a blank value taken away, an unknown key refused`() {
-        fun beta() = settingsApi.getSettings().body!!.single { it.source == "beta" }.propertyValues.associateBy { it.key }
-        assertTrue(settingsApi.getSettings().body!!.none { it.source == "alpha" }, "a source without settings is not listed")
+        fun beta() =
+            settingsApi.getSettings().body!!.single { it.source == "beta" }.propertyValues.associateBy { it.key }
+        assertTrue(
+            settingsApi.getSettings().body!!.none { it.source == "alpha" },
+            "a source without settings is not listed",
+        )
         assertEquals(false, beta().getValue("cookie").set)
         assertEquals("5", beta().getValue("delay").value)
         assertEquals("beta:setting.cookie", beta().getValue("cookie").labelKey)
@@ -774,7 +940,9 @@ class TwoSitesTest {
     @Test
     fun `the model of a type — trained on demand, its scorer chosen, an unknown scorer refused`() {
         (1..8).forEach { k ->
-            alpha("m$k|Work $k|${if (k % 2 == 0) "sea" else "land"}|${if (k % 2 == 0) "Ships and storms at sea" else "Fields and farms on land"} $k||")
+            alpha(
+                "m$k|Work $k|${if (k % 2 == 0) "sea" else "land"}|${if (k % 2 == 0) "Ships and storms at sea" else "Fields and farms on land"} $k||"
+            )
             items.rateItem("alpha", "m$k", RatingRequest(if (k % 2 == 0) 5 else 1))
         }
         // Planned at once, not waited for: the request answers with the model as it is
@@ -783,7 +951,10 @@ class TwoSitesTest {
         val trained = model.getModel("books").body!!
         assertTrue(trained.scorers.any { it.id == "pairwise-logistic" })
         assertEquals("pairwise-logistic", model.chooseScorer("books", ScorerChoice("pairwise-logistic")).body!!.scorer)
-        assertEquals(Refusal.NO_SCORER, assertThrows<Refused> { model.chooseScorer("books", ScorerChoice("nope")) }.refusal)
+        assertEquals(
+            Refusal.NO_SCORER,
+            assertThrows<Refused> { model.chooseScorer("books", ScorerChoice("nope")) }.refusal,
+        )
         assertTrue(model.getModel("books").body!!.trained)
         assertEquals(404, model.getModel("nothing").statusCode.value())
         (1..8).forEach { items.unrateItem("alpha", "m$it", null) }
@@ -795,10 +966,19 @@ class TwoSitesTest {
         LocaleContextHolder.setLocale(Locale.ENGLISH)
         alpha("q3|Deep water|water|Waves over the reef||")
         // Indexed as the site wrote it first
-        assertTrue(waitFor(60) { items.listItems("books", ItemQuery(search = "water")).body!!.items.any { it.item == "q3" } })
+        assertTrue(
+            waitFor(60) { items.listItems("books", ItemQuery(search = "water")).body!!.items.any { it.item == "q3" } }
+        )
         corrections.correctFacet("alpha", "q3", FacetCorrection(facet = "tags", added = true, name = "Mermaids"))
         assertTrue(
-            waitFor(60) { items.listItems("books", ItemQuery(search = "mermaids", sort = ItemSort.SCORE)).body!!.items.firstOrNull()?.item == "q3" },
+            waitFor(60) {
+                items
+                    .listItems("books", ItemQuery(search = "mermaids", sort = ItemSort.SCORE))
+                    .body!!
+                    .items
+                    .firstOrNull()
+                    ?.item == "q3"
+            },
             "document ${searchService.documents(stores.source("alpha")!!, listOf("q3"), passages = false).values.single().fields.map { it.key to it.values }}",
         )
     }
@@ -807,9 +987,18 @@ class TwoSitesTest {
     fun `a search finds the works by their words, the likest first`() {
         alpha("q1|Night watch|watch|A lighthouse keeper watches the night sea||")
         alpha("q2|Gardens|garden|Roses and tulips in a spring garden||")
-        val found = waitFor(60) {
-            items.listItems("books", ItemQuery(search = "lighthouse keeper", sort = ItemSort.SCORE)).body!!.items.firstOrNull()?.item == "q1"
-        }
-        assertTrue(found, "found ${items.listItems("books", ItemQuery(search = "lighthouse keeper")).body!!.items.map { it.item }}")
+        val found =
+            waitFor(60) {
+                items
+                    .listItems("books", ItemQuery(search = "lighthouse keeper", sort = ItemSort.SCORE))
+                    .body!!
+                    .items
+                    .firstOrNull()
+                    ?.item == "q1"
+            }
+        assertTrue(
+            found,
+            "found ${items.listItems("books", ItemQuery(search = "lighthouse keeper")).body!!.items.map { it.item }}",
+        )
     }
 }

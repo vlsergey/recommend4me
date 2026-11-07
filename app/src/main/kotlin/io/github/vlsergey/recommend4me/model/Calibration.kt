@@ -5,13 +5,13 @@ import kotlin.math.exp
 import kotlin.math.ln
 
 /**
- * A SCORE MADE A CHANCE, by Platt's scaling: chance = σ([slope]·z + [intercept]), z a standardised
- * score. Fitted on the scores of works the model had not seen (the cross-validation's) — on its own
- * training works a model is surer than it will be on new ones.
+ * A SCORE MADE A CHANCE, by Platt's scaling: chance = σ([slope]·z + [intercept]), z a standardised score. Fitted on the
+ * scores of works the model had not seen (the cross-validation's) — on its own training works a model is surer than it
+ * will be on new ones.
  *
- * The targets are Platt's: not 1 and 0 but (N₊+1)/(N₊+2) and 1/(N₋+2), what Bayes' rule gives with
- * a uniform prior on every work's chance — so a few labels are never taken for certainty. Fitted by
- * Newton's method with a step halved until the loss falls (Lin, Lin and Weng, 2007).
+ * The targets are Platt's: not 1 and 0 but (N₊+1)/(N₊+2) and 1/(N₋+2), what Bayes' rule gives with a uniform prior on
+ * every work's chance — so a few labels are never taken for certainty. Fitted by Newton's method with a step halved
+ * until the loss falls (Lin, Lin and Weng, 2007).
  */
 data class Calibration(val slope: Double, val intercept: Double) {
 
@@ -36,11 +36,12 @@ data class Calibration(val slope: Double, val intercept: Double) {
             val high = (pos + 1.0) / (pos + 2.0)
             val low = 1.0 / (neg + 2.0)
             val t = DoubleArray(z.size) { if (positive[it]) high else low }
-            fun loss(a: Double, b: Double): Double = z.indices.sumOf { i ->
-                val f = a * z[i] + b
-                // −t·ln σ(f) − (1−t)·ln(1−σ(f)), without overflow either way
-                t[i] * softplus(-f) + (1 - t[i]) * softplus(f)
-            }
+            fun loss(a: Double, b: Double): Double =
+                z.indices.sumOf { i ->
+                    val f = a * z[i] + b
+                    // −t·ln σ(f) − (1−t)·ln(1−σ(f)), without overflow either way
+                    t[i] * softplus(-f) + (1 - t[i]) * softplus(f)
+                }
             var a = 0.0
             var b = ln((pos + 1.0) / (neg + 1.0))
             var current = loss(a, b)

@@ -5,20 +5,18 @@ import kotlin.math.ln
 import kotlin.math.sqrt
 
 /**
- * THE PAIRS EVERY SUGGESTER IS JUDGED BY, ALIKE — so that the held-out losses of two methods
- * compare on the page of the models. Of every item, the values whose pair with it weighs anything,
- * in ascending order, with the weight and the label of each: when the item has any value, every
- * value it may have ([SuggestionTask.allowed], but the [SuggestionTask.barred]) weighs
- * [SuggestionTask.lackWeight] as one it lacks; one the user rejected weighs 1, labelled 0; one it
- * has weighs 1, labelled 1 — a draft the user has not confirmed [SuggestionTask.draftWeight]. The
- * items are dealt into [FOLDS] folds by their ids, the same way every time: a work one method holds
- * out, every other holds out too.
+ * THE PAIRS EVERY SUGGESTER IS JUDGED BY, ALIKE — so that the held-out losses of two methods compare on the page of the
+ * models. Of every item, the values whose pair with it weighs anything, in ascending order, with the weight and the
+ * label of each: when the item has any value, every value it may have ([SuggestionTask.allowed], but the
+ * [SuggestionTask.barred]) weighs [SuggestionTask.lackWeight] as one it lacks; one the user rejected weighs 1, labelled
+ * 0; one it has weighs 1, labelled 1 — a draft the user has not confirmed [SuggestionTask.draftWeight]. The items are
+ * dealt into [FOLDS] folds by their ids, the same way every time: a work one method holds out, every other holds out
+ * too.
  *
- * THE PAIRS OF A VALUE MERELY LACKED ARE NOT KEPT: all alike — the lacking weight, the label
- * nought — they are the values the item may have ([may], one array for every item of the same), and
- * what an item has of its own is kept beside them ([own]). Kept one by one, the 75 000 works of
- * fanfics.me, of a universe of 4 400 characters each, were 330 million pairs — gigabytes of the same
- * two numbers. Read by [forEach], merged as they are read.
+ * THE PAIRS OF A VALUE MERELY LACKED ARE NOT KEPT: all alike — the lacking weight, the label nought — they are the
+ * values the item may have ([may], one array for every item of the same), and what an item has of its own is kept
+ * beside them ([own]). Kept one by one, the 75 000 works of fanfics.me, of a universe of 4 400 characters each, were
+ * 330 million pairs — gigabytes of the same two numbers. Read by [forEach], merged as they are read.
  */
 class SuggestionPairs(task: SuggestionTask) {
     val n = task.itemCount
@@ -28,8 +26,8 @@ class SuggestionPairs(task: SuggestionTask) {
     val foldOf = IntArray(n) { foldOf(task.itemIds[it]) }
 
     /**
-     * Of every item, the weight of a value it may have and merely lacks: [SuggestionTask.lackWeight]
-     * when it has any value; nought when it has none — such an item is unknown, not denied.
+     * Of every item, the weight of a value it may have and merely lacks: [SuggestionTask.lackWeight] when it has any
+     * value; nought when it has none — such an item is unknown, not denied.
      */
     val lack = FloatArray(n)
 
@@ -37,9 +35,8 @@ class SuggestionPairs(task: SuggestionTask) {
     val may: Array<IntArray?>
 
     /**
-     * Of every item, the values whose pair is not one merely lacked, ascending — one it has, one the
-     * user rejected, a draft, one barred or out of [may] — with their weights and labels; a weight
-     * nought: no pair.
+     * Of every item, the values whose pair is not one merely lacked, ascending — one it has, one the user rejected, a
+     * draft, one barred or out of [may] — with their weights and labels; a weight nought: no pair.
      */
     val own: Array<IntArray>
     val ownWeight: Array<FloatArray>
@@ -55,7 +52,12 @@ class SuggestionPairs(task: SuggestionTask) {
     init {
         // Every array of the allowed made ascending once, however many items share it
         val ascending = IdentityHashMap<IntArray, IntArray>()
-        may = Array(n) { i -> task.allowed[i]?.let { a -> ascending.getOrPut(a) { a.filter { it in 0 until m }.distinct().sorted().toIntArray() } } }
+        may =
+            Array(n) { i ->
+                task.allowed[i]?.let { a ->
+                    ascending.getOrPut(a) { a.filter { it in 0 until m }.distinct().sorted().toIntArray() }
+                }
+            }
         val lackWeight = task.lackWeight.toFloat()
         val draftWeight = task.draftWeight.toFloat()
         val ownOf = arrayOfNulls<IntArray>(n)
@@ -72,7 +74,10 @@ class SuggestionPairs(task: SuggestionTask) {
             val labelled = HashSet<Int>()
             task.barred[i].forEach { if (it in 0 until m) weight[it] = 0f }
             task.rejected[i].forEach { weight[it] = 1f }
-            has.forEach { weight[it] = 1f; labelled += it }
+            has.forEach {
+                weight[it] = 1f
+                labelled += it
+            }
             val drafted = task.drafts[i]
             if (drafted.isNotEmpty()) {
                 val confirmed = task.confirmed[i].toHashSet()
@@ -101,7 +106,9 @@ class SuggestionPairs(task: SuggestionTask) {
         longest = count.maxOrNull() ?: 0
     }
 
-    /** The weight of the value [v] of the item [i] were it merely lacked: [lack] when the item may have it, else nought. */
+    /**
+     * The weight of the value [v] of the item [i] were it merely lacked: [lack] when the item may have it, else nought.
+     */
     fun lacking(i: Int, v: Int): Float {
         val lacking = lack[i]
         if (lacking == 0f) return 0f
@@ -150,9 +157,8 @@ class SuggestionPairs(task: SuggestionTask) {
     }
 
     /**
-     * The held-out loss of a method: of every fold, the chances [chances] gives the items of the fold
-     * by what it learnt of the others — of each item its chance of every value of its pairs — their
-     * logistic losses weighed and summed.
+     * The held-out loss of a method: of every fold, the chances [chances] gives the items of the fold by what it learnt
+     * of the others — of each item its chance of every value of its pairs — their logistic losses weighed and summed.
      */
     fun heldOut(chances: (fold: Int, items: IntArray) -> List<FloatArray>): HeldLoss {
         val held = HeldLoss()
@@ -193,7 +199,8 @@ class HeldLoss {
     private var squares = 0.0
     private var weights = 0.0
 
-    val mean: Double get() = if (weight > 0) loss / weight else Double.MAX_VALUE
+    val mean: Double
+        get() = if (weight > 0) loss / weight else Double.MAX_VALUE
 
     fun add(w: Double, l: Double) {
         weight += w
@@ -203,17 +210,18 @@ class HeldLoss {
     }
 
     /** The standard error of [mean]: the weighted spread over the effective number of pairs. */
-    val error: Double get() {
-        if (weight <= 0 || weights <= 0) return Double.MAX_VALUE
-        val variance = (squares / weight - mean * mean).coerceAtLeast(0.0)
-        return sqrt(variance / (weight * weight / weights))
-    }
+    val error: Double
+        get() {
+            if (weight <= 0 || weights <= 0) return Double.MAX_VALUE
+            val variance = (squares / weight - mean * mean).coerceAtLeast(0.0)
+            return sqrt(variance / (weight * weight / weights))
+        }
 }
 
 /**
- * The one-standard-error rule (Breiman et al.): of the settings that hold out no worse than the best
- * by more than its standard error, the one [simpler] puts first — the data cannot tell them apart,
- * and the simpler guesses less where an item is unlike those it learnt from.
+ * The one-standard-error rule (Breiman et al.): of the settings that hold out no worse than the best by more than its
+ * standard error, the one [simpler] puts first — the data cannot tell them apart, and the simpler guesses less where an
+ * item is unlike those it learnt from.
  */
 fun <T> oneStandardError(tried: List<T>, held: (T) -> HeldLoss, simpler: Comparator<T>): T {
     val least = tried.minBy { held(it).mean }

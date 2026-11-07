@@ -2,19 +2,19 @@ package io.github.vlsergey.recommend4me.encoder
 
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
-import org.junit.jupiter.api.Assumptions.assumeTrue
-import tools.jackson.databind.json.JsonMapper
 import java.nio.file.Files
-import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import tools.jackson.databind.json.JsonMapper
 
 class Siglip2EncoderTest {
 
     // gradlew test -Pgpu checks the vectors made on the card
-    private val siglip = Siglip2Encoder(Onnx(defaultModelsDir(), gpu = System.getProperty("recommend4me.gpu").toBoolean()))
+    private val siglip =
+        Siglip2Encoder(Onnx(defaultModelsDir(), gpu = System.getProperty("recommend4me.gpu").toBoolean()))
     private val check = defaultModelsDir().resolve("siglip2_naflex_check")
 
     @Test

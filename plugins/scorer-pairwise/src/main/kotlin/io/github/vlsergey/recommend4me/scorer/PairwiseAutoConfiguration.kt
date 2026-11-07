@@ -5,6 +5,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class PairwiseAutoConfiguration {
-    @Bean
-    fun pairwiseScorer(): Scorer = PairwiseScorer()
+    @Bean fun pairwiseScorer(): Scorer = PairwiseScorer()
 }

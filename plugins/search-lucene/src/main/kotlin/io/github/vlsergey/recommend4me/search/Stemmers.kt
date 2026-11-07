@@ -97,15 +97,14 @@ import org.tartarus.snowball.ext.TurkishStemmer
 import org.tartarus.snowball.ext.YiddishStemmer
 
 /**
- * EVERY STEMMER LUCENE KNOWS, by the language's code (ISO 639-1): what a text of the language is
- * read by before it is put in the index — its words lower-cased as the language does it, normalized
- * as it writes them, their endings taken off ("драконы", "драконов", "дракон" one word) — and what
- * a line searched or a name looked for in a text of it is read by (user, 2026-10-16). A language of
- * none, English ([DEFAULT]).
+ * EVERY STEMMER LUCENE KNOWS, by the language's code (ISO 639-1): what a text of the language is read by before it is
+ * put in the index — its words lower-cased as the language does it, normalized as it writes them, their endings taken
+ * off ("драконы", "драконов", "дракон" one word) — and what a line searched or a name looked for in a text of it is
+ * read by (user, 2026-10-16). A language of none, English ([DEFAULT]).
  *
- * The chain of each is its own analyzer's of Lucene but the stop words: every word stays, at its
- * place — a name is found by its words in a row, and a function word may be a word of a name; the
- * function words are told apart where they matter ([stopWords]).
+ * The chain of each is its own analyzer's of Lucene but the stop words: every word stays, at its place — a name is
+ * found by its words in a row, and a function word may be a word of a name; the function words are told apart where
+ * they matter ([stopWords]).
  */
 object Stemmers {
     /** The stemmer of a text of a language none is known of. */
@@ -114,55 +113,100 @@ object Stemmers {
     /** A language's chain after the tokenizer, and its function words. */
     private class Language(val chain: (TokenStream) -> TokenStream, val stops: () -> CharArraySet)
 
-    private fun snowball(lower: (TokenStream) -> TokenStream = ::LowerCaseFilter, stemmer: () -> org.tartarus.snowball.SnowballStemmer): (TokenStream) -> TokenStream =
-        { SnowballFilter(lower(it), stemmer()) }
+    private fun snowball(
+        lower: (TokenStream) -> TokenStream = ::LowerCaseFilter,
+        stemmer: () -> org.tartarus.snowball.SnowballStemmer,
+    ): (TokenStream) -> TokenStream = { SnowballFilter(lower(it), stemmer()) }
 
-    private val LANGUAGES: Map<String, Language> = mapOf(
-        "ar" to Language({ ArabicStemFilter(ArabicNormalizationFilter(LowerCaseFilter(it))) }, ArabicAnalyzer::getDefaultStopSet),
-        "bg" to Language({ BulgarianStemFilter(LowerCaseFilter(it)) }, BulgarianAnalyzer::getDefaultStopSet),
-        "bn" to Language({ BengaliStemFilter(BengaliNormalizationFilter(IndicNormalizationFilter(LowerCaseFilter(it)))) }, BengaliAnalyzer::getDefaultStopSet),
-        "ca" to Language(snowball { CatalanStemmer() }, CatalanAnalyzer::getDefaultStopSet),
-        "cs" to Language({ CzechStemFilter(LowerCaseFilter(it)) }, CzechAnalyzer::getDefaultStopSet),
-        "da" to Language(snowball { DanishStemmer() }, DanishAnalyzer::getDefaultStopSet),
-        "de" to Language({ GermanLightStemFilter(GermanNormalizationFilter(LowerCaseFilter(it))) }, GermanAnalyzer::getDefaultStopSet),
-        "el" to Language({ GreekStemFilter(GreekLowerCaseFilter(it)) }, GreekAnalyzer::getDefaultStopSet),
-        // Irregular verbs read as their base after the stemmer: "stolen" as "steal"; accents folded, as English writes borrowed words
-        "en" to Language({ IrregularVerbs.filter(PorterStemFilter(EnglishPossessiveFilter(ASCIIFoldingFilter(LowerCaseFilter(it))))) }, { EnglishAnalyzer.ENGLISH_STOP_WORDS_SET }),
-        "es" to Language({ SpanishLightStemFilter(LowerCaseFilter(it)) }, SpanishAnalyzer::getDefaultStopSet),
-        "et" to Language(snowball { EstonianStemmer() }, EstonianAnalyzer::getDefaultStopSet),
-        "eu" to Language(snowball { BasqueStemmer() }, BasqueAnalyzer::getDefaultStopSet),
-        "fa" to Language({ PersianStemFilter(PersianNormalizationFilter(ArabicNormalizationFilter(LowerCaseFilter(it)))) }, PersianAnalyzer::getDefaultStopSet),
-        "fi" to Language({ FinnishLightStemFilter(LowerCaseFilter(it)) }, FinnishAnalyzer::getDefaultStopSet),
-        "fr" to Language({ FrenchLightStemFilter(LowerCaseFilter(it)) }, FrenchAnalyzer::getDefaultStopSet),
-        "ga" to Language(snowball(::IrishLowerCaseFilter) { IrishStemmer() }, IrishAnalyzer::getDefaultStopSet),
-        "gl" to Language({ GalicianStemFilter(LowerCaseFilter(it)) }, GalicianAnalyzer::getDefaultStopSet),
-        "hi" to Language({ HindiStemFilter(HindiNormalizationFilter(IndicNormalizationFilter(LowerCaseFilter(it)))) }, HindiAnalyzer::getDefaultStopSet),
-        "hu" to Language({ HungarianLightStemFilter(LowerCaseFilter(it)) }, HungarianAnalyzer::getDefaultStopSet),
-        "hy" to Language(snowball { ArmenianStemmer() }, ArmenianAnalyzer::getDefaultStopSet),
-        "id" to Language({ IndonesianStemFilter(LowerCaseFilter(it)) }, IndonesianAnalyzer::getDefaultStopSet),
-        "it" to Language({ ItalianLightStemFilter(LowerCaseFilter(it)) }, ItalianAnalyzer::getDefaultStopSet),
-        "lt" to Language(snowball { LithuanianStemmer() }, LithuanianAnalyzer::getDefaultStopSet),
-        "lv" to Language({ LatvianStemFilter(LowerCaseFilter(it)) }, LatvianAnalyzer::getDefaultStopSet),
-        "ne" to Language(snowball { NepaliStemmer() }, NepaliAnalyzer::getDefaultStopSet),
-        "nl" to Language(snowball { DutchStemmer() }, DutchAnalyzer::getDefaultStopSet),
-        "no" to Language({ NorwegianLightStemFilter(LowerCaseFilter(it)) }, NorwegianAnalyzer::getDefaultStopSet),
-        "pt" to Language({ PortugueseLightStemFilter(LowerCaseFilter(it)) }, PortugueseAnalyzer::getDefaultStopSet),
-        "ro" to Language(snowball { RomanianStemmer() }, RomanianAnalyzer::getDefaultStopSet),
-        // 'ё' read as 'е', as Russian writes it most of the time
-        "ru" to Language({ RussianLightStemFilter(Yo(LowerCaseFilter(it))) }, RussianAnalyzer::getDefaultStopSet),
-        "sr" to Language(snowball({ SerbianNormalizationFilter(LowerCaseFilter(it)) }) { SerbianStemmer() }, SerbianAnalyzer::getDefaultStopSet),
-        "sv" to Language({ SwedishLightStemFilter(LowerCaseFilter(it)) }, SwedishAnalyzer::getDefaultStopSet),
-        "ta" to Language(snowball { TamilStemmer() }, TamilAnalyzer::getDefaultStopSet),
-        "te" to Language({ TeluguStemFilter(TeluguNormalizationFilter(LowerCaseFilter(it))) }, TeluguAnalyzer::getDefaultStopSet),
-        "tr" to Language(snowball({ TurkishLowerCaseFilter(ApostropheFilter(it)) }) { TurkishStemmer() }, TurkishAnalyzer::getDefaultStopSet),
-        "yi" to Language(snowball { YiddishStemmer() }, { CharArraySet.EMPTY_SET }),
-    )
+    private val LANGUAGES: Map<String, Language> =
+        mapOf(
+            "ar" to
+                Language(
+                    { ArabicStemFilter(ArabicNormalizationFilter(LowerCaseFilter(it))) },
+                    ArabicAnalyzer::getDefaultStopSet,
+                ),
+            "bg" to Language({ BulgarianStemFilter(LowerCaseFilter(it)) }, BulgarianAnalyzer::getDefaultStopSet),
+            "bn" to
+                Language(
+                    { BengaliStemFilter(BengaliNormalizationFilter(IndicNormalizationFilter(LowerCaseFilter(it)))) },
+                    BengaliAnalyzer::getDefaultStopSet,
+                ),
+            "ca" to Language(snowball { CatalanStemmer() }, CatalanAnalyzer::getDefaultStopSet),
+            "cs" to Language({ CzechStemFilter(LowerCaseFilter(it)) }, CzechAnalyzer::getDefaultStopSet),
+            "da" to Language(snowball { DanishStemmer() }, DanishAnalyzer::getDefaultStopSet),
+            "de" to
+                Language(
+                    { GermanLightStemFilter(GermanNormalizationFilter(LowerCaseFilter(it))) },
+                    GermanAnalyzer::getDefaultStopSet,
+                ),
+            "el" to Language({ GreekStemFilter(GreekLowerCaseFilter(it)) }, GreekAnalyzer::getDefaultStopSet),
+            // Irregular verbs read as their base after the stemmer: "stolen" as "steal"; accents folded, as English
+            // writes borrowed words
+            "en" to
+                Language(
+                    {
+                        IrregularVerbs.filter(
+                            PorterStemFilter(EnglishPossessiveFilter(ASCIIFoldingFilter(LowerCaseFilter(it))))
+                        )
+                    },
+                    { EnglishAnalyzer.ENGLISH_STOP_WORDS_SET },
+                ),
+            "es" to Language({ SpanishLightStemFilter(LowerCaseFilter(it)) }, SpanishAnalyzer::getDefaultStopSet),
+            "et" to Language(snowball { EstonianStemmer() }, EstonianAnalyzer::getDefaultStopSet),
+            "eu" to Language(snowball { BasqueStemmer() }, BasqueAnalyzer::getDefaultStopSet),
+            "fa" to
+                Language(
+                    { PersianStemFilter(PersianNormalizationFilter(ArabicNormalizationFilter(LowerCaseFilter(it)))) },
+                    PersianAnalyzer::getDefaultStopSet,
+                ),
+            "fi" to Language({ FinnishLightStemFilter(LowerCaseFilter(it)) }, FinnishAnalyzer::getDefaultStopSet),
+            "fr" to Language({ FrenchLightStemFilter(LowerCaseFilter(it)) }, FrenchAnalyzer::getDefaultStopSet),
+            "ga" to Language(snowball(::IrishLowerCaseFilter) { IrishStemmer() }, IrishAnalyzer::getDefaultStopSet),
+            "gl" to Language({ GalicianStemFilter(LowerCaseFilter(it)) }, GalicianAnalyzer::getDefaultStopSet),
+            "hi" to
+                Language(
+                    { HindiStemFilter(HindiNormalizationFilter(IndicNormalizationFilter(LowerCaseFilter(it)))) },
+                    HindiAnalyzer::getDefaultStopSet,
+                ),
+            "hu" to Language({ HungarianLightStemFilter(LowerCaseFilter(it)) }, HungarianAnalyzer::getDefaultStopSet),
+            "hy" to Language(snowball { ArmenianStemmer() }, ArmenianAnalyzer::getDefaultStopSet),
+            "id" to Language({ IndonesianStemFilter(LowerCaseFilter(it)) }, IndonesianAnalyzer::getDefaultStopSet),
+            "it" to Language({ ItalianLightStemFilter(LowerCaseFilter(it)) }, ItalianAnalyzer::getDefaultStopSet),
+            "lt" to Language(snowball { LithuanianStemmer() }, LithuanianAnalyzer::getDefaultStopSet),
+            "lv" to Language({ LatvianStemFilter(LowerCaseFilter(it)) }, LatvianAnalyzer::getDefaultStopSet),
+            "ne" to Language(snowball { NepaliStemmer() }, NepaliAnalyzer::getDefaultStopSet),
+            "nl" to Language(snowball { DutchStemmer() }, DutchAnalyzer::getDefaultStopSet),
+            "no" to Language({ NorwegianLightStemFilter(LowerCaseFilter(it)) }, NorwegianAnalyzer::getDefaultStopSet),
+            "pt" to Language({ PortugueseLightStemFilter(LowerCaseFilter(it)) }, PortugueseAnalyzer::getDefaultStopSet),
+            "ro" to Language(snowball { RomanianStemmer() }, RomanianAnalyzer::getDefaultStopSet),
+            // 'ё' read as 'е', as Russian writes it most of the time
+            "ru" to Language({ RussianLightStemFilter(Yo(LowerCaseFilter(it))) }, RussianAnalyzer::getDefaultStopSet),
+            "sr" to
+                Language(
+                    snowball({ SerbianNormalizationFilter(LowerCaseFilter(it)) }) { SerbianStemmer() },
+                    SerbianAnalyzer::getDefaultStopSet,
+                ),
+            "sv" to Language({ SwedishLightStemFilter(LowerCaseFilter(it)) }, SwedishAnalyzer::getDefaultStopSet),
+            "ta" to Language(snowball { TamilStemmer() }, TamilAnalyzer::getDefaultStopSet),
+            "te" to
+                Language(
+                    { TeluguStemFilter(TeluguNormalizationFilter(LowerCaseFilter(it))) },
+                    TeluguAnalyzer::getDefaultStopSet,
+                ),
+            "tr" to
+                Language(
+                    snowball({ TurkishLowerCaseFilter(ApostropheFilter(it)) }) { TurkishStemmer() },
+                    TurkishAnalyzer::getDefaultStopSet,
+                ),
+            "yi" to Language(snowball { YiddishStemmer() }, { CharArraySet.EMPTY_SET }),
+        )
 
     /** Norwegian of either written standard by the one stemmer. */
     private val ALIASES = mapOf("nb" to "no", "nn" to "no")
 
     /** Every language a stemmer is known of, by its code. */
-    val languages: Set<String> get() = LANGUAGES.keys + ALIASES.keys
+    val languages: Set<String>
+        get() = LANGUAGES.keys + ALIASES.keys
 
     /** The language a text of [language] is stemmed as: itself when a stemmer is known of it, else [DEFAULT]. */
     fun of(language: String?): String = language?.let { ALIASES[it] ?: it }?.takeIf { it in LANGUAGES } ?: DEFAULT
@@ -171,9 +215,9 @@ object Stemmers {
     fun stopWords(language: String): CharArraySet = LANGUAGES.getValue(of(language)).stops()
 
     /**
-     * The analyzer of a text of the [language] ([of]): its words, each marked with the payload
-     * [CAPITAL] when written with a capital ([Capitals]), stemmed by the language's chain; every
-     * value of a field farther from the next than any name reaches ([LuceneIndex.VALUE_GAP]).
+     * The analyzer of a text of the [language] ([of]): its words, each marked with the payload [CAPITAL] when written
+     * with a capital ([Capitals]), stemmed by the language's chain; every value of a field farther from the next than
+     * any name reaches ([LuceneIndex.VALUE_GAP]).
      */
     fun analyzer(language: String, reuse: Boolean = true): Analyzer {
         val chain = LANGUAGES.getValue(of(language)).chain
@@ -188,26 +232,36 @@ object Stemmers {
     }
 
     /**
-     * A stream of its own of every call: the values of one field of a document are given the writer
-     * as streams made before it reads any — streams reused would read the last value only.
+     * A stream of its own of every call: the values of one field of a document are given the writer as streams made
+     * before it reads any — streams reused would read the last value only.
      */
-    private val NO_REUSE = object : Analyzer.ReuseStrategy() {
-        override fun getReusableComponents(analyzer: Analyzer, fieldName: String): Analyzer.TokenStreamComponents? = null
+    private val NO_REUSE =
+        object : Analyzer.ReuseStrategy() {
+            override fun getReusableComponents(analyzer: Analyzer, fieldName: String): Analyzer.TokenStreamComponents? =
+                null
 
-        override fun setReusableComponents(analyzer: Analyzer, fieldName: String, components: Analyzer.TokenStreamComponents) {}
-    }
+            override fun setReusableComponents(
+                analyzer: Analyzer,
+                fieldName: String,
+                components: Analyzer.TokenStreamComponents,
+            ) {}
+        }
 
     /** The payload of a word written with a capital: one byte, 1. */
     val CAPITAL = BytesRef(byteArrayOf(1))
 
-    /** Marks every word written with a capital by the payload [CAPITAL]: a name of one word counts only so ("Captain" names, "captain" not). */
+    /**
+     * Marks every word written with a capital by the payload [CAPITAL]: a name of one word counts only so ("Captain"
+     * names, "captain" not).
+     */
     private class Capitals(input: TokenStream) : TokenFilter(input) {
         private val term = addAttribute(CharTermAttribute::class.java)
         private val payload = addAttribute(PayloadAttribute::class.java)
 
         override fun incrementToken(): Boolean {
             if (!input.incrementToken()) return false
-            payload.payload = if (term.isNotEmpty() && Character.isUpperCase(Character.codePointAt(term, 0))) CAPITAL else null
+            payload.payload =
+                if (term.isNotEmpty() && Character.isUpperCase(Character.codePointAt(term, 0))) CAPITAL else null
             return true
         }
     }

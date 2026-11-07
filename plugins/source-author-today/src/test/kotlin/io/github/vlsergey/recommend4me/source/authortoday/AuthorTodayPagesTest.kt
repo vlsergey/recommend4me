@@ -3,13 +3,13 @@ package io.github.vlsergey.recommend4me.source.authortoday
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
-import org.jsoup.Jsoup
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.jsoup.Jsoup
 
 class AuthorTodayPagesTest {
 
@@ -41,10 +41,13 @@ class AuthorTodayPagesTest {
         // Not filed under "Фанфик": an original work
         assertEquals(listOf("original"), facets["kind"])
         // A fan fiction of the list is one
-        assertTrue(context.facets.values.any { it["tag"].orEmpty().contains("фанфик") && it["kind"] == listOf("fanfiction") })
+        assertTrue(
+            context.facets.values.any { it["tag"].orEmpty().contains("фанфик") && it["kind"] == listOf("fanfiction") }
+        )
         assertEquals(listOf("in-progress"), facets["status"])
         assertEquals(listOf("54335"), facets["series"])
-        // The age ratings a card lets the work have: no "18+" — G to R; "18+" — NC-17 to NC-21; the model chooses within
+        // The age ratings a card lets the work have: no "18+" — G to R; "18+" — NC-17 to NC-21; the model chooses
+        // within
         assertEquals(listOf("g", "pg-13", "r"), facets[AgeRating.SITE_KEY])
         assertEquals(listOf("nc-17", "nc-21"), context.facets.getValue("657555")[AgeRating.SITE_KEY])
         assertEquals(emptyList(), context.facets.getValue("657555")[AgeRating.KEY])
@@ -54,7 +57,10 @@ class AuthorTodayPagesTest {
         assertEquals(1278.0, numbers["likes"])
         assertEquals(289.0, numbers["comments"])
         assertTrue(context.texts.getValue("661269").getValue("annotation").startsWith("Тайна южного берега Дуата"))
-        assertEquals(listOf("https://cm.author.today/content/2026/10/02/8c93cd9c617e493aab150ac8eaa5c6ed.jpg"), context.pictures["661269"])
+        assertEquals(
+            listOf("https://cm.author.today/content/2026/10/02/8c93cd9c617e493aab150ac8eaa5c6ed.jpg"),
+            context.pictures["661269"],
+        )
         // A guest's page says nothing of the user's library
         assertTrue(context.signalValues.isEmpty())
     }
@@ -103,13 +109,15 @@ class AuthorTodayPagesTest {
     @Test
     fun `the reader gives the text of a chapter once it is loaded`() {
         val context = MemorySourceContext()
-        val empty = "<html><head><title>Книга Ученик Белого Дьявола - 9, Глава 1. Прикрывая тылы, Джон Голд читать онлайн</title></head>" +
-            "<body><div id=\"reader\"><div id=\"text-container\" class=\"text-container\"></div></div></body></html>"
+        val empty =
+            "<html><head><title>Книга Ученик Белого Дьявола - 9, Глава 1. Прикрывая тылы, Джон Голд читать онлайн</title></head>" +
+                "<body><div id=\"reader\"><div id=\"text-container\" class=\"text-container\"></div></div></body></html>"
         assertEquals(emptyList(), capture(context, "https://author.today/reader/661269/6337965", empty))
-        val loaded = empty.replace(
-            "<div id=\"text-container\" class=\"text-container\"></div>",
-            "<div id=\"text-container\" class=\"text-container\"><h1>Глава 1. Прикрывая тылы</h1><p><em>55 сутки, север Дуата</em></p><p>Гуам давно меня заметил.</p></div>",
-        )
+        val loaded =
+            empty.replace(
+                "<div id=\"text-container\" class=\"text-container\"></div>",
+                "<div id=\"text-container\" class=\"text-container\"><h1>Глава 1. Прикрывая тылы</h1><p><em>55 сутки, север Дуата</em></p><p>Гуам давно меня заметил.</p></div>",
+            )
         assertEquals(listOf("661269"), capture(context, "https://author.today/reader/661269/6337965", loaded))
         // The reader before the work's page: the work is named after the page's title
         assertEquals("Ученик Белого Дьявола - 9", context.heads.getValue("661269").title)
@@ -121,10 +129,11 @@ class AuthorTodayPagesTest {
     @Test
     fun `a logged-in page gives the user's own marks`() {
         val context = MemorySourceContext()
-        val html = page("work-661269.html")
-            .replace("isAuthenticated: false", "isAuthenticated: true")
-            .replace("state: 'None'", "state: 'Reading'")
-            .replace("voteId: null", "voteId: 123")
+        val html =
+            page("work-661269.html")
+                .replace("isAuthenticated: false", "isAuthenticated: true")
+                .replace("state: 'None'", "state: 'Reading'")
+                .replace("voteId: null", "voteId: 123")
         capture(context, "https://author.today/work/661269", html)
         assertEquals("reading", context.signalValues["661269" to "shelf"])
         assertEquals(null, context.signalValues["661269" to "read"])
@@ -145,7 +154,10 @@ class AuthorTodayPagesTest {
         val texts = context.texts.getValue("661269").toMap()
         assertTrue(tags.isNotEmpty() && texts.isNotEmpty())
 
-        val changed = Jsoup.parse(page("work-661269.html")).also { it.select(".book-meta-panel .tags, #tab-annotation").remove() }.outerHtml()
+        val changed =
+            Jsoup.parse(page("work-661269.html"))
+                .also { it.select(".book-meta-panel .tags, #tab-annotation").remove() }
+                .outerHtml()
         assertEquals(listOf("661269"), capture(context, url, changed))
         assertEquals(tags, context.facets.getValue("661269").getValue("tag"))
         assertEquals(texts, context.texts.getValue("661269").toMap())

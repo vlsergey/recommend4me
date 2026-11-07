@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.textvector
 
-import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceSchema
@@ -11,16 +11,16 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 private val log = LoggerFactory.getLogger(TextVectors::class.java)
 
@@ -28,15 +28,16 @@ private val log = LoggerFactory.getLogger(TextVectors::class.java)
 data class TextVectorsChanged(val source: String, val ids: List<String>)
 
 /**
- * Vectors of the items' texts — those the model reads ([TextDef.block][io.github.vlsergey.recommend4me.source.TextDef.block]),
- * those searched by meaning, and the title ([TITLE]) — of the text as the user corrected it, kept with its hash and the
- * encoder that made them: a text is encoded again when it or the encoder changed.
+ * Vectors of the items' texts — those the model reads
+ * ([TextDef.block][io.github.vlsergey.recommend4me.source.TextDef.block]), those searched by meaning, and the title
+ * ([TITLE]) — of the text as the user corrected it, kept with its hash and the encoder that made them: a text is
+ * encoded again when it or the encoder changed.
  *
- * On start every source is gone through; afterwards the items whose texts were written are encoded
- * a few seconds after the last write — the queue of their ids is the only thing kept here.
+ * On start every source is gone through; afterwards the items whose texts were written are encoded a few seconds after
+ * the last write — the queue of their ids is the only thing kept here.
  *
- * IN THE QUEUE OF THE COMPUTATIONS ([Workload]), each encoding whole, one at a time with every
- * other computation of the application.
+ * IN THE QUEUE OF THE COMPUTATIONS ([Workload]), each encoding whole, one at a time with every other computation of the
+ * application.
  */
 @Service
 class TextVectors(
@@ -47,11 +48,12 @@ class TextVectors(
 ) {
     private val whole = ConcurrentHashMap<String, AtomicBoolean>()
     private val queued = ConcurrentHashMap<String, MutableSet<String>>()
-    private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "text-vectors").apply { isDaemon = true } }
+    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "text-vectors").apply { isDaemon = true }
+    }
     private val scheduled = AtomicBoolean(false)
 
-    @Volatile
-    private var running = false
+    @Volatile private var running = false
 
     fun running(): Boolean = running
 
@@ -92,9 +94,9 @@ class TextVectors(
     }
 
     /**
-     * Encodes every text of the source whose text is new or changed, and drops the vectors of texts
-     * that are gone; with [only], of those items. Returns how many texts were encoded. In the queue of
-     * the computations, for the [reason] — a key the interface words.
+     * Encodes every text of the source whose text is new or changed, and drops the vectors of texts that are gone; with
+     * [only], of those items. Returns how many texts were encoded. In the queue of the computations, for the [reason] —
+     * a key the interface words.
      */
     fun refresh(
         store: SourceStore,
@@ -102,33 +104,46 @@ class TextVectors(
         only: Collection<String>? = null,
         progress: (done: Int, total: Int) -> Unit = { _, _ -> },
         cancelled: () -> Boolean = { false },
-    ): Int = workload.run(
-        Work("textVectors", source = store.id, item = only?.singleOrNull()), mapOf(reason to (only?.size ?: 1)),
-        // A batch of ids is its own: another batch of the source is not this one
-        joinAlike = only == null || only.size == 1,
-    ) {
-        refreshed(store, only, progress, cancelled)
-    }
+    ): Int =
+        workload.run(
+            Work("textVectors", source = store.id, item = only?.singleOrNull()),
+            mapOf(reason to (only?.size ?: 1)),
+            // A batch of ids is its own: another batch of the source is not this one
+            joinAlike = only == null || only.size == 1,
+        ) {
+            refreshed(store, only, progress, cancelled)
+        }
 
-    private fun refreshed(store: SourceStore, only: Collection<String>?, progress: (done: Int, total: Int) -> Unit, cancelled: () -> Boolean): Int {
+    private fun refreshed(
+        store: SourceStore,
+        only: Collection<String>?,
+        progress: (done: Int, total: Int) -> Unit,
+        cancelled: () -> Boolean,
+    ): Int {
         val encoder = plugins.textEncoder() ?: return 0
         val flag = whole.computeIfAbsent(store.id) { AtomicBoolean(false) }
         if (only == null && !flag.compareAndSet(false, true)) return 0
         running = true
         try {
             val keys = store.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
-            val stored = if (only == null) store.textVectors.hashes(encoder.id) else only.flatMap { store.textVectors.hashes(encoder.id, it).entries }.associate { it.toPair() }
-            val known = if (only == null) store.textVectors.keys() else only.flatMap { store.textVectors.keys(it) }.toSet()
+            val stored =
+                if (only == null) store.textVectors.hashes(encoder.id)
+                else only.flatMap { store.textVectors.hashes(encoder.id, it).entries }.associate { it.toPair() }
+            val known =
+                if (only == null) store.textVectors.keys() else only.flatMap { store.textVectors.keys(it) }.toSet()
             val fields = if (only == null) store.corrections.allFields() else store.corrections.fieldsOf(only)
             // The title of every item, as the user corrected it: a text the models read like any other
-            val titles = if (only == null) store.items.titles() else store.items.heads(only).mapValues { it.value.title }
+            val titles =
+                if (only == null) store.items.titles() else store.items.heads(only).mapValues { it.value.title }
 
             class Todo(val itemId: String, val key: String, val text: String, val hash: String)
             val todo = ArrayList<Todo>()
             val present = HashSet<Pair<String, String>>()
             fun consider(itemId: String, site: Map<String, String>) {
                 val own = fields[itemId].orEmpty()
-                val texts = Corrected.texts(site, own) + listOfNotNull(titles[itemId]?.let { TITLE to Corrected.title(it, own) })
+                val texts =
+                    Corrected.texts(site, own) +
+                        listOfNotNull(titles[itemId]?.let { TITLE to Corrected.title(it, own) })
                 (keys + TITLE).forEach { key ->
                     val text = texts[key]?.takeIf { it.isNotBlank() } ?: return@forEach
                     present += itemId to key
@@ -138,7 +153,11 @@ class TextVectors(
             }
             val considered = HashSet<String>()
             if (only == null) {
-                if (keys.isNotEmpty()) store.items.forEachTexts(keys) { id, texts -> considered += id; consider(id, texts) }
+                if (keys.isNotEmpty())
+                    store.items.forEachTexts(keys) { id, texts ->
+                        considered += id
+                        consider(id, texts)
+                    }
                 // The items with a title and no other text
                 titles.keys.filter { it !in considered }.forEach { consider(it, emptyMap()) }
             } else store.items.textsOf(only, keys).let { all -> only.forEach { id -> consider(id, all[id].orEmpty()) } }
@@ -160,12 +179,16 @@ class TextVectors(
                 batch.forEachIndexed { i, t ->
                     vectors[i]?.let { store.textVectors.save(t.itemId, t.key, encoder.id, t.hash, it) }
                 }
-                keepWindows(store, batch.filterIndexed { i, _ -> vectors[i] != null }.map { Triple(it.itemId, it.key, it.text) })
+                keepWindows(
+                    store,
+                    batch.filterIndexed { i, _ -> vectors[i] != null }.map { Triple(it.itemId, it.key, it.text) },
+                )
                 events.publishEvent(TextVectorsChanged(store.id, batch.map { it.itemId }.distinct()))
                 done += batch.size
                 progress(done, todo.size)
             }
-            if (todo.size > BATCH) log.info("{}: {} texts encoded in {} ms", store.id, done, System.currentTimeMillis() - started)
+            if (todo.size > BATCH)
+                log.info("{}: {} texts encoded in {} ms", store.id, done, System.currentTimeMillis() - started)
             return done
         } finally {
             if (only == null) flag.set(false)
@@ -174,8 +197,8 @@ class TextVectors(
     }
 
     /**
-     * The windows of texts just encoded: how many each has, and of a text of more than one the
-     * vector of every window — what the search finds a piece of a long text by.
+     * The windows of texts just encoded: how many each has, and of a text of more than one the vector of every window —
+     * what the search finds a piece of a long text by.
      */
     private fun keepWindows(store: SourceStore, texts: List<Triple<String, String, String>>) {
         val encoder = plugins.textEncoder() ?: return
@@ -187,13 +210,14 @@ class TextVectors(
     }
 
     /**
-     * The windows of the texts encoded before their windows were kept, made now, a batch at a time:
-     * of the texts as they are now — a text changed since is encoded again by [refresh], its windows
-     * with it. Answers how many texts were gone through.
+     * The windows of the texts encoded before their windows were kept, made now, a batch at a time: of the texts as
+     * they are now — a text changed since is encoded again by [refresh], its windows with it. Answers how many texts
+     * were gone through.
      */
-    fun fillWindows(store: SourceStore, cancelled: () -> Boolean = { false }): Int = workload.run(Work("textWindows", source = store.id), mapOf("start" to 1)) {
-        windowsFilled(store, cancelled)
-    }
+    fun fillWindows(store: SourceStore, cancelled: () -> Boolean = { false }): Int =
+        workload.run(Work("textWindows", source = store.id), mapOf("start" to 1)) {
+            windowsFilled(store, cancelled)
+        }
 
     private fun windowsFilled(store: SourceStore, cancelled: () -> Boolean): Int {
         val encoder = plugins.textEncoder() ?: return 0
@@ -209,7 +233,9 @@ class TextVectors(
             val titles = store.items.heads(ids).mapValues { it.value.title }
             val texts = todo.map { (id, key) ->
                 val own = fields[id].orEmpty()
-                val all = Corrected.texts(site[id].orEmpty(), own) + listOfNotNull(titles[id]?.let { TITLE to Corrected.title(it, own) })
+                val all =
+                    Corrected.texts(site[id].orEmpty(), own) +
+                        listOfNotNull(titles[id]?.let { TITLE to Corrected.title(it, own) })
                 // A text gone since: no windows, and the next refresh drops its vector
                 Triple(id, key, all[key].orEmpty())
             }
@@ -218,7 +244,8 @@ class TextVectors(
             events.publishEvent(TextVectorsChanged(store.id, ids))
             done += texts.size
         }
-        if (done > 0) log.info("{}: windows of {} texts counted in {} ms", store.id, done, System.currentTimeMillis() - started)
+        if (done > 0)
+            log.info("{}: windows of {} texts counted in {} ms", store.id, done, System.currentTimeMillis() - started)
         return done
     }
 
@@ -236,12 +263,13 @@ class TextVectors(
         const val TITLE = "title"
 
         /**
-         * Every text of the source's items the models read, by its key, with the block of the
-         * models' input it is and the key of its label: every text that has vectors — those of the
-         * source's own blocks, the lines searched by meaning (the site's line of characters) — and the title.
+         * Every text of the source's items the models read, by its key, with the block of the models' input it is and
+         * the key of its label: every text that has vectors — those of the source's own blocks, the lines searched by
+         * meaning (the site's line of characters) — and the title.
          */
         fun blocks(source: String, schema: SourceSchema): Map<String, Pair<String, String>> =
-            schema.texts.filter { it.block != null || it.searchByMeaning }
+            schema.texts
+                .filter { it.block != null || it.searchByMeaning }
                 .associate { it.key to ((it.block ?: "text:${it.key}") to I18nKeys.textLabel(source, it.key)) } +
                 (TITLE to ("text:$TITLE" to TITLE_LABEL))
 

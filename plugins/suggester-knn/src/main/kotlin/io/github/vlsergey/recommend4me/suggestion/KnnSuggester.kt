@@ -5,7 +5,6 @@ import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.OnnxGraph
-import org.slf4j.LoggerFactory
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -15,23 +14,22 @@ import java.nio.ByteOrder
 import java.util.Random
 import java.util.concurrent.CancellationException
 import kotlin.math.sqrt
+import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(KnnSuggester::class.java)
 
 /**
- * THE NEAREST WORKS: the chance a work has a value is the share of its [k] most alike works that
- * have it — each by how alike — drawn towards the value's share among all the works by one work's
- * worth. Alike by the cosine of what the work's texts and pictures were encoded as ([InputBlock]):
- * every block of unit length, the blocks side by side, put down to [DIMENSIONS] dimensions by a
- * random projection (fixed by its seed, the same every time) and of unit length again. Reads
- * neither the names of the values nor the work's other facets: a measure of what the texts and
- * pictures tell by likeness alone.
+ * THE NEAREST WORKS: the chance a work has a value is the share of its [k] most alike works that have it — each by how
+ * alike — drawn towards the value's share among all the works by one work's worth. Alike by the cosine of what the
+ * work's texts and pictures were encoded as ([InputBlock]): every block of unit length, the blocks side by side, put
+ * down to [DIMENSIONS] dimensions by a random projection (fixed by its seed, the same every time) and of unit length
+ * again. Reads neither the names of the values nor the work's other facets: a measure of what the texts and pictures
+ * tell by likeness alone.
  *
- * The likeness of every work to every other, its [MAX_K] nearest kept: on the card when there is one
- * (a product of every work with every other, and the nearest of each, in one graph), else by
- * OpenBLAS. [k] chosen by the held-out loss of the five folds ([SuggestionPairs]), the neighbours of
- * a held-out work taken from the other folds; the one-standard-error rule preferring the more.
- * The neighbours are the task's own: nothing is packed but [k].
+ * The likeness of every work to every other, its [MAX_K] nearest kept: on the card when there is one (a product of
+ * every work with every other, and the nearest of each, in one graph), else by OpenBLAS. [k] chosen by the held-out
+ * loss of the five folds ([SuggestionPairs]), the neighbours of a held-out work taken from the other folds; the
+ * one-standard-error rule preferring the more. The neighbours are the task's own: nothing is packed but [k].
  */
 class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggester {
     constructor() : this(null)
@@ -57,14 +55,23 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
         val chosen = oneStandardError(tried, { it.held }, compareByDescending { it.k })
         log.info(
             "{} items × {} values, {} blocks of input, neighbours {} in {} ms: {}; chosen k={} in {} ms",
-            task.itemCount, task.valueCount, task.inputs.size, if (near.onCard) "on the card" else "on the processor", searched,
+            task.itemCount,
+            task.valueCount,
+            task.inputs.size,
+            if (near.onCard) "on the card" else "on the processor",
+            searched,
             tried.joinToString("; ") { "k=${it.k}: %.4f ± %.4f".format(it.held.mean, it.held.error) },
-            chosen.k, System.currentTimeMillis() - started,
+            chosen.k,
+            System.currentTimeMillis() - started,
         )
-        val report = FitReport(
-            mapOf(K to chosen.k.toString()), chosen.held.mean, chosen.held.error,
-            tried.map { FitTry(mapOf(K to it.k.toString()), it.held.mean, it.held.error, it.millis) }, fromScratch = true,
-        )
+        val report =
+            FitReport(
+                mapOf(K to chosen.k.toString()),
+                chosen.held.mean,
+                chosen.held.error,
+                tried.map { FitTry(mapOf(K to it.k.toString()), it.held.mean, it.held.error, it.millis) },
+                fromScratch = true,
+            )
         return Fitted(chosen.k, onnx, report)
     }
 
@@ -113,8 +120,8 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
     }
 
     /**
-     * Every work's nearest works by the cosine of its texts and pictures, the nearest first: their
-     * rows and likenesses, [MAX_K] at most, the work itself left out.
+     * Every work's nearest works by the cosine of its texts and pictures, the nearest first: their rows and likenesses,
+     * [MAX_K] at most, the work itself left out.
      */
     private class Neighbours(val rows: Array<IntArray>, val likeness: Array<FloatArray>, val onCard: Boolean) {
         companion object {
@@ -133,7 +140,10 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                 )
             }
 
-            /** Every work as [DIMENSIONS] numbers of unit length: its blocks of unit length side by side, projected at random (the seed fixed). */
+            /**
+             * Every work as [DIMENSIONS] numbers of unit length: its blocks of unit length side by side, projected at
+             * random (the seed fixed).
+             */
             private fun project(task: SuggestionTask): Floats {
                 val n = task.itemCount
                 val width = task.inputs.sumOf { it.vectors.cols }
@@ -154,7 +164,12 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                     at += cols
                 }
                 val random = Random(SEED)
-                val r = Floats.of(FloatArray(width * DIMENSIONS) { (random.nextGaussian() / sqrt(DIMENSIONS.toDouble())).toFloat() })
+                val r =
+                    Floats.of(
+                        FloatArray(width * DIMENSIONS) {
+                            (random.nextGaussian() / sqrt(DIMENSIONS.toDouble())).toFloat()
+                        }
+                    )
                 val y = Floats(n * DIMENSIONS)
                 if (width > 0) Blas.product(x, width, n, width, r, DIMENSIONS, y)
                 val out = FloatArray(DIMENSIONS)
@@ -167,19 +182,33 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                 return y
             }
 
-            /** The nearest of every work by a graph on the card: a chunk of works against every work, the [wanted] likeliest of each; null without a card. */
+            /**
+             * The nearest of every work by a graph on the card: a chunk of works against every work, the [wanted]
+             * likeliest of each; null without a card.
+             */
             private fun onCard(onnx: Onnx, y: Floats, n: Int, wanted: Int): Pair<Array<IntArray>, Array<FloatArray>>? {
                 val f = OnnxGraph.FLOAT
-                val graph = OnnxGraph("knn-nearest")
-                    .input("Q", f, "rows", DIMENSIONS)
-                    .supplied("Y", n.toLong(), DIMENSIONS.toLong())
-                    .constant("K", longArrayOf(wanted.toLong()), 1)
-                    .node("Gemm", listOf("Q", "Y"), listOf("S"), mapOf("transB" to 1))
-                    .node("TopK", listOf("S", "K"), listOf("likeness", "rows_found"), mapOf("axis" to 1L, "largest" to 1L, "sorted" to 1L))
-                    .output("likeness", f, "rows", wanted)
-                    .output("rows_found", OnnxGraph.INT64, "rows", wanted)
-                    .bytes(OPSET)
-                val all = OnnxTensor.createTensor(onnx.env, y.buffer(0, n * DIMENSIONS), longArrayOf(n.toLong(), DIMENSIONS.toLong()))
+                val graph =
+                    OnnxGraph("knn-nearest")
+                        .input("Q", f, "rows", DIMENSIONS)
+                        .supplied("Y", n.toLong(), DIMENSIONS.toLong())
+                        .constant("K", longArrayOf(wanted.toLong()), 1)
+                        .node("Gemm", listOf("Q", "Y"), listOf("S"), mapOf("transB" to 1))
+                        .node(
+                            "TopK",
+                            listOf("S", "K"),
+                            listOf("likeness", "rows_found"),
+                            mapOf("axis" to 1L, "largest" to 1L, "sorted" to 1L),
+                        )
+                        .output("likeness", f, "rows", wanted)
+                        .output("rows_found", OnnxGraph.INT64, "rows", wanted)
+                        .bytes(OPSET)
+                val all =
+                    OnnxTensor.createTensor(
+                        onnx.env,
+                        y.buffer(0, n * DIMENSIONS),
+                        longArrayOf(n.toLong(), DIMENSIONS.toLong()),
+                    )
                 val session = onnx.onCard(graph, mapOf("Y" to all)) ?: return null.also { all.close() }
                 return try {
                     val rows = Array(n) { IntArray(0) }
@@ -189,25 +218,30 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                     while (from < n) {
                         val count = minOf(CHUNK, n - from)
                         y.take(chunk, 0, from * DIMENSIONS, count * DIMENSIONS)
-                        val buffer = ByteBuffer.allocateDirect(count * DIMENSIONS * Float.SIZE_BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer()
+                        val buffer =
+                            ByteBuffer.allocateDirect(count * DIMENSIONS * Float.SIZE_BYTES)
+                                .order(ByteOrder.nativeOrder())
+                                .asFloatBuffer()
                         buffer.put(chunk, 0, count * DIMENSIONS).flip()
-                        OnnxTensor.createTensor(onnx.env, buffer, longArrayOf(count.toLong(), DIMENSIONS.toLong())).use { q ->
-                            session.run(mapOf("Q" to q)).use { result ->
-                                @Suppress("UNCHECKED_CAST")
-                                val values = result.get(0).value as Array<FloatArray>
-                                @Suppress("UNCHECKED_CAST")
-                                val indices = result.get(1).value as Array<LongArray>
-                                for (r in 0 until count) {
-                                    likeness[from + r] = values[r]
-                                    rows[from + r] = IntArray(indices[r].size) { indices[r][it].toInt() }
+                        OnnxTensor.createTensor(onnx.env, buffer, longArrayOf(count.toLong(), DIMENSIONS.toLong()))
+                            .use { q ->
+                                session.run(mapOf("Q" to q)).use { result ->
+                                    @Suppress("UNCHECKED_CAST") val values = result.get(0).value as Array<FloatArray>
+                                    @Suppress("UNCHECKED_CAST") val indices = result.get(1).value as Array<LongArray>
+                                    for (r in 0 until count) {
+                                        likeness[from + r] = values[r]
+                                        rows[from + r] = IntArray(indices[r].size) { indices[r][it].toInt() }
+                                    }
                                 }
                             }
-                        }
                         from += count
                     }
                     rows to likeness
                 } catch (e: Exception) {
-                    log.warn("the nearest works could not be found on the card, the processor finds them: {}", e.message)
+                    log.warn(
+                        "the nearest works could not be found on the card, the processor finds them: {}",
+                        e.message,
+                    )
                     null
                 } finally {
                     session.close()
@@ -215,7 +249,10 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                 }
             }
 
-            /** The nearest of every work by OpenBLAS: a chunk of works against every work, the [wanted] likeliest of each kept. */
+            /**
+             * The nearest of every work by OpenBLAS: a chunk of works against every work, the [wanted] likeliest of
+             * each kept.
+             */
             private fun onProcessor(y: Floats, n: Int, wanted: Int): Pair<Array<IntArray>, Array<FloatArray>> {
                 val rows = Array(n) { IntArray(0) }
                 val likeness = Array(n) { FloatArray(0) }
@@ -270,11 +307,18 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
         private const val PRIOR = 1.0
 
         /**
-         * The chance of every value of the work [i]: of its [k] nearest works that [usable] allows —
-         * those of the other folds, of a held-out one — the weighted share labelled 1 of their pairs
-         * with the value, each by its likeness, drawn towards the value's share among all by [PRIOR].
+         * The chance of every value of the work [i]: of its [k] nearest works that [usable] allows — those of the other
+         * folds, of a held-out one — the weighted share labelled 1 of their pairs with the value, each by its likeness,
+         * drawn towards the value's share among all by [PRIOR].
          */
-        private fun chances(pairs: SuggestionPairs, near: Neighbours, prior: Prior, i: Int, k: Int, usable: (Int) -> Boolean): FloatArray {
+        private fun chances(
+            pairs: SuggestionPairs,
+            near: Neighbours,
+            prior: Prior,
+            i: Int,
+            k: Int,
+            usable: (Int) -> Boolean,
+        ): FloatArray {
             val one = DoubleArray(pairs.m)
             val all = DoubleArray(pairs.m)
             var taken = 0

@@ -16,17 +16,16 @@ import kotlin.math.sqrt
  *
  *     score(x) = Σ_j α_j · k(x_j, x)
  *
- * — not by a sum of what each of its features is worth. A taste of several kinds (quiet everyday
- * stories, and hard war ones, and not their mixture) is a score high near either and low between:
- * no line holds it, a kernel does.
+ * — not by a sum of what each of its features is worth. A taste of several kinds (quiet everyday stories, and hard war
+ * ones, and not their mixture) is a score high near either and low between: no line holds it, a kernel does.
  *
- * The kernel is the arc-cosine kernel of degree one (Cho & Saul, 2009), the kernel of a ReLU
- * network of endless width: k(x, y) = |x|·|y|·(sin θ + (π − θ)·cos θ) / π, θ the angle between x
- * and y. It has no width to choose: none is chosen by hand, and none needs a measuring.
+ * The kernel is the arc-cosine kernel of degree one (Cho & Saul, 2009), the kernel of a ReLU network of endless width:
+ * k(x, y) = |x|·|y|·(sin θ + (π − θ)·cos θ) / π, θ the angle between x and y. It has no width to choose: none is chosen
+ * by hand, and none needs a measuring.
  *
- * Learnt from the same pairs ([RankingPairs]) by the same loss as the line, the penalty αᵀKα / 2C:
- * with the linear kernel it is |w|² / 2C, the line's own, so C means what it means there. The
- * kernel's matrices are one product of OpenBLAS each, X·Xᵀ; the gradient is one more, K·(q + α/C).
+ * Learnt from the same pairs ([RankingPairs]) by the same loss as the line, the penalty αᵀKα / 2C: with the linear
+ * kernel it is |w|² / 2C, the line's own, so C means what it means there. The kernel's matrices are one product of
+ * OpenBLAS each, X·Xᵀ; the gradient is one more, K·(q + α/C).
  */
 class KernelScorer : Scorer {
     override val id = "kernel-arccos"
@@ -38,10 +37,14 @@ class KernelScorer : Scorer {
         val at = IntArray(task.x.rows) { -1 }.also { a -> learnt.forEachIndexed { k, i -> a[i] = k } }
         val all = RankingPairs.of(task, rows)
         // The pairs in the numbering of the rows learnt from
-        val pairs = RankingPairs(
-            IntArray(all.better.size) { at[all.better[it]] }, IntArray(all.worse.size) { at[all.worse[it]] },
-            IntArray(all.first.size) { at[all.first[it]] }, IntArray(all.second.size) { at[all.second[it]] }, all.equalWeight,
-        )
+        val pairs =
+            RankingPairs(
+                IntArray(all.better.size) { at[all.better[it]] },
+                IntArray(all.worse.size) { at[all.worse[it]] },
+                IntArray(all.first.size) { at[all.first[it]] },
+                IntArray(all.second.size) { at[all.second[it]] },
+                all.equalWeight,
+            )
         return fit(task.x.gather(learnt), pairs, parameter)
     }
 
@@ -78,11 +81,13 @@ internal object Kernel {
         val nb = norms(b, m)
         for (i in 0 until rows) for (j in 0 until m) {
             val scale = na[i] * nb[j]
-            dots[i * m + j] = if (scale <= 0.0) 0f else {
-                val cos = (dots[i * m + j] / scale).coerceIn(-1.0, 1.0)
-                val theta = acos(cos)
-                (scale * (sqrt(1 - cos * cos) + (PI - theta) * cos) / PI).toFloat()
-            }
+            dots[i * m + j] =
+                if (scale <= 0.0) 0f
+                else {
+                    val cos = (dots[i * m + j] / scale).coerceIn(-1.0, 1.0)
+                    val theta = acos(cos)
+                    (scale * (sqrt(1 - cos * cos) + (PI - theta) * cos) / PI).toFloat()
+                }
         }
         return dots
     }
@@ -97,7 +102,12 @@ internal object Kernel {
 }
 
 /** The loss over the pairs by α, the weights of the rows learnt from, and its gradient. */
-internal class KernelObjective(private val k: Floats, private val n: Int, private val pairs: RankingPairs, private val c: Double) {
+internal class KernelObjective(
+    private val k: Floats,
+    private val n: Int,
+    private val pairs: RankingPairs,
+    private val c: Double,
+) {
     private val count = max(pairs.weight, 1.0)
     private val alpha = Floats(n)
     private val z = Floats(n)
@@ -138,7 +148,8 @@ class KernelModel(val learnt: Matrix, val alpha: FloatArray) : FittedScorer {
     override fun pack(): ByteArray {
         val m = learnt.rows
         val d = learnt.cols
-        val buffer = ByteBuffer.allocate(2 * Int.SIZE_BYTES + (m * d + m) * Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        val buffer =
+            ByteBuffer.allocate(2 * Int.SIZE_BYTES + (m * d + m) * Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN)
         buffer.putInt(m).putInt(d)
         val floats = buffer.asFloatBuffer()
         floats.put(learnt.held.toArray()).put(alpha)

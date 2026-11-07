@@ -16,17 +16,18 @@ class BoostingScorerTest {
         val n = 240
         val d = 8
         val x = Matrix(n, d)
-        val grades = IntArray(n) { i ->
-            for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
-            val s = (if (x.held[i * d + 2] > 0) x.held[i * d] else 0f) + 0.3f * x.held[i * d + 1]
-            when {
-                s > 0.4f -> 5
-                s > 0.1f -> 4
-                s > -0.1f -> 3
-                s > -0.4f -> 2
-                else -> 1
+        val grades =
+            IntArray(n) { i ->
+                for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
+                val s = (if (x.held[i * d + 2] > 0) x.held[i * d] else 0f) + 0.3f * x.held[i * d + 1]
+                when {
+                    s > 0.4f -> 5
+                    s > 0.1f -> 4
+                    s > -0.1f -> 3
+                    s > -0.4f -> 2
+                    else -> 1
+                }
             }
-        }
         val ids = LongArray(n) { it.toLong() }
         val task = RankingTask(x, grades, ids, ids)
         val scores = BoostingScorer().fit(task, IntArray(180) { it }, 200.0).scores(x)
@@ -77,7 +78,11 @@ class BoostingScorerTest {
         val counts = listOf(5.0, 20.0, 10.0, 40.0)
         val together = BoostingScorer().fitEach(task, rows, counts)
         counts.forEachIndexed { i, trees ->
-            assertEquals(BoostingScorer().fit(task, rows, trees).scores(x).toList(), together[i].scores(x).toList(), "$trees trees")
+            assertEquals(
+                BoostingScorer().fit(task, rows, trees).scores(x).toList(),
+                together[i].scores(x).toList(),
+                "$trees trees",
+            )
         }
     }
 
@@ -92,7 +97,11 @@ class BoostingScorerTest {
         val learnt = IntArray(n) { (it * 7) % n }
         val grower = Grower(x, learnt)
         for (f in 0 until d) {
-            assertEquals(learnt.indices.sortedBy { x.held[learnt[it] * d + f] }, grower.sorted[f].toList(), "feature $f")
+            assertEquals(
+                learnt.indices.sortedBy { x.held[learnt[it] * d + f] },
+                grower.sorted[f].toList(),
+                "feature $f",
+            )
         }
     }
 

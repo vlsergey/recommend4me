@@ -4,17 +4,30 @@ import io.github.vlsergey.recommend4me.database.model.tables.references.WORK_SIZ
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
-/** How many words every normalized work has to a character, in the model database of its content type: made again by [WorkSizes]. */
+/**
+ * How many words every normalized work has to a character, in the model database of its content type: made again by
+ * [WorkSizes].
+ */
 class WorkSizeRepository(private val db: DSLContext) {
 
     /** The ratios kept of the normalized [works]. */
     fun of(works: Collection<Long>): Map<Long, Double> =
-        works.distinct().chunked(BATCH).flatMap { chunk ->
-            db.select(WORK_SIZE.WORK, WORK_SIZE.WORDS_PER_CHAR).from(WORK_SIZE).where(WORK_SIZE.WORK.`in`(chunk)).fetch { it.value1()!! to it.value2()!! }
-        }.toMap()
+        works
+            .distinct()
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(WORK_SIZE.WORK, WORK_SIZE.WORDS_PER_CHAR)
+                    .from(WORK_SIZE)
+                    .where(WORK_SIZE.WORK.`in`(chunk))
+                    .fetch { it.value1()!! to it.value2()!! }
+            }
+            .toMap()
 
     /** The ratio of every work. */
-    fun all(): Map<Long, Double> = db.select(WORK_SIZE.WORK, WORK_SIZE.WORDS_PER_CHAR).from(WORK_SIZE).fetchMap({ it.value1()!! }, { it.value2()!! })
+    fun all(): Map<Long, Double> =
+        db.select(WORK_SIZE.WORK, WORK_SIZE.WORDS_PER_CHAR)
+            .from(WORK_SIZE)
+            .fetchMap({ it.value1()!! }, { it.value2()!! })
 
     /** The [ratios] in place of the last. */
     fun keep(ratios: Map<Long, Double>) = db.transaction { c ->

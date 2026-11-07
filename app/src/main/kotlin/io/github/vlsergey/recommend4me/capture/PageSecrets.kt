@@ -3,10 +3,9 @@ package io.github.vlsergey.recommend4me.capture
 import org.jsoup.Jsoup
 
 /**
- * What a page sent by the extension must not keep: its scripts and the tokens of the user's session
- * on the site — AO3's `<meta name="csrf-token">` and the `authenticity_token` of its forms, the
- * `__RequestVerificationToken` of author.today. A kept page lies in the source database and in
- * every backup of it; no parser reads any of these.
+ * What a page sent by the extension must not keep: its scripts and the tokens of the user's session on the site — AO3's
+ * `<meta name="csrf-token">` and the `authenticity_token` of its forms, the `__RequestVerificationToken` of
+ * author.today. A kept page lies in the source database and in every backup of it; no parser reads any of these.
  */
 object PageSecrets {
 

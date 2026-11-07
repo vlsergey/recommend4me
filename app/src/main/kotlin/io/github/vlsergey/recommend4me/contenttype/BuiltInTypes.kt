@@ -7,24 +7,28 @@ import org.springframework.context.annotation.Configuration
 @Configuration(proxyBeanMethods = false)
 class BuiltInTypes {
 
-    @Bean
-    fun games() = GAMES
+    @Bean fun games() = GAMES
 
-    @Bean
-    fun books() = Books.TYPE
+    @Bean fun books() = Books.TYPE
 
     companion object {
         /**
-         * Games: their title, grades and verb are the interface's words of "games"; their sites' free
-         * tags normalized into the same dictionary as the books' ([StandardTags]); a game is played in
-         * every language it is translated to ([StandardLanguages]), its description written in one
-         * ([StandardLanguages.DESCRIPTION]).
+         * Games: their title, grades and verb are the interface's words of "games"; their sites' free tags normalized
+         * into the same dictionary as the books' ([StandardTags]); a game is played in every language it is translated
+         * to ([StandardLanguages]), its description written in one ([StandardLanguages.DESCRIPTION]).
          */
-        val GAMES = ContentType(
-            id = "games",
-            facets = listOf(StandardTags.TAG, StandardLanguages.LANGUAGE, AgeRating.SITE),
-            layer = listOf(StandardTags.TAGS, StandardLanguages.languages(single = false), StandardLanguages.DESCRIPTION, AgeRating.RATING),
-            numbers = listOf(StandardNumbers.LIKES),
-        )
+        val GAMES =
+            ContentType(
+                id = "games",
+                facets = listOf(StandardTags.TAG, StandardLanguages.LANGUAGE, AgeRating.SITE),
+                layer =
+                    listOf(
+                        StandardTags.TAGS,
+                        StandardLanguages.languages(single = false),
+                        StandardLanguages.DESCRIPTION,
+                        AgeRating.RATING,
+                    ),
+                numbers = listOf(StandardNumbers.LIKES),
+            )
     }
 }

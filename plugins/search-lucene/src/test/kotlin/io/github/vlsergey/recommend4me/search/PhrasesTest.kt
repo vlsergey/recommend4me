@@ -7,12 +7,14 @@ class PhrasesTest {
 
     @Test
     fun `a text falls into its sentences and items, headings and numbers left out`() {
-        val text = """
+        val text =
+            """
             v0.5
             - Added a new route with Anna. Fixed the gallery!
             * The beach scene now has three variants
             Bug fixes
-        """.trimIndent()
+            """
+                .trimIndent()
         assertEquals(
             listOf("Added a new route with Anna.", "Fixed the gallery!", "The beach scene now has three variants"),
             Phrases.split(text),

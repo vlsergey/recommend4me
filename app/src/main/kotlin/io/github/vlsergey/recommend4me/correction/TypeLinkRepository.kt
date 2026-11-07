@@ -6,17 +6,20 @@ import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
 
 /**
- * Which items of the sources of one content type are one work, and the user's word on those that are
- * not — different works, or related of another kind (a translation, a part) — by the items, kept
- * by their normalized works ([WorkRepository]): a word on two items is a word on their works. Every
- * word said and taken back is written to the [journal], with the word the pair had before.
+ * Which items of the sources of one content type are one work, and the user's word on those that are not — different
+ * works, or related of another kind (a translation, a part) — by the items, kept by their normalized works
+ * ([WorkRepository]): a word on two items is a word on their works. Every word said and taken back is written to the
+ * [journal], with the word the pair had before.
  */
 class TypeLinkRepository(
     private val works: WorkRepository,
     private val journal: WorkPairJournal,
     /** Every source of the type. */
     private val sources: Collection<String>,
-    /** The facets of one value of the type ([io.github.vlsergey.recommend4me.source.FacetDef.single]): of two works merged, one stands. */
+    /**
+     * The facets of one value of the type ([io.github.vlsergey.recommend4me.source.FacetDef.single]): of two works
+     * merged, one stands.
+     */
     private val single: Set<String> = emptySet(),
 ) {
 
@@ -47,7 +50,10 @@ class TypeLinkRepository(
     /** The two items said to be different works; [b] taken out of a work holding both. */
     fun distinct(a: ItemKey, b: ItemKey, now: Instant) = say(a, b, DIFFERENT, now)
 
-    /** The two items said to be related works of the [kind] — one the translation of the other, one a part of the other —, not one: [b] taken out of a work holding both. */
+    /**
+     * The two items said to be related works of the [kind] — one the translation of the other, one a part of the other
+     * —, not one: [b] taken out of a work holding both.
+     */
     fun relate(a: ItemKey, b: ItemKey, kind: String, now: Instant) = say(a, b, kind, now)
 
     private fun say(a: ItemKey, b: ItemKey, kind: String, now: Instant) {
@@ -73,8 +79,15 @@ class TypeLinkRepository(
 
     /** The word on every pair of items now, as [word] tells it, read in one go: of an item bound to no work, none. */
     fun words(pairs: Collection<Pair<ItemKey, ItemKey>>): Map<Pair<ItemKey, ItemKey>, String?> {
-        val bound = pairs.flatMap { it.toList() }.distinct().groupBy { it.source }
-            .flatMap { (source, keys) -> works.ofItems(source, keys.map { it.id }).map { (id, work) -> ItemKey(source, id) to work } }.toMap()
+        val bound =
+            pairs
+                .flatMap { it.toList() }
+                .distinct()
+                .groupBy { it.source }
+                .flatMap { (source, keys) ->
+                    works.ofItems(source, keys.map { it.id }).map { (id, work) -> ItemKey(source, id) to work }
+                }
+                .toMap()
         val words = works.words()
         return pairs.associateWith { (a, b) ->
             val x = bound[a] ?: return@associateWith null

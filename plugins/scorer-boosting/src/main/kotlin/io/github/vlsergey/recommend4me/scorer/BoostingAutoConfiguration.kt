@@ -5,6 +5,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class BoostingAutoConfiguration {
-    @Bean
-    fun boostingScorer(): Scorer = BoostingScorer()
+    @Bean fun boostingScorer(): Scorer = BoostingScorer()
 }

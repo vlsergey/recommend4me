@@ -7,23 +7,30 @@ import io.github.vlsergey.recommend4me.source.Job
 import io.github.vlsergey.recommend4me.source.JobCancelled
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceMode
-import io.github.vlsergey.recommend4me.source.job
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.job
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import jakarta.annotation.PreDestroy
+import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
-import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 private val log = LoggerFactory.getLogger(Jobs::class.java)
 
-enum class JobState { IDLE, RUNNING, CANCELLING, DONE, CANCELLED, FAILED }
+enum class JobState {
+    IDLE,
+    RUNNING,
+    CANCELLING,
+    DONE,
+    CANCELLED,
+    FAILED,
+}
 
 data class JobProgress(
     val state: JobState = JobState.IDLE,
@@ -44,11 +51,11 @@ data class JobProgress(
 )
 
 /**
- * The scraping jobs of the sources, one at a time per source, each on a thread of its own: the
- * source's own work, then the vectors of the texts it wrote and a training of the content type.
+ * The scraping jobs of the sources, one at a time per source, each on a thread of its own: the source's own work, then
+ * the vectors of the texts it wrote and a training of the content type.
  *
- * A JOB OF THE WHOLE CATALOGUE GOES ON AFTER A RESTART: it is remembered as running
- * (`job.<source>.running`) until it ends or the user stops it, and started again on the next start.
+ * A JOB OF THE WHOLE CATALOGUE GOES ON AFTER A RESTART: it is remembered as running (`job.<source>.running`) until it
+ * ends or the user stops it, and started again on the next start.
  */
 @Service
 class Jobs(
@@ -61,38 +68,45 @@ class Jobs(
     private val runs = ConcurrentHashMap<String, Run>()
     private val executors = ConcurrentHashMap<String, ExecutorService>()
 
-    @Volatile
-    private var shuttingDown = false
+    @Volatile private var shuttingDown = false
 
     /** A job's state as the interface sees it, and the plugin's handle on it. */
     private inner class Run(val sourceId: String, val mode: SourceMode) : Job {
-        @Volatile
-        var progress = JobProgress(state = JobState.RUNNING, mode = mode, startedAt = Instant.now())
+        @Volatile var progress = JobProgress(state = JobState.RUNNING, mode = mode, startedAt = Instant.now())
 
-        @Volatile
-        var cancelRequested = false
+        @Volatile var cancelRequested = false
 
         @Synchronized
         fun update(change: (JobProgress) -> JobProgress) {
             progress = change(progress)
         }
 
-        override fun phase(name: String, total: Int, processed: Int) =
-            update { it.copy(phase = name, phaseStartedAt = Instant.now(), processed = processed, total = total) }
+        override fun phase(name: String, total: Int, processed: Int) = update {
+            it.copy(phase = name, phaseStartedAt = Instant.now(), processed = processed, total = total)
+        }
 
-        override fun progress(processed: Int, total: Int?) = update { it.copy(processed = processed, total = total ?: it.total) }
+        override fun progress(processed: Int, total: Int?) = update {
+            it.copy(processed = processed, total = total ?: it.total)
+        }
+
         override fun found(newItems: Int) = update { it.copy(newItems = it.newItems + newItems) }
+
         override fun error(message: String) {
             log.warn("{}: {}", sourceId, message)
             update { it.copy(errors = it.errors + 1) }
         }
+
         override fun message(key: String?) {
             val source = stores.source(sourceId)?.source
-            if (key != null && source != null && key !in source.messages) log.warn("{}: the job left the message '{}' the source does not declare", sourceId, key)
+            if (key != null && source != null && key !in source.messages)
+                log.warn("{}: the job left the message '{}' the source does not declare", sourceId, key)
             update { it.copy(messageKey = key?.let { k -> I18nKeys.qualified(sourceId, I18nKeys.job(k)) }) }
         }
+
         override fun session(loggedIn: Boolean?) = update { it.copy(loggedIn = loggedIn) }
-        override val cancelled: Boolean get() = cancelRequested
+
+        override val cancelled: Boolean
+            get() = cancelRequested
 
         override fun checkpoint() {
             try {
@@ -105,13 +119,15 @@ class Jobs(
         }
 
         override fun state(key: String): String? = settings.get("job.$sourceId.$key")
+
         override fun state(key: String, value: String?) = settings.set("job.$sourceId.$key", value)
     }
 
     fun status(sourceId: String): JobProgress = runs[sourceId]?.progress ?: JobProgress()
 
     /** The mode a job of the source left running at the last stop of the application. */
-    fun resumable(sourceId: String): SourceMode? = settings.get("job.$sourceId.running")?.let { runCatching { SourceMode.valueOf(it) }.getOrNull() }
+    fun resumable(sourceId: String): SourceMode? =
+        settings.get("job.$sourceId.running")?.let { runCatching { SourceMode.valueOf(it) }.getOrNull() }
 
     /** Starts a job; false when one of the source runs already or the source has no such mode. */
     @Synchronized
@@ -122,7 +138,10 @@ class Jobs(
         if (current == JobState.RUNNING || current == JobState.CANCELLING) return false
         val run = Run(sourceId, mode)
         runs[sourceId] = run
-        val executor = executors.computeIfAbsent(sourceId) { Executors.newSingleThreadExecutor { r -> Thread(r, "job-$sourceId").apply { isDaemon = true } } }
+        val executor =
+            executors.computeIfAbsent(sourceId) {
+                Executors.newSingleThreadExecutor { r -> Thread(r, "job-$sourceId").apply { isDaemon = true } }
+            }
         executor.execute { run(run) }
         return true
     }
@@ -144,7 +163,12 @@ class Jobs(
             store.source.scrape(run.mode, contexts.of(store.id), run)
             run.checkCancelled()
             run.phase("vectors")
-            textVectors.refresh(store, "crawl", progress ={ done, total -> run.progress(done, total) }, cancelled = { run.cancelRequested })
+            textVectors.refresh(
+                store,
+                "crawl",
+                progress = { done, total -> run.progress(done, total) },
+                cancelled = { run.cancelRequested },
+            )
             run.checkCancelled()
             run.phase("scoring")
             recommendations.retrainAndScore(store.type)
@@ -158,7 +182,13 @@ class Jobs(
         } catch (e: Exception) {
             log.error("{}: the job failed", run.sourceId, e)
             // The failure as the code tells it: no words of the interface
-            run.update { it.copy(state = JobState.FAILED, failure = e.message ?: e.javaClass.simpleName, finishedAt = Instant.now()) }
+            run.update {
+                it.copy(
+                    state = JobState.FAILED,
+                    failure = e.message ?: e.javaClass.simpleName,
+                    finishedAt = Instant.now(),
+                )
+            }
         }
     }
 

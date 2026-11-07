@@ -1,32 +1,48 @@
 package io.github.vlsergey.recommend4me
 
-import io.github.vlsergey.recommend4me.workload.inBackground
-import io.github.vlsergey.recommend4me.draft.LayerDrafts
 import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.CardsRequest
 import io.github.vlsergey.recommend4me.api.model.CatalogueEntryRef
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
+import io.github.vlsergey.recommend4me.api.model.FacetRole as ApiFacetRole
+import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
+import io.github.vlsergey.recommend4me.api.model.HierarchyOffer
+import io.github.vlsergey.recommend4me.api.model.HierarchyOfferKind
+import io.github.vlsergey.recommend4me.api.model.Inclusion
+import io.github.vlsergey.recommend4me.api.model.LocalName
 import io.github.vlsergey.recommend4me.api.model.MarkAnswer
 import io.github.vlsergey.recommend4me.api.model.MarkVerdict
 import io.github.vlsergey.recommend4me.api.model.MarkingOrder
-import io.github.vlsergey.recommend4me.marking.MarkingController
-import io.github.vlsergey.recommend4me.pairing.PairingsController
-import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
+import io.github.vlsergey.recommend4me.api.model.TagAboveRequest
+import io.github.vlsergey.recommend4me.api.model.TagBindingRequest
+import io.github.vlsergey.recommend4me.api.model.TagByTextAnswer
+import io.github.vlsergey.recommend4me.api.model.TagEntryRequest
+import io.github.vlsergey.recommend4me.api.model.TagIgnoredRequest
+import io.github.vlsergey.recommend4me.api.model.TagNameRequest
+import io.github.vlsergey.recommend4me.api.model.TagNameRule
+import io.github.vlsergey.recommend4me.api.model.TagRelation
+import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
+import io.github.vlsergey.recommend4me.api.model.TooGeneralRequest
+import io.github.vlsergey.recommend4me.api.model.UniverseRef
 import io.github.vlsergey.recommend4me.capture.CaptureController
 import io.github.vlsergey.recommend4me.contenttype.Books
-import io.github.vlsergey.recommend4me.refusal.Refusal
-import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
+import io.github.vlsergey.recommend4me.draft.LayerDrafts
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.encoder.TextKind
-import io.github.vlsergey.recommend4me.item.ItemsController
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.ItemsController
+import io.github.vlsergey.recommend4me.marking.MarkingController
 import io.github.vlsergey.recommend4me.model.CatalogueReader
 import io.github.vlsergey.recommend4me.model.MeasuringState
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.model.ScorerComparisons
 import io.github.vlsergey.recommend4me.page.PagesController
+import io.github.vlsergey.recommend4me.pairing.PairingsController
+import io.github.vlsergey.recommend4me.part.Paragraphs
+import io.github.vlsergey.recommend4me.refusal.Refusal
+import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.CardDecor
 import io.github.vlsergey.recommend4me.source.FacetDecor
@@ -35,6 +51,7 @@ import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PageDecor
+import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
@@ -45,35 +62,16 @@ import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.source.WantedPage
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
-import io.github.vlsergey.recommend4me.textvector.TextVectors
-import io.github.vlsergey.recommend4me.api.model.Inclusion
-import io.github.vlsergey.recommend4me.api.model.LocalName
-import io.github.vlsergey.recommend4me.api.model.FacetRole as ApiFacetRole
-import io.github.vlsergey.recommend4me.api.model.UniverseRef
-import io.github.vlsergey.recommend4me.api.model.TagBindingRequest
-import io.github.vlsergey.recommend4me.api.model.TagIgnoredRequest
-import io.github.vlsergey.recommend4me.api.model.TagNameRequest
-import io.github.vlsergey.recommend4me.api.model.TagNameRule
-import io.github.vlsergey.recommend4me.api.model.TagRelation
-import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
-import io.github.vlsergey.recommend4me.tag.TagRepository
-import io.github.vlsergey.recommend4me.tag.TagVectors
-import io.github.vlsergey.recommend4me.api.model.TagByTextAnswer
-import io.github.vlsergey.recommend4me.source.PartData
-import io.github.vlsergey.recommend4me.tagtext.TagsByTextController
-import io.github.vlsergey.recommend4me.tagtext.TextTags
-import io.github.vlsergey.recommend4me.part.Paragraphs
-import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.tag.Tags
-import io.github.vlsergey.recommend4me.tag.TagsController
-import io.github.vlsergey.recommend4me.api.model.TagEntryRequest
-import io.github.vlsergey.recommend4me.api.model.HierarchyOffer
-import io.github.vlsergey.recommend4me.api.model.HierarchyOfferKind
-import io.github.vlsergey.recommend4me.api.model.TagAboveRequest
-import io.github.vlsergey.recommend4me.api.model.TooGeneralRequest
 import io.github.vlsergey.recommend4me.tag.TagCatalogue
 import io.github.vlsergey.recommend4me.tag.TagEntry
+import io.github.vlsergey.recommend4me.tag.TagRepository
+import io.github.vlsergey.recommend4me.tag.TagVectors
+import io.github.vlsergey.recommend4me.tag.Tags
+import io.github.vlsergey.recommend4me.tag.TagsController
+import io.github.vlsergey.recommend4me.tagtext.TagsByTextController
+import io.github.vlsergey.recommend4me.tagtext.TextTags
+import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.CatalogueLookup
 import io.github.vlsergey.recommend4me.universe.LayerDraft
 import io.github.vlsergey.recommend4me.universe.UniverseCatalogue
@@ -83,14 +81,8 @@ import io.github.vlsergey.recommend4me.universe.UniverseEntry
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.universe.UniversesController
-import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
-import org.springframework.http.HttpStatus
+import io.github.vlsergey.recommend4me.vector.Vectors
+import io.github.vlsergey.recommend4me.workload.inBackground
 import java.io.File
 import java.time.Instant
 import kotlin.math.abs
@@ -99,10 +91,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
+import org.springframework.http.HttpStatus
 
 /**
- * The site as the application's interface: the extension's view of a work's page and of a list,
- * the suggested tags confirmed and rejected, a value added by its name, the works found for a link.
+ * The site as the application's interface: the extension's view of a work's page and of a list, the suggested tags
+ * confirmed and rejected, a value added by its name, the works found for a link.
  */
 @SpringBootTest(properties = ["recommend4me.data-dir=build/test-data/site"])
 class SiteTest {
@@ -117,67 +117,122 @@ class SiteTest {
 
     @TestConfiguration
     class Plugins {
-        @Bean
-        fun siteSource(): Source = SiteSource()
+        @Bean fun siteSource(): Source = SiteSource()
 
-        @Bean
-        fun wordsEncoder(): TextEncoder = WordsEncoder()
+        @Bean fun wordsEncoder(): TextEncoder = WordsEncoder()
 
-        @Bean
-        fun fakeCatalogue(): FakeCatalogue = FakeCatalogue()
+        @Bean fun fakeCatalogue(): FakeCatalogue = FakeCatalogue()
     }
 
     /**
-     * A catalogue of two universes of space opera, each with the same two characters and a station, a
-     * place; its texts in English. And of one concept a tag is bound to: a hull, named in Russian too.
+     * A catalogue of two universes of space opera, each with the same two characters and a station, a place; its texts
+     * in English. And of one concept a tag is bound to: a hull, named in Russian too.
      */
     class FakeCatalogue : UniverseCatalogue, TagCatalogue {
         override val id = "fake"
+
         private fun en(text: String) = mapOf("en" to text)
 
-        private val hull = TagEntry("E1", mapOf("en" to "Hull", "ru" to "Корпус"), mapOf("en" to listOf("Ship hull")), mapOf("en" to "the body of a ship"), "https://fake.example/E1")
-        private val vessel = TagEntry("E2", mapOf("en" to "Vessel", "ru" to "Судно"), emptyMap(), mapOf("en" to "a ship"), "https://fake.example/E2")
+        private val hull =
+            TagEntry(
+                "E1",
+                mapOf("en" to "Hull", "ru" to "Корпус"),
+                mapOf("en" to listOf("Ship hull")),
+                mapOf("en" to "the body of a ship"),
+                "https://fake.example/E1",
+            )
+        private val vessel =
+            TagEntry(
+                "E2",
+                mapOf("en" to "Vessel", "ru" to "Судно"),
+                emptyMap(),
+                mapOf("en" to "a ship"),
+                "https://fake.example/E2",
+            )
 
-        override fun find(text: String, languages: List<String>) = when {
-            "hull" in text.lowercase() || text == "E1" -> listOf(hull)
-            "vessel" in text.lowercase() || text == "E2" -> listOf(vessel)
-            else -> emptyList()
-        }
-        private val craft = TagEntry("E3", mapOf("en" to "Craft", "ru" to "Аппарат"), emptyMap(), emptyMap(), "https://fake.example/E3")
+        override fun find(text: String, languages: List<String>) =
+            when {
+                "hull" in text.lowercase() || text == "E1" -> listOf(hull)
+                "vessel" in text.lowercase() || text == "E2" -> listOf(vessel)
+                else -> emptyList()
+            }
 
-        private val sail = TagEntry("E4", mapOf("en" to "Sail", "ru" to "Парус"), emptyMap(), emptyMap(), "https://fake.example/E4")
+        private val craft =
+            TagEntry("E3", mapOf("en" to "Craft", "ru" to "Аппарат"), emptyMap(), emptyMap(), "https://fake.example/E3")
 
-        private val keel = TagEntry("E6", mapOf("en" to "Keel", "ru" to "Киль"), emptyMap(), emptyMap(), "https://fake.example/E6")
+        private val sail =
+            TagEntry("E4", mapOf("en" to "Sail", "ru" to "Парус"), emptyMap(), emptyMap(), "https://fake.example/E4")
 
-        override fun entries(ids: Collection<String>, languages: List<String>) = listOf(hull, vessel, craft, sail, keel).filter { it.id in ids }
+        private val keel =
+            TagEntry("E6", mapOf("en" to "Keel", "ru" to "Киль"), emptyMap(), emptyMap(), "https://fake.example/E6")
 
-        /** A hull is a kind of vessel, a vessel a kind of craft; a sail a kind of craft too; a keel a kind of vessel. */
+        override fun entries(ids: Collection<String>, languages: List<String>) =
+            listOf(hull, vessel, craft, sail, keel).filter { it.id in ids }
+
+        /**
+         * A hull is a kind of vessel, a vessel a kind of craft; a sail a kind of craft too; a keel a kind of vessel.
+         */
         override fun above(ids: Collection<String>) =
-            mapOf("E1" to listOf("E2"), "E2" to listOf("E3"), "E4" to listOf("E3"), "E6" to listOf("E2")).filterKeys { it in ids }
-        private fun entries(languages: List<String>) = listOf(
-            UniverseEntry("U1", en("Space opera"), en("Ships and pilots"), "https://fake.example/U1", languages),
-            UniverseEntry("U2", en("Fleet"), en("More ships"), "https://fake.example/U2", languages),
-        )
+            mapOf("E1" to listOf("E2"), "E2" to listOf("E3"), "E4" to listOf("E3"), "E6" to listOf("E2")).filterKeys {
+                it in ids
+            }
 
-        override fun findUniverses(name: String, languages: List<String>) = if ("space" in name.lowercase()) entries(languages).take(1) else emptyList()
-        override fun universe(id: String, languages: List<String>, properties: Set<String>) = entries(languages).firstOrNull { it.id == id }
-        override fun characters(id: String, languages: List<String>, properties: Set<String>) = listOf(
-            UniverseCharacter(
-                "C1", en("Pilot"), mapOf("en" to listOf("The Pilot")), emptyMap(), "https://fake.example/C1", languages, listOf("K1"),
-                properties = if ("P1" in properties) mapOf("P1" to listOf("Space Pilot")) else emptyMap(),
-            ),
-            UniverseCharacter("C2", en("Captain"), emptyMap(), en("Of the fleet"), "https://fake.example/C2", languages, listOf("K1")),
-            UniverseCharacter("S1", en("Station"), emptyMap(), en("Where ships dock"), "https://fake.example/S1", languages, listOf("K2")),
-        )
+        private fun entries(languages: List<String>) =
+            listOf(
+                UniverseEntry("U1", en("Space opera"), en("Ships and pilots"), "https://fake.example/U1", languages),
+                UniverseEntry("U2", en("Fleet"), en("More ships"), "https://fake.example/U2", languages),
+            )
+
+        override fun findUniverses(name: String, languages: List<String>) =
+            if ("space" in name.lowercase()) entries(languages).take(1) else emptyList()
+
+        override fun universe(id: String, languages: List<String>, properties: Set<String>) =
+            entries(languages).firstOrNull { it.id == id }
+
+        override fun characters(id: String, languages: List<String>, properties: Set<String>) =
+            listOf(
+                UniverseCharacter(
+                    "C1",
+                    en("Pilot"),
+                    mapOf("en" to listOf("The Pilot")),
+                    emptyMap(),
+                    "https://fake.example/C1",
+                    languages,
+                    listOf("K1"),
+                    properties = if ("P1" in properties) mapOf("P1" to listOf("Space Pilot")) else emptyMap(),
+                ),
+                UniverseCharacter(
+                    "C2",
+                    en("Captain"),
+                    emptyMap(),
+                    en("Of the fleet"),
+                    "https://fake.example/C2",
+                    languages,
+                    listOf("K1"),
+                ),
+                UniverseCharacter(
+                    "S1",
+                    en("Station"),
+                    emptyMap(),
+                    en("Where ships dock"),
+                    "https://fake.example/S1",
+                    languages,
+                    listOf("K2"),
+                ),
+            )
 
         override fun classes(ids: Collection<String>, languages: List<String>) =
-            listOf(UniverseClass("K1", en("person"), true, languages), UniverseClass("K2", en("place"), false, languages)).filter { it.id in ids }
+            listOf(
+                    UniverseClass("K1", en("person"), true, languages),
+                    UniverseClass("K2", en("place"), false, languages),
+                )
+                .filter { it.id in ids }
     }
 
     /**
-     * A site whose pages are "<id>|<title>|<tags>|<annotation>|<pairings>": tags to suggest, and
-     * pairings the application works out from the line the site writes them in. What a tag means it
-     * answers at [describe] of the tag.
+     * A site whose pages are "<id>|<title>|<tags>|<annotation>|<pairings>": tags to suggest, and pairings the
+     * application works out from the line the site writes them in. What a tag means it answers at [describe] of the
+     * tag.
      */
     class SiteSource : Source {
         companion object {
@@ -195,28 +250,36 @@ class SiteTest {
 
         /** A character's tag on the site, as the catalogue states it. */
         override val catalogueProperties = mapOf("fake" to setOf("P1"))
-        override val schema = SourceSchema(
-            facets = listOf(
-                // The site's tags: its word, the examples of the work's tags
-                Books.TAG.asFacet(),
-                FacetDef("pairing", infer = true, original = "pairings"),
-                FacetDef("series", role = FacetRole.SERIES),
-            ),
-            texts = listOf(
-                TextDef("annotation", block = "text:annotation"),
-                TextDef("pairings", searchByMeaning = true),
-            ),
-            universeLine = "pairings",
-        )
+        override val schema =
+            SourceSchema(
+                facets =
+                    listOf(
+                        // The site's tags: its word, the examples of the work's tags
+                        Books.TAG.asFacet(),
+                        FacetDef("pairing", infer = true, original = "pairings"),
+                        FacetDef("series", role = FacetRole.SERIES),
+                    ),
+                texts =
+                    listOf(
+                        TextDef("annotation", block = "text:annotation"),
+                        TextDef("pairings", searchByMeaning = true),
+                    ),
+                universeLine = "pairings",
+            )
         override val modes = setOf(SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://site\\.example/(work|tags|synonyms)/.*"))
+
         override fun itemUrl(itemId: String) = "https://site.example/work/$itemId"
-        override fun itemIdOf(url: String) = Regex("^https://site\\.example/work/([^/?#]+)").find(url)?.groupValues?.get(1)
-        override val pageDecor = PageDecor(
-            panelAfter = "h1",
-            facets = listOf(FacetDecor(Books.TAGS.key, after = ".tags")),
-            cards = CardDecor(".card", "a.title"),
-        )
+
+        override fun itemIdOf(url: String) =
+            Regex("^https://site\\.example/work/([^/?#]+)").find(url)?.groupValues?.get(1)
+
+        override val pageDecor =
+            PageDecor(
+                panelAfter = "h1",
+                facets = listOf(FacetDecor(Books.TAGS.key, after = ".tags")),
+                cards = CardDecor(".card", "a.title"),
+            )
 
         /** What a tag means, asked of the site by its address of the tag: the answer is the description itself. */
         override fun describing(facet: String, tags: List<String>): List<WantedPage> =
@@ -225,46 +288,84 @@ class SiteTest {
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
             if (page.url.startsWith(SiteSource.SYNONYMS)) {
                 val names = page.html.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                context.items.setFacetValueSynonyms("tag", mapOf(page.url.removePrefix(SiteSource.SYNONYMS) to names.associateBy { it.lowercase() }))
+                context.items.setFacetValueSynonyms(
+                    "tag",
+                    mapOf(page.url.removePrefix(SiteSource.SYNONYMS) to names.associateBy { it.lowercase() }),
+                )
                 return emptyList()
             }
             if (page.url.startsWith(SiteSource.DESCRIBE)) {
-                page.html.trim().takeIf { it.isNotEmpty() }?.let { context.items.describeFacetValues("tag", mapOf(page.url.removePrefix(SiteSource.DESCRIBE) to it)) }
+                page.html
+                    .trim()
+                    .takeIf { it.isNotEmpty() }
+                    ?.let {
+                        context.items.describeFacetValues(
+                            "tag",
+                            mapOf(page.url.removePrefix(SiteSource.DESCRIBE) to it),
+                        )
+                    }
                 return emptyList()
             }
             val parts = page.html.split('|')
             val (id, title, tags, annotation, pairings) = parts
-            context.items.upsert(ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")), page.capturedAt)
-            context.items.setFacet(id, "tag", tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it.replaceFirstChar(Char::uppercase)) })
+            context.items.upsert(
+                ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-01T00:00:00Z")),
+                page.capturedAt,
+            )
+            context.items.setFacet(
+                id,
+                "tag",
+                tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it.replaceFirstChar(Char::uppercase)) },
+            )
             parts.getOrNull(5)?.let { context.items.setFacet(id, "series", listOf(FacetValue(it.lowercase(), it))) }
-            context.items.setFacet(id, "pairing", pairings.split(", ").filter { it.isNotBlank() }.map { FacetValue(it.lowercase(), it) })
+            context.items.setFacet(
+                id,
+                "pairing",
+                pairings.split(", ").filter { it.isNotBlank() }.map { FacetValue(it.lowercase(), it) },
+            )
             context.items.setTexts(id, mapOf("annotation" to annotation, "pairings" to pairings))
             return listOf(id)
         }
 
-        /** Of a line of friends ("Space Pilot & Captain"), every name the catalogue states as its tag of one character alone: a main character. */
+        /**
+         * Of a line of friends ("Space Pilot & Captain"), every name the catalogue states as its tag of one character
+         * alone: a main character.
+         */
         override fun draft(facets: Map<String, List<FacetValue>>, lookup: CatalogueLookup): List<LayerDraft> =
-            facets["pairing"].orEmpty().mapNotNull { it.name }.filter { " & " in it }.flatMap { line ->
-                line.split(" & ").mapNotNull { name -> lookup.characters("fake", "P1", name).singleOrNull()?.let { LayerDraft(UniverseFacets.CHARACTERS, it, name) } }
-            }
+            facets["pairing"]
+                .orEmpty()
+                .mapNotNull { it.name }
+                .filter { " & " in it }
+                .flatMap { line ->
+                    line.split(" & ").mapNotNull { name ->
+                        lookup.characters("fake", "P1", name).singleOrNull()?.let {
+                            LayerDraft(UniverseFacets.CHARACTERS, it, name)
+                        }
+                    }
+                }
     }
 
     /** Texts as bags of their words, hashed into a few dimensions: alike words, alike vectors. */
     class WordsEncoder : TextEncoder {
         override val id = "words"
         override val dim = 512
+
         override fun ready() = true
 
         override fun encode(texts: List<String>, kind: TextKind): List<FloatArray?> = texts.map { text ->
             val v = FloatArray(dim)
-            Regex("\\p{L}+").findAll(text.lowercase()).forEach { w -> v[Math.floorMod(w.value.take(5).hashCode(), dim)] += 1f }
+            Regex("\\p{L}+").findAll(text.lowercase()).forEach { w ->
+                v[Math.floorMod(w.value.take(5).hashCode(), dim)] += 1f
+            }
             val n = sqrt(v.sumOf { it.toDouble() * it }).toFloat()
             if (n == 0f) null else FloatArray(dim) { v[it] / n }
         }
 
-        override fun encodeWindows(texts: List<String>): List<List<FloatArray>> = encode(texts).map { listOfNotNull(it) }
+        override fun encodeWindows(texts: List<String>): List<List<FloatArray>> =
+            encode(texts).map { listOfNotNull(it) }
 
-        override fun windowSpans(text: String): List<IntRange> = if (text.isBlank()) emptyList() else listOf(text.indices)
+        override fun windowSpans(text: String): List<IntRange> =
+            if (text.isBlank()) emptyList() else listOf(text.indices)
     }
 
     @Autowired lateinit var captures: CaptureController
@@ -288,11 +389,12 @@ class SiteTest {
     @Autowired lateinit var marking: MarkingController
     @Autowired lateinit var layerDrafts: LayerDrafts
 
-    private fun capture(body: String) = captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
+    private fun capture(body: String) =
+        captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
 
     /**
-     * The texts' vectors made, and what the background makes of the tags made now: their works
-     * counted and kept ([Tags.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
+     * The texts' vectors made, and what the background makes of the tags made now: their works counted and kept
+     * ([Tags.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
      */
     private fun refresh(store: SourceStore) = inBackground {
         textVectors.refresh(store, "asked")
@@ -307,36 +409,65 @@ class SiteTest {
     }
 
     /**
-     * Forty works of two kinds, one of the first kind the site gave a dragons' tag by mistake, and
-     * one of the first kind it gave nothing.
+     * Forty works of two kinds, one of the first kind the site gave a dragons' tag by mistake, and one of the first
+     * kind it gave nothing.
      */
     private fun catalogue() {
         repeat(20) { k ->
             // As on a site: some works with one tag of their two, some untagged, some without pairings
-            fun tags(one: String, two: String) = when {
-                k % 5 == 0 -> ""
-                k % 3 == 0 -> one
-                else -> "$one,$two"
-            }
+            fun tags(one: String, two: String) =
+                when {
+                    k % 5 == 0 -> ""
+                    k % 3 == 0 -> one
+                    else -> "$one,$two"
+                }
             // And some crossovers: the other kind's pairing beside the own one
-            fun pairing(own: String, other: String) = when {
-                k % 4 == 0 -> ""
-                k % 7 == 3 -> "$own, $other"
-                else -> own
-            }
+            fun pairing(own: String, other: String) =
+                when {
+                    k % 4 == 0 -> ""
+                    k % 7 == 3 -> "$own, $other"
+                    else -> own
+                }
             // Titles of all sorts, that tell nothing of the kind: the description does
-            val names = listOf("Anna", "Boris", "Clara", "Denis", "Elena", "Fedor", "Galina", "Igor", "Kira", "Leonid", "Maria", "Nikita", "Olga", "Pavel")
-            fun title(i: Int) = "${names[i % names.size]} and ${names[(i * 5 + 3) % names.size]} ${listOf("Story", "Summer", "Letters", "Road", "Winter")[i % 5]}"
-            capture("s$k|${title(2 * k)}|${tags("space", "ships")}|Starships cross the galaxy, pilots fight in orbit near distant planets $k|${pairing("Pilot/Captain", "Knight/Princess")}")
-            capture("d$k|${title(2 * k + 1)}|${tags("dragons", "magic")}|A dragon guards the castle, wizards cast spells and magic $k|${pairing("Knight/Princess", "Pilot/Captain")}")
+            val names =
+                listOf(
+                    "Anna",
+                    "Boris",
+                    "Clara",
+                    "Denis",
+                    "Elena",
+                    "Fedor",
+                    "Galina",
+                    "Igor",
+                    "Kira",
+                    "Leonid",
+                    "Maria",
+                    "Nikita",
+                    "Olga",
+                    "Pavel",
+                )
+            fun title(i: Int) =
+                "${names[i % names.size]} and ${names[(i * 5 + 3) % names.size]} ${listOf("Story", "Summer", "Letters", "Road", "Winter")[i % 5]}"
+            capture(
+                "s$k|${title(2 * k)}|${tags("space", "ships")}|Starships cross the galaxy, pilots fight in orbit near distant planets $k|${pairing("Pilot/Captain", "Knight/Princess")}"
+            )
+            capture(
+                "d$k|${title(2 * k + 1)}|${tags("dragons", "magic")}|A dragon guards the castle, wizards cast spells and magic $k|${pairing("Knight/Princess", "Pilot/Captain")}"
+            )
         }
-        capture("w1|Wrong tag|space,ships,magic|Starships cross the galaxy, pilots fight in orbit near distant planets|Pilot/Captain")
+        capture(
+            "w1|Wrong tag|space,ships,magic|Starships cross the galaxy, pilots fight in orbit near distant planets|Pilot/Captain"
+        )
         capture("x1|Lost fleet||Pilots of starships lost beyond the galaxy fight near planets|")
         // The user's tags of some works the site left untagged: where the work's tags part from the
         // site's, the model learns what the texts say of them
         listOf(5, 10, 15).forEach { k ->
-            listOf("space", "ships").forEach { corrections.correctFacet("site", "s$k", FacetCorrection(facet = "tags", added = true, key = tag(it))) }
-            listOf("dragons", "magic").forEach { corrections.correctFacet("site", "d$k", FacetCorrection(facet = "tags", added = true, key = tag(it))) }
+            listOf("space", "ships").forEach {
+                corrections.correctFacet("site", "s$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
+            }
+            listOf("dragons", "magic").forEach {
+                corrections.correctFacet("site", "d$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
+            }
         }
         val store = stores.source("site")!!
         refresh(store)
@@ -344,7 +475,8 @@ class SiteTest {
     }
 
     /** The key of the normalized tag the site's tag [site] is bound to. */
-    private fun tag(site: String) = TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef("site", site)))
+    private fun tag(site: String) =
+        TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef("site", site)))
 
     @Test
     fun `the tags a work's own text is closest to, each with its paragraph, and the user's three answers on them`() {
@@ -355,19 +487,35 @@ class SiteTest {
         capture("tt3|A tale|||")
         refresh(store)
         // Paragraphs long enough to stand alone, and two short lines of a dialogue, joined into one
-        val road = "The road was long, and the travellers walked it for days through the rain and the wind, past villages and farms and " +
-            "forests, their boots wet and their packs heavy, saying little to one another as the miles went by."
-        val dragonsText = "Dragons flew over the castle, dragons everywhere: the great dragons of the north circled the towers, breathing " +
-            "fire on the walls, and the little dragons of the hills followed them, screeching, while the guards hid."
-        val shipsText = "Ships sailed among the stars, ships of space with silver hulls, carrying their crews from one star to the next, and " +
-            "the ships of the fleet kept watch at the edge of the system, waiting for the ships of the enemy."
-        store.parts.save("tt3", listOf(PartData("c1", 0, "One", "$road\n***\n$dragonsText\n$shipsText\n— Ships?\n— Ships.", null)))
-        assertEquals(listOf(road, dragonsText, "$shipsText\n— Ships?\n— Ships."), Paragraphs.of("$road\n***\n$dragonsText\n$shipsText\n— Ships?\n— Ships."))
+        val road =
+            "The road was long, and the travellers walked it for days through the rain and the wind, past villages and farms and " +
+                "forests, their boots wet and their packs heavy, saying little to one another as the miles went by."
+        val dragonsText =
+            "Dragons flew over the castle, dragons everywhere: the great dragons of the north circled the towers, breathing " +
+                "fire on the walls, and the little dragons of the hills followed them, screeching, while the guards hid."
+        val shipsText =
+            "Ships sailed among the stars, ships of space with silver hulls, carrying their crews from one star to the next, and " +
+                "the ships of the fleet kept watch at the edge of the system, waiting for the ships of the enemy."
+        store.parts.save(
+            "tt3",
+            listOf(PartData("c1", 0, "One", "$road\n***\n$dragonsText\n$shipsText\n— Ships?\n— Ships.", null)),
+        )
+        assertEquals(
+            listOf(road, dragonsText, "$shipsText\n— Ships?\n— Ships."),
+            Paragraphs.of("$road\n***\n$dragonsText\n$shipsText\n— Ships?\n— Ships."),
+        )
         // Its paragraphs encoded, as the background encodes them: the line of stars is none
         val encoder = WordsEncoder()
         store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
             val texts = Paragraphs.of(part.content)
-            store.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, encoder.encode(texts), texts.map(Vectors::hash))
+            store.parts.saveParagraphVectors(
+                part.itemId,
+                part.partId,
+                Paragraphs.keyOf(encoder.id),
+                part.hash,
+                encoder.encode(texts),
+                texts.map(Vectors::hash),
+            )
         }
         fun list() = tagsByText.getTagsByText("site", "tt3").body!!
         val first = list()
@@ -377,18 +525,58 @@ class SiteTest {
         assertEquals("c1" to 1, dragons.part to dragons.paragraph)
         assertEquals("One", dragons.partTitle)
         // Not enough: the paragraph is offered for the tag no more, nothing learnt
-        assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(dragons.key, "c1", 1, TagByTextAnswer.Verdict.ENOUGH_NOT)).statusCode.value())
+        assertEquals(
+            204,
+            tagsByText
+                .answerTagByText(
+                    "site",
+                    "tt3",
+                    TagByTextAnswer(dragons.key, "c1", 1, TagByTextAnswer.Verdict.ENOUGH_NOT),
+                )
+                .statusCode
+                .value(),
+        )
         assertTrue(list().tags.none { it.key == dragons.key && it.paragraph == 1 }, "list ${list()}")
-        // The answer is on the paragraph itself, by the hash of its text: a paragraph put before it, the same one stays hidden at its new number
-        store.parts.save("tt3", listOf(PartData("c1", 0, "One", listOf(road, "$road and again", "***", dragonsText, shipsText, "— Ships?", "— Ships.").joinToString("\n"), null)))
+        // The answer is on the paragraph itself, by the hash of its text: a paragraph put before it, the same one stays
+        // hidden at its new number
+        store.parts.save(
+            "tt3",
+            listOf(
+                PartData(
+                    "c1",
+                    0,
+                    "One",
+                    listOf(road, "$road and again", "***", dragonsText, shipsText, "— Ships?", "— Ships.")
+                        .joinToString("\n"),
+                    null,
+                )
+            ),
+        )
         store.parts.paragraphsToEncode(Paragraphs.keyOf(encoder.id), 10).forEach { part ->
             val texts = Paragraphs.of(part.content)
-            store.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, encoder.encode(texts), texts.map(Vectors::hash))
+            store.parts.saveParagraphVectors(
+                part.itemId,
+                part.partId,
+                Paragraphs.keyOf(encoder.id),
+                part.hash,
+                encoder.encode(texts),
+                texts.map(Vectors::hash),
+            )
         }
         assertTrue(list().tags.none { it.key == dragons.key && it.quote == dragonsText }, "list ${list()}")
         // Yes: the tag is the work's, answered on it, offered no more
         val ships = list().tags.single { it.name == "Ships" }
-        assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(ships.key, ships.part, ships.paragraph, TagByTextAnswer.Verdict.YES)).statusCode.value())
+        assertEquals(
+            204,
+            tagsByText
+                .answerTagByText(
+                    "site",
+                    "tt3",
+                    TagByTextAnswer(ships.key, ships.part, ships.paragraph, TagByTextAnswer.Verdict.YES),
+                )
+                .statusCode
+                .value(),
+        )
         assertTrue(store.corrections.facetsOf("tt3").any { it.facet == "tags" && it.key == ships.key && it.added })
         assertTrue(list().tags.none { it.key == ships.key })
         // Of the tags' hierarchy: a tag above one the work has, it has — not asked
@@ -404,12 +592,28 @@ class SiteTest {
         corrections.uncorrectFacet("site", "tt3", "tags", space.key)
         tagsApi.relateTags(TagRelationRequest(dragons.key, space.key, TagRelation.NONE))
         // Wrong: of answers of both kinds the model is fitted, and every tag offered has its chance
-        assertEquals(204, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(space.key, space.part, space.paragraph, TagByTextAnswer.Verdict.WRONG)).statusCode.value())
+        assertEquals(
+            204,
+            tagsByText
+                .answerTagByText(
+                    "site",
+                    "tt3",
+                    TagByTextAnswer(space.key, space.part, space.paragraph, TagByTextAnswer.Verdict.WRONG),
+                )
+                .statusCode
+                .value(),
+        )
         inBackground { textTags.fit() }
         val fitted = list()
         assertTrue(fitted.fitted && fitted.tags.all { it.chance != null }, "list $fitted")
         // No such paragraph: nothing kept
-        assertEquals(404, tagsByText.answerTagByText("site", "tt3", TagByTextAnswer(dragons.key, "c1", 9, TagByTextAnswer.Verdict.YES)).statusCode.value())
+        assertEquals(
+            404,
+            tagsByText
+                .answerTagByText("site", "tt3", TagByTextAnswer(dragons.key, "c1", 9, TagByTextAnswer.Verdict.YES))
+                .statusCode
+                .value(),
+        )
     }
 
     @Test
@@ -437,8 +641,14 @@ class SiteTest {
         // among them, beyond them those whose chances are not kept
         val more = suggestionsApi.getCandidates("site", "x1", "tags", null, null).body!!
         val offeredKeys = given.filter { it.offered == true }.map { it.key }.toSet()
-        assertTrue(more.map { it.key }.containsAll(offeredKeys) && more.size > offeredKeys.size, "more $more, offered $offeredKeys")
-        assertTrue(more.none { c -> given.any { it.key == c.key && it.offered != true } }, "none the work is given: $more")
+        assertTrue(
+            more.map { it.key }.containsAll(offeredKeys) && more.size > offeredKeys.size,
+            "more $more, offered $offeredKeys",
+        )
+        assertTrue(
+            more.none { c -> given.any { it.key == c.key && it.offered != true } },
+            "none the work is given: $more",
+        )
         assertTrue(more.zipWithNext().all { (a, b) -> a.chance!! >= b.chance!! }, "the likeliest first: $more")
 
         // The pairing of its kind is given to it at once, marked as the model's, the likeliest of all. Not
@@ -452,13 +662,19 @@ class SiteTest {
 
         // The site's tags are its word, shown as they are; of the work's, the site's mistaken one is the least likely
         val w1 = items.getItem("site", "w1").body!!.allFacets
-        assertEquals(setOf("space", "ships", "magic"), w1.single { it.facet == "tag" }.propertyValues.map { it.key }.toSet())
+        assertEquals(
+            setOf("space", "ships", "magic"),
+            w1.single { it.facet == "tag" }.propertyValues.map { it.key }.toSet(),
+        )
         assertEquals(false, w1.single { it.facet == "tag" }.editable)
         val worked = w1.single { it.facet == "tags" }
         assertEquals(true, worked.editable)
         // A value not given at all is less likely than not
         fun chanceOf(key: String) = worked.propertyValues.find { it.key == key }?.chance ?: 0.0
-        assertTrue(chanceOf(tag("space")) > 0.5 && chanceOf(tag("ships")) > 0.5, "the work's tags ${worked.propertyValues}")
+        assertTrue(
+            chanceOf(tag("space")) > 0.5 && chanceOf(tag("ships")) > 0.5,
+            "the work's tags ${worked.propertyValues}",
+        )
         assertTrue(
             chanceOf(tag("magic")) < chanceOf(tag("space")) && chanceOf(tag("magic")) < chanceOf(tag("ships")),
             "magic on a space work: ${worked.propertyValues}",
@@ -470,13 +686,29 @@ class SiteTest {
         assertEquals("magic", magic.name.lowercase())
         assertNotNull(magic.chance, "the chance of magic of w1: $magic")
         // Marked as the site's, told apart from the model's offers; the model's own come after every one of the site's
-        assertTrue(listOf("space", "ships", "magic").all { k -> worked.propertyValues.single { it.key == tag(k) }.fromSite == true }, "${worked.propertyValues}")
-        assertTrue(worked.propertyValues.none { it.fromSite == true && it.key !in setOf(tag("space"), tag("ships"), tag("magic")) }, "${worked.propertyValues}")
+        assertTrue(
+            listOf("space", "ships", "magic").all { k ->
+                worked.propertyValues.single { it.key == tag(k) }.fromSite == true
+            },
+            "${worked.propertyValues}",
+        )
+        assertTrue(
+            worked.propertyValues.none {
+                it.fromSite == true && it.key !in setOf(tag("space"), tag("ships"), tag("magic"))
+            },
+            "${worked.propertyValues}",
+        )
         val siteAt = worked.propertyValues.indexOfLast { it.fromSite == true }
-        assertTrue(worked.propertyValues.withIndex().none { (i, v) -> v.offered == true && v.fromSite != true && i < siteAt }, "${worked.propertyValues}")
+        assertTrue(
+            worked.propertyValues.withIndex().none { (i, v) -> v.offered == true && v.fromSite != true && i < siteAt },
+            "${worked.propertyValues}",
+        )
 
         // The site's word is not corrected
-        val refused = assertThrows<Refused> { corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = true, key = "space")) }
+        val refused =
+            assertThrows<Refused> {
+                corrections.correctFacet("site", "x1", FacetCorrection(facet = "tag", added = true, key = "space"))
+            }
         assertEquals(Refusal.SITE_FIELD, refused.refusal)
         // The field by the key of its label: the site's tags are a standard facet
         assertEquals(mapOf("field" to "standard:facet.tag"), refused.params)
@@ -484,7 +716,14 @@ class SiteTest {
         // The work's tags are: a value given and confirmed is the user's, one taken away is shown so
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tags", added = true, key = tag("space")))
         corrections.correctFacet("site", "x1", FacetCorrection(facet = "tags", added = false, key = tag("ships")))
-        val facets = pages.getPage("https://site.example/work/x1").body!!.item!!.facets.single { it.facet == "tags" }.propertyValues
+        val facets =
+            pages
+                .getPage("https://site.example/work/x1")
+                .body!!
+                .item!!
+                .facets
+                .single { it.facet == "tags" }
+                .propertyValues
         assertEquals(FacetValueInfo.Corrected.CONFIRMED, facets.single { it.key == tag("space") }.corrected)
         // A value taken away is still shown, crossed out, with the model's chance to keep its place by
         val ships = facets.single { it.key == tag("ships") }
@@ -498,7 +737,10 @@ class SiteTest {
         // Added — or confirmed, where the model gave it too
         val answeredYes = setOf(FacetValueInfo.Corrected.ADDED, FacetValueInfo.Corrected.CONFIRMED)
         val space = values.single { it.name == "Космос" }.key
-        assertEquals(setOf(tag("space"), tag("magic"), space), values.filter { it.corrected in answeredYes }.map { it.key }.toSet())
+        assertEquals(
+            setOf(tag("space"), tag("magic"), space),
+            values.filter { it.corrected in answeredYes }.map { it.key }.toSet(),
+        )
         // Found by its name first; the others it lacks to make the number, by the meaning of theirs, each once
         val mag = items.listFacetValues("site", "tags", "mag", 10).body!!.map { it.key }
         assertEquals(tag("magic"), mag.first())
@@ -507,12 +749,29 @@ class SiteTest {
         // given, the tag is made of the entry, named by its label, bound to it
         val vessel = items.listFacetValues("site", "tags", "vessel", 10).body!!.single { it.entry != null }
         assertEquals("fake" to "E2", vessel.entry!!.catalogue to vessel.entry!!.entry)
-        val made = corrections.correctFacet("site", "x1", FacetCorrection(facet = "tags", added = true, entry = CatalogueEntryRef("fake", "E2"))).body!!
+        val made =
+            corrections
+                .correctFacet(
+                    "site",
+                    "x1",
+                    FacetCorrection(facet = "tags", added = true, entry = CatalogueEntryRef("fake", "E2")),
+                )
+                .body!!
         assertEquals("Судно", made.name)
         assertEquals(listOf("E2"), tagsApi.getTag(made.key).body!!.catalogueEntries.map { it.entry })
         // The entry is a tag's now: offered as that tag, not as a new one; given again, the same tag
         assertTrue(items.listFacetValues("site", "tags", "vessel", 10).body!!.none { it.entry != null })
-        assertEquals(made.key, corrections.correctFacet("site", "x1", FacetCorrection(facet = "tags", added = true, entry = CatalogueEntryRef("fake", "E2"))).body!!.key)
+        assertEquals(
+            made.key,
+            corrections
+                .correctFacet(
+                    "site",
+                    "x1",
+                    FacetCorrection(facet = "tags", added = true, entry = CatalogueEntryRef("fake", "E2")),
+                )
+                .body!!
+                .key,
+        )
         // As it was: the entry is the other tests'
         corrections.uncorrectFacet("site", "x1", "tags", made.key)
         tagsApi.bindTagEntry(TagEntryRequest(made.key, "fake", "E2", false))
@@ -527,15 +786,27 @@ class SiteTest {
         val worth = inBackground { recommendations.worth("books")!! }
         // The parts by the keys of their labels: the site's tags a standard facet, the title the standard text
         val tagLabel = "standard:facet.${Books.TAG.key}"
-        assertTrue(worth.full != null && worth.parts.any { it.labelKey == tagLabel && it.metrics != null }, "parts ${worth.parts.map { it.labelKey }}")
+        assertTrue(
+            worth.full != null && worth.parts.any { it.labelKey == tagLabel && it.metrics != null },
+            "parts ${worth.parts.map { it.labelKey }}",
+        )
         val explained = items.getItem("site", "x1").body!!.explanation
-        assertTrue(explained.any { it.labelKey == tagLabel && it.features.isNotEmpty() }, "parts ${explained.map { it.labelKey }}")
+        assertTrue(
+            explained.any { it.labelKey == tagLabel && it.features.isNotEmpty() },
+            "parts ${explained.map { it.labelKey }}",
+        )
         // A feature of a value: the facet's label and the value as the data names it
         val tagFeature = explained.single { it.labelKey == tagLabel }.features.first()
         assertEquals(tagLabel, tagFeature.labelKey)
         assertNotNull(tagFeature.value)
-        assertTrue(explained.all { g -> ':' in g.labelKey && g.features.all { ':' in it.labelKey } }, "every label a key: $explained")
-        assertTrue(explained.zipWithNext().all { (a, b) -> abs(a.contribution) >= abs(b.contribution) }, "strongest first")
+        assertTrue(
+            explained.all { g -> ':' in g.labelKey && g.features.all { ':' in it.labelKey } },
+            "every label a key: $explained",
+        )
+        assertTrue(
+            explained.zipWithNext().all { (a, b) -> abs(a.contribution) >= abs(b.contribution) },
+            "strongest first",
+        )
         val onPage = items.getExplanation("site", "x1").body!!
         assertTrue(onPage.isNotEmpty() && onPage.all { it.features.isEmpty() }, "on a page $onPage")
         // What a model that had not seen a graded work says is read apart, fitted in the queue: being
@@ -555,7 +826,8 @@ class SiteTest {
         // a comparison under way is answered as it stands, not started again
         val comparison = comparisons.start("books")
         val again = comparisons.start("books")
-        if (again !== comparison) assertNotNull(comparison.finishedAt, "a second comparison started while the first was under way")
+        if (again !== comparison)
+            assertNotNull(comparison.finishedAt, "a second comparison started while the first was under way")
         val until = System.currentTimeMillis() + 60_000
         while (comparison.finishedAt == null && System.currentTimeMillis() < until) Thread.sleep(50)
         assertTrue(comparison.grades > 0, "measured on ${comparison.grades} grades")
@@ -568,19 +840,33 @@ class SiteTest {
         corrections.correctFacet("site", "s4", FacetCorrection(facet = "tags", added = true, name = "Совсем новый тег"))
         corrections.correctFacet("site", "s3", FacetCorrection(facet = "tags", added = true, name = "Совсем новый тег"))
         val graded = pages.getPage("https://site.example/work/s3").body!!.item!!
-        assertTrue(graded.facets.single { it.facet == "tags" }.propertyValues.any { it.name == "Совсем новый тег" }, "s3 ${graded.facets}")
+        assertTrue(
+            graded.facets.single { it.facet == "tags" }.propertyValues.any { it.name == "Совсем новый тег" },
+            "s3 ${graded.facets}",
+        )
 
         // The other works of the series, with the user's grades
         capture("s1|Space 1|space|Starships cross the galaxy 1|Pilot/Captain|Галактика")
         capture("s2|Space 2|space|Starships cross the galaxy 2|Pilot/Captain|Галактика")
         items.rateItem("site", "s2", RatingRequest(5))
         val series = items.getItem("site", "s1").body!!.related.single()
-        assertEquals(Triple("Галактика", ApiFacetRole.SERIES, listOf("s2")), Triple(series.name, series.role, series.items.map { it.item }))
+        assertEquals(
+            Triple("Галактика", ApiFacetRole.SERIES, listOf("s2")),
+            Triple(series.name, series.role, series.items.map { it.item }),
+        )
         assertEquals(5, series.items.single().grade)
 
         // The cards of a list get the works' grades
         items.rateItem("site", "s1", RatingRequest(4))
-        val cards = pages.getCards(CardsRequest("https://site.example/list", listOf("/work/s1", "/work/unknown", "https://elsewhere.example/work/s2"))).body!!
+        val cards =
+            pages
+                .getCards(
+                    CardsRequest(
+                        "https://site.example/list",
+                        listOf("/work/s1", "/work/unknown", "https://elsewhere.example/work/s2"),
+                    )
+                )
+                .body!!
         assertEquals(listOf("/work/s1"), cards.map { it.link })
         assertEquals(4, cards.single().grade)
 
@@ -593,7 +879,10 @@ class SiteTest {
         assertEquals(404, pages.getPage("https://nowhere.example/").statusCode.value())
 
         // An error says what is wrong: by the key of its words, filled with what was asked
-        val error = assertThrows<Refused> { corrections.correctFacet("site", "x1", FacetCorrection(facet = "nope", added = true, key = "x")) }
+        val error =
+            assertThrows<Refused> {
+                corrections.correctFacet("site", "x1", FacetCorrection(facet = "nope", added = true, key = "x"))
+            }
         assertEquals("standard:error.noField", error.refusal.key)
         assertEquals(mapOf("field" to "nope"), error.params)
     }
@@ -606,7 +895,10 @@ class SiteTest {
         assertEquals("fake:U1", added.value)
         assertEquals(2, added.characters)
         assertEquals(true, universes.searchUniverses("space").body!!.single().added)
-        assertEquals(listOf("Pilot", "The Pilot"), universes.listCharacters("fake", "U1").body!!.single { it.character == "C1" }.names)
+        assertEquals(
+            listOf("Pilot", "The Pilot"),
+            universes.listCharacters("fake", "U1").body!!.single { it.character == "C1" }.names,
+        )
         // The statements the site asked of the catalogue came with the characters, and are kept
         val pilot = stores.type("books")!!.universes.characters("fake", "U1").single { it.id == "C1" }
         assertEquals(mapOf("P1" to listOf("Space Pilot")), pilot.properties)
@@ -636,7 +928,17 @@ class SiteTest {
         // The universe is a value to pick for any work, linked to none yet; linked, it names itself
         assertTrue(items.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
         corrections.correctFacet("site", "u1", FacetCorrection(facet = "universe", added = true, key = "fake:U1"))
-        assertEquals("Space opera", items.getItem("site", "u1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.single { it.key == "fake:U1" }.name)
+        assertEquals(
+            "Space opera",
+            items
+                .getItem("site", "u1")
+                .body!!
+                .allFacets
+                .single { it.facet == "universe" }
+                .propertyValues
+                .single { it.key == "fake:U1" }
+                .name,
+        )
         assertEquals(1, universes.listUniverses().body!!.single { it.universe == "U1" }.works)
 
         // Removed, it takes its links with it
@@ -654,11 +956,19 @@ class SiteTest {
             capture("p$k|Pilots $k|space|Pilots fly starships in orbit near planets $k|Pilot/Captain")
             capture("q$k|Knights $k|dragons|A knight guards the princess in the castle $k|Knight/Princess")
         }
-        repeat(12) { k -> corrections.correctFacet("site", "p$k", FacetCorrection(facet = "universe", added = true, key = "fake:U2")) }
+        repeat(12) { k ->
+            corrections.correctFacet("site", "p$k", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
+        }
         // The user's word on half of them
         repeat(6) { k ->
-            listOf("fake:C1", "fake:C2").forEach { corrections.correctFacet("site", "p$k", FacetCorrection(facet = "characters", added = true, key = it)) }
-            corrections.correctFacet("site", "p$k", FacetCorrection(facet = "pairings", added = true, key = "pair:fake:C1|fake:C2"))
+            listOf("fake:C1", "fake:C2").forEach {
+                corrections.correctFacet("site", "p$k", FacetCorrection(facet = "characters", added = true, key = it))
+            }
+            corrections.correctFacet(
+                "site",
+                "p$k",
+                FacetCorrection(facet = "pairings", added = true, key = "pair:fake:C1|fake:C2"),
+            )
         }
         val store = stores.source("site")!!
         refresh(store)
@@ -668,7 +978,11 @@ class SiteTest {
 
         val facets = items.getItem("site", "p9").body!!.allFacets
         val characters = facets.single { it.facet == "characters" }.propertyValues
-        assertEquals(setOf("fake:C1", "fake:C2"), characters.filter { it.inferred == true }.map { it.key }.toSet(), "characters $characters")
+        assertEquals(
+            setOf("fake:C1", "fake:C2"),
+            characters.filter { it.inferred == true }.map { it.key }.toSet(),
+            "characters $characters",
+        )
         assertEquals("Pilot", characters.single { it.key == "fake:C1" }.name)
         val pairing = facets.single { it.facet == "pairings" }.propertyValues.single { it.offered != true }
         assertEquals("pair:fake:C1|fake:C2", pairing.key)
@@ -677,79 +991,160 @@ class SiteTest {
         val unanswered = characters.filter { it.corrected == null }
         assertEquals(1, unanswered.count { it.offered == true }, "characters $characters")
         assertTrue(unanswered.size >= 3, "characters $characters")
-        // A universe the model gives a work — more likely than not — lets it have the universe's characters, confirmed or not
-        fun outside() = items.getItem("site", "q9").body!!.allFacets.filter { it.facet == "characters" || it.facet == "pairings" }
-        val givenUniverse = items.getItem("site", "q9").body!!.allFacets.single { it.facet == "universe" }.propertyValues
-            .any { it.key == "fake:U2" && it.inferred == true }
+        // A universe the model gives a work — more likely than not — lets it have the universe's characters, confirmed
+        // or not
+        fun outside() =
+            items.getItem("site", "q9").body!!.allFacets.filter { it.facet == "characters" || it.facet == "pairings" }
+        val givenUniverse =
+            items
+                .getItem("site", "q9")
+                .body!!
+                .allFacets
+                .single { it.facet == "universe" }
+                .propertyValues
+                .any { it.key == "fake:U2" && it.inferred == true }
         if (givenUniverse) {
-            val chosen = outside().single { it.facet == "characters" }.propertyValues.map { it.key } +
-                suggestionsApi.getCandidates("site", "q9", "characters", null, null).body!!.map { it.key }
+            val chosen =
+                outside().single { it.facet == "characters" }.propertyValues.map { it.key } +
+                    suggestionsApi.getCandidates("site", "q9", "characters", null, null).body!!.map { it.key }
             assertTrue(chosen.any { it.startsWith("fake:C") }, "characters of q9 $chosen")
         }
-        // Said to have no universe, a work has no characters of one: only its site's line, and the original characters offered
+        // Said to have no universe, a work has no characters of one: only its site's line, and the original characters
+        // offered
         corrections.completeFacet("site", "q9", "universe")
         suggestionsApi.settleSuggestions("site", "q9")
         val none = outside()
-        assertTrue(none.all { f -> f.propertyValues.all { it.offered == true } && f.said.orEmpty().flatMap { it.words }.map { it.name } == listOf("Knight/Princess") }, "outside $none")
+        assertTrue(
+            none.all { f ->
+                f.propertyValues.all { it.offered == true } &&
+                    f.said.orEmpty().flatMap { it.words }.map { it.name } == listOf("Knight/Princess")
+            },
+            "outside $none",
+        )
         // Its site's line is shown above
-        assertEquals(listOf("Pilot/Captain"), facets.single { it.facet == "characters" }.said.orEmpty().flatMap { it.words }.map { it.name })
+        assertEquals(
+            listOf("Pilot/Captain"),
+            facets.single { it.facet == "characters" }.said.orEmpty().flatMap { it.words }.map { it.name },
+        )
 
         // A new work of the universe: every character it may have is offered, with how often its texts name them
         // A name of one word is a name written with a capital: the lower-case "captain" names nobody
-        capture("n1|The captain|space|The Captain commands. The Captain waits. The Captain sleeps, the captain of the guard does not|")
+        capture(
+            "n1|The captain|space|The Captain commands. The Captain waits. The Captain sleeps, the captain of the guard does not|"
+        )
         corrections.correctFacet("site", "n1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
         refresh(store)
-        // The models fitted after the quiet — here at once; how often its texts name every character is counted for its candidates alone
+        // The models fitted after the quiet — here at once; how often its texts name every character is counted for its
+        // candidates alone
         inBackground { suggestions.refresh(store) }
         // The candidates wait for nothing: they offer what the weights say now, the work's kept chances
         // are made in the queue of the computations; a value the card gives is never offered beside it
         val offered = suggestionsApi.getCandidates("site", "n1", "characters", null, null).body!!
-        val given = items.getItem("site", "n1").body!!.allFacets.find { it.facet == "characters" }?.propertyValues.orEmpty().filter { it.offered != true }.map { it.key }
-        assertEquals(setOf("fake:C1", "fake:C2", "oc:female", "oc:male"), (offered.map { it.key } + given).toSet(), "offered $offered, given $given")
+        val given =
+            items
+                .getItem("site", "n1")
+                .body!!
+                .allFacets
+                .find { it.facet == "characters" }
+                ?.propertyValues
+                .orEmpty()
+                .filter { it.offered != true }
+                .map { it.key }
+        assertEquals(
+            setOf("fake:C1", "fake:C2", "oc:female", "oc:male"),
+            (offered.map { it.key } + given).toSet(),
+            "offered $offered, given $given",
+        )
         assertTrue(offered.none { it.key in given }, "offered $offered, given $given")
         assertTrue(offered.zipWithNext().all { (a, b) -> a.chance!! >= b.chance!! }, "the likeliest first: $offered")
         offered.find { it.key == "fake:C2" }?.let { assertEquals(3, it.mentions) }
         // Given or offered as the model's chance falls (above): when offered, no text of the work names it
         offered.find { it.key == "oc:male" }?.let { assertEquals(0, it.mentions) }
         assertEquals("Captain", offered.find { it.key == "fake:C2" }?.name ?: "Captain")
-        // "…": the likeliest so many, then so many more of the rest the texts name three times at least, the most named first, each once
+        // "…": the likeliest so many, then so many more of the rest the texts name three times at least, the most named
+        // first, each once
         val more = suggestionsApi.getCandidates("site", "n1", "characters", 1, 2).body!!
-        val byText = offered.drop(1).filter { (it.mentions ?: 0) >= 3 }.sortedByDescending { it.mentions }.take(2).map { it.key }
+        val byText =
+            offered.drop(1).filter { (it.mentions ?: 0) >= 3 }.sortedByDescending { it.mentions }.take(2).map { it.key }
         assertEquals(offered.take(1).map { it.key } + byText, more.map { it.key }, "more $more of $offered")
         assertEquals(listOf(false) + byText.map { true }, more.map { it.named == true }, "more $more")
         // The passages naming a character, each by where it is: the annotation by the key of its label
         val quotes = suggestionsApi.getMentions("site", "n1", "characters", "fake:C2").body!!
-        assertTrue(quotes.isNotEmpty() && quotes.all { it.labelKey == "site:text.annotation" && it.title == null && it.part == null }, "quotes $quotes")
+        assertTrue(
+            quotes.isNotEmpty() &&
+                quotes.all { it.labelKey == "site:text.annotation" && it.title == null && it.part == null },
+            "quotes $quotes",
+        )
         assertEquals(404, suggestionsApi.getCandidates("site", "n1", "nope", null, null).statusCode.value())
 
         // A character is a work's main one or its secondary one: never shown, given or offered in both
-        fun keysOf(facet: String) = items.getItem("site", "n1").body!!.allFacets.find { it.facet == facet }?.propertyValues.orEmpty().map { it.key }
-        fun candidatesOf(facet: String) = suggestionsApi.getCandidates("site", "n1", facet, null, null).body!!.map { it.key }
-        // No work has a secondary character yet: nothing to learn from, every character of the universe offered all the same
+        fun keysOf(facet: String) =
+            items
+                .getItem("site", "n1")
+                .body!!
+                .allFacets
+                .find { it.facet == facet }
+                ?.propertyValues
+                .orEmpty()
+                .map { it.key }
+        fun candidatesOf(facet: String) =
+            suggestionsApi.getCandidates("site", "n1", facet, null, null).body!!.map { it.key }
+        // No work has a secondary character yet: nothing to learn from, every character of the universe offered all the
+        // same
         val untaught = suggestionsApi.getCandidates("site", "n1", "secondary-characters", null, null).body!!
         assertTrue(untaught.isNotEmpty() && untaught.all { it.chance == null }, "secondary $untaught")
         // Each with every name it goes by, the shown one first: a search finds it by any of them
         assertEquals(listOf("Pilot", "The Pilot"), untaught.first { it.key == "fake:C1" }.names)
         corrections.correctFacet("site", "n1", FacetCorrection(facet = "characters", added = true, key = "fake:C1"))
-        assertTrue("fake:C1" !in keysOf("secondary-characters") && "fake:C1" !in candidatesOf("secondary-characters"), "secondary ${keysOf("secondary-characters")}")
-        assertTrue("fake:C2" in keysOf("secondary-characters") + candidatesOf("secondary-characters") || "fake:C2" in keysOf("characters"))
+        assertTrue(
+            "fake:C1" !in keysOf("secondary-characters") && "fake:C1" !in candidatesOf("secondary-characters"),
+            "secondary ${keysOf("secondary-characters")}",
+        )
+        assertTrue(
+            "fake:C2" in keysOf("secondary-characters") + candidatesOf("secondary-characters") ||
+                "fake:C2" in keysOf("characters")
+        )
         // Said secondary, it leaves the main ones — the model's word yields to the user's
-        corrections.correctFacet("site", "n1", FacetCorrection(facet = "secondary-characters", added = true, key = "fake:C2"))
-        assertTrue("fake:C2" !in keysOf("characters") && "fake:C2" !in candidatesOf("characters"), "main ${keysOf("characters")}")
+        corrections.correctFacet(
+            "site",
+            "n1",
+            FacetCorrection(facet = "secondary-characters", added = true, key = "fake:C2"),
+        )
+        assertTrue(
+            "fake:C2" !in keysOf("characters") && "fake:C2" !in candidatesOf("characters"),
+            "main ${keysOf("characters")}",
+        )
         // Said main then, it is secondary no more: the earlier answer is taken back, not shown crossed out
         corrections.correctFacet("site", "n1", FacetCorrection(facet = "characters", added = true, key = "fake:C2"))
-        assertTrue("fake:C2" in keysOf("characters") && "fake:C2" !in keysOf("secondary-characters"), "main ${keysOf("characters")}, secondary ${keysOf("secondary-characters")}")
+        assertTrue(
+            "fake:C2" in keysOf("characters") && "fake:C2" !in keysOf("secondary-characters"),
+            "main ${keysOf("characters")}, secondary ${keysOf("secondary-characters")}",
+        )
         // The original characters are many persons: in both
         corrections.correctFacet("site", "n1", FacetCorrection(facet = "characters", added = true, key = "oc:female"))
         assertTrue("oc:female" in keysOf("secondary-characters") + candidatesOf("secondary-characters"))
         // Shown by the key of its words; its name, which the model reads, stays one language
-        val ofc = items.getItem("site", "n1").body!!.allFacets.single { it.facet == "characters" }.propertyValues.single { it.key == "oc:female" }
+        val ofc =
+            items
+                .getItem("site", "n1")
+                .body!!
+                .allFacets
+                .single { it.facet == "characters" }
+                .propertyValues
+                .single { it.key == "oc:female" }
         assertEquals("standard:character.oc-female", ofc.nameKey)
         assertEquals(UniverseFacet.ORIGINAL_CHARACTERS.getValue("oc:female"), ofc.name)
         // Every pair of the work's main characters is given or offered, a pair of characters added after the
         // fitting too: the model has no chance of it, offered all the same
-        val had = items.getItem("site", "n1").body!!.allFacets.single { it.facet == "characters" }.propertyValues
-            .filter { it.offered != true && it.corrected != FacetValueInfo.Corrected.REMOVED }.map { it.key }
+        val had =
+            items
+                .getItem("site", "n1")
+                .body!!
+                .allFacets
+                .single { it.facet == "characters" }
+                .propertyValues
+                .filter { it.offered != true && it.corrected != FacetValueInfo.Corrected.REMOVED }
+                .map { it.key }
         val mains = (had + UniverseFacet.ORIGINAL_CHARACTERS.keys).distinct().sorted()
         val pairs = mains.flatMapIndexed { k, a -> mains.drop(k + 1).map { b -> UniverseFacet.pairing(a, b) } }.toSet()
         assertTrue("pair:fake:C2|oc:female" in pairs, "pairs $pairs")
@@ -761,7 +1156,8 @@ class SiteTest {
         corrections.correctFacet("site", "f1", FacetCorrection(facet = "kind", added = true, key = "fanfiction"))
         refresh(store)
         inBackground { suggestions.refresh(store) }
-        val universes = items.getItem("site", "f1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.map { it.key }
+        val universes =
+            items.getItem("site", "f1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.map { it.key }
         val offeredUniverses = suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.map { it.key }
         assertEquals("fake:U2", (universes + offeredUniverses).first(), "given $universes, offered $offeredUniverses")
 
@@ -774,15 +1170,24 @@ class SiteTest {
         fun other(details: io.github.vlsergey.recommend4me.api.model.ItemDetails) =
             details.allFacets.single { it.facet == "universe" }.propertyValues.any { it.key == "fake:U1" } ||
                 suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.any { it.key == "fake:U1" }
-        // An answer is kept at once, the chances it changes made apart: the page reads the work again once they are made
-        fun settled(item: String) = suggestionsApi.settleSuggestions("site", item).let { items.getItem("site", item).body!! }
+        // An answer is kept at once, the chances it changes made apart: the page reads the work again once they are
+        // made
+        fun settled(item: String) =
+            suggestionsApi.settleSuggestions("site", item).let { items.getItem("site", item).body!! }
         corrections.correctFacet("site", "f1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
         assertTrue(other(settled("f1")))
         corrections.completeFacet("site", "f1", "universe")
         val named = settled("f1").allFacets.single { it.facet == "universe" }
         assertEquals(true, named.complete)
-        assertEquals(listOf("fake:U2"), named.propertyValues.filter { it.corrected != FacetValueInfo.Corrected.REMOVED }.map { it.key }, "values ${named.propertyValues}")
-        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.map { it.key })
+        assertEquals(
+            listOf("fake:U2"),
+            named.propertyValues.filter { it.corrected != FacetValueInfo.Corrected.REMOVED }.map { it.key },
+            "values ${named.propertyValues}",
+        )
+        assertEquals(
+            emptyList(),
+            suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.map { it.key },
+        )
         // Taken back, the others are offered again
         corrections.uncompleteFacet("site", "f1", "universe")
         val reopened = settled("f1")
@@ -792,25 +1197,57 @@ class SiteTest {
 
         // An original work, an alternative history and a realistic one have no universe of another's
         capture("o1|Our own world|space|Ships of the fleet|")
-        corrections.correctFacet("site", "o1", FacetCorrection(facet = "kind", added = true, key = "alternative-history"))
+        corrections.correctFacet(
+            "site",
+            "o1",
+            FacetCorrection(facet = "kind", added = true, key = "alternative-history"),
+        )
         capture("o2|A school year|school|Lessons and friends|")
         corrections.correctFacet("site", "o2", FacetCorrection(facet = "kind", added = true, key = "realism"))
         // A standard value is shown by its key
-        val kind = items.getItem("site", "o1").body!!.allFacets.single { it.facet == "kind" }.propertyValues.single { it.key == "alternative-history" }
+        val kind =
+            items
+                .getItem("site", "o1")
+                .body!!
+                .allFacets
+                .single { it.facet == "kind" }
+                .propertyValues
+                .single { it.key == "alternative-history" }
         assertEquals("standard:facet.kind.value.alternative-history", kind.nameKey)
-        assertTrue(items.listFilterValues("books", "kind").body!!.propertyValues.any { it.nameKey == "standard:facet.kind.value.realism" })
+        assertTrue(
+            items.listFilterValues("books", "kind").body!!.propertyValues.any {
+                it.nameKey == "standard:facet.kind.value.realism"
+            }
+        )
         inBackground { suggestions.refresh(store) }
-        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "o1", "universe", null, null).body!!.map { it.key })
-        assertEquals(emptyList(), suggestionsApi.getCandidates("site", "o2", "universe", null, null).body!!.map { it.key })
+        assertEquals(
+            emptyList(),
+            suggestionsApi.getCandidates("site", "o1", "universe", null, null).body!!.map { it.key },
+        )
+        assertEquals(
+            emptyList(),
+            suggestionsApi.getCandidates("site", "o2", "universe", null, null).body!!.map { it.key },
+        )
 
         // The user's own name of a character and of a universe over the catalogue's: shown everywhere in its place
-        fun characterName() = items.getItem("site", "p9").body!!.allFacets.single { it.facet == "characters" }.propertyValues.single { it.key == "fake:C1" }.name
+        fun characterName() =
+            items
+                .getItem("site", "p9")
+                .body!!
+                .allFacets
+                .single { it.facet == "characters" }
+                .propertyValues
+                .single { it.key == "fake:C1" }
+                .name
         this.universes.nameUniverseEntry("fake", "C1", LocalName("Лётчица"))
         assertEquals("Лётчица", characterName())
         // Kept as the universe is read again from the catalogue, its characters made anew
         this.universes.addUniverse(UniverseRef("fake", "U2"))
         assertEquals("Лётчица", characterName())
-        assertEquals(listOf("Лётчица", "Pilot"), this.universes.listCharacters("fake", "U2").body!!.single { it.character == "C1" }.names.take(2))
+        assertEquals(
+            listOf("Лётчица", "Pilot"),
+            this.universes.listCharacters("fake", "U2").body!!.single { it.character == "C1" }.names.take(2),
+        )
         this.universes.nameUniverseEntry("fake", "U2", LocalName("Флот"))
         val fleet = this.universes.listUniverses().body!!.single { it.universe == "U2" }
         assertEquals("Флот" to "Fleet", fleet.name to fleet.catalogueName)
@@ -828,7 +1265,8 @@ class SiteTest {
         dictionary().forEach { universes.removeUniverse("fake", it) }
         capture("g1|Wingmen|space|Two friends fly a starship|Space Pilot & Captain")
         fun facetsOf(id: String) = items.getItem("site", id).body!!.allFacets
-        fun valueOf(id: String, facet: String, key: String) = facetsOf(id).find { it.facet == facet }?.propertyValues?.find { it.key == key }
+        fun valueOf(id: String, facet: String, key: String) =
+            facetsOf(id).find { it.facet == facet }?.propertyValues?.find { it.key == key }
         assertNull(valueOf("g1", "characters", "fake:C1"))
 
         // The universe added: its pilot is stated to be the site's "Space Pilot" — drafted a main character
@@ -856,7 +1294,8 @@ class SiteTest {
         val made = pairingsApi.getPairing(UniverseFacets.pairing("fake:C2", "fake:C1")).body!!
         assertEquals(UniverseFacets.pairing("fake:C1", "fake:C2"), made.key)
         assertEquals(setOf("Pilot", "Captain"), made.characters.map { it.name }.toSet())
-        fun toMark(answered: Boolean = false, order: MarkingOrder = MarkingOrder.LIKELY) = marking.getMarkingWorks(UniverseFacets.PAIRINGS, made.key, answered, order, 0, 50).body!!.works
+        fun toMark(answered: Boolean = false, order: MarkingOrder = MarkingOrder.LIKELY) =
+            marking.getMarkingWorks(UniverseFacets.PAIRINGS, made.key, answered, order, 0, 50).body!!.works
         assertTrue(toMark().map { it.item }.containsAll(listOf("g1", "g2")), "to mark: ${toMark().map { it.item }}")
         assertEquals(listOf("Space Pilot & Captain"), toMark().first { it.item == "g1" }.lines.map { it.line })
         // Yes: the pairing the work's, its two characters its main ones; not clear: nothing written, asked no more
@@ -864,20 +1303,49 @@ class SiteTest {
         val before = counted()
         marking.answerMarking(MarkAnswer("site", "g1", UniverseFacets.PAIRINGS, made.key, MarkVerdict.YES))
         marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, made.key, MarkVerdict.UNKNOWN))
-        val g1 = stores.source("site")!!.corrections.facetsOf("g1").filter { it.added }.map { it.facet to it.key }.toSet()
-        assertTrue(g1.containsAll(setOf(UniverseFacets.PAIRINGS to made.key, UniverseFacets.CHARACTERS to "fake:C1", UniverseFacets.CHARACTERS to "fake:C2")), "g1: $g1")
+        val g1 =
+            stores.source("site")!!.corrections.facetsOf("g1").filter { it.added }.map { it.facet to it.key }.toSet()
+        assertTrue(
+            g1.containsAll(
+                setOf(
+                    UniverseFacets.PAIRINGS to made.key,
+                    UniverseFacets.CHARACTERS to "fake:C1",
+                    UniverseFacets.CHARACTERS to "fake:C2",
+                )
+            ),
+            "g1: $g1",
+        )
         assertTrue(stores.source("site")!!.corrections.facetsOf("g2").none { it.facet == UniverseFacets.PAIRINGS })
         assertTrue(toMark().none { it.item in setOf("g1", "g2") })
-        assertEquals(mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.UNKNOWN), toMark(answered = true).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer })
+        assertEquals(
+            mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.UNKNOWN),
+            toMark(answered = true).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer },
+        )
         assertEquals(Triple(before.first + 1, before.second, before.third + 1), counted())
         // No: answered so, the characters as they were
         marking.answerMarking(MarkAnswer("site", "g2", UniverseFacets.PAIRINGS, made.key, MarkVerdict.NO))
-        assertEquals(listOf(false), stores.source("site")!!.corrections.facetsOf("g2").filter { it.facet == UniverseFacets.PAIRINGS }.map { it.added })
+        assertEquals(
+            listOf(false),
+            stores
+                .source("site")!!
+                .corrections
+                .facetsOf("g2")
+                .filter { it.facet == UniverseFacets.PAIRINGS }
+                .map { it.added },
+        )
         assertTrue(stores.source("site")!!.corrections.facetsOf("g2").none { it.facet == UniverseFacets.CHARACTERS })
         // Every order shows the same works, each as it was answered on
         MarkingOrder.entries.forEach { order ->
-            assertEquals(toMark().map { it.item }.toSet(), toMark(order = order).map { it.item }.toSet(), "open, $order")
-            assertEquals(mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.NO), toMark(true, order).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer }, "answered, $order")
+            assertEquals(
+                toMark().map { it.item }.toSet(),
+                toMark(order = order).map { it.item }.toSet(),
+                "open, $order",
+            )
+            assertEquals(
+                mapOf("g1" to MarkVerdict.YES, "g2" to MarkVerdict.NO),
+                toMark(true, order).filter { it.item in setOf("g1", "g2") }.associate { it.item to it.answer },
+                "answered, $order",
+            )
         }
         // Taken back: the works to mark again, as they were before
         listOf("g1", "g2").forEach { marking.unanswerMarking("site", it, UniverseFacets.PAIRINGS, made.key) }
@@ -931,7 +1399,10 @@ class SiteTest {
         captures.capturePage(CaptureRequest(SiteSource.describe("wrecks"), "Ships broken apart"))
         captures.capturePage(CaptureRequest(SiteSource.describe("hulks"), ""))
         val described = tagsApi.getTag(wrecks).body!!
-        assertEquals(listOf("Ships broken apart"), described.descriptions.filter { it.origin == "site" }.map { it.text })
+        assertEquals(
+            listOf("Ships broken apart"),
+            described.descriptions.filter { it.origin == "site" }.map { it.text },
+        )
         assertEquals(emptyList(), described.awaitedDescriptions)
         assertEquals(emptyList(), tagsApi.getTag(hulks).body!!.awaitedDescriptions)
         assertEquals(emptyList(), capture("w3|Wreck three|wrecks,hulks|A third wreck|").body!!.wanted)
@@ -964,7 +1435,10 @@ class SiteTest {
         refresh(stores.source("site")!!)
         // The synonyms variants of the tag, of no work, with their names: the tag found by them
         val ofCargo = tagsApi.getTag(cargo).body!!.variants.associate { it.tag to (it.name to it.works) }
-        assertEquals(mapOf("cargo" to ("Cargo" to 1), "freight" to ("Freight" to 0), "shipment" to ("Shipment" to 0)), ofCargo)
+        assertEquals(
+            mapOf("cargo" to ("Cargo" to 1), "freight" to ("Freight" to 0), "shipment" to ("Shipment" to 0)),
+            ofCargo,
+        )
         assertTrue(tagsApi.listTags("shipment", null, null, null, 0, 10).body!!.tags.any { it.key == cargo })
 
         // Offered alike: the other tags of the sites, with how alike their names are; the site's own tag of it, merged
@@ -1000,7 +1474,14 @@ class SiteTest {
         assertEquals(TagNameRule.EXPLICIT, named.rule)
         // Named by the user: the sites' names all follow it, in the same order
         assertEquals(listOf("Starhulls", "Hulls"), named.names)
-        val shown = items.getItem("site", "t3").body!!.allFacets.single { it.facet == "tags" }.propertyValues.single { it.key == hulls }
+        val shown =
+            items
+                .getItem("site", "t3")
+                .body!!
+                .allFacets
+                .single { it.facet == "tags" }
+                .propertyValues
+                .single { it.key == hulls }
         assertEquals("Корпуса", shown.name)
         // Found by the name of a site's tag of it, not its own; once, by its own name; the rest by meaning
         val found = items.listFacetValues("site", "tags", "starhull", 10).body!!
@@ -1016,14 +1497,19 @@ class SiteTest {
         val bound = tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", true)).body!!
         assertEquals("Корпус" to TagNameRule.CATALOGUE, bound.name to bound.rule)
         assertEquals(setOf("Hull", "Корпус", "Ship hull"), bound.catalogueEntries.single().names.toSet())
-        assertEquals(listOf(hulls to "Корпус"), tagsApi.findTagEntries("E1").body!!.single().tags.map { it.key to it.name })
+        assertEquals(
+            listOf(hulls to "Корпус"),
+            tagsApi.findTagEntries("E1").body!!.single().tags.map { it.key to it.name },
+        )
         // Found by any name of its entry, in any language
         assertTrue(tagsApi.listTags("ship hull", null, null, null, 0, 10).body!!.tags.any { it.key == hulls })
         // Filtered by what it comes from: the site and the catalogue it is bound to an entry of
         val ofCatalogue = tagsApi.listTags(null, listOf("fake"), null, null, 0, 1000).body!!
         assertEquals(listOf("site", "fake"), ofCatalogue.sources)
         assertEquals(listOf(hulls), ofCatalogue.tags.map { it.key })
-        assertTrue(tagsApi.listTags(null, listOf("site"), listOf("fake"), null, 0, 1000).body!!.tags.none { it.key == hulls })
+        assertTrue(
+            tagsApi.listTags(null, listOf("site"), listOf("fake"), null, 0, 1000).body!!.tags.none { it.key == hulls }
+        )
         assertTrue(tagsApi.listTags(null, listOf("site"), null, null, 0, 1000).body!!.tags.any { it.key == hulls })
         // Ignored: kept with the work and found by the filter, never read by the model of the grades
         val t3Key = ItemKey("site", "t3")
@@ -1033,7 +1519,15 @@ class SiteTest {
         assertEquals(listOf(hulls), tagsApi.listTags(null, null, null, true, 0, 1000).body!!.tags.map { it.key })
         assertTrue(tagsApi.listTags(null, null, null, false, 0, 1000).body!!.tags.none { it.key == hulls })
         assertTrue(feature !in catalogueReader.item(stores.type("books")!!, t3Key)!!.categorical)
-        assertTrue(items.getItem("site", "t3").body!!.allFacets.single { it.facet == "tags" }.propertyValues.any { it.key == hulls })
+        assertTrue(
+            items
+                .getItem("site", "t3")
+                .body!!
+                .allFacets
+                .single { it.facet == "tags" }
+                .propertyValues
+                .any { it.key == hulls }
+        )
         // Never offered to mark: not among the candidates, not found to add
         assertTrue(suggestionsApi.getCandidates("site", "t2", "tags", null, null).body!!.none { it.key == hulls })
         assertTrue(items.listFacetValues("site", "tags", "hull", 10).body!!.none { it.key == hulls })
@@ -1041,7 +1535,8 @@ class SiteTest {
         assertTrue(!tagsApi.ignoreTag(TagIgnoredRequest(hulls, false)).body!!.ignored)
         assertTrue(items.listFacetValues("site", "tags", "hull", 10).body!!.any { it.key == hulls })
         assertTrue(feature in catalogueReader.item(stores.type("books")!!, t3Key)!!.categorical)
-        // A second entry besides: the one bound first still names it; the descriptions of the site's tag's page first, then of each entry
+        // A second entry besides: the one bound first still names it; the descriptions of the site's tag's page first,
+        // then of each entry
         stores.source("site")!!.items.describeFacetValues(Books.TAG.key, mapOf("hulls" to "The hulls of ships"))
         val both = tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E2", true)).body!!
         assertEquals(listOf("E1", "E2"), both.catalogueEntries.map { it.entry })
@@ -1061,12 +1556,19 @@ class SiteTest {
         assertEquals(emptyList(), unbound.catalogueEntries)
         assertEquals(TagNameRule.LIKED, unbound.rule)
 
-        // A hull is a kind of vessel in the catalogue: the tag of the vessel offered above the hulls, the hulls under it
+        // A hull is a kind of vessel in the catalogue: the tag of the vessel offered above the hulls, the hulls under
+        // it
         tagsApi.bindTagEntry(TagEntryRequest(hulls, "fake", "E1", true))
         tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E2", true))
         val offered = tagsApi.getTag(hulls).body!!.catalogueOffers.single()
-        assertEquals(Triple(cargo, TagRelation.PARENT, listOf("Корпус", "Судно")), Triple(offered.tag.key, offered.relation, offered.path))
-        assertEquals(listOf(hulls to TagRelation.CHILD), tagsApi.getTag(cargo).body!!.catalogueOffers.map { it.tag.key to it.relation })
+        assertEquals(
+            Triple(cargo, TagRelation.PARENT, listOf("Корпус", "Судно")),
+            Triple(offered.tag.key, offered.relation, offered.path),
+        )
+        assertEquals(
+            listOf(hulls to TagRelation.CHILD),
+            tagsApi.getTag(cargo).body!!.catalogueOffers.map { it.tag.key to it.relation },
+        )
         // Read again from the card: the same entries, the same offer
         assertEquals(listOf("E1"), tagsApi.refreshTagEntries(hulls).body!!.catalogueEntries.map { it.entry })
         // The page's offers: the hulls under the cargo; no new tag above both, where the cargo's own entry is
@@ -1082,7 +1584,10 @@ class SiteTest {
         tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E2", false))
         tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E4", true))
         val above = offers().single()
-        assertEquals(Triple(HierarchyOfferKind.NEW_PARENT, "E3", setOf(hulls, cargo)), Triple(above.kind, above.entry, above.tags.map { it.key }.toSet()))
+        assertEquals(
+            Triple(HierarchyOfferKind.NEW_PARENT, "E3", setOf(hulls, cargo)),
+            Triple(above.kind, above.entry, above.tags.map { it.key }.toSet()),
+        )
         // Said too general: still listed, as rejected — the screen hides it unless asked — and taken back
         tagsApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E3", true))
         assertEquals(listOf(true), offers().map { it.rejected })
@@ -1098,8 +1603,12 @@ class SiteTest {
         // A tag of the entry's name there already, bound to it not: that tag offered above both, not a new one
         tagsApi.nameTag(TagNameRequest(craft.key, "Аппарат"))
         val bind = offers().single()
-        assertEquals(Triple(HierarchyOfferKind.BIND_PARENT, craft.key, setOf(hulls, cargo)), Triple(bind.kind, bind.existing?.key, bind.tags.map { it.key }.toSet()))
-        val boundAbove = tagsApi.createTagAbove(TagAboveRequest("fake", "E3", bind.tags.map { it.key }, craft.key)).body!!
+        assertEquals(
+            Triple(HierarchyOfferKind.BIND_PARENT, craft.key, setOf(hulls, cargo)),
+            Triple(bind.kind, bind.existing?.key, bind.tags.map { it.key }.toSet()),
+        )
+        val boundAbove =
+            tagsApi.createTagAbove(TagAboveRequest("fake", "E3", bind.tags.map { it.key }, craft.key)).body!!
         assertEquals(craft.key to listOf("E3"), boundAbove.key to boundAbove.catalogueEntries.map { it.entry })
         assertEquals(setOf(hulls, cargo), boundAbove.children.map { it.key }.toSet())
         // The hulls put under the cargo too: right under the craft over the cargo's head — offered to be taken away
@@ -1112,7 +1621,8 @@ class SiteTest {
         tagsApi.bindTagEntry(TagEntryRequest(craft.key, "fake", "E3", false))
 
         // A vessel said too general: the craft, more general still, offered above the hull and the sail no more
-        fun newAbove() = offers().filter { it.kind == HierarchyOfferKind.NEW_PARENT || it.kind == HierarchyOfferKind.BIND_PARENT }
+        fun newAbove() =
+            offers().filter { it.kind == HierarchyOfferKind.NEW_PARENT || it.kind == HierarchyOfferKind.BIND_PARENT }
         assertEquals(listOf("E3"), newAbove().map { it.entry })
         tagsApi.judgeTagEntryTooGeneral(TooGeneralRequest("fake", "E2", true))
         assertEquals(emptyList(), newAbove())
@@ -1123,7 +1633,10 @@ class SiteTest {
         // vessel, is above the two already: the vessel would say nothing the craft does not
         tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E4", false))
         tagsApi.bindTagEntry(TagEntryRequest(cargo, "fake", "E6", true))
-        assertEquals(listOf("E2" to setOf(hulls, cargo)), newAbove().map { it.entry to it.tags.map { t -> t.key }.toSet() })
+        assertEquals(
+            listOf("E2" to setOf(hulls, cargo)),
+            newAbove().map { it.entry to it.tags.map { t -> t.key }.toSet() },
+        )
         tagsApi.createTagAbove(TagAboveRequest("fake", "E3", listOf(hulls, cargo), craft.key))
         assertEquals(emptyList(), newAbove())
         tagsApi.relateTags(TagRelationRequest(craft.key, hulls, TagRelation.NONE))
@@ -1134,7 +1647,14 @@ class SiteTest {
 
         // Both site's tags merged rows of it; one taken out, to a new tag of its own; the answer stays with the tag
         fun rows() = tagsApi.listSimilarTags(hulls, null, 0, 50, null, null).body!!.tags
-        assertEquals(setOf("hulls", "starhulls"), rows().filter { it.site != null }.onEach { assertEquals(TagRelation.MERGED, it.relation) }.map { it.site!!.tag }.toSet())
+        assertEquals(
+            setOf("hulls", "starhulls"),
+            rows()
+                .filter { it.site != null }
+                .onEach { assertEquals(TagRelation.MERGED, it.relation) }
+                .map { it.site!!.tag }
+                .toSet(),
+        )
         val takenOut = tagsApi.bindSiteTag(TagBindingRequest("site", "starhulls")).body!!
         assertTrue(takenOut.key != hulls && takenOut.key != starhulls, "a new tag ${takenOut.key}")
         // Counted in the queue after the quiet — here at once
@@ -1142,10 +1662,16 @@ class SiteTest {
         val out = tagsApi.getTag(takenOut.key).body!!
         assertEquals(2, out.works)
         assertEquals(listOf("hulls"), tagsApi.getTag(hulls).body!!.variants.map { it.tag })
-        assertEquals(listOf(hulls to true), stores.source("site")!!.corrections.facetsOf("t3").filter { it.facet == "tags" }.map { it.key to it.added })
+        assertEquals(
+            listOf(hulls to true),
+            stores.source("site")!!.corrections.facetsOf("t3").filter { it.facet == "tags" }.map { it.key to it.added },
+        )
         val other = out.key
         // One row of it among the alike, not merged
-        assertEquals(listOf(TagRelation.NONE), rows().filter { it.tag.key == other && it.site == null }.map { it.relation })
+        assertEquals(
+            listOf(TagRelation.NONE),
+            rows().filter { it.tag.key == other && it.site == null }.map { it.relation },
+        )
 
         // Told apart: stays among the alike, marked, whatever its likeness
         fun relationOf(key: String) = rows().singleOrNull { it.tag.key == key && it.site == null }?.relation
@@ -1154,10 +1680,16 @@ class SiteTest {
         // The rows of a relation hidden on the server, the total without them
         val all = tagsApi.listSimilarTags(hulls, null, 0, 50, null, null).body!!
         val noDifferent = tagsApi.listSimilarTags(hulls, null, 0, 50, null, listOf(TagRelation.DIFFERENT)).body!!
-        assertTrue(noDifferent.tags.none { it.relation == TagRelation.DIFFERENT }, "hidden ${noDifferent.tags.map { it.relation }}")
+        assertTrue(
+            noDifferent.tags.none { it.relation == TagRelation.DIFFERENT },
+            "hidden ${noDifferent.tags.map { it.relation }}",
+        )
         assertEquals(all.total - 1, noDifferent.total)
         // A page at a time: the pages one after another are the whole table
-        val paged = (0 until all.total).chunked(1).flatMap { tagsApi.listSimilarTags(hulls, null, it.first(), 1, null, null).body!!.tags }
+        val paged =
+            (0 until all.total).chunked(1).flatMap {
+                tagsApi.listSimilarTags(hulls, null, it.first(), 1, null, null).body!!.tags
+            }
         assertEquals(all.tags.map { it.tag.key to it.site?.tag }, paged.map { it.tag.key to it.site?.tag })
         // Searched for: alike the text, not the tag — all the rows, in another order
         val searched = tagsApi.listSimilarTags(hulls, "freight cargo", 0, 50, null, null).body!!
@@ -1185,32 +1717,66 @@ class SiteTest {
         tagsApi.relateTags(TagRelationRequest(cargo, other, TagRelation.NONE))
         // A tag never under its own descendant: other under hulls under cargo, and cargo not under other
         tagsApi.relateTags(TagRelationRequest(cargo, hulls, TagRelation.CHILD))
-        assertEquals(Refusal.TAG_ABOVE, assertThrows<Refused> { tagsApi.relateTags(TagRelationRequest(other, cargo, TagRelation.CHILD)) }.refusal)
+        assertEquals(
+            Refusal.TAG_ABOVE,
+            assertThrows<Refused> { tagsApi.relateTags(TagRelationRequest(other, cargo, TagRelation.CHILD)) }.refusal,
+        )
         tagsApi.relateTags(TagRelationRequest(cargo, hulls, TagRelation.NONE))
         // The parent of a child the user confirmed is not taken away: the work has it by the child
-        val implied = assertThrows<Refused> { corrections.correctFacet("site", "t2", FacetCorrection(facet = "tags", added = false, key = hulls)) }
+        val implied =
+            assertThrows<Refused> {
+                corrections.correctFacet("site", "t2", FacetCorrection(facet = "tags", added = false, key = hulls))
+            }
         assertEquals(Refusal.TAG_IMPLIED, implied.refusal)
         // The answer on the child taken back, the parent taken away: the child goes with it, not shown at all
         corrections.uncorrectFacet("site", "t2", "tags", other)
         corrections.correctFacet("site", "t2", FacetCorrection(facet = "tags", added = false, key = hulls))
         assertTrue(tagsOf("t2").none { it.key == other }, "tags ${tagsOf("t2")}")
-        assertEquals(io.github.vlsergey.recommend4me.api.model.FacetValueInfo.Corrected.REMOVED, tagsOf("t2").single { it.key == hulls }.corrected)
+        assertEquals(
+            io.github.vlsergey.recommend4me.api.model.FacetValueInfo.Corrected.REMOVED,
+            tagsOf("t2").single { it.key == hulls }.corrected,
+        )
         // Nor offered among the candidates
         val candidates = suggestionsApi.getCandidates("site", "t2", "tags", null, null).body!!.map { it.key }
         assertTrue(other !in candidates, "candidates of t2 $candidates")
         // The other way round: above it
-        assertEquals(listOf(other), tagsApi.relateTags(TagRelationRequest(hulls, other, TagRelation.PARENT)).body!!.parents.map { it.key })
+        assertEquals(
+            listOf(other),
+            tagsApi.relateTags(TagRelationRequest(hulls, other, TagRelation.PARENT)).body!!.parents.map { it.key },
+        )
         tagsApi.relateTags(TagRelationRequest(hulls, other, TagRelation.NONE))
         assertEquals(TagRelation.NONE, relationOf(other) ?: TagRelation.NONE)
 
-        // A tag the user makes up on a work by its name: a new normalized tag of that name; the same name again, the same tag
+        // A tag the user makes up on a work by its name: a new normalized tag of that name; the same name again, the
+        // same tag
         // The answer is only written: it tells the key found or made, nothing of the work read back
-        val made = corrections.correctFacet("site", "t1", FacetCorrection(facet = "tags", added = true, name = "Пустота")).body!!
+        val made =
+            corrections
+                .correctFacet("site", "t1", FacetCorrection(facet = "tags", added = true, name = "Пустота"))
+                .body!!
         val void = made.key
         assertEquals("Пустота", made.name)
-        assertEquals(void, items.getItem("site", "t1").body!!.allFacets.single { it.facet == "tags" }.propertyValues.single { it.name == "Пустота" }.key)
+        assertEquals(
+            void,
+            items
+                .getItem("site", "t1")
+                .body!!
+                .allFacets
+                .single { it.facet == "tags" }
+                .propertyValues
+                .single { it.name == "Пустота" }
+                .key,
+        )
         assertEquals("Пустота", type.tags.explicitNames()[TagRepository.idOf(void)])
         corrections.correctFacet("site", "t3", FacetCorrection(facet = "tags", added = true, name = "пустота"))
-        assertEquals(void, stores.source("site")!!.corrections.facetsOf("t3").single { it.facet == "tags" && it.added && it.key != hulls }.key)
+        assertEquals(
+            void,
+            stores
+                .source("site")!!
+                .corrections
+                .facetsOf("t3")
+                .single { it.facet == "tags" && it.added && it.key != hulls }
+                .key,
+        )
     }
 }

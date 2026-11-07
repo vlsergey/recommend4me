@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.database
 
-import org.jooq.ConnectionProvider
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -14,14 +13,14 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.SQLFeatureNotSupportedException
 import javax.sql.DataSource
+import org.jooq.ConnectionProvider
 
 /**
- * THE CONNECTIONS jOOQ WRITES BYTES BY: as bytes, not as a LOB. jOOQ binds every `byte[]` for H2 as
- * a Blob of the connection — `createBlob()`, then `setBlob` — and H2 writes such a Blob to its file
- * as a temporary LOB, kept till the connection is closed: every write of bytes — a model's scoring,
- * a page, a picture — written to the file twice, the copy left in it for as long as the pooled
- * connection lives, and no compaction gives its space back meanwhile. Of these connections the Blob
- * is an array in memory, set as the bytes it holds.
+ * THE CONNECTIONS jOOQ WRITES BYTES BY: as bytes, not as a LOB. jOOQ binds every `byte[]` for H2 as a Blob of the
+ * connection — `createBlob()`, then `setBlob` — and H2 writes such a Blob to its file as a temporary LOB, kept till the
+ * connection is closed: every write of bytes — a model's scoring, a page, a picture — written to the file twice, the
+ * copy left in it for as long as the pooled connection lives, and no compaction gives its space back meanwhile. Of
+ * these connections the Blob is an array in memory, set as the bytes it holds.
  */
 internal class InlineBlobs(private val source: DataSource) : ConnectionProvider {
 
@@ -31,13 +30,16 @@ internal class InlineBlobs(private val source: DataSource) : ConnectionProvider 
 
     private fun proxy(connection: Connection): Connection {
         lateinit var self: Connection
-        self = proxy(connection, Connection::class.java) { method, call ->
-            if (method.name == "createBlob") Bytes() else when (val result = call()) {
-                is CallableStatement -> statement(result, self, CallableStatement::class.java)
-                is PreparedStatement -> statement(result, self, PreparedStatement::class.java)
-                else -> result
+        self =
+            proxy(connection, Connection::class.java) { method, call ->
+                if (method.name == "createBlob") Bytes()
+                else
+                    when (val result = call()) {
+                        is CallableStatement -> statement(result, self, CallableStatement::class.java)
+                        is PreparedStatement -> statement(result, self, PreparedStatement::class.java)
+                        else -> result
+                    }
             }
-        }
         return self
     }
 
@@ -46,23 +48,34 @@ internal class InlineBlobs(private val source: DataSource) : ConnectionProvider 
         proxy(statement, type) { method, call ->
             val args = call.args
             when {
-                method.name == "setBlob" && args?.size == 2 && args[1] is Bytes -> statement.setBytes(args[0] as Int, (args[1] as Bytes).bytes)
+                method.name == "setBlob" && args?.size == 2 && args[1] is Bytes ->
+                    statement.setBytes(args[0] as Int, (args[1] as Bytes).bytes)
                 method.name == "getConnection" -> connection
                 else -> call()
             }
         }
 
-    /** The [target] as [type], every call to it made by [around]: the target itself to [java.sql.Wrapper.unwrap], H2's own classes reached through it. */
+    /**
+     * The [target] as [type], every call to it made by [around]: the target itself to [java.sql.Wrapper.unwrap], H2's
+     * own classes reached through it.
+     */
     private fun <T : Any> proxy(target: T, type: Class<T>, around: (Method, Call) -> Any?): T =
-        type.cast(Proxy.newProxyInstance(javaClass.classLoader, arrayOf(type), InvocationHandler { _, method, args -> around(method, Call(target, method, args)) }))
+        type.cast(
+            Proxy.newProxyInstance(
+                javaClass.classLoader,
+                arrayOf(type),
+                InvocationHandler { _, method, args -> around(method, Call(target, method, args)) },
+            )
+        )
 
     /** A call to the target as it was asked for. */
     private class Call(private val target: Any, private val method: Method, val args: Array<out Any?>?) {
-        operator fun invoke(): Any? = try {
-            method.invoke(target, *(args ?: emptyArray()))
-        } catch (e: InvocationTargetException) {
-            throw e.targetException
-        }
+        operator fun invoke(): Any? =
+            try {
+                method.invoke(target, *(args ?: emptyArray()))
+            } catch (e: InvocationTargetException) {
+                throw e.targetException
+            }
     }
 
     /** A Blob of bytes in memory: what jOOQ writes into one and sets, nothing more. */
@@ -72,7 +85,8 @@ internal class InlineBlobs(private val source: DataSource) : ConnectionProvider 
 
         override fun length() = bytes.size.toLong()
 
-        override fun getBytes(pos: Long, length: Int): ByteArray = bytes.copyOfRange((pos - 1).toInt(), minOf(bytes.size, (pos - 1).toInt() + length))
+        override fun getBytes(pos: Long, length: Int): ByteArray =
+            bytes.copyOfRange((pos - 1).toInt(), minOf(bytes.size, (pos - 1).toInt() + length))
 
         override fun getBinaryStream(): InputStream = ByteArrayInputStream(bytes)
 
@@ -97,6 +111,7 @@ internal class InlineBlobs(private val source: DataSource) : ConnectionProvider 
             bytes = bytes.copyOf(len.toInt())
         }
 
-        override fun getBinaryStream(pos: Long, length: Long): InputStream = ByteArrayInputStream(bytes, (pos - 1).toInt(), length.toInt())
+        override fun getBinaryStream(pos: Long, length: Long): InputStream =
+            ByteArrayInputStream(bytes, (pos - 1).toInt(), length.toInt())
     }
 }

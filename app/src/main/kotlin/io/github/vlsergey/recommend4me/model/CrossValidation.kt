@@ -24,21 +24,22 @@ data class RankingMetrics(
 /** One value of the scorer's parameter with its out-of-fold quality: what the model keeps of its choice. */
 data class RankingResult(val parameter: Double, val metrics: RankingMetrics)
 
-/** One value of the parameter with its out-of-fold quality and the out-of-fold standardised scores of the rated rows. */
+/**
+ * One value of the parameter with its out-of-fold quality and the out-of-fold standardised scores of the rated rows.
+ */
 class RankingCandidate(val parameter: Double, val metrics: RankingMetrics, val scores: DoubleArray) {
     fun result() = RankingResult(parameter, metrics)
 }
 
 /**
- * THE SCORER'S PARAMETER IS CHOSEN BY THE CONCORDANCE ON CROSS-VALIDATION over works (two ratings
- * of one work never fall into different folds), under the one-standard-error rule: of the values no
- * further from the best than its standard error, the most cautious — the first of the scorer's list.
+ * THE SCORER'S PARAMETER IS CHOSEN BY THE CONCORDANCE ON CROSS-VALIDATION over works (two ratings of one work never
+ * fall into different folds), under the one-standard-error rule: of the values no further from the best than its
+ * standard error, the most cautious — the first of the scorer's list.
  *
- * THE SCALE COMES AFTERWARDS, FROM THE DATA ([ladder], [Scale]): on the scorer's line every grade
- * is a cloud of its works; the centre of the lowest grade becomes 0, that of the highest 10, and
- * every other grade lands where its centre lies between them. The centres are taken from
- * cross-validation — from works each fold's model had not seen — because on its own training works
- * a model spreads the clouds wider than they will be on new ones.
+ * THE SCALE COMES AFTERWARDS, FROM THE DATA ([ladder], [Scale]): on the scorer's line every grade is a cloud of its
+ * works; the centre of the lowest grade becomes 0, that of the highest 10, and every other grade lands where its centre
+ * lies between them. The centres are taken from cross-validation — from works each fold's model had not seen — because
+ * on its own training works a model spreads the clouds wider than they will be on new ones.
  */
 object CrossValidation {
 
@@ -46,10 +47,7 @@ object CrossValidation {
     const val MIN_WORKS = 6
     private const val MAX_FOLDS = 5
 
-    /**
-     * Fold of every rating: works dealt round-robin by their last grade, so every fold sees every
-     * grade.
-     */
+    /** Fold of every rating: works dealt round-robin by their last grade, so every fold sees every grade. */
     fun folds(grades: IntArray, works: LongArray): IntArray {
         val distinct = works.distinct()
         val k = minOf(MAX_FOLDS, distinct.size / 2)
@@ -67,7 +65,9 @@ object CrossValidation {
         return folds
     }
 
-    /** Share of the pairs of [rows] of different grades and works put in the right order by [scores] (ties count half). */
+    /**
+     * Share of the pairs of [rows] of different grades and works put in the right order by [scores] (ties count half).
+     */
     fun concordance(grades: IntArray, works: LongArray, rows: IntArray, scores: DoubleArray): Double? {
         var right = 0.0
         var pairs = 0
@@ -82,11 +82,11 @@ object CrossValidation {
     }
 
     /**
-     * Cross-validates [scorer] with every one of its candidate parameters on the rows [xFor] gives
-     * (the works under test given, for features that depend on them; [task]'s own when they do not),
-     * in the scorer's order. The folds in parallel, every fold fitting every parameter at once
-     * ([Scorer.fitEach]). A fold's scores are standardised by the fold's model on its own training
-     * rows, so all folds share one scale; the concordance is counted within every fold and averaged.
+     * Cross-validates [scorer] with every one of its candidate parameters on the rows [xFor] gives (the works under
+     * test given, for features that depend on them; [task]'s own when they do not), in the scorer's order. The folds in
+     * parallel, every fold fitting every parameter at once ([Scorer.fitEach]). A fold's scores are standardised by the
+     * fold's model on its own training rows, so all folds share one scale; the concordance is counted within every fold
+     * and averaged.
      */
     fun measureAll(task: RankingTask, scorer: Scorer, xFor: ((Set<Long>) -> Matrix)? = null): List<RankingCandidate> {
         val grades = task.grades
@@ -97,27 +97,36 @@ object CrossValidation {
         val parameters = scorer.candidates
         val tests = Array(k) { fold -> grades.indices.filter { folds[it] == fold }.toIntArray() }
         // Of every fold, of every parameter, the standardised scores of its rows under test
-        val perFold: List<List<DoubleArray>> = (0 until k).toList().parallelStream().map { fold ->
-            val train = grades.indices.filter { folds[it] != fold }.toIntArray()
-            val test = tests[fold]
-            val rows = xFor?.invoke(test.map { works[it] }.toSet()) ?: task.x
-            scorer.fitEach(RankingTask(rows, grades, works, task.items), train, parameters).map { fitted ->
-                val all = fitted.scores(rows)
-                val (mean, sd) = standardisation(train.map { all[it].toDouble() })
-                DoubleArray(test.size) { (all[test[it]] - mean) / sd }
-            }
-        }.toList()
+        val perFold: List<List<DoubleArray>> =
+            (0 until k)
+                .toList()
+                .parallelStream()
+                .map { fold ->
+                    val train = grades.indices.filter { folds[it] != fold }.toIntArray()
+                    val test = tests[fold]
+                    val rows = xFor?.invoke(test.map { works[it] }.toSet()) ?: task.x
+                    scorer.fitEach(RankingTask(rows, grades, works, task.items), train, parameters).map { fitted ->
+                        val all = fitted.scores(rows)
+                        val (mean, sd) = standardisation(train.map { all[it].toDouble() })
+                        DoubleArray(test.size) { (all[test[it]] - mean) / sd }
+                    }
+                }
+                .toList()
         val decided = grades.indices.filter { grades[it] != Grades.MIDDLE }
         return parameters.indices.mapNotNull { p ->
             val scores = DoubleArray(grades.size)
-            val concordances = (0 until k).mapNotNull { fold ->
-                val test = tests[fold]
-                test.forEachIndexed { i, row -> scores[row] = perFold[fold][p][i] }
-                concordance(grades, works, test, scores)
-            }
+            val concordances =
+                (0 until k).mapNotNull { fold ->
+                    val test = tests[fold]
+                    test.forEachIndexed { i, row -> scores[row] = perFold[fold][p][i] }
+                    concordance(grades, works, test, scores)
+                }
             if (concordances.isEmpty()) return@mapNotNull null
             val mean = concordances.average()
-            val se = if (concordances.size > 1) sqrt(concordances.sumOf { (it - mean).pow(2) } / (concordances.size - 1) / concordances.size) else 0.0
+            val se =
+                if (concordances.size > 1)
+                    sqrt(concordances.sumOf { (it - mean).pow(2) } / (concordances.size - 1) / concordances.size)
+                else 0.0
             RankingCandidate(
                 parameters[p],
                 RankingMetrics(
@@ -146,9 +155,9 @@ object CrossValidation {
     }
 
     /**
-     * Where every grade lies on the standardised line: the median of its works' [scores], made to
-     * rise with the grade — adjacent grades whose medians do not rise are pooled into their weighted
-     * mean. A grade without works has no place.
+     * Where every grade lies on the standardised line: the median of its works' [scores], made to rise with the grade —
+     * adjacent grades whose medians do not rise are pooled into their weighted mean. A grade without works has no
+     * place.
      */
     fun ladder(grades: IntArray, scores: DoubleArray): Map<Int, Double> {
         val groups = grades.indices.groupBy { grades[it] }.toSortedMap()
@@ -168,7 +177,10 @@ object CrossValidation {
         return blocks.flatMap { b -> b.grades.map { it to b.value } }.toMap()
     }
 
-    /** Spearman's rank correlation: Pearson's of the ranks, ties sharing their mean rank; null when one side is constant. */
+    /**
+     * Spearman's rank correlation: Pearson's of the ranks, ties sharing their mean rank; null when one side is
+     * constant.
+     */
     fun spearman(a: List<Double>, b: List<Double>): Double? {
         val ra = ranks(a)
         val rb = ranks(b)
@@ -210,10 +222,9 @@ object CrossValidation {
 }
 
 /**
- * A scorer's score of a work on 0..10: standardised as on the training rows ([mean], [sd]), then
- * placed by the [ladder] — the lowest grade's centre is 0, the highest's 10. Works beyond the
- * extreme grades go beyond 0..10: the order among the very best is kept, and a work past 10 is one
- * the model is surer of than of a typical work of the highest grade.
+ * A scorer's score of a work on 0..10: standardised as on the training rows ([mean], [sd]), then placed by the [ladder]
+ * — the lowest grade's centre is 0, the highest's 10. Works beyond the extreme grades go beyond 0..10: the order among
+ * the very best is kept, and a work past 10 is one the model is surer of than of a typical work of the highest grade.
  */
 class Scale(val mean: Double, val sd: Double, val ladder: Map<Int, Double>) {
     private val low = ladder.values.minOrNull() ?: -1.0

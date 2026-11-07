@@ -3,12 +3,12 @@ package io.github.vlsergey.recommend4me.source.authortoday
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
-import org.jsoup.Jsoup
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.jsoup.Jsoup
 
 /** The extension finds on the site's pages what the application knows of them. */
 class AuthorTodayDecorTest {
@@ -44,8 +44,14 @@ class AuthorTodayDecorTest {
         assertEquals(1, block.size)
         val shown = block.select("a").map { (it.attr("title").ifBlank { it.text() }).trim().lowercase() }
         // The site's tags kept: the ones of the block and its genres
-        val genres = doc.select(".book-meta-panel .book-genres a[href^=/work/genre/]").filter { "/all/" !in it.attr("href") }.map { it.text().trim().lowercase() }
-        assertEquals(context.facets.getValue("216859").getValue(AuthorToday.TAG).sorted(), (shown + genres).distinct().sorted())
+        val genres =
+            doc.select(".book-meta-panel .book-genres a[href^=/work/genre/]")
+                .filter { "/all/" !in it.attr("href") }
+                .map { it.text().trim().lowercase() }
+        assertEquals(
+            context.facets.getValue("216859").getValue(AuthorToday.TAG).sorted(),
+            (shown + genres).distinct().sorted(),
+        )
 
         val cover = doc.select(decor.pictures!!.selector).map { it.attr("src").substringBefore('?') }
         assertEquals(context.pictures.getValue("216859").filterNotNull(), cover)
@@ -70,7 +76,10 @@ class AuthorTodayDecorTest {
         val captured = source.capture(CapturedPage("https://author.today/work/genre/fantasy", html, now), context)
         val doc = Jsoup.parse(html, "https://author.today/work/genre/fantasy")
         val cards = decor.cards!!
-        val linked = doc.select(cards.selector).mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }.mapNotNull(source::itemIdOf)
+        val linked =
+            doc.select(cards.selector)
+                .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
+                .mapNotNull(source::itemIdOf)
         assertEquals(captured, linked)
     }
 }

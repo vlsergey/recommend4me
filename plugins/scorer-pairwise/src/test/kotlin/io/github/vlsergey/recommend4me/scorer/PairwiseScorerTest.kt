@@ -14,17 +14,18 @@ class PairwiseScorerTest {
         val n = 120
         val d = 30
         val x = Matrix(n, d)
-        val grades = IntArray(n) { i ->
-            for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
-            val s = x.held[i * d] + 0.5f * x.held[i * d + 1]
-            when {
-                s > 0.6f -> 5
-                s > 0.2f -> 4
-                s > -0.2f -> 3
-                s > -0.6f -> 2
-                else -> 1
+        val grades =
+            IntArray(n) { i ->
+                for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
+                val s = x.held[i * d] + 0.5f * x.held[i * d + 1]
+                when {
+                    s > 0.6f -> 5
+                    s > 0.2f -> 4
+                    s > -0.2f -> 3
+                    s > -0.6f -> 2
+                    else -> 1
+                }
             }
-        }
         val task = RankingTask(x, grades, LongArray(n) { it.toLong() }, LongArray(n) { it.toLong() })
         val model = PairwiseScorer().fit(task, IntArray(n) { it }, 1.0) as LinearModel
         assertTrue(model.w[0] > 0 && model.w[1] > 0 && model.w[0] > model.w[1])

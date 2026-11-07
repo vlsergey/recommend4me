@@ -13,8 +13,8 @@ import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.PictureDecor
 import io.github.vlsergey.recommend4me.source.ReviewDecor
-import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SignalDef
+import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
@@ -25,11 +25,11 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.net.URLEncoder
 
 /**
- * ficbook.net — fanfics and originals, read in the browser and seen by the extension only: the
- * site checks its visitors, and the application requests no page of it. What a page shows is kept:
- * the cards of every list, a work's header with its table of contents, the text of every part read,
- * and the readers' comments ("Отзывы") as the opinions of other people about the work. What a tag
- * means the browser asks the site's search of tags for, from a page of the site open in it ([describing]).
+ * ficbook.net — fanfics and originals, read in the browser and seen by the extension only: the site checks its
+ * visitors, and the application requests no page of it. What a page shows is kept: the cards of every list, a work's
+ * header with its table of contents, the text of every part read, and the readers' comments ("Отзывы") as the opinions
+ * of other people about the work. What a tag means the browser asks the site's search of tags for, from a page of the
+ * site open in it ([describing]).
  */
 class Ficbook : Source {
     override val id = ID
@@ -37,100 +37,112 @@ class Ficbook : Source {
     override val homepage = BASE
     override val modes = setOf(SourceMode.BROWSER)
 
-    override val schema = SourceSchema(
-        facets = listOf(
-            Books.AUTHOR.asFacet(AUTHOR),
-            Books.FANDOM.asFacet(FANDOM),
-            Books.DIRECTION.asFacet(DIRECTION),
-            AgeRating.SITE.asFacet(),
-            Books.STATUS.asFacet(STATUS),
-            Books.TAG.asFacet(TAG),
-            // The pairings and characters as the authors write them: the site's strings, kept as they
-            // are; the application works the characters and pairings of the universes out of them
-            Books.PAIRINGS.asFacet(PAIRING),
-            FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
-        ),
-        numbers = listOf(
-            StandardNumbers.WORDS.asNumber(WORDS),
-            NumberDef(PAGES, NumberScale.LOG),
-            Books.PARTS.asNumber(PARTS),
-            StandardNumbers.LIKES.asNumber(LIKES),
-            NumberDef(COMMENTS, NumberScale.LOG),
-        ),
-        texts = listOf(
-            TextDef(ANNOTATION, block = "text:annotation", searchWeight = 0.6f, role = TextRole.DESCRIPTION),
-            TextDef(NOTES, block = "text:notes", searchWeight = 0.5f, role = TextRole.NOTES),
-            TextDef(DEDICATION, searchWeight = 0.3f, role = TextRole.NOTES),
-            TextDef(PAIRINGS_LINE, searchWeight = 0.7f, searchByMeaning = true),
-        ),
-        reviews = true,
-        parts = true,
-        universeLine = PAIRINGS_LINE,
-        // A work of the fandom "Ориджиналы" is an original one
-        kindFrom = FANDOM,
-    )
+    override val schema =
+        SourceSchema(
+            facets =
+                listOf(
+                    Books.AUTHOR.asFacet(AUTHOR),
+                    Books.FANDOM.asFacet(FANDOM),
+                    Books.DIRECTION.asFacet(DIRECTION),
+                    AgeRating.SITE.asFacet(),
+                    Books.STATUS.asFacet(STATUS),
+                    Books.TAG.asFacet(TAG),
+                    // The pairings and characters as the authors write them: the site's strings, kept as they
+                    // are; the application works the characters and pairings of the universes out of them
+                    Books.PAIRINGS.asFacet(PAIRING),
+                    FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
+                ),
+            numbers =
+                listOf(
+                    StandardNumbers.WORDS.asNumber(WORDS),
+                    NumberDef(PAGES, NumberScale.LOG),
+                    Books.PARTS.asNumber(PARTS),
+                    StandardNumbers.LIKES.asNumber(LIKES),
+                    NumberDef(COMMENTS, NumberScale.LOG),
+                ),
+            texts =
+                listOf(
+                    TextDef(ANNOTATION, block = "text:annotation", searchWeight = 0.6f, role = TextRole.DESCRIPTION),
+                    TextDef(NOTES, block = "text:notes", searchWeight = 0.5f, role = TextRole.NOTES),
+                    TextDef(DEDICATION, searchWeight = 0.3f, role = TextRole.NOTES),
+                    TextDef(PAIRINGS_LINE, searchWeight = 0.7f, searchByMeaning = true),
+                ),
+            reviews = true,
+            parts = true,
+            universeLine = PAIRINGS_LINE,
+            // A work of the fandom "Ориджиналы" is an original one
+            kindFrom = FANDOM,
+        )
 
     /** Its own changes of the values kept: the direction made a standard one. */
     override val migrations = listOf("classpath:db/ficbook")
 
-    override val capturePatterns = listOf(
-        Regex("https://ficbook\\.net/(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*|popular-fanfics[^/?#]*|recommendation|home/[^?#]*)([/?#].*)?"),
-    )
+    override val capturePatterns =
+        listOf(
+            Regex(
+                "https://ficbook\\.net/(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*|popular-fanfics[^/?#]*|recommendation|home/[^?#]*)([/?#].*)?"
+            )
+        )
 
     /**
-     * 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever
-     * the order of its names. 3: whether a work is fan fiction, by its fandom. 4: the promotion of
-     * another work the site puts among the paragraphs of a part is not its text. 5: the standard
-     * statuses; the user's marks of a work — liked, read, followed. 6: the pairings and the
-     * characters alone in one field, every entry of the line as written; the fandom a standard one.
-     * 7: what a tag's own page says the tag means. 8: the direction a standard one, with AO3's category.
-     * 9: the covers as the site draws them now: of a work's own page, and of a card of a list as a picture.
-     * 10: the covers of the cards of a list, a picture of a source for every width. 11: a tag's
-     * synonyms, of its own page and of the search of tags — each a tag of its own of the same thing.
+     * 2: the line of pairings and characters kept as the site writes it; a pairing is one whatever the order of its
+     * names. 3: whether a work is fan fiction, by its fandom. 4: the promotion of another work the site puts among the
+     * paragraphs of a part is not its text. 5: the standard statuses; the user's marks of a work — liked, read,
+     * followed. 6: the pairings and the characters alone in one field, every entry of the line as written; the fandom a
+     * standard one. 7: what a tag's own page says the tag means. 8: the direction a standard one, with AO3's category.
+     * 9: the covers as the site draws them now: of a work's own page, and of a card of a list as a picture. 10: the
+     * covers of the cards of a list, a picture of a source for every width. 11: a tag's synonyms, of its own page and
+     * of the search of tags — each a tag of its own of the same thing.
      */
     override val parserVersion = 11
 
-    override val signals = listOf(
-        Books.READ.asSignal(),
-        Books.LIKED.asSignal(),
-        SignalDef(SIGNAL_FOLLOWED, setOf(Books.YES.key)),
-    )
+    override val signals =
+        listOf(
+            Books.READ.asSignal(),
+            Books.LIKED.asSignal(),
+            SignalDef(SIGNAL_FOLLOWED, setOf(Books.YES.key)),
+        )
 
     override fun itemUrl(itemId: String) = "$BASE/readfic/$itemId"
 
     /** A part's own page, by the id of its address; the text of a work of one part is on the work's page. */
-    override fun partUrl(itemId: String, partId: String) = if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/readfic/$itemId/$partId"
+    override fun partUrl(itemId: String, partId: String) =
+        if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/readfic/$itemId/$partId"
 
     /** An author's own page, by the id of its address. */
-    override fun valueUrl(facet: String, key: String, name: String) = if (facet == AUTHOR) "$BASE/authors/$key" else null
+    override fun valueUrl(facet: String, key: String, name: String) =
+        if (facet == AUTHOR) "$BASE/authors/$key" else null
 
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
-    override val pageDecor = PageDecor(
-        panelAfter = "section.fanfic-hat",
-        facets = listOf(
-            // The site's tags are its word, never answered on: the work's tags after them
-            FacetDecor(Books.TAGS.key, after = "section.fanfic-hat .tags"),
-            // The universes, characters and pairings worked out go in lines of their own under the site's block of them
-            FacetDecor(UniverseFacets.UNIVERSE, after = PAIRINGS_BLOCK),
-            FacetDecor(UniverseFacets.CHARACTERS, after = PAIRINGS_BLOCK),
-            FacetDecor(UniverseFacets.SECONDARY_CHARACTERS, after = PAIRINGS_BLOCK),
-            FacetDecor(UniverseFacets.PAIRINGS, after = PAIRINGS_BLOCK),
-        ),
-        reviews = ReviewDecor("article.comment-container[id^='com']", idPrefix = "com"),
-        // The cover of the work's header; the covers of the cards are of other works
-        pictures = PictureDecor("section.fanfic-hat .fanfic-hat-cover img"),
-        cards = CardDecor("article.fanfic-inline", ".fanfic-inline-title a[href^='/readfic/']"),
-        // The arrow to the right of the pages of a list; on its last page a span, not a link
-        nextPage = "nav.pagination a.arrow:has(svg.arrow-right)",
-    )
+    override val pageDecor =
+        PageDecor(
+            panelAfter = "section.fanfic-hat",
+            facets =
+                listOf(
+                    // The site's tags are its word, never answered on: the work's tags after them
+                    FacetDecor(Books.TAGS.key, after = "section.fanfic-hat .tags"),
+                    // The universes, characters and pairings worked out go in lines of their own under the site's block
+                    // of them
+                    FacetDecor(UniverseFacets.UNIVERSE, after = PAIRINGS_BLOCK),
+                    FacetDecor(UniverseFacets.CHARACTERS, after = PAIRINGS_BLOCK),
+                    FacetDecor(UniverseFacets.SECONDARY_CHARACTERS, after = PAIRINGS_BLOCK),
+                    FacetDecor(UniverseFacets.PAIRINGS, after = PAIRINGS_BLOCK),
+                ),
+            reviews = ReviewDecor("article.comment-container[id^='com']", idPrefix = "com"),
+            // The cover of the work's header; the covers of the cards are of other works
+            pictures = PictureDecor("section.fanfic-hat .fanfic-hat-cover img"),
+            cards = CardDecor("article.fanfic-inline", ".fanfic-inline-title a[href^='/readfic/']"),
+            // The arrow to the right of the pages of a list; on its last page a span, not a link
+            nextPage = "nav.pagination a.arrow:has(svg.arrow-right)",
+        )
 
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
 
     /**
-     * A tag by the site's search of tags, the one its page of all the tags asks: by the name — the
-     * key is the name in lower case, which the search finds as well — it answers the tag's
-     * description, read by [FicbookPages]. The address carries the name: the answer is known by it.
+     * A tag by the site's search of tags, the one its page of all the tags asks: by the name — the key is the name in
+     * lower case, which the search finds as well — it answers the tag's description, read by [FicbookPages]. The
+     * address carries the name: the answer is known by it.
      */
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
         if (facet != TAG) emptyList() else tags.map { WantedPage(tagSearch(it), mapOf("title" to it)) }

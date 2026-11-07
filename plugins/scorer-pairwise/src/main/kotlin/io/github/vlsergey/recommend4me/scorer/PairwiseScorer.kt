@@ -9,13 +9,13 @@ import java.nio.ByteOrder
 import kotlin.math.max
 
 /**
- * PAIRWISE LOGISTIC RANKING — RankNet with a line. From every pair of rated works of different
- * grades it learns a score that puts the better one higher: the grades carry no numbers, only
- * which of two is better. A grade is not a fixed point either: "do not like it" holds works bad in
- * every way and works of the wrong story alike, and they may lie far apart on the line.
+ * PAIRWISE LOGISTIC RANKING — RankNet with a line. From every pair of rated works of different grades it learns a score
+ * that puts the better one higher: the grades carry no numbers, only which of two is better. A grade is not a fixed
+ * point either: "do not like it" holds works bad in every way and works of the wrong story alike, and they may lie far
+ * apart on the line.
  *
- * The parameter is C of the L2 penalty: the loss is the mean over pairs plus ||w||² / (2 C · pairs),
- * so C means what it means for a model of single rows.
+ * The parameter is C of the L2 penalty: the loss is the mean over pairs plus ||w||² / (2 C · pairs), so C means what it
+ * means for a model of single rows.
  */
 class PairwiseScorer : Scorer {
     override val id = "pairwise-logistic"
@@ -29,8 +29,8 @@ class PairwiseScorer : Scorer {
 
     companion object {
         /**
-         * Fits the line on [pairs] of the rows of [x]: the logistic loss of score(better) − score(worse),
-         * of an equal pair the loss of a pair either way round with the chance of a half, L2 with [c].
+         * Fits the line on [pairs] of the rows of [x]: the logistic loss of score(better) − score(worse), of an equal
+         * pair the loss of a pair either way round with the chance of a half, L2 with [c].
          */
         fun fit(x: Matrix, pairs: RankingPairs, c: Double, maxIter: Int = 300, tol: Double = 1e-4): LinearModel {
             val objective = PairObjective(x, pairs, c)
@@ -42,9 +42,8 @@ class PairwiseScorer : Scorer {
     }
 
     /**
-     * The loss over pairs without a matrix of pairs: the scores of the rows are one product
-     * (z = X·w), and the gradient one more (Xᵀ·q) once every pair's residual is added to its
-     * better row and taken from its worse one.
+     * The loss over pairs without a matrix of pairs: the scores of the rows are one product (z = X·w), and the gradient
+     * one more (Xᵀ·q) once every pair's residual is added to its better row and taken from its worse one.
      */
     private class PairObjective(val x: Matrix, val pairs: RankingPairs, val c: Double) {
         private val n = x.rows

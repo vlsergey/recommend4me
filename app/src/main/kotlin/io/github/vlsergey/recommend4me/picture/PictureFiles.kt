@@ -1,19 +1,18 @@
 package io.github.vlsergey.recommend4me.picture
 
-import org.glavo.avif.AvifImageReader
-import org.glavo.avif.AvifPixelFormat
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import javax.imageio.ImageIO
+import org.glavo.avif.AvifImageReader
+import org.glavo.avif.AvifPixelFormat
 
 /**
- * The picture files of one source's items, in `<source folder>/images/<item>/`:
- * `<position>-preview.<ext>` always, `<position>.<ext>` (the original) only for works graded "can
- * be played" or more. Files on disk, not in the database: the originals run to a hundred
- * gigabytes, and the database files are copied whole.
+ * The picture files of one source's items, in `<source folder>/images/<item>/`: `<position>-preview.<ext>` always,
+ * `<position>.<ext>` (the original) only for works graded "can be played" or more. Files on disk, not in the database:
+ * the originals run to a hundred gigabytes, and the database files are copied whole.
  */
 class PictureFiles(sourceFolder: Path) {
 
@@ -42,9 +41,14 @@ class PictureFiles(sourceFolder: Path) {
             ImageIO.scanForPlugins()
         }
 
-        private val EXTENSIONS = mapOf(
-            "image/webp" to "webp", "image/png" to "png", "image/jpeg" to "jpg", "image/gif" to "gif", "image/avif" to "avif",
-        )
+        private val EXTENSIONS =
+            mapOf(
+                "image/webp" to "webp",
+                "image/png" to "png",
+                "image/jpeg" to "jpg",
+                "image/gif" to "gif",
+                "image/avif" to "avif",
+            )
 
         /** An item's id as a folder name: what a file system would not take is replaced. */
         fun folderOf(itemId: String): String = itemId.replace(Regex("[^A-Za-z0-9._-]"), "_")
@@ -55,8 +59,8 @@ class PictureFiles(sourceFolder: Path) {
             EXTENSIONS.entries.firstOrNull { file.endsWith("." + it.value) }?.key ?: "application/octet-stream"
 
         /**
-         * The picture, its first frame for an animation; null when no reader knows the format.
-         * AVIF goes to javif (pure Java AV1): ImageIO has no reader for it.
+         * The picture, its first frame for an animation; null when no reader knows the format. AVIF goes to javif (pure
+         * Java AV1): ImageIO has no reader for it.
          */
         fun decode(bytes: ByteArray): BufferedImage? =
             if (isAvif(bytes)) decodeAvif(bytes) else ImageIO.read(ByteArrayInputStream(bytes))
@@ -68,22 +72,25 @@ class PictureFiles(sourceFolder: Path) {
             return brand == "avif" || brand == "avis"
         }
 
-        private fun decodeAvif(bytes: ByteArray): BufferedImage = AvifImageReader.open(bytes).use { reader ->
-            val frame = reader.readFrame(0)
-            val (w, h) = frame.width() to frame.height()
-            val argb = when (frame.pixelFormat()) {
-                AvifPixelFormat.ARGB_8888 -> frame.intPixels()
-                // 10 and 12 bits come as 16 bits a channel: the top byte of each is enough here
-                else -> frame.longPixels().let { wide ->
-                    IntArray(wide.size) { i ->
-                        val p = wide[i]
-                        fun top(shift: Int) = (p ushr shift).toInt() and 0xFF
-                        (top(56) shl 24) or (top(40) shl 16) or (top(24) shl 8) or top(8)
+        private fun decodeAvif(bytes: ByteArray): BufferedImage =
+            AvifImageReader.open(bytes).use { reader ->
+                val frame = reader.readFrame(0)
+                val (w, h) = frame.width() to frame.height()
+                val argb =
+                    when (frame.pixelFormat()) {
+                        AvifPixelFormat.ARGB_8888 -> frame.intPixels()
+                        // 10 and 12 bits come as 16 bits a channel: the top byte of each is enough here
+                        else ->
+                            frame.longPixels().let { wide ->
+                                IntArray(wide.size) { i ->
+                                    val p = wide[i]
+                                    fun top(shift: Int) = (p ushr shift).toInt() and 0xFF
+                                    (top(56) shl 24) or (top(40) shl 16) or (top(24) shl 8) or top(8)
+                                }
+                            }
                     }
-                }
+                val type = if (reader.info().alphaPresent()) BufferedImage.TYPE_INT_ARGB else BufferedImage.TYPE_INT_RGB
+                BufferedImage(w, h, type).apply { setRGB(0, 0, w, h, argb, 0, w) }
             }
-            val type = if (reader.info().alphaPresent()) BufferedImage.TYPE_INT_ARGB else BufferedImage.TYPE_INT_RGB
-            BufferedImage(w, h, type).apply { setRGB(0, 0, w, h, argb, 0, w) }
-        }
     }
 }

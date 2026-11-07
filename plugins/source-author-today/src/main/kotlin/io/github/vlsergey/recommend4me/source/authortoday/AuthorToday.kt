@@ -22,10 +22,10 @@ import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.source.TextRole
 
 /**
- * author.today — books, read in the browser and seen by the extension only: the application
- * requests no page of the site. What a page shows is kept: the cards of every list, a work's page
- * with its table of contents, its reviews, the text of every chapter read; and the user's own marks
- * on the work — the shelf of the library, the like, the reactions, "not interested".
+ * author.today — books, read in the browser and seen by the extension only: the application requests no page of the
+ * site. What a page shows is kept: the cards of every list, a work's page with its table of contents, its reviews, the
+ * text of every chapter read; and the user's own marks on the work — the shelf of the library, the like, the reactions,
+ * "not interested".
  */
 class AuthorToday : Source {
     override val id = ID
@@ -33,44 +33,51 @@ class AuthorToday : Source {
     override val homepage = BASE
     override val modes = setOf(SourceMode.BROWSER)
 
-    override val schema = SourceSchema(
-        facets = listOf(
-            Books.AUTHOR.asFacet(AUTHOR),
-            FacetDef(FORM, filter = true, role = FacetRole.FORM),
-            Books.TAG.asFacet(TAG),
-            Books.STATUS.asFacet(STATUS),
-            FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
-            AgeRating.SITE.asFacet(),
-        ),
-        numbers = listOf(
-            // Characters, not words: a number of its own
-            StandardNumbers.CHARS.asNumber(CHARS),
-            StandardNumbers.VIEWS.asNumber(VIEWS),
-            StandardNumbers.LIKES.asNumber(LIKES),
-            NumberDef(COMMENTS, NumberScale.LOG),
-            NumberDef(REVIEWS, NumberScale.LOG),
-            NumberDef(AWARDS, NumberScale.LOG),
-        ),
-        texts = listOf(
-            TextDef(ANNOTATION, block = "text:annotation", searchWeight = 0.6f, role = TextRole.DESCRIPTION),
-            TextDef(NOTES, block = "text:notes", searchWeight = 0.5f, role = TextRole.NOTES),
-        ),
-        reviews = true,
-        parts = true,
-        // The site's genres, "Фанфик" among them, are among its tags
-        kindFrom = TAG,
-    )
+    override val schema =
+        SourceSchema(
+            facets =
+                listOf(
+                    Books.AUTHOR.asFacet(AUTHOR),
+                    FacetDef(FORM, filter = true, role = FacetRole.FORM),
+                    Books.TAG.asFacet(TAG),
+                    Books.STATUS.asFacet(STATUS),
+                    FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
+                    AgeRating.SITE.asFacet(),
+                ),
+            numbers =
+                listOf(
+                    // Characters, not words: a number of its own
+                    StandardNumbers.CHARS.asNumber(CHARS),
+                    StandardNumbers.VIEWS.asNumber(VIEWS),
+                    StandardNumbers.LIKES.asNumber(LIKES),
+                    NumberDef(COMMENTS, NumberScale.LOG),
+                    NumberDef(REVIEWS, NumberScale.LOG),
+                    NumberDef(AWARDS, NumberScale.LOG),
+                ),
+            texts =
+                listOf(
+                    TextDef(ANNOTATION, block = "text:annotation", searchWeight = 0.6f, role = TextRole.DESCRIPTION),
+                    TextDef(NOTES, block = "text:notes", searchWeight = 0.5f, role = TextRole.NOTES),
+                ),
+            reviews = true,
+            parts = true,
+            // The site's genres, "Фанфик" among them, are among its tags
+            kindFrom = TAG,
+        )
 
-    override val capturePatterns = listOf(
-        Regex("https://author\\.today/(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"),
-    )
+    override val capturePatterns =
+        listOf(
+            Regex(
+                "https://author\\.today/(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"
+            )
+        )
 
     /**
-     * 2: whether a work is fan fiction, by its genres. 3: the standard statuses; the shelf of the
-     * finished as the standard "read". 4: the shelf as the standard one. 5: the pages that failed
-     * when several pages of one work were read at once read again. 6: the alternative history as a
-     * kind of its own, the erotic fan fiction as fan fiction. 7: the age ratings a card lets the work
-     * have, by its "18+". 8: of a work without it, G to R. 9: the genres the site's tags.
+     * 2: whether a work is fan fiction, by its genres. 3: the standard statuses; the shelf of the finished as the
+     * standard "read". 4: the shelf as the standard one. 5: the pages that failed when several pages of one work were
+     * read at once read again. 6: the alternative history as a kind of its own, the erotic fan fiction as fan fiction.
+     * 7: the age ratings a card lets the work have, by its "18+". 8: of a work without it, G to R. 9: the genres the
+     * site's tags.
      */
     override val parserVersion = 9
 
@@ -87,31 +94,44 @@ class AuthorToday : Source {
 
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
-    override val signals = listOf(
-        Books.SHELF.asSignal(),
-        Books.READ.asSignal(),
-        Books.LIKED.asSignal(),
-        SignalDef(
-            SIGNAL_REACTION,
-            setOf(
-                "Perfect", "Waiting", "ImpossibleToPutDown", "Boring", "Funny", "Sadly",
-                "Cute", "Wisely", "Facepalm", "DoNotRecommend", "Obscene", "Unclear",
+    override val signals =
+        listOf(
+            Books.SHELF.asSignal(),
+            Books.READ.asSignal(),
+            Books.LIKED.asSignal(),
+            SignalDef(
+                SIGNAL_REACTION,
+                setOf(
+                    "Perfect",
+                    "Waiting",
+                    "ImpossibleToPutDown",
+                    "Boring",
+                    "Funny",
+                    "Sadly",
+                    "Cute",
+                    "Wisely",
+                    "Facepalm",
+                    "DoNotRecommend",
+                    "Obscene",
+                    "Unclear",
+                ),
             ),
-        ),
-        SignalDef(SIGNAL_HIDDEN, setOf(Books.YES.key)),
-    )
+            SignalDef(SIGNAL_HIDDEN, setOf(Books.YES.key)),
+        )
 
-    override val pageDecor = PageDecor(
-        // After the whole card of the book: within it the columns are laid out by hand
-        panelAfter = ".book-panel",
-        // The site's tags, its genres among them, are its word, never answered on: the work's tags after them
-        facets = listOf(FacetDecor(Books.TAGS.key, after = ".book-meta-panel .tags")),
-        reviews = ReviewDecor("article.post[id^='post_']", idPrefix = "post_"),
-        pictures = PictureDecor(".book-cover img.cover-image"),
-        cards = CardDecor(".book-row", ".book-title a[href^='/work/']"),
-    )
+    override val pageDecor =
+        PageDecor(
+            // After the whole card of the book: within it the columns are laid out by hand
+            panelAfter = ".book-panel",
+            // The site's tags, its genres among them, are its word, never answered on: the work's tags after them
+            facets = listOf(FacetDecor(Books.TAGS.key, after = ".book-meta-panel .tags")),
+            reviews = ReviewDecor("article.post[id^='post_']", idPrefix = "post_"),
+            pictures = PictureDecor(".book-cover img.cover-image"),
+            cards = CardDecor(".book-row", ".book-title a[href^='/work/']"),
+        )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> = AuthorTodayPages(context).read(page)
+    override fun capture(page: CapturedPage, context: SourceContext): List<String> =
+        AuthorTodayPages(context).read(page)
 
     companion object {
         const val ID = "author.today"

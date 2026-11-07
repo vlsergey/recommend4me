@@ -7,15 +7,15 @@ import io.github.vlsergey.recommend4me.matrix.Floats
 internal class NoRoomOnCard : RuntimeException("no room on the card for the searches")
 
 /**
- * A SEARCH'S VECTORS ON THE CARD ([Search]): the point, the gradient, the direction, the remembered
- * steps and changes of every model, worked by cuBLAS — tens of dot products and sums of vectors of
- * a quarter of a million numbers a step of every model, the card's work, not the processor's.
- * Every vector made is freed by [close].
+ * A SEARCH'S VECTORS ON THE CARD ([Search]): the point, the gradient, the direction, the remembered steps and changes
+ * of every model, worked by cuBLAS — tens of dot products and sums of vectors of a quarter of a million numbers a step
+ * of every model, the card's work, not the processor's. Every vector made is freed by [close].
  */
 internal class SearchOnCard(private val cublas: Cublas) : Space<Cublas.DeviceFloats>, AutoCloseable {
     private val made = ArrayList<Cublas.DeviceFloats>()
 
-    override fun make(size: Int): Cublas.DeviceFloats = (cublas.allocate(size.toLong()) ?: throw NoRoomOnCard()).also { made += it }
+    override fun make(size: Int): Cublas.DeviceFloats =
+        (cublas.allocate(size.toLong()) ?: throw NoRoomOnCard()).also { made += it }
 
     override fun dot(a: Cublas.DeviceFloats, b: Cublas.DeviceFloats, n: Int) = cublas.dot(a, 0, b, 0, n)
 
@@ -27,17 +27,17 @@ internal class SearchOnCard(private val cublas: Cublas) : Space<Cublas.DeviceFlo
 
     override fun put(from: FloatArray, into: Cublas.DeviceFloats) = into.upload(Floats.of(from), 0, 0, from.size)
 
-    override fun take(from: Cublas.DeviceFloats, n: Int): FloatArray = Floats(n).also { from.download(it, 0, 0, n) }.toArray()
+    override fun take(from: Cublas.DeviceFloats, n: Int): FloatArray =
+        Floats(n).also { from.download(it, 0, 0, n) }.toArray()
 
     override fun close() = made.forEach { it.close() }
 }
 
 /**
- * WHERE A MODEL'S POINT — OR ITS GRADIENT — LIES WHEN ITS SEARCH IS ON THE CARD: its weights A,
- * nine tenths of its numbers, on the card, [cardCount] of them at [cardAt] of [card] — the products
- * of the items' features read and write them there, and they never leave it; the rest — B, E, the
- * biases, the pair's own weights — in the main memory ([host]), where the pairs of the items and
- * their values are worked out, carried over through [scratch] on the card.
+ * WHERE A MODEL'S POINT — OR ITS GRADIENT — LIES WHEN ITS SEARCH IS ON THE CARD: its weights A, nine tenths of its
+ * numbers, on the card, [cardCount] of them at [cardAt] of [card] — the products of the items' features read and write
+ * them there, and they never leave it; the rest — B, E, the biases, the pair's own weights — in the main memory
+ * ([host]), where the pairs of the items and their values are worked out, carried over through [scratch] on the card.
  */
 internal class CardPieces(
     private val cublas: Cublas,

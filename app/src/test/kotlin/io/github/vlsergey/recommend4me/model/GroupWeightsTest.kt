@@ -4,14 +4,17 @@ import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.scorer.FittedScorer
 import io.github.vlsergey.recommend4me.scorer.RankingTask
 import io.github.vlsergey.recommend4me.scorer.Scorer
-import org.junit.jupiter.api.Test
 import kotlin.random.Random
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Test
 
 class GroupWeightsTest {
 
-    /** Every column weighed by how it goes with the grades on the rows learnt from: a wide group of noise drowns a column of signal. */
+    /**
+     * Every column weighed by how it goes with the grades on the rows learnt from: a wide group of noise drowns a
+     * column of signal.
+     */
     private class CovarianceScorer : Scorer {
         override val id = "covariance"
         override val candidates = listOf(1.0)
@@ -19,9 +22,16 @@ class GroupWeightsTest {
 
         override fun fit(task: RankingTask, rows: IntArray, parameter: Double): FittedScorer {
             val mean = rows.map { task.grades[it] }.average()
-            val w = FloatArray(task.x.cols) { c -> rows.sumOf { r -> (task.grades[r] - mean) * task.x.held[task.x.row(r) + c] }.toFloat() }
+            val w =
+                FloatArray(task.x.cols) { c ->
+                    rows.sumOf { r -> (task.grades[r] - mean) * task.x.held[task.x.row(r) + c] }.toFloat()
+                }
             return object : FittedScorer {
-                override fun scores(x: Matrix, rows: Int) = FloatArray(rows) { r -> (0 until x.cols).sumOf { c -> (w[c] * x.held[x.row(r) + c]).toDouble() }.toFloat() }
+                override fun scores(x: Matrix, rows: Int) =
+                    FloatArray(rows) { r ->
+                        (0 until x.cols).sumOf { c -> (w[c] * x.held[x.row(r) + c]).toDouble() }.toFloat()
+                    }
+
                 override fun pack() = ByteArray(0)
             }
         }

@@ -7,6 +7,5 @@ import tools.jackson.databind.json.JsonMapper
 @AutoConfiguration
 class WikidataAutoConfiguration {
     /** Of its own class: a catalogue of universes and of tags both */
-    @Bean
-    fun wikidataCatalogue(json: JsonMapper): WikidataCatalogue = WikidataCatalogue(json)
+    @Bean fun wikidataCatalogue(json: JsonMapper): WikidataCatalogue = WikidataCatalogue(json)
 }

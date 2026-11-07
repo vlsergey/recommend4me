@@ -1,30 +1,32 @@
 package io.github.vlsergey.recommend4me.search
 
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.LowerCaseFilter
 import org.apache.lucene.analysis.en.PorterStemFilter
 import org.apache.lucene.analysis.standard.StandardTokenizer
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 class IrregularVerbsTest {
 
-    private val analyzer = object : Analyzer() {
-        override fun createComponents(fieldName: String): TokenStreamComponents {
-            val source = StandardTokenizer()
-            return TokenStreamComponents(source, IrregularVerbs.filter(PorterStemFilter(LowerCaseFilter(source))))
+    private val analyzer =
+        object : Analyzer() {
+            override fun createComponents(fieldName: String): TokenStreamComponents {
+                val source = StandardTokenizer()
+                return TokenStreamComponents(source, IrregularVerbs.filter(PorterStemFilter(LowerCaseFilter(source))))
+            }
         }
-    }
 
-    private fun tokens(text: String): List<String> = analyzer.tokenStream("", text).use { stream ->
-        val term = stream.addAttribute(CharTermAttribute::class.java)
-        stream.reset()
-        val out = ArrayList<String>()
-        while (stream.incrementToken()) out += term.toString()
-        stream.end()
-        out
-    }
+    private fun tokens(text: String): List<String> =
+        analyzer.tokenStream("", text).use { stream ->
+            val term = stream.addAttribute(CharTermAttribute::class.java)
+            stream.reset()
+            val out = ArrayList<String>()
+            while (stream.incrementToken()) out += term.toString()
+            stream.end()
+            out
+        }
 
     @Test
     fun `every form of an irregular verb is its base, as the stemmer leaves the regular ones`() {

@@ -6,6 +6,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class Ao3AutoConfiguration {
-    @Bean
-    fun ao3(): Source = Ao3()
+    @Bean fun ao3(): Source = Ao3()
 }

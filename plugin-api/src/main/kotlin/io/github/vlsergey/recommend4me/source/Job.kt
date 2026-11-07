@@ -1,8 +1,8 @@
 package io.github.vlsergey.recommend4me.source
 
 /**
- * A running job of a source — a scrape — as the interface shows it: the phase, how far it got,
- * how many items are new; and the user's wish to stop it.
+ * A running job of a source — a scrape — as the interface shows it: the phase, how far it got, how many items are new;
+ * and the user's wish to stop it.
  */
 interface Job {
     /** A new phase: the progress starts again. */
@@ -17,8 +17,8 @@ interface Job {
     fun error(message: String)
 
     /**
-     * What the user should know at the end — "the cookie was not accepted" — by its key among the
-     * source's [messages][Source.messages]; null — nothing.
+     * What the user should know at the end — "the cookie was not accepted" — by its key among the source's
+     * [messages][Source.messages]; null — nothing.
      */
     fun message(key: String?)
 
@@ -33,8 +33,8 @@ interface Job {
     }
 
     /**
-     * Lets the application catch up in the middle of a long job: the new texts encoded, the model
-     * retrained — so the recommendations grow with the download instead of waiting for its end.
+     * Lets the application catch up in the middle of a long job: the new texts encoded, the model retrained — so the
+     * recommendations grow with the download instead of waiting for its end.
      */
     fun checkpoint()
 

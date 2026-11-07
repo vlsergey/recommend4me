@@ -5,21 +5,22 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * A matcher of the names of a base but some values finds what a matcher of those names alone finds,
- * a word of a value left out naming another alone; two words at one place both read.
+ * A matcher of the names of a base but some values finds what a matcher of those names alone finds, a word of a value
+ * left out naming another alone; two words at one place both read.
  */
 class NameMatcherTest {
 
-    private val names = mapOf(
-        "harry" to listOf("Гарри Поттер", "Harry Potter"),
-        "james" to listOf("Джеймс Поттер"),
-        "lily" to listOf("Лили Поттер", "Лили Эванс"),
-        "ron" to listOf("Рон Уизли"),
-        "ginny" to listOf("Джинни Уизли", "Джиневра Уизли"),
-        "hermione" to listOf("Гермиона Грейнджер", "Hermione Granger"),
-        "saw" to listOf("Со Геррера"),
-        "rick" to listOf("Рик Джонс", "Нова"),
-    )
+    private val names =
+        mapOf(
+            "harry" to listOf("Гарри Поттер", "Harry Potter"),
+            "james" to listOf("Джеймс Поттер"),
+            "lily" to listOf("Лили Поттер", "Лили Эванс"),
+            "ron" to listOf("Рон Уизли"),
+            "ginny" to listOf("Джинни Уизли", "Джиневра Уизли"),
+            "hermione" to listOf("Гермиона Грейнджер", "Hermione Granger"),
+            "saw" to listOf("Со Геррера"),
+            "rick" to listOf("Рик Джонс", "Нова"),
+        )
 
     private val stems = NameStems()
 
@@ -34,7 +35,8 @@ class NameMatcherTest {
         return out
     }
 
-    private fun found(matcher: NameMatcher, words: List<NamedWord>) = matcher.found(words.shuffled()).map { Triple(it.value, it.first.position, it.last.position) }
+    private fun found(matcher: NameMatcher, words: List<NamedWord>) =
+        matcher.found(words.shuffled()).map { Triple(it.value, it.first.position, it.last.position) }
 
     @Test
     fun `of the names but some values the same as of those names alone`() {

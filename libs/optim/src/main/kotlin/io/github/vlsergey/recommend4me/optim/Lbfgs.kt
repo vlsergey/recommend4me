@@ -7,10 +7,9 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
- * L-BFGS with a backtracking (Armijo) line search, in ask/tell form: it says where it wants
- * the loss and the gradient next ([at]), is told them ([tell]) and says when it is [done]. Over
- * [d] weights and one more number, an intercept for those who need it. Ported from
- * local-ai-chroma-enf-lora's `student/Optim.kt`.
+ * L-BFGS with a backtracking (Armijo) line search, in ask/tell form: it says where it wants the loss and the gradient
+ * next ([at]), is told them ([tell]) and says when it is [done]. Over [d] weights and one more number, an intercept for
+ * those who need it. Ported from local-ai-chroma-enf-lora's `student/Optim.kt`.
  */
 class Lbfgs(private val d: Int, private val maxIter: Int, private val tol: Double) {
     val at = DoubleArray(d + 1)
@@ -88,7 +87,8 @@ class Lbfgs(private val d: Int, private val maxIter: Int, private val tol: Doubl
 private class LbfgsMemory {
     private val sHist = ArrayList<DoubleArray>()
     private val yHist = ArrayList<DoubleArray>()
-    val size: Int get() = sHist.size
+    val size: Int
+        get() = sHist.size
 
     fun direction(g: DoubleArray, dir: DoubleArray) {
         for (k in dir.indices) dir[k] = -g[k]

@@ -2,12 +2,12 @@ package io.github.vlsergey.recommend4me.source.ao3
 
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
-import org.jsoup.Jsoup
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.jsoup.Jsoup
 
 /** The extension finds on the site's pages what the application knows of them. */
 class Ao3DecorTest {
@@ -21,7 +21,10 @@ class Ao3DecorTest {
     @Test
     fun `the addresses of a work's pages name the work`() {
         assertEquals("93948516", source.itemIdOf("https://archiveofourown.org/works/93948516"))
-        assertEquals("93948516", source.itemIdOf("https://archiveofourown.org/works/93948516/chapters/250718281#workskin"))
+        assertEquals(
+            "93948516",
+            source.itemIdOf("https://archiveofourown.org/works/93948516/chapters/250718281#workskin"),
+        )
         assertEquals("93948516", source.itemIdOf("https://archiveofourown.org/works/93948516?view_full_work=true"))
         assertNull(source.itemIdOf("https://archiveofourown.org/works/search?work_search%5Bquery%5D=x"))
         assertNull(source.itemIdOf("https://archiveofourown.org/tags/Angst/works"))
@@ -40,7 +43,10 @@ class Ao3DecorTest {
     fun `the comments of a page are the ones kept`() {
         val html = page("comments.html")
         val context = MemorySourceContext()
-        source.capture(CapturedPage("https://archiveofourown.org/works/89821571/chapters/238641631?show_comments=true", html, now), context)
+        source.capture(
+            CapturedPage("https://archiveofourown.org/works/89821571/chapters/238641631?show_comments=true", html, now),
+            context,
+        )
         val r = decor.reviews!!
         val ids = Jsoup.parse(html).select(r.selector).map { it.attr(r.idAttribute).removePrefix(r.idPrefix) }
         assertTrue(ids.isNotEmpty())
@@ -54,7 +60,11 @@ class Ao3DecorTest {
         val url = "https://archiveofourown.org/tags/Fullmetal%20Alchemist%20-%20All%20Media%20Types/works"
         val captured = source.capture(CapturedPage(url, html, now), context)
         val cards = decor.cards!!
-        val linked = Jsoup.parse(html, url).select(cards.selector).mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }.mapNotNull(source::itemIdOf)
+        val linked =
+            Jsoup.parse(html, url)
+                .select(cards.selector)
+                .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
+                .mapNotNull(source::itemIdOf)
         assertEquals(captured, linked)
     }
 }

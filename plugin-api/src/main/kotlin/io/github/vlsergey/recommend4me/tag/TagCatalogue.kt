@@ -1,9 +1,9 @@
 package io.github.vlsergey.recommend4me.tag
 
 /**
- * An entry of a catalogue a tag is bound to — a genre, a trope, a sport, a fictional thing — with
- * its names and the line that tells it from its namesakes, by language: every language asked for
- * that has them. [aliases]: the other names it goes by, by language.
+ * An entry of a catalogue a tag is bound to — a genre, a trope, a sport, a fictional thing — with its names and the
+ * line that tells it from its namesakes, by language: every language asked for that has them. [aliases]: the other
+ * names it goes by, by language.
  */
 class TagEntry(
     /** Stable within the catalogue: "Q305561". */
@@ -16,27 +16,28 @@ class TagEntry(
 )
 
 /**
- * A catalogue the tags of the sites are bound to by the user — Wikidata: an entry of it names the
- * tag in every language of the user, and its other names are the tag's too. The user finds the
- * entry ([find]) and binds the tag to it; the entry's names are read again when asked ([entries]).
+ * A catalogue the tags of the sites are bound to by the user — Wikidata: an entry of it names the tag in every language
+ * of the user, and its other names are the tag's too. The user finds the entry ([find]) and binds the tag to it; the
+ * entry's names are read again when asked ([entries]).
  *
- * Implemented by a plugin and declared as a Spring bean. The calls go to the catalogue's service
- * and may take seconds.
+ * Implemented by a plugin and declared as a Spring bean. The calls go to the catalogue's service and may take seconds.
  */
 interface TagCatalogue {
     /** Stable: the ids of its entries are kept with it; and the namespace of its title, which the plugin carries. */
     val id: String
 
-    /** The entries a text may stand for, the likeliest first — an id of the catalogue, or its page's address, the entry itself. */
+    /**
+     * The entries a text may stand for, the likeliest first — an id of the catalogue, or its page's address, the entry
+     * itself.
+     */
     fun find(text: String, languages: List<String>): List<TagEntry>
 
     /** The entries [ids] with their names in [languages], those the catalogue has. */
     fun entries(ids: Collection<String>, languages: List<String>): List<TagEntry>
 
     /**
-     * The entries right above each of [ids] — what each is a kind of: "satire" is a kind of
-     * "humor"; by id, an entry with none left out. What the application offers the tags' graph
-     * from; none of a catalogue that does not say.
+     * The entries right above each of [ids] — what each is a kind of: "satire" is a kind of "humor"; by id, an entry
+     * with none left out. What the application offers the tags' graph from; none of a catalogue that does not say.
      */
     fun above(ids: Collection<String>): Map<String, List<String>> = emptyMap()
 }

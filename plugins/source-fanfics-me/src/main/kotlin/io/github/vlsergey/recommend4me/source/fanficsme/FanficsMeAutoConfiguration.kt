@@ -6,6 +6,5 @@ import org.springframework.context.annotation.Bean
 
 @AutoConfiguration
 class FanficsMeAutoConfiguration {
-    @Bean
-    fun fanficsMe(): Source = FanficsMe()
+    @Bean fun fanficsMe(): Source = FanficsMe()
 }

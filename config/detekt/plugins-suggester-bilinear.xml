@@ -1,0 +1,60 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:Ensemble.kt:Ensemble$blocks.any { it == null } || a == null || u == null || du == null || g == null || part == null || rows == null</ID>
+    <ID>CyclomaticComplexMethod:Bilinear.kt:Bilinear$internal fun lossAndGradient: Float</ID>
+    <ID>CyclomaticComplexMethod:BilinearSuggester.kt:BilinearSuggester$override fun fit: FittedSuggester?</ID>
+    <ID>CyclomaticComplexMethod:BilinearSuggesterTest.kt:BilinearSuggesterTest$@Test fun `a work with nothing but its text, among works the site tagged, is judged by its text`</ID>
+    <ID>CyclomaticComplexMethod:BilinearTest.kt:BilinearTest$private fun task: SuggestionTask</ID>
+    <ID>CyclomaticComplexMethod:Design.kt:Design$internal fun features: ItemFeatures</ID>
+    <ID>CyclomaticComplexMethod:Lbfgs.kt:Lbfgs$fun minimize: FloatArray</ID>
+    <ID>CyclomaticComplexMethod:Scoring.kt:Scoring.Scored$private fun score</ID>
+    <ID>ForEachOnRange:Scoring.kt:Scoring$(0 until task.itemCount).chunked(SHARE_CHUNK)</ID>
+    <ID>LargeClass:Ensemble.kt:Ensemble : AutoCloseable</ID>
+    <ID>LongMethod:Bilinear.kt:Bilinear$internal fun lossAndGradient: Float</ID>
+    <ID>LongMethod:BilinearBench.kt:BilinearBench$@Test fun `a kept task fitted, and fitted again after one answer more`</ID>
+    <ID>LongMethod:BilinearSuggester.kt:BilinearSuggester$override fun fit: FittedSuggester?</ID>
+    <ID>LongMethod:BilinearSuggester.kt:BilinearSuggester$private fun fitRank: Pair&lt;List&lt;Tried&gt;, String&gt;</ID>
+    <ID>LongMethod:BilinearSuggesterTest.kt:BilinearSuggesterTest$@Test fun `a work with nothing but its text, among works the site tagged, is judged by its text`</ID>
+    <ID>LongMethod:BilinearTest.kt:BilinearTest$@Test fun `the features' products are those of the features laid out whole`</ID>
+    <ID>LongMethod:Ensemble.kt:Ensemble$internal fun evaluate</ID>
+    <ID>LongMethod:Lbfgs.kt:Lbfgs$fun minimize: FloatArray</ID>
+    <ID>LongMethod:PairsOnCard.kt:PairsOnCard$fun evaluate</ID>
+    <ID>LongMethod:Scoring.kt:Scoring.Scored$private fun score</ID>
+    <ID>LongMethod:Scoring.kt:Scoring.Scored.OnCard$fun shown: List&lt;Shown&gt;</ID>
+    <ID>LongMethod:ScoringTest.kt:ScoringTest$private fun cardAlike</ID>
+    <ID>LongMethod:StepOnCard.kt:StepOnCard.Companion$private fun forwardGraph: ByteArray</ID>
+    <ID>LoopWithTooManyJumpStatements:Bilinear.kt:Bilinear$for</ID>
+    <ID>MagicNumber:Ensemble.kt:Ensemble$5</ID>
+    <ID>MagicNumber:Lbfgs.kt:Lbfgs$0.5f</ID>
+    <ID>MagicNumber:Lbfgs.kt:Search$0.5f</ID>
+    <ID>MagicNumber:PairsOnCard.kt:PairsOnCard$16</ID>
+    <ID>MagicNumber:PairsOnCard.kt:PairsOnCard$32</ID>
+    <ID>MagicNumber:PairsOnCard.kt:PairsOnCard$3L</ID>
+    <ID>MagicNumber:Scoring.kt:Scoring.Companion$3</ID>
+    <ID>MagicNumber:Scoring.kt:Scoring.Scored$1_000_000</ID>
+    <ID>MagicNumber:Scoring.kt:Scoring.Scored.OnCard$1_000_000</ID>
+    <ID>MagicNumber:Scoring.kt:Scoring.Scored.OnCard$64</ID>
+    <ID>MagicNumber:StepOnCard.kt:StepOnCard.Companion$10</ID>
+    <ID>MaxLineLength:BilinearBench.kt:BilinearBench$"BENCH ${task.itemCount} items × ${task.valueCount} values, ${problem.pairs.count.sumOf { it.toLong() }} pairs that weigh anything, ${problem.hintPairs} pairs of names in ${problem.hintGroups.size} groups"</ID>
+    <ID>MaxLineLength:BilinearBench.kt:BilinearBench$"BENCH on the $where: one loss $one ms; a fold from scratch $calls losses in ${(System.nanoTime() - t) / 1_000_000} ms"</ID>
+    <ID>MaxLineLength:BilinearSuggester.kt:BilinearSuggester$"{} items × {} values, {} features of an item, {} of a value, {} names against {} values, {}: {}; chosen r={} λ={} — in {} ms; "</ID>
+    <ID>MaxLineLength:BilinearSuggesterTest.kt:BilinearSuggesterTest$fun</ID>
+    <ID>MaxLineLength:BilinearTest.kt:BilinearTest$"model $k: the worst relative difference of the gradient $worst, at $at of $part: ${grad[at]} alone, ${gradients[k][at]} together"</ID>
+    <ID>MaxLineLength:PairsOnCard.kt:PairsOnCard.Companion$"no room on the card for the pairs of {} items × {} values and {} names: they stay on the processor"</ID>
+    <ID>MaxLineLength:PairsOnCardBench.kt:PairsOnCardBench$"BENCH $what: ${problem.n} items × ${problem.m} values, ${problem.hintPairs} pairs of names in ${problem.hintGroups.size} groups; "</ID>
+    <ID>MaxLineLength:Scoring.kt:Scoring.Scored$"the coordinates of {} items of {} values, {} features, {} folds of rank {}, in the main memory: the weights laid out in {} ms; "</ID>
+    <ID>MaxLineLength:Scoring.kt:Scoring.Scored$"the coordinates of {} items of {} values, {} features, {} folds of rank {}, on the card: the weights and ones sent in {} ms, "</ID>
+    <ID>MaxLineLength:Scoring.kt:Scoring.Scored$"the scores of every value of {} items of {} values: their coordinates gathered in {} ms, the rows made in {} ms"</ID>
+    <ID>MaxLineLength:Scoring.kt:Scoring.Scored.OnCard$"what {} items of {} values are shown with, chosen on the card: laid out and sent in {} ms, chosen and brought back in {} ms, "</ID>
+    <ID>MaxLineLength:ScoringTest.kt:ScoringTest$fun</ID>
+    <ID>NestedBlockDepth:ScoringTest.kt:ScoringTest$private fun cardAlike</ID>
+    <ID>ReturnCount:Lbfgs.kt:Lbfgs$fun minimize: FloatArray</ID>
+    <ID>ReturnCount:PairsOnCard.kt:PairsOnCard.Companion$fun open: PairsOnCard?</ID>
+    <ID>ReturnCount:StepOnCard.kt:StepOnCard.Companion$fun open: StepOnCard?</ID>
+    <ID>SwallowedException:Ensemble.kt:Ensemble$e: NoRoomOnCard</ID>
+    <ID>SwallowedException:PairsOnCard.kt:PairsOnCard.Companion$e: NoRoom</ID>
+    <ID>TooManyFunctions:Ensemble.kt:Ensemble : AutoCloseable</ID>
+  </CurrentIssues>
+</SmellBaseline>

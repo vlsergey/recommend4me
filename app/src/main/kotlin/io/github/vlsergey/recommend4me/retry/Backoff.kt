@@ -4,9 +4,9 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * When a thing that failed is tried again: [first] after the first failure, [factor] times longer
- * after every next one, never longer than [max] — without a bound when it is null, the wait growing
- * without end. The attempts are counted by the one who tries: the number of failures so far.
+ * When a thing that failed is tried again: [first] after the first failure, [factor] times longer after every next one,
+ * never longer than [max] — without a bound when it is null, the wait growing without end. The attempts are counted by
+ * the one who tries: the number of failures so far.
  */
 data class Backoff(
     val first: Duration = Duration.ofSeconds(1),

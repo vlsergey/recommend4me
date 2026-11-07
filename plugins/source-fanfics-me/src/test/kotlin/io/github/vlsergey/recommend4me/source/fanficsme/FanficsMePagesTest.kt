@@ -24,7 +24,10 @@ class FanficsMePagesTest {
     @Test
     fun `the cards of the search give the works with all their header says`() {
         val context = MemorySourceContext()
-        assertEquals(listOf("251745", "251243", "218574", "252329", "247092"), capture(context, "https://fanfics.me/find?reit1=0&page=1", "find.html"))
+        assertEquals(
+            listOf("251745", "251243", "218574", "252329", "247092"),
+            capture(context, "https://fanfics.me/find?reit1=0&page=1", "find.html"),
+        )
         val work = "247092"
         assertEquals("Когда моя бабушка умрёт?", context.heads.getValue(work).title)
         // "изменено 28.10.2026", in Moscow time
@@ -40,17 +43,27 @@ class FanficsMePagesTest {
         assertEquals(listOf("макси"), facets["size"])
         // The genres, the warnings and the events: the site's tags
         val tags = facets.getValue("tag")
-        listOf("детектив", "нецензурная лексика", "т/и / л/и", "дом дракона", "фик об оригинальных героях").forEach { assertTrue(it in tags, "$it in $tags") }
+        listOf("детектив", "нецензурная лексика", "т/и / л/и", "дом дракона", "фик об оригинальных героях").forEach {
+            assertTrue(it in tags, "$it in $tags")
+        }
         // The characters by their ids of the site's encyclopedia, the names as written
         assertEquals("109000", facets.getValue("pairing").first())
         assertEquals("Эймонд Таргариен", context.facetNames.getValue("pairing")["109000"])
-        assertTrue(context.texts.getValue(work).getValue(FanficsMe.PAIRINGS_LINE).startsWith("Эймонд Таргариен, Деймон Таргариен (Порочный принц), "))
+        assertTrue(
+            context.texts
+                .getValue(work)
+                .getValue(FanficsMe.PAIRINGS_LINE)
+                .startsWith("Эймонд Таргариен, Деймон Таргариен (Порочный принц), ")
+        )
         assertTrue(context.texts.getValue(work).getValue(FanficsMe.ANNOTATION).startsWith("Писательница без книг."))
         val numbers = context.numbers.getValue(work)
         assertEquals(148239.0, numbers["chars"])
         assertEquals(2.0, numbers["readers"])
         assertTrue((numbers["views"] ?: 0.0) > 0)
-        assertEquals(listOf("https://fanfics.me/images/fanart/2026/07/07/1783406848483_200_300.jpg"), context.pictures[work])
+        assertEquals(
+            listOf("https://fanfics.me/images/fanart/2026/07/07/1783406848483_200_300.jpg"),
+            context.pictures[work],
+        )
     }
 
     @Test
@@ -84,7 +97,9 @@ class FanficsMePagesTest {
         assertEquals("1/2/3", facets.getValue("pairing").first())
         assertEquals("Гарри Поттер/Гермиона Грейнджер/Рон Уизли", context.facetNames.getValue("pairing")["1/2/3"])
         val tags = facets.getValue("tag")
-        listOf("приключения", "попаданцы", "распределение в другие факультеты").forEach { assertTrue(it in tags, "$it in $tags") }
+        listOf("приключения", "попаданцы", "распределение в другие факультеты").forEach {
+            assertTrue(it in tags, "$it in $tags")
+        }
         // Not a translation: nothing of an original
         assertEquals(emptyList(), facets["originalLanguage"])
         val numbers = context.numbers.getValue(work)
@@ -94,7 +109,8 @@ class FanficsMePagesTest {
         assertEquals(27.0, numbers["readers"])
         assertEquals(0.0, numbers["comments"])
         assertEquals(0.0, numbers["recommendations"])
-        // The page lists the first three chapters, the rest hidden, and the last three: the hidden left out of the page kept here
+        // The page lists the first three chapters, the rest hidden, and the last three: the hidden left out of the page
+        // kept here
         assertEquals(6.0, numbers["parts"])
         val texts = context.texts.getValue(work)
         assertTrue(texts.getValue(FanficsMe.ANNOTATION).startsWith("Продолжение серии книг и фильмов о Гарри Поттере"))
@@ -105,7 +121,10 @@ class FanficsMePagesTest {
         assertEquals("Сюжет 1 серии: Ожившее прошлое Дж. К. Роулинг", parts.getValue("0").title)
         assertEquals(Instant.parse("2026-10-24T21:00:00Z"), parts.getValue("0").publishedAt)
         assertNull(parts.getValue("0").content)
-        assertEquals(listOf("https://fanfics.me/images/fanart/2026/10/25/1792907630596_200_300.jpg"), context.pictures[work])
+        assertEquals(
+            listOf("https://fanfics.me/images/fanart/2026/10/25/1792907630596_200_300.jpg"),
+            context.pictures[work],
+        )
     }
 
     @Test
@@ -191,7 +210,10 @@ class FanficsMePagesTest {
         assertEquals("252474", source.itemIdOf("https://fanfics.me/read.php?chapter=3&id=252474"))
         assertNull(source.itemIdOf("https://fanfics.me/fandom2"))
         assertEquals(
-            listOf("https://fanfics.me/images/fanart/2026/10/25/1792907630596.jpg", "https://fanfics.me/images/fanart/2026/10/25/1792907630596_200_300.jpg"),
+            listOf(
+                "https://fanfics.me/images/fanart/2026/10/25/1792907630596.jpg",
+                "https://fanfics.me/images/fanart/2026/10/25/1792907630596_200_300.jpg",
+            ),
             source.pictureAddresses("https://fanfics.me/images/fanart/2026/10/25/1792907630596_200_300.jpg"),
         )
     }

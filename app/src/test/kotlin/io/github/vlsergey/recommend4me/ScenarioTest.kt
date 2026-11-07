@@ -1,20 +1,8 @@
 package io.github.vlsergey.recommend4me
 
-import io.github.vlsergey.recommend4me.refusal.Refusal
-import io.github.vlsergey.recommend4me.refusal.Refused
-import io.github.vlsergey.recommend4me.source.CapturedPage
-import io.github.vlsergey.recommend4me.source.FacetDef
-import io.github.vlsergey.recommend4me.source.FacetValue
-import io.github.vlsergey.recommend4me.source.ItemHead
-import io.github.vlsergey.recommend4me.source.NumberDef
-import io.github.vlsergey.recommend4me.source.Source
-import io.github.vlsergey.recommend4me.source.SourceContext
-import io.github.vlsergey.recommend4me.source.SourceMode
-import io.github.vlsergey.recommend4me.source.SourceSchema
-import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.api.model.CaptureRequest
-import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.FacetChoice
+import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.InterestRequest
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.ItemRef
@@ -27,6 +15,23 @@ import io.github.vlsergey.recommend4me.contenttype.TypesController
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.i18n.TranslationsController
 import io.github.vlsergey.recommend4me.item.ItemsController
+import io.github.vlsergey.recommend4me.refusal.Refusal
+import io.github.vlsergey.recommend4me.refusal.Refused
+import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.FacetDef
+import io.github.vlsergey.recommend4me.source.FacetValue
+import io.github.vlsergey.recommend4me.source.ItemHead
+import io.github.vlsergey.recommend4me.source.NumberDef
+import io.github.vlsergey.recommend4me.source.Source
+import io.github.vlsergey.recommend4me.source.SourceContext
+import io.github.vlsergey.recommend4me.source.SourceMode
+import io.github.vlsergey.recommend4me.source.SourceSchema
+import io.github.vlsergey.recommend4me.source.TextDef
+import java.io.File
+import java.time.Instant
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -34,15 +39,10 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
-import java.io.File
-import java.time.Instant
-import kotlin.test.assertEquals
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
- * The whole application with a source of its own: a page captured from the browser becomes an
- * item, a grade is kept, a correction shows, the list filters and sorts.
+ * The whole application with a source of its own: a page captured from the browser becomes an item, a grade is kept, a
+ * correction shows, the list filters and sorts.
  */
 @SpringBootTest(properties = ["recommend4me.data-dir=build/test-data/scenario"])
 class ScenarioTest {
@@ -58,8 +58,7 @@ class ScenarioTest {
 
     @TestConfiguration
     class Plugin {
-        @Bean
-        fun testSource(): Source = TestSource()
+        @Bean fun testSource(): Source = TestSource()
     }
 
     /** A site whose pages are "<id>|<title>|<tags>|<annotation>". */
@@ -67,18 +66,23 @@ class ScenarioTest {
         override val id = "test"
         override val contentType = "books"
         override val homepage = "https://test.example"
-        override val schema = SourceSchema(
-            facets = listOf(FacetDef("tag", filter = true, searchWeight = 0.9f, onCard = true)),
-            numbers = listOf(NumberDef("likes", sortable = true, filterable = true)),
-            texts = listOf(TextDef("annotation", block = "text:annotation")),
-        )
+        override val schema =
+            SourceSchema(
+                facets = listOf(FacetDef("tag", filter = true, searchWeight = 0.9f, onCard = true)),
+                numbers = listOf(NumberDef("likes", sortable = true, filterable = true)),
+                texts = listOf(TextDef("annotation", block = "text:annotation")),
+            )
         override val modes = setOf(SourceMode.BROWSER)
         override val capturePatterns = listOf(Regex("https://test\\.example/work/.*"))
+
         override fun itemUrl(itemId: String) = "https://test.example/work/$itemId"
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
             val (id, title, tags, annotation) = page.html.split('|')
-            context.items.upsert(ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-0${id.last()}T00:00:00Z")), page.capturedAt)
+            context.items.upsert(
+                ItemHead(id, itemUrl(id), title, updatedAt = Instant.parse("2026-01-0${id.last()}T00:00:00Z")),
+                page.capturedAt,
+            )
             context.items.setFacet(id, "tag", tags.split(',').map { FacetValue(it, it.uppercase()) })
             context.items.setNumbers(id, mapOf("likes" to id.last().digitToInt().toDouble()))
             context.items.setTexts(id, mapOf("annotation" to annotation))
@@ -86,29 +90,34 @@ class ScenarioTest {
         }
     }
 
-    @Autowired
-    lateinit var captures: CaptureController
+    @Autowired lateinit var captures: CaptureController
 
-    @Autowired
-    lateinit var items: ItemsController
+    @Autowired lateinit var items: ItemsController
 
-    @Autowired
-    lateinit var corrections: CorrectionsController
+    @Autowired lateinit var corrections: CorrectionsController
 
-    @Autowired
-    lateinit var types: TypesController
+    @Autowired lateinit var types: TypesController
 
-    @Autowired
-    lateinit var translations: TranslationsController
+    @Autowired lateinit var translations: TranslationsController
 
-    @Autowired
-    lateinit var stores: io.github.vlsergey.recommend4me.source.Stores
+    @Autowired lateinit var stores: io.github.vlsergey.recommend4me.source.Stores
 
-    private fun capture(body: String) = captures.capturePage(CaptureRequest("https://test.example/work/${body.substringBefore('|')}", body)).body!!
+    private fun capture(body: String) =
+        captures.capturePage(CaptureRequest("https://test.example/work/${body.substringBefore('|')}", body)).body!!
 
     private fun list(
-        view: ItemView = ItemView.ALL, sort: ItemSort = ItemSort.SCORE, sortNumber: String? = null, facets: List<FacetChoice>? = null, range: List<String>? = null,
-    ) = items.listItems("books", ItemQuery(view = view, sort = sort, sortNumber = sortNumber, facets = facets, ranges = range)).body!!
+        view: ItemView = ItemView.ALL,
+        sort: ItemSort = ItemSort.SCORE,
+        sortNumber: String? = null,
+        facets: List<FacetChoice>? = null,
+        range: List<String>? = null,
+    ) =
+        items
+            .listItems(
+                "books",
+                ItemQuery(view = view, sort = sort, sortNumber = sortNumber, facets = facets, ranges = range),
+            )
+            .body!!
 
     @Test
     fun `a captured page becomes an item that can be graded, corrected, filtered and sorted`() {
@@ -119,7 +128,8 @@ class ScenarioTest {
 
         val type = types.listTypes().body!!.single()
         assertEquals("books", type.id)
-        // The server words nothing: a source's own things by the keys of its namespace, the standard ones of the standard
+        // The server words nothing: a source's own things by the keys of its namespace, the standard ones of the
+        // standard
         val source = type.sources.single()
         assertEquals("test:facet.tag", source.facets.single { it.key == "tag" }.labelKey)
         assertEquals("standard:facet.universe", source.facets.single { it.key == "universe" }.labelKey)
@@ -145,15 +155,22 @@ class ScenarioTest {
         assertEquals(2, list(view = ItemView.UNRATED).total)
 
         // The site's tags are its word, not corrected; the list is filtered by them
-        val siteField = assertThrows<Refused> { corrections.correctFacet("test", "w2", FacetCorrection(facet = "tag", added = true, key = "fantasy")) }
+        val siteField =
+            assertThrows<Refused> {
+                corrections.correctFacet("test", "w2", FacetCorrection(facet = "tag", added = true, key = "fantasy"))
+            }
         assertEquals(Refusal.SITE_FIELD, siteField.refusal)
         assertEquals(mapOf("field" to "test:facet.tag"), siteField.params)
-        assertEquals("standard:error.siteField", siteField.refusal.problem(siteField.status, siteField.message!!, siteField.params).properties!!["code"])
+        assertEquals(
+            "standard:error.siteField",
+            siteField.refusal.problem(siteField.status, siteField.message!!, siteField.params).properties!!["code"],
+        )
         assertEquals(2, list(facets = listOf(FacetChoice("test.tag", hidden = listOf("romance")))).total)
         val notFantasy = list(facets = listOf(FacetChoice("test.tag", hidden = listOf("fantasy", "dragons"))))
         assertEquals(listOf("w2"), notFantasy.items.map { it.item })
         // The values shown alone, when fewer: every other hidden, the hidden list not read
-        val dragons = list(facets = listOf(FacetChoice("test.tag", hidden = listOf("dragons"), shown = listOf("dragons"))))
+        val dragons =
+            list(facets = listOf(FacetChoice("test.tag", hidden = listOf("dragons"), shown = listOf("dragons"))))
         assertEquals(listOf("w1"), dragons.items.map { it.item })
         assertEquals(0, list(facets = listOf(FacetChoice("test.tag", shown = emptyList()))).total)
 
@@ -165,15 +182,22 @@ class ScenarioTest {
         assertEquals(listOf("w3"), list(range = listOf("test.likes=3..")).items.map { it.item })
         // A number no source has limits nothing; a range not understood is refused
         assertEquals(3, list(range = listOf("other.parts=1..1")).total)
-        assertEquals(mapOf("range" to "test.likes=a..2"), assertThrows<Refused> { list(range = listOf("test.likes=a..2")) }.params)
+        assertEquals(
+            mapOf("range" to "test.likes=a..2"),
+            assertThrows<Refused> { list(range = listOf("test.likes=a..2")) }.params,
+        )
         assertEquals("A boy finds a dragon egg", items.getItem("test", "w1").body!!.texts.single().content)
-        // The source's filter facet, and the kind, the universe, the language and the age rating the application gives every book
+        // The source's filter facet, and the kind, the universe, the language and the age rating the application gives
+        // every book
         val filters = items.listFacets("books").body!!
         assertEquals(listOf("test.tag", "kind", "universe", "languages", "age-rating"), filters.map { it.id })
         // The age rating a scale: every value of it in its order, a value no work has too
         val rating = filters.single { it.id == "age-rating" }
         assertEquals(true, rating.ordered)
-        assertEquals(listOf("g", "pg-13", "r", "nc-17", "nc-21"), items.listFilterValues("books", rating.id).body!!.propertyValues.map { it.key })
+        assertEquals(
+            listOf("g", "pg-13", "r", "nc-17", "nc-21"),
+            items.listFilterValues("books", rating.id).body!!.propertyValues.map { it.key },
+        )
 
         // The user's word on what a search found: one line however typed, taken back when pressed again
         items.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", relevant = true))
@@ -238,7 +262,10 @@ class ScenarioTest {
         val again = items.getItem("test", "w1").body!!
         assertNull(again.summary.grade)
         assertNull(again.summary.interest)
-        assertTrue(again.allFacets.none { f -> f.propertyValues.any { it.corrected != null } }, "answers ${again.allFacets}")
+        assertTrue(
+            again.allFacets.none { f -> f.propertyValues.any { it.corrected != null } },
+            "answers ${again.allFacets}",
+        )
         assertEquals(3, list().total)
         // The newest in the application first: the work seen anew, however long ago it was updated on the site
         assertEquals("w1", list(sort = ItemSort.ADDED).items.first().item)

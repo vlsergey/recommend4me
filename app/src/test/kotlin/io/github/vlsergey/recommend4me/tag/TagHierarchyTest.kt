@@ -7,7 +7,10 @@ import kotlin.test.assertEquals
 class TagHierarchyTest {
 
     // слоуберн → романтика → отношения; флафф → романтика
-    private val h = TagHierarchy(mapOf("слоуберн" to setOf("романтика"), "романтика" to setOf("отношения"), "флафф" to setOf("романтика")))
+    private val h =
+        TagHierarchy(
+            mapOf("слоуберн" to setOf("романтика"), "романтика" to setOf("отношения"), "флафф" to setOf("романтика"))
+        )
 
     private fun answer(key: String, added: Boolean) = FacetCorrection("w", "tags", key, added, null)
 
@@ -20,12 +23,14 @@ class TagHierarchyTest {
 
     @Test
     fun `a tag the user said the work has not takes every tag under it, over any has`() {
-        val corrected = TagHierarchy.corrected(
-            mapOf("tags" to listOf("слоуберн", "драма")),
-            listOf(answer("флафф", true), answer("романтика", false)),
-            mapOf("tags" to h),
-        )
-        // Not the slow burn nor the fluff, under the romance taken away; not the romance; the relations still not said of
+        val corrected =
+            TagHierarchy.corrected(
+                mapOf("tags" to listOf("слоуберн", "драма")),
+                listOf(answer("флафф", true), answer("романтика", false)),
+                mapOf("tags" to h),
+            )
+        // Not the slow burn nor the fluff, under the romance taken away; not the romance; the relations still not said
+        // of
         assertEquals(listOf("драма"), corrected["tags"])
     }
 

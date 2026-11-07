@@ -27,7 +27,10 @@ class FactorizationScorerTest {
             val plus = theta.copyOf().also { it[k] += h }
             val minus = theta.copyOf().also { it[k] -= h }
             val numeric = (objective.at(plus, DoubleArray(g.size)) - objective.at(minus, DoubleArray(g.size))) / (2 * h)
-            assertTrue(abs(numeric - g[k]) < 2e-3 * maxOf(1.0, abs(numeric)), "θ[$k]: analytic ${g[k]}, numeric $numeric")
+            assertTrue(
+                abs(numeric - g[k]) < 2e-3 * maxOf(1.0, abs(numeric)),
+                "θ[$k]: analytic ${g[k]}, numeric $numeric",
+            )
         }
     }
 
@@ -38,17 +41,18 @@ class FactorizationScorerTest {
         val n = 240
         val d = 8
         val x = Matrix(n, d)
-        val grades = IntArray(n) { i ->
-            for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
-            val s = x.held[i * d] * x.held[i * d + 1]
-            when {
-                s > 0.3f -> 5
-                s > 0.1f -> 4
-                s > -0.1f -> 3
-                s > -0.3f -> 2
-                else -> 1
+        val grades =
+            IntArray(n) { i ->
+                for (k in 0 until d) x.held[i * d + k] = random.nextFloat() * 2 - 1
+                val s = x.held[i * d] * x.held[i * d + 1]
+                when {
+                    s > 0.3f -> 5
+                    s > 0.1f -> 4
+                    s > -0.1f -> 3
+                    s > -0.3f -> 2
+                    else -> 1
+                }
             }
-        }
         val ids = LongArray(n) { it.toLong() }
         val task = RankingTask(x, grades, ids, ids)
         val train = IntArray(180) { it }
@@ -88,6 +92,7 @@ class FactorizationScorerTest {
 
     /** The line alone: the machine with no vectors. */
     private object PairwiseLine {
-        fun fit(task: RankingTask, rows: IntArray): FittedScorer = FactorizationScorer.fit(task.x, RankingPairs.of(task, rows), 1.0, rank = 0)
+        fun fit(task: RankingTask, rows: IntArray): FittedScorer =
+            FactorizationScorer.fit(task.x, RankingPairs.of(task, rows), 1.0, rank = 0)
     }
 }

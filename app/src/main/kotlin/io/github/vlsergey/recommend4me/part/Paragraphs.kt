@@ -1,21 +1,19 @@
 package io.github.vlsergey.recommend4me.part
 
 /**
- * THE PARAGRAPHS OF A PART'S TEXT, as the tags are held against them: its lines with a letter in
- * them, stripped — a line of dashes or stars between scenes is none — those in a row shorter than
- * [MIN_CHARS] joined into one, so a line of a dialogue ("Пить.") is not a passage of its own that
- * the name of a tag is close to by its one word; counted from nought in their order. The same
- * cutting where they are encoded and where one is quoted; a paragraph is known by the hash of its
- * text, its part and number telling only where it is now.
+ * THE PARAGRAPHS OF A PART'S TEXT, as the tags are held against them: its lines with a letter in them, stripped — a
+ * line of dashes or stars between scenes is none — those in a row shorter than [MIN_CHARS] joined into one, so a line
+ * of a dialogue ("Пить.") is not a passage of its own that the name of a tag is close to by its one word; counted from
+ * nought in their order. The same cutting where they are encoded and where one is quoted; a paragraph is known by the
+ * hash of its text, its part and number telling only where it is now.
  */
 object Paragraphs {
     /** The letters a paragraph has at least, its lines joined till it has. */
     const val MIN_CHARS = 200
 
     /**
-     * The cutting in use: the second. The first cut every line apart ([firstCutting]); an answer
-     * given on it was on a line, not on a paragraph of this one — the model learns from those of
-     * this cutting alone.
+     * The cutting in use: the second. The first cut every line apart ([firstCutting]); an answer given on it was on a
+     * line, not on a paragraph of this one — the model learns from those of this cutting alone.
      */
     const val CUTTING = 2
 

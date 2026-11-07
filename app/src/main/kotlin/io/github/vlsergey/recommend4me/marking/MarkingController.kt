@@ -11,14 +11,22 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 class MarkingController(private val marking: Marking) : MarkingApi {
 
-    override fun getMarkingWorks(facet: String, value: String, answered: Boolean, order: MarkingOrder, offset: Int, limit: Int): ResponseEntity<MarkedWorks> =
-        ResponseEntity.ok(marking.works(facet, value, answered, order, offset, limit))
+    override fun getMarkingWorks(
+        facet: String,
+        value: String,
+        answered: Boolean,
+        order: MarkingOrder,
+        offset: Int,
+        limit: Int,
+    ): ResponseEntity<MarkedWorks> = ResponseEntity.ok(marking.works(facet, value, answered, order, offset, limit))
 
     override fun answerMarking(markAnswer: MarkAnswer): ResponseEntity<Unit> {
         val a = markAnswer
-        return if (marking.answer(a.source, a.item, a.facet, a.value, a.verdict)) ResponseEntity.noContent().build() else ResponseEntity.notFound().build()
+        return if (marking.answer(a.source, a.item, a.facet, a.value, a.verdict)) ResponseEntity.noContent().build()
+        else ResponseEntity.notFound().build()
     }
 
     override fun unanswerMarking(source: String, item: String, facet: String, value: String): ResponseEntity<Unit> =
-        if (marking.unanswer(source, item, facet, value)) ResponseEntity.noContent().build() else ResponseEntity.notFound().build()
+        if (marking.unanswer(source, item, facet, value)) ResponseEntity.noContent().build()
+        else ResponseEntity.notFound().build()
 }

@@ -3,10 +3,10 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.source.SourceSchema
 
 /**
- * The values of an item's facets as the application reads them before the user's corrections: the
- * site's — never any taken away — and, of a facet the application works out
- * ([FacetDef.infer][io.github.vlsergey.recommend4me.source.FacetDef.infer]), every value the model
- * says the item more likely has than not.
+ * The values of an item's facets as the application reads them before the user's corrections: the site's — never any
+ * taken away — and, of a facet the application works out
+ * ([FacetDef.infer][io.github.vlsergey.recommend4me.source.FacetDef.infer]), every value the model says the item more
+ * likely has than not.
  */
 object ModelValues {
 
@@ -14,28 +14,41 @@ object ModelValues {
     const val LIKELY = 0.5
 
     /**
-     * How many values of a facet of the layer a work is offered at least that the user has not
-     * answered on and the site does not give: besides every value more likely than not, the
-     * likeliest others up to this many, likely or not — the user's choice.
+     * How many values of a facet of the layer a work is offered at least that the user has not answered on and the site
+     * does not give: besides every value more likely than not, the likeliest others up to this many, likely or not —
+     * the user's choice.
      */
     const val OFFERED = 3
 
     /**
-     * The values to offer beside those a work is shown with: of [chances] (value to chance), the
-     * likeliest the work is not shown with, the user has not answered on and the site does not
-     * give ([fromSite]) — as many as lack to make [OFFERED] with the [shown] values of that kind.
+     * The values to offer beside those a work is shown with: of [chances] (value to chance), the likeliest the work is
+     * not shown with, the user has not answered on and the site does not give ([fromSite]) — as many as lack to make
+     * [OFFERED] with the [shown] values of that kind.
      */
-    fun offered(chances: Map<String, Double>, shown: Set<String>, answered: Set<String>, fromSite: Set<String>): List<String> {
+    fun offered(
+        chances: Map<String, Double>,
+        shown: Set<String>,
+        answered: Set<String>,
+        fromSite: Set<String>,
+    ): List<String> {
         val open = shown.count { it !in answered && it !in fromSite }
-        return chances.entries.asSequence()
+        return chances.entries
+            .asSequence()
             .filter { (key, _) -> key !in shown && key !in answered && key !in fromSite }
-            .sortedByDescending { it.value }.take((OFFERED - open).coerceAtLeast(0)).map { it.key }.toList()
+            .sortedByDescending { it.value }
+            .take((OFFERED - open).coerceAtLeast(0))
+            .map { it.key }
+            .toList()
     }
 
     /** Scores that are the chances themselves ([SuggestionScores]'s own). */
     val CHANCES = SuggestionScores { error("Of chances alone") }
 
-    fun of(schema: SourceSchema, site: Map<String, List<String>>, chances: Map<String, Map<String, Chance>>?): Map<String, List<String>> {
+    fun of(
+        schema: SourceSchema,
+        site: Map<String, List<String>>,
+        chances: Map<String, Map<String, Chance>>?,
+    ): Map<String, List<String>> {
         if (chances.isNullOrEmpty()) return site
         val worked = schema.facets.filter { it.infer && it.key in chances }
         if (worked.isEmpty()) return site
@@ -44,27 +57,40 @@ object ModelValues {
             val own = site[def.key].orEmpty()
             // Of a facet of one value, the likeliest alone — and none beside the site's own; of one every
             // work has ([FacetDef.required]), the likeliest however likely
-            val given = given(chances[def.key].orEmpty()).filter { it !in own }.let {
-                if (!def.single) it
-                else if (own.isNotEmpty()) emptyList()
-                else it.take(1).ifEmpty { if (def.required) listOfNotNull(likeliest(chances[def.key].orEmpty())) else emptyList() }
-            }
+            val given =
+                given(chances[def.key].orEmpty())
+                    .filter { it !in own }
+                    .let {
+                        if (!def.single) it
+                        else if (own.isNotEmpty()) emptyList()
+                        else
+                            it.take(1).ifEmpty {
+                                if (def.required) listOfNotNull(likeliest(chances[def.key].orEmpty())) else emptyList()
+                            }
+                    }
             if (given.isNotEmpty()) out[def.key] = own + given
         }
         return out
     }
 
     /** The likeliest value the item has not already of the [chances]; none of none. */
-    fun likeliest(chances: Map<String, Chance>): String? = chances.values.filter { !it.had }.maxByOrNull { it.chance }?.key
-
-    /** The values the model gives an item of a facet it works out — and every draft of the layer ([Chance.drafted]) — the likeliest first. */
-    fun given(chances: Map<String, Chance>): List<String> =
-        chances.values.filter { !it.had && (it.drafted || it.chance > LIKELY) }.sortedByDescending { it.chance }.map { it.key }
+    fun likeliest(chances: Map<String, Chance>): String? =
+        chances.values.filter { !it.had }.maxByOrNull { it.chance }?.key
 
     /**
-     * The values of an item's [chances] a card or a work's facets may show with their names: those it
-     * has and those given. Not every value kept — thousands of a universe's characters are, of a work
-     * of it — the few offered beside them named apart, when shown.
+     * The values the model gives an item of a facet it works out — and every draft of the layer ([Chance.drafted]) —
+     * the likeliest first.
+     */
+    fun given(chances: Map<String, Chance>): List<String> =
+        chances.values
+            .filter { !it.had && (it.drafted || it.chance > LIKELY) }
+            .sortedByDescending { it.chance }
+            .map { it.key }
+
+    /**
+     * The values of an item's [chances] a card or a work's facets may show with their names: those it has and those
+     * given. Not every value kept — thousands of a universe's characters are, of a work of it — the few offered beside
+     * them named apart, when shown.
      */
     fun named(chances: Map<String, Chance>?): List<String> =
         chances.orEmpty().values.filter { it.had || it.drafted || it.chance > LIKELY }.map { it.key }

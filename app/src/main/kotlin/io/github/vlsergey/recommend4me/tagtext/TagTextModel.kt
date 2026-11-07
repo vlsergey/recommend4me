@@ -1,20 +1,19 @@
 package io.github.vlsergey.recommend4me.tagtext
 
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.TAG_TEXT_MODEL
-import org.jooq.DSLContext
-import org.jooq.impl.DSL
 import java.time.Instant
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
+import org.jooq.DSLContext
+import org.jooq.impl.DSL
 
 /**
- * THE MODEL OF THE CLOSENESS of a tag and a paragraph, learnt from the user's answers on the tags
- * offered by the text ([TagTextVerdict]): the chance that the work has the tag by the paragraph is
- * σ(slope · closeness + intercept + the tag's own bias). The bias of a tag the user keeps calling
- * wrong falls — a structural tag, never in a paragraph, sinks by itself; of a tag never answered on,
- * nought: it is told by its closeness alone.
+ * THE MODEL OF THE CLOSENESS of a tag and a paragraph, learnt from the user's answers on the tags offered by the text
+ * ([TagTextVerdict]): the chance that the work has the tag by the paragraph is σ(slope · closeness + intercept + the
+ * tag's own bias). The bias of a tag the user keeps calling wrong falls — a structural tag, never in a paragraph, sinks
+ * by itself; of a tag never answered on, nought: it is told by its closeness alone.
  */
 class TagTextModel(val slope: Double, val intercept: Double, val bias: Map<Long, Double>) {
 
@@ -30,13 +29,17 @@ class TagTextModel(val slope: Double, val intercept: Double, val bias: Map<Long,
         private const val ROUNDS = 100
 
         /**
-         * Fitted of the [answers] that teach ([TagTextVerdict.YES] and [TagTextVerdict.WRONG]) by
-         * Newton's steps: of the slope and the intercept together, of every tag's bias apart. Null
-         * while there are not answers of both kinds — nothing to tell them by.
+         * Fitted of the [answers] that teach ([TagTextVerdict.YES] and [TagTextVerdict.WRONG]) by Newton's steps: of
+         * the slope and the intercept together, of every tag's bias apart. Null while there are not answers of both
+         * kinds — nothing to tell them by.
          */
         fun fit(answers: List<TagTextAnswer>): TagTextModel? {
             val teaching = answers.filter { it.verdict != TagTextVerdict.ENOUGH_NOT }
-            if (teaching.none { it.verdict == TagTextVerdict.YES } || teaching.none { it.verdict == TagTextVerdict.WRONG }) return null
+            if (
+                teaching.none { it.verdict == TagTextVerdict.YES } ||
+                    teaching.none { it.verdict == TagTextVerdict.WRONG }
+            )
+                return null
             val x = DoubleArray(teaching.size) { teaching[it].closeness.toDouble() }
             val y = DoubleArray(teaching.size) { if (teaching[it].verdict == TagTextVerdict.YES) 1.0 else 0.0 }
             val tags = teaching.map { it.tag }.distinct()
@@ -86,20 +89,30 @@ class TagTextModel(val slope: Double, val intercept: Double, val bias: Map<Long,
         fun sigmoid(z: Double): Double = if (z >= 0) 1 / (1 + exp(-z)) else exp(z).let { it / (1 + it) }
 
         /** The loss of the [model] on the [answers]: what a test measures the fitting by. */
-        fun loss(model: TagTextModel, answers: List<TagTextAnswer>): Double = answers.filter { it.verdict != TagTextVerdict.ENOUGH_NOT }.sumOf { a ->
-            val p = model.chance(a.tag, a.closeness.toDouble())
-            -ln(max(1e-12, if (a.verdict == TagTextVerdict.YES) p else 1 - p))
-        }
+        fun loss(model: TagTextModel, answers: List<TagTextAnswer>): Double =
+            answers
+                .filter { it.verdict != TagTextVerdict.ENOUGH_NOT }
+                .sumOf { a ->
+                    val p = model.chance(a.tag, a.closeness.toDouble())
+                    -ln(max(1e-12, if (a.verdict == TagTextVerdict.YES) p else 1 - p))
+                }
     }
 }
 
-/** The model of the closeness kept in the dictionaries: every tag's bias a row, the slope and the intercept the row of tag nought. */
+/**
+ * The model of the closeness kept in the dictionaries: every tag's bias a row, the slope and the intercept the row of
+ * tag nought.
+ */
 class TagTextModelRepository(private val db: DSLContext) {
 
     fun read(): TagTextModel? {
         val rows = db.selectFrom(TAG_TEXT_MODEL).fetch()
         val common = rows.firstOrNull { it.tag == COMMON } ?: return null
-        return TagTextModel(common.slope ?: 0.0, common.bias!!, rows.filter { it.tag != COMMON }.associate { it.tag!! to it.bias!! })
+        return TagTextModel(
+            common.slope ?: 0.0,
+            common.bias!!,
+            rows.filter { it.tag != COMMON }.associate { it.tag!! to it.bias!! },
+        )
     }
 
     /** The [model] kept in place of the last, of [answers] answers; none when it is null. */
@@ -108,11 +121,20 @@ class TagTextModelRepository(private val db: DSLContext) {
             val tx = DSL.using(c)
             tx.deleteFrom(TAG_TEXT_MODEL).execute()
             if (model == null) return@transaction
-            tx.insertInto(TAG_TEXT_MODEL).set(TAG_TEXT_MODEL.TAG, COMMON).set(TAG_TEXT_MODEL.BIAS, model.intercept).set(TAG_TEXT_MODEL.SLOPE, model.slope)
-                .set(TAG_TEXT_MODEL.ANSWERS, answers.values.sum()).set(TAG_TEXT_MODEL.FITTED_AT, now).execute()
+            tx.insertInto(TAG_TEXT_MODEL)
+                .set(TAG_TEXT_MODEL.TAG, COMMON)
+                .set(TAG_TEXT_MODEL.BIAS, model.intercept)
+                .set(TAG_TEXT_MODEL.SLOPE, model.slope)
+                .set(TAG_TEXT_MODEL.ANSWERS, answers.values.sum())
+                .set(TAG_TEXT_MODEL.FITTED_AT, now)
+                .execute()
             model.bias.forEach { (tag, bias) ->
-                tx.insertInto(TAG_TEXT_MODEL).set(TAG_TEXT_MODEL.TAG, tag).set(TAG_TEXT_MODEL.BIAS, bias)
-                    .set(TAG_TEXT_MODEL.ANSWERS, answers[tag] ?: 0).set(TAG_TEXT_MODEL.FITTED_AT, now).execute()
+                tx.insertInto(TAG_TEXT_MODEL)
+                    .set(TAG_TEXT_MODEL.TAG, tag)
+                    .set(TAG_TEXT_MODEL.BIAS, bias)
+                    .set(TAG_TEXT_MODEL.ANSWERS, answers[tag] ?: 0)
+                    .set(TAG_TEXT_MODEL.FITTED_AT, now)
+                    .execute()
             }
         }
     }

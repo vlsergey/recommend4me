@@ -1,9 +1,5 @@
 package io.github.vlsergey.recommend4me.matrix
 
-import org.bytedeco.javacpp.FloatPointer
-import org.bytedeco.openblas.global.openblas
-import org.bytedeco.openblas.global.openblas_full
-import org.slf4j.LoggerFactory
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -11,26 +7,29 @@ import java.lang.foreign.SymbolLookup
 import java.lang.foreign.ValueLayout
 import java.util.concurrent.Semaphore
 import java.util.stream.IntStream
+import org.bytedeco.javacpp.FloatPointer
+import org.bytedeco.openblas.global.openblas
+import org.bytedeco.openblas.global.openblas_full
+import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(Blas::class.java)
 
 /**
  * Matrix products done by OpenBLAS, ported from local-ai-chroma-enf-lora's `embeddings/Blas.kt`.
  *
- * ONE THREAD FOR THE LIBRARY, THE ROWS SHARED OUT AMONG OURS: OpenBLAS splits a product among
- * its own threads badly at these shapes, and our threads also know what else runs — the
- * cross-validation trains many models at once and fills the cores by itself.
+ * ONE THREAD FOR THE LIBRARY, THE ROWS SHARED OUT AMONG OURS: OpenBLAS splits a product among its own threads badly at
+ * these shapes, and our threads also know what else runs — the cross-validation trains many models at once and fills
+ * the cores by itself.
  *
- * Absent (an operating system nobody built the natives for), the plain loops answer instead —
- * slower, never wrong — and the log says once which path is in force.
+ * Absent (an operating system nobody built the natives for), the plain loops answer instead — slower, never wrong — and
+ * the log says once which path is in force.
  *
- * ITS MEMORY: the library gives every product in progress a buffer of 128 MB of its own —
- * committed, never given back — and keeps as many as were ever in progress at once, and one for
- * every thread it starts. Loaded as it comes, with a thread a core, it took 46 of them, 5.9 GB,
- * before its first product; the cross-validation's thirty threads twenty more (2026-11-04). So it
- * is loaded with one thread ([on]) — it starts the threads of [wide] when asked, a buffer each —
- * and at most [PARTS] products are in it at once ([calling]): 22 buffers of a machine of 24 cores at
- * the most, not 70.
+ * ITS MEMORY: the library gives every product in progress a buffer of 128 MB of its own — committed, never given back —
+ * and keeps as many as were ever in progress at once, and one for every thread it starts. Loaded as it comes, with a
+ * thread a core, it took 46 of them, 5.9 GB, before its first product; the cross-validation's thirty threads twenty
+ * more (2026-11-04). So it is loaded with one thread ([on]) — it starts the threads of [wide] when asked, a buffer each
+ * — and at most [PARTS] products are in it at once ([calling]): 22 buffers of a machine of 24 cores at the most,
+ * not 70.
  */
 object Blas {
 
@@ -43,27 +42,28 @@ object Blas {
     private const val LEAST_ROWS = 64
 
     /**
-     * Whether the library is there. Its own setter is called by its own name: the binding's
-     * `blas_set_num_threads` silently does nothing (found out in local-ai-chroma-enf-lora).
+     * Whether the library is there. Its own setter is called by its own name: the binding's `blas_set_num_threads`
+     * silently does nothing (found out in local-ai-chroma-enf-lora).
      */
-    val on: Boolean = try {
-        presetEnvironment("OPENBLAS_NUM_THREADS", THREADS.toString())
-        openblas_full.openblas_set_num_threads(THREADS)
-        log.info(
-            "matrix products go through OpenBLAS {} ({}), {} thread(s)",
-            openblas.OPENBLAS_VERSION.trim(),
-            openblas_full.openblas_get_corename()?.string?.trim(),
-            openblas_full.openblas_get_num_threads(),
-        )
-        true
-    } catch (e: Throwable) {
-        log.warn("no OpenBLAS ({}), plain loops are used", e.javaClass.simpleName)
-        false
-    }
+    val on: Boolean =
+        try {
+            presetEnvironment("OPENBLAS_NUM_THREADS", THREADS.toString())
+            openblas_full.openblas_set_num_threads(THREADS)
+            log.info(
+                "matrix products go through OpenBLAS {} ({}), {} thread(s)",
+                openblas.OPENBLAS_VERSION.trim(),
+                openblas_full.openblas_get_corename()?.string?.trim(),
+                openblas_full.openblas_get_num_threads(),
+            )
+            true
+        } catch (e: Throwable) {
+            log.warn("no OpenBLAS ({}), plain loops are used", e.javaClass.simpleName)
+            false
+        }
 
     /**
-     * `out[i, j] = Σ_q a[i, q] · b[q, j]` over the first [m] rows of [a]: a batch through a layer.
-     * [a] is m × k with row stride [lda], [b] is k × n, [out] is m × n.
+     * `out[i, j] = Σ_q a[i, q] · b[q, j]` over the first [m] rows of [a]: a batch through a layer. [a] is m × k with
+     * row stride [lda], [b] is k × n, [out] is m × n.
      */
     fun product(a: Floats, lda: Int, m: Int, k: Int, b: Floats, n: Int, out: Floats, parts: Int = PARTS) {
         val pa = a.p
@@ -81,19 +81,39 @@ object Blas {
         split(m, parts) { from, upTo ->
             calling {
                 openblas_full.cblas_sgemm(
-                    openblas_full.CblasRowMajor, openblas_full.CblasNoTrans, openblas_full.CblasNoTrans,
-                    upTo - from, n, k, 1.0f, FloatPointer(pa).position(from.toLong() * lda), lda, pb, n,
-                    0.0f, FloatPointer(pc).position(from.toLong() * n), n,
+                    openblas_full.CblasRowMajor,
+                    openblas_full.CblasNoTrans,
+                    openblas_full.CblasNoTrans,
+                    upTo - from,
+                    n,
+                    k,
+                    1.0f,
+                    FloatPointer(pa).position(from.toLong() * lda),
+                    lda,
+                    pb,
+                    n,
+                    0.0f,
+                    FloatPointer(pc).position(from.toLong() * n),
+                    n,
                 )
             }
         }
     }
 
     /**
-     * `out[q, j] = Σ_i a[i, q] · deltas[i, j]` over the first [m] rows of both: the gradient of a
-     * layer, written once a batch instead of once per example. [a] is m × k with stride [lda].
+     * `out[q, j] = Σ_i a[i, q] · deltas[i, j]` over the first [m] rows of both: the gradient of a layer, written once a
+     * batch instead of once per example. [a] is m × k with stride [lda].
      */
-    fun transposedProduct(a: Floats, lda: Int, m: Int, k: Int, deltas: Floats, n: Int, out: Floats, parts: Int = PARTS) {
+    fun transposedProduct(
+        a: Floats,
+        lda: Int,
+        m: Int,
+        k: Int,
+        deltas: Floats,
+        n: Int,
+        out: Floats,
+        parts: Int = PARTS,
+    ) {
         val pa = a.p
         val pb = deltas.p
         val pc = out.p
@@ -110,9 +130,20 @@ object Blas {
         split(k, parts) { from, upTo ->
             calling {
                 openblas_full.cblas_sgemm(
-                    openblas_full.CblasRowMajor, openblas_full.CblasTrans, openblas_full.CblasNoTrans,
-                    upTo - from, n, m, 1.0f, FloatPointer(pa).position(from.toLong()), lda, pb, n,
-                    0.0f, FloatPointer(pc).position(from.toLong() * n), n,
+                    openblas_full.CblasRowMajor,
+                    openblas_full.CblasTrans,
+                    openblas_full.CblasNoTrans,
+                    upTo - from,
+                    n,
+                    m,
+                    1.0f,
+                    FloatPointer(pa).position(from.toLong()),
+                    lda,
+                    pb,
+                    n,
+                    0.0f,
+                    FloatPointer(pc).position(from.toLong() * n),
+                    n,
                 )
             }
         }
@@ -130,9 +161,18 @@ object Blas {
         split(m, parts) { from, upTo ->
             calling {
                 openblas_full.cblas_sgemv(
-                    openblas_full.CblasRowMajor, openblas_full.CblasNoTrans, upTo - from, k,
-                    1.0f, FloatPointer(pa).position(from.toLong() * lda), lda, px, 1,
-                    0.0f, FloatPointer(py).position(from.toLong()), 1,
+                    openblas_full.CblasRowMajor,
+                    openblas_full.CblasNoTrans,
+                    upTo - from,
+                    k,
+                    1.0f,
+                    FloatPointer(pa).position(from.toLong() * lda),
+                    lda,
+                    px,
+                    1,
+                    0.0f,
+                    FloatPointer(py).position(from.toLong()),
+                    1,
                 )
             }
         }
@@ -153,21 +193,44 @@ object Blas {
         }
         calling {
             openblas_full.cblas_sgemv(
-                openblas_full.CblasRowMajor, openblas_full.CblasTrans, m, k,
-                1.0f, pa, lda, pr, 1, 0.0f, py, 1,
+                openblas_full.CblasRowMajor,
+                openblas_full.CblasTrans,
+                m,
+                k,
+                1.0f,
+                pa,
+                lda,
+                pr,
+                1,
+                0.0f,
+                py,
+                1,
             )
         }
     }
 
     /**
-     * `c = alpha · op(a) · op(b) + beta · c`, row-major, ONE CALL OF THE WHOLE: the library shares it out
-     * among its own threads when a caller asks for them ([wide]), none of ours. Every side
-     * addressed where it lies — [aAt], [bAt], [cAt] the numbers it starts at — nothing copied.
-     * op(a) is m × k (a is k × m when [transA]), op(b) k × n, c m × n.
+     * `c = alpha · op(a) · op(b) + beta · c`, row-major, ONE CALL OF THE WHOLE: the library shares it out among its own
+     * threads when a caller asks for them ([wide]), none of ours. Every side addressed where it lies — [aAt], [bAt],
+     * [cAt] the numbers it starts at — nothing copied. op(a) is m × k (a is k × m when [transA]), op(b) k × n, c m × n.
      */
     fun gemm(
-        transA: Boolean, transB: Boolean, m: Int, n: Int, k: Int,
-        a: Floats, aAt: Int, lda: Int, b: Floats, bAt: Int, ldb: Int, c: Floats, cAt: Int, ldc: Int, beta: Float = 0f, alpha: Float = 1f,
+        transA: Boolean,
+        transB: Boolean,
+        m: Int,
+        n: Int,
+        k: Int,
+        a: Floats,
+        aAt: Int,
+        lda: Int,
+        b: Floats,
+        bAt: Int,
+        ldb: Int,
+        c: Floats,
+        cAt: Int,
+        ldc: Int,
+        beta: Float = 0f,
+        alpha: Float = 1f,
     ) {
         if (m == 0 || n == 0) return
         val pa = a.p
@@ -187,19 +250,41 @@ object Blas {
         }
         calling {
             openblas_full.cblas_sgemm(
-                openblas_full.CblasRowMajor, if (transA) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
+                openblas_full.CblasRowMajor,
+                if (transA) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
                 if (transB) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
-                m, n, k, alpha, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(pb).position(bAt.toLong()), ldb,
-                beta, FloatPointer(pc).position(cAt.toLong()), ldc,
+                m,
+                n,
+                k,
+                alpha,
+                FloatPointer(pa).position(aAt.toLong()),
+                lda,
+                FloatPointer(pb).position(bAt.toLong()),
+                ldb,
+                beta,
+                FloatPointer(pc).position(cAt.toLong()),
+                ldc,
             )
         }
     }
 
     /**
-     * `y = op(a) · x + beta · y` — op(a) of [m] × [n] numbers, a row-major of [lda]; transposed
-     * when [trans] (a is then m × n and op(a) n × m) — one call of the whole, as [gemm].
+     * `y = op(a) · x + beta · y` — op(a) of [m] × [n] numbers, a row-major of [lda]; transposed when [trans] (a is then
+     * m × n and op(a) n × m) — one call of the whole, as [gemm].
      */
-    fun gemv(trans: Boolean, m: Int, n: Int, a: Floats, aAt: Int, lda: Int, x: Floats, xAt: Int, y: Floats, yAt: Int, beta: Float = 0f) {
+    fun gemv(
+        trans: Boolean,
+        m: Int,
+        n: Int,
+        a: Floats,
+        aAt: Int,
+        lda: Int,
+        x: Floats,
+        xAt: Int,
+        y: Floats,
+        yAt: Int,
+        beta: Float = 0f,
+    ) {
         if (m == 0 || n == 0) return
         val pa = a.p
         val px = x.p
@@ -216,9 +301,18 @@ object Blas {
         }
         calling {
             openblas_full.cblas_sgemv(
-                openblas_full.CblasRowMajor, if (trans) openblas_full.CblasTrans else openblas_full.CblasNoTrans, m, n,
-                1.0f, FloatPointer(pa).position(aAt.toLong()), lda, FloatPointer(px).position(xAt.toLong()), 1,
-                beta, FloatPointer(py).position(yAt.toLong()), 1,
+                openblas_full.CblasRowMajor,
+                if (trans) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
+                m,
+                n,
+                1.0f,
+                FloatPointer(pa).position(aAt.toLong()),
+                lda,
+                FloatPointer(px).position(xAt.toLong()),
+                1,
+                beta,
+                FloatPointer(py).position(yAt.toLong()),
+                1,
             )
         }
     }
@@ -237,9 +331,9 @@ object Blas {
     }
 
     /**
-     * The [name] of the environment set to [value] for the native libraries loaded after, unless it
-     * is set already: OpenBLAS reads its number of threads once, as it is loaded, of the environment
-     * of its own C runtime — on Windows msvcrt's, which the process's alone does not reach.
+     * The [name] of the environment set to [value] for the native libraries loaded after, unless it is set already:
+     * OpenBLAS reads its number of threads once, as it is loaded, of the environment of its own C runtime — on Windows
+     * msvcrt's, which the process's alone does not reach.
      */
     private fun presetEnvironment(name: String, value: String) {
         if (System.getenv(name) != null) return
@@ -249,16 +343,33 @@ object Blas {
                 val windows = System.getProperty("os.name").startsWith("Windows")
                 if (windows) {
                     val putenv = SymbolLookup.libraryLookup("msvcrt", arena).find("_putenv_s").orElseThrow()
-                    linker.downcallHandle(putenv, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS))
+                    linker
+                        .downcallHandle(
+                            putenv,
+                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+                        )
                         .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value))
                 } else {
                     val setenv = linker.defaultLookup().find("setenv").orElseThrow()
-                    linker.downcallHandle(setenv, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS, ValueLayout.JAVA_INT))
+                    linker
+                        .downcallHandle(
+                            setenv,
+                            FunctionDescriptor.of(
+                                ValueLayout.JAVA_INT,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.ADDRESS,
+                                ValueLayout.JAVA_INT,
+                            ),
+                        )
                         .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value), 0)
                 }
             }
         } catch (e: Throwable) {
-            log.warn("{} not set for the native libraries ({}): OpenBLAS takes a thread and a buffer a core", name, e.toString())
+            log.warn(
+                "{} not set for the native libraries ({}): OpenBLAS takes a thread and a buffer a core",
+                name,
+                e.toString(),
+            )
         }
     }
 
@@ -267,11 +378,11 @@ object Blas {
     private val wideLock = Any()
 
     /**
-     * [body] run with THE LIBRARY SHARING ITS PRODUCTS OUT AMONG ITS OWN THREADS, one a physical
-     * core: for a caller of one thread whose products are of the whole — the fitting of a facet's
-     * models, ten of them in one product ([gemm]). The setting is the library's, of the whole
-     * process: a product another thread makes meanwhile goes on more threads too — the queue of the
-     * computations lets one heavy work run at a time, so none but a page's small ones.
+     * [body] run with THE LIBRARY SHARING ITS PRODUCTS OUT AMONG ITS OWN THREADS, one a physical core: for a caller of
+     * one thread whose products are of the whole — the fitting of a facet's models, ten of them in one product
+     * ([gemm]). The setting is the library's, of the whole process: a product another thread makes meanwhile goes on
+     * more threads too — the queue of the computations lets one heavy work run at a time, so none but a page's small
+     * ones.
      */
     fun <T> wide(body: () -> T): T {
         if (!on) return body()

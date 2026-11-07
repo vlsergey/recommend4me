@@ -10,20 +10,20 @@ import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.setvector.SetVectors
-import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
+import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
-import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Component
 import java.time.Instant
 import kotlin.math.ln1p
 import kotlin.math.max
+import org.slf4j.LoggerFactory
+import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(CatalogueReader::class.java)
 
@@ -41,10 +41,9 @@ class CatalogueItem(
 class TypedRating(val key: ItemKey, val version: String, val grade: Int, val ratedAt: Instant)
 
 /**
- * WHAT THE AVERAGE WORK OF THE CATALOGUE IS: where the vectors and the numbers of every work lie, and
- * how often it has a categorical feature. Counted as every work is read, or told by a model kept
- * ([ModelMeta.averages]), counted when it was trained. [shares]: a feature not among them is
- * counted of the works read.
+ * WHAT THE AVERAGE WORK OF THE CATALOGUE IS: where the vectors and the numbers of every work lie, and how often it has
+ * a categorical feature. Counted as every work is read, or told by a model kept ([ModelMeta.averages]), counted when it
+ * was trained. [shares]: a feature not among them is counted of the works read.
  */
 class Averages(
     /** The mean and the spread of every block but the likeness to the marks, over the vectors of every work. */
@@ -54,22 +53,22 @@ class Averages(
 )
 
 /**
- * EVERYTHING THE MODEL READS OF EVERY NORMALIZED WORK OF A CONTENT TYPE, loaded in batch for one
- * operation — one pass over each source of each file: the works with their corrected facets and
- * numbers, the grades — and handed to every step that needs it. Nothing of it outlives the operation.
- * Not the user's signals on the sites: they are the user's verdict, the very thing the grades teach.
+ * EVERYTHING THE MODEL READS OF EVERY NORMALIZED WORK OF A CONTENT TYPE, loaded in batch for one operation — one pass
+ * over each source of each file: the works with their corrected facets and numbers, the grades — and handed to every
+ * step that needs it. Nothing of it outlives the operation. Not the user's signals on the sites: they are the user's
+ * verdict, the very thing the grades teach.
  *
- * A WORK IS ONE ROW, whatever sites have it: of several items it is made of all of them
- * ([WorkFeatures]), named by the first of them ([WorkClusters.representative]); its grades and its
- * mark are the grades and the mark of that item, as of every item of it.
+ * A WORK IS ONE ROW, whatever sites have it: of several items it is made of all of them ([WorkFeatures]), named by the
+ * first of them ([WorkClusters.representative]); its grades and its mark are the grades and the mark of that item, as
+ * of every item of it.
  *
- * THE VECTORS OF THE WORKS THE TRAINING READS ALONE ([vectors]): the graded, those marked of interest,
- * those linked to them, and any asked for — a few hundred of 27 718 games, each a few thousand
- * numbers. Of every work only what the average work is made of is kept ([averages]); a work's vectors
- * otherwise are read when it is scored, a chunk at a time ([vectorsOfMany]), and let go.
+ * THE VECTORS OF THE WORKS THE TRAINING READS ALONE ([vectors]): the graded, those marked of interest, those linked to
+ * them, and any asked for — a few hundred of 27 718 games, each a few thousand numbers. Of every work only what the
+ * average work is made of is kept ([averages]); a work's vectors otherwise are read when it is scored, a chunk at a
+ * time ([vectorsOfMany]), and let go.
  *
- * OF THE GRADED WORKS ALONE ([CatalogueReader.gradedWorks]): the rows of the grades are all a fitting
- * reads, what the average work is told by the model kept.
+ * OF THE GRADED WORKS ALONE ([CatalogueReader.gradedWorks]): the rows of the grades are all a fitting reads, what the
+ * average work is told by the model kept.
  */
 class Catalogue(
     val type: TypeStore,
@@ -115,9 +114,9 @@ class CatalogueReader(
 ) {
 
     /**
-     * The catalogue of [type]: every work's facets and numbers, the vectors of the works a training
-     * reads — the graded, those marked of interest, those linked, and [also] — and the spreads of
-     * every work's vectors, counted as they stream past.
+     * The catalogue of [type]: every work's facets and numbers, the vectors of the works a training reads — the graded,
+     * those marked of interest, those linked, and [also] — and the spreads of every work's vectors, counted as they
+     * stream past.
      */
     fun read(type: TypeStore, withLikeness: Boolean = true, also: Collection<ItemKey> = emptyList()): Catalogue {
         val started = System.currentTimeMillis()
@@ -138,12 +137,13 @@ class CatalogueReader(
             s.interest.all().forEach { (id, mark) -> interest[ItemKey(s.id, id)] = mark }
         }
         val clusters = works.of(type)
-        val kept = HashSet<ItemKey>().apply {
-            ratings.forEach { add(it.key) }
-            addAll(interest.keys)
-            clusters.linkedWorks().forEach(::addAll)
-            addAll(also)
-        }
+        val kept =
+            HashSet<ItemKey>().apply {
+                ratings.forEach { add(it.key) }
+                addAll(interest.keys)
+                clusters.linkedWorks().forEach(::addAll)
+                addAll(also)
+            }
 
         type.sources.forEach { s ->
             val laps = Laps()
@@ -179,27 +179,41 @@ class CatalogueReader(
         }
         val read = System.currentTimeMillis()
         val graded = items.map { it.key }.toSet().let { keys -> ratings.map { it.key }.filter { it in keys }.toSet() }
-        val center = centerSum?.takeIf { pictures > 0 }?.let { sum -> FloatArray(sum.size) { (sum[it] / pictures).toFloat() } }
+        val center =
+            centerSum?.takeIf { pictures > 0 }?.let { sum -> FloatArray(sum.size) { (sum[it] / pictures).toFloat() } }
         val likeness = if (withLikeness) likenesses.forTraining(type, center, graded) else likenesses.stored(type)
-        val numbers = FeatureLayout.numberSpreads(items.filter { clusters.representative(it.key) == it.key }.map { ItemInput(it.key, emptyMap(), emptySet(), it.numeric) })
+        val numbers =
+            FeatureLayout.numberSpreads(
+                items
+                    .filter { clusters.representative(it.key) == it.key }
+                    .map { ItemInput(it.key, emptyMap(), emptySet(), it.numeric) }
+            )
         val made = System.currentTimeMillis()
         return catalogue(type, items, ratings, vectors, likeness, interest, Averages(spreads.spreads(), numbers)).also {
             log.info(
                 "{}: catalogue of {} works read of {} items in {} ms, the vectors of {} kept, likeness in {} ms",
-                type.id, it.items.size, items.size, read - started, it.vectors.size, made - read,
+                type.id,
+                it.items.size,
+                items.size,
+                read - started,
+                it.vectors.size,
+                made - read,
             )
         }
     }
 
     /**
-     * THE GRADED WORKS ALONE, each with all its items, and [also]: what a fitting on the rows of the
-     * grades reads, and no other work — their facets and numbers read of them, their chances made
-     * as their suggesters say they read ([io.github.vlsergey.recommend4me.suggestion.FacetSuggester.reads]),
-     * their vectors by their keys. The [averages] are the caller's, of the model it goes by.
+     * THE GRADED WORKS ALONE, each with all its items, and [also]: what a fitting on the rows of the grades reads, and
+     * no other work — their facets and numbers read of them, their chances made as their suggesters say they read
+     * ([io.github.vlsergey.recommend4me.suggestion.FacetSuggester.reads]), their vectors by their keys. The [averages]
+     * are the caller's, of the model it goes by.
      */
     fun gradedWorks(type: TypeStore, averages: Averages, also: Collection<ItemKey> = emptyList()): Catalogue {
         val started = System.currentTimeMillis()
-        val ratings = type.sources.flatMap { s -> s.ratings.all().map { TypedRating(ItemKey(s.id, it.itemId), it.version, it.grade, it.ratedAt) } }
+        val ratings =
+            type.sources.flatMap { s ->
+                s.ratings.all().map { TypedRating(ItemKey(s.id, it.itemId), it.version, it.grade, it.ratedAt) }
+            }
         val interest = HashMap<ItemKey, InterestMark>()
         type.sources.forEach { s -> s.interest.all().forEach { (id, mark) -> interest[ItemKey(s.id, id)] = mark } }
         val clusters = works.of(type)
@@ -209,14 +223,27 @@ class CatalogueReader(
         val vectors = vectorsOfMany(type, wanted.toList())
         val keys = items.map { it.key }.toSet()
         val likeness = likenesses.asMade(type, ratings.map { it.key }.filter { it in keys }.toSet())
-        log.info("{}: {} items of the graded works read in {} ms", type.id, items.size, System.currentTimeMillis() - started)
+        log.info(
+            "{}: {} items of the graded works read in {} ms",
+            type.id,
+            items.size,
+            System.currentTimeMillis() - started,
+        )
         return catalogue(type, items, ratings, vectors, likeness, interest, averages)
     }
 
-    /** What was read as the catalogue of the normalized works: a work of several items one row, named by the first of them. */
+    /**
+     * What was read as the catalogue of the normalized works: a work of several items one row, named by the first of
+     * them.
+     */
     private fun catalogue(
-        type: TypeStore, items: List<CatalogueItem>, ratings: List<TypedRating>, read: Map<ItemKey, Map<String, FloatArray>>, likeness: TypeLikeness,
-        interest: Map<ItemKey, InterestMark>, averages: Averages,
+        type: TypeStore,
+        items: List<CatalogueItem>,
+        ratings: List<TypedRating>,
+        read: Map<ItemKey, Map<String, FloatArray>>,
+        likeness: TypeLikeness,
+        interest: Map<ItemKey, InterestMark>,
+        averages: Averages,
     ): Catalogue {
         val clusters = works.of(type)
         val vectors = HashMap(read)
@@ -234,17 +261,28 @@ class CatalogueReader(
         val named = items.filter { clusters.representative(it.key) == it.key }.map { merged[it.key] ?: it }
         val keys = named.map { it.key }.toSet()
         return Catalogue(
-            type, named, ratings.filter { it.key in keys }, vectors, likeness, clusters, interest.filterKeys { it in keys },
-            averages = averages, read = { wanted -> vectorsOfMany(type, wanted) },
+            type,
+            named,
+            ratings.filter { it.key in keys },
+            vectors,
+            likeness,
+            clusters,
+            interest.filterKeys { it in keys },
+            averages = averages,
+            read = { wanted -> vectorsOfMany(type, wanted) },
         )
     }
 
     /**
-     * The items of one source as the model reads them: their facets and numbers with the user's
-     * corrections, the source when the type has several. Of the items [ids], when given; of every
-     * item in one pass over each table.
+     * The items of one source as the model reads them: their facets and numbers with the user's corrections, the source
+     * when the type has several. Of the items [ids], when given; of every item in one pass over each table.
      */
-    private fun readItems(s: SourceStore, severalSources: Boolean, ids: List<String>? = null, laps: Laps = Laps()): List<CatalogueItem> {
+    private fun readItems(
+        s: SourceStore,
+        severalSources: Boolean,
+        ids: List<String>? = null,
+        laps: Laps = Laps(),
+    ): List<CatalogueItem> {
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
         // Of every work, every facet and every answer read once, and handed to the chances made of them:
         // a facet not of the model gives no feature below
@@ -254,7 +292,14 @@ class CatalogueReader(
         val facetCorrections = every?.corrections ?: s.corrections.facetsOf(ids!!)
         laps.lap("corrections", facetCorrections.size)
         // The values the model gives the items of the facets it works out: made now of them, in one pass
-        val chances = suggestions.chancesOf(s, ids, s.schema.facets.filter { it.infer && it.feature }.map { it.key }, laps.within("chances:"), every)
+        val chances =
+            suggestions.chancesOf(
+                s,
+                ids,
+                s.schema.facets.filter { it.infer && it.feature }.map { it.key },
+                laps.within("chances:"),
+                every,
+            )
         laps.restart()
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numbers = HashMap<String, HashMap<String, Double>>()
@@ -273,23 +318,32 @@ class CatalogueReader(
         val wanted = ids?.toHashSet()
         // Every feature's name one string of the reading, made once however many works have it
         val names = HashMap<String, HashMap<String, String>>()
-        fun feature(facetId: String, key: String) = names.getOrPut(facetId) { HashMap() }.getOrPut(key) { FeatureNames.facet(facetId, key) }
+        fun feature(facetId: String, key: String) =
+            names.getOrPut(facetId) { HashMap() }.getOrPut(key) { FeatureNames.facet(facetId, key) }
         val source = "source:${s.id}"
-        val made = s.items.keys().filter { wanted == null || it.id in wanted }.map { k ->
-            val categorical = LinkedHashSet<String>()
-            val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
-            TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets).forEach { (facet, keys) ->
-                val facetId = facetIds[facet] ?: return@forEach
-                val unread = ignored[facet]
-                keys.forEach { if (unread == null || it !in unread) categorical += feature(facetId, it) }
-            }
-            if (severalSources) categorical += source
-            val numeric = Corrected.numbers(numbers[k.id].orEmpty(), fields[k.id].orEmpty()).mapNotNull { (key, value) ->
-                val def = numberDefs[key] ?: return@mapNotNull null
-                FeatureNames.number(FeatureNames.numberId(s.source, def)) to transform(def.scale, value)
-            }.toMap()
-            CatalogueItem(ItemKey(s.id, k.id), k.version, k.updatedAt, categorical, numeric)
-        }
+        val made =
+            s.items
+                .keys()
+                .filter { wanted == null || it.id in wanted }
+                .map { k ->
+                    val categorical = LinkedHashSet<String>()
+                    val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
+                    TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets)
+                        .forEach { (facet, keys) ->
+                            val facetId = facetIds[facet] ?: return@forEach
+                            val unread = ignored[facet]
+                            keys.forEach { if (unread == null || it !in unread) categorical += feature(facetId, it) }
+                        }
+                    if (severalSources) categorical += source
+                    val numeric =
+                        Corrected.numbers(numbers[k.id].orEmpty(), fields[k.id].orEmpty())
+                            .mapNotNull { (key, value) ->
+                                val def = numberDefs[key] ?: return@mapNotNull null
+                                FeatureNames.number(FeatureNames.numberId(s.source, def)) to transform(def.scale, value)
+                            }
+                            .toMap()
+                    CatalogueItem(ItemKey(s.id, k.id), k.version, k.updatedAt, categorical, numeric)
+                }
         laps.lap("items", made.size)
         return made
     }
@@ -301,23 +355,31 @@ class CatalogueReader(
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
         val categorical = LinkedHashSet<String>()
         val wanted = s.schema.facets.filter { it.infer && it.feature }.map { it.key }
-        val base = ModelValues.of(s.schema, s.items.facets(key.id), suggestions.chancesOf(s, listOf(key.id), wanted)[key.id])
+        val base =
+            ModelValues.of(s.schema, s.items.facets(key.id), suggestions.chancesOf(s, listOf(key.id), wanted)[key.id])
         val ignored = s.ignoredTags()
-        TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies(), s.singleFacets).forEach { (facet, keys) ->
+        TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies(), s.singleFacets).forEach {
+            (facet, keys) ->
             val facetId = facetIds[facet] ?: return@forEach
             val unread = ignored[facet]
             keys.forEach { if (unread == null || it !in unread) categorical += FeatureNames.facet(facetId, it) }
         }
         if (type.sources.size > 1) categorical += "source:${s.id}"
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
-        val numeric = Corrected.numbers(s.items.numbers(key.id), s.corrections.fieldsOf(key.id)).mapNotNull { (k, value) ->
-            val def = numberDefs[k] ?: return@mapNotNull null
-            FeatureNames.number(FeatureNames.numberId(s.source, def)) to transform(def.scale, value)
-        }.toMap()
+        val numeric =
+            Corrected.numbers(s.items.numbers(key.id), s.corrections.fieldsOf(key.id))
+                .mapNotNull { (k, value) ->
+                    val def = numberDefs[k] ?: return@mapNotNull null
+                    FeatureNames.number(FeatureNames.numberId(s.source, def)) to transform(def.scale, value)
+                }
+                .toMap()
         return CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)
     }
 
-    /** The work of the item as the model reads it, without its vectors, named by the first of its items; null when there is no such item. */
+    /**
+     * The work of the item as the model reads it, without its vectors, named by the first of its items; null when there
+     * is no such item.
+     */
     fun work(type: TypeStore, key: ItemKey): CatalogueItem? {
         val members = works.of(type).members(key).sortedBy { it.toString() }
         if (members.size == 1) return item(type, key)
@@ -326,9 +388,9 @@ class CatalogueReader(
     }
 
     /**
-     * The vectors of the work of the item — texts, pictures, sets — without its likeness to the marks:
-     * for a request, of what is kept alone, so of several items the mean of their sets too, the sets of
-     * all of them made in a computation ([SetVectors.ofWork]).
+     * The vectors of the work of the item — texts, pictures, sets — without its likeness to the marks: for a request,
+     * of what is kept alone, so of several items the mean of their sets too, the sets of all of them made in a
+     * computation ([SetVectors.ofWork]).
      */
     fun vectors(type: TypeStore, key: ItemKey): Map<String, FloatArray> {
         val members = works.of(type).members(key)
@@ -336,7 +398,10 @@ class CatalogueReader(
         return WorkFeatures.vectors(members.mapNotNull { read[it] })
     }
 
-    /** The vectors of [keys] — texts, pictures, sets — without their likeness to the marks: a query of each kind a source. */
+    /**
+     * The vectors of [keys] — texts, pictures, sets — without their likeness to the marks: a query of each kind a
+     * source.
+     */
     fun vectorsOfMany(type: TypeStore, keys: List<ItemKey>): Map<ItemKey, Map<String, FloatArray>> {
         val out = HashMap<ItemKey, HashMap<String, FloatArray>>()
         val embeddings = type.embeddings.ids()
@@ -347,10 +412,14 @@ class CatalogueReader(
             }
             plugins.textEncoder()?.let { encoder ->
                 val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
-                s.textVectors.ofMany(ids, encoder.id).forEach { (id, texts) -> texts.forEach { (k, v) -> blocks[k]?.let { put(id, it, v) } } }
+                s.textVectors.ofMany(ids, encoder.id).forEach { (id, texts) ->
+                    texts.forEach { (k, v) -> blocks[k]?.let { put(id, it, v) } }
+                }
             }
             plugins.imageEncoder()?.let { encoder ->
-                s.pictures.itemVectorsOf(ids, encoder.id).forEach { (id, blocks) -> blocks.forEach { (b, v) -> put(id, b, v) } }
+                s.pictures.itemVectorsOf(ids, encoder.id).forEach { (id, blocks) ->
+                    blocks.forEach { (b, v) -> put(id, b, v) }
+                }
             }
             s.setVectors.ofMany(ids, embeddings).forEach { (id, blocks) -> blocks.forEach { (b, v) -> put(id, b, v) } }
         }
@@ -358,32 +427,48 @@ class CatalogueReader(
     }
 
     companion object {
-        fun transform(scale: NumberScale, value: Double): Float = when (scale) {
-            NumberScale.LOG -> ln1p(max(value, 0.0)).toFloat()
-            NumberScale.LINEAR -> value.toFloat()
-        }
+        fun transform(scale: NumberScale, value: Double): Float =
+            when (scale) {
+                NumberScale.LOG -> ln1p(max(value, 0.0)).toFloat()
+                NumberScale.LINEAR -> value.toFloat()
+            }
 
         /** For each rating, the grade of an earlier, different version of the same item. */
         fun previousGradesOfRatings(all: List<TypedRating>): Map<TypedRating, Int> {
             val result = HashMap<TypedRating, Int>()
-            all.groupBy { it.key }.values.forEach { list ->
-                val sorted = list.sortedBy { it.ratedAt }
-                sorted.forEachIndexed { i, rating ->
-                    sorted.subList(0, i).lastOrNull { it.version != rating.version }?.let { result[rating] = it.grade }
+            all.groupBy { it.key }
+                .values
+                .forEach { list ->
+                    val sorted = list.sortedBy { it.ratedAt }
+                    sorted.forEachIndexed { i, rating ->
+                        sorted
+                            .subList(0, i)
+                            .lastOrNull { it.version != rating.version }
+                            ?.let { result[rating] = it.grade }
+                    }
                 }
-            }
             return result
         }
 
         /** For each item, the latest grade of a version other than the current one. */
-        fun previousGradesOfCurrentVersions(all: List<TypedRating>, versionOf: (ItemKey) -> String?): Map<ItemKey, Int> =
-            all.groupBy { it.key }.mapNotNull { (key, list) ->
-                val version = versionOf(key) ?: return@mapNotNull null
-                list.filter { it.version != version }.maxByOrNull { it.ratedAt }?.let { key to it.grade }
-            }.toMap()
+        fun previousGradesOfCurrentVersions(
+            all: List<TypedRating>,
+            versionOf: (ItemKey) -> String?,
+        ): Map<ItemKey, Int> =
+            all.groupBy { it.key }
+                .mapNotNull { (key, list) ->
+                    val version = versionOf(key) ?: return@mapNotNull null
+                    list.filter { it.version != version }.maxByOrNull { it.ratedAt }?.let { key to it.grade }
+                }
+                .toMap()
 
         fun inputOf(item: CatalogueItem, vectors: Map<String, FloatArray>, previousGrade: Int?): ItemInput =
-            ItemInput(item.key, vectors, if (previousGrade == null) item.categorical else item.categorical + "prev:$previousGrade", item.numeric)
+            ItemInput(
+                item.key,
+                vectors,
+                if (previousGrade == null) item.categorical else item.categorical + "prev:$previousGrade",
+                item.numeric,
+            )
 
         fun rating(s: SourceStore, r: Rating) = TypedRating(ItemKey(s.id, r.itemId), r.version, r.grade, r.ratedAt)
     }

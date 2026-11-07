@@ -5,10 +5,10 @@ import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.scorer.RankingTask
 
 /**
- * What a feature adds to a work's score, in points of 0..10; for a categorical feature against the
- * average work of the catalogue — so a liked tag the work does NOT have ([present] false) shows as
- * what its absence costs. What the user is shown of it ([FeatureLabel]) is told when it is shown, by the
- * names of the moment: a model kept before its label was dropped from here is read all the same.
+ * What a feature adds to a work's score, in points of 0..10; for a categorical feature against the average work of the
+ * catalogue — so a liked tag the work does NOT have ([present] false) shows as what its absence costs. What the user is
+ * shown of it ([FeatureLabel]) is told when it is shown, by the names of the moment: a model kept before its label was
+ * dropped from here is read all the same.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class Contribution(val feature: String, val contribution: Double, val present: Boolean = true)
@@ -16,20 +16,45 @@ data class Contribution(val feature: String, val contribution: Double, val prese
 /** A [contribution] with what the user is shown of its feature. */
 data class LabelledContribution(val contribution: Contribution, val label: FeatureLabel)
 
-/** The out-of-fold quality of the ranking without one part of the input ([part]: as in [ContributionGroup]), of [features] columns. */
+/**
+ * The out-of-fold quality of the ranking without one part of the input ([part]: as in [ContributionGroup]), of
+ * [features] columns.
+ */
 class PartWorth(val part: String, val labelKey: String, val features: Int, val metrics: RankingMetrics?)
 
-/** The out-of-fold quality of the ranking on everything, and without every part in turn — the most needed part first. */
+/**
+ * The out-of-fold quality of the ranking on everything, and without every part in turn — the most needed part first.
+ */
 class ModelWorth(val scorer: String, val full: RankingMetrics?, val grades: Int, val parts: List<PartWorth>)
 
-/** A group of the input ([ColumnGroup]) by the key of its label, of [columns] columns, and the weight chosen of it on every grade. */
+/**
+ * A group of the input ([ColumnGroup]) by the key of its label, of [columns] columns, and the weight chosen of it on
+ * every grade.
+ */
 class WeighedGroup(val part: String, val labelKey: String, val columns: Int, val weight: Double)
 
-/** Whether weighing the parts would rank better ([GroupWeights.nested]), fold by fold, and the weights on every grade with their quality. */
-class Weighing(val scorer: String, val grades: Int, val groups: List<WeighedGroup>, val folds: List<GroupWeights.NestedFold>, val onAll: RankingMetrics?)
+/**
+ * Whether weighing the parts would rank better ([GroupWeights.nested]), fold by fold, and the weights on every grade
+ * with their quality.
+ */
+class Weighing(
+    val scorer: String,
+    val grades: Int,
+    val groups: List<WeighedGroup>,
+    val folds: List<GroupWeights.NestedFold>,
+    val onAll: RankingMetrics?,
+)
 
-/** What a part of a work's input moves its score by as a whole — a facet, the pictures, a text — and every feature in it. */
-data class ContributionGroup(val part: String, val labelKey: String, val contribution: Double, val features: List<LabelledContribution>)
+/**
+ * What a part of a work's input moves its score by as a whole — a facet, the pictures, a text — and every feature in
+ * it.
+ */
+data class ContributionGroup(
+    val part: String,
+    val labelKey: String,
+    val contribution: Double,
+    val features: List<LabelledContribution>,
+)
 
 /** Everything about a trained model but its scorer's state; kept as JSON beside it. */
 data class ModelMeta(
@@ -37,7 +62,9 @@ data class ModelMeta(
     /** The scorer's parameter, chosen by cross-validation. */
     val parameter: Double,
     val categorical: List<String>,
-    /** Share of the catalogue's items with every [categorical] feature: the average work the explanation compares with. */
+    /**
+     * Share of the catalogue's items with every [categorical] feature: the average work the explanation compares with.
+     */
     val categoricalShare: FloatArray,
     /** Centre and spread of every vector block the model was trained with. */
     val vectorCenters: Map<String, FloatArray>,
@@ -56,29 +83,35 @@ data class ModelMeta(
     val topNegative: List<Contribution>,
     val textEncoder: String?,
     val imageEncoder: String?,
-    /** How long the training took, the measuring of its parameter's candidates with it; none of a model trained before it was kept. */
+    /**
+     * How long the training took, the measuring of its parameter's candidates with it; none of a model trained before
+     * it was kept.
+     */
     val trainMillis: Long? = null,
 ) {
     fun scale() = Scale(scoreMean, scoreSd, ladder)
 
-    fun layout() = FeatureLayout(
-        categorical,
-        vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
-        numbers,
-    )
+    fun layout() =
+        FeatureLayout(
+            categorical,
+            vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
+            numbers,
+        )
 
     /** What the model says the average work is, as counted when it was trained: no work read for it. */
-    fun averages() = Averages(
-        vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
-        numbers,
-        categorical.indices.filter { it < categoricalShare.size }.associate { categorical[it] to categoricalShare[it] },
-    )
+    fun averages() =
+        Averages(
+            vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
+            numbers,
+            categorical.indices
+                .filter { it < categoricalShare.size }
+                .associate { categorical[it] to categoricalShare[it] },
+        )
 }
 
 /**
- * The model of interest — whether the user finds a work interesting at all — but its scorer's
- * state; kept as JSON beside it. Its scores are standardised as on its training rows and made a
- * chance by the [calibration].
+ * The model of interest — whether the user finds a work interesting at all — but its scorer's state; kept as JSON
+ * beside it. Its scores are standardised as on its training rows and made a chance by the [calibration].
  */
 data class InterestMeta(
     val scorer: String,
@@ -96,16 +129,20 @@ data class InterestMeta(
     val notInteresting: Int,
     /** Out-of-fold; the concordance of two kinds is the ROC AUC. */
     val metrics: RankingMetrics?,
-    /** Every value of the scorer's parameter measured, as of the grade model ([ModelMeta.candidates]); none of a model trained before they were kept. */
+    /**
+     * Every value of the scorer's parameter measured, as of the grade model ([ModelMeta.candidates]); none of a model
+     * trained before they were kept.
+     */
     val candidates: List<RankingResult> = emptyList(),
     /** How long the training took; none of a model trained before it was kept. */
     val trainMillis: Long? = null,
 ) {
-    fun layout() = FeatureLayout(
-        categorical,
-        vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
-        numbers,
-    )
+    fun layout() =
+        FeatureLayout(
+            categorical,
+            vectorCenters.mapValues { (key, center) -> VectorSpread(center, vectorSpreads.getValue(key)) },
+            numbers,
+        )
 
     fun chance(raw: Double): Double = calibration.chance((raw - scoreMean) / scoreSd)
 }

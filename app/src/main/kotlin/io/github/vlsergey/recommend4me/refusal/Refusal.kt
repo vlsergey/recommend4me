@@ -11,9 +11,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice
 private val log = LoggerFactory.getLogger(Refusal::class.java)
 
 /**
- * WHY A REQUEST IS REFUSED, by the key of its words in the interface's standard namespace
- * ("standard:error.<code>"): the server words nothing for the user. The values the words are filled
- * with are named in [params]; the interface keeps the words of every one.
+ * WHY A REQUEST IS REFUSED, by the key of its words in the interface's standard namespace ("standard:error.<code>"):
+ * the server words nothing for the user. The values the words are filled with are named in [params]; the interface
+ * keeps the words of every one.
  */
 enum class Refusal(val code: String, val params: List<String> = emptyList()) {
     /** The source has no such field (facet, text, number). */
@@ -48,10 +48,16 @@ enum class Refusal(val code: String, val params: List<String> = emptyList()) {
     /** A tag above or under another through others: not said of the two, of the tags between. */
     TAG_THROUGH("tagThrough"),
 
-    /** A name typed for a facet of the dictionary's entries alone — a universe, a pairing — that is no entry of it; [params] "value". */
+    /**
+     * A name typed for a facet of the dictionary's entries alone — a universe, a pairing — that is no entry of it;
+     * [params] "value".
+     */
     NOT_IN_DICTIONARY("notInDictionary", listOf("value")),
 
-    /** A tag the work has by a tag under it the user confirmed, said not to be the work's; [params] "tag" — that tag's name. */
+    /**
+     * A tag the work has by a tag under it the user confirmed, said not to be the work's; [params] "tag" — that tag's
+     * name.
+     */
     TAG_IMPLIED("tagImplied", listOf("tag")),
 
     /** Two authors said to be different or partly one who are one normalized author by now. */
@@ -62,15 +68,15 @@ enum class Refusal(val code: String, val params: List<String> = emptyList()) {
     NO_SETTING("noSetting", listOf("setting")),
     NO_SCORER("noScorer", listOf("scorer")),
     ACCESS_REFUSED("accessRefused"),
-    NO_EXTENSION_FOLDER("noExtensionFolder"),
-    ;
+    NO_EXTENSION_FOLDER("noExtensionFolder");
 
     /** The key of its words: "standard:error.noField". */
-    val key: String get() = I18nKeys.qualified(I18nKeys.STANDARD, "error.$code")
+    val key: String
+        get() = I18nKeys.qualified(I18nKeys.STANDARD, "error.$code")
 
     /**
-     * The request refused with [status] for this reason; [detail] tells it in English for the log,
-     * [values] fill the words, by their names ([params]).
+     * The request refused with [status] for this reason; [detail] tells it in English for the log, [values] fill the
+     * words, by their names ([params]).
      */
     fun refuse(status: HttpStatus, detail: String, vararg values: Pair<String, Any?>): Refused {
         val filled = values.associate { (name, value) -> name to value.toString() }
@@ -87,7 +93,8 @@ enum class Refusal(val code: String, val params: List<String> = emptyList()) {
 }
 
 /** A request refused for [refusal], answered as a problem ([RefusalAnswers]). */
-class Refused(val status: HttpStatus, val refusal: Refusal, val params: Map<String, String>, detail: String) : RuntimeException(detail)
+class Refused(val status: HttpStatus, val refusal: Refusal, val params: Map<String, String>, detail: String) :
+    RuntimeException(detail)
 
 /** A refusal answered as application/problem+json with its key and values. */
 @RestControllerAdvice

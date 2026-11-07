@@ -7,23 +7,22 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
-import org.springframework.context.ApplicationEventPublisher
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 private val log = LoggerFactory.getLogger(PartVectors::class.java)
 
 /**
- * The text of every part of every work read, encoded window by window in the background: a vector
- * for every few hundred words, so a chapter is a set of vectors and one scene unlike the rest is
- * not averaged away. And paragraph by paragraph ([Paragraphs]): what the tags are held against to be
- * offered by the work's own text, a paragraph quoted beside its tag. A part read again with another
- * text is encoded again.
+ * The text of every part of every work read, encoded window by window in the background: a vector for every few hundred
+ * words, so a chapter is a set of vectors and one scene unlike the rest is not averaged away. And paragraph by
+ * paragraph ([Paragraphs]): what the tags are held against to be offered by the work's own text, a paragraph quoted
+ * beside its tag. A part read again with another text is encoded again.
  */
 @Service
 class PartVectors(
@@ -36,16 +35,13 @@ class PartVectors(
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "part-vectors").apply { isDaemon = true } }
     private val wake = Object()
 
-    @Volatile
-    private var stopping = false
+    @Volatile private var stopping = false
 
-    @Volatile
-    private var busy = false
+    @Volatile private var busy = false
 
     fun running(): Boolean = busy
 
-    @EventListener
-    fun partsSaved(event: PartsSaved) = synchronized(wake) { wake.notifyAll() }
+    @EventListener fun partsSaved(event: PartsSaved) = synchronized(wake) { wake.notifyAll() }
 
     @Order(5)
     @EventListener(ApplicationReadyEvent::class)
@@ -81,7 +77,9 @@ class PartVectors(
             if (todo.isEmpty()) return@forEach
             busy = true
             val windows = encoder.encodeWindows(todo.map { it.content })
-            todo.forEachIndexed { i, part -> s.parts.saveVectors(part.itemId, part.partId, encoder.id, part.hash, windows[i]) }
+            todo.forEachIndexed { i, part ->
+                s.parts.saveVectors(part.itemId, part.partId, encoder.id, part.hash, windows[i])
+            }
             // The works searched by the meaning of their chapters' windows: indexed again with them
             events.publishEvent(TextVectorsChanged(s.id, todo.map { it.itemId }.distinct()))
             done += todo.size
@@ -93,14 +91,26 @@ class PartVectors(
             todo.forEach { part ->
                 val texts = Paragraphs.of(part.content)
                 val vectors = texts.chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
-                s.parts.saveParagraphVectors(part.itemId, part.partId, Paragraphs.keyOf(encoder.id), part.hash, vectors, texts.map(Vectors::hash))
+                s.parts.saveParagraphVectors(
+                    part.itemId,
+                    part.partId,
+                    Paragraphs.keyOf(encoder.id),
+                    part.hash,
+                    vectors,
+                    texts.map(Vectors::hash),
+                )
             }
             done += todo.size
         }
         return done
     }
 
-    fun pending(): Int = plugins.textEncoder()?.let { e -> stores.sources.sumOf { it.parts.countToEncode(e.id) + it.parts.countParagraphsToEncode(Paragraphs.keyOf(e.id)) } } ?: 0
+    fun pending(): Int =
+        plugins.textEncoder()?.let { e ->
+            stores.sources.sumOf {
+                it.parts.countToEncode(e.id) + it.parts.countParagraphsToEncode(Paragraphs.keyOf(e.id))
+            }
+        } ?: 0
 
     fun total(): Int = stores.sources.sumOf { it.parts.countWithText() }
 

@@ -6,21 +6,23 @@ import kotlin.math.ln
 import kotlin.math.sqrt
 
 /**
- * What a work tells of how long its words are: its [features] — the site, the language, the normalized
- * tags and authors — and the [words] of its [chars] known, of its text or of what the sites state.
+ * What a work tells of how long its words are: its [features] — the site, the language, the normalized tags and authors
+ * — and the [words] of its [chars] known, of its text or of what the sites state.
  */
 class SizeExample(val features: Collection<String>, val words: Double, val chars: Double) {
-    val logRatio: Double get() = ln(words / chars)
+    val logRatio: Double
+        get() = ln(words / chars)
 
     /** What the example weighs: a short text tells its ratio by few words. */
-    val weight: Double get() = chars / (chars + WordsPerChar.SAMPLE)
+    val weight: Double
+        get() = chars / (chars + WordsPerChar.SAMPLE)
 }
 
 /**
- * HOW MANY WORDS A WORK HAS TO A CHARACTER, spaces among the characters — a ridge regression of the
- * logarithm of the ratio over a work's features: of all the works one mean and each feature's step from
- * it, an author's words saying much of a work and a tag's less, each by its own penalty. A work's own
- * numbers weigh over the model's by how many characters they count ([of]).
+ * HOW MANY WORDS A WORK HAS TO A CHARACTER, spaces among the characters — a ridge regression of the logarithm of the
+ * ratio over a work's features: of all the works one mean and each feature's step from it, an author's words saying
+ * much of a work and a tag's less, each by its own penalty. A work's own numbers weigh over the model's by how many
+ * characters they count ([of]).
  */
 class WordsPerChar(private val weights: Map<String, Double>) {
     /** The logarithm of the ratio of a work of these features. */
@@ -47,23 +49,26 @@ class WordsPerChar(private val weights: Map<String, Double>) {
         private const val FOLDS = 10
 
         /**
-         * The penalty of a feature's weight, found by the cross-validation over the works known on
-         * 2026-10-30: the mean nearly free, a language — few works of any but the first — lightly held, an
-         * author a little more, a tag — one of many that say little — most.
+         * The penalty of a feature's weight, found by the cross-validation over the works known on 2026-10-30: the mean
+         * nearly free, a language — few works of any but the first — lightly held, an author a little more, a tag — one
+         * of many that say little — most.
          */
-        private fun penalty(feature: String) = when {
-            feature == MEAN -> 1e-6
-            feature.startsWith(LANGUAGE) -> 0.1
-            feature.startsWith(AUTHOR) -> 1.0
-            feature.startsWith(SOURCE) -> 3.0
-            else -> 10.0
-        }
+        private fun penalty(feature: String) =
+            when {
+                feature == MEAN -> 1e-6
+                feature.startsWith(LANGUAGE) -> 0.1
+                feature.startsWith(AUTHOR) -> 1.0
+                feature.startsWith(SOURCE) -> 3.0
+                else -> 10.0
+            }
 
         /** The model of the [examples]: the normal equations of the weighed ridge solved by conjugate gradients. */
         fun fit(examples: List<SizeExample>): WordsPerChar {
             val index = HashMap<String, Int>()
             index[MEAN] = 0
-            val rows = examples.map { e -> (e.features.map { f -> index.getOrPut(f) { index.size } } + 0).distinct().toIntArray() }
+            val rows = examples.map { e ->
+                (e.features.map { f -> index.getOrPut(f) { index.size } } + 0).distinct().toIntArray()
+            }
             val n = index.size
             val lambda = DoubleArray(n)
             index.forEach { (f, i) -> lambda[i] = penalty(f) }
@@ -96,7 +101,10 @@ class WordsPerChar(private val weights: Map<String, Double>) {
             return WordsPerChar(index.entries.associate { (f, i) -> f to x[i] })
         }
 
-        /** How far from the truth the logarithm of the ratio is told of a work the model did not see: the mean square of the folds' errors, its root. */
+        /**
+         * How far from the truth the logarithm of the ratio is told of a work the model did not see: the mean square of
+         * the folds' errors, its root.
+         */
         fun outOfFold(examples: List<SizeExample>): Double {
             if (examples.size < FOLDS) return Double.NaN
             val shuffled = examples.shuffled(Random(1))
@@ -112,7 +120,10 @@ class WordsPerChar(private val weights: Map<String, Double>) {
     }
 }
 
-/** How a text's words are counted as the sites count them: letters and digits, a hyphen or an apostrophe within them part of the word — ficbook's count to a tenth of a percent, and a dash standing alone no word. */
+/**
+ * How a text's words are counted as the sites count them: letters and digits, a hyphen or an apostrophe within them
+ * part of the word — ficbook's count to a tenth of a percent, and a dash standing alone no word.
+ */
 object WordCount {
     fun of(text: String): Int {
         var words = 0

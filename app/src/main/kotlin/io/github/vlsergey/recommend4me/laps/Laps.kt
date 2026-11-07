@@ -1,8 +1,8 @@
 package io.github.vlsergey.recommend4me.laps
 
 /**
- * The time of every step of a computation, in the order taken: what a slow one is made of, in the
- * log. A step of a part handed on is named with the part's prefix ([within]).
+ * The time of every step of a computation, in the order taken: what a slow one is made of, in the log. A step of a part
+ * handed on is named with the part's prefix ([within]).
  */
 class Laps private constructor(private val prefix: String, private val laps: ArrayList<String>) {
     constructor() : this("", ArrayList())
@@ -15,7 +15,10 @@ class Laps private constructor(private val prefix: String, private val laps: Arr
         last = now
     }
 
-    /** A part of the next lap timed apart — summed of its pieces done in turns with others: told before the lap, which it is within. */
+    /**
+     * A part of the next lap timed apart — summed of its pieces done in turns with others: told before the lap, which
+     * it is within.
+     */
     fun took(step: String, millis: Long) {
         laps += "$prefix$step $millis"
     }

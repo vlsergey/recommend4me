@@ -9,16 +9,23 @@ import kotlin.test.assertTrue
 /** Every work's values read row by row into arrays: read as the tables of them the rows make. */
 class WorkFacetsTest {
 
-    private val rows = listOf(
-        Triple("w1", "tags", "a"), Triple("w2", "fandom", "hp"), Triple("w1", "fandom", "hp"),
-        Triple("w1", "tags", "b"), Triple("w2", "tags", "a"), Triple("w3", "rating", "pg-13"),
-    )
+    private val rows =
+        listOf(
+            Triple("w1", "tags", "a"),
+            Triple("w2", "fandom", "hp"),
+            Triple("w1", "fandom", "hp"),
+            Triple("w1", "tags", "b"),
+            Triple("w2", "tags", "a"),
+            Triple("w3", "rating", "pg-13"),
+        )
 
     @Test
     fun `every work's facets as the rows give them, in the order read`() {
         val reading = WorkFacets.Reading()
         // Strings of a row each, as a database gives them
-        rows.forEach { (id, facet, key) -> reading.add(String(id.toCharArray()), String(facet.toCharArray()), String(key.toCharArray())) }
+        rows.forEach { (id, facet, key) ->
+            reading.add(String(id.toCharArray()), String(facet.toCharArray()), String(key.toCharArray()))
+        }
         val works = reading.done()
         val tables = HashMap<String, HashMap<String, MutableList<String>>>()
         rows.forEach { (id, facet, key) -> tables.getOrPut(id) { HashMap() }.getOrPut(facet) { ArrayList() } += key }

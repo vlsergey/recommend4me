@@ -12,42 +12,48 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
+import java.time.Instant
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
-import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 
 private val log = LoggerFactory.getLogger(LayerDrafts::class.java)
 
 /**
  * THE DRAFTS OF THE LAYER, MADE: of every work of a source that asks the catalogue for statements
- * ([Source.catalogueProperties][io.github.vlsergey.recommend4me.source.Source.catalogueProperties]),
- * what the source drafts of it from its values on the site through the dictionary
- * ([Source.draft][io.github.vlsergey.recommend4me.source.Source.draft]) — and the universe of every
- * character drafted that is in one universe of the dictionary alone; and of every work of a source
- * with fandoms, the universes the user bound its fandoms to ([UniverseRepository.fandomUniverses][io.github.vlsergey.recommend4me.universe.UniverseRepository.fandomUniverses]).
+ * ([Source.catalogueProperties][io.github.vlsergey.recommend4me.source.Source.catalogueProperties]), what the source
+ * drafts of it from its values on the site through the dictionary
+ * ([Source.draft][io.github.vlsergey.recommend4me.source.Source.draft]) — and the universe of every character drafted
+ * that is in one universe of the dictionary alone; and of every work of a source with fandoms, the universes the user
+ * bound its fandoms to
+ * ([UniverseRepository.fandomUniverses][io.github.vlsergey.recommend4me.universe.UniverseRepository.fandomUniverses]).
  *
- * Made again when the work is captured or refreshed — before anything reads it — and, of every work
- * of the type, when the dictionary changes and on start, of every work of a source when the user
- * binds its fandoms anew ([fandomsBound]) — these in the background, in the queue of the computations
- * ([Workload]), never on the thread of the start or of a request: the works whose drafts changed are
- * then read again as any changed work is.
+ * Made again when the work is captured or refreshed — before anything reads it — and, of every work of the type, when
+ * the dictionary changes and on start, of every work of a source when the user binds its fandoms anew ([fandomsBound])
+ * — these in the background, in the queue of the computations ([Workload]), never on the thread of the start or of a
+ * request: the works whose drafts changed are then read again as any changed work is.
  *
- * A draft is a value the work is given, marked so ([Chance.draftedFrom][io.github.vlsergey.recommend4me.suggestion.Chance.draftedFrom]);
- * the user's answers override it, kept apart: a draft taken away stays taken away, whatever it is
- * made of again.
+ * A draft is a value the work is given, marked so
+ * ([Chance.draftedFrom][io.github.vlsergey.recommend4me.suggestion.Chance.draftedFrom]); the user's answers override
+ * it, kept apart: a draft taken away stays taken away, whatever it is made of again.
  */
 @Component
-class LayerDrafts(private val stores: Stores, private val events: ApplicationEventPublisher, private val workload: Workload) {
+class LayerDrafts(
+    private val stores: Stores,
+    private val events: ApplicationEventPublisher,
+    private val workload: Workload,
+) {
 
     /** The drafts of whole sources made again: in the background, in the queue of the computations, after a quiet. */
-    private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "layer-drafts").apply { isDaemon = true } }
+    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "layer-drafts").apply { isDaemon = true }
+    }
 
     /** The sources to be drafted again whole; guarded by itself. */
     private val redrafted = LinkedHashSet<String>()
@@ -57,8 +63,8 @@ class LayerDrafts(private val stores: Stores, private val events: ApplicationEve
 
     /**
      * After the sites' tags are bound ([TagNormalization][io.github.vlsergey.recommend4me.tag.TagNormalization]),
-     * before the model reads the works: the works written drafted at once — a few, before anything
-     * reads them. Every work of the source — the dictionary changed — drafted in the background.
+     * before the model reads the works: the works written drafted at once — a few, before anything reads them. Every
+     * work of the source — the dictionary changed — drafted in the background.
      */
     @Order(-50)
     @EventListener
@@ -78,18 +84,23 @@ class LayerDrafts(private val stores: Stores, private val events: ApplicationEve
         redraft(store, lookup, event.ids, facets, names, store.drafts.ofItems(event.ids))
     }
 
-    /** Every work drafted again after the start: the dictionary or the rules may have changed while the application was down. */
+    /**
+     * Every work drafted again after the start: the dictionary or the rules may have changed while the application was
+     * down.
+     */
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.sources.filter(::drafts).forEach { redraftLater(it.id, "start") }
     }
 
-    /** The user bound a fandom of the [source] to a universe, or took it back: every work of the source drafted again. */
+    /**
+     * The user bound a fandom of the [source] to a universe, or took it back: every work of the source drafted again.
+     */
     fun fandomsBound(source: String) = redraftLater(source, "fandoms")
 
     /**
-     * Every work of the [source] drafted again once the askings are quiet for [QUIET_SECONDS] — a
-     * few in a row draft once — the works whose drafts changed then read again.
+     * Every work of the [source] drafted again once the askings are quiet for [QUIET_SECONDS] — a few in a row draft
+     * once — the works whose drafts changed then read again.
      */
     private fun redraftLater(source: String, reason: String) {
         synchronized(redrafted) {
@@ -100,49 +111,68 @@ class LayerDrafts(private val stores: Stores, private val events: ApplicationEve
         }
     }
 
-    /** Every work of the sources planned drafted again now, in the queue of the computations: what the background does after the quiet. */
+    /**
+     * Every work of the sources planned drafted again now, in the queue of the computations: what the background does
+     * after the quiet.
+     */
     fun redraftPlanned() {
         val sources = synchronized(redrafted) { redrafted.toList().also { redrafted.clear() } }
-        val changed = try {
-            workload.run(DRAFTING) {
-                sources.mapNotNull { source ->
-                    val store = stores.source(source)?.takeIf(::drafts) ?: return@mapNotNull null
-                    try {
-                        source to redraftWhole(store)
-                    } catch (e: Exception) {
-                        log.error("{}: the drafts of the works were not made", source, e)
-                        null
+        val changed =
+            try {
+                workload.run(DRAFTING) {
+                    sources.mapNotNull { source ->
+                        val store = stores.source(source)?.takeIf(::drafts) ?: return@mapNotNull null
+                        try {
+                            source to redraftWhole(store)
+                        } catch (e: Exception) {
+                            log.error("{}: the drafts of the works were not made", source, e)
+                            null
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                log.error("The drafts of {} were not made", sources, e)
+                return
             }
-        } catch (e: Exception) {
-            log.error("The drafts of {} were not made", sources, e)
-            return
-        }
         // Told once out of the queue: whatever reads the works again plans its own work
         changed.forEach { (source, ids) -> if (ids.isNotEmpty()) events.publishEvent(ItemsChanged(source, ids)) }
     }
 
-    /** Every work of the [store] drafted again: its values, their names and its drafts read once, a pass over each table. */
+    /**
+     * Every work of the [store] drafted again: its values, their names and its drafts read once, a pass over each
+     * table.
+     */
     private fun redraftWhole(store: SourceStore): List<String> {
         val ids = store.items.keys().map { it.id }
         return redraft(
-            store, DictionaryLookup.load(stores.typeOf(store.id).universes), ids,
-            EveryItemFacets.siteOf(store), store.items.allFacetNames(), store.drafts.all(),
+            store,
+            DictionaryLookup.load(stores.typeOf(store.id).universes),
+            ids,
+            EveryItemFacets.siteOf(store),
+            store.items.allFacetNames(),
+            store.drafts.all(),
         )
     }
 
-    /** Whether the source drafts anything: it asks the catalogue for statements or has fandoms, and its type has universes. */
+    /**
+     * Whether the source drafts anything: it asks the catalogue for statements or has fandoms, and its type has
+     * universes.
+     */
     private fun drafts(store: SourceStore): Boolean =
-        (store.source.catalogueProperties.isNotEmpty() || UniverseFacet.fandomFacet(store.schema) != null) && stores.typeOf(store.id).type.universes
+        (store.source.catalogueProperties.isNotEmpty() || UniverseFacet.fandomFacet(store.schema) != null) &&
+            stores.typeOf(store.id).type.universes
 
     /**
-     * The drafts of the works [ids] made now of their site's values [facets], named by [names] (facet
-     * to key to name), and kept where not what they were ([before]); the works whose drafts changed.
+     * The drafts of the works [ids] made now of their site's values [facets], named by [names] (facet to key to name),
+     * and kept where not what they were ([before]); the works whose drafts changed.
      */
     private fun redraft(
-        store: SourceStore, lookup: DictionaryLookup, ids: List<String>,
-        facets: Map<String, Map<String, List<String>>>, names: Map<String, Map<String, String>>, before: Map<String, List<LayerDraft>>,
+        store: SourceStore,
+        lookup: DictionaryLookup,
+        ids: List<String>,
+        facets: Map<String, Map<String, List<String>>>,
+        names: Map<String, Map<String, String>>,
+        before: Map<String, List<LayerDraft>>,
     ): List<String> {
         val started = System.currentTimeMillis()
         // The universes the user bound the source's fandoms to, read once for every work
@@ -150,24 +180,42 @@ class LayerDrafts(private val stores: Stores, private val events: ApplicationEve
         val bound = if (fandom == null) emptyMap() else stores.typeOf(store.id).universes.fandomUniverses(store.id)
         val made = HashMap<String, List<LayerDraft>>()
         ids.forEach { id ->
-            val values = facets[id].orEmpty().mapValues { (facet, keys) -> keys.map { FacetValue(it, names[facet]?.get(it)) } }
+            val values =
+                facets[id].orEmpty().mapValues { (facet, keys) -> keys.map { FacetValue(it, names[facet]?.get(it)) } }
             val drafted = if (lookup.empty) emptyList() else store.source.draft(values, lookup)
-            val ofFandoms = fandom?.let { values[it] }.orEmpty().flatMap { f -> bound[f.key].orEmpty().map { LayerDraft(UniverseFacets.UNIVERSE, it, f.name ?: f.key) } }
+            val ofFandoms =
+                fandom
+                    ?.let { values[it] }
+                    .orEmpty()
+                    .flatMap { f ->
+                        bound[f.key].orEmpty().map { LayerDraft(UniverseFacets.UNIVERSE, it, f.name ?: f.key) }
+                    }
             made[id] = withUniverses(drafted + ofFandoms, lookup)
         }
         val changed = ids.filter { id -> made[id].orEmpty().toSet() != before[id].orEmpty().toSet() }
         if (changed.isNotEmpty()) store.drafts.replace(changed.associateWith { made[it].orEmpty() })
         if (changed.isNotEmpty() || ids.size > 1) {
-            log.info("{}: drafts of {} works made, {} changed, in {} ms", store.id, ids.size, changed.size, System.currentTimeMillis() - started)
+            log.info(
+                "{}: drafts of {} works made, {} changed, in {} ms",
+                store.id,
+                ids.size,
+                changed.size,
+                System.currentTimeMillis() - started,
+            )
         }
         return changed
     }
 
     /** The drafts with the universe of every character drafted that the dictionary has in one universe alone. */
     private fun withUniverses(drafts: List<LayerDraft>, lookup: DictionaryLookup): List<LayerDraft> {
-        val universes = drafts.filter { it.facet == UniverseFacets.CHARACTERS }.mapNotNull { d ->
-            lookup.characterUniverses[d.key]?.singleOrNull()?.let { LayerDraft(UniverseFacets.UNIVERSE, it, d.from) }
-        }
+        val universes =
+            drafts
+                .filter { it.facet == UniverseFacets.CHARACTERS }
+                .mapNotNull { d ->
+                    lookup.characterUniverses[d.key]?.singleOrNull()?.let {
+                        LayerDraft(UniverseFacets.UNIVERSE, it, d.from)
+                    }
+                }
         return (drafts + universes).distinct()
     }
 

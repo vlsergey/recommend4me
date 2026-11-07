@@ -10,18 +10,21 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(ItemRemoval::class.java)
 
 /**
- * A WORK REMOVED FROM THE LIBRARY — gone from the site — with everything of it in every database:
- * the source's (the work, its texts, pictures, reviews, parts and every vector of them, the pages
- * kept of it alone), the files of its pictures, the user's answers and links, grades, marks and the
- * site's signals, and what the model made of it (predictions, chances, likeness). Nothing is kept
- * to tell it was there: seen on the site again — removed by mistake — it is made anew, as a work
- * never seen.
+ * A WORK REMOVED FROM THE LIBRARY — gone from the site — with everything of it in every database: the source's (the
+ * work, its texts, pictures, reviews, parts and every vector of them, the pages kept of it alone), the files of its
+ * pictures, the user's answers and links, grades, marks and the site's signals, and what the model made of it
+ * (predictions, chances, likeness). Nothing is kept to tell it was there: seen on the site again — removed by mistake —
+ * it is made anew, as a work never seen.
  *
- * What is learnt of all the works together — the model, the directions of the sets — is made again
- * without it: the change is told as any other.
+ * What is learnt of all the works together — the model, the directions of the sets — is made again without it: the
+ * change is told as any other.
  */
 @Component
-class ItemRemoval(private val stores: Stores, private val recommendations: Recommendations, private val events: ApplicationEventPublisher) {
+class ItemRemoval(
+    private val stores: Stores,
+    private val recommendations: Recommendations,
+    private val events: ApplicationEventPublisher,
+) {
 
     /** False when there is no such work. */
     fun remove(key: ItemKey): Boolean {

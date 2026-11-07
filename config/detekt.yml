@@ -1,0 +1,8 @@
+# THE RULES OF THE KOTLIN CODE (AGENTS.md): detekt's own default profile, every rule as detekt has it;
+# below only what this project sets otherwise, each with why.
+
+complexity:
+  LargeClass:
+    active: true
+    # No class longer than 600 lines (detekt's default too): a class too long is split by meaning
+    allowedLines: 600

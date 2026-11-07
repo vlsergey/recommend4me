@@ -8,25 +8,27 @@ import java.nio.file.Files
 import kotlin.math.sqrt
 
 /**
- * A STRONG MULTILINGUAL SENTENCE ENCODER: BAAI/bge-m3 (XLM-RoBERTa large, MIT) as an ONNX graph in
- * half precision, its dense vector — the hidden state of the first piece, of unit length — 1024
- * numbers. The sibling of the reranker (bge-reranker-v2-m3): what it finds near a line is what
- * that one reads. It replaced multilingual-e5-small, whose 384 numbers found "a detective in
- * Victorian London" in the texts naming a Victor and London.
+ * A STRONG MULTILINGUAL SENTENCE ENCODER: BAAI/bge-m3 (XLM-RoBERTa large, MIT) as an ONNX graph in half precision, its
+ * dense vector — the hidden state of the first piece, of unit length — 1024 numbers. The sibling of the reranker
+ * (bge-reranker-v2-m3): what it finds near a line is what that one reads. It replaced multilingual-e5-small, whose 384
+ * numbers found "a detective in Victorian London" in the texts naming a Victor and London.
  *
  * No prefixes: bge-m3 reads a query and a passage alike.
  *
- * TEXTS ARE READ IN WINDOWS of [WINDOW] pieces, the positions XLM-RoBERTa was pretrained at: every
- * window is encoded on its own — a passage the search finds, a scene rather than a chapter — and a
- * text's vector is the windows' mean weighted by length, made unit again, of [MAX_WINDOWS] at most:
- * the 8192 pieces bge-m3 was trained to read of one text.
+ * TEXTS ARE READ IN WINDOWS of [WINDOW] pieces, the positions XLM-RoBERTa was pretrained at: every window is encoded on
+ * its own — a passage the search finds, a scene rather than a chapter — and a text's vector is the windows' mean
+ * weighted by length, made unit again, of [MAX_WINDOWS] at most: the 8192 pieces bge-m3 was trained to read of one
+ * text.
  */
 class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
 
     private val tokenizer: HuggingFaceTokenizer by lazy {
         val p = onnx.path(TOKENIZER)
         check(Files.isRegularFile(p)) { "The bge-m3 tokenizer is missing: ${p.toAbsolutePath()}" }
-        HuggingFaceTokenizer.newInstance(p, mapOf("addSpecialTokens" to "false", "truncation" to "false", "padding" to "false"))
+        HuggingFaceTokenizer.newInstance(
+            p,
+            mapOf("addSpecialTokens" to "false", "truncation" to "false", "padding" to "false"),
+        )
     }
 
     /** The ids that open and close every window: <s> and </s> of XLM-RoBERTa. */
@@ -69,7 +71,8 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         if (text.isBlank()) return emptyList()
         val spans = tokenizer.encode(text, false, false).charTokenSpans
         return spans.indices.chunked(ROOM).mapNotNull { chunk ->
-            // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that have
+            // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that
+            // have
             val from = chunk.firstNotNullOfOrNull { spans[it] }?.start ?: return@mapNotNull null
             val to = chunk.asReversed().firstNotNullOfOrNull { spans[it] }?.end ?: return@mapNotNull null
             from until to
@@ -77,8 +80,8 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     }
 
     /**
-     * Every window of every text in one list, so windows of different texts share batches, with
-     * the text each is of; at most [limit] windows of a text.
+     * Every window of every text in one list, so windows of different texts share batches, with the text each is of; at
+     * most [limit] windows of a text.
      */
     private fun windowsOf(texts: List<String>, limit: Int): Pair<List<LongArray>, List<Int>> {
         val windows = ArrayList<LongArray>()
@@ -94,9 +97,8 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     }
 
     /**
-     * Vectors of ready windows. Windows are SORTED BY LENGTH before batching: a batch is padded to
-     * its longest window, and a ten-piece genre beside a five-hundred-piece description would run
-     * through fifty times the work.
+     * Vectors of ready windows. Windows are SORTED BY LENGTH before batching: a batch is padded to its longest window,
+     * and a ten-piece genre beside a five-hundred-piece description would run through fifty times the work.
      */
     private fun embedIds(windows: List<LongArray>): List<FloatArray> {
         val out = arrayOfNulls<FloatArray>(windows.size)
@@ -112,10 +114,11 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
                 }
             }
             val shape = longArrayOf(batch.size.toLong(), len.toLong())
-            val inputs = mapOf(
-                "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
-                "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
-            )
+            val inputs =
+                mapOf(
+                    "input_ids" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(ids), shape),
+                    "attention_mask" to OnnxTensor.createTensor(onnx.env, LongBuffer.wrap(mask), shape),
+                )
             val hidden = onnx.runSequence(MODEL, inputs)
             // The dense vector of bge-m3: the first piece's hidden state, as it is trained
             batch.forEachIndexed { r, w -> out[w] = unit(hidden[r][0].copyOf()) }

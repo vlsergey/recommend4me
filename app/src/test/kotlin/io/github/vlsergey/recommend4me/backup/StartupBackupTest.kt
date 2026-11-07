@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.backup
 
-import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -15,17 +14,18 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.io.TempDir
 
 /** The copies of the user's own data on start: which files, where, zipped later, the newest kept. */
 class StartupBackupTest {
 
-    @TempDir
-    lateinit var data: Path
+    @TempDir lateinit var data: Path
 
-    private fun file(path: String, text: String = "data") = data.resolve(path).also {
-        it.parent.createDirectories()
-        it.writeText(text)
-    }
+    private fun file(path: String, text: String = "data") =
+        data.resolve(path).also {
+            it.parent.createDirectories()
+            it.writeText(text)
+        }
 
     @Test
     fun `the user's own files are copied — the answers and the grades — never what is made again from them`() {
@@ -67,10 +67,16 @@ class StartupBackupTest {
 
         val zips = backups.listDirectoryEntries("*.zip").map { it.name }.sorted()
         assertEquals(listOf("backup-20261003-120000.zip", "backup-20261004-120000.zip"), zips)
-        assertTrue(backups.listDirectoryEntries().none { Files.isDirectory(it) && !it.name.endsWith(".tmp") }, "the plain copies are gone once zipped")
+        assertTrue(
+            backups.listDirectoryEntries().none { Files.isDirectory(it) && !it.name.endsWith(".tmp") },
+            "the plain copies are gone once zipped",
+        )
         ZipFile(backups.resolve(zips.last()).toFile()).use { zip ->
             assertEquals(listOf("sources/site/corrections.mv.db"), zip.entries().toList().map { it.name })
-            assertEquals("answers", zip.getInputStream(zip.getEntry("sources/site/corrections.mv.db")).readBytes().decodeToString())
+            assertEquals(
+                "answers",
+                zip.getInputStream(zip.getEntry("sources/site/corrections.mv.db")).readBytes().decodeToString(),
+            )
         }
     }
 }

@@ -3,12 +3,12 @@ package io.github.vlsergey.recommend4me.source.ficbook
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
-import org.jsoup.Jsoup
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.jsoup.Jsoup
 
 class FicbookPagesTest {
 
@@ -34,7 +34,10 @@ class FicbookPagesTest {
     @Test
     fun `the cards of a list give the works, the promoted ones left out`() {
         val context = MemorySourceContext()
-        assertEquals(listOf(work, "9876543"), capture(context, "https://ficbook.net/fanfiction/no_fandom/originals", "fandom-originals.html"))
+        assertEquals(
+            listOf(work, "9876543"),
+            capture(context, "https://ficbook.net/fanfiction/no_fandom/originals", "fandom-originals.html"),
+        )
         assertEquals("Нас связали шрамами. Тихий дом (Том 1)", context.heads.getValue(work).title)
         assertEquals(Instant.parse("2026-08-03T21:00:00Z"), context.heads.getValue(work).updatedAt)
         val facets = context.facets.getValue(work)
@@ -50,7 +53,10 @@ class FicbookPagesTest {
         assertTrue("слоуберн" in facets.getValue("tag"))
         // Every entry of the line in one field: a pairing one whatever the order of its names, a
         // character alone as itself; the names stay as written
-        assertEquals(listOf("авелин/брайан", "альфред/итан", "фрида", "сия", "терен", "бабушка рико"), facets["pairing"])
+        assertEquals(
+            listOf("авелин/брайан", "альфред/итан", "фрида", "сия", "терен", "бабушка рико"),
+            facets["pairing"],
+        )
         assertEquals("Брайан/Авелин", context.facetNames.getValue("pairing")["авелин/брайан"])
         assertEquals("Бабушка Рико", context.facetNames.getValue("pairing")["бабушка рико"])
         assertNull(facets["character"])
@@ -58,7 +64,10 @@ class FicbookPagesTest {
         val numbers = context.numbers.getValue(work)
         assertEquals(mapOf("likes" to 2.0, "pages" to 180.0, "words" to 68967.0, "parts" to 20.0), numbers)
         assertTrue(context.texts.getValue(work).getValue("annotation").startsWith("Молодой хирург"))
-        assertEquals(listOf("rouling_dzhoan___garri_potter".let { "books/$it" }, "anime_and_manga/naruto"), context.facets.getValue("9876543")["fandom"])
+        assertEquals(
+            listOf("rouling_dzhoan___garri_potter".let { "books/$it" }, "anime_and_manga/naruto"),
+            context.facets.getValue("9876543")["fandom"],
+        )
         assertEquals(listOf("fanfiction"), context.facets.getValue("9876543")["kind"])
         assertEquals(Instant.parse("2026-08-02T14:55:00Z"), context.heads.getValue("9876543").updatedAt)
     }
@@ -80,8 +89,12 @@ class FicbookPagesTest {
         assertEquals(setOf(work), context.heads.keys)
     }
 
-    /** A work's page as the site shows it to a user logged in ([loggedIn]): the buttons of its header as they are on the site, pressed or not. */
-    private fun marked(loggedIn: Boolean, liked: Boolean, followed: Boolean, read: Boolean) = """
+    /**
+     * A work's page as the site shows it to a user logged in ([loggedIn]): the buttons of its header as they are on the
+     * site, pressed or not.
+     */
+    private fun marked(loggedIn: Boolean, liked: Boolean, followed: Boolean, read: Boolean) =
+        """
         <html><body>
         ${if (loggedIn) """<a href="/home/liked_fanfics">Понравившиеся работы</a>""" else ""}
         <h1 class="heading">Работа</h1>
@@ -92,22 +105,44 @@ class FicbookPagesTest {
         <button type="button" class="ds-btn ds-btn-regular ds-btn-mini${if (read) " ds-btn-success" else ""} jsVueComponent"><svg class="${if (read) "ic_checkbox-checked2" else "ic_checkbox-unchecked2"} svg-icon"></svg> Прочитано</button>
         </div></section>
         </body></html>
-    """.trimIndent()
+    """
+            .trimIndent()
 
     @Test
     fun `the user's marks of a work are its signals, read only of a user logged in`() {
         val context = MemorySourceContext()
-        source.capture(CapturedPage("https://ficbook.net/readfic/123", marked(loggedIn = true, liked = true, followed = false, read = true), now), context)
+        source.capture(
+            CapturedPage(
+                "https://ficbook.net/readfic/123",
+                marked(loggedIn = true, liked = true, followed = false, read = true),
+                now,
+            ),
+            context,
+        )
         assertEquals(mapOf("123" to "yes"), context.signals.withSignal("liked"))
         assertEquals(mapOf("123" to "yes"), context.signals.withSignal("read"))
         assertEquals(emptyMap(), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
         // Unread and unliked again: the signals go
-        source.capture(CapturedPage("https://ficbook.net/readfic/123", marked(loggedIn = true, liked = false, followed = true, read = false), now), context)
+        source.capture(
+            CapturedPage(
+                "https://ficbook.net/readfic/123",
+                marked(loggedIn = true, liked = false, followed = true, read = false),
+                now,
+            ),
+            context,
+        )
         assertEquals(emptyMap(), context.signals.withSignal("liked"))
         assertEquals(emptyMap(), context.signals.withSignal("read"))
         assertEquals(mapOf("123" to "yes"), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
         // A page of no user says nothing of the marks: they stay
-        source.capture(CapturedPage("https://ficbook.net/readfic/123", marked(loggedIn = false, liked = false, followed = false, read = false), now), context)
+        source.capture(
+            CapturedPage(
+                "https://ficbook.net/readfic/123",
+                marked(loggedIn = false, liked = false, followed = false, read = false),
+                now,
+            ),
+            context,
+        )
         assertEquals(mapOf("123" to "yes"), context.signals.withSignal(Ficbook.SIGNAL_FOLLOWED))
     }
 
@@ -115,7 +150,10 @@ class FicbookPagesTest {
     fun `a part gives its text, and comments are the readers' opinions`() {
         val context = MemorySourceContext()
         capture(context, "https://ficbook.net/readfic/$work", "readfic.html")
-        assertEquals(listOf(work), capture(context, "https://ficbook.net/readfic/$work/42501445#part_content", "part.html"))
+        assertEquals(
+            listOf(work),
+            capture(context, "https://ficbook.net/readfic/$work/42501445#part_content", "part.html"),
+        )
         val part = context.parts.getValue(work).getValue("42501445")
         assertEquals(0, part.position)
         assertEquals(
@@ -127,7 +165,10 @@ class FicbookPagesTest {
         val comments = context.reviews.getValue(work)
         assertEquals(setOf("138019862", "138000001"), comments.keys)
         // A quote of another comment is not this one's words
-        assertEquals("Спасибо-спасибо-спасибо! Я очень рада, что вам понравилось) Приятного чтения!", comments.getValue("138019862").content)
+        assertEquals(
+            "Спасибо-спасибо-спасибо! Я очень рада, что вам понравилось) Приятного чтения!",
+            comments.getValue("138019862").content,
+        )
         assertEquals(Instant.parse("2026-09-01T09:15:00Z"), comments.getValue("138019862").postedAt)
     }
 
@@ -141,14 +182,21 @@ class FicbookPagesTest {
             context.facetDescriptions.getValue("tag")["hurt/comfort"],
         )
         // The other names the site files under it: each a tag of its own, named, a synonym of it
-        val synonyms = mapOf("хёрт/комфорт" to "Хёрт/комфорт", "х/к" to "Х/К", "h/c" to "H/C", "помощь нежностью" to "Помощь нежностью")
+        val synonyms =
+            mapOf(
+                "хёрт/комфорт" to "Хёрт/комфорт",
+                "х/к" to "Х/К",
+                "h/c" to "H/C",
+                "помощь нежностью" to "Помощь нежностью",
+            )
         assertEquals(synonyms.keys.associateWith { "hurt/comfort" }, context.facetSynonyms.getValue("tag"))
         synonyms.forEach { (key, name) -> assertEquals(name, context.facetNames.getValue("tag")[key]) }
     }
 
     @Test
     fun `the site's search of tags, asked by the browser, says what the tag asked means — of its own name or a synonym`() {
-        val harassment = "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."
+        val harassment =
+            "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."
         val asked = source.describing("tag", listOf("харассмент", "домогательства"))
         assertEquals(listOf(Ficbook.tagSearch("харассмент"), Ficbook.tagSearch("домогательства")), asked.map { it.url })
         assertEquals(mapOf("title" to "харассмент"), asked.first().form)
@@ -160,7 +208,15 @@ class FicbookPagesTest {
             // The tag found and its synonyms, asked by either: each a tag of its own of the same thing
             assertEquals("Харассмент", context.facetNames.getValue("tag")["харассмент"])
             assertEquals(
-                setOf("домогательство", "склонение к сексу", "дискриминация", "домогательства", "сексуальное домогательство", "приставания").associateWith { "харассмент" },
+                setOf(
+                        "домогательство",
+                        "склонение к сексу",
+                        "дискриминация",
+                        "домогательства",
+                        "сексуальное домогательство",
+                        "приставания",
+                    )
+                    .associateWith { "харассмент" },
                 context.facetSynonyms.getValue("tag"),
             )
         }
@@ -175,13 +231,19 @@ class FicbookPagesTest {
         val covers = "https://assets.teinon.net/fanfic-covers"
         val doc = Jsoup.parse(page("fandom-originals.html"))
         val card = doc.selectFirst("article.fanfic-inline")!!
-        val id = card.selectFirst(".fanfic-inline-title a")!!.attr("href").substringAfter("/readfic/").substringBefore('?')
-        card.selectFirst(".side-section")!!.append(
-            """<a href="/readfic/$id"><picture class="fanfic-hat-cover-picture"><source media="(max-width: 480px)" srcset="$covers/m_Y.webp">""" +
-                """<source media="(min-width: 481px)" srcset="$covers/d_Y.webp"><img src="$covers/m_Y.webp" alt="" width="180px"></picture></a>""",
-        )
+        val id =
+            card.selectFirst(".fanfic-inline-title a")!!.attr("href").substringAfter("/readfic/").substringBefore('?')
+        card
+            .selectFirst(".side-section")!!
+            .append(
+                """<a href="/readfic/$id"><picture class="fanfic-hat-cover-picture"><source media="(max-width: 480px)" srcset="$covers/m_Y.webp">""" +
+                    """<source media="(min-width: 481px)" srcset="$covers/d_Y.webp"><img src="$covers/m_Y.webp" alt="" width="180px"></picture></a>"""
+            )
         val context = MemorySourceContext()
-        source.capture(CapturedPage("https://ficbook.net/fanfiction/no_fandom/originals", doc.outerHtml(), now), context)
+        source.capture(
+            CapturedPage("https://ficbook.net/fanfiction/no_fandom/originals", doc.outerHtml(), now),
+            context,
+        )
         assertEquals(listOf("$covers/d_Y.webp"), context.pictures[id])
     }
 
@@ -189,19 +251,39 @@ class FicbookPagesTest {
     fun `a work's cover is read of its header, as the site sends it and as the browser draws it`() {
         val url = "https://ficbook.net/readfic/$work"
         val covers = "https://assets.teinon.net/fanfic-covers"
-        fun withCover(html: String) = Jsoup.parse(page("readfic.html")).also { it.selectFirst(".fanfic-hat")!!.prependChild(Jsoup.parse(html).body().child(0)) }.outerHtml()
+        fun withCover(html: String) =
+            Jsoup.parse(page("readfic.html"))
+                .also { it.selectFirst(".fanfic-hat")!!.prependChild(Jsoup.parse(html).body().child(0)) }
+                .outerHtml()
         val sent = MemorySourceContext()
-        source.capture(CapturedPage(url, withCover("""<fanfic-cover class="jsVueComponent" src-original="$covers/X.webp" src-desktop="$covers/d_X.webp" src-mobile="$covers/m_X.webp"></fanfic-cover>"""), now), sent)
+        source.capture(
+            CapturedPage(
+                url,
+                withCover(
+                    """<fanfic-cover class="jsVueComponent" src-original="$covers/X.webp" src-desktop="$covers/d_X.webp" src-mobile="$covers/m_X.webp"></fanfic-cover>"""
+                ),
+                now,
+            ),
+            sent,
+        )
         assertEquals(listOf("$covers/d_X.webp"), sent.pictures[work])
         val drawn = MemorySourceContext()
-        val picture = """<div class="jsVueComponent"><div class="fanfic-hat-cover"><picture class="fanfic-hat-cover-picture">""" +
-            """<source media="(max-width: 650px)" srcset="$covers/m_X.webp"><img src="$covers/d_X.webp" alt="" width="200"></picture></div></div>"""
+        val picture =
+            """<div class="jsVueComponent"><div class="fanfic-hat-cover"><picture class="fanfic-hat-cover-picture">""" +
+                """<source media="(max-width: 650px)" srcset="$covers/m_X.webp"><img src="$covers/d_X.webp" alt="" width="200"></picture></div></div>"""
         source.capture(CapturedPage(url, withCover(picture), now), drawn)
         assertEquals(listOf("$covers/d_X.webp"), drawn.pictures[work])
         // The extension marks the cover of the header, not the covers of the other works' cards
-        assertEquals(listOf("$covers/d_X.webp"), Jsoup.parse(withCover(picture)).select(source.pageDecor.pictures!!.selector).map { it.attr("src") })
+        assertEquals(
+            listOf("$covers/d_X.webp"),
+            Jsoup.parse(withCover(picture)).select(source.pageDecor.pictures!!.selector).map { it.attr("src") },
+        )
         // A work without a cover has none
-        assertNull(MemorySourceContext().also { source.capture(CapturedPage(url, page("readfic.html"), now), it) }.pictures[work])
+        assertNull(
+            MemorySourceContext()
+                .also { source.capture(CapturedPage(url, page("readfic.html"), now), it) }
+                .pictures[work]
+        )
     }
 
     @Test
@@ -222,7 +304,10 @@ class FicbookPagesTest {
         assertEquals(tags, context.facets.getValue(work).getValue("tag"))
 
         // The block of tags there, its links of another markup: the tags are not taken away
-        val otherTags = Jsoup.parse(page("readfic.html")).also { d -> d.select("a.tag").forEach { it.tagName("span").removeClass("tag") } }.outerHtml()
+        val otherTags =
+            Jsoup.parse(page("readfic.html"))
+                .also { d -> d.select("a.tag").forEach { it.tagName("span").removeClass("tag") } }
+                .outerHtml()
         source.capture(CapturedPage(url, otherTags, now), context)
         assertEquals(tags, context.facets.getValue(work).getValue("tag"))
     }

@@ -11,7 +11,11 @@ class SetEmbeddingTest {
     /** Points spread 10 along the first axis, 3 along the second, a little along the rest. */
     private fun cloud(n: Int, d: Int = 8): List<FloatArray> {
         val random = Random(1)
-        return List(n) { FloatArray(d) { k -> (random.nextDouble(-1.0, 1.0) * if (k == 0) 10.0 else if (k == 1) 3.0 else 0.1).toFloat() } }
+        return List(n) {
+            FloatArray(d) { k ->
+                (random.nextDouble(-1.0, 1.0) * if (k == 0) 10.0 else if (k == 1) 3.0 else 0.1).toFloat()
+            }
+        }
     }
 
     @Test
