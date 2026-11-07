@@ -111,11 +111,10 @@ the model, its loss, what it reads and the rule it chooses by are chosen for wha
 
 **Kotlin is formatted by ktfmt**, kotlinlang's style, lines of 120 at most (Spotless): run
 `gradlew spotlessApply` before committing Kotlin; `spotlessCheck` fails what is not formatted so.
-**Its rules are detekt's default profile** (`config/detekt.yml` holds only what this project sets
-otherwise, each with why): a class of 600 lines at most, methods short and simple, numbers named, no
-exception caught but the one meant. Both run before every module's tests. What broke the profile when
-it was turned on is in `config/detekt/<module>.xml` for a while, being fixed; nothing is added there —
-a finding is fixed, or the rule is set otherwise in `config/detekt.yml` with its reason.
+**Its rules are detekt's default profile as it is**: a class of 600 lines at most, methods short and
+simple, numbers named, no exception caught but the one meant. Both run before every module's tests.
+What broke the profile when it was turned on is in `config/detekt/<module>.xml` for a while, being
+fixed; nothing is added there — a finding is fixed.
 
 **The scripts — the web interface and the extension — are linted by Biome**, its recommended rules
 (`biome.jsonc`; `npm run lint` in `frontend`, `gradlew :app:lintScripts`): a file of 600 lines at most.

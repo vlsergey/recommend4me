@@ -41,11 +41,10 @@ spotless {
     }
 }
 
-// THE RULES OF THE CODE (AGENTS.md): detekt's default profile, what config/detekt.yml sets otherwise
-// alone, of the module's sources and tests. Before the tests, with the form: every test run checks both
+// THE RULES OF THE CODE (AGENTS.md): detekt's default profile as it is, of the module's sources and tests. Before
+// the tests, with the form: every test run checks both
 detekt {
     buildUponDefaultConfig = true
-    config.setFrom(rootProject.file("config/detekt.yml"))
     // FOR A WHILE: what broke the default profile when it was turned on (2026-11-07), being fixed a rule after
     // another; a module's file goes once nothing is left in it
     baseline = rootProject.file("config/detekt/${project.path.removePrefix(":").replace(':', '-')}.xml")
