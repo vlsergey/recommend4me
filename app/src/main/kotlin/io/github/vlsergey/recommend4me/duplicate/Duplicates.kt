@@ -644,16 +644,15 @@ class Duplicates(
 
     /**
      * The size in words of every work of [keys]: stated by its site, or worked out of its characters
-     * ([WorkSizes.ofItems]); none of a work of neither. Every source's read in one go.
+     * ([WorkSizes.ofEvery]); none of a work of neither. The pairs are of nearly every work: every
+     * source's sizes read whole, once.
      */
     private fun wordsOf(type: TypeStore, keys: Collection<ItemKey>): Map<ItemKey, Double> {
         val out = HashMap<ItemKey, Double>()
         keys.groupBy { it.source }.forEach { (source, own) ->
             val s = type.source(source) ?: return@forEach
-            val ids = own.map { it.id }
-            sizes.ofItems(type, s, ids, s.items.numbersOf(ids), s.corrections.fieldsOf(ids)).forEach { (id, size) ->
-                size.words?.let { out[ItemKey(source, id)] = it.value }
-            }
+            val every = sizes.ofEvery(type, s)
+            own.forEach { key -> every[key.id]?.words?.let { out[key] = it.value } }
         }
         return out
     }

@@ -60,11 +60,35 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
      * operation.
      */
     fun ofItems(type: TypeStore, s: SourceStore, ids: List<String>, numbers: Map<String, Map<String, Double>>, fields: Map<String, Map<String, String>>): Map<String, ItemSize> {
+        if (wordsKey(s) == null && charsKey(s) == null) return emptyMap()
+        val works = s.works.ofItems(s.id, ids)
+        return sized(s, ids, numbers, fields, works, type.sizes.of(works.values))
+    }
+
+    /**
+     * The size of every item of the source that has one, for an operation over every work (the pairs of
+     * the duplicates sorted by their size): each table read whole, once — the two numbers of the size
+     * alone, every field the user wrote, every item's work, every work's ratio. Asked item by item, the
+     * 82 000 works of the books took three minutes.
+     */
+    fun ofEvery(type: TypeStore, s: SourceStore): Map<String, ItemSize> {
+        val keys = listOfNotNull(wordsKey(s), charsKey(s))
+        if (keys.isEmpty()) return emptyMap()
+        val numbers = HashMap<String, MutableMap<String, Double>>()
+        keys.forEach { key -> s.items.number(key).forEach { (id, value) -> numbers.getOrPut(id) { HashMap() }[key] = value } }
+        val fields = s.corrections.allFields()
+        // An item of no number of its size may have one the user wrote
+        val ids = (numbers.keys + fields.keys).toList()
+        return sized(s, ids, numbers, fields, s.works.allOf(s.id), type.sizes.all())
+    }
+
+    /** The sizes of the items [ids] of what is read of them: their numbers, the fields the user wrote, their works and the works' ratios. */
+    private fun sized(
+        s: SourceStore, ids: List<String>, numbers: Map<String, Map<String, Double>>, fields: Map<String, Map<String, String>>,
+        works: Map<String, Long>, ratios: Map<Long, Double>,
+    ): Map<String, ItemSize> {
         val words = wordsKey(s)
         val chars = charsKey(s)
-        if (words == null && chars == null) return emptyMap()
-        val works = s.works.ofItems(s.id, ids)
-        val ratios = type.sizes.of(works.values)
         return ids.associateWith { id ->
             val own = Corrected.numbers(numbers[id].orEmpty(), fields[id].orEmpty())
             val statedWords = words?.let { own[it] }?.takeIf { it > 0 }
