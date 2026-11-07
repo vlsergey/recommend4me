@@ -11,6 +11,24 @@ import kotlin.test.assertTrue
 class SimdTest {
 
     @Test
+    fun `a row combined of coordinates and a side agrees with the plain sums`() {
+        val random = Random(5)
+        // Not a whole number of lanes: the tail goes the plain way; the coordinates read from the middle of their array
+        val n = 1003
+        val rank = 16
+        val side = FloatArray(rank * n) { random.nextFloat() - 0.5f }
+        val coords = FloatArray(3 * rank) { random.nextFloat() - 0.5f }
+        val base = FloatArray(n) { random.nextFloat() }
+        val out = FloatArray(n)
+        Simd.combine(coords, rank, rank, side, n, base, out)
+        for (k in 0 until n) {
+            var s = base[k].toDouble()
+            for (q in 0 until rank) s += coords[rank + q].toDouble() * side[q * n + k]
+            assertTrue(abs(out[k] - s) < 1e-4, "at $k: ${out[k]} against $s")
+        }
+    }
+
+    @Test
     fun `a row of logistic losses agrees with the plain loop`() {
         assertTrue(Simd.on, "the Vector API module must be loaded in tests")
         val random = Random(2)

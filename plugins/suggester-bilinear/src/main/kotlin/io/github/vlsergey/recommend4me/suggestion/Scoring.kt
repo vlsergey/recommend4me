@@ -8,6 +8,8 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.util.IdentityHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.stream.IntStream
 import org.slf4j.LoggerFactory
 
@@ -95,8 +97,6 @@ internal class Scoring(
             require(task.valueCount == m) { "${task.valueCount} values of a scoring of $m" }
         }
 
-        private val sides = vt.map { Floats.of(it) }
-
         /** Every item's fold, of its id. */
         private val foldOf: IntArray by lazy { IntArray(task.itemCount) { Problem.foldOf(task.itemIds[it], folds) } }
 
@@ -118,6 +118,14 @@ internal class Scoring(
             }
         }
 
+        /**
+         * The time of the scores of every value — of the rows asking every one, as the tags — by its parts,
+         * summed over the askings: told in the log once every item was scored so.
+         */
+        private val gathering = AtomicLong()
+        private val making = AtomicLong()
+        private val wholeRows = AtomicInteger()
+
         override fun of(rows: IntArray): List<FloatArray> = scored(rows, null, chances = true)
 
         override fun scores(rows: IntArray, columns: List<IntArray?>): List<FloatArray> = scored(rows, columns, chances = false)
@@ -138,10 +146,18 @@ internal class Scoring(
                 val groups = IdentityHashMap<IntArray?, MutableList<Int>>()
                 at.forEach { k -> groups.getOrPut(columns?.get(k)) { ArrayList() } += k }
                 groups.forEach { (cols, members) ->
+                    val started = System.nanoTime()
                     val u = Floats(members.size * rank)
                     members.forEachIndexed { r, k -> u.copy(all, rows[k] * width + f * rank, r * rank, rank) }
+                    if (cols == null) gathering.addAndGet(System.nanoTime() - started)
                     score(f, rows, members.toIntArray(), u, cols, chances, out)
                 }
+            }
+            if (columns == null || columns.all { it == null }) {
+                if (wholeRows.addAndGet(rows.size) == task.itemCount) log.info(
+                    "the scores of every value of {} items of {} values: their coordinates gathered in {} ms, the rows made in {} ms",
+                    task.itemCount, m, gathering.get() / 1_000_000, making.get() / 1_000_000,
+                )
             }
             return out.map { it!! }
         }
@@ -154,20 +170,24 @@ internal class Scoring(
                 members.forEach { out[it] = FloatArray(0) }
                 return
             }
-            // The products of the rows: in the native memory of the product, each row taken out of it once,
-            // into the array it is answered in — not copied whole to the heap and then a row at a time
-            val product: Floats
+            // Of the rows of every value, each row made where it is answered, of the coordinates and the side
+            // ([Simd.combine]): a product of tens of thousands of works by thousands of values written into fresh
+            // native memory, then copied out a row at a time, took the most of the tags' scores. Of the values
+            // asked, the products of the rows in the native memory of the product, each row taken out of it once
+            val product: Floats?
+            val coords: FloatArray?
             if (cols == null) {
-                product = Floats(n * m)
-                Blas.product(u, rank, n, rank, sides[f], m, product)
+                product = null
+                coords = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
             } else if (n.toLong() * k * rank <= DIRECT) {
                 // A few rows of a few values: summed here, no product to set up
                 val side = vt[f]
-                val coords = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
+                val own = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
                 product = Floats(n * k)
+                coords = null
                 for (r in 0 until n) for (c in 0 until k) {
                     var sum = 0f
-                    for (q in 0 until rank) sum += coords[r * rank + q] * side[q * m + cols[c]]
+                    for (q in 0 until rank) sum += own[r * rank + q] * side[q * m + cols[c]]
                     product[r * k + c] = sum
                 }
             } else {
@@ -175,6 +195,7 @@ internal class Scoring(
                 val sub = FloatArray(rank * k)
                 for (q in 0 until rank) for (c in 0 until k) sub[q * k + c] = side[q * m + cols[c]]
                 product = Floats(n * k)
+                coords = null
                 Blas.product(u, rank, n, rank, Floats.of(sub), k, product)
             }
             // A value's place among those asked
@@ -190,13 +211,18 @@ internal class Scoring(
             val each = { r: Int ->
                 val i = rows[members[r]]
                 val row = FloatArray(k)
-                product.take(row, 0, r * k, k)
-                Simd.axpy(1f, shift, row)
+                if (product == null) Simd.combine(coords!!, r * rank, rank, vt[f], m, shift, row)
+                else {
+                    product.take(row, 0, r * k, k)
+                    Simd.axpy(1f, shift, row)
+                }
                 task.examples[i].forEach { v -> place(v).let { if (it >= 0) row[it] += w[0] } }
                 if (chances) for (c in 0 until k) row[c] = Bilinear.sigmoid(row[c])
                 out[members[r]] = row
             }
+            val made = System.nanoTime()
             if (n.toLong() * k <= DIRECT) for (r in 0 until n) each(r) else IntStream.range(0, n).parallel().forEach { each(it) }
+            if (cols == null) making.addAndGet(System.nanoTime() - made)
         }
     }
 

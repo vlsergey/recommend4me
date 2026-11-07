@@ -220,6 +220,33 @@ object Simd {
         }
     }
 
+    /**
+     * `out[k] = base[k] + Σ_q c[cAt + q] · x[q · stride + k]` for q under [count], k under `out.size`: a row
+     * of a product of [count] coordinates by a side of them laid out row after row ([stride] apart), made
+     * in one pass — every lane's worth of [out] summed in the wide registers over all the rows of [x] and
+     * written once, not [count] passes of [axpy] over it, nor a product written whole and copied after.
+     */
+    fun combine(c: FloatArray, cAt: Int, count: Int, x: FloatArray, stride: Int, base: FloatArray, out: FloatArray) {
+        val n = out.size
+        var k = 0
+        if (on) {
+            val sp = FloatVector.SPECIES_PREFERRED
+            val bound = sp.loopBound(n)
+            while (k < bound) {
+                var acc = FloatVector.fromArray(sp, base, k)
+                for (q in 0 until count) acc = FloatVector.fromArray(sp, x, q * stride + k).fma(FloatVector.broadcast(sp, c[cAt + q]), acc)
+                acc.intoArray(out, k)
+                k += sp.length()
+            }
+        }
+        while (k < n) {
+            var s = base[k]
+            for (q in 0 until count) s += c[cAt + q] * x[q * stride + k]
+            out[k] = s
+            k++
+        }
+    }
+
     /** `y[yAt + k] += c · x[xAt + k]` for k under [n], where the numbers lie: a lane's worth at once. */
     fun axpy(c: Float, x: Floats, xAt: Int, y: Floats, yAt: Int, n: Int) {
         var k = 0
