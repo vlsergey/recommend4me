@@ -20,7 +20,7 @@ class DuplicateModelTest {
         chance(title, description, null, facets)
 
     @Test
-    fun `one author by the dictionary lifts a pair, and the boundary of the answers stands between what is said one work and what different`() {
+    fun `one author lifts a pair, and the boundary stands between the answers of one work and of different ones`() {
         fun one(n: Int) =
             DuplicateCandidate(ItemKey("a", "$n"), ItemKey("b", "$n"), 0.6f, null, null, emptyMap(), sameAuthor = true)
         fun two(n: Int) = pair(n, 0.6f, null)

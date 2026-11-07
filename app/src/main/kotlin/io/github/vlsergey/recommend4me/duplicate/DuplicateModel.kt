@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.item.ItemKey
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
@@ -144,7 +145,14 @@ class DuplicateModel(val weights: Map<String, Double>?) {
         /** How far the weights are held to nought: the user's few answers do not swing them wide. */
         private const val PENALTY = 1.0
 
+        /** Newton's steps at most. */
         private const val STEPS = 50
+
+        /** The largest move of a weight of a step under which the weights are settled: Newton's steps stop. */
+        private const val SETTLED = 1e-6
+
+        /** A pivot of Gauss's elimination this small is nought: of a feature no pair tells apart, no step. */
+        private const val NO_PIVOT = 1e-12
 
         /** The features of a pair by their names: the constant, every layer both have and that they have it. */
         fun features(
@@ -207,39 +215,71 @@ class DuplicateModel(val weights: Map<String, Double>?) {
                 }
             }
             val w = DoubleArray(count)
-            repeat(STEPS) {
-                val gradient = DoubleArray(count)
-                val hessian = Array(count) { DoubleArray(count) }
-                for (i in pairs.indices) {
-                    val weight = if (labels[i] == null) lack else 1.0
-                    val y = if (labels[i] == true) 1.0 else 0.0
-                    val p = places[i]
-                    val x = values[i]
-                    var z = 0.0
-                    for (k in p.indices) z += w[p[k]] * x[k]
-                    val chance = sigmoid(z)
-                    val r = weight * chance * (1 - chance)
-                    for (k in p.indices) {
-                        gradient[p[k]] += weight * (chance - y) * x[k]
-                        for (q in p.indices) hessian[p[k]][p[q]] += r * x[k] * x[q]
-                    }
-                }
-                for (k in 1 until count) {
-                    gradient[k] += PENALTY * w[k]
-                    hessian[k][k] += PENALTY
-                }
-                // A feature no pair has: its weight held where it is
-                for (k in 0 until count) if (hessian[k][k] == 0.0) hessian[k][k] = 1.0
-                val step = solve(hessian, gradient)
-                var moved = 0.0
-                for (k in 0 until count) {
-                    w[k] -= step[k]
-                    moved = maxOf(moved, abs(step[k]))
-                }
-                if (moved < 1e-6) return DuplicateModel(names.indices.associate { names[it] to w[it] })
+            var step = 0
+            var settled = false
+            while (step < STEPS && !settled) {
+                step++
+                settled = newtonStep(w, places, values, labels, lack) < SETTLED
             }
             return DuplicateModel(names.indices.associate { names[it] to w[it] })
         }
+
+        /**
+         * One of Newton's steps of the penalized log-likelihood: the weights [w] moved by the gradient and the Hessian
+         * of the pairs, each pair's features by their [places] and [values], labelled by [labels], one not answered on
+         * weighing [lack]. The largest move of a weight returned.
+         */
+        private fun newtonStep(
+            w: DoubleArray,
+            places: List<IntArray>,
+            values: List<DoubleArray>,
+            labels: List<Boolean?>,
+            lack: Double,
+        ): Double {
+            val count = w.size
+            val gradient = DoubleArray(count)
+            val hessian = Array(count) { DoubleArray(count) }
+            for (i in labels.indices) {
+                val weight = if (labels[i] == null) lack else 1.0
+                val y = if (labels[i] == true) 1.0 else 0.0
+                val p = places[i]
+                val x = values[i]
+                var z = 0.0
+                for (k in p.indices) z += w[p[k]] * x[k]
+                val chance = sigmoid(z)
+                val r = weight * chance * (1 - chance)
+                for (k in p.indices) {
+                    gradient[p[k]] += weight * (chance - y) * x[k]
+                    for (q in p.indices) hessian[p[k]][p[q]] += r * x[k] * x[q]
+                }
+            }
+            for (k in 1 until count) {
+                gradient[k] += PENALTY * w[k]
+                hessian[k][k] += PENALTY
+            }
+            // A feature no pair has: its weight held where it is
+            for (k in 0 until count) if (hessian[k][k] == 0.0) hessian[k][k] = 1.0
+            val shift = solve(hessian, gradient)
+            var moved = 0.0
+            for (k in 0 until count) {
+                w[k] -= shift[k]
+                moved = maxOf(moved, abs(shift[k]))
+            }
+            return moved
+        }
+
+        /**
+         * The model of the user's answers of the [pairs]: one work, different — every pair not answered on a likely
+         * different one — the related works left out (user, 2026-10-30): a translation's authors differ, its tags and
+         * description are the other's, a part is neither one nor two — they teach neither one work nor two.
+         */
+        fun ofAnswers(
+            pairs: Collection<DuplicateCandidate>,
+            said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+        ): DuplicateModel? =
+            fit(pairs.filter { said[it.pair]?.related != true }) { c ->
+                said[c.pair]?.let { it == DuplicateAnswer.SAME }
+            }
 
         /** The solution of a x = b by Gauss's elimination with the largest pivot: a small system. */
         private fun solve(a: Array<DoubleArray>, b: DoubleArray): DoubleArray {
@@ -250,14 +290,14 @@ class DuplicateModel(val weights: Map<String, Double>?) {
                 val t = m[c]
                 m[c] = m[pivot]
                 m[pivot] = t
-                if (abs(m[c][c]) < 1e-12) continue
+                if (abs(m[c][c]) < NO_PIVOT) continue
                 for (r in 0 until n) {
                     if (r == c) continue
                     val f = m[r][c] / m[c][c]
                     if (f != 0.0) for (k in c..n) m[r][k] -= f * m[c][k]
                 }
             }
-            return DoubleArray(n) { if (abs(m[it][it]) < 1e-12) 0.0 else m[it][n] / m[it][it] }
+            return DoubleArray(n) { if (abs(m[it][it]) < NO_PIVOT) 0.0 else m[it][n] / m[it][it] }
         }
     }
 }

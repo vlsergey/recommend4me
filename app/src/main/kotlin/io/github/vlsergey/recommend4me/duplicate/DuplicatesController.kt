@@ -14,7 +14,12 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class DuplicatesController(private val stores: Stores, private val duplicates: Duplicates) : DuplicatesApi {
+class DuplicatesController(
+    private val stores: Stores,
+    private val duplicates: Duplicates,
+    private val pages: DuplicatePages,
+    private val journal: DuplicateJournal,
+) : DuplicatesApi {
 
     override fun getDuplicates(
         type: String,
@@ -23,14 +28,14 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
         limit: Int,
         sort: DuplicateSort,
     ): ResponseEntity<DuplicatePage> {
-        val page = duplicates.page(type, answered, offset, limit, sort) ?: return ResponseEntity.notFound().build()
+        val page = pages.page(type, answered, offset, limit, sort) ?: return ResponseEntity.notFound().build()
         // A search or a fitting planned or running: what there is, the page asks again
         return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)
     }
 
     override fun getItemDuplicates(source: String, item: String): ResponseEntity<List<DuplicatePair>> {
         if (stores.source(source)?.items?.exists(item) != true) return ResponseEntity.notFound().build()
-        return ResponseEntity.ok(duplicates.ofItem(ItemKey(source, item)))
+        return ResponseEntity.ok(pages.ofItem(ItemKey(source, item)))
     }
 
     override fun searchDuplicates(type: String): ResponseEntity<Unit> {
@@ -60,10 +65,10 @@ class DuplicatesController(private val stores: Stores, private val duplicates: D
     }
 
     override fun getDuplicateJournal(type: String, offset: Int, limit: Int): ResponseEntity<WorkPairJournalPage> =
-        duplicates.journal(type, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+        journal.journal(type, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun undoDuplicateWord(type: String, id: Long): ResponseEntity<Unit> {
-        if (!duplicates.undo(type, id))
+        if (!journal.undo(type, id))
             throw Refusal.NOT_UNDOABLE.refuse(
                 HttpStatus.CONFLICT,
                 "Word $id of $type is no word of it, or no longer what its pair has",

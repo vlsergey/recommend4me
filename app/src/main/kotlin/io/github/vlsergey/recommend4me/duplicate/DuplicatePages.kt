@@ -1,0 +1,197 @@
+package io.github.vlsergey.recommend4me.duplicate
+
+import io.github.vlsergey.recommend4me.api.model.DuplicatePage
+import io.github.vlsergey.recommend4me.api.model.DuplicatePair
+import io.github.vlsergey.recommend4me.api.model.DuplicateSort
+import io.github.vlsergey.recommend4me.interest.Interest
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.size.WorkSizes
+import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.work.Works
+import java.time.ZoneOffset
+import kotlin.math.abs
+import org.springframework.stereotype.Component
+
+/** The pairs, or the words of the journal, a page holds at most. */
+internal const val MAX_PAGE = 200
+
+/**
+ * THE PAIRS AS THEY ARE LOOKED THROUGH: a page of the pairs of a type in the order the user chose ([page]), and the
+ * pairs of one work ([ofItem]).
+ */
+@Component
+class DuplicatePages(
+    private val stores: Stores,
+    private val works: Works,
+    private val duplicates: Duplicates,
+    private val views: DuplicateViews,
+    private val sizes: WorkSizes,
+) {
+    /**
+     * A page of the pairs of the type: not [answered] — those neither linked (by any way, through other works too) nor
+     * said to be different — or answered, the works linked across the sites and those said to be different. The first
+     * by the chance the pair is one work, by the model of the answers, times what the [sort] says of the work the pair
+     * was found for ([DuplicateCandidate.foundFor]; of both, the larger): its score by the formula of the list (the
+     * prediction times the chance of interest: a work the user would read first), its chance of interest, its predicted
+     * grade, or nothing — a work of a high score, the likeliest of many works of another site, does not lift every pair
+     * of them; equal, the likelier pair first. Or times the pair's own mean size ([DuplicateSort.SIZE]): the long works
+     * first. Or, of the pairs in doubt ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change
+     * ([DuplicateModel.boundary]): what an answer teaches the model most. Every pair read for the request and let go.
+     * Null of no such type.
+     */
+    fun page(
+        typeId: String,
+        answered: Boolean,
+        offset: Int,
+        limit: Int,
+        sort: DuplicateSort = DuplicateSort.FORMULA,
+    ): DuplicatePage? {
+        val type = stores.type(typeId) ?: return null
+        val said = duplicates.said(type)
+        val search = type.duplicates.search()
+        val model = DuplicateModel(search?.weights)
+        val kept = type.duplicates.all()
+        // The size of every work of the pairs, in words: of the sort by the pair's size alone
+        val words =
+            if (sort != DuplicateSort.SIZE) emptyMap()
+            else wordsOf(type, (kept.map { it.pair } + said.keys).flatMap { listOf(it.first, it.second) }.toSet())
+        val boundary =
+            if (sort == DuplicateSort.UNCERTAIN)
+                model.boundary(kept) { c -> said[c.pair]?.takeIf { !it.related }?.let { it == DuplicateAnswer.SAME } }
+            else 0.0
+        val ranking = Ranking(sort, model, worthOf(type, sort), words, boundary)
+        val rows =
+            if (!answered) kept.filter { it.pair !in said }.map { ranking.ranked(it.pair, it) }
+            else kept.associateBy { it.pair }.let { byPair -> said.keys.map { ranking.ranked(it, byPair[it]) } }
+        val sorted =
+            rows.sortedWith(
+                compareByDescending<Ranked> { it.priority }
+                    .thenByDescending { it.chance ?: -1.0 }
+                    .thenBy { it.pair.first.toString() }
+            )
+        val page = sorted.drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE))
+        return DuplicatePage(
+            total = rows.size,
+            pairs = views.pairs(type, said, page),
+            pending = duplicates.isSearching(type),
+            searchedAt = search?.madeAt?.atOffset(ZoneOffset.UTC),
+            works = search?.works,
+            learnt = search?.weights != null,
+        )
+    }
+
+    /**
+     * What the [sort] says of every work: of the prediction (not below nought) and the chance of interest (the user's
+     * mark over the model's; without a model of interest, as likely as not to tell nothing: 1). None of a sort that
+     * says nothing of the work.
+     */
+    private fun worthOf(type: TypeStore, sort: DuplicateSort): Map<ItemKey, Double> {
+        val worth = HashMap<ItemKey, Double>()
+        if (sort == DuplicateSort.FORMULA || sort == DuplicateSort.INTEREST || sort == DuplicateSort.GRADE)
+            type.sources.forEach { s ->
+                val marks = s.interest.all()
+                type.models.predicted(s.id).forEach { (id, p) ->
+                    val grade = p.score.coerceAtLeast(0.0)
+                    val interest = Interest.chance(marks[id]?.interesting, p.interest) ?: 1.0
+                    worth[ItemKey(s.id, id)] = sort.worth(grade, interest)
+                }
+            }
+        return worth
+    }
+
+    /**
+     * What the last search found for the work of [key]: every pair of an item of it and an item of another work,
+     * answered or not, the likeliest first.
+     */
+    fun ofItem(key: ItemKey): List<DuplicatePair> {
+        val type = stores.typeOf(key.source)
+        val own = works.of(type).members(key).toSet()
+        val model = DuplicateModel(type.duplicates.search()?.weights)
+        val found =
+            type.duplicates
+                .all()
+                .filter { (it.pair.first in own) != (it.pair.second in own) }
+                .map { c -> model.chance(c).let { Ranked(c.pair, c, it, it) } }
+                .sortedByDescending { it.priority }
+                // Found by several items of the work, the other is one: the likeliest pair of them, an answer going
+                // across the work
+                .distinctBy { if (it.pair.first in own) it.pair.second else it.pair.first }
+        return views.pairs(type, duplicates.said(type), found)
+    }
+
+    /**
+     * The size in words of every work of [keys]: stated by its site, or worked out of its characters
+     * ([WorkSizes.ofEvery]); none of a work of neither. The pairs are of nearly every work: every source's sizes read
+     * whole, once.
+     */
+    private fun wordsOf(type: TypeStore, keys: Collection<ItemKey>): Map<ItemKey, Double> {
+        val out = HashMap<ItemKey, Double>()
+        keys
+            .groupBy { it.source }
+            .forEach { (source, own) ->
+                val s = type.source(source) ?: return@forEach
+                val every = sizes.ofEvery(type, s)
+                own.forEach { key -> every[key.id]?.words?.let { out[key] = it.value } }
+            }
+        return out
+    }
+}
+
+/** What the sort says of a work of the [grade] (not below nought) and the chance of [interest]: 1 of a sort of none. */
+private fun DuplicateSort.worth(grade: Double, interest: Double): Double =
+    when (this) {
+        DuplicateSort.FORMULA -> grade * interest
+        DuplicateSort.INTEREST -> interest
+        DuplicateSort.GRADE -> grade
+        DuplicateSort.CHANCE,
+        DuplicateSort.SIZE,
+        DuplicateSort.UNCERTAIN -> 1.0
+    }
+
+/**
+ * How the [sort] ranks a pair: by the [model]'s chance it is one work, times what the sort says of the work it was
+ * found for ([worth]), of its size in [words], or by how near it is to the [boundary] of the user's answers.
+ */
+private class Ranking(
+    private val sort: DuplicateSort,
+    private val model: DuplicateModel,
+    private val worth: Map<ItemKey, Double>,
+    private val words: Map<ItemKey, Double>,
+    private val boundary: Double,
+) {
+    /** The pair of its [layers] (none of an answered pair not kept) with what ranks it. */
+    fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
+        val chance = layers?.let(model::chance)
+        val priority =
+            when (sort) {
+                DuplicateSort.CHANCE -> chance ?: 0.0
+                DuplicateSort.UNCERTAIN -> layers?.let { 1 / (1 + abs(model.logit(it) - boundary)) } ?: 0.0
+                DuplicateSort.SIZE -> size(pair) * (chance ?: 0.0)
+                DuplicateSort.FORMULA,
+                DuplicateSort.INTEREST,
+                DuplicateSort.GRADE -> sought(pair, layers) * (chance ?: 0.0)
+            }
+        return Ranked(pair, layers, chance, priority)
+    }
+
+    /** The mean of the two works' sizes, of those known: of a work of no size known, the other's alone. */
+    private fun size(pair: Pair<ItemKey, ItemKey>): Double {
+        val known = listOfNotNull(words[pair.first], words[pair.second])
+        return if (known.isEmpty()) 0.0 else known.average()
+    }
+
+    /**
+     * What the sort says of the work the pair was found for — of both, the larger; of neither (an answered pair not
+     * kept), the larger too.
+     */
+    private fun sought(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Double {
+        val first = worth[pair.first] ?: 0.0
+        val second = worth[pair.second] ?: 0.0
+        return when (layers?.foundFor) {
+            DuplicateCandidate.FIRST -> first
+            DuplicateCandidate.SECOND -> second
+            else -> maxOf(first, second)
+        }
+    }
+}
