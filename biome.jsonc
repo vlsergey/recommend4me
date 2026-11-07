@@ -12,7 +12,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "style": {
         // No file longer than 600 lines: a file too long is split by meaning, never by its length
         "noExcessiveLinesPerFile": { "level": "error", "options": { "maxLines": 600 } }

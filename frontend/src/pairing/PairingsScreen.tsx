@@ -28,13 +28,13 @@ type Order = "weight" | "name";
 const SHOWN = 200;
 
 /** The key of the pairing of two characters: one whatever their order. */
-const pairingKey = (a: string, b: string) => "pair:" + [a, b].sort().join("|");
+const pairingKey = (a: string, b: string) => `pair:${[a, b].sort().join("|")}`;
 
 /** A character's name: an original character's by its key, in the user's language. */
 const characterName = (c: Pairing["characters"][number]) => (c.nameKey ? labelOfKey(c.nameKey) : c.name);
 
 /** A weight as a share of the works: "4.2%", small ones with their first two digits. */
-const share = (w: number) => (w * 100).toLocaleString(intlTag(), { maximumSignificantDigits: 2 }) + "%";
+const share = (w: number) => `${(w * 100).toLocaleString(intlTag(), { maximumSignificantDigits: 2 })}%`;
 
 /**
  * THE PAIRINGS: every pairing the models know or the user answered on, none kept of its own — with

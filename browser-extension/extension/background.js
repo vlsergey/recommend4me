@@ -109,7 +109,7 @@ async function capture(url, html, tabId) {
       await browser.action.setBadgeText({ text: result.items.length ? String(result.items.length) : "✓", tabId });
       // The page shows the work as the application knows it now
       browser.tabs.sendMessage(tabId, { type: "captured", url }).catch(() => {});
-      if (result.wanted && result.wanted.length) fetchWanted(tabId, result.wanted);
+      if (result.wanted?.length) fetchWanted(tabId, result.wanted);
     }
   } catch (e) {
     entry.error = String(e.message || e);
@@ -209,13 +209,13 @@ async function call(message, sender) {
 /** What an error's body says: the detail for the log, and the key of its words with their params when it has one. */
 function problemOf(data, status) {
   return {
-    error: (data && data.detail) || `HTTP ${status}`,
-    problem: data && data.code ? { code: data.code, params: data.params || {} } : null,
+    error: data?.detail || `HTTP ${status}`,
+    problem: data?.code ? { code: data.code, params: data.params || {} } : null,
   };
 }
 
 browser.runtime.onMessage.addListener((message, sender) => {
-  if (message.type === "capture") return capture(message.url, message.html, sender.tab && sender.tab.id);
+  if (message.type === "capture") return capture(message.url, message.html, sender.tab?.id);
   if (message.type === "api") return call(message, sender);
   if (message.type === "server") return loadSettings().then((s) => s.server);
   if (message.type === "language") return loadSettings().then((s) => s.language);

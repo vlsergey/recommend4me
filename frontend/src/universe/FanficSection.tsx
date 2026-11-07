@@ -64,7 +64,7 @@ export const ORIGINAL_CHARACTERS = [
 type AllNamedKind = "universes" | "mainCharacters" | "secondaryCharacters" | "pairings";
 
 /** The key of the pairing of two characters: one whatever their order. */
-const pairingKey = (a: string, b: string) => "pair:" + [a, b].sort().join("|");
+const pairingKey = (a: string, b: string) => `pair:${[a, b].sort().join("|")}`;
 
 /** A name as a search compares it: lower case, "ё" as "е". */
 const folded = (text: string) => text.toLocaleLowerCase("ru-RU").replace(/ё/g, "е");

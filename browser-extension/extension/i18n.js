@@ -534,7 +534,7 @@ var R4M_WORDS = {
 
 /** The first of the browser's languages the extension speaks ("sr-Latn-RS" is "sr"), else English. */
 function browserLanguage() {
-  const wanted = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""])
+  const wanted = (navigator.languages?.length ? navigator.languages : [navigator.language || ""])
     .map((tag) => String(tag).split("-")[0].toLowerCase());
   return wanted.find((language) => R4M_LANGUAGES.includes(language)) || R4M_LANGUAGES[0];
 }

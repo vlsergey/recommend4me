@@ -19,7 +19,7 @@
 
   const api = async (method, path, body) => {
     const answer = await browser.runtime.sendMessage({ type: "api", method, path, body });
-    if (answer && answer.ok) {
+    if (answer?.ok) {
       // Every key of the server's words the answer has can be said at once
       await need(keysIn(answer.data));
       return answer.data;
@@ -29,7 +29,7 @@
   /** A call as [api], whose status tells more than its data: {status, data}. */
   const apiAnswer = async (method, path, body) => {
     const answer = await browser.runtime.sendMessage({ type: "api", method, path, body });
-    if (answer && answer.ok) {
+    if (answer?.ok) {
       await need(keysIn(answer.data));
       return { status: answer.status, data: answer.data };
     }
@@ -55,7 +55,7 @@
         else serverWords.delete(namespace);
       };
       const reading = browser.runtime.sendMessage({ type: "api", method: "GET", path: `/i18n/${enc(namespace)}/${r4mLanguage}.json` }).then(
-        (answer) => done(answer && answer.ok && answer.data),
+        (answer) => done(answer?.ok && answer.data),
         () => done(null),
       );
       serverWords.set(namespace, reading);
@@ -132,7 +132,7 @@
     if (!answer) return t("app.noAnswer");
     if (answer.unreachable) return t("app.silent");
     const problem = answer.problem;
-    if (!problem || !problem.code) return answer.error || t("app.noAnswer");
+    if (!problem?.code) return answer.error || t("app.noAnswer");
     const params = problem.params || {};
     await need([problem.code, ...Object.values(params)]);
     const worded = {};
@@ -349,7 +349,7 @@
         if (about) failed.set(about, e.message);
         else message = e.message;
       }
-      if (kept && shown && view && view.item) {
+      if (kept && shown && view?.item) {
         try {
           shown(view.item);
         } catch (e) {
@@ -383,7 +383,7 @@
   function explanationLater() {
     clearTimeout(explanationTimer);
     explanationTimer = setTimeout(() => {
-      if (view && view.item && pending === 0) readExplanation(view.item);
+      if (view?.item && pending === 0) readExplanation(view.item);
     }, SETTLE_MS);
   }
 
@@ -401,7 +401,7 @@
         if (answer.status === 202) {
           // Being fitted in the queue of the computations: the request never waits for it, so it is asked again
           setTimeout(() => {
-            if (view && view.item && keyOf(view.item) === of) readExplanation(view.item);
+            if (view?.item && keyOf(view.item) === of) readExplanation(view.item);
           }, FITTING_POLL_MS);
           return;
         }
@@ -415,7 +415,7 @@
       // The panel goes without it
       return;
     }
-    if (view && view.item && keyOf(view.item) === of) render();
+    if (view?.item && keyOf(view.item) === of) render();
   }
 
   /** A score of 0..10 as a class of colour, red to green. */
@@ -469,7 +469,7 @@
     render();
     // The candidates asked for are read anew too, after the work is shown: an answer changes which
     // the work may yet have, and they wait for its chances to be made
-    if (view && view.item && more.size) {
+    if (view?.item && more.size) {
       try {
         for (const facet of more.keys()) {
           const asked = candidatesRead.get(facet);
@@ -489,7 +489,7 @@
    */
   async function settledLater() {
     const asked = ++settling;
-    const item = view && view.item;
+    const item = view?.item;
     if (!item) return;
     try {
       await api("GET", `/api/items/${enc(item.summary.source)}/${enc(item.summary.item)}/suggestions/settled`);
@@ -503,7 +503,7 @@
     document.querySelectorAll("[data-r4m]:not(r4m-badge)").forEach((e) => {
       // A field's own parts stay in it: the field is put back whole ([addFields]). A card's badge
       // stays with what it shows: filled once, it is not asked for again ([cards])
-      if (e.parentElement && e.parentElement.closest("form.r4m-add, r4m-badge")) return;
+      if (e.parentElement?.closest("form.r4m-add, r4m-badge")) return;
       e.remove();
     });
     document.querySelectorAll(".r4m-removed, .r4m-doubted, .r4m-marked").forEach((e) =>
@@ -532,7 +532,7 @@
    */
   function render() {
     const active = document.activeElement;
-    const focused = active && active.closest && active.closest("form.r4m-add") ? active : null;
+    const focused = active?.closest?.("form.r4m-add") ? active : null;
     const caret = focused ? [focused.selectionStart, focused.selectionEnd] : null;
     draw();
     addFields.forEach((form, id) => {
@@ -540,7 +540,7 @@
       form.r4mClose();
       addFields.delete(id);
     });
-    if (focused && focused.isConnected && document.activeElement !== focused) {
+    if (focused?.isConnected && document.activeElement !== focused) {
       refocusing = true;
       try {
         focused.focus({ preventScroll: true });
@@ -590,7 +590,7 @@
     let f = item.facets.find((x) => x.facet === facet);
     if (!f) {
       const suggested = (item.suggestions || []).find((x) => x.facet === facet);
-      f = { facet, labelKey: suggested && suggested.labelKey, values: [] };
+      f = { facet, labelKey: suggested?.labelKey, values: [] };
       item.facets.push(f);
     }
     f.values = f.values || [];
@@ -635,10 +635,10 @@
     const root = el("r4m-panel");
     const head = el("r4m-head");
     head.appendChild(el("strong", null, "recommend4me"));
-    if (item && item.summary.prediction) {
+    if (item?.summary.prediction) {
       head.appendChild(el("r4m-score", scoreClass(item.summary.prediction.score), shownScore(item.summary.prediction.score)));
     }
-    if (item && item.summary.grade) head.appendChild(el("r4m-grade-mark", null, `★${item.summary.grade}`));
+    if (item?.summary.grade) head.appendChild(el("r4m-grade-mark", null, `★${item.summary.grade}`));
     head.appendChild(el("span", "r4m-spacer"));
     if (pending) head.appendChild(el("r4m-saving-note", null, pending > 1 ? t("panel.savingCount", { count: pending }) : t("panel.saving")));
     // The tags by the work's own text, beside the way to the application, as in its window of the work: of a source with tags alone
@@ -689,7 +689,7 @@
       held.appendChild(el("r4m-score", scoreClass(known.heldOut), shownScore(known.heldOut)));
       root.appendChild(held);
     }
-    if (known && known.parts && known.parts.length) {
+    if (known?.parts?.length) {
       const why = el("r4m-why");
       why.appendChild(el("span", "r4m-muted", `${t("panel.why")} `));
       known.parts.slice(0, 6).forEach((c, i) => {
@@ -1037,7 +1037,7 @@
 
   /** The keys of the values a facet's line shows: the work's, the user's, the suggested. */
   function shownKeys(facet, suggestions) {
-    return new Set([...(facet.values || []), ...((suggestions && suggestions.suggested) || [])].map((v) => v.key));
+    return new Set([...(facet.values || []), ...(suggestions?.suggested || [])].map((v) => v.key));
   }
 
   /** "mentioned 3 times" — how often the work's texts name a candidate; empty when they were not counted. */
@@ -1209,7 +1209,7 @@
               // A character of the work's other facet of characters — the user's or the model's — is found
               // here too, said so: chosen, it moves here from there
               const other = OTHER_CHARACTERS[facet];
-              const work = (view && view.item) || item;
+              const work = view?.item || item;
               const elsewhere = other && (work.facets || []).find((f) => f.facet === other);
               if (elsewhere) {
                 const known = new Map(hints.map((h) => [h.key, h]));
@@ -1464,7 +1464,7 @@
       }, "r4m-button r4m-all", (shown) => open.forEach((v) => answeredShown(facet.facet, v, true)(shown)), all), all));
     }
     // A scale — the age rating — answered on as one
-    if (editable && facet.steps && facet.steps.length) {
+    if (editable && facet.steps?.length) {
       const words = saidBlock(item, facet, inPanel);
       if (words) block.appendChild(words);
       block.appendChild(scaleBlock(item, facet));
@@ -1482,7 +1482,7 @@
       line.appendChild(valueChip(item, facet.facet, v, editable));
     });
     if (editable) {
-      ((suggestions && suggestions.suggested) || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
+      (suggestions?.suggested || []).forEach((v) => line.appendChild(suggestedChip(item, facet.facet, v)));
       // A facet of one value that has one offers no other: one chosen in its place replaces it
       if (!facet.complete && !held(facet)) moreOf(item, facet.facet, line, shownKeys(facet, suggestions));
       line.appendChild(field);
@@ -1557,7 +1557,7 @@
    */
   function facetInPlace(item, decor) {
     const suggestions = (item.suggestions || []).find((x) => x.facet === decor.facet);
-    const facet = (item.facets || []).find((f) => f.facet === decor.facet) || { facet: decor.facet, labelKey: suggestions && suggestions.labelKey, values: [] };
+    const facet = (item.facets || []).find((f) => f.facet === decor.facet) || { facet: decor.facet, labelKey: suggestions?.labelKey, values: [] };
     if (decor.after) {
       const anchor = document.querySelector(decor.after);
       if (!anchor) return false;
@@ -1585,7 +1585,7 @@
     });
     const after = el("r4m-chips");
     values.filter((v) => v.corrected === "ADDED" || (v.inferred && v.corrected !== "REMOVED")).forEach((v) => after.appendChild(valueChip(item, decor.facet, v)));
-    ((suggestions && suggestions.suggested) || []).forEach((v) => after.appendChild(suggestedChip(item, decor.facet, v)));
+    (suggestions?.suggested || []).forEach((v) => after.appendChild(suggestedChip(item, decor.facet, v)));
     if (!facet.complete && !held(facet)) moreOf(item, decor.facet, after, shownKeys(facet, suggestions));
     const field = addField(item, decor.facet, labelOf(facet), held(facet));
     after.appendChild(field);
@@ -1643,7 +1643,7 @@
       render();
     }
     if (!state.open) return;
-    const next = state.list && state.list.pending ? BY_TEXT_POLL_MS : state.every;
+    const next = state.list?.pending ? BY_TEXT_POLL_MS : state.every;
     if (next) state.timer = setTimeout(() => readByText(item, facet), next);
   }
 
@@ -1757,7 +1757,7 @@
     const state = byText.get(facet.facet) || { open: false, list: null, error: null, timer: null, scroll: 0, locked: false, waiting: null, every: BY_TEXT_EVERY };
     byText.set(facet.facet, state);
     const block = el("r4m-bytext");
-    const count = state.list && state.list.tags.length ? ` (${state.list.tags.length})` : "";
+    const count = state.list?.tags.length ? ` (${state.list.tags.length})` : "";
     const open = el("button", "r4m-button r4m-bytext-toggle", `${t("byText.toggle")}${count}`);
     open.type = "button";
     open.title = t("byText.toggleHint");
@@ -1967,7 +1967,7 @@
     const done = new Set();
     document.querySelectorAll(selector).forEach((img) => {
       const link = img.closest("a");
-      const candidates = [img.getAttribute("src"), img.getAttribute("data-src"), img.getAttribute("data-url"), link && link.getAttribute("href")];
+      const candidates = [img.getAttribute("src"), img.getAttribute("data-src"), img.getAttribute("data-url"), link?.getAttribute("href")];
       const picture = candidates.map((u) => u && byFile.get(fileOf(u))).find((p) => p);
       if (!picture || done.has(picture.position)) return;
       done.add(picture.position);
@@ -2011,7 +2011,7 @@
    * asked again.
    */
   async function fillCards() {
-    const decor = view && view.decor.cards;
+    const decor = view?.decor.cards;
     if (!decor) return;
     const wanted = [];
     document.querySelectorAll(decor.selector).forEach((card) => {
@@ -2019,7 +2019,7 @@
       const badge = card.querySelector("r4m-badge");
       if (badge && !badge.classList.contains("r4m-pending")) return;
       const link = card.querySelector(decor.link);
-      if (link && link.getAttribute("href")) wanted.push({ card, link });
+      if (link?.getAttribute("href")) wanted.push({ card, link });
     });
     if (!wanted.length) return;
     let known = [];
@@ -2080,7 +2080,7 @@
 
   /** The site's links to the next page — a list has one over it and one under it. */
   function nextLinks() {
-    const selector = view && view.decor.nextPage;
+    const selector = view?.decor.nextPage;
     if (!selector) return [];
     return [...document.querySelectorAll(selector)].filter((a) => !a.closest("[data-r4m]") && a.getAttribute("href"));
   }
@@ -2091,13 +2091,13 @@
    * badge is filled on the page it is on, or seen on the list in the application.
    */
   function cardsWaiting() {
-    const decor = view && view.decor.cards;
+    const decor = view?.decor.cards;
     if (!decor) return 0;
     let waiting = 0;
     document.querySelectorAll(decor.selector).forEach((card) => {
       if (card.closest("[data-r4m]")) return;
       const link = card.querySelector(decor.link);
-      if (!link || !link.getAttribute("href")) return;
+      if (!link?.getAttribute("href")) return;
       const badge = card.querySelector("r4m-badge");
       if (!badge || badge.classList.contains("r4m-unsaved")) waiting++;
     });
@@ -2219,7 +2219,7 @@
 
   // Lists that load more cards as the user scrolls
   new MutationObserver((mutations) => {
-    if (!view || !view.decor.cards) return;
+    if (!view?.decor.cards) return;
     const theirs = mutations.some((m) => [...m.addedNodes].some((n) => n.nodeType === 1 && !n.hasAttribute("data-r4m")));
     if (!theirs) return;
     clearTimeout(cardsTimer);
@@ -2241,7 +2241,7 @@
       cards();
       return;
     }
-    if (!view || !view.item || Date.now() - loadedAt > RELOAD_AFTER) load();
+    if (!view?.item || Date.now() - loadedAt > RELOAD_AFTER) load();
   });
 
   // The page may have been sent before this script listened: the background script tells what it sent

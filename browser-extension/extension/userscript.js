@@ -36,8 +36,8 @@ function request(method, path, body) {
         resolve(ok ? { ok, status: response.status, data } : {
           ok,
           status: response.status,
-          error: (data && data.detail) || `HTTP ${response.status}`,
-          problem: data && data.code ? { code: data.code, params: data.params || {} } : null,
+          error: data?.detail || `HTTP ${response.status}`,
+          problem: data?.code ? { code: data.code, params: data.params || {} } : null,
         });
       },
       onerror: failed,
@@ -99,7 +99,7 @@ const browser = {
         if (sent.ok) sentPages.unshift({ url: message.url, at, error: null });
         // The page shows the work as the application knows it now
         if (sent.ok) listeners.forEach((listener) => listener({ type: "captured", url: message.url }));
-        if (sent.ok && sent.data && sent.data.wanted && sent.data.wanted.length) fetchWanted(sent.data.wanted);
+        if (sent.ok && sent.data?.wanted?.length) fetchWanted(sent.data.wanted);
         return sent;
       }
       return undefined;
