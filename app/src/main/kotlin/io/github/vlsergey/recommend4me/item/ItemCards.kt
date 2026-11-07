@@ -1,29 +1,24 @@
 package io.github.vlsergey.recommend4me.item
 
-import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemFacet
 import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.api.model.LinkedItem
 import io.github.vlsergey.recommend4me.api.model.Prediction
-import io.github.vlsergey.recommend4me.api.model.ScaleStep
 import io.github.vlsergey.recommend4me.api.model.SearchMatch
 import io.github.vlsergey.recommend4me.api.model.SiteSaid
 import io.github.vlsergey.recommend4me.api.model.TextRange
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
-import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.source.StoredItem
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.Chance
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
-import io.github.vlsergey.recommend4me.tag.TagHierarchy
-import io.github.vlsergey.recommend4me.tag.TagRepository
-import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.work.TextPlace
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
@@ -32,18 +27,6 @@ import org.springframework.stereotype.Component
 
 /** The grade of the current version of a work, and the latest grade of an earlier one with its version. */
 data class Graded(val grade: Int?, val previousGrade: Int?, val previousVersion: String?)
-
-/**
- * What the sites and the model give a work ([ItemCards.ofWork]). [bySite]: of a facet of the layer, every value a site
- * gives, with the sites that give it; [lets]: of a facet told by a site's own (the age rating), the steps any site of
- * the work names.
- */
-data class WorkValues(
-    val site: Map<String, List<String>>,
-    val chances: Map<String, Map<String, Chance>>?,
-    val bySite: Map<String, Map<String, List<String>>> = emptyMap(),
-    val lets: Map<String, Set<String>> = emptyMap(),
-)
 
 /** The cards of works as the list shows them, read in batch: one query per table per source. */
 @Component
@@ -64,7 +47,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
     /**
      * The facets of an item for the interface: every value with its name, the user's word on it, the model's chance of
      * it, and whether the model gave it; [sources] what every site of the work says of a field, for a form to show
-     * above it.
+     * above it ([ShownFacets]).
      */
     fun facets(
         store: SourceStore,
@@ -78,159 +61,9 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         complete: Set<String> = emptySet(),
         only: (String) -> Boolean,
     ): List<ItemFacet> {
-        val schema = store.schema
-        val (site, chances) = work
-        val base = ModelValues.of(schema, site, chances)
-        // A tag under another gives the work the other too, shown as such; a tag the user said it has
-        // not hides every tag under it ([TagHierarchy]) — read only of the facets of tags asked for
-        val ofTags = schema.facets.any { only(it.key) && it.key in store.tagFacets }
-        val hierarchies = if (!ofTags) emptyMap() else store.hierarchies()
-        // The tags the user ignores: never given or offered to mark — shown only where the user answered on them
-        val ignoredTags = if (!ofTags) emptyMap() else store.ignoredTags()
-        val single = schema.facets.filter { it.single }.map { it.key }.toSet()
-        val plain = Corrected.facets(base, corrections, single)
-        val corrected = TagHierarchy.corrected(base, corrections, hierarchies, single)
-        val said = corrections.filter { it.added }.groupBy({ it.facet }, { it.key })
-        return schema.facets
-            .filter { only(it.key) }
-            .mapNotNull { def ->
-                val hierarchy = hierarchies[def.key]
-                val negated =
-                    hierarchy
-                        ?.let { h ->
-                            corrections
-                                .filter { it.facet == def.key && !it.added }
-                                .flatMap { listOf(it.key) + h.descendants(it.key) }
-                                .toSet()
-                        }
-                        .orEmpty()
-                val implied = corrected[def.key].orEmpty().toSet() - plain[def.key].orEmpty().toSet()
-                // A character of the work's other facet of characters is not shown here at all
-                val out = UniverseFacet.leftOut(def.key, { corrected[it].orEmpty() }, { said[it].orEmpty() })
-                val siteKeys = site[def.key].orEmpty().toSet()
-                val bySite = work.bySite[def.key].orEmpty()
-                val fromSite = bySite.keys
-                val answered = corrections.filter { it.facet == def.key }.map { it.key }.toSet()
-                val ignored = ignoredTags[def.key].orEmpty()
-                /** A value shown to mark: none the user ignores, the site's or not, but those answered on. */
-                fun offerable(key: String) = key !in ignored || key in answered
-                val keys = (corrected[def.key].orEmpty() - out).filter(::offerable)
-                val had = base[def.key].orEmpty().toSet()
-                // Every value the user rejected is shown crossed out — offered or given, it stays in its place
-                val removed = corrections.filter { it.facet == def.key && !it.added && it.key !in out }.map { it.key }
-                val added = corrections.filter { it.facet == def.key && it.added }.associate { it.key to it.name }
-                // The chances of a facet the model works on now: none of one it no longer does
-                val own = if (def.suggest || def.infer) chances?.get(def.key).orEmpty() else emptyMap()
-                // Of a facet of the layer the model works out: every value the site gives the work — a tag of
-                // the site bound to it — it is not shown with and the user has not answered on, whatever its
-                // chance: the site's word, none hidden; then the likeliest values the work is not shown with,
-                // the user has not answered on and the site does not give — to make at least so many
-                // Of a facet of one value that has it, none: another one added takes its place
-                val offered =
-                    if (!(def.infer && def.editable) || def.key in complete || (def.single && keys.isNotEmpty()))
-                        emptyList()
-                    else {
-                        val shown = keys.toSet()
-                        val ofSites =
-                            fromSite
-                                .filter {
-                                    it !in shown && it !in answered && it !in out && it !in negated && it !in ignored
-                                }
-                                .sortedByDescending { own[it]?.chance ?: -1.0 }
-                        ofSites +
-                            ModelValues.offered(
-                                own.filterValues {
-                                        !it.had && it.key !in out && it.key !in negated && it.key !in ignored
-                                    }
-                                    .mapValues { it.value.chance },
-                                shown = shown,
-                                answered = answered,
-                                fromSite = fromSite,
-                            )
-                    }
-                // A facet said to have no other values is shown with none too: the answer is there to take back
-                if (!empty(def) && keys.isEmpty() && removed.isEmpty() && offered.isEmpty() && def.key !in complete)
-                    return@mapNotNull null
-                // The value's own name — a tag's as the user and the sites name it — the name the answer was given with
-                // only of a value nothing else names
-                // The names of the values the caller did not read — a site's tags bound to tags of the layer
-                // offered, a tag above one of the work's — in one read
-                val unnamed = (keys + offered).filter { names[def.key]?.containsKey(it) != true }
-                val more = if (unnamed.isEmpty()) emptyMap() else store.names(def.key, unnamed)
-                fun name(key: String) = names[def.key]?.get(key) ?: more[key] ?: added[key] ?: key
-                // What the catalogue says of a universe or a character shown: one read of the facet's
-                val described = store.descriptions(def.key, keys + offered + removed)
-                fun info(key: String, corrected: FacetValueInfo.Corrected?, offer: Boolean = false): FacetValueInfo {
-                    // Drafted, unanswered: the site's value it was drafted from, not the model's word
-                    val draftedFrom =
-                        chances?.get(def.key)?.get(key)?.draftedFrom?.takeIf { corrected == null && !offer }
-                    return FacetValueInfo(
-                        key = key,
-                        name = name(key),
-                        nameKey = store.nameKey(def.key, key),
-                        corrected = corrected,
-                        chance = own[key]?.chance,
-                        inferred = (key in had && key !in siteKeys && draftedFrom == null).takeIf { it },
-                        draftedFrom = draftedFrom,
-                        offered = offer.takeIf { it },
-                        fromSite = (def.infer && key in fromSite).takeIf { it },
-                        sites = bySite[key]?.takeIf { def.infer },
-                        implied = (key in implied).takeIf { it },
-                        description = described[key],
-                    )
-                }
-                ItemFacet(
-                    facet = def.key,
-                    labelKey = I18nKeys.facetLabel(store.id, def),
-                    editable = def.editable,
-                    tags = (def.key in store.tagFacets).takeIf { it },
-                    // In the order shown: the work's values and those rejected, then the site's values only
-                    // offered, then the model's offers; in each the likeliest first — a value with no chance
-                    // after them — and a tag above another before it ([TagHierarchy.parentsFirst]); the pages keep it
-                    propertyValues =
-                        (keys.map { k ->
-                                // Confirmed: the site or the model gave it — the model even when the user's answer
-                                // has since made it the work's own, no longer the model's to give
-                                val given = k in had || (own[k]?.chance ?: 0.0) > ModelValues.LIKELY
-                                info(
-                                    k,
-                                    if (k in added)
-                                        (if (given) FacetValueInfo.Corrected.CONFIRMED
-                                        else FacetValueInfo.Corrected.ADDED)
-                                    else null,
-                                )
-                            } +
-                                offered.map { info(it, null, offer = true) } +
-                                removed.map { info(it, FacetValueInfo.Corrected.REMOVED) })
-                            .sortedWith(
-                                compareBy<FacetValueInfo> {
-                                        if (it.offered != true) 0 else if (it.fromSite == true) 1 else 2
-                                    }
-                                    .thenByDescending { it.chance ?: -1.0 }
-                            )
-                            .let { values -> hierarchy?.parentsFirst(values) { it.key } ?: values },
-                    said = sources[def.key],
-                    complete = (def.key in complete).takeIf { it },
-                    single = def.single.takeIf { it },
-                    completable = def.completable.takeIf { it },
-                    // Of a scale every step, with the model's chance of it and whether the site lets it
-                    steps =
-                        def.standard
-                            ?.takeIf { it.ordered }
-                            ?.let { scale ->
-                                val allowed = work.lets[def.key].orEmpty()
-                                scale.values.orEmpty().map { v ->
-                                    ScaleStep(
-                                        v.key,
-                                        v.modelName,
-                                        allowed.isEmpty() || v.key in allowed,
-                                        I18nKeys.standardValueOf(scale, v.key),
-                                        own[v.key]?.chance,
-                                    )
-                                }
-                            },
-                )
-            }
+        val ofTags = store.schema.facets.any { only(it.key) && it.key in store.tagFacets }
+        val shown = ShownFacets(store, work, corrections, names, sources, empty, complete, ofTags)
+        return store.schema.facets.filter { only(it.key) }.mapNotNull(shown::of)
     }
 
     /**
@@ -251,41 +84,34 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         val members = clusters.members(key)
         val store = type.source(key.source) ?: return WorkValues(site, chances)
         val layer = store.schema.facets.filter { it.editable && (wanted == null || it.key in wanted) }
-        val bySite = HashMap<String, MutableMap<String, MutableList<String>>>()
-        val lets = HashMap<String, MutableSet<String>>()
+        val given = SitesGive()
         // What each item gives is told by its own source: its tags are bound there
         members
             .groupBy { it.source }
             .forEach { (source, items) ->
-                val s = type.source(source) ?: return@forEach
-                val defs = layer.mapNotNull { def -> s.schema.facets.firstOrNull { it.key == def.key } }
-                val bound = if (defs.any { it.examplesFrom != null }) s.tags.bindingsOf(s.id) else emptyMap()
-                val facets = s.items.facetsOf(items.map { it.id })
-                items.forEach { m ->
-                    val theirs = if (m == key) site else facets[m.id].orEmpty()
-                    defs.forEach { def ->
-                        val given =
-                            theirs[def.key].orEmpty() +
-                                def.examplesFrom
-                                    ?.let { from ->
-                                        theirs[from].orEmpty().mapNotNull { bound[it]?.let(TagRepository::key) }
-                                    }
-                                    .orEmpty()
-                        given.forEach { value ->
-                            val sites = bySite.getOrPut(def.key) { LinkedHashMap() }.getOrPut(value) { ArrayList() }
-                            if (source !in sites) sites += source
-                        }
-                        def.originalFacet?.let { theirs[it] }?.let { lets.getOrPut(def.key) { HashSet() } += it }
-                    }
-                }
+                type.source(source)?.let { s -> given.read(s, source, items, key, site, layer) }
             }
+        val own = WorkValues(site, chances, given.bySite, given.lets)
         val others = members.drop(1)
-        if (others.isEmpty()) return WorkValues(site, chances, bySite, lets)
+        return if (others.isEmpty()) own else withOthers(type, store, others, own, wanted)
+    }
+
+    /**
+     * The values and the chances of the [work] with those of its [others] items added, in the facets the model works
+     * out ([wanted] of them, all when null): a value given by more than one, by the likeliest.
+     */
+    private fun withOthers(
+        type: TypeStore,
+        store: SourceStore,
+        others: List<ItemKey>,
+        work: WorkValues,
+        wanted: Collection<String>?,
+    ): WorkValues {
         val wantedFacets = store.schema.facets.filter { wanted == null || it.key in wanted }
         val worked = wantedFacets.filter { it.infer }.map { it.key }
         val chanced = wantedFacets.filter { it.infer || it.suggest }.map { it.key }
-        val values = LinkedHashMap(site)
-        val likely = HashMap(chances.orEmpty())
+        val values = LinkedHashMap(work.site)
+        val likely = HashMap(work.chances.orEmpty())
         others.forEach { m ->
             val s = type.source(m.source) ?: return@forEach
             val theirs = s.items.facetsOf(listOf(m.id))[m.id].orEmpty()
@@ -294,14 +120,17 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                     else suggestions.chancesOf(s, listOf(m.id), wanted))[m.id]
                     .orEmpty()
             worked.forEach { facet -> theirs[facet]?.let { values[facet] = (values[facet].orEmpty() + it).distinct() } }
-            chanced.forEach { facet ->
-                made[facet]?.forEach { (value, chance) ->
-                    val own = likely[facet].orEmpty()
-                    if ((own[value]?.chance ?: -1.0) < chance.chance) likely[facet] = own + (value to chance)
-                }
-            }
+            chanced.forEach { facet -> made[facet]?.let { likelier(likely, facet, it) } }
         }
-        return WorkValues(values, likely, bySite, lets)
+        return WorkValues(values, likely, work.bySite, work.lets)
+    }
+
+    /** Of the [facet], each of the chances [made] by another item put in [likely] where likelier than its own. */
+    private fun likelier(likely: MutableMap<String, Map<String, Chance>>, facet: String, made: Map<String, Chance>) {
+        made.forEach { (value, chance) ->
+            val own = likely[facet].orEmpty()
+            if ((own[value]?.chance ?: -1.0) < chance.chance) likely[facet] = own + (value to chance)
+        }
     }
 
     /**
@@ -320,110 +149,151 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
     ): List<ItemSummary> {
         val out = HashMap<ItemKey, ItemSummary>()
         val members = keys.flatMap { clusters.members(it) }.distinct()
-        // The heads of every member, to name the linked items
-        val heads =
-            members
-                .groupBy { it.source }
-                .flatMap { (source, list) ->
-                    val store = stores.source(source) ?: return@flatMap emptyList()
-                    store.items.heads(list.map { it.id }).map { (id, head) ->
-                        ItemKey(source, id) to (head to Corrected.title(head.title, store.corrections.fieldsOf(id)))
-                    }
-                }
-                .toMap()
-        // The pictures of every member: the cover of a work is any of its items'
-        val pictures =
-            members
-                .groupBy { it.source }
-                .flatMap { (source, list) ->
-                    stores
-                        .source(source)
-                        ?.pictures
-                        ?.countsOf(list.map { it.id })
-                        ?.map { (id, count) -> ItemKey(source, id) to count }
-                        .orEmpty()
-                }
-                .toMap()
+        val read = CardsRead(type, clusters, headsOf(members), picturesOf(members), matches, places, judged)
         keys
             .groupBy { it.source }
             .forEach { (source, list) ->
                 val store = stores.source(source) ?: return@forEach
-                val ids = list.map { it.id }
-                val facets = store.items.facetsOf(ids)
-                val corrections = store.corrections.facetsOf(ids)
-                val fields = store.corrections.fieldsOf(ids)
-                val onCard = store.schema.facets.filter { it.onCard }.map { it.key }.toSet()
-                // The chances of the facets on a card alone, made now of these works
-                val chances = suggestions.chancesOf(store, ids, onCard)
-                val names = onCard.associateWith { facet ->
-                    store.names(
-                        facet,
-                        ids.flatMap {
-                            facets[it]?.get(facet).orEmpty() +
-                                ModelValues.named(chances[it]?.get(facet)) +
-                                corrections[it].orEmpty().filter { c -> c.facet == facet }.map { c -> c.key }
-                        },
-                    )
-                }
-                val numbers = store.items.numbersOf(ids)
-                val ratings = store.ratings.all().filter { it.itemId in ids.toSet() }
-                val versions =
-                    ids.mapNotNull { id -> heads[ItemKey(source, id)]?.first?.let { id to it.version } }.toMap()
-                val graded = graded(ratings, versions)
-                val predicted = type.models.predicted(source)
-                val heldOut = type.models.heldOut(source)
-                val interest = store.interest.all()
-                val signals = store.signals.all()
-                ids.forEach { id ->
-                    val key = ItemKey(source, id)
-                    val (head, title) = heads[key] ?: return@forEach
-                    val g = graded[id]
-                    val work = ofWork(type, clusters, key, facets[id].orEmpty(), chances[id], onCard)
-                    out[key] =
-                        ItemSummary(
-                            source = source,
-                            item = id,
-                            work = clusters.representative(key).toString(),
-                            title = title,
-                            version = head.version,
-                            url = head.url,
-                            updatedAt = head.updatedAt.atOffset(ZoneOffset.UTC),
-                            facets = facets(store, work, corrections[id].orEmpty(), names) { it in onCard },
-                            numbers = Corrected.numbers(numbers[id].orEmpty(), fields[id].orEmpty()),
-                            cover =
-                                clusters
-                                    .members(key)
-                                    .firstOrNull { pictures[it]?.second == true }
-                                    ?.let { ItemRef(it.source, it.id) },
-                            pictureCount = pictures[key]?.first ?: 0,
-                            linked =
-                                clusters.members(key).drop(1).mapNotNull { m ->
-                                    heads[m]?.let { (h, t) -> LinkedItem(m.source, m.id, t, h.url) }
-                                },
-                            grade = g?.grade,
-                            previousGrade = g?.previousGrade,
-                            previousGradeVersion = g?.previousVersion,
-                            prediction = predicted[id]?.let { Prediction(it.score) },
-                            heldOut = heldOut[id]?.let { Prediction(it) },
-                            interest = interest[id]?.interesting,
-                            interestChance = predicted[id]?.interest,
-                            searchMatch =
-                                matches[key]?.let { m ->
-                                    val place = places[key] ?: TextPlace()
-                                    SearchMatch(
-                                        byMeaning = m.byMeaning,
-                                        text = m.text,
-                                        highlights = m.highlights.map { (s, e) -> TextRange(s, e) },
-                                        labelKey = place.labelKey,
-                                        title = place.title,
-                                        part = place.part,
-                                    )
-                                },
-                            searchRelevant = judged[key],
-                            signals = signals[id]?.takeIf { it.isNotEmpty() },
-                        )
-                }
+                out += SourceCards(store, source, list.map { it.id }, read).cards()
             }
         return keys.mapNotNull { out[it] }
+    }
+
+    /** The heads of every member with its title as the user corrected it, to name the linked items. */
+    private fun headsOf(members: List<ItemKey>): Map<ItemKey, Pair<StoredItem, String>> =
+        members
+            .groupBy { it.source }
+            .flatMap { (source, list) ->
+                val store = stores.source(source) ?: return@flatMap emptyList()
+                store.items.heads(list.map { it.id }).map { (id, head) ->
+                    ItemKey(source, id) to (head to Corrected.title(head.title, store.corrections.fieldsOf(id)))
+                }
+            }
+            .toMap()
+
+    /**
+     * The pictures of every member — how many, and whether there is a cover: the cover of a work is any of its items'.
+     */
+    private fun picturesOf(members: List<ItemKey>): Map<ItemKey, Pair<Int, Boolean>> =
+        members
+            .groupBy { it.source }
+            .flatMap { (source, list) ->
+                stores
+                    .source(source)
+                    ?.pictures
+                    ?.countsOf(list.map { it.id })
+                    ?.map { (id, count) -> ItemKey(source, id) to count }
+                    .orEmpty()
+            }
+            .toMap()
+
+    /**
+     * What the cards of every source of one request read together: the [heads] and the [pictures] of every member of
+     * the works shown, what a search found and the user's word on it.
+     */
+    private class CardsRead(
+        val type: TypeStore,
+        val clusters: WorkClusters,
+        val heads: Map<ItemKey, Pair<StoredItem, String>>,
+        val pictures: Map<ItemKey, Pair<Int, Boolean>>,
+        val matches: Map<ItemKey, io.github.vlsergey.recommend4me.search.SearchMatch>,
+        val places: Map<ItemKey, TextPlace>,
+        val judged: Map<ItemKey, Boolean>,
+    )
+
+    /** The cards of the items [ids] of one source, every table of it read once for them all. */
+    private inner class SourceCards(
+        private val store: SourceStore,
+        private val source: String,
+        private val ids: List<String>,
+        private val read: CardsRead,
+    ) {
+        private val type = read.type
+        private val facets = store.items.facetsOf(ids)
+        private val corrections = store.corrections.facetsOf(ids)
+        private val fields = store.corrections.fieldsOf(ids)
+        private val onCard = store.schema.facets.filter { it.onCard }.map { it.key }.toSet()
+        // The chances of the facets on a card alone, made now of these works
+        private val chances = suggestions.chancesOf(store, ids, onCard)
+        private val names = onCard.associateWith { facet ->
+            store.names(
+                facet,
+                ids.flatMap {
+                    facets[it]?.get(facet).orEmpty() +
+                        ModelValues.named(chances[it]?.get(facet)) +
+                        corrections[it].orEmpty().filter { c -> c.facet == facet }.map { c -> c.key }
+                },
+            )
+        }
+        private val numbers = store.items.numbersOf(ids)
+        private val ratings = store.ratings.all().filter { it.itemId in ids.toSet() }
+        private val versions =
+            ids.mapNotNull { id -> read.heads[ItemKey(source, id)]?.first?.let { id to it.version } }.toMap()
+        private val graded = graded(ratings, versions)
+        private val predicted = type.models.predicted(source)
+        private val heldOut = type.models.heldOut(source)
+        private val interest = store.interest.all()
+        private val signals = store.signals.all()
+
+        /** The card of every item that has a head, by its key. */
+        fun cards(): Map<ItemKey, ItemSummary> =
+            ids.mapNotNull { id ->
+                    val key = ItemKey(source, id)
+                    read.heads[key]?.let { (head, title) -> key to card(key, head, title) }
+                }
+                .toMap()
+
+        /** The card of the item [key] with its [head] and its [title] as the user corrected it. */
+        private fun card(key: ItemKey, head: StoredItem, title: String): ItemSummary {
+            val id = key.id
+            val g = graded[id]
+            val clusters = read.clusters
+            val work = ofWork(type, clusters, key, facets[id].orEmpty(), chances[id], onCard)
+            return ItemSummary(
+                source = source,
+                item = id,
+                work = clusters.representative(key).toString(),
+                title = title,
+                version = head.version,
+                url = head.url,
+                updatedAt = head.updatedAt.atOffset(ZoneOffset.UTC),
+                facets = facets(store, work, corrections[id].orEmpty(), names) { it in onCard },
+                numbers = Corrected.numbers(numbers[id].orEmpty(), fields[id].orEmpty()),
+                cover =
+                    clusters
+                        .members(key)
+                        .firstOrNull { read.pictures[it]?.second == true }
+                        ?.let { ItemRef(it.source, it.id) },
+                pictureCount = read.pictures[key]?.first ?: 0,
+                linked =
+                    clusters.members(key).drop(1).mapNotNull { m ->
+                        read.heads[m]?.let { (h, t) -> LinkedItem(m.source, m.id, t, h.url) }
+                    },
+                grade = g?.grade,
+                previousGrade = g?.previousGrade,
+                previousGradeVersion = g?.previousVersion,
+                prediction = predicted[id]?.let { Prediction(it.score) },
+                heldOut = heldOut[id]?.let { Prediction(it) },
+                interest = interest[id]?.interesting,
+                interestChance = predicted[id]?.interest,
+                searchMatch = searchMatch(key),
+                searchRelevant = read.judged[key],
+                signals = signals[id]?.takeIf { it.isNotEmpty() },
+            )
+        }
+
+        /** What a search found in the item [key] and where in the work it is; null when not searched. */
+        private fun searchMatch(key: ItemKey): SearchMatch? =
+            read.matches[key]?.let { m ->
+                val place = read.places[key] ?: TextPlace()
+                SearchMatch(
+                    byMeaning = m.byMeaning,
+                    text = m.text,
+                    highlights = m.highlights.map { (s, e) -> TextRange(s, e) },
+                    labelKey = place.labelKey,
+                    title = place.title,
+                    part = place.part,
+                )
+            }
     }
 }

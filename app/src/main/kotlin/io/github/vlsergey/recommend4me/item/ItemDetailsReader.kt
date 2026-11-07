@@ -4,26 +4,27 @@ import io.github.vlsergey.recommend4me.api.model.ContributionGroup as ApiContrib
 import io.github.vlsergey.recommend4me.api.model.FacetRole as ApiFacetRole
 import io.github.vlsergey.recommend4me.api.model.FeatureContribution
 import io.github.vlsergey.recommend4me.api.model.ItemDetails
+import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.api.model.NumberValue
 import io.github.vlsergey.recommend4me.api.model.PartInfo
 import io.github.vlsergey.recommend4me.api.model.PictureInfo
-import io.github.vlsergey.recommend4me.api.model.PictureMatch
 import io.github.vlsergey.recommend4me.api.model.RatingRecord
 import io.github.vlsergey.recommend4me.api.model.RelatedWorks
 import io.github.vlsergey.recommend4me.api.model.ReviewInfo
-import io.github.vlsergey.recommend4me.api.model.ReviewMatch
 import io.github.vlsergey.recommend4me.api.model.TextValue
 import io.github.vlsergey.recommend4me.api.model.WorkRelation
 import io.github.vlsergey.recommend4me.api.model.WorkSite
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
-import io.github.vlsergey.recommend4me.mark.MarkKind
 import io.github.vlsergey.recommend4me.model.ContributionGroup
 import io.github.vlsergey.recommend4me.model.LabelledContribution
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetRole
+import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.source.downloadsPages
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
@@ -49,6 +50,57 @@ fun ContributionGroup.toApi(withFeatures: Boolean = true) =
         features = if (withFeatures) features.map { it.toApi() } else emptyList(),
     )
 
+/**
+ * The texts of an item of the [store] as shown, as the user corrected them, each with the site's own of [siteTexts]: a
+ * facet's own line as the site writes it is shown with the facet, not among the texts.
+ */
+private fun textValues(
+    store: SourceStore,
+    siteTexts: Map<String, String>,
+    fields: Map<String, String>,
+): List<TextValue> {
+    val texts = Corrected.texts(siteTexts, fields)
+    val originals = store.schema.facets.mapNotNull { it.original }.toSet()
+    return store.schema.texts
+        .filter { it.key !in originals }
+        .mapNotNull { def ->
+            texts[def.key]?.let {
+                TextValue(
+                    def.key,
+                    I18nKeys.textLabel(store.id, def.key),
+                    it,
+                    def.spoiler,
+                    Corrected.textField(def.key) in fields,
+                    siteTexts[def.key],
+                )
+            }
+        }
+}
+
+/**
+ * The numbers of an item of the [store] as shown, as the user corrected them; [withSite], each with the site's own of
+ * [siteNumbers] too.
+ */
+private fun numberValues(
+    store: SourceStore,
+    siteNumbers: Map<String, Double>,
+    fields: Map<String, String>,
+    withSite: Boolean,
+): List<NumberValue> {
+    val numbers = Corrected.numbers(siteNumbers, fields)
+    return store.schema.numbers.mapNotNull { def ->
+        numbers[def.key]?.let {
+            NumberValue(
+                def.key,
+                I18nKeys.numberLabel(store.id, def),
+                it,
+                Corrected.numberField(def.key) in fields,
+                siteNumbers[def.key]?.takeIf { withSite },
+            )
+        }
+    }
+}
+
 /** Everything the dialog of a work shows. */
 @Component
 class ItemDetailsReader(
@@ -64,8 +116,11 @@ class ItemDetailsReader(
     fun read(key: ItemKey): ItemDetails? {
         val store = stores.source(key.source) ?: return null
         val type = stores.typeOf(key.source)
-        val summary = cards.cards(type, listOf(key)).firstOrNull() ?: return null
-        val schema = store.schema
+        return cards.cards(type, listOf(key)).firstOrNull()?.let { summary -> details(store, type, key, summary) }
+    }
+
+    /** Everything the dialog shows of the item [key] of the [store], its card [summary] read. */
+    private fun details(store: SourceStore, type: TypeStore, key: ItemKey, summary: ItemSummary): ItemDetails {
         val clusters = works.of(type)
         val corrections = store.corrections.facetsOf(key.id)
         val fields = store.corrections.fieldsOf(key.id)
@@ -77,42 +132,9 @@ class ItemDetailsReader(
                 store.items.facets(key.id),
                 suggestions.chances(store, listOf(key.id))[key.id],
             )
-        val (site, chances) = work
-        val names =
-            schema.facets.associate { def ->
-                def.key to
-                    store.names(
-                        def.key,
-                        site[def.key].orEmpty() +
-                            corrections.filter { it.facet == def.key }.map { it.key } +
-                            ModelValues.named(chances?.get(def.key)),
-                    )
-            }
-        // A facet's own line as the site writes it is shown with the facet, not among the texts
-        val originals = schema.facets.mapNotNull { it.original }.toSet()
-        val siteTexts = store.items.texts(key.id)
-        val texts = Corrected.texts(siteTexts, fields)
-        val siteNumbers = store.items.numbers(key.id)
-        val numbers = Corrected.numbers(siteNumbers, fields)
+        val names = namesOf(store, work, corrections)
         val model = recommendations.details(key)
-        val encoder = plugins.imageEncoder()?.id
-        val pictureMarks = store.marks.pictureMarksOf(key.id)
-        val pictures = store.pictures.ofItem(key.id, encoder)
-        val reviewMarks = store.marks.reviewMarksOf(key.id)
-        val feedback =
-            type.sources
-                .flatMap { it.marks.feedback(MarkKind.PICTURE) + it.marks.feedback(MarkKind.REVIEW) }
-                .filter { it.match.item == key }
-        fun verdict(kind: MarkKind, mark: io.github.vlsergey.recommend4me.likeness.Marked, matchRef: String?) =
-            feedback
-                .firstOrNull {
-                    it.kind == kind && it.mark.item == mark.owner && it.mark.ref == mark.ref && it.match.ref == matchRef
-                }
-                ?.verdict
-        fun titleOf(k: ItemKey): String =
-            stores.source(k.source)?.let { s ->
-                s.items.find(k.id)?.let { Corrected.title(it.title, s.corrections.fieldsOf(k.id)) }
-            } ?: k.toString()
+        val matches = ItemMatches(stores, type, key)
         return ItemDetails(
             summary = summary,
             titleCorrected = Corrected.TITLE in fields,
@@ -128,132 +150,92 @@ class ItemDetailsReader(
                 ) {
                     true
                 },
-            texts =
-                schema.texts
-                    .filter { it.key !in originals }
-                    .mapNotNull { def ->
-                        texts[def.key]?.let {
-                            TextValue(
-                                def.key,
-                                I18nKeys.textLabel(store.id, def.key),
-                                it,
-                                def.spoiler,
-                                Corrected.textField(def.key) in fields,
-                                siteTexts[def.key],
-                            )
-                        }
-                    },
-            allNumbers =
-                schema.numbers.mapNotNull { def ->
-                    numbers[def.key]?.let {
-                        NumberValue(
-                            def.key,
-                            I18nKeys.numberLabel(store.id, def),
-                            it,
-                            Corrected.numberField(def.key) in fields,
-                        )
-                    }
-                },
+            texts = textValues(store, store.items.texts(key.id), fields),
+            allNumbers = numberValues(store, store.items.numbers(key.id), fields, withSite = false),
             // Of a graded work, what a model that had not seen it says is read apart (heldOut): it is
             // fitted for the asking, and every correction would wait a second or more for it
             explanation = model.explanation.map { it.toApi() },
             ratings = ratings(type, key),
-            reviews =
-                model.reviews.map { (r, influence) ->
-                    ReviewInfo(
-                        reviewId = r.reviewId,
-                        content = r.content,
-                        author = r.author,
-                        stars = r.stars,
-                        postedAt = r.postedAt?.atOffset(ZoneOffset.UTC),
-                        influence = influence,
-                        mark = reviewMarks[r.reviewId],
-                    )
-                },
+            reviews = reviews(store, key, model),
             reviewCount = store.reviews.countOf(key.id),
-            pictures =
-                pictures.map { p ->
-                    PictureInfo(
-                        position = p.position,
-                        hasFull = p.fullFile != null,
-                        analyzed = p.analyzed,
-                        mark = pictureMarks.firstOrNull { it.position == p.position && it.url == p.url }?.mark,
-                        influence = model.pictures[p.position],
-                        error = p.error,
-                    )
-                },
-            parts =
-                store.parts.ofItem(key.id).map {
-                    PartInfo(
-                        it.partId,
-                        it.position,
-                        it.hasText,
-                        it.title,
-                        it.publishedAt?.atOffset(ZoneOffset.UTC),
-                        model.parts[it.partId],
-                    )
-                },
-            pictureMatches =
-                model.pictureMatches.map {
-                    PictureMatch(
-                        position = it.ref?.toIntOrNull() ?: 0,
-                        markSource = it.mark.owner.source,
-                        markItem = it.mark.owner.id,
-                        markTitle = titleOf(it.mark.owner),
-                        markPosition = it.mark.ref.toIntOrNull() ?: 0,
-                        mark = it.mark.mark,
-                        strength = it.strength.toDouble(),
-                        verdict = verdict(MarkKind.PICTURE, it.mark, it.ref),
-                    )
-                },
-            reviewMatches =
-                model.reviewMatches.let { matches ->
-                    val contents =
-                        matches
-                            .flatMap { m -> listOfNotNull(m.ref?.let { key to it }, m.mark.owner to m.mark.ref) }
-                            .groupBy { it.first.source }
-                            .flatMap { (source, refs) ->
-                                stores
-                                    .source(source)
-                                    ?.reviews
-                                    ?.contents(refs.map { it.first.id to it.second })
-                                    ?.map { (k, v) -> (ItemKey(source, k.first) to k.second) to v }
-                                    .orEmpty()
-                            }
-                            .toMap()
-                    matches.map {
-                        ReviewMatch(
-                            reviewId = it.ref.orEmpty(),
-                            content = contents[key to it.ref.orEmpty()].orEmpty(),
-                            markSource = it.mark.owner.source,
-                            markItem = it.mark.owner.id,
-                            markReviewId = it.mark.ref,
-                            markTitle = titleOf(it.mark.owner),
-                            markContent = contents[it.mark.owner to it.mark.ref].orEmpty(),
-                            mark = it.mark.mark,
-                            strength = it.strength.toDouble(),
-                            verdict = verdict(MarkKind.REVIEW, it.mark, it.ref),
-                        )
-                    }
-                },
+            pictures = pictures(store, key, model),
+            parts = parts(store, key, model),
+            pictureMatches = matches.pictures(model.pictureMatches),
+            reviewMatches = matches.reviews(model.reviewMatches),
             canRefresh = store.source.downloadsPages,
-            related = related(type, store, key, Corrected.facets(site, corrections), names),
+            related = related(type, store, key, Corrected.facets(work.site, corrections), names),
             sites = sites(type, clusters.members(key)),
             relations = relations(type, clusters.members(key)),
         )
     }
 
+    /** The names of every value of every facet the [work] is shown with: the site's, those answered on, the model's. */
+    private fun namesOf(
+        store: SourceStore,
+        work: WorkValues,
+        corrections: List<FacetCorrection>,
+    ): Map<String, Map<String, String>> =
+        store.schema.facets.associate { def ->
+            def.key to
+                store.names(
+                    def.key,
+                    work.site[def.key].orEmpty() +
+                        corrections.filter { it.facet == def.key }.map { it.key } +
+                        ModelValues.named(work.chances?.get(def.key)),
+                )
+        }
+
+    /** The reviews of the item [key], each with what it moves the [model] by and the user's mark of it. */
+    private fun reviews(store: SourceStore, key: ItemKey, model: Recommendations.Details): List<ReviewInfo> {
+        val reviewMarks = store.marks.reviewMarksOf(key.id)
+        return model.reviews.map { (r, influence) ->
+            ReviewInfo(
+                reviewId = r.reviewId,
+                content = r.content,
+                author = r.author,
+                stars = r.stars,
+                postedAt = r.postedAt?.atOffset(ZoneOffset.UTC),
+                influence = influence,
+                mark = reviewMarks[r.reviewId],
+            )
+        }
+    }
+
+    /** The pictures of the item [key], each with what it moves the [model] by and the user's mark of it. */
+    private fun pictures(store: SourceStore, key: ItemKey, model: Recommendations.Details): List<PictureInfo> {
+        val pictureMarks = store.marks.pictureMarksOf(key.id)
+        return store.pictures.ofItem(key.id, plugins.imageEncoder()?.id).map { p ->
+            PictureInfo(
+                position = p.position,
+                hasFull = p.fullFile != null,
+                analyzed = p.analyzed,
+                mark = pictureMarks.firstOrNull { it.position == p.position && it.url == p.url }?.mark,
+                influence = model.pictures[p.position],
+                error = p.error,
+            )
+        }
+    }
+
+    /** The parts of the item [key], each with what its text moves the [model] by. */
+    private fun parts(store: SourceStore, key: ItemKey, model: Recommendations.Details): List<PartInfo> =
+        store.parts.ofItem(key.id).map {
+            PartInfo(
+                it.partId,
+                it.position,
+                it.hasText,
+                it.title,
+                it.publishedAt?.atOffset(ZoneOffset.UTC),
+                model.parts[it.partId],
+            )
+        }
+
     /** What each item of a work says of it: the one that says the most first ([Works.fullness]). */
-    private fun sites(type: io.github.vlsergey.recommend4me.source.TypeStore, members: List<ItemKey>): List<WorkSite> {
+    private fun sites(type: TypeStore, members: List<ItemKey>): List<WorkSite> {
         val encoder = plugins.imageEncoder()?.id
         return works.fullestFirst(type, members).mapNotNull { m ->
             val s = type.source(m.source) ?: return@mapNotNull null
             val head = s.items.find(m.id) ?: return@mapNotNull null
             val fields = s.corrections.fieldsOf(m.id)
-            val siteTexts = s.items.texts(m.id)
-            val texts = Corrected.texts(siteTexts, fields)
-            val siteNumbers = s.items.numbers(m.id)
-            val numbers = Corrected.numbers(siteNumbers, fields)
             val authors =
                 s.schema.facets
                     .firstOrNull { it.role == FacetRole.AUTHOR }
@@ -264,8 +246,6 @@ class ItemDetailsReader(
                         keys.map { names[it] ?: it }
                     }
                     .orEmpty()
-            // A facet's own line as the site writes it stands with the field, not among the texts
-            val originals = s.schema.facets.mapNotNull { it.original }.toSet()
             WorkSite(
                 source = m.source,
                 item = m.id,
@@ -274,33 +254,8 @@ class ItemDetailsReader(
                 siteTitle = head.title,
                 url = head.url,
                 authors = authors,
-                texts =
-                    s.schema.texts
-                        .filter { it.key !in originals }
-                        .mapNotNull { def ->
-                            texts[def.key]?.let {
-                                TextValue(
-                                    def.key,
-                                    I18nKeys.textLabel(s.id, def.key),
-                                    it,
-                                    def.spoiler,
-                                    Corrected.textField(def.key) in fields,
-                                    siteTexts[def.key],
-                                )
-                            }
-                        },
-                numbers =
-                    s.schema.numbers.mapNotNull { def ->
-                        numbers[def.key]?.let {
-                            NumberValue(
-                                def.key,
-                                I18nKeys.numberLabel(s.id, def),
-                                it,
-                                Corrected.numberField(def.key) in fields,
-                                siteNumbers[def.key],
-                            )
-                        }
-                    },
+                texts = textValues(s, s.items.texts(m.id), fields),
+                numbers = numberValues(s, s.items.numbers(m.id), fields, withSite = true),
                 reviewCount = s.reviews.countOf(m.id),
                 pictureCount = s.pictures.ofItem(m.id, encoder).size,
                 partCount = s.parts.ofItem(m.id).size,
@@ -310,10 +265,7 @@ class ItemDetailsReader(
     }
 
     /** The works the user said to be related to the work of the [members]: every item of them. */
-    private fun relations(
-        type: io.github.vlsergey.recommend4me.source.TypeStore,
-        members: List<ItemKey>,
-    ): List<WorkRelation> {
+    private fun relations(type: TypeStore, members: List<ItemKey>): List<WorkRelation> {
         val own = members.toSet()
         return type.links
             .relations()
@@ -344,8 +296,8 @@ class ItemDetailsReader(
      * of a volume after. The series first; a work shown there is not shown again under its author.
      */
     private fun related(
-        type: io.github.vlsergey.recommend4me.source.TypeStore,
-        store: io.github.vlsergey.recommend4me.source.SourceStore,
+        type: TypeStore,
+        store: SourceStore,
         key: ItemKey,
         values: Map<String, List<String>>,
         names: Map<String, Map<String, String>>,
@@ -391,7 +343,7 @@ class ItemDetailsReader(
     }
 
     /** The grades of the work [key] is of as they were given, newest first. */
-    fun ratings(type: io.github.vlsergey.recommend4me.source.TypeStore, key: ItemKey): List<RatingRecord> =
+    fun ratings(type: TypeStore, key: ItemKey): List<RatingRecord> =
         type.source(key.source)?.ratings?.given(key.id).orEmpty().map {
             RatingRecord(
                 source = it.key.source,

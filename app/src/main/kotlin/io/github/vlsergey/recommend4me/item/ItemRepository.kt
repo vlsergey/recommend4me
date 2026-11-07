@@ -1,15 +1,8 @@
 package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.CAPTURED_PAGE
-import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE
-import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
-import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_SYNONYM
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM
-import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_FACET
-import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_NUMBER
-import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_TEXT
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_VERSION
-import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.StoredItem
 import java.time.Instant
@@ -17,14 +10,35 @@ import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
 
+/** The ids bound to one query at most: a thousand in a list of a condition, memory and H2's plan, not meaning. */
+internal const val ITEM_BATCH = 1000
+
+/** The rows streamed from the database at a time: memory, not meaning. */
+internal const val STREAMED_ROWS = 5000
+
+/** The longest key of a facet's value the tables of the facets hold (`VARCHAR(500)`). */
+internal const val VALUE_KEY_LENGTH = 500
+
 /**
- * The items of one source as its source database holds them: what every item has, its facets, numbers and texts.
- * [changed] is told of every item whose searchable data was written.
+ * The items of one source as its source database holds them: what every item has, its facets, numbers and texts, and
+ * the dictionary of the facets' values — each held by its own part ([ItemFacets], [FacetDictionary], [ItemNumbers],
+ * [ItemTexts]), this one by the items' heads. [changed] is told of every item whose searchable data was written.
  */
-class ItemRepository(
+class ItemRepository
+private constructor(
     private val db: DSLContext,
     private val changed: (Collection<String>) -> Unit,
-) {
+    dictionary: FacetDictionary,
+) :
+    FacetDictionary by dictionary,
+    ItemFacets by ItemFacetRepository(db, changed, dictionary),
+    ItemNumbers by ItemNumberRepository(db),
+    ItemTexts by ItemTextRepository(db, changed) {
+
+    constructor(
+        db: DSLContext,
+        changed: (Collection<String>) -> Unit,
+    ) : this(db, changed, FacetDictionaryRepository(db))
 
     /**
      * Creates or updates an item; true when it is new or its version changed. The head and its version in one
@@ -50,10 +64,7 @@ class ItemRepository(
                         .set(ITEM.FIRST_SEEN_AT, now)
                         .execute()
                 } else if (
-                    known.value1() != item.version ||
-                        known.value2() != item.title ||
-                        known.value3() != item.url ||
-                        known.value4() != updatedAt
+                    headChanged(known.value1(), known.value2(), known.value3(), known.value4(), item, updatedAt)
                 ) {
                     tx.update(ITEM)
                         .set(ITEM.URL, item.url)
@@ -85,7 +96,7 @@ class ItemRepository(
     /** The items [ids], in one query per thousand. */
     fun heads(ids: Collection<String>): Map<String, StoredItem> {
         val out = HashMap<String, StoredItem>()
-        ids.distinct().chunked(BATCH).forEach { chunk ->
+        ids.distinct().chunked(ITEM_BATCH).forEach { chunk ->
             db.select(HEAD).from(ITEM).where(ITEM.ITEM_ID.`in`(chunk)).fetch { out[it.get(ITEM.ITEM_ID)!!] = head(it) }
         }
         return out
@@ -93,7 +104,9 @@ class ItemRepository(
 
     /** Every item, streamed. */
     fun forEachHead(action: (StoredItem) -> Unit) {
-        db.select(HEAD).from(ITEM).fetchSize(2000).fetchLazy().use { cursor -> cursor.forEach { action(head(it)) } }
+        db.select(HEAD).from(ITEM).fetchSize(HEADS_STREAMED).fetchLazy().use { cursor ->
+            cursor.forEach { action(head(it)) }
+        }
     }
 
     /**
@@ -101,9 +114,10 @@ class ItemRepository(
      * first saw it.
      */
     fun keys(): List<ItemKeys> =
-        db.select(ITEM.ITEM_ID, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT).from(ITEM).fetchSize(5000).fetch {
-            ItemKeys(it.value1()!!, it.value2()!!, it.value3()!!, it.value4()!!)
-        }
+        db.select(ITEM.ITEM_ID, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT)
+            .from(ITEM)
+            .fetchSize(STREAMED_ROWS)
+            .fetch { ItemKeys(it.value1()!!, it.value2()!!, it.value3()!!, it.value4()!!) }
 
     fun count(): Int = db.fetchCount(ITEM)
 
@@ -122,181 +136,6 @@ class ItemRepository(
 
     fun latestUpdate(): Instant? = db.select(DSL.max(ITEM.UPDATED_AT)).from(ITEM).fetchOne()?.value1()
 
-    // --- Facets ---
-
-    fun setFacet(itemId: String, facet: String, values: List<FacetValue>) {
-        val distinct = values.distinctBy { it.key }
-        val before =
-            db.select(ITEM_FACET.VALUE_KEY)
-                .from(ITEM_FACET)
-                .where(ITEM_FACET.ITEM_ID.eq(itemId), ITEM_FACET.FACET.eq(facet))
-                .orderBy(ITEM_FACET.POSITION)
-                .fetch { it.value1()!! }
-        if (before != distinct.map { it.key }) {
-            db.transaction { c ->
-                val tx = DSL.using(c)
-                tx.deleteFrom(ITEM_FACET).where(ITEM_FACET.ITEM_ID.eq(itemId), ITEM_FACET.FACET.eq(facet)).execute()
-                distinct.forEachIndexed { i, v ->
-                    tx.insertInto(ITEM_FACET)
-                        .set(ITEM_FACET.ITEM_ID, itemId)
-                        .set(ITEM_FACET.FACET, facet)
-                        .set(ITEM_FACET.VALUE_KEY, v.key.take(500))
-                        .set(ITEM_FACET.POSITION, i)
-                        .execute()
-                }
-            }
-            changed(listOf(itemId))
-        }
-        val named = distinct.filter { it.name != null }.associate { it.key to it.name!! }
-        if (named.isNotEmpty()) nameFacetValues(facet, named)
-    }
-
-    /**
-     * Removes the values, the names and the descriptions of every facet not among [facets]; how many values were
-     * removed of each.
-     */
-    fun keepOnlyFacets(facets: Collection<String>): Map<String, Int> {
-        val gone =
-            db.select(ITEM_FACET.FACET)
-                .from(ITEM_FACET)
-                .where(ITEM_FACET.FACET.notIn(facets))
-                .fetch(ITEM_FACET.FACET)
-                .groupingBy { it!! }
-                .eachCount()
-        if (gone.isNotEmpty()) db.deleteFrom(ITEM_FACET).where(ITEM_FACET.FACET.notIn(facets)).execute()
-        db.deleteFrom(FACET_VALUE).where(FACET_VALUE.FACET.notIn(facets)).execute()
-        db.deleteFrom(FACET_VALUE_DESCRIPTION).where(FACET_VALUE_DESCRIPTION.FACET.notIn(facets)).execute()
-        return gone
-    }
-
-    /**
-     * The names of the facet's values written where new or changed. One writer at a time: a page's reading and the
-     * chances made after an answer name the same values at once, and H2's MERGE of two of them is no merge — the second
-     * insert breaks the primary key.
-     */
-    @Synchronized
-    fun nameFacetValues(facet: String, names: Map<String, String>) {
-        if (names.isEmpty()) return
-        val known = facetNames(facet, names.keys)
-        names
-            .filter { (key, name) -> known[key] != name }
-            .forEach { (key, name) ->
-                db.insertInto(FACET_VALUE)
-                    .set(FACET_VALUE.FACET, facet)
-                    .set(FACET_VALUE.VALUE_KEY, key.take(500))
-                    .set(FACET_VALUE.NAME, name.take(1000))
-                    .onDuplicateKeyUpdate()
-                    .set(FACET_VALUE.NAME, name.take(1000))
-                    .execute()
-            }
-    }
-
-    /**
-     * The names of the values [keys] of a facet; a key without a name has none here. One pass over the facet's names,
-     * the keys looked up here: H2 takes a list of keys bound to the query not for the primary key but for a condition
-     * of every row of the facet, every key of it compared with every row — of the thousands of characters most of the
-     * time of reading what a model learns.
-     */
-    fun facetNames(facet: String, keys: Collection<String>): Map<String, String> {
-        if (keys.isEmpty()) return emptyMap()
-        val wanted = keys as? Set<String> ?: keys.toHashSet()
-        val out = HashMap<String, String>()
-        db.select(FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)
-            .from(FACET_VALUE)
-            .where(FACET_VALUE.FACET.eq(facet))
-            .fetchSize(5000)
-            .fetchLazy()
-            .use { cursor -> cursor.forEach { if (it.value1()!! in wanted) out[it.value1()!!] = it.value2()!! } }
-        return out
-    }
-
-    /**
-     * What the site says the facet's values mean, written where new or changed; one writer at a time, as of the names.
-     */
-    @Synchronized
-    fun describeFacetValues(facet: String, descriptions: Map<String, String>) {
-        if (descriptions.isEmpty()) return
-        val d = FACET_VALUE_DESCRIPTION
-        val known = facetDescriptions(facet, descriptions.keys)
-        descriptions
-            .filter { (key, text) -> known[key] != text }
-            .forEach { (key, text) ->
-                db.insertInto(d)
-                    .set(d.FACET, facet)
-                    .set(d.VALUE_KEY, key.take(500))
-                    .set(d.DESCRIPTION, text.take(4000))
-                    .onDuplicateKeyUpdate()
-                    .set(d.DESCRIPTION, text.take(4000))
-                    .execute()
-            }
-    }
-
-    /** What the site says the values [keys] of a facet mean: key to description. */
-    fun facetDescriptions(facet: String, keys: Collection<String>): Map<String, String> {
-        if (keys.isEmpty()) return emptyMap()
-        val d = FACET_VALUE_DESCRIPTION
-        return keys
-            .distinct()
-            .chunked(1000)
-            .flatMap { chunk ->
-                db.select(d.VALUE_KEY, d.DESCRIPTION).from(d).where(d.FACET.eq(facet), d.VALUE_KEY.`in`(chunk)).fetch {
-                    it.value1()!! to it.value2()!!
-                }
-            }
-            .toMap()
-    }
-
-    /**
-     * The synonyms of the facet's values [synonyms] gives — value key to synonym key to its name — written in place of
-     * those the values had; each synonym named. A synonym is of one value: given of another, it is of that one now. One
-     * writer at a time, as of the names.
-     */
-    @Synchronized
-    fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
-        if (synonyms.isEmpty()) return
-        val s = FACET_VALUE_SYNONYM
-        db.transaction { c ->
-            val tx = DSL.using(c)
-            tx.deleteFrom(s).where(s.FACET.eq(facet), s.VALUE_KEY.`in`(synonyms.keys.map { it.take(500) })).execute()
-            synonyms.forEach { (key, of) ->
-                of.keys
-                    .filter { it != key }
-                    .forEach { synonym ->
-                        tx.insertInto(s)
-                            .set(s.FACET, facet)
-                            .set(s.SYNONYM_KEY, synonym.take(500))
-                            .set(s.VALUE_KEY, key.take(500))
-                            .onDuplicateKeyUpdate()
-                            .set(s.VALUE_KEY, key.take(500))
-                            .execute()
-                    }
-            }
-        }
-        nameFacetValues(facet, synonyms.values.fold(emptyMap()) { all, names -> all + names })
-    }
-
-    /** Every synonym of the facet's values: the synonym's key to the value's key. */
-    fun facetSynonyms(facet: String): Map<String, String> =
-        db.select(FACET_VALUE_SYNONYM.SYNONYM_KEY, FACET_VALUE_SYNONYM.VALUE_KEY)
-            .from(FACET_VALUE_SYNONYM)
-            .where(FACET_VALUE_SYNONYM.FACET.eq(facet))
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
-
-    /** Every named value of one facet: key to name. */
-    fun facetNames(facet: String): Map<String, String> =
-        db.select(FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)
-            .from(FACET_VALUE)
-            .where(FACET_VALUE.FACET.eq(facet))
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
-
-    /** How many items have each value of a facet, as the site gives them. */
-    fun valueUses(facet: String): Map<String, Int> =
-        db.select(ITEM_FACET.VALUE_KEY, DSL.count())
-            .from(ITEM_FACET)
-            .where(ITEM_FACET.FACET.eq(facet))
-            .groupBy(ITEM_FACET.VALUE_KEY)
-            .fetchMap({ it.value1()!! }, { it.value2()!! })
-
     /** The items whose title holds [piece], any case, the newest first. */
     fun findByTitle(piece: String, limit: Int): List<StoredItem> =
         db.select(HEAD)
@@ -306,232 +145,16 @@ class ItemRepository(
             .limit(limit)
             .fetch(::head)
 
-    /** Every named value of every facet: facet to key to name. */
-    fun allFacetNames(): Map<String, Map<String, String>> =
-        db.select(FACET_VALUE.FACET, FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)
-            .from(FACET_VALUE)
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! to it.value3()!! })
-            .mapValues { it.value.toMap() }
-
-    fun facets(itemId: String): Map<String, List<String>> =
-        db.select(ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
-            .from(ITEM_FACET)
-            .where(ITEM_FACET.ITEM_ID.eq(itemId))
-            .orderBy(ITEM_FACET.FACET, ITEM_FACET.POSITION)
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! })
-
-    /**
-     * The facets of the items [ids]: item to facet to keys in order. By their ids up to a [BATCH] of them; of more,
-     * every value of every item streamed once and picked from, each list put in order after: by thousands of ids the
-     * values of 31 000 works of 75 000 took 5 s.
-     */
-    fun facetsOf(ids: Collection<String>): Map<String, Map<String, List<String>>> {
-        val asked = ids.toHashSet()
-        val out = HashMap<String, MutableMap<String, MutableList<String>>>()
-        if (asked.size <= BATCH) {
-            db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
-                .from(ITEM_FACET)
-                .where(ITEM_FACET.ITEM_ID.`in`(asked))
-                .orderBy(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.POSITION)
-                .fetch {
-                    out.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } += it.value3()!!
-                }
-            return out
-        }
-        val placed = HashMap<String, MutableMap<String, MutableList<Pair<Int, String>>>>()
-        db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY, ITEM_FACET.POSITION)
-            .from(ITEM_FACET)
-            .fetchSize(5000)
-            .fetchLazy()
-            .use { cursor ->
-                cursor.forEach {
-                    val id = it.value1()!!
-                    if (id in asked)
-                        placed.getOrPut(id) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } +=
-                            it.value4()!! to it.value3()!!
-                }
-            }
-        placed.forEach { (id, facets) ->
-            out[id] =
-                facets.mapValuesTo(HashMap()) { (_, keys) ->
-                    keys.sortedBy { it.first }.mapTo(ArrayList()) { it.second }
-                }
-        }
-        return out
-    }
-
-    /** The items the site gives each of the [keys] of the facet: key to items. */
-    fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<String>> {
-        if (keys.isEmpty()) return emptyMap()
-        return db.select(ITEM_FACET.VALUE_KEY, ITEM_FACET.ITEM_ID)
-            .from(ITEM_FACET)
-            .where(ITEM_FACET.FACET.eq(facet), ITEM_FACET.VALUE_KEY.`in`(keys.distinct()))
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! })
-    }
-
-    /** Every item's keys of one facet, streamed item by item. */
-    fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) {
-        var current: String? = null
-        val list = ArrayList<String>()
-        db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.VALUE_KEY)
-            .from(ITEM_FACET)
-            .where(ITEM_FACET.FACET.eq(facet))
-            .orderBy(ITEM_FACET.ITEM_ID, ITEM_FACET.POSITION)
-            .fetchSize(5000)
-            .fetchLazy()
-            .use { cursor ->
-                cursor.forEach {
-                    if (it.value1() != current) {
-                        current?.let { id -> action(id, list.toList()) }
-                        list.clear()
-                        current = it.value1()
-                    }
-                    list += it.value2()!!
-                }
-            }
-        current?.let { action(it, list.toList()) }
-    }
-
-    /** Every facet of every item, streamed: (item, facet, key). */
-    fun forEachFacetValue(action: (itemId: String, facet: String, key: String) -> Unit) {
-        db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
-            .from(ITEM_FACET)
-            .fetchSize(5000)
-            .fetchLazy()
-            .use { cursor -> cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) } }
-    }
-
-    // --- Numbers ---
-
-    fun setNumbers(itemId: String, numbers: Map<String, Double?>) {
-        numbers.forEach { (key, value) ->
-            if (value == null || value.isNaN()) {
-                db.deleteFrom(ITEM_NUMBER)
-                    .where(ITEM_NUMBER.ITEM_ID.eq(itemId), ITEM_NUMBER.NUMBER_KEY.eq(key))
-                    .execute()
-            } else {
-                db.insertInto(ITEM_NUMBER)
-                    .set(ITEM_NUMBER.ITEM_ID, itemId)
-                    .set(ITEM_NUMBER.NUMBER_KEY, key)
-                    .set(ITEM_NUMBER.CONTENT, value)
-                    .onDuplicateKeyUpdate()
-                    .set(ITEM_NUMBER.CONTENT, value)
-                    .execute()
-            }
-        }
-    }
-
-    fun numbers(itemId: String): Map<String, Double> =
-        db.select(ITEM_NUMBER.NUMBER_KEY, ITEM_NUMBER.CONTENT)
-            .from(ITEM_NUMBER)
-            .where(ITEM_NUMBER.ITEM_ID.eq(itemId))
-            .fetch()
-            .associate { it.value1()!! to it.value2()!! }
-
-    fun numbersOf(ids: Collection<String>): Map<String, Map<String, Double>> {
-        val out = HashMap<String, MutableMap<String, Double>>()
-        ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(ITEM_NUMBER.ITEM_ID, ITEM_NUMBER.NUMBER_KEY, ITEM_NUMBER.CONTENT)
-                .from(ITEM_NUMBER)
-                .where(ITEM_NUMBER.ITEM_ID.`in`(chunk))
-                .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = it.value3()!! }
-        }
-        return out
-    }
-
-    /** Every number of every item, streamed: (item, key, value). */
-    fun forEachNumber(action: (itemId: String, key: String, value: Double) -> Unit) {
-        db.select(ITEM_NUMBER.ITEM_ID, ITEM_NUMBER.NUMBER_KEY, ITEM_NUMBER.CONTENT)
-            .from(ITEM_NUMBER)
-            .fetchSize(5000)
-            .fetchLazy()
-            .use { cursor -> cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) } }
-    }
-
-    /** One number of every item that has it. */
-    fun number(key: String): Map<String, Double> =
-        db.select(ITEM_NUMBER.ITEM_ID, ITEM_NUMBER.CONTENT)
-            .from(ITEM_NUMBER)
-            .where(ITEM_NUMBER.NUMBER_KEY.eq(key))
-            .fetch()
-            .associate { it.value1()!! to it.value2()!! }
-
-    // --- Texts ---
-
-    fun setTexts(itemId: String, texts: Map<String, String?>) {
-        if (texts.isEmpty()) return
-        val before = texts(itemId)
-        var any = false
-        texts.forEach { (key, value) ->
-            val text = value?.trim()?.takeIf { it.isNotEmpty() }
-            if (before[key] == text) return@forEach
-            any = true
-            if (text == null) {
-                db.deleteFrom(ITEM_TEXT).where(ITEM_TEXT.ITEM_ID.eq(itemId), ITEM_TEXT.TEXT_KEY.eq(key)).execute()
-            } else {
-                db.insertInto(ITEM_TEXT)
-                    .set(ITEM_TEXT.ITEM_ID, itemId)
-                    .set(ITEM_TEXT.TEXT_KEY, key)
-                    .set(ITEM_TEXT.CONTENT, text)
-                    .onDuplicateKeyUpdate()
-                    .set(ITEM_TEXT.CONTENT, text)
-                    .execute()
-            }
-        }
-        if (any) changed(listOf(itemId))
-    }
-
-    fun texts(itemId: String): Map<String, String> =
-        db.select(ITEM_TEXT.TEXT_KEY, ITEM_TEXT.CONTENT)
-            .from(ITEM_TEXT)
-            .where(ITEM_TEXT.ITEM_ID.eq(itemId))
-            .fetch()
-            .associate { it.value1()!! to it.value2()!! }
-
-    fun textsOf(ids: Collection<String>, keys: Collection<String>? = null): Map<String, Map<String, String>> {
-        val out = HashMap<String, MutableMap<String, String>>()
-        ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(ITEM_TEXT.ITEM_ID, ITEM_TEXT.TEXT_KEY, ITEM_TEXT.CONTENT)
-                .from(ITEM_TEXT)
-                .where(ITEM_TEXT.ITEM_ID.`in`(chunk))
-                .and(keys?.let { ITEM_TEXT.TEXT_KEY.`in`(it) } ?: DSL.noCondition())
-                .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = it.value3()!! }
-        }
-        return out
-    }
-
-    /** Every text of the [keys] of every item, streamed item by item. */
     /** The title of every item as the site gives it: item to title. */
     fun titles(): Map<String, String> =
-        db.select(ITEM.ITEM_ID, ITEM.TITLE).from(ITEM).fetchSize(5000).fetchMap({ it.value1()!! }, { it.value2()!! })
-
-    fun forEachTexts(keys: Collection<String>, action: (itemId: String, texts: Map<String, String>) -> Unit) {
-        var current: String? = null
-        val texts = HashMap<String, String>()
-        db.select(ITEM_TEXT.ITEM_ID, ITEM_TEXT.TEXT_KEY, ITEM_TEXT.CONTENT)
-            .from(ITEM_TEXT)
-            .where(ITEM_TEXT.TEXT_KEY.`in`(keys))
-            .orderBy(ITEM_TEXT.ITEM_ID)
-            .fetchSize(500)
-            .fetchLazy()
-            .use { cursor ->
-                cursor.forEach {
-                    if (it.value1() != current) {
-                        current?.let { id -> action(id, texts.toMap()) }
-                        texts.clear()
-                        current = it.value1()
-                    }
-                    texts[it.value2()!!] = it.value3()!!
-                }
-            }
-        current?.let { action(it, texts.toMap()) }
-    }
+        db.select(ITEM.ITEM_ID, ITEM.TITLE)
+            .from(ITEM)
+            .fetchSize(STREAMED_ROWS)
+            .fetchMap({ it.value1()!! }, { it.value2()!! })
 
     companion object {
-        private const val BATCH = 1000
+        /** The heads streamed from the database at a time: memory, not meaning. */
+        private const val HEADS_STREAMED = 2000
 
         private val HEAD = listOf(ITEM.ITEM_ID, ITEM.URL, ITEM.TITLE, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT)
 
@@ -544,6 +167,19 @@ class ItemRepository(
                 updatedAt = r.get(ITEM.UPDATED_AT)!!,
                 firstSeenAt = r.get(ITEM.FIRST_SEEN_AT)!!,
             )
+
+        /**
+         * Whether the head kept — its [version], [title], [url] and [updatedAt] — differs from the [item] read, updated
+         * at [itemUpdatedAt].
+         */
+        private fun headChanged(
+            version: String?,
+            title: String?,
+            url: String?,
+            updatedAt: Instant?,
+            item: ItemHead,
+            itemUpdatedAt: Instant,
+        ): Boolean = version != item.version || title != item.title || url != item.url || updatedAt != itemUpdatedAt
     }
 }
 

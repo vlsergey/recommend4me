@@ -14,6 +14,11 @@ info:
 tags:
   - name: types
   - name: items
+  - name: search
+  - name: filters
+  - name: explanation
+  - name: grades
+  - name: marks
   - name: corrections
   - name: jobs
   - name: model
@@ -95,7 +100,7 @@ paths:
 
   /api/types/{type}/search/judgments:
     put:
-      tags: [items]
+      tags: [search]
       operationId: judgeSearch
       summary: The user's word on whether a work found answers the line searched
       description: |
@@ -115,7 +120,7 @@ paths:
 
   /api/types/{type}/search/quality:
     get:
-      tags: [items]
+      tags: [search]
       operationId: getSearchQuality
       summary: How well the search finds what the user judged, with the reranker and without
       description: |
@@ -141,7 +146,7 @@ paths:
 
   /api/types/{type}/facets:
     get:
-      tags: [items]
+      tags: [filters]
       operationId: listFacets
       summary: The filter facets of a content type, without their values - those read apart, of each filter its own (listFilterValues)
       description: No work is read and no model runs - shown at once.
@@ -159,7 +164,7 @@ paths:
 
   /api/types/{type}/facets/{facet}/values:
     get:
-      tags: [items]
+      tags: [filters]
       operationId: listFilterValues
       summary: The values of one filter facet with how many works have each
       description: |
@@ -188,7 +193,7 @@ paths:
 
   /api/types/{type}/lookup:
     get:
-      tags: [items]
+      tags: [search]
       operationId: lookupItems
       summary: Works of a content type by a piece of the title or by the address of the work's page, each item apart
       description: |
@@ -218,7 +223,7 @@ paths:
 
   /api/sources/{source}/facets/{facet}/values:
     get:
-      tags: [items]
+      tags: [search]
       operationId: listFacetValues
       summary: The values of a facet of a source, by how many items have each, for a value to be added
       parameters:
@@ -307,7 +312,7 @@ paths:
 
   /api/items/{source}/{item}/explanation:
     get:
-      tags: [items]
+      tags: [explanation]
       operationId: getExplanation
       summary: What moves the work's prediction, part by part, strongest first - the parts alone, without their features
       description: |
@@ -333,7 +338,7 @@ paths:
 
   /api/items/{source}/{item}/held-out:
     get:
-      tags: [items]
+      tags: [explanation]
       operationId: getHeldOut
       summary: How a model that had not seen the graded work would grade it, and why
       description: |
@@ -1087,7 +1092,7 @@ paths:
 
   /api/items/{source}/{item}/rating:
     put:
-      tags: [items]
+      tags: [grades]
       operationId: rateItem
       summary: Grades the item's current version
       parameters:
@@ -1107,7 +1112,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemSummary'
     delete:
-      tags: [items]
+      tags: [grades]
       operationId: unrateItem
       summary: Takes back the grade of the item's current version, or of the version named
       parameters:
@@ -1128,7 +1133,7 @@ paths:
 
   /api/items/{source}/{item}/interest:
     put:
-      tags: [items]
+      tags: [grades]
       operationId: markInterest
       summary: Marks the work interesting to read or not, whatever its version; the items linked to it too
       parameters:
@@ -1148,7 +1153,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ItemSummary'
     delete:
-      tags: [items]
+      tags: [grades]
       operationId: unmarkInterest
       summary: Takes back the mark of interest of the work; of the items linked to it too
       parameters:
@@ -1191,7 +1196,7 @@ paths:
 
   /api/items/{source}/{item}/pictures/{position}/mark:
     put:
-      tags: [items]
+      tags: [marks]
       operationId: markPicture
       parameters:
         - $ref: '#/components/parameters/Source'
@@ -1209,7 +1214,7 @@ paths:
         '404':
           description: No such picture
     delete:
-      tags: [items]
+      tags: [marks]
       operationId: unmarkPicture
       parameters:
         - $ref: '#/components/parameters/Source'
@@ -1221,7 +1226,7 @@ paths:
 
   /api/items/{source}/{item}/reviews/{reviewId}/mark:
     put:
-      tags: [items]
+      tags: [marks]
       operationId: markReview
       parameters:
         - $ref: '#/components/parameters/Source'
@@ -1239,7 +1244,7 @@ paths:
         '404':
           description: No such review
     delete:
-      tags: [items]
+      tags: [marks]
       operationId: unmarkReview
       parameters:
         - $ref: '#/components/parameters/Source'
@@ -1274,7 +1279,7 @@ paths:
 
   /api/match-feedback:
     post:
-      tags: [items]
+      tags: [marks]
       operationId: giveMatchFeedback
       summary: The user's word on a match shown for a mark
       requestBody:

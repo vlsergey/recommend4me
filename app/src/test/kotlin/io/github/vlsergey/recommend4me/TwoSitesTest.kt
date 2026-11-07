@@ -27,8 +27,11 @@ import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.duplicate.DuplicatesController
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.item.GradesController
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsController
+import io.github.vlsergey.recommend4me.item.MarksController
+import io.github.vlsergey.recommend4me.item.SearchController
 import io.github.vlsergey.recommend4me.job.Jobs
 import io.github.vlsergey.recommend4me.job.JobsController
 import io.github.vlsergey.recommend4me.model.ModelController
@@ -264,6 +267,9 @@ class TwoSitesTest {
     @Autowired lateinit var captures: CaptureController
     @Autowired lateinit var captured: Captures
     @Autowired lateinit var items: ItemsController
+    @Autowired lateinit var gradesController: GradesController
+    @Autowired lateinit var marksController: MarksController
+    @Autowired lateinit var searchController: SearchController
     @Autowired lateinit var corrections: CorrectionsController
     @Autowired lateinit var duplicates: DuplicatesController
     @Autowired lateinit var authors: AuthorsController
@@ -348,14 +354,14 @@ class TwoSitesTest {
         alpha("a1|The Lighthouse|sea|A keeper of a lighthouse waits for the storm||")
         beta("b9|The Lighthouse|ocean|A keeper of a lighthouse waits for the storm")
         corrections.linkItem("alpha", "a1", ItemRef("beta", "b9"))
-        items.rateItem("alpha", "a1", RatingRequest(4))
+        gradesController.rateItem("alpha", "a1", RatingRequest(4))
         assertEquals(4, items.getItem("beta", "b9").body!!.summary.grade)
         // The link taken back: each keeps its grade, and is its own after
         corrections.unlinkItem("alpha", "a1", "beta", "b9")
-        items.rateItem("beta", "b9", RatingRequest(2))
+        gradesController.rateItem("beta", "b9", RatingRequest(2))
         assertEquals(4, items.getItem("alpha", "a1").body!!.summary.grade)
-        items.unrateItem("alpha", "a1", null)
-        items.unrateItem("beta", "b9", null)
+        gradesController.unrateItem("alpha", "a1", null)
+        gradesController.unrateItem("beta", "b9", null)
     }
 
     @Test
@@ -617,7 +623,7 @@ class TwoSitesTest {
         beta("r3|Reefs|reefs|Reefs")
         // The tags named and counted after the quiet — here at once
         inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
-        val found = items.listFacetValues("alpha", "tags", "reefs", 1).body!!
+        val found = searchController.listFacetValues("alpha", "tags", "reefs", 1).body!!
         assertEquals(listOf(tagOf("beta", "reefs")), found.map { it.key })
     }
 
@@ -629,14 +635,14 @@ class TwoSitesTest {
         alpha("h4|Another harbour|harbours|Boats in another harbour||")
         corrections.linkItem("alpha", "h1", ItemRef("alpha", "h2"))
         corrections.linkItem("alpha", "h1", ItemRef("beta", "h3"))
-        items.rateItem("beta", "h3", RatingRequest(5))
+        gradesController.rateItem("beta", "h3", RatingRequest(5))
         inBackground { tagService.scope()?.let { tagService.rename(it, it.facet) } }
         val tag = tags.getTag(tagOf("alpha", "harbours")).body!!
         assertEquals(Triple(2, 1, 1), Triple(tag.works, tag.graded, tag.liked))
         val bySite = tag.variants.associateBy { it.source }
         assertEquals(Triple(2, 1, 1), bySite.getValue("alpha").let { Triple(it.works, it.graded, it.liked) })
         assertEquals(Triple(1, 1, 1), bySite.getValue("beta").let { Triple(it.works, it.graded, it.liked) })
-        items.unrateItem("beta", "h3", null)
+        gradesController.unrateItem("beta", "h3", null)
     }
 
     @Test
@@ -849,16 +855,16 @@ class TwoSitesTest {
     @Test
     fun `the page of a work graded is loaded at once, when the site has more of it`() {
         beta("b5|Deep|depth|Short")
-        items.rateItem("beta", "b5", RatingRequest(5))
+        gradesController.rateItem("beta", "b5", RatingRequest(5))
         assertTrue(waitFor { "b5" in Beta.refreshed })
         assertTrue(waitFor { items.getItem("beta", "b5").body!!.texts.any { "loaded once graded" in it.content } })
         // A work the site has no more of is not asked for
         beta("x5|Shallow|depth|Short")
-        items.rateItem("beta", "x5", RatingRequest(3))
+        gradesController.rateItem("beta", "x5", RatingRequest(3))
         Thread.sleep(500)
         assertTrue("x5" !in Beta.refreshed)
-        items.unrateItem("beta", "b5", null)
-        items.unrateItem("beta", "x5", null)
+        gradesController.unrateItem("beta", "b5", null)
+        gradesController.unrateItem("beta", "x5", null)
     }
 
     @Test
@@ -877,18 +883,18 @@ class TwoSitesTest {
     @Test
     fun `a review and a picture are marked, taken back, and only with a mark of +1 or -1`() {
         alpha("a8|Storm|storm|A storm at sea|cover.png|The storm scene is wonderful")
-        assertEquals(204, items.markReview("alpha", "a8", "r1", Mark(1)).statusCode.value())
+        assertEquals(204, marksController.markReview("alpha", "a8", "r1", Mark(1)).statusCode.value())
         assertEquals(1, items.getItem("alpha", "a8").body!!.reviews.single().mark)
-        assertEquals(204, items.unmarkReview("alpha", "a8", "r1").statusCode.value())
+        assertEquals(204, marksController.unmarkReview("alpha", "a8", "r1").statusCode.value())
         assertNull(items.getItem("alpha", "a8").body!!.reviews.single().mark)
-        assertEquals(404, items.markReview("alpha", "a8", "no-such", Mark(1)).statusCode.value())
-        assertThrows<Refused> { items.markReview("alpha", "a8", "r1", Mark(0)) }
+        assertEquals(404, marksController.markReview("alpha", "a8", "no-such", Mark(1)).statusCode.value())
+        assertThrows<Refused> { marksController.markReview("alpha", "a8", "r1", Mark(0)) }
 
-        assertEquals(204, items.markPicture("alpha", "a8", 0, Mark(-1)).statusCode.value())
+        assertEquals(204, marksController.markPicture("alpha", "a8", 0, Mark(-1)).statusCode.value())
         assertEquals(-1, items.getItem("alpha", "a8").body!!.pictures.single().mark)
-        items.unmarkPicture("alpha", "a8", 0)
+        marksController.unmarkPicture("alpha", "a8", 0)
         assertNull(items.getItem("alpha", "a8").body!!.pictures.single().mark)
-        assertEquals(404, items.markPicture("alpha", "a8", 7, Mark(1)).statusCode.value())
+        assertEquals(404, marksController.markPicture("alpha", "a8", 7, Mark(1)).statusCode.value())
     }
 
     @Test
@@ -943,7 +949,7 @@ class TwoSitesTest {
             alpha(
                 "m$k|Work $k|${if (k % 2 == 0) "sea" else "land"}|${if (k % 2 == 0) "Ships and storms at sea" else "Fields and farms on land"} $k||"
             )
-            items.rateItem("alpha", "m$k", RatingRequest(if (k % 2 == 0) 5 else 1))
+            gradesController.rateItem("alpha", "m$k", RatingRequest(if (k % 2 == 0) 5 else 1))
         }
         // Planned at once, not waited for: the request answers with the model as it is
         assertEquals(200, model.trainModel("books").statusCode.value())
@@ -957,7 +963,7 @@ class TwoSitesTest {
         )
         assertTrue(model.getModel("books").body!!.trained)
         assertEquals(404, model.getModel("nothing").statusCode.value())
-        (1..8).forEach { items.unrateItem("alpha", "m$it", null) }
+        (1..8).forEach { gradesController.unrateItem("alpha", "m$it", null) }
     }
 
     @Test

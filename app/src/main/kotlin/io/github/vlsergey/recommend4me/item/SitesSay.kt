@@ -56,42 +56,47 @@ class SitesSay(private val works: Works, private val plugins: Plugins) {
                 if (!speaking) emptyList()
                 else
                     read.map { m ->
-                        val def = defOf(m.store, field)
-                        val speakers = UniverseFacet.saidBy(def, m.store.schema)
-                        val words = speakers.flatMap { facet ->
-                            val values = m.facets[facet].orEmpty()
-                            val names = m.store.names(facet, values)
-                            values.map { key ->
-                                val name = names[key] ?: key
-                                // The field's own word is searched for in it; the direction of pairs is no value of
-                                // theirs
-                                SiteWord(
-                                    key,
-                                    name,
-                                    facet == speakers.first(),
-                                    reaches(
-                                        def,
-                                        facet,
-                                        key,
-                                        name,
-                                        m,
-                                        bound[m.key.source].orEmpty(),
-                                        fandoms[m.key.source].orEmpty(),
-                                    ),
-                                )
-                            }
-                        }
-                        // A site that writes the field as one line and gave no word of it: the line as it is
-                        val line = if (words.isNotEmpty()) null else def.original?.let { m.texts[it] }
-                        SiteSaid(
-                            source = m.key.source,
-                            item = m.key.id,
-                            url = m.url,
-                            read = read(m, encoder),
-                            words = words + listOfNotNull(line?.let { SiteWord(it, it, true) }),
+                        said(
+                            m,
+                            defOf(m.store, field),
+                            read(m, encoder),
+                            bound[m.key.source].orEmpty(),
+                            fandoms[m.key.source].orEmpty(),
                         )
                     }
         }
+    }
+
+    /**
+     * What the member [m] says of the field [def], as its own source defines the field: word by word, each with what it
+     * reached; [read] whether its page was ever read.
+     */
+    private fun said(
+        m: Member,
+        def: FacetDef,
+        read: Boolean,
+        bound: Map<String, Long>,
+        fandoms: Map<String, Set<String>>,
+    ): SiteSaid {
+        val speakers = UniverseFacet.saidBy(def, m.store.schema)
+        val words = speakers.flatMap { facet ->
+            val values = m.facets[facet].orEmpty()
+            val names = m.store.names(facet, values)
+            values.map { key ->
+                val name = names[key] ?: key
+                // The field's own word is searched for in it; the direction of pairs is no value of theirs
+                SiteWord(key, name, facet == speakers.first(), reaches(def, facet, key, name, m, bound, fandoms))
+            }
+        }
+        // A site that writes the field as one line and gave no word of it: the line as it is
+        val line = if (words.isNotEmpty()) null else def.original?.let { m.texts[it] }
+        return SiteSaid(
+            source = m.key.source,
+            item = m.key.id,
+            url = m.url,
+            read = read,
+            words = words + listOfNotNull(line?.let { SiteWord(it, it, true) }),
+        )
     }
 
     private fun defOf(store: SourceStore, field: FacetDef) =

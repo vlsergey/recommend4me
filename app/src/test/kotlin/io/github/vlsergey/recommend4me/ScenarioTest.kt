@@ -14,7 +14,10 @@ import io.github.vlsergey.recommend4me.capture.CaptureController
 import io.github.vlsergey.recommend4me.contenttype.TypesController
 import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.i18n.TranslationsController
+import io.github.vlsergey.recommend4me.item.FiltersController
+import io.github.vlsergey.recommend4me.item.GradesController
 import io.github.vlsergey.recommend4me.item.ItemsController
+import io.github.vlsergey.recommend4me.item.SearchController
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.CapturedPage
@@ -94,6 +97,12 @@ class ScenarioTest {
 
     @Autowired lateinit var items: ItemsController
 
+    @Autowired lateinit var gradesController: GradesController
+
+    @Autowired lateinit var filtersController: FiltersController
+
+    @Autowired lateinit var searchController: SearchController
+
     @Autowired lateinit var corrections: CorrectionsController
 
     @Autowired lateinit var types: TypesController
@@ -150,7 +159,7 @@ class ScenarioTest {
         assertEquals(3, updated.total)
         assertEquals("w3", updated.items.first().item)
 
-        assertEquals(5, items.rateItem("test", "w1", RatingRequest(5)).body!!.grade)
+        assertEquals(5, gradesController.rateItem("test", "w1", RatingRequest(5)).body!!.grade)
         assertEquals(1, list(view = ItemView.RATED).total)
         assertEquals(2, list(view = ItemView.UNRATED).total)
 
@@ -189,22 +198,22 @@ class ScenarioTest {
         assertEquals("A boy finds a dragon egg", items.getItem("test", "w1").body!!.texts.single().content)
         // The source's filter facet, and the kind, the universe, the language and the age rating the application gives
         // every book
-        val filters = items.listFacets("books").body!!
+        val filters = filtersController.listFacets("books").body!!
         assertEquals(listOf("test.tag", "kind", "universe", "languages", "age-rating"), filters.map { it.id })
         // The age rating a scale: every value of it in its order, a value no work has too
         val rating = filters.single { it.id == "age-rating" }
         assertEquals(true, rating.ordered)
         assertEquals(
             listOf("g", "pg-13", "r", "nc-17", "nc-21"),
-            items.listFilterValues("books", rating.id).body!!.propertyValues.map { it.key },
+            filtersController.listFilterValues("books", rating.id).body!!.propertyValues.map { it.key },
         )
 
         // The user's word on what a search found: one line however typed, taken back when pressed again
-        items.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", relevant = true))
-        items.judgeSearch("books", SearchJudgment("dragons", "test", "w2", relevant = false))
-        items.judgeSearch("books", SearchJudgment("knights", "test", "w3", relevant = true))
-        items.judgeSearch("books", SearchJudgment("knights", "test", "w3", relevant = null))
-        val quality = items.getSearchQuality("books", 10).body!!
+        searchController.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", relevant = true))
+        searchController.judgeSearch("books", SearchJudgment("dragons", "test", "w2", relevant = false))
+        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", relevant = true))
+        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", relevant = null))
+        val quality = searchController.getSearchQuality("books", 10).body!!
         assertEquals(listOf("dragons"), quality.queries.map { it.query })
         assertEquals(1, quality.queries.single().relevant)
         assertEquals(1, quality.queries.single().irrelevant)
@@ -212,32 +221,32 @@ class ScenarioTest {
         // Linked, two items are one work: a grade of either is of both, in the list one row
         fun gradeOf(id: String) = items.getItem("test", id).body!!.summary.grade
         corrections.linkItem("test", "w2", ItemRef("test", "w3"))
-        items.rateItem("test", "w2", RatingRequest(3))
+        gradesController.rateItem("test", "w2", RatingRequest(3))
         assertEquals(3, gradeOf("w3"))
         assertEquals(2, list(view = ItemView.RATED).total)
         // Taken back of one, taken back of both
-        items.unrateItem("test", "w3", null)
+        gradesController.unrateItem("test", "w3", null)
         assertNull(gradeOf("w2"))
         assertEquals(1, list(view = ItemView.RATED).total)
         // The link taken back leaves both their grades; graded after, each is its own
-        items.rateItem("test", "w3", RatingRequest(4))
+        gradesController.rateItem("test", "w3", RatingRequest(4))
         assertEquals(4, gradeOf("w2"))
         corrections.unlinkItem("test", "w2", "test", "w3")
         assertEquals(4, gradeOf("w2"))
         assertEquals(4, gradeOf("w3"))
-        items.rateItem("test", "w2", RatingRequest(2))
+        gradesController.rateItem("test", "w2", RatingRequest(2))
         assertEquals(4, gradeOf("w3"))
-        items.unrateItem("test", "w2", null)
-        items.unrateItem("test", "w3", null)
+        gradesController.unrateItem("test", "w2", null)
+        gradesController.unrateItem("test", "w3", null)
 
         // Interesting or not, apart from the grade: one mark a work, written to each of its items, taken back of both
         fun interestOf(id: String) = items.getItem("test", id).body!!.summary.interest
-        items.markInterest("test", "w3", InterestRequest(true))
+        gradesController.markInterest("test", "w3", InterestRequest(true))
         corrections.linkItem("test", "w2", ItemRef("test", "w3"))
         assertEquals(true, interestOf("w2"))
-        assertEquals(false, items.markInterest("test", "w2", InterestRequest(false)).body!!.interest)
+        assertEquals(false, gradesController.markInterest("test", "w2", InterestRequest(false)).body!!.interest)
         assertEquals(false, interestOf("w3"))
-        items.unmarkInterest("test", "w3")
+        gradesController.unmarkInterest("test", "w3")
         assertNull(interestOf("w2"))
         // A correction is of the work: seen through either item, kept by both when the work is parted
         fun correctedOf(id: String) = stores.source("test")!!.corrections.facetsOf(id).map { it.key }
@@ -250,7 +259,7 @@ class ScenarioTest {
         corrections.uncorrectFacet("test", "w3", "tags", "magic")
 
         // Removed from the library — gone from the site — with its grade and the user's answers
-        items.markInterest("test", "w1", InterestRequest(true))
+        gradesController.markInterest("test", "w1", InterestRequest(true))
         corrections.correctFacet("test", "w1", FacetCorrection(facet = "tags", added = true, key = "magic"))
         assertEquals(204, items.removeItem("test", "w1").statusCode.value())
         assertEquals(404, items.getItem("test", "w1").statusCode.value())

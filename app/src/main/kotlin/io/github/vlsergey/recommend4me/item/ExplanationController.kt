@@ -1,0 +1,45 @@
+package io.github.vlsergey.recommend4me.item
+
+import io.github.vlsergey.recommend4me.api.ExplanationApi
+import io.github.vlsergey.recommend4me.api.model.ContributionGroup as ApiContributionGroup
+import io.github.vlsergey.recommend4me.api.model.HeldOut as ApiHeldOut
+import io.github.vlsergey.recommend4me.model.ContributionGroup
+import io.github.vlsergey.recommend4me.model.Recommendations
+import io.github.vlsergey.recommend4me.source.Stores
+import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.RestController
+
+/**
+ * What moves the prediction of a work, and of a graded one what the model that had not seen it says — worked out in the
+ * queue of the computations, 202 till it is there.
+ */
+@RestController
+class ExplanationController(private val stores: Stores, private val recommendations: Recommendations) : ExplanationApi {
+
+    override fun getExplanation(source: String, item: String): ResponseEntity<List<ApiContributionGroup>> =
+        stores.answerOn(source, item) { _, _ ->
+            val key = ItemKey(source, item)
+            // Of a graded work, the model's that had not seen it, once worked out
+            when (val h = recommendations.heldOut(key)) {
+                is Recommendations.HeldOutRead.Ready -> explained(h.heldOut.explanation)
+                Recommendations.HeldOutRead.Planned -> ResponseEntity.accepted().build()
+                Recommendations.HeldOutRead.None -> explained(recommendations.explanation(key))
+            }
+        }
+
+    /** The parts of an explanation, without their features. */
+    private fun explained(groups: List<ContributionGroup>): ResponseEntity<List<ApiContributionGroup>> =
+        ResponseEntity.ok(groups.map { it.toApi(withFeatures = false) })
+
+    override fun getHeldOut(source: String, item: String): ResponseEntity<ApiHeldOut> =
+        stores.answerOn(source, item) { _, _ ->
+            when (val h = recommendations.heldOut(ItemKey(source, item))) {
+                is Recommendations.HeldOutRead.Ready ->
+                    ResponseEntity.ok(
+                        ApiHeldOut(h.heldOut.score, h.heldOut.explanation.map { it.toApi() }, h.heldOut.gradePlace)
+                    )
+                Recommendations.HeldOutRead.Planned -> ResponseEntity.accepted().build()
+                Recommendations.HeldOutRead.None -> ResponseEntity.noContent().build()
+            }
+        }
+}

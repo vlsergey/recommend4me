@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.rating.GradesChanged
+import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -28,8 +29,13 @@ class ItemRemoval(
 
     /** False when there is no such work. */
     fun remove(key: ItemKey): Boolean {
-        val store = stores.source(key.source) ?: return false
-        if (!store.items.exists(key.id)) return false
+        val store = stores.source(key.source)?.takeIf { it.items.exists(key.id) } ?: return false
+        removeFrom(store, key)
+        return true
+    }
+
+    /** The work [key] of the [store] removed, with everything of it in every database. */
+    private fun removeFrom(store: SourceStore, key: ItemKey) {
         val type = stores.typeOf(key.source)
         val graded = store.ratings.ofItem(key.id).isNotEmpty()
         // The files of its pictures first: their names are in the rows that go with the work
@@ -48,6 +54,5 @@ class ItemRemoval(
         events.publishEvent(ItemsChanged(key.source, listOf(key.id)))
         if (graded) events.publishEvent(GradesChanged(type.id, key.source, key.id))
         recommendations.scheduleRetrain(type.id, "removal")
-        return true
     }
 }

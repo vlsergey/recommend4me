@@ -31,8 +31,12 @@ import io.github.vlsergey.recommend4me.correction.CorrectionsController
 import io.github.vlsergey.recommend4me.draft.LayerDrafts
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.encoder.TextKind
+import io.github.vlsergey.recommend4me.item.ExplanationController
+import io.github.vlsergey.recommend4me.item.FiltersController
+import io.github.vlsergey.recommend4me.item.GradesController
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsController
+import io.github.vlsergey.recommend4me.item.SearchController
 import io.github.vlsergey.recommend4me.marking.MarkingController
 import io.github.vlsergey.recommend4me.model.CatalogueReader
 import io.github.vlsergey.recommend4me.model.MeasuringState
@@ -370,6 +374,10 @@ class SiteTest {
 
     @Autowired lateinit var captures: CaptureController
     @Autowired lateinit var items: ItemsController
+    @Autowired lateinit var gradesController: GradesController
+    @Autowired lateinit var filtersController: FiltersController
+    @Autowired lateinit var searchController: SearchController
+    @Autowired lateinit var explanationController: ExplanationController
     @Autowired lateinit var corrections: CorrectionsController
     @Autowired lateinit var pages: PagesController
     @Autowired lateinit var suggestionsApi: SuggestionsController
@@ -742,12 +750,12 @@ class SiteTest {
             values.filter { it.corrected in answeredYes }.map { it.key }.toSet(),
         )
         // Found by its name first; the others it lacks to make the number, by the meaning of theirs, each once
-        val mag = items.listFacetValues("site", "tags", "mag", 10).body!!.map { it.key }
+        val mag = searchController.listFacetValues("site", "tags", "mag", 10).body!!.map { it.key }
         assertEquals(tag("magic"), mag.first())
         assertEquals(mag.distinct(), mag)
         // No tag goes by the name typed: the entries of the catalogue after the tags, each a new tag;
         // given, the tag is made of the entry, named by its label, bound to it
-        val vessel = items.listFacetValues("site", "tags", "vessel", 10).body!!.single { it.entry != null }
+        val vessel = searchController.listFacetValues("site", "tags", "vessel", 10).body!!.single { it.entry != null }
         assertEquals("fake" to "E2", vessel.entry!!.catalogue to vessel.entry!!.entry)
         val made =
             corrections
@@ -760,7 +768,7 @@ class SiteTest {
         assertEquals("Судно", made.name)
         assertEquals(listOf("E2"), tagsApi.getTag(made.key).body!!.catalogueEntries.map { it.entry })
         // The entry is a tag's now: offered as that tag, not as a new one; given again, the same tag
-        assertTrue(items.listFacetValues("site", "tags", "vessel", 10).body!!.none { it.entry != null })
+        assertTrue(searchController.listFacetValues("site", "tags", "vessel", 10).body!!.none { it.entry != null })
         assertEquals(
             made.key,
             corrections
@@ -778,8 +786,8 @@ class SiteTest {
 
         // The prediction is told part by part, each part with its features; a page of the site gets the parts alone
         (3..8).forEach { k ->
-            items.rateItem("site", "s$k", RatingRequest(5))
-            items.rateItem("site", "d$k", RatingRequest(1))
+            gradesController.rateItem("site", "s$k", RatingRequest(5))
+            gradesController.rateItem("site", "d$k", RatingRequest(1))
         }
         inBackground { recommendations.retrainAndScore("books") }
         // What every part is worth: the ranking cross-validated without it, every part measured
@@ -807,20 +815,20 @@ class SiteTest {
             explained.zipWithNext().all { (a, b) -> abs(a.contribution) >= abs(b.contribution) },
             "strongest first",
         )
-        val onPage = items.getExplanation("site", "x1").body!!
+        val onPage = explanationController.getExplanation("site", "x1").body!!
         assertTrue(onPage.isNotEmpty() && onPage.all { it.features.isEmpty() }, "on a page $onPage")
         // What a model that had not seen a graded work says is read apart, fitted in the queue: being
         // fitted, the request answers so and does not wait; an ungraded work has none
-        assertEquals(HttpStatus.ACCEPTED, items.getHeldOut("site", "s3").statusCode)
-        var heldOut = items.getHeldOut("site", "s3")
+        assertEquals(HttpStatus.ACCEPTED, explanationController.getHeldOut("site", "s3").statusCode)
+        var heldOut = explanationController.getHeldOut("site", "s3")
         val fitted = System.currentTimeMillis() + 30_000
         while (heldOut.statusCode == HttpStatus.ACCEPTED && System.currentTimeMillis() < fitted) {
             Thread.sleep(50)
-            heldOut = items.getHeldOut("site", "s3")
+            heldOut = explanationController.getHeldOut("site", "s3")
         }
         assertEquals(HttpStatus.OK, heldOut.statusCode)
         assertTrue(heldOut.body!!.explanation.isNotEmpty())
-        assertEquals(HttpStatus.NO_CONTENT, items.getHeldOut("site", "x1").statusCode)
+        assertEquals(HttpStatus.NO_CONTENT, explanationController.getHeldOut("site", "x1").statusCode)
 
         // The scorers are compared in the background, each one's result there once it is measured;
         // a comparison under way is answered as it stands, not started again
@@ -848,7 +856,7 @@ class SiteTest {
         // The other works of the series, with the user's grades
         capture("s1|Space 1|space|Starships cross the galaxy 1|Pilot/Captain|Галактика")
         capture("s2|Space 2|space|Starships cross the galaxy 2|Pilot/Captain|Галактика")
-        items.rateItem("site", "s2", RatingRequest(5))
+        gradesController.rateItem("site", "s2", RatingRequest(5))
         val series = items.getItem("site", "s1").body!!.related.single()
         assertEquals(
             Triple("Галактика", ApiFacetRole.SERIES, listOf("s2")),
@@ -857,7 +865,7 @@ class SiteTest {
         assertEquals(5, series.items.single().grade)
 
         // The cards of a list get the works' grades
-        items.rateItem("site", "s1", RatingRequest(4))
+        gradesController.rateItem("site", "s1", RatingRequest(4))
         val cards =
             pages
                 .getCards(
@@ -871,8 +879,11 @@ class SiteTest {
         assertEquals(4, cards.single().grade)
 
         // A work is found by a piece of its title and by the address of its page
-        assertEquals(listOf("x1"), items.lookupItems("books", "lost fl", 10).body!!.map { it.item })
-        assertEquals("d3", items.lookupItems("books", "https://site.example/work/d3", 10).body!!.first().item)
+        assertEquals(listOf("x1"), searchController.lookupItems("books", "lost fl", 10).body!!.map { it.item })
+        assertEquals(
+            "d3",
+            searchController.lookupItems("books", "https://site.example/work/d3", 10).body!!.first().item,
+        )
 
         // A page of no work, and a page of no source
         assertNull(pages.getPage("https://site.example/about").body!!.item)
@@ -926,7 +937,7 @@ class SiteTest {
         universes.resetUniverseEntry("fake", "U1", "S1")
 
         // The universe is a value to pick for any work, linked to none yet; linked, it names itself
-        assertTrue(items.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
+        assertTrue(searchController.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
         corrections.correctFacet("site", "u1", FacetCorrection(facet = "universe", added = true, key = "fake:U1"))
         assertEquals(
             "Space opera",
@@ -1215,7 +1226,7 @@ class SiteTest {
                 .single { it.key == "alternative-history" }
         assertEquals("standard:facet.kind.value.alternative-history", kind.nameKey)
         assertTrue(
-            items.listFilterValues("books", "kind").body!!.propertyValues.any {
+            filtersController.listFilterValues("books", "kind").body!!.propertyValues.any {
                 it.nameKey == "standard:facet.kind.value.realism"
             }
         )
@@ -1431,7 +1442,7 @@ class SiteTest {
         assertEquals(cargo, tagOf("shipment"))
         // The user's answer on a tag that will be merged into another
         corrections.correctFacet("site", "t3", FacetCorrection(facet = "tags", added = true, key = starhulls))
-        items.rateItem("site", "t2", RatingRequest(5))
+        gradesController.rateItem("site", "t2", RatingRequest(5))
         refresh(stores.source("site")!!)
         // The synonyms variants of the tag, of no work, with their names: the tag found by them
         val ofCargo = tagsApi.getTag(cargo).body!!.variants.associate { it.tag to (it.name to it.works) }
@@ -1484,7 +1495,7 @@ class SiteTest {
                 .single { it.key == hulls }
         assertEquals("Корпуса", shown.name)
         // Found by the name of a site's tag of it, not its own; once, by its own name; the rest by meaning
-        val found = items.listFacetValues("site", "tags", "starhull", 10).body!!
+        val found = searchController.listFacetValues("site", "tags", "starhull", 10).body!!
         assertEquals(hulls to "Корпуса", found.first().let { it.key to it.name })
         assertEquals(1, found.count { it.key == hulls })
         // The name taken back: the sites' names decide again
@@ -1530,10 +1541,10 @@ class SiteTest {
         )
         // Never offered to mark: not among the candidates, not found to add
         assertTrue(suggestionsApi.getCandidates("site", "t2", "tags", null, null).body!!.none { it.key == hulls })
-        assertTrue(items.listFacetValues("site", "tags", "hull", 10).body!!.none { it.key == hulls })
-        assertTrue(items.listFacetValues("site", "tags", null, 500).body!!.none { it.key == hulls })
+        assertTrue(searchController.listFacetValues("site", "tags", "hull", 10).body!!.none { it.key == hulls })
+        assertTrue(searchController.listFacetValues("site", "tags", null, 500).body!!.none { it.key == hulls })
         assertTrue(!tagsApi.ignoreTag(TagIgnoredRequest(hulls, false)).body!!.ignored)
-        assertTrue(items.listFacetValues("site", "tags", "hull", 10).body!!.any { it.key == hulls })
+        assertTrue(searchController.listFacetValues("site", "tags", "hull", 10).body!!.any { it.key == hulls })
         assertTrue(feature in catalogueReader.item(stores.type("books")!!, t3Key)!!.categorical)
         // A second entry besides: the one bound first still names it; the descriptions of the site's tag's page first,
         // then of each entry
