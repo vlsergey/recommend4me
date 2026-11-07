@@ -187,7 +187,8 @@ val jvmFlags = listOf("--add-modules", "jdk.incubator.vector", "--enable-native-
 application {
     applicationName = "recommend4me"
     mainClass = "io.github.vlsergey.recommend4me.launcher.LauncherKt"
-    applicationDefaultJvmArgs = jvmFlags + listOf("-Xmx8g")
+    // 12 GB: the pages H2 keeps of every source's file, up to a gigabyte each (Databases.SOURCE_CACHE_MB), beside the 4-5 GB the rest takes
+    applicationDefaultJvmArgs = jvmFlags + listOf("-Xmx12g")
 }
 
 distributions {

@@ -38,7 +38,8 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
     private val sources: Map<String, SourceDatabases> = plugins.sources.associate { s ->
         val dir = folder.source(s.id)
         s.id to SourceDatabases(
-            source = Database("${s.id}/source", dir.resolve("source"), "source", s.migrations),
+            // The pages of a source's file H2 keeps: every pass reads its vectors whole
+            source = Database("${s.id}/source", dir.resolve("source"), "source", s.migrations, cacheMegabytes = SOURCE_CACHE_MB),
             corrections = Database("${s.id}/corrections", dir.resolve("corrections"), "corrections", placeholders = mapOf("source" to s.id)),
             ratings = Database("${s.id}/ratings", dir.resolve("ratings"), "ratings"),
         )
@@ -66,5 +67,13 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
         types.values.forEach { it.model.close() }
         dictionaries.close()
         preferences.close()
+    }
+
+    private companion object {
+        /**
+         * The pages of a source's file H2 keeps read, in megabytes ([Database.cacheMegabytes]): of
+         * fanfics.me the vectors of its texts alone are 416 MB; used only as pages are read.
+         */
+        const val SOURCE_CACHE_MB = 1024
     }
 }

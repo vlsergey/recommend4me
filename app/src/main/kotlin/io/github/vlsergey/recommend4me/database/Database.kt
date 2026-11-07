@@ -31,6 +31,14 @@ class Database(
     classLoader: ClassLoader = Thread.currentThread().contextClassLoader,
     /** The values the application's migrations of the file are written with: `${source}` of a source's file. */
     private val placeholders: Map<String, String> = emptyMap(),
+    /**
+     * How much of the file's pages H2 keeps read, in megabytes: H2's own cache (`CACHE_SIZE`), of the
+     * pages as it reads them, scan-resistant, dropped as the file is closed; null: H2's own size. Of a
+     * source's file, whose vectors every pass reads whole: a second reading of fanfics.me's 416 MB of
+     * the texts' vectors 70-95 ms with a cache of a gigabyte, 300 without (the user, 2026-11-07: the
+     * database's cache, not one of ours).
+     */
+    cacheMegabytes: Int? = null,
     /** Done with the file as it is, before its migrations: what a migration drops copied elsewhere first. */
     beforeMigrations: (DSLContext) -> Unit = {},
 ) : AutoCloseable {
@@ -46,7 +54,7 @@ class Database(
         // space. Closed, it is compacted for up to [CLOSE_COMPACT_MS]: what a long run of writes left
         // unused is given back
         jdbcUrl = "jdbc:h2:file:${file.toAbsolutePath().toString().replace('\\', '/')};DB_CLOSE_ON_EXIT=FALSE;LOCK_TIMEOUT=10000;COMPRESS=TRUE" +
-            ";MAX_COMPACT_TIME=$CLOSE_COMPACT_MS"
+            ";MAX_COMPACT_TIME=$CLOSE_COMPACT_MS" + (cacheMegabytes?.let { ";CACHE_SIZE=${it * 1024}" } ?: "")
         username = "sa"
         password = ""
         poolName = name
