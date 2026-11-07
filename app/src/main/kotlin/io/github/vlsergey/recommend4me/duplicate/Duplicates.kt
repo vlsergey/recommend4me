@@ -684,7 +684,10 @@ class Duplicates(
             val heads = s.items.heads(ids)
             val fields = s.corrections.fieldsOf(ids)
             val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-            val texts = if (description == null) emptyMap() else s.items.textsOf(ids, listOf(description))
+            // The site's own line of the characters and pairings, shown after the description, folded with it
+            val universeLine = s.schema.universeLine
+            val wanted = listOfNotNull(description, universeLine)
+            val texts = if (wanted.isEmpty()) emptyMap() else s.items.textsOf(ids, wanted)
             val authorFacet = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key
             val fandomFacet = UniverseFacet.fandomFacet(s.schema)
             val facets = s.items.facetsOf(ids)
@@ -707,6 +710,7 @@ class Duplicates(
                         authors = authors.map { authorNames[it] ?: it },
                         fandoms =fandomFacet?.let { f -> facets[id]?.get(f).orEmpty().map { fandomNames[it] ?: it } }.orEmpty(),
                         description = description?.let { shown[it] },
+                        universeLine = universeLine?.let { shown[it] }?.takeIf { it.isNotBlank() },
                         status = statusFacet?.let { f -> facets[id]?.get(f).orEmpty().map { DuplicateStatus(statusNames[it] ?: it, s.nameKey(f, it)) } },
                         words = itemSizes[id]?.words,
                         chars = itemSizes[id]?.chars,

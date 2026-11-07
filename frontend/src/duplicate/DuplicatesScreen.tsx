@@ -307,7 +307,11 @@ function PairRow({
   );
 }
 
-/** One work of a pair: its site, its title opening the work, its page on the site, its authors, fandoms, status and size, its description folded. */
+/**
+ * One work of a pair: its site, its title opening the work, its page on the site, its authors, fandoms,
+ * status and size, its description and after it the site's own line of its characters and pairings,
+ * folded together.
+ */
 function WorkSide({ work: w }: { work: DuplicateWork }) {
   const { t } = useTranslation("duplicate");
   const [whole, setWhole] = useState(false);
@@ -334,8 +338,9 @@ function WorkSide({ work: w }: { work: DuplicateWork }) {
           {w.chars && <Size size={w.chars} word="chars" />}
         </div>
       )}
-      {w.description && (
-        // Text to select and copy: unfolded or folded by a press that selects nothing
+      {(w.description || w.universeLine) && (
+        // Text to select and copy: unfolded or folded by a press that selects nothing. The site's own line of
+        // the characters and pairings after the description, folded with it: one flow of lines, clamped together
         <div
           className={cn("cursor-pointer text-sm whitespace-pre-line select-text text-muted-foreground", !whole && "line-clamp-4")}
           title={t(whole ? "WorkSide.fold" : "WorkSide.unfold")}
@@ -344,6 +349,8 @@ function WorkSide({ work: w }: { work: DuplicateWork }) {
           }}
         >
           {w.description}
+          {w.description && w.universeLine && "\n"}
+          {w.universeLine && <span className="text-foreground/80">{w.universeLine}</span>}
         </div>
       )}
     </div>

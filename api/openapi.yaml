@@ -5342,6 +5342,9 @@ components:
             type: string
         description:
           type: string
+        universeLine:
+          type: string
+          description: The characters and pairings as the site writes them, its own line (SourceSchema.universeLine); none of a site without one
         status:
           type: array
           description: Whether the work is finished, in progress, frozen, as its site says
