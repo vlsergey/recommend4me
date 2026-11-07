@@ -67,10 +67,13 @@ class PairwiseScorer : Scorer {
                 g[k] = (gw[k] + th[k] / c) / count
             }
             g[d] = 0.0
-            return (loss + 0.5 * pen / c) / count
+            return (loss + HALF * pen / c) / count
         }
     }
 }
+
+/** The ½ of the penalty ‖w‖²/2C: its gradient is then w/C. */
+private const val HALF = 0.5
 
 /** A linear model: `score = w · x + b`. */
 class LinearModel(val w: FloatArray, val b: Float) : FittedScorer {

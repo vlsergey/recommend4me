@@ -37,7 +37,7 @@ class Lbfgs(private val d: Int, private val maxIter: Int, private val tol: Doubl
             iterate()
             return
         }
-        if (loss <= f + 1e-4 * step * slope) accept(loss, gradient) else halve()
+        if (loss <= f + ARMIJO * step * slope) accept(loss, gradient) else halve()
     }
 
     private fun accept(loss: Double, gradient: DoubleArray) {
@@ -55,11 +55,11 @@ class Lbfgs(private val d: Int, private val maxIter: Int, private val tol: Doubl
     }
 
     private fun halve() {
-        if (++attempt >= 40) {
+        if (++attempt >= MAX_HALVINGS) {
             done = true
             return
         }
-        step *= 0.5
+        step *= BACKTRACK
         for (k in at.indices) at[k] = theta[k] + step * dir[k]
     }
 
@@ -112,7 +112,7 @@ private class LbfgsMemory {
 
     /** Only steps of positive curvature are remembered, and only the last [MEMORY]. */
     fun remember(s: DoubleArray, y: DoubleArray) {
-        if (dot(s, y) <= 1e-12) return
+        if (dot(s, y) <= MIN_CURVATURE) return
         sHist.add(s)
         yHist.add(y)
         if (sHist.size > MEMORY) {
@@ -131,4 +131,12 @@ private class LbfgsMemory {
 private fun dot(a: DoubleArray, b: DoubleArray): Double = Simd.dot(a, b)
 
 private const val MEMORY = 10
+/** The sufficient decrease of the Armijo condition: the share of the slope's promise a step must keep. */
+private const val ARMIJO = 1e-4
+/** The step is halved at most so many times before the search gives up. */
+private const val MAX_HALVINGS = 40
+/** What a rejected step is shortened by. */
+private const val BACKTRACK = 0.5
+/** A pair whose curvature s·y is no more than this is too flat to remember: it would divide by almost nothing. */
+private const val MIN_CURVATURE = 1e-12
 private const val FTOL = 64 * 2.220446049250313e-16

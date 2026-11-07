@@ -9,8 +9,9 @@ import kotlin.test.assertTrue
 
 class WordsPerCharTest {
 
+    /** A hyphen or an apostrophe within a word is part of it, a dash standing alone no word. */
     @Test
-    fun `words are counted as the sites count them, a hyphen or an apostrophe within a word part of it, a dash alone none`() {
+    fun `words are counted as the sites count them`() {
         assertEquals(0, WordCount.of(""))
         assertEquals(3, WordCount.of("Раз, два — три."))
         assertEquals(2, WordCount.of("кто-то don't"))

@@ -18,8 +18,9 @@ import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.model.ContributionGroup
+import io.github.vlsergey.recommend4me.model.Details
+import io.github.vlsergey.recommend4me.model.Explanations
 import io.github.vlsergey.recommend4me.model.LabelledContribution
-import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -107,7 +108,7 @@ class ItemDetailsReader(
     private val stores: Stores,
     private val plugins: Plugins,
     private val cards: ItemCards,
-    private val recommendations: Recommendations,
+    private val explanations: Explanations,
     private val works: Works,
     private val suggestions: FacetSuggestions,
     private val sitesSay: SitesSay,
@@ -133,7 +134,7 @@ class ItemDetailsReader(
                 suggestions.chances(store, listOf(key.id))[key.id],
             )
         val names = namesOf(store, work, corrections)
-        val model = recommendations.details(key)
+        val model = explanations.details(key)
         val matches = ItemMatches(stores, type, key)
         return ItemDetails(
             summary = summary,
@@ -186,7 +187,7 @@ class ItemDetailsReader(
         }
 
     /** The reviews of the item [key], each with what it moves the [model] by and the user's mark of it. */
-    private fun reviews(store: SourceStore, key: ItemKey, model: Recommendations.Details): List<ReviewInfo> {
+    private fun reviews(store: SourceStore, key: ItemKey, model: Details): List<ReviewInfo> {
         val reviewMarks = store.marks.reviewMarksOf(key.id)
         return model.reviews.map { (r, influence) ->
             ReviewInfo(
@@ -202,7 +203,7 @@ class ItemDetailsReader(
     }
 
     /** The pictures of the item [key], each with what it moves the [model] by and the user's mark of it. */
-    private fun pictures(store: SourceStore, key: ItemKey, model: Recommendations.Details): List<PictureInfo> {
+    private fun pictures(store: SourceStore, key: ItemKey, model: Details): List<PictureInfo> {
         val pictureMarks = store.marks.pictureMarksOf(key.id)
         return store.pictures.ofItem(key.id, plugins.imageEncoder()?.id).map { p ->
             PictureInfo(
@@ -217,7 +218,7 @@ class ItemDetailsReader(
     }
 
     /** The parts of the item [key], each with what its text moves the [model] by. */
-    private fun parts(store: SourceStore, key: ItemKey, model: Recommendations.Details): List<PartInfo> =
+    private fun parts(store: SourceStore, key: ItemKey, model: Details): List<PartInfo> =
         store.parts.ofItem(key.id).map {
             PartInfo(
                 it.partId,

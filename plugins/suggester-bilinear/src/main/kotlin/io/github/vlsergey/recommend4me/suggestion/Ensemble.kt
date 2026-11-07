@@ -5,6 +5,8 @@ import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Simd
+import io.github.vlsergey.recommend4me.matrix.logisticRow
+import io.github.vlsergey.recommend4me.matrix.weightedLogisticRow
 import java.util.concurrent.CancellationException
 import kotlin.concurrent.withLock
 

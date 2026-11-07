@@ -128,9 +128,12 @@ internal class KernelObjective(
         Blas.times(k, n, n, n, q, kq, parts = 1)
         for (i in 0 until n) g[i] = kq[i] / count
         g[n] = 0.0
-        return (loss + 0.5 * penalty / c) / count
+        return (loss + HALF * penalty / c) / count
     }
 }
+
+/** The ½ of the penalty αᵀKα/2C: its gradient is then K·α/C. */
+private const val HALF = 0.5
 
 /** A fitted kernel ranking: the rows learnt from and the weight of each. */
 class KernelModel(val learnt: Matrix, val alpha: FloatArray) : FittedScorer {

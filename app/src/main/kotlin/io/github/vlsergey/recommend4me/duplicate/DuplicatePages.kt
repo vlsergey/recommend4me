@@ -91,7 +91,7 @@ class DuplicatePages(
         if (sort == DuplicateSort.FORMULA || sort == DuplicateSort.INTEREST || sort == DuplicateSort.GRADE)
             type.sources.forEach { s ->
                 val marks = s.interest.all()
-                type.models.predicted(s.id).forEach { (id, p) ->
+                type.predictions.predicted(s.id).forEach { (id, p) ->
                     val grade = p.score.coerceAtLeast(0.0)
                     val interest = Interest.chance(marks[id]?.interesting, p.interest) ?: 1.0
                     worth[ItemKey(s.id, id)] = sort.worth(grade, interest)

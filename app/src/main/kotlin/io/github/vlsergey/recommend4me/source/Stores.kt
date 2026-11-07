@@ -19,7 +19,9 @@ import io.github.vlsergey.recommend4me.item.ItemRepository
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.mark.MarkRepository
+import io.github.vlsergey.recommend4me.model.HeldOutRepository
 import io.github.vlsergey.recommend4me.model.ModelRepository
+import io.github.vlsergey.recommend4me.model.PredictionRepository
 import io.github.vlsergey.recommend4me.part.PartRepository
 import io.github.vlsergey.recommend4me.picture.PictureFiles
 import io.github.vlsergey.recommend4me.picture.PictureRepository
@@ -273,6 +275,8 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val tags = TagRepository(databases.dictionaries.dsl)
     val authors = AuthorRepository(databases.dictionaries.dsl)
     val models = ModelRepository(databases.model(type.id))
+    val predictions = PredictionRepository(databases.model(type.id))
+    val heldOut = HeldOutRepository(databases.model(type.id))
     val embeddings = SetEmbeddingRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))

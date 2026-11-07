@@ -45,7 +45,7 @@ class AgeRatingRepository(private val db: DSLContext) {
                     AGE_RATING_WEIGHT.WORKS,
                     AGE_RATING_WEIGHT.FITTED_AT,
                 )
-            chunk.forEach { (feature, w, n) -> insert.values(feature.take(200), w, n, now) }
+            chunk.forEach { (feature, w, n) -> insert.values(feature.take(FEATURE_LENGTH), w, n, now) }
             insert.execute()
         }
     }
@@ -53,6 +53,9 @@ class AgeRatingRepository(private val db: DSLContext) {
     companion object {
         private const val THRESHOLD = "threshold:"
         private const val BATCH = 1000
+
+        /** The length of the column of a feature's name: a longer one is cut to it. */
+        private const val FEATURE_LENGTH = 200
 
         fun tag(id: Long) = "tag:$id"
 

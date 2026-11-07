@@ -95,10 +95,13 @@ class KnnScorer : Scorer {
     }
 
     companion object {
+        /** The norm of a row of noughts is taken as this: its cosine is then nought, not a division by nought. */
+        private const val LEAST_NORM = 1e-9f
+
         private fun norm(v: FloatArray, d: Int): Float {
             var s = 0.0
             for (q in 0 until d) s += v[q].toDouble() * v[q]
-            return sqrt(s).toFloat().coerceAtLeast(1e-9f)
+            return sqrt(s).toFloat().coerceAtLeast(LEAST_NORM)
         }
     }
 }

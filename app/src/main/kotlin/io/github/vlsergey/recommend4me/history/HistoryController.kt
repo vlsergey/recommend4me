@@ -61,7 +61,7 @@ class HistoryController(private val stores: Stores, private val works: Works) : 
                                     )
                                 }
                             }
-                    val latest = (grades + marks).sortedByDescending { it.second }.take(limit.coerceIn(1, 1000))
+                    val latest = (grades + marks).sortedByDescending { it.second }.take(limit.coerceIn(1, MOST_ENTRIES))
                     if (latest.isEmpty()) return@flatMap emptyList()
                     val heads = s.items.heads(latest.map { it.first }.toSet())
                     val fields = s.corrections.allFields()
@@ -71,7 +71,10 @@ class HistoryController(private val stores: Stores, private val works: Works) : 
                 }
             }
         return ResponseEntity.ok(
-            entries.sortedByDescending { it.first }.take(limit.coerceIn(1, 1000)).map { it.second }
+            entries.sortedByDescending { it.first }.take(limit.coerceIn(1, MOST_ENTRIES)).map { it.second }
         )
     }
 }
+
+/** The most entries the history is asked for at once. */
+private const val MOST_ENTRIES = 1000

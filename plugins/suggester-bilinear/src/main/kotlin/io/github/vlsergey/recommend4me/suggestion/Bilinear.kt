@@ -4,6 +4,8 @@ import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.matrix.Simd
+import io.github.vlsergey.recommend4me.matrix.logisticRow
+import io.github.vlsergey.recommend4me.matrix.weightedLogisticRow
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.util.Collections

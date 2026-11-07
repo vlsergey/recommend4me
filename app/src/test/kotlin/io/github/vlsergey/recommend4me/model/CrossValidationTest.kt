@@ -68,10 +68,10 @@ class CrossValidationTest {
         val works = task.works
         val folds = CrossValidation.folds(grades, works)
         val k = (folds.maxOrNull() ?: 0) + 1
-        if (k < 2) return null
         val scores = DoubleArray(grades.size)
+        // Of fewer than two folds, none measured
         val perFold =
-            (0 until k).mapNotNull { fold ->
+            (if (k >= 2) 0 until k else IntRange.EMPTY).mapNotNull { fold ->
                 val train = grades.indices.filter { folds[it] != fold }.toIntArray()
                 val test = grades.indices.filter { folds[it] == fold }.toIntArray()
                 val rows = xFor?.invoke(test.map { works[it] }.toSet()) ?: task.x

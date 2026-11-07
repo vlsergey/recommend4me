@@ -39,6 +39,7 @@ import io.github.vlsergey.recommend4me.item.ItemsController
 import io.github.vlsergey.recommend4me.item.SearchController
 import io.github.vlsergey.recommend4me.marking.MarkingController
 import io.github.vlsergey.recommend4me.model.CatalogueReader
+import io.github.vlsergey.recommend4me.model.InputMeasures
 import io.github.vlsergey.recommend4me.model.MeasuringState
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.model.ScorerComparisons
@@ -386,6 +387,7 @@ class SiteTest {
     @Autowired lateinit var suggestions: FacetSuggestions
     @Autowired lateinit var universes: UniversesController
     @Autowired lateinit var recommendations: Recommendations
+    @Autowired lateinit var measures: InputMeasures
     @Autowired lateinit var comparisons: ScorerComparisons
     @Autowired lateinit var tagsApi: TagsController
     @Autowired lateinit var catalogueReader: CatalogueReader
@@ -791,7 +793,7 @@ class SiteTest {
         }
         inBackground { recommendations.retrainAndScore("books") }
         // What every part is worth: the ranking cross-validated without it, every part measured
-        val worth = inBackground { recommendations.worth("books")!! }
+        val worth = inBackground { measures.worth("books")!! }
         // The parts by the keys of their labels: the site's tags a standard facet, the title the standard text
         val tagLabel = "standard:facet.${Books.TAG.key}"
         assertTrue(

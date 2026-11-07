@@ -35,7 +35,7 @@ internal class NextPictures(private val stores: Stores) {
             if (graded.size >= limit) emptyList()
             else {
                 val todo = s.pictures.queue.itemsWithPending(encoder.id) - best.keys
-                val predictions = stores.typeOf(s.id).models.predictions(s.id)
+                val predictions = stores.typeOf(s.id).predictions.scores(s.id)
                 val order = todo.sortedByDescending { predictions[it] ?: Double.NEGATIVE_INFINITY }.take(limit)
                 s.pictures.queue.pendingOf(order, encoder.id, emptySet(), limit - graded.size)
             }

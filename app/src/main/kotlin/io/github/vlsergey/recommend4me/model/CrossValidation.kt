@@ -47,6 +47,9 @@ object CrossValidation {
     const val MIN_WORKS = 6
     private const val MAX_FOLDS = 5
 
+    /** A pair of the same score counts half right. */
+    private const val TIE = 0.5
+
     /** Fold of every rating: works dealt round-robin by their last grade, so every fold sees every grade. */
     fun folds(grades: IntArray, works: LongArray): IntArray {
         val distinct = works.distinct()
@@ -74,7 +77,7 @@ object CrossValidation {
         for (a in rows) for (b in rows) {
             if (grades[a] > grades[b] && works[a] != works[b]) {
                 val d = scores[a] - scores[b]
-                right += if (d > 0) 1.0 else if (d == 0.0) 0.5 else 0.0
+                right += if (d > 0) 1.0 else if (d == 0.0) TIE else 0.0
                 pairs++
             }
         }
