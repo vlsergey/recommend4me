@@ -23,10 +23,10 @@ class SignalRepository(private val db: DSLContext) : SiteSignals {
             db.insertInto(SITE_SIGNAL)
                 .set(SITE_SIGNAL.ITEM_ID, itemId)
                 .set(SITE_SIGNAL.SIGNAL, signal)
-                .set(SITE_SIGNAL.CONTENT, value.take(500))
+                .set(SITE_SIGNAL.CONTENT, value.take(CONTENT_LENGTH))
                 .set(SITE_SIGNAL.SEEN_AT, Instant.now())
                 .onDuplicateKeyUpdate()
-                .set(SITE_SIGNAL.CONTENT, value.take(500))
+                .set(SITE_SIGNAL.CONTENT, value.take(CONTENT_LENGTH))
                 .set(SITE_SIGNAL.SEEN_AT, Instant.now())
                 .execute()
         }
@@ -72,3 +72,6 @@ class SignalRepository(private val db: DSLContext) : SiteSignals {
         db.deleteFrom(SITE_SIGNAL).where(SITE_SIGNAL.ITEM_ID.eq(itemId)).execute()
     }
 }
+
+/** The length of the column of a signal's content: a longer one is cut to it. */
+private const val CONTENT_LENGTH = 500

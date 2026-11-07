@@ -19,8 +19,8 @@ import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.mark.MarkKind
 import io.github.vlsergey.recommend4me.model.ContributionGroup
+import io.github.vlsergey.recommend4me.model.Explanations
 import io.github.vlsergey.recommend4me.model.LabelledContribution
-import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.Stores
@@ -55,7 +55,7 @@ class ItemDetailsReader(
     private val stores: Stores,
     private val plugins: Plugins,
     private val cards: ItemCards,
-    private val recommendations: Recommendations,
+    private val explanations: Explanations,
     private val works: Works,
     private val suggestions: FacetSuggestions,
     private val sitesSay: SitesSay,
@@ -94,7 +94,7 @@ class ItemDetailsReader(
         val texts = Corrected.texts(siteTexts, fields)
         val siteNumbers = store.items.numbers(key.id)
         val numbers = Corrected.numbers(siteNumbers, fields)
-        val model = recommendations.details(key)
+        val model = explanations.details(key)
         val encoder = plugins.imageEncoder()?.id
         val pictureMarks = store.marks.pictureMarksOf(key.id)
         val pictures = store.pictures.ofItem(key.id, encoder)

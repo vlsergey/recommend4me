@@ -370,8 +370,8 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 val versions =
                     ids.mapNotNull { id -> heads[ItemKey(source, id)]?.first?.let { id to it.version } }.toMap()
                 val graded = graded(ratings, versions)
-                val predicted = type.models.predicted(source)
-                val heldOut = type.models.heldOut(source)
+                val predicted = type.predictions.predicted(source)
+                val heldOut = type.heldOut.scores(source)
                 val interest = store.interest.all()
                 val signals = store.signals.all()
                 ids.forEach { id ->

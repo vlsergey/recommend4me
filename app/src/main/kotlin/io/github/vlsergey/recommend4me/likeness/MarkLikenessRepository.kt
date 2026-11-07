@@ -37,7 +37,7 @@ class MarkLikenessRepository(private val db: DSLContext) {
             .forEach { (source, keys) ->
                 keys
                     .map { it.id }
-                    .chunked(1000)
+                    .chunked(IDS_A_QUERY)
                     .forEach { ids ->
                         db.select(MARK_LIKENESS_STRENGTH.ITEM_ID, MARK_LIKENESS_STRENGTH.STRENGTH)
                             .from(MARK_LIKENESS_STRENGTH)
@@ -53,7 +53,7 @@ class MarkLikenessRepository(private val db: DSLContext) {
         db.select(MARK_LIKENESS_AXES.SOURCE, MARK_LIKENESS_AXES.ITEM_ID, MARK_LIKENESS_AXES.AXES)
             .from(MARK_LIKENESS_AXES)
             .where(MARK_LIKENESS_AXES.MARK_KIND.eq(kind.name))
-            .fetchSize(5000)
+            .fetchSize(FETCH)
             .fetchLazy()
             .use { cursor ->
                 cursor.forEach { axes[ItemKey(it.value1()!!, it.value2()!!)] = Vectors.unpack(it.value3()!!) }
@@ -135,5 +135,11 @@ class MarkLikenessRepository(private val db: DSLContext) {
 
     companion object {
         private const val BATCH = 1000
+
+        /** The ids one query reads by IN: the size of a statement, not meaning. */
+        private const val IDS_A_QUERY = 1000
+
+        /** The rows of every work's axes fetched at a time: memory, not meaning. */
+        private const val FETCH = 5000
     }
 }

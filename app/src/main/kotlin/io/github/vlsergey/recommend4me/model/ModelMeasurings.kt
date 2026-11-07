@@ -19,14 +19,14 @@ class Measuring<T : Any>(val startedAt: Instant) {
 }
 
 /**
- * THE MEASURINGS OF A MODEL ASKED FOR — what every part of the input is worth ([Recommendations.worth]), whether
- * weighing the parts would rank better ([Recommendations.weighing]) — IN THE BACKGROUND: each takes from a dozen
- * trainings to hundreds, in the queue of the computations, and the request that asks does not wait for them
+ * THE MEASURINGS OF A MODEL ASKED FOR — what every part of the input is worth ([InputMeasures.worth]), whether weighing
+ * the parts would rank better ([InputMeasures.weighing]) — IN THE BACKGROUND: each takes from a dozen trainings to
+ * hundreds, in the queue of the computations, and the request that asks does not wait for them
  * ([io.github.vlsergey.recommend4me.workload.Requests]). Nothing is kept but the measuring of every type last started,
  * while the application runs: it is a measuring, not data. A measuring under way is not started again.
  */
 @Component
-class ModelMeasurings(private val recommendations: Recommendations) {
+class ModelMeasurings(private val measures: InputMeasures) {
     private val worth = ConcurrentHashMap<String, Measuring<ModelWorth>>()
     private val weighing = ConcurrentHashMap<String, Measuring<Weighing>>()
     private val executor = Executors.newSingleThreadExecutor { r ->
@@ -38,10 +38,10 @@ class ModelMeasurings(private val recommendations: Recommendations) {
     fun weighingOf(typeId: String): Measuring<Weighing>? = weighing[typeId]
 
     fun measureWorth(typeId: String): Measuring<ModelWorth> =
-        start(worth, typeId, "part worth") { recommendations.worth(typeId) }
+        start(worth, typeId, "part worth") { measures.worth(typeId) }
 
     fun measureWeighing(typeId: String, cautious: Boolean): Measuring<Weighing> =
-        start(weighing, typeId, "weighing") { recommendations.weighing(typeId, cautious) }
+        start(weighing, typeId, "weighing") { measures.weighing(typeId, cautious) }
 
     private fun <T : Any> start(
         of: ConcurrentHashMap<String, Measuring<T>>,
@@ -53,6 +53,9 @@ class ModelMeasurings(private val recommendations: Recommendations) {
             if (running != null && running.finishedAt == null) return@compute running
             Measuring<T>(Instant.now()).also { m ->
                 executor.submit {
+                    // The boundary of the measurings' thread: whatever a measuring throws is logged and ends it,
+                    // the next measuring asked for still runs
+                    @Suppress("TooGenericExceptionCaught")
                     try {
                         m.result = body()
                     } catch (e: Exception) {

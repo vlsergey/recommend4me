@@ -24,7 +24,10 @@ import io.github.vlsergey.recommend4me.correction.FacetValues
 import io.github.vlsergey.recommend4me.mark.MarkKind
 import io.github.vlsergey.recommend4me.mark.MarksChanged
 import io.github.vlsergey.recommend4me.mark.ThingRef
-import io.github.vlsergey.recommend4me.model.Recommendations
+import io.github.vlsergey.recommend4me.model.Explanations
+import io.github.vlsergey.recommend4me.model.HeldOutModels
+import io.github.vlsergey.recommend4me.model.HeldOutRead
+import io.github.vlsergey.recommend4me.model.Scoring
 import io.github.vlsergey.recommend4me.picture.PictureService
 import io.github.vlsergey.recommend4me.picture.Served
 import io.github.vlsergey.recommend4me.rating.Grades
@@ -62,7 +65,9 @@ class ItemsController(
     private val details: ItemDetailsReader,
     private val pictures: PictureService,
     private val contexts: SourceContexts,
-    private val recommendations: Recommendations,
+    private val heldOuts: HeldOutModels,
+    private val explanations: Explanations,
+    private val scoring: Scoring,
     private val events: ApplicationEventPublisher,
     private val removal: ItemRemoval,
     private val workEvents: WorkEvents,
@@ -216,10 +221,10 @@ class ItemsController(
         val key = ItemKey(source, item)
         // Of a graded work, the model's that had not seen it, once worked out
         val groups =
-            when (val h = recommendations.heldOut(key)) {
-                is Recommendations.HeldOutRead.Ready -> h.heldOut.explanation
-                Recommendations.HeldOutRead.Planned -> return ResponseEntity.accepted().build()
-                Recommendations.HeldOutRead.None -> recommendations.explanation(key)
+            when (val h = heldOuts.heldOut(key)) {
+                is HeldOutRead.Ready -> h.heldOut.explanation
+                HeldOutRead.Planned -> return ResponseEntity.accepted().build()
+                HeldOutRead.None -> explanations.explanation(key)
             }
         return ResponseEntity.ok(groups.map { it.toApi(withFeatures = false) })
     }
@@ -227,13 +232,13 @@ class ItemsController(
     override fun getHeldOut(source: String, item: String): ResponseEntity<ApiHeldOut> {
         val store = stores.source(source) ?: return ResponseEntity.notFound().build()
         if (store.items.find(item) == null) return ResponseEntity.notFound().build()
-        return when (val h = recommendations.heldOut(ItemKey(source, item))) {
-            is Recommendations.HeldOutRead.Ready ->
+        return when (val h = heldOuts.heldOut(ItemKey(source, item))) {
+            is HeldOutRead.Ready ->
                 ResponseEntity.ok(
                     ApiHeldOut(h.heldOut.score, h.heldOut.explanation.map { it.toApi() }, h.heldOut.gradePlace)
                 )
-            Recommendations.HeldOutRead.Planned -> ResponseEntity.accepted().build()
-            Recommendations.HeldOutRead.None -> ResponseEntity.noContent().build()
+            HeldOutRead.Planned -> ResponseEntity.accepted().build()
+            HeldOutRead.None -> ResponseEntity.noContent().build()
         }
     }
 
@@ -262,7 +267,7 @@ class ItemsController(
                 "The source $source could not download the page of $item",
             )
         // Its texts encoded in the queue of the computations, as every written work's: not waited for here
-        recommendations.scoreItem(ItemKey(source, item))
+        scoring.scoreItem(ItemKey(source, item))
         return getItem(source, item)
     }
 

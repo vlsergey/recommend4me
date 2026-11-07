@@ -181,7 +181,7 @@ class PictureService(
                         if (graded.size >= limit) emptyList()
                         else {
                             val todo = s.pictures.itemsWithPending(encoder.id) - best.keys
-                            val predictions = stores.typeOf(s.id).models.predictions(s.id)
+                            val predictions = stores.typeOf(s.id).predictions.scores(s.id)
                             val order =
                                 todo.sortedByDescending { predictions[it] ?: Double.NEGATIVE_INFINITY }.take(limit)
                             s.pictures.pendingOf(order, encoder.id, emptySet(), limit - graded.size)

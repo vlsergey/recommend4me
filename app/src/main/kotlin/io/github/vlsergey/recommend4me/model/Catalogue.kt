@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.encoder.ImageEncoder
+import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.interest.InterestMark
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -9,7 +11,9 @@ import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Rating
+import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.setvector.SetVectors
+import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -120,17 +124,10 @@ class CatalogueReader(
      */
     fun read(type: TypeStore, withLikeness: Boolean = true, also: Collection<ItemKey> = emptyList()): Catalogue {
         val started = System.currentTimeMillis()
-        val textEncoder = plugins.textEncoder()
-        val imageEncoder = plugins.imageEncoder()
-        val embeddings = type.embeddings.ids()
         val severalSources = type.sources.size > 1
         val items = ArrayList<CatalogueItem>()
-        val vectors = HashMap<ItemKey, HashMap<String, FloatArray>>()
-        val spreads = VectorSpreads()
         val ratings = ArrayList<TypedRating>()
         val interest = HashMap<ItemKey, InterestMark>()
-        val centerSum = imageEncoder?.let { DoubleArray(it.dim) }
-        var pictures = 0
         // The works a training reads, known before the vectors are: of them alone the vectors are kept
         type.sources.forEach { s ->
             ratings += s.ratings.all().map { TypedRating(ItemKey(s.id, it.itemId), it.version, it.grade, it.ratedAt) }
@@ -145,43 +142,17 @@ class CatalogueReader(
                 addAll(also)
             }
 
+        val reading = VectorReading(kept, plugins.textEncoder(), plugins.imageEncoder(), type.embeddings.ids())
         type.sources.forEach { s ->
             val laps = Laps()
             items += readItems(s, severalSources, laps = laps)
-            var count = 0
-            fun put(id: String, block: String, v: FloatArray) {
-                count++
-                spreads.add(block, v)
-                val key = ItemKey(s.id, id)
-                if (key in kept) vectors.getOrPut(key) { HashMap() }[block] = v
-            }
-            if (textEncoder != null) {
-                // The title and the site's lines too: every text that has vectors
-                val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
-                s.textVectors.forEach(textEncoder.id, blocks.keys) { id, key, v -> put(id, blocks.getValue(key), v) }
-                laps.lap("text vectors", count)
-            }
-            if (imageEncoder != null) {
-                count = 0
-                s.pictures.forEachItemVector(imageEncoder.id) { id, block, v ->
-                    put(id, block, v)
-                    if (v.size == centerSum!!.size) {
-                        for (k in v.indices) centerSum[k] += v[k].toDouble()
-                        pictures++
-                    }
-                }
-                laps.lap("picture vectors", count)
-            }
-            count = 0
-            s.setVectors.forEach(embeddings) { id, key, v -> put(id, key, v) }
-            laps.lap("set vectors", count)
+            reading.read(s, laps)
             log.info("{}/{}: catalogue read in ms: {}", type.id, s.id, laps)
         }
         val read = System.currentTimeMillis()
         val graded = items.map { it.key }.toSet().let { keys -> ratings.map { it.key }.filter { it in keys }.toSet() }
-        val center =
-            centerSum?.takeIf { pictures > 0 }?.let { sum -> FloatArray(sum.size) { (sum[it] / pictures).toFloat() } }
-        val likeness = if (withLikeness) likenesses.forTraining(type, center, graded) else likenesses.stored(type)
+        val likeness =
+            if (withLikeness) likenesses.forTraining(type, reading.center(), graded) else likenesses.stored(type)
         val numbers =
             FeatureLayout.numberSpreads(
                 items
@@ -189,7 +160,8 @@ class CatalogueReader(
                     .map { ItemInput(it.key, emptyMap(), emptySet(), it.numeric) }
             )
         val made = System.currentTimeMillis()
-        return catalogue(type, items, ratings, vectors, likeness, interest, Averages(spreads.spreads(), numbers)).also {
+        val averages = Averages(reading.spreads.spreads(), numbers)
+        return catalogue(type, items, ratings, reading.vectors, likeness, interest, averages).also {
             log.info(
                 "{}: catalogue of {} works read of {} items in {} ms, the vectors of {} kept, likeness in {} ms",
                 type.id,
@@ -326,22 +298,12 @@ class CatalogueReader(
                 .keys()
                 .filter { wanted == null || it.id in wanted }
                 .map { k ->
-                    val categorical = LinkedHashSet<String>()
                     val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
-                    TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets)
-                        .forEach { (facet, keys) ->
-                            val facetId = facetIds[facet] ?: return@forEach
-                            val unread = ignored[facet]
-                            keys.forEach { if (unread == null || it !in unread) categorical += feature(facetId, it) }
-                        }
+                    val corrected =
+                        TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets)
+                    val categorical = categoricalOf(corrected, facetIds, ignored, ::feature)
                     if (severalSources) categorical += source
-                    val numeric =
-                        Corrected.numbers(numbers[k.id].orEmpty(), fields[k.id].orEmpty())
-                            .mapNotNull { (key, value) ->
-                                val def = numberDefs[key] ?: return@mapNotNull null
-                                FeatureNames.number(FeatureNames.numberId(s.source, def)) to transform(def.scale, value)
-                            }
-                            .toMap()
+                    val numeric = numericOf(s, numberDefs, numbers[k.id].orEmpty(), fields[k.id].orEmpty())
                     CatalogueItem(ItemKey(s.id, k.id), k.version, k.updatedAt, categorical, numeric)
                 }
         laps.lap("items", made.size)
@@ -351,29 +313,25 @@ class CatalogueReader(
     /** One item as the model reads it, without its vectors; null when there is no such item. */
     fun item(type: TypeStore, key: ItemKey): CatalogueItem? {
         val s = type.source(key.source) ?: return null
-        val head = s.items.find(key.id) ?: return null
-        val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
-        val categorical = LinkedHashSet<String>()
-        val wanted = s.schema.facets.filter { it.infer && it.feature }.map { it.key }
-        val base =
-            ModelValues.of(s.schema, s.items.facets(key.id), suggestions.chancesOf(s, listOf(key.id), wanted)[key.id])
-        val ignored = s.ignoredTags()
-        TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies(), s.singleFacets).forEach {
-            (facet, keys) ->
-            val facetId = facetIds[facet] ?: return@forEach
-            val unread = ignored[facet]
-            keys.forEach { if (unread == null || it !in unread) categorical += FeatureNames.facet(facetId, it) }
+        return s.items.find(key.id)?.let { head ->
+            val facetIds =
+                s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
+            val wanted = s.schema.facets.filter { it.infer && it.feature }.map { it.key }
+            val base =
+                ModelValues.of(
+                    s.schema,
+                    s.items.facets(key.id),
+                    suggestions.chancesOf(s, listOf(key.id), wanted)[key.id],
+                )
+            val ignored = s.ignoredTags()
+            val corrected =
+                TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies(), s.singleFacets)
+            val categorical = categoricalOf(corrected, facetIds, ignored, FeatureNames::facet)
+            if (type.sources.size > 1) categorical += "source:${s.id}"
+            val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
+            val numeric = numericOf(s, numberDefs, s.items.numbers(key.id), s.corrections.fieldsOf(key.id))
+            CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)
         }
-        if (type.sources.size > 1) categorical += "source:${s.id}"
-        val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
-        val numeric =
-            Corrected.numbers(s.items.numbers(key.id), s.corrections.fieldsOf(key.id))
-                .mapNotNull { (k, value) ->
-                    val def = numberDefs[k] ?: return@mapNotNull null
-                    FeatureNames.number(FeatureNames.numberId(s.source, def)) to transform(def.scale, value)
-                }
-                .toMap()
-        return CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)
     }
 
     /**
@@ -406,24 +364,34 @@ class CatalogueReader(
         val out = HashMap<ItemKey, HashMap<String, FloatArray>>()
         val embeddings = type.embeddings.ids()
         keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
-            val s = type.source(source) ?: return@forEach
-            fun put(id: String, block: String, v: FloatArray) {
-                out.getOrPut(ItemKey(source, id)) { HashMap() }[block] = v
-            }
-            plugins.textEncoder()?.let { encoder ->
-                val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
-                s.textVectors.ofMany(ids, encoder.id).forEach { (id, texts) ->
-                    texts.forEach { (k, v) -> blocks[k]?.let { put(id, it, v) } }
+            type.source(source)?.let { s ->
+                vectorsOf(s, ids, embeddings) { id, block, v ->
+                    out.getOrPut(ItemKey(source, id)) { HashMap() }[block] = v
                 }
             }
-            plugins.imageEncoder()?.let { encoder ->
-                s.pictures.itemVectorsOf(ids, encoder.id).forEach { (id, blocks) ->
-                    blocks.forEach { (b, v) -> put(id, b, v) }
-                }
-            }
-            s.setVectors.ofMany(ids, embeddings).forEach { (id, blocks) -> blocks.forEach { (b, v) -> put(id, b, v) } }
         }
         return out
+    }
+
+    /** The vectors of the items [ids] of the source [s], every one handed to [put]: of texts, of pictures, of sets. */
+    private fun vectorsOf(
+        s: SourceStore,
+        ids: List<String>,
+        embeddings: Map<SetKind, Long>,
+        put: (id: String, block: String, v: FloatArray) -> Unit,
+    ) {
+        plugins.textEncoder()?.let { encoder ->
+            val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
+            s.textVectors.ofMany(ids, encoder.id).forEach { (id, texts) ->
+                texts.forEach { (k, v) -> blocks[k]?.let { put(id, it, v) } }
+            }
+        }
+        plugins.imageEncoder()?.let { encoder ->
+            s.pictures.itemVectorsOf(ids, encoder.id).forEach { (id, blocks) ->
+                blocks.forEach { (b, v) -> put(id, b, v) }
+            }
+        }
+        s.setVectors.ofMany(ids, embeddings).forEach { (id, blocks) -> blocks.forEach { (b, v) -> put(id, b, v) } }
     }
 
     companion object {
@@ -471,5 +439,93 @@ class CatalogueReader(
             )
 
         fun rating(s: SourceStore, r: Rating) = TypedRating(ItemKey(s.id, r.itemId), r.version, r.grade, r.ratedAt)
+    }
+}
+
+/**
+ * The categorical features of an item of the facet values [corrected] — the user's word over the site's and the
+ * model's: every value of a facet of the model ([facetIds]: facet to its id) but those the user ignores, named by
+ * [name].
+ */
+private fun categoricalOf(
+    corrected: Map<String, List<String>>,
+    facetIds: Map<String, String>,
+    ignored: Map<String, Set<String>>,
+    name: (facetId: String, key: String) -> String,
+): LinkedHashSet<String> {
+    val categorical = LinkedHashSet<String>()
+    corrected.forEach { (facet, keys) ->
+        val facetId = facetIds[facet] ?: return@forEach
+        val unread = ignored[facet]
+        keys.forEach { if (unread == null || it !in unread) categorical += name(facetId, it) }
+    }
+    return categorical
+}
+
+/**
+ * The numeric features of an item of the source [s]: its [numbers] with the user's [fields] over them, of the numbers
+ * of the model ([numberDefs]), each on its scale.
+ */
+private fun numericOf(
+    s: SourceStore,
+    numberDefs: Map<String, NumberDef>,
+    numbers: Map<String, Double>,
+    fields: Map<String, String>,
+): Map<String, Float> =
+    Corrected.numbers(numbers, fields)
+        .mapNotNull { (key, value) ->
+            val def = numberDefs[key] ?: return@mapNotNull null
+            FeatureNames.number(FeatureNames.numberId(s.source, def)) to CatalogueReader.transform(def.scale, value)
+        }
+        .toMap()
+
+/**
+ * The vectors of a catalogue's items read as they stream past, a source at a time: the spread of every block counted of
+ * all of them, the vectors of the works the training reads ([kept]) alone kept, and the mean of the pictures.
+ */
+private class VectorReading(
+    private val kept: Set<ItemKey>,
+    private val textEncoder: TextEncoder?,
+    private val imageEncoder: ImageEncoder?,
+    private val embeddings: Map<SetKind, Long>,
+) {
+    val vectors = HashMap<ItemKey, HashMap<String, FloatArray>>()
+    val spreads = VectorSpreads()
+    private val centerSum = imageEncoder?.let { DoubleArray(it.dim) }
+    private var pictures = 0
+
+    /** The mean vector of the pictures read; null of none. */
+    fun center(): FloatArray? =
+        centerSum?.takeIf { pictures > 0 }?.let { sum -> FloatArray(sum.size) { (sum[it] / pictures).toFloat() } }
+
+    /** Every vector of the source [s]: of its texts, its pictures and its sets, each kind's time a lap of [laps]. */
+    fun read(s: SourceStore, laps: Laps) {
+        var count = 0
+        fun put(id: String, block: String, v: FloatArray) {
+            count++
+            spreads.add(block, v)
+            val key = ItemKey(s.id, id)
+            if (key in kept) vectors.getOrPut(key) { HashMap() }[block] = v
+        }
+        if (textEncoder != null) {
+            // The title and the site's lines too: every text that has vectors
+            val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
+            s.textVectors.forEach(textEncoder.id, blocks.keys) { id, key, v -> put(id, blocks.getValue(key), v) }
+            laps.lap("text vectors", count)
+        }
+        if (imageEncoder != null) {
+            count = 0
+            s.pictures.forEachItemVector(imageEncoder.id) { id, block, v ->
+                put(id, block, v)
+                if (v.size == centerSum!!.size) {
+                    for (k in v.indices) centerSum[k] += v[k].toDouble()
+                    pictures++
+                }
+            }
+            laps.lap("picture vectors", count)
+        }
+        count = 0
+        s.setVectors.forEach(embeddings) { id, key, v -> put(id, key, v) }
+        laps.lap("set vectors", count)
     }
 }

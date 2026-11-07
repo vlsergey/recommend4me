@@ -55,7 +55,7 @@ class SourceContexts(
 
         override fun itemsInOrder(): List<String> {
             val graded = store.ratings.gradedItems()
-            val predictions = stores.typeOf(store.id).models.predictions(store.id)
+            val predictions = stores.typeOf(store.id).predictions.scores(store.id)
             return store.items
                 .keys()
                 .sortedWith(

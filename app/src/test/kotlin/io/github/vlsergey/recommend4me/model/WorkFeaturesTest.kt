@@ -11,8 +11,9 @@ class WorkFeaturesTest {
     private val a = ItemKey("alpha", "1")
     private val b = ItemKey("beta", "2")
 
+    /** Of a number both items have, the mean; of the version, that of the item that names it. */
     @Test
-    fun `a work of two items has what either has, of a number both have the mean, the version of the item that names it`() {
+    fun `a work of two items has what either has`() {
         val first =
             CatalogueItem(
                 a,

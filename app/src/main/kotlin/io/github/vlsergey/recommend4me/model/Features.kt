@@ -87,7 +87,7 @@ class VectorSpreads {
         val centerSquare = sum.sumOf { (it / n) * (it / n) }
         VectorSpread(
             center,
-            sqrt((squares.getValue(key) / n - centerSquare).coerceAtLeast(0.0)).toFloat().coerceAtLeast(1e-6f),
+            sqrt((squares.getValue(key) / n - centerSquare).coerceAtLeast(0.0)).toFloat().coerceAtLeast(LEAST_SPREAD),
         )
     }
 }
@@ -195,3 +195,6 @@ class FeatureLayout(
         }
     }
 }
+
+/** The least spread of a vector's numbers: of a vector alike in every work, a division by it, not by nought. */
+private const val LEAST_SPREAD = 1e-6f

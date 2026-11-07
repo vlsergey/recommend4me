@@ -46,7 +46,7 @@ class ScorerComparison(val startedAt: Instant, val scorers: List<ScorerMeasure>)
  */
 @Component
 class ScorerComparisons(
-    private val recommendations: Recommendations,
+    private val measures: InputMeasures,
     private val plugins: Plugins,
     private val workload: Workload,
 ) {
@@ -77,8 +77,11 @@ class ScorerComparisons(
     private fun keyOf(typeId: String, interest: Boolean) = if (interest) "$typeId/interest" else typeId
 
     private fun run(typeId: String, interest: Boolean, comparison: ScorerComparison) {
+        // The boundary of the comparison's thread: whatever stops it fails the scorers not measured yet, and the
+        // comparison is finished all the same
+        @Suppress("TooGenericExceptionCaught")
         try {
-            val input = recommendations.measuringInput(typeId, interest)
+            val input = measures.measuringInput(typeId, interest)
             if (input == null) {
                 comparison.scorers.forEach { it.state = MeasuringState.DONE }
                 return
@@ -94,6 +97,8 @@ class ScorerComparisons(
                 }
                 measure.state = MeasuringState.MEASURING
                 val started = System.currentTimeMillis()
+                // A scorer is a plugin: whatever its fitting throws fails its own measure, the others are measured
+                @Suppress("TooGenericExceptionCaught")
                 try {
                     val candidates = CrossValidation.measureAll(input.task, scorer, input.xFor)
                     measure.candidates = candidates.map { it.result() }

@@ -41,6 +41,9 @@ object GroupWeights {
     /** The group of every small part. */
     const val REST = "rest"
 
+    /** The concordance of a fold none of whose pairs could be told apart: a coin's. */
+    private const val CHANCE = 0.5
+
     /** The groups of the [columns] of every part: the large ones by themselves, the rest together. */
     fun groups(columns: Map<String, List<Int>>): List<ColumnGroup> {
         val (large, small) = columns.entries.partition { it.value.size >= OWN_GROUP }
@@ -90,30 +93,53 @@ object GroupWeights {
         cautious: Boolean = true,
     ): TunedWeights {
         val weights = DoubleArray(groups.size) { 1.0 }
-        var current = measure(task, xFor, scorer, groups, weights)?.metrics ?: return TunedWeights(weights, null)
-        repeat(PASSES) {
-            var changed = false
-            groups.indices.forEach { g ->
-                val tried =
-                    GRID.associateWith { w ->
-                            if (w == weights[g]) current
-                            else measure(task, xFor, scorer, groups, weights.copyOf().also { it[g] = w })?.metrics
-                        }
-                        .filterValues { it != null }
-                        .mapValues { it.value!! }
-                val best = tried.values.maxOf { it.concordance }
-                val limit = if (cautious) best - tried.values.maxBy { it.concordance }.concordanceSe else best
-                // Of those within the error of the best, the nearest to 1 — the weight of no choice
-                val chosen = tried.filterValues { it.concordance >= limit }.keys.minBy { distanceFromOne(it) }
-                if (chosen != weights[g]) {
-                    weights[g] = chosen
-                    current = tried.getValue(chosen)
-                    changed = true
-                }
-            }
-            if (!changed) return TunedWeights(weights, current)
+        var current = measure(task, xFor, scorer, groups, weights)?.metrics
+        // A turn that changed nothing ends the turns
+        var changed = current
+        var passes = 0
+        while (changed != null && passes < PASSES) {
+            changed = pass(task, xFor, scorer, groups, weights, changed, cautious)
+            if (changed != null) current = changed
+            passes++
         }
         return TunedWeights(weights, current)
+    }
+
+    /**
+     * One turn over the [groups]: the weight of every group in turn chosen of [GRID], the others as [weights] has them
+     * — changed in place; [current] the quality of them as they were. The quality of the last change, null when none
+     * changed.
+     */
+    private fun pass(
+        task: RankingTask,
+        xFor: ((Set<Long>) -> Matrix)?,
+        scorer: Scorer,
+        groups: List<ColumnGroup>,
+        weights: DoubleArray,
+        current: RankingMetrics,
+        cautious: Boolean,
+    ): RankingMetrics? {
+        var now = current
+        var changed = false
+        groups.indices.forEach { g ->
+            val tried =
+                GRID.associateWith { w ->
+                        if (w == weights[g]) now
+                        else measure(task, xFor, scorer, groups, weights.copyOf().also { it[g] = w })?.metrics
+                    }
+                    .filterValues { it != null }
+                    .mapValues { it.value!! }
+            val best = tried.values.maxOf { it.concordance }
+            val limit = if (cautious) best - tried.values.maxBy { it.concordance }.concordanceSe else best
+            // Of those within the error of the best, the nearest to 1 — the weight of no choice
+            val chosen = tried.filterValues { it.concordance >= limit }.keys.minBy { distanceFromOne(it) }
+            if (chosen != weights[g]) {
+                weights[g] = chosen
+                now = tried.getValue(chosen)
+                changed = true
+            }
+        }
+        return now.takeIf { changed }
     }
 
     /** How far a weight is from 1, on the scale of ratios; 0 the farthest of all. */
@@ -170,7 +196,7 @@ object GroupWeights {
                     )
                 val fitted = scorer.fit(weighed, IntArray(kept.size) { it }, chosen)
                 val scores = fitted.scores(scaled(rowsAll, groups, weights)).map { it.toDouble() }.toDoubleArray()
-                return CrossValidation.concordance(grades, works, test, scores) ?: 0.5
+                return CrossValidation.concordance(grades, works, test, scores) ?: CHANCE
             }
             val baseline = ranked(DoubleArray(groups.size) { 1.0 })
             val tuned = tune(innerTask, innerFor, scorer, groups, cautious)

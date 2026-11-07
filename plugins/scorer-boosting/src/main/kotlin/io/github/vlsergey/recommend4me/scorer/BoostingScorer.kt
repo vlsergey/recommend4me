@@ -75,8 +75,11 @@ class BoostingScorer : Scorer {
                 h[b] += second
             }
             for (k in pairs.better.indices) pair(pairs.better[k], pairs.worse[k], 1.0, 1.0)
-            for (k in pairs.first.indices) pair(pairs.first[k], pairs.second[k], pairs.equalWeight, 0.5)
+            for (k in pairs.first.indices) pair(pairs.first[k], pairs.second[k], pairs.equalWeight, EVEN)
         }
+
+        /** The chance of a pair graded alike that the first is the better: neither is. */
+        private const val EVEN = 0.5
     }
 }
 
@@ -119,7 +122,119 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
         nodes += Node()
         // Level by level: the rows of every node of the level are split at once, a pass a feature;
         // the sums of a node kept by its number — a tree has few
-        val most = (1 shl (BoostingScorer.DEPTH + 1))
+        val splits = Splits(1 shl (BoostingScorer.DEPTH + 1))
+        var level = listOf(0)
+        for (depth in 0 until BoostingScorer.DEPTH) {
+            if (level.isEmpty()) break
+            splits.start(level)
+            sumLevel(splits, g, h)
+            for (f in features) findSplits(splits, f, g, h)
+            level = branch(level, splits, nodes)
+            descend(splits, nodes)
+        }
+        return leaves(nodes, g, h)
+    }
+
+    /** The sums of the derivatives and the number of rows of every node of the level. */
+    private fun sumLevel(splits: Splits, g: DoubleArray, h: DoubleArray) {
+        val inLevel = splits.inLevel
+        val sumG = splits.sumG
+        val sumH = splits.sumH
+        val rowsOf = splits.rowsOf
+        for (k in 0 until m) {
+            val n = node[k]
+            if (!inLevel[n]) continue
+            sumG[n] += g[learnt[k]]
+            sumH[n] += h[learnt[k]]
+            rowsOf[n]++
+        }
+    }
+
+    /**
+     * One pass over the rows of the feature [f] in the order of its value: every node of the level keeps the split by
+     * it if it gains more than the best found before.
+     */
+    private fun findSplits(splits: Splits, f: Int, g: DoubleArray, h: DoubleArray) {
+        splits.startFeature()
+        val inLevel = splits.inLevel
+        val leftG = splits.leftG
+        val leftH = splits.leftH
+        val leftRows = splits.leftRows
+        val lastValue = splits.lastValue
+        for (k in sorted[f]) {
+            val n = node[k]
+            if (!inLevel[n]) continue
+            val value = values[k][f]
+            val lr = leftRows[n]
+            // A split between two different values, both sides big enough
+            if (
+                lr >= BoostingScorer.LEAST_ROWS &&
+                    splits.rowsOf[n] - lr >= BoostingScorer.LEAST_ROWS &&
+                    value > lastValue[n]
+            ) {
+                splits.offer(n, f, (lastValue[n] + value) / 2)
+            }
+            leftG[n] += g[learnt[k]]
+            leftH[n] += h[learnt[k]]
+            leftRows[n] = lr + 1
+            lastValue[n] = value
+        }
+    }
+
+    /** The nodes of the level that found a split get their two children; the children are the next level. */
+    private fun branch(level: List<Int>, splits: Splits, nodes: ArrayList<Node>): List<Int> {
+        val next = ArrayList<Int>()
+        level.forEach { n ->
+            if (splits.feature[n] < 0) return@forEach
+            val left = nodes.size
+            nodes += Node()
+            nodes += Node()
+            nodes[n].feature = splits.feature[n]
+            nodes[n].threshold = splits.threshold[n]
+            nodes[n].left = left
+            next += left
+            next += left + 1
+        }
+        return next
+    }
+
+    /** Every row of a node of the level that was split goes down to the child its value falls in. */
+    private fun descend(splits: Splits, nodes: List<Node>) {
+        for (k in 0 until m) {
+            val n = node[k]
+            if (!splits.inLevel[n] || nodes[n].left < 0) continue
+            node[k] = if (values[k][nodes[n].feature] < nodes[n].threshold) nodes[n].left else nodes[n].left + 1
+        }
+    }
+
+    /** The leaves: Newton's step, shrunk. */
+    private fun leaves(nodes: List<Node>, g: DoubleArray, h: DoubleArray): Tree {
+        val leafG = DoubleArray(nodes.size)
+        val leafH = DoubleArray(nodes.size)
+        for (k in 0 until m) {
+            leafG[node[k]] += g[learnt[k]]
+            leafH[node[k]] += h[learnt[k]]
+        }
+        nodes.forEachIndexed { n, leaf ->
+            if (leaf.left < 0) {
+                leaf.value = (-BoostingScorer.RATE * leafG[n] / (leafH[n] + BoostingScorer.L2)).toFloat()
+            }
+        }
+        return Tree(
+            IntArray(nodes.size) { nodes[it].feature },
+            FloatArray(nodes.size) { nodes[it].threshold },
+            IntArray(nodes.size) { nodes[it].left },
+            FloatArray(nodes.size) { nodes[it].value },
+        )
+    }
+
+    private class Node(var feature: Int = -1, var threshold: Float = 0f, var left: Int = -1, var value: Float = 0f)
+
+    /**
+     * The nodes of a level, kept by their numbers: the sums of their rows' derivatives, the left side of the pass over
+     * a feature, and the best split found for each.
+     */
+    private class Splits(most: Int) {
         val inLevel = BooleanArray(most)
         val sumG = DoubleArray(most)
         val sumH = DoubleArray(most)
@@ -131,9 +246,9 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
         val gain = DoubleArray(most)
         val feature = IntArray(most)
         val threshold = FloatArray(most)
-        var level = listOf(0)
-        for (depth in 0 until BoostingScorer.DEPTH) {
-            if (level.isEmpty()) break
+
+        /** A new level: its nodes marked, their sums and best splits forgotten. */
+        fun start(level: List<Int>) {
             inLevel.fill(false)
             level.forEach { inLevel[it] = true }
             sumG.fill(0.0)
@@ -141,85 +256,34 @@ internal class Grower(private val x: Matrix, private val learnt: IntArray) {
             rowsOf.fill(0)
             gain.fill(0.0)
             feature.fill(-1)
-            for (k in 0 until m) {
-                val n = node[k]
-                if (!inLevel[n]) continue
-                sumG[n] += g[learnt[k]]
-                sumH[n] += h[learnt[k]]
-                rowsOf[n]++
-            }
-            for (f in features) {
-                leftG.fill(0.0)
-                leftH.fill(0.0)
-                leftRows.fill(0)
-                for (k in sorted[f]) {
-                    val n = node[k]
-                    if (!inLevel[n]) continue
-                    val value = values[k][f]
-                    val lr = leftRows[n]
-                    // A split between two different values, both sides big enough
-                    if (
-                        lr >= BoostingScorer.LEAST_ROWS &&
-                            rowsOf[n] - lr >= BoostingScorer.LEAST_ROWS &&
-                            value > lastValue[n]
-                    ) {
-                        val gl = leftG[n]
-                        val hl = leftH[n]
-                        val gr = sumG[n] - gl
-                        val hr = sumH[n] - hl
-                        val gained =
-                            gl * gl / (hl + BoostingScorer.L2) + gr * gr / (hr + BoostingScorer.L2) -
-                                sumG[n] * sumG[n] / (sumH[n] + BoostingScorer.L2)
-                        if (gained > gain[n]) {
-                            gain[n] = gained
-                            feature[n] = f
-                            threshold[n] = (lastValue[n] + value) / 2
-                        }
-                    }
-                    leftG[n] += g[learnt[k]]
-                    leftH[n] += h[learnt[k]]
-                    leftRows[n] = lr + 1
-                    lastValue[n] = value
-                }
-            }
-            val next = ArrayList<Int>()
-            level.forEach { n ->
-                if (feature[n] < 0) return@forEach
-                val left = nodes.size
-                nodes += Node()
-                nodes += Node()
-                nodes[n].feature = feature[n]
-                nodes[n].threshold = threshold[n]
-                nodes[n].left = left
-                next += left
-                next += left + 1
-            }
-            for (k in 0 until m) {
-                val n = node[k]
-                if (!inLevel[n] || nodes[n].left < 0) continue
-                node[k] = if (values[k][nodes[n].feature] < nodes[n].threshold) nodes[n].left else nodes[n].left + 1
-            }
-            level = next
         }
-        // The leaves: Newton's step, shrunk
-        val leafG = DoubleArray(nodes.size)
-        val leafH = DoubleArray(nodes.size)
-        for (k in 0 until m) {
-            leafG[node[k]] += g[learnt[k]]
-            leafH[node[k]] += h[learnt[k]]
-        }
-        nodes.forEachIndexed { n, it ->
-            if (it.left < 0) it.value = (-BoostingScorer.RATE * leafG[n] / (leafH[n] + BoostingScorer.L2)).toFloat()
-        }
-        return Tree(
-            IntArray(nodes.size) { nodes[it].feature },
-            FloatArray(nodes.size) { nodes[it].threshold },
-            IntArray(nodes.size) { nodes[it].left },
-            FloatArray(nodes.size) { nodes[it].value },
-        )
-    }
 
-    private class Node(var feature: Int = -1, var threshold: Float = 0f, var left: Int = -1, var value: Float = 0f)
+        /** A new pass, of another feature: the left sides empty. */
+        fun startFeature() {
+            leftG.fill(0.0)
+            leftH.fill(0.0)
+            leftRows.fill(0)
+        }
+
+        /**
+         * The split of the node [n] by the feature [f] at [at], between its rows passed and the rest, kept if it gains
+         * the most yet: Newton's gain, the sides' squared first derivatives over their second ones.
+         */
+        fun offer(n: Int, f: Int, at: Float) {
+            val gl = leftG[n]
+            val hl = leftH[n]
+            val gr = sumG[n] - gl
+            val hr = sumH[n] - hl
+            val gained =
+                gl * gl / (hl + BoostingScorer.L2) + gr * gr / (hr + BoostingScorer.L2) -
+                    sumG[n] * sumG[n] / (sumH[n] + BoostingScorer.L2)
+            if (gained > gain[n]) {
+                gain[n] = gained
+                feature[n] = f
+                threshold[n] = at
+            }
+        }
+    }
 }
 
 /** A tree: every node's feature and threshold, its left child (the right one after it; -1: a leaf), a leaf's value. */

@@ -55,12 +55,19 @@ class WordsPerChar(private val weights: Map<String, Double>) {
          */
         private fun penalty(feature: String) =
             when {
-                feature == MEAN -> 1e-6
-                feature.startsWith(LANGUAGE) -> 0.1
-                feature.startsWith(AUTHOR) -> 1.0
-                feature.startsWith(SOURCE) -> 3.0
-                else -> 10.0
+                feature == MEAN -> MEAN_PENALTY
+                feature.startsWith(LANGUAGE) -> LANGUAGE_PENALTY
+                feature.startsWith(AUTHOR) -> AUTHOR_PENALTY
+                feature.startsWith(SOURCE) -> SOURCE_PENALTY
+                else -> TAG_PENALTY
             }
+
+        /** The penalties of [penalty], by what the feature is. */
+        private const val MEAN_PENALTY = 1e-6
+        private const val LANGUAGE_PENALTY = 0.1
+        private const val AUTHOR_PENALTY = 1.0
+        private const val SOURCE_PENALTY = 3.0
+        private const val TAG_PENALTY = 10.0
 
         /** The model of the [examples]: the normal equations of the weighed ridge solved by conjugate gradients. */
         fun fit(examples: List<SizeExample>): WordsPerChar {
@@ -133,10 +140,16 @@ object WordCount {
             if (c.isLetterOrDigit()) {
                 if (!inWord) words++
                 inWord = true
-            } else if (!inWord || c !in WITHIN || i + 1 == text.length || !text[i + 1].isLetterOrDigit()) inWord = false
+            } else if (!inWord || !joins(text, i)) inWord = false
         }
         return words
     }
+
+    /**
+     * Whether the character at [i], within a word, joins it to the letter or digit after it: a hyphen, an apostrophe.
+     */
+    private fun joins(text: String, i: Int): Boolean =
+        text[i] in WITHIN && i + 1 < text.length && text[i + 1].isLetterOrDigit()
 
     private const val WITHIN = "-'’‐‑"
 }

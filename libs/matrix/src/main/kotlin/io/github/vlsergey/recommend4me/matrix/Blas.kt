@@ -56,7 +56,7 @@ object Blas {
                 openblas_full.openblas_get_num_threads(),
             )
             true
-        } catch (e: Throwable) {
+        } catch (e: LinkageError) {
             log.warn("no OpenBLAS ({}), plain loops are used", e.javaClass.simpleName)
             false
         }
@@ -236,35 +236,36 @@ object Blas {
         val pa = a.p
         val pb = b.p
         val pc = c.p
-        if (pa == null || pb == null || pc == null) {
-            for (i in 0 until m) for (j in 0 until n) {
-                var s = 0f
-                for (q in 0 until k) {
-                    val x = if (transA) a[aAt + q * lda + i] else a[aAt + i * lda + q]
-                    val y = if (transB) b[bAt + j * ldb + q] else b[bAt + q * ldb + j]
-                    s += x * y
-                }
-                c[cAt + i * ldc + j] = alpha * s + (if (beta == 0f) 0f else beta * c[cAt + i * ldc + j])
+        if (pa != null && pb != null && pc != null) {
+            calling {
+                openblas_full.cblas_sgemm(
+                    openblas_full.CblasRowMajor,
+                    if (transA) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
+                    if (transB) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
+                    m,
+                    n,
+                    k,
+                    alpha,
+                    FloatPointer(pa).position(aAt.toLong()),
+                    lda,
+                    FloatPointer(pb).position(bAt.toLong()),
+                    ldb,
+                    beta,
+                    FloatPointer(pc).position(cAt.toLong()),
+                    ldc,
+                )
             }
             return
         }
-        calling {
-            openblas_full.cblas_sgemm(
-                openblas_full.CblasRowMajor,
-                if (transA) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
-                if (transB) openblas_full.CblasTrans else openblas_full.CblasNoTrans,
-                m,
-                n,
-                k,
-                alpha,
-                FloatPointer(pa).position(aAt.toLong()),
-                lda,
-                FloatPointer(pb).position(bAt.toLong()),
-                ldb,
-                beta,
-                FloatPointer(pc).position(cAt.toLong()),
-                ldc,
-            )
+        // The library absent: the plain loops
+        for (i in 0 until m) for (j in 0 until n) {
+            var s = 0f
+            for (q in 0 until k) {
+                val x = if (transA) a[aAt + q * lda + i] else a[aAt + i * lda + q]
+                val y = if (transB) b[bAt + j * ldb + q] else b[bAt + q * ldb + j]
+                s += x * y
+            }
+            c[cAt + i * ldc + j] = alpha * s + (if (beta == 0f) 0f else beta * c[cAt + i * ldc + j])
         }
     }
 
@@ -330,49 +331,6 @@ object Blas {
         }
     }
 
-    /**
-     * The [name] of the environment set to [value] for the native libraries loaded after, unless it is set already:
-     * OpenBLAS reads its number of threads once, as it is loaded, of the environment of its own C runtime — on Windows
-     * msvcrt's, which the process's alone does not reach.
-     */
-    private fun presetEnvironment(name: String, value: String) {
-        if (System.getenv(name) != null) return
-        try {
-            val linker = Linker.nativeLinker()
-            Arena.ofConfined().use { arena ->
-                val windows = System.getProperty("os.name").startsWith("Windows")
-                if (windows) {
-                    val putenv = SymbolLookup.libraryLookup("msvcrt", arena).find("_putenv_s").orElseThrow()
-                    linker
-                        .downcallHandle(
-                            putenv,
-                            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
-                        )
-                        .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value))
-                } else {
-                    val setenv = linker.defaultLookup().find("setenv").orElseThrow()
-                    linker
-                        .downcallHandle(
-                            setenv,
-                            FunctionDescriptor.of(
-                                ValueLayout.JAVA_INT,
-                                ValueLayout.ADDRESS,
-                                ValueLayout.ADDRESS,
-                                ValueLayout.JAVA_INT,
-                            ),
-                        )
-                        .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value), 0)
-                }
-            }
-        } catch (e: Throwable) {
-            log.warn(
-                "{} not set for the native libraries ({}): OpenBLAS takes a thread and a buffer a core",
-                name,
-                e.toString(),
-            )
-        }
-    }
-
     /** The callers inside [wide] now; the library's threads go back to one when the last leaves. */
     private var wideCallers = 0
     private val wideLock = Any()
@@ -411,4 +369,59 @@ object Blas {
             if (upTo > from) body(from, upTo)
         }
     }
+}
+
+/**
+ * The [name] of the environment set to [value] for the native libraries loaded after, unless it is set already:
+ * OpenBLAS reads its number of threads once, as it is loaded, of the environment of its own C runtime — on Windows
+ * msvcrt's, which the process's alone does not reach.
+ */
+private fun presetEnvironment(name: String, value: String) {
+    if (System.getenv(name) != null) return
+    try {
+        val linker = Linker.nativeLinker()
+        Arena.ofConfined().use { arena ->
+            val windows = System.getProperty("os.name").startsWith("Windows")
+            if (windows) {
+                val putenv = SymbolLookup.libraryLookup("msvcrt", arena).find("_putenv_s").orElseThrow()
+                linker
+                    .downcallHandle(
+                        putenv,
+                        FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+                    )
+                    .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value))
+            } else {
+                val setenv = linker.defaultLookup().find("setenv").orElseThrow()
+                linker
+                    .downcallHandle(
+                        setenv,
+                        FunctionDescriptor.of(
+                            ValueLayout.JAVA_INT,
+                            ValueLayout.ADDRESS,
+                            ValueLayout.ADDRESS,
+                            ValueLayout.JAVA_INT,
+                        ),
+                    )
+                    .invokeWithArguments(arena.allocateFrom(name), arena.allocateFrom(value), 0)
+            }
+        }
+    } catch (e: IllegalArgumentException) {
+        // The C runtime's library not found
+        notPreset(name, e)
+    } catch (e: NoSuchElementException) {
+        // Its setter not found in it
+        notPreset(name, e)
+    } catch (e: IllegalCallerException) {
+        // Native access denied to the module
+        notPreset(name, e)
+    }
+}
+
+/** The warning that [name] could not be set, and what it costs. */
+private fun notPreset(name: String, e: RuntimeException) {
+    log.warn(
+        "{} not set for the native libraries ({}): OpenBLAS takes a thread and a buffer a core",
+        name,
+        e.toString(),
+    )
 }

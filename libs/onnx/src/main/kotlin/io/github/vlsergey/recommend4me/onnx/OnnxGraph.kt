@@ -52,28 +52,15 @@ class OnnxGraph(private val name: String) {
         constants +=
             Proto()
                 .apply {
-                    dims.forEach { varint(1, it) }
-                    varint(2, FLOAT.toLong())
-                    string(8, name)
+                    dims.forEach { varint(TensorField.DIMS, it) }
+                    varint(TensorField.DATA_TYPE, FLOAT.toLong())
+                    string(TensorField.NAME, name)
+                    message(TensorField.EXTERNAL_DATA, entry("location", SUPPLIED))
                     message(
-                        13,
-                        Proto()
-                            .apply {
-                                string(1, "location")
-                                string(2, SUPPLIED)
-                            }
-                            .bytes(),
+                        TensorField.EXTERNAL_DATA,
+                        entry("length", (dims.fold(1L, Long::times) * Float.SIZE_BYTES).toString()),
                     )
-                    message(
-                        13,
-                        Proto()
-                            .apply {
-                                string(1, "length")
-                                string(2, (dims.fold(1L, Long::times) * Float.SIZE_BYTES).toString())
-                            }
-                            .bytes(),
-                    )
-                    varint(14, DATA_EXTERNAL)
+                    varint(TensorField.DATA_LOCATION, DATA_EXTERNAL)
                 }
                 .bytes()
     }
@@ -94,11 +81,11 @@ class OnnxGraph(private val name: String) {
             nodes +=
                 Proto()
                     .apply {
-                        inputs.forEach { string(1, it) }
-                        outputs.forEach { string(2, it) }
-                        string(3, "${op}_${nodes.size}")
-                        string(4, op)
-                        attributes.forEach { (n, v) -> message(5, attribute(n, v)) }
+                        inputs.forEach { string(NodeField.INPUT, it) }
+                        outputs.forEach { string(NodeField.OUTPUT, it) }
+                        string(NodeField.NAME, "${op}_${nodes.size}")
+                        string(NodeField.OP_TYPE, op)
+                        attributes.forEach { (n, v) -> message(NodeField.ATTRIBUTE, attribute(n, v)) }
                     }
                     .bytes()
         }
@@ -108,19 +95,19 @@ class OnnxGraph(private val name: String) {
         val graph =
             Proto()
                 .apply {
-                    nodes.forEach { message(1, it) }
-                    string(2, name)
-                    constants.forEach { message(5, it) }
-                    inputs.forEach { message(11, it) }
-                    outputs.forEach { message(12, it) }
+                    nodes.forEach { message(GraphField.NODE, it) }
+                    string(GraphField.NAME, name)
+                    constants.forEach { message(GraphField.INITIALIZER, it) }
+                    inputs.forEach { message(GraphField.INPUT, it) }
+                    outputs.forEach { message(GraphField.OUTPUT, it) }
                 }
                 .bytes()
         return Proto()
             .apply {
-                varint(1, IR_VERSION)
-                string(2, "recommend4me")
-                message(7, graph)
-                message(8, Proto().apply { varint(2, opset.toLong()) }.bytes())
+                varint(ModelField.IR_VERSION, IR_VERSION)
+                string(ModelField.PRODUCER_NAME, "recommend4me")
+                message(ModelField.GRAPH, graph)
+                message(ModelField.OPSET_IMPORT, Proto().apply { varint(OPSET_VERSION, opset.toLong()) }.bytes())
             }
             .bytes()
     }
@@ -131,9 +118,11 @@ class OnnxGraph(private val name: String) {
                 .apply {
                     dims.forEach { d ->
                         message(
-                            1,
+                            SHAPE_DIM,
                             Proto()
-                                .apply { if (d is String) string(2, d) else varint(1, (d as Number).toLong()) }
+                                .apply {
+                                    if (d is String) string(DIM_PARAM, d) else varint(DIM_VALUE, (d as Number).toLong())
+                                }
                                 .bytes(),
                         )
                     }
@@ -142,14 +131,14 @@ class OnnxGraph(private val name: String) {
         val tensorType =
             Proto()
                 .apply {
-                    varint(1, type.toLong())
-                    message(2, shape)
+                    varint(TENSOR_TYPE_ELEM_TYPE, type.toLong())
+                    message(TENSOR_TYPE_SHAPE, shape)
                 }
                 .bytes()
         return Proto()
             .apply {
-                string(1, name)
-                message(2, Proto().apply { message(1, tensorType) }.bytes())
+                string(VALUE_INFO_NAME, name)
+                message(VALUE_INFO_TYPE, Proto().apply { message(TYPE_TENSOR_TYPE, tensorType) }.bytes())
             }
             .bytes()
     }
@@ -157,33 +146,33 @@ class OnnxGraph(private val name: String) {
     private fun tensor(name: String, type: Int, dims: LongArray, raw: ByteArray): ByteArray =
         Proto()
             .apply {
-                dims.forEach { varint(1, it) }
-                varint(2, type.toLong())
-                string(8, name)
-                bytes(9, raw)
+                dims.forEach { varint(TensorField.DIMS, it) }
+                varint(TensorField.DATA_TYPE, type.toLong())
+                string(TensorField.NAME, name)
+                bytes(TensorField.RAW_DATA, raw)
             }
             .bytes()
 
     private fun attribute(name: String, value: Any): ByteArray =
         Proto()
             .apply {
-                string(1, name)
+                string(AttributeField.NAME, name)
                 when (value) {
                     is Float -> {
-                        fixed32(2, value.toRawBits())
-                        varint(20, ATTRIBUTE_FLOAT)
+                        fixed32(AttributeField.F, value.toRawBits())
+                        varint(AttributeField.TYPE, ATTRIBUTE_FLOAT)
                     }
                     is Int -> {
-                        varint(3, value.toLong())
-                        varint(20, ATTRIBUTE_INT)
+                        varint(AttributeField.I, value.toLong())
+                        varint(AttributeField.TYPE, ATTRIBUTE_INT)
                     }
                     is Long -> {
-                        varint(3, value)
-                        varint(20, ATTRIBUTE_INT)
+                        varint(AttributeField.I, value)
+                        varint(AttributeField.TYPE, ATTRIBUTE_INT)
                     }
                     is LongArray -> {
-                        value.forEach { varint(8, it) }
-                        varint(20, ATTRIBUTE_INTS)
+                        value.forEach { varint(AttributeField.INTS, it) }
+                        varint(AttributeField.TYPE, ATTRIBUTE_INTS)
                     }
                     else -> error("An attribute of ${value.javaClass}")
                 }
@@ -194,27 +183,31 @@ class OnnxGraph(private val name: String) {
     private class Proto {
         private val out = ByteArrayOutputStream()
 
+        /** A base-128 varint: seven bits a byte, the lowest first, the high bit of every byte but the last set. */
         private fun raw(v: Long) {
             var x = v
-            while (x and 0x7FL.inv() != 0L) {
-                out.write(((x and 0x7F) or 0x80).toInt())
-                x = x ushr 7
+            while (x and SEVEN_BITS.inv() != 0L) {
+                out.write(((x and SEVEN_BITS) or MORE).toInt())
+                x = x ushr BITS_A_BYTE
             }
             out.write(x.toInt())
         }
 
+        /** The key of a field: its number above the three bits of its wire type. */
+        private fun key(field: Int, wireType: Int) = raw(((field shl WIRE_TYPE_BITS) or wireType).toLong())
+
         fun varint(field: Int, v: Long) {
-            raw((field shl 3).toLong())
+            key(field, WIRE_VARINT)
             raw(v)
         }
 
         fun fixed32(field: Int, bits: Int) {
-            raw(((field shl 3) or 5).toLong())
-            for (k in 0 until 4) out.write((bits ushr (8 * k)) and 0xFF)
+            key(field, WIRE_FIXED32)
+            for (k in 0 until Int.SIZE_BYTES) out.write((bits ushr (Byte.SIZE_BITS * k)) and BYTE_MASK)
         }
 
         fun bytes(field: Int, b: ByteArray) {
-            raw(((field shl 3) or 2).toLong())
+            key(field, WIRE_LENGTH_DELIMITED)
             raw(b.size.toLong())
             out.write(b)
         }
@@ -224,6 +217,69 @@ class OnnxGraph(private val name: String) {
         fun message(field: Int, b: ByteArray) = bytes(field, b)
 
         fun bytes(): ByteArray = out.toByteArray()
+
+        companion object {
+            /** The wire types: a varint, four bytes, a length and as many bytes. */
+            private const val WIRE_VARINT = 0
+            private const val WIRE_FIXED32 = 5
+            private const val WIRE_LENGTH_DELIMITED = 2
+
+            /** The bits of a key the wire type takes. */
+            private const val WIRE_TYPE_BITS = 3
+
+            /** The bits of a number a byte of a varint carries, and the bit that says another byte follows. */
+            private const val BITS_A_BYTE = 7
+            private const val SEVEN_BITS = 0x7FL
+            private const val MORE = 0x80L
+
+            /** The low byte of an int. */
+            private const val BYTE_MASK = 0xFF
+        }
+    }
+
+    /** The fields of TensorProto. */
+    private object TensorField {
+        const val DIMS = 1
+        const val DATA_TYPE = 2
+        const val NAME = 8
+        const val RAW_DATA = 9
+        const val EXTERNAL_DATA = 13
+        const val DATA_LOCATION = 14
+    }
+
+    /** The fields of NodeProto. */
+    private object NodeField {
+        const val INPUT = 1
+        const val OUTPUT = 2
+        const val NAME = 3
+        const val OP_TYPE = 4
+        const val ATTRIBUTE = 5
+    }
+
+    /** The fields of GraphProto. */
+    private object GraphField {
+        const val NODE = 1
+        const val NAME = 2
+        const val INITIALIZER = 5
+        const val INPUT = 11
+        const val OUTPUT = 12
+    }
+
+    /** The fields of ModelProto. */
+    private object ModelField {
+        const val IR_VERSION = 1
+        const val PRODUCER_NAME = 2
+        const val GRAPH = 7
+        const val OPSET_IMPORT = 8
+    }
+
+    /** The fields of AttributeProto. */
+    private object AttributeField {
+        const val NAME = 1
+        const val F = 2
+        const val I = 3
+        const val INTS = 8
+        const val TYPE = 20
     }
 
     companion object {
@@ -245,5 +301,31 @@ class OnnxGraph(private val name: String) {
 
         /** The "file" a [supplied] tensor's data is in: none — a name only, for the format to have one. */
         private const val SUPPLIED = "supplied"
+
+        /** OperatorSetIdProto's version; StringStringEntryProto's key and value. */
+        private const val OPSET_VERSION = 2
+        private const val ENTRY_KEY = 1
+        private const val ENTRY_VALUE = 2
+
+        /** TensorShapeProto's dim; a Dimension's dim_value and dim_param. */
+        private const val SHAPE_DIM = 1
+        private const val DIM_VALUE = 1
+        private const val DIM_PARAM = 2
+
+        /** TypeProto.Tensor's elem_type and shape; TypeProto's tensor_type; ValueInfoProto's name and type. */
+        private const val TENSOR_TYPE_ELEM_TYPE = 1
+        private const val TENSOR_TYPE_SHAPE = 2
+        private const val TYPE_TENSOR_TYPE = 1
+        private const val VALUE_INFO_NAME = 1
+        private const val VALUE_INFO_TYPE = 2
+
+        /** A StringStringEntryProto: a [key] and its [value]. */
+        private fun entry(key: String, value: String): ByteArray =
+            Proto()
+                .apply {
+                    string(ENTRY_KEY, key)
+                    string(ENTRY_VALUE, value)
+                }
+                .bytes()
     }
 }

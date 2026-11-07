@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.matrix
 
+import java.io.IOException
 import java.lang.foreign.Arena
 import java.lang.foreign.FunctionDescriptor
 import java.lang.foreign.Linker
@@ -52,6 +53,15 @@ private constructor(
      * a time.
      */
     private val scalars: MemorySegment = Arena.global().allocate(ValueLayout.JAVA_FLOAT, 4)
+
+    /** Where a call reads α of a product, or the c of an axpy or of a scaling: the first of [scalars]. */
+    private val alphaAt: MemorySegment = scalars.asSlice(0, Float.SIZE_BYTES.toLong())
+
+    /** Where a product reads β: the second of [scalars]. */
+    private val betaAt: MemorySegment = scalars.asSlice(Float.SIZE_BYTES.toLong(), Float.SIZE_BYTES.toLong())
+
+    /** Where a dot writes its result: the third of [scalars]. */
+    private val resultAt: MemorySegment = scalars.asSlice(2L * Float.SIZE_BYTES, Float.SIZE_BYTES.toLong())
 
     private val cudaMallocHost: MethodHandle by lazy {
         Linker.nativeLinker()
@@ -139,6 +149,10 @@ private constructor(
             closed = true
             cudaFree.invokeExact(address) as Int
         }
+
+        /** [n] floats copied. */
+        private fun copy(dst: MemorySegment, src: MemorySegment, n: Long, kind: Int) =
+            copyBytes(dst, src, n * Float.SIZE_BYTES, kind)
     }
 
     /**
@@ -215,24 +229,6 @@ private constructor(
             if (bytes > 0) copyBytes(into.segment, at(at), bytes, DEVICE_TO_HOST)
         }
 
-        /** The first [n] ints. */
-        fun ints(n: Int): IntArray =
-            Arena.ofConfined().use { a ->
-                if (n == 0) return IntArray(0)
-                val into = a.allocate(ValueLayout.JAVA_INT, n.toLong())
-                copyBytes(into, address, n.toLong() * Int.SIZE_BYTES, DEVICE_TO_HOST)
-                into.toArray(ValueLayout.JAVA_INT)
-            }
-
-        /** The first [n] floats. */
-        fun floats(n: Int): FloatArray =
-            Arena.ofConfined().use { a ->
-                if (n == 0) return FloatArray(0)
-                val into = a.allocate(ValueLayout.JAVA_FLOAT, n.toLong())
-                copyBytes(into, address, n.toLong() * Float.SIZE_BYTES, DEVICE_TO_HOST)
-                into.toArray(ValueLayout.JAVA_FLOAT)
-            }
-
         /** Every byte made nought. */
         fun zero() = memset(address, bytes)
 
@@ -265,17 +261,19 @@ private constructor(
     fun kernels(source: String, names: List<String>): CudaKernels? =
         try {
             CudaKernels.compile(dir, runtime, source, names)
-        } catch (e: Throwable) {
-            log.warn(
-                "kernels of their own not made for the card ({}): that work stays on the processor",
-                e.message ?: e.javaClass.simpleName,
-            )
-            null
+        } catch (e: IllegalArgumentException) {
+            // NVRTC's library not found
+            kernelsNotMade(e)
+        } catch (e: IllegalStateException) {
+            // A function missing, a call that failed, a source the compiler refused
+            kernelsNotMade(e)
+        } catch (e: IllegalCallerException) {
+            // Native access denied to the module
+            kernelsNotMade(e)
+        } catch (e: IOException) {
+            // The folder of the libraries not read
+            kernelsNotMade(e)
         }
-
-    /** [n] floats copied. */
-    private fun copy(dst: MemorySegment, src: MemorySegment, n: Long, kind: Int) =
-        copyBytes(dst, src, n * Float.SIZE_BYTES, kind)
 
     private fun copyBytes(dst: MemorySegment, src: MemorySegment, bytes: Long, kind: Int) {
         val status = cudaMemcpy.invokeExact(dst, src, bytes, kind) as Int
@@ -316,23 +314,21 @@ private constructor(
                 n,
                 m,
                 k,
-                scalar(0),
+                alphaAt,
                 b.at(bAt),
                 ldb,
                 a.at(aAt),
                 lda,
-                scalar(1),
+                betaAt,
                 c.at(cAt),
                 ldc,
             ) as Int
         check(status == 0) { "a product on the card failed: cuBLAS status $status" }
     }
 
-    private fun scalar(k: Long): MemorySegment = scalars.asSlice(k * Float.SIZE_BYTES, Float.SIZE_BYTES.toLong())
-
     /** `Σ a[aAt + q] · b[bAt + q]` for q under [n], on the card; the sum brought back. */
     fun dot(a: DeviceFloats, aAt: Long, b: DeviceFloats, bAt: Long, n: Int): Float {
-        val status = cublasSdot.invokeExact(handle, n, a.at(aAt), 1, b.at(bAt), 1, scalar(2)) as Int
+        val status = cublasSdot.invokeExact(handle, n, a.at(aAt), 1, b.at(bAt), 1, resultAt) as Int
         check(status == 0) { "a dot on the card failed: cuBLAS status $status" }
         return scalars.getAtIndex(ValueLayout.JAVA_FLOAT, 2)
     }
@@ -340,14 +336,14 @@ private constructor(
     /** `y[yAt + q] += c · x[xAt + q]` for q under [n], on the card. */
     fun axpy(c: Float, x: DeviceFloats, xAt: Long, y: DeviceFloats, yAt: Long, n: Int) {
         scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 0, c)
-        val status = cublasSaxpy.invokeExact(handle, n, scalar(0), x.at(xAt), 1, y.at(yAt), 1) as Int
+        val status = cublasSaxpy.invokeExact(handle, n, alphaAt, x.at(xAt), 1, y.at(yAt), 1) as Int
         check(status == 0) { "an axpy on the card failed: cuBLAS status $status" }
     }
 
     /** `x[at + q] *= c` for q under [n], on the card. */
     fun scale(c: Float, x: DeviceFloats, at: Long, n: Int) {
         scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 0, c)
-        val status = cublasSscal.invokeExact(handle, n, scalar(0), x.at(at), 1) as Int
+        val status = cublasSscal.invokeExact(handle, n, alphaAt, x.at(at), 1) as Int
         check(status == 0) { "a scaling on the card failed: cuBLAS status $status" }
     }
 
@@ -371,88 +367,8 @@ private constructor(
             tried = true
             opened =
                 try {
-                    val linker = Linker.nativeLinker()
-                    val runtime = SymbolLookup.libraryLookup(dir.resolve("cudart64_12.dll"), Arena.global())
-                    val blas = SymbolLookup.libraryLookup(dir.resolve("cublas64_12.dll"), Arena.global())
-                    fun handleOf(lookup: SymbolLookup, name: String, descriptor: FunctionDescriptor) =
-                        linker.downcallHandle(
-                            lookup.find(name).orElseThrow { IllegalStateException("no $name") },
-                            descriptor,
-                        )
-                    val int = ValueLayout.JAVA_INT
-                    val address = ValueLayout.ADDRESS
-                    val cublasCreate = handleOf(blas, "cublasCreate_v2", FunctionDescriptor.of(int, address))
-                    val handle =
-                        Arena.ofConfined().use { a ->
-                            val out = a.allocate(address)
-                            check((cublasCreate.invokeExact(out) as Int) == 0) { "cuBLAS was not opened" }
-                            out.get(address, 0)
-                        }
-                    Cublas(
-                            cudaMalloc =
-                                handleOf(
-                                    runtime,
-                                    "cudaMalloc",
-                                    FunctionDescriptor.of(int, address, ValueLayout.JAVA_LONG),
-                                ),
-                            cudaFree = handleOf(runtime, "cudaFree", FunctionDescriptor.of(int, address)),
-                            cudaMemcpy =
-                                handleOf(
-                                    runtime,
-                                    "cudaMemcpy",
-                                    FunctionDescriptor.of(int, address, address, ValueLayout.JAVA_LONG, int),
-                                ),
-                            cublasSgemm =
-                                handleOf(
-                                    blas,
-                                    "cublasSgemm_v2",
-                                    FunctionDescriptor.of(
-                                        int,
-                                        address,
-                                        int,
-                                        int,
-                                        int,
-                                        int,
-                                        int,
-                                        address,
-                                        address,
-                                        int,
-                                        address,
-                                        int,
-                                        address,
-                                        address,
-                                        int,
-                                    ),
-                                ),
-                            cublasSdot =
-                                handleOf(
-                                    blas,
-                                    "cublasSdot_v2",
-                                    FunctionDescriptor.of(int, address, int, address, int, address, int, address),
-                                ),
-                            cublasSaxpy =
-                                handleOf(
-                                    blas,
-                                    "cublasSaxpy_v2",
-                                    FunctionDescriptor.of(int, address, int, address, address, int, address, int),
-                                ),
-                            cublasSscal =
-                                handleOf(
-                                    blas,
-                                    "cublasSscal_v2",
-                                    FunctionDescriptor.of(int, address, int, address, address, int),
-                                ),
-                            cudaMemset =
-                                handleOf(
-                                    runtime,
-                                    "cudaMemset",
-                                    FunctionDescriptor.of(int, address, int, ValueLayout.JAVA_LONG),
-                                ),
-                            handle = handle,
-                            dir = dir,
-                            runtime = runtime,
-                        )
-                        .takeIf { it.checked() }
+                    bind(dir)
+                        .takeIf { checked(it) }
                         .also {
                             if (it == null)
                                 log.warn(
@@ -460,44 +376,142 @@ private constructor(
                                     dir,
                                 )
                         }
-                } catch (e: Throwable) {
-                    log.warn(
-                        "no cuBLAS in {} ({}): the products stay on the processor",
-                        dir,
-                        e.message ?: e.javaClass.simpleName,
-                    )
-                    null
+                } catch (e: IllegalArgumentException) {
+                    // A library not found
+                    notOpened(dir, e)
+                } catch (e: IllegalStateException) {
+                    // A function missing, a call that failed: no card, no room on it
+                    notOpened(dir, e)
+                } catch (e: IllegalCallerException) {
+                    // Native access denied to the module
+                    notOpened(dir, e)
                 }
             if (opened != null) log.info("matrix products of the fittings go through cuBLAS of {}", dir)
             return opened
         }
-    }
 
-    /** A product of its own, on the card and by the processor's plain loops: the same to the float's last digits. */
-    private fun checked(): Boolean {
-        val m = 3
-        val n = 4
-        val k = 5
-        val a = Floats(m * k).also { f -> for (i in 0 until f.count) f[i] = (i % 7 - 3) / 2f }
-        val b = Floats(n * k).also { f -> for (i in 0 until f.count) f[i] = (i % 5 - 2) / 3f }
-        val expected = Floats(m * n)
-        val got = Floats(m * n)
-        // a · bᵀ: one side transposed, as the fittings' products are
-        for (i in 0 until m) for (j in 0 until n) {
-            var s = 0f
-            for (q in 0 until k) s += a[i * k + q] * b[j * k + q]
-            expected[i * n + j] = s
+        /** The libraries in [dir] loaded, the functions called bound, and cuBLAS's handle made. */
+        private fun bind(dir: Path): Cublas {
+            val runtime = SymbolLookup.libraryLookup(dir.resolve("cudart64_12.dll"), Arena.global())
+            val blas = SymbolLookup.libraryLookup(dir.resolve("cublas64_12.dll"), Arena.global())
+            val int = ValueLayout.JAVA_INT
+            val address = ValueLayout.ADDRESS
+            val handle = createHandle(blas)
+            return Cublas(
+                cudaMalloc =
+                    handleOf(runtime, "cudaMalloc", FunctionDescriptor.of(int, address, ValueLayout.JAVA_LONG)),
+                cudaFree = handleOf(runtime, "cudaFree", FunctionDescriptor.of(int, address)),
+                cudaMemcpy =
+                    handleOf(
+                        runtime,
+                        "cudaMemcpy",
+                        FunctionDescriptor.of(int, address, address, ValueLayout.JAVA_LONG, int),
+                    ),
+                cublasSgemm =
+                    handleOf(
+                        blas,
+                        "cublasSgemm_v2",
+                        FunctionDescriptor.of(
+                            int,
+                            address,
+                            int,
+                            int,
+                            int,
+                            int,
+                            int,
+                            address,
+                            address,
+                            int,
+                            address,
+                            int,
+                            address,
+                            address,
+                            int,
+                        ),
+                    ),
+                cublasSdot =
+                    handleOf(
+                        blas,
+                        "cublasSdot_v2",
+                        FunctionDescriptor.of(int, address, int, address, int, address, int, address),
+                    ),
+                cublasSaxpy =
+                    handleOf(
+                        blas,
+                        "cublasSaxpy_v2",
+                        FunctionDescriptor.of(int, address, int, address, address, int, address, int),
+                    ),
+                cublasSscal =
+                    handleOf(blas, "cublasSscal_v2", FunctionDescriptor.of(int, address, int, address, address, int)),
+                cudaMemset =
+                    handleOf(runtime, "cudaMemset", FunctionDescriptor.of(int, address, int, ValueLayout.JAVA_LONG)),
+                handle = handle,
+                dir = dir,
+                runtime = runtime,
+            )
         }
-        DeviceFloats(a.count.toLong()).use { da ->
-            DeviceFloats(b.count.toLong()).use { db ->
-                DeviceFloats(got.count.toLong()).use { dc ->
-                    da.upload(a, 0, 0, a.count)
-                    db.upload(b, 0, 0, b.count)
-                    gemm(false, true, m, n, k, da, 0, k, db, 0, k, dc, 0, n)
-                    dc.download(got, 0, 0, got.count)
-                }
+
+        private fun handleOf(lookup: SymbolLookup, name: String, descriptor: FunctionDescriptor): MethodHandle =
+            Linker.nativeLinker()
+                .downcallHandle(lookup.find(name).orElseThrow { IllegalStateException("no $name") }, descriptor)
+
+        /** cuBLAS's handle, made by the library [blas]. */
+        private fun createHandle(blas: SymbolLookup): MemorySegment {
+            val address = ValueLayout.ADDRESS
+            val cublasCreate = handleOf(blas, "cublasCreate_v2", FunctionDescriptor.of(ValueLayout.JAVA_INT, address))
+            return Arena.ofConfined().use { a ->
+                val out = a.allocate(address)
+                check((cublasCreate.invokeExact(out) as Int) == 0) { "cuBLAS was not opened" }
+                out.get(address, 0)
             }
         }
-        return (0 until m * n).all { abs(got[it] - expected[it]) < 1e-4f }
+
+        /**
+         * A product of its own, on [cublas] and by the processor's plain loops: the same to the float's last digits.
+         */
+        private fun checked(cublas: Cublas): Boolean {
+            val m = 3
+            val n = 4
+            val k = 5
+            val a = Floats(m * k).also { f -> for (i in 0 until f.count) f[i] = (i % 7 - 3) / 2f }
+            val b = Floats(n * k).also { f -> for (i in 0 until f.count) f[i] = (i % 5 - 2) / 3f }
+            val expected = Floats(m * n)
+            val got = Floats(m * n)
+            // a · bᵀ: one side transposed, as the fittings' products are
+            for (i in 0 until m) for (j in 0 until n) {
+                var s = 0f
+                for (q in 0 until k) s += a[i * k + q] * b[j * k + q]
+                expected[i * n + j] = s
+            }
+            cublas.DeviceFloats(a.count.toLong()).use { da ->
+                cublas.DeviceFloats(b.count.toLong()).use { db ->
+                    cublas.DeviceFloats(got.count.toLong()).use { dc ->
+                        da.upload(a, 0, 0, a.count)
+                        db.upload(b, 0, 0, b.count)
+                        cublas.gemm(false, true, m, n, k, da, 0, k, db, 0, k, dc, 0, n)
+                        dc.download(got, 0, 0, got.count)
+                    }
+                }
+            }
+            return (0 until m * n).all { abs(got[it] - expected[it]) < AGREEMENT }
+        }
+
+        /** How near the card's product and the processor's must be: the last digits of a float. */
+        private const val AGREEMENT = 1e-4f
     }
+}
+
+/** The warning that the card's own kernels were not made, and why: the caller's work stays on the processor. */
+private fun kernelsNotMade(e: Exception): CudaKernels? {
+    log.warn(
+        "kernels of their own not made for the card ({}): that work stays on the processor",
+        e.message ?: e.javaClass.simpleName,
+    )
+    return null
+}
+
+/** The warning that cuBLAS of [dir] was not opened, and why: the products stay on the processor. */
+private fun notOpened(dir: Path, e: RuntimeException): Cublas? {
+    log.warn("no cuBLAS in {} ({}): the products stay on the processor", dir, e.message ?: e.javaClass.simpleName)
+    return null
 }

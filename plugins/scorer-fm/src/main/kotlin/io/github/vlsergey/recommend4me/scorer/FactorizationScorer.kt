@@ -127,9 +127,15 @@ internal class FactorizationObjective(val x: Matrix, val pairs: RankingPairs, va
             }
         }
         g[size] = 0.0
-        return (loss + 0.5 * penalty / c) / count
+        return (loss + HALF * penalty / c) / count
     }
 }
+
+/** The ½ of the penalty ‖θ‖²/2C: its gradient is then θ/C. */
+private const val HALF = 0.5
+
+/** The ½ of Rendle's identity: every pair is counted twice in the square of the sum. */
+private const val HALF_OF_PAIRS = 0.5f
 
 /** A fitted machine: w, and the vector of every feature ([v], d × [rank], a row a feature). */
 class FactorizationModel(val w: FloatArray, val v: FloatArray, val rank: Int) : FittedScorer {
@@ -204,7 +210,7 @@ class FactorizationModel(val w: FloatArray, val v: FloatArray, val rank: Int) : 
                     val uf = u[i * rank + f]
                     pairs += uf * uf - p[i * rank + f]
                 }
-                z[i] = z[i] + 0.5f * pairs
+                z[i] = z[i] + HALF_OF_PAIRS * pairs
             }
         }
     }

@@ -30,7 +30,12 @@ class Marked(
     val toward: List<FloatArray> = emptyList(),
     val awayFrom: List<FloatArray> = emptyList(),
     val rejected: Set<Pair<ItemKey, String>> = emptySet(),
-)
+) {
+    /**
+     * Whether the user said the thing [ref] of the item [owner] is not alike this mark: it never counts as alike it.
+     */
+    fun rejects(owner: ItemKey, ref: String): Boolean = rejected.isNotEmpty() && (owner to ref) in rejected
+}
 
 /**
  * How much a work looks like the things the user marked — pictures, or reviews — as more axes of the model, beside the
@@ -155,10 +160,10 @@ private constructor(
     fun rowOf(owner: ItemKey, items: List<Pair<String, FloatArray>>): Row? {
         if (m == 0 || items.isEmpty()) return null
         val cosines = cosines(items.map { it.second })
-        val best = FloatArray(m) { -2f }
+        val best = FloatArray(m) { NO_COSINE }
         val at = arrayOfNulls<String>(m)
         for (i in items.indices) for (j in 0 until m) {
-            if (rejects(j, owner, items[i].first)) continue
+            if (marks[j].rejects(owner, items[i].first)) continue
             val c = cosines[i * m + j]
             if (c > best[j]) {
                 best[j] = c
@@ -182,9 +187,6 @@ private constructor(
             }
             .sortedByDescending { it.strength }
 
-    private fun rejects(j: Int, owner: ItemKey, ref: String): Boolean =
-        marks[j].rejected.isNotEmpty() && (owner to ref) in marks[j].rejected
-
     /** Cosines of the [vectors] to every mark, centred: item i, mark j at i·m + j. */
     private fun cosines(vectors: List<FloatArray>): FloatArray {
         val d = center.size
@@ -201,9 +203,72 @@ private constructor(
         val inBin = (if (bin + 1 < BINS) below[j][bin + 1] else total) - below[j][bin]
         // Half the item's own bin below it; never all of the catalogue, an item is not past every one
         val f = ((below[j][bin] + inBin / 2.0) / total).coerceAtMost(1.0 - 0.5 / total)
-        if (f <= 0.0) return 0f
-        val chance = -expm1(n * ln(f))
-        return (-ln(chance)).toFloat().coerceIn(0f, MAX_STRENGTH)
+        return if (f <= 0.0) 0f
+        else {
+            val chance = -expm1(n * ln(f))
+            (-ln(chance)).toFloat().coerceIn(0f, MAX_STRENGTH)
+        }
+    }
+
+    /**
+     * ONE PASS OVER THE ITEMS OF THE CATALOGUE, a chunk of them at a time through one product with the [columns] of the
+     * [marks]: how many items fall in every bin of every mark's cosine, and every work's best item for every mark.
+     */
+    private class CataloguePass(
+        private val marks: List<Marked>,
+        private val center: FloatArray,
+        private val columns: Floats,
+    ) {
+        private val d = center.size
+        private val m = marks.size
+
+        /** Per mark, the items of the catalogue in every bin of the cosine. */
+        val counts = Array(m) { LongArray(BINS) }
+
+        /** Per work, its best cosine to every mark and the thing it is of. */
+        val best = HashMap<ItemKey, Pair<FloatArray, Array<String?>>>()
+
+        /** Per work, how many of its things have a vector. */
+        val sizes = HashMap<ItemKey, Int>()
+
+        private val a = Floats(CHUNK * d)
+        private val out = Floats(CHUNK * m)
+        private val owners = arrayOfNulls<ItemKey>(CHUNK)
+        private val ids = arrayOfNulls<String>(CHUNK)
+        private var rows = 0
+
+        /** The things [list] (ref, vector) of the work [owner] put in the chunk; the chunk counted whenever full. */
+        fun add(owner: ItemKey, list: List<Pair<String, FloatArray>>) {
+            if (list.isEmpty()) return
+            sizes[owner] = list.size
+            list.forEach { (id, v) ->
+                if (rows == CHUNK) flush()
+                a.put(unit(v, center), 0, rows * d, d)
+                owners[rows] = owner
+                ids[rows] = id
+                rows++
+            }
+        }
+
+        /** The items of the chunk counted, and the chunk emptied. */
+        fun flush() {
+            if (rows == 0) return
+            Blas.product(a, d, rows, d, columns, m, out)
+            val cos = FloatArray(rows * m).also { out.take(it, 0, 0, rows * m) }
+            for (i in 0 until rows) {
+                val (b, at) = best.getOrPut(owners[i]!!) { FloatArray(m) { NO_COSINE } to arrayOfNulls(m) }
+                for (j in 0 until m) {
+                    val c = cos[i * m + j]
+                    // The catalogue's usual likeness counts every item, a rejected one too
+                    counts[j][binOf(c)]++
+                    if (c > b[j] && !marks[j].rejects(owners[i]!!, ids[i]!!)) {
+                        b[j] = c
+                        at[j] = ids[i]
+                    }
+                }
+            }
+            rows = 0
+        }
     }
 
     companion object {
@@ -224,6 +289,12 @@ private constructor(
         private const val BINS = 4000
         private const val CHUNK = 4096
 
+        /** Below every cosine: no best found yet. */
+        private const val NO_COSINE = -2f
+
+        /** A vector shorter than this is left as it is: nought, not a direction. */
+        private const val LEAST_NORM = 1e-9
+
         private fun binOf(cosine: Float): Int = ((cosine + 1f) / 2f * BINS).toInt().coerceIn(0, BINS - 1)
 
         private fun unit(v: FloatArray, center: FloatArray): FloatArray {
@@ -231,7 +302,7 @@ private constructor(
             var n = 0.0
             for (x in u) n += x.toDouble() * x
             n = sqrt(n)
-            if (n > 1e-9) for (k in u.indices) u[k] = (u[k] / n).toFloat()
+            if (n > LEAST_NORM) for (k in u.indices) u[k] = (u[k] / n).toFloat()
             return u
         }
 
@@ -253,58 +324,21 @@ private constructor(
             }
             if (m == 0) return MarkLikeness(marks, center, columns, emptyArray(), 0, emptyMap())
 
-            val counts = Array(m) { LongArray(BINS) }
-            val best = HashMap<ItemKey, Pair<FloatArray, Array<String?>>>()
-            val sizes = HashMap<ItemKey, Int>()
-            val a = Floats(CHUNK * d)
-            val out = Floats(CHUNK * m)
-            val owners = arrayOfNulls<ItemKey>(CHUNK)
-            val ids = arrayOfNulls<String>(CHUNK)
-            var rows = 0
-            fun flush() {
-                if (rows == 0) return
-                Blas.product(a, d, rows, d, columns, m, out)
-                val cos = FloatArray(rows * m).also { out.take(it, 0, 0, rows * m) }
-                for (i in 0 until rows) {
-                    val (b, at) = best.getOrPut(owners[i]!!) { FloatArray(m) { -2f } to arrayOfNulls(m) }
-                    for (j in 0 until m) {
-                        val c = cos[i * m + j]
-                        // The catalogue's usual likeness counts every item, a rejected one too
-                        counts[j][binOf(c)]++
-                        if (
-                            c > b[j] &&
-                                !(marks[j].rejected.isNotEmpty() && (owners[i]!! to ids[i]!!) in marks[j].rejected)
-                        ) {
-                            b[j] = c
-                            at[j] = ids[i]
-                        }
-                    }
-                }
-                rows = 0
-            }
-            items { owner, list ->
-                if (list.isEmpty()) return@items
-                sizes[owner] = list.size
-                list.forEach { (id, v) ->
-                    if (rows == CHUNK) flush()
-                    a.put(unit(v, center), 0, rows * d, d)
-                    owners[rows] = owner
-                    ids[rows] = id
-                    rows++
-                }
-            }
-            flush()
+            val pass = CataloguePass(marks, center, columns)
+            items { owner, list -> pass.add(owner, list) }
+            pass.flush()
 
             val below =
                 Array(m) { j ->
-                    LongArray(BINS).also { c -> for (b in 1 until BINS) c[b] = c[b - 1] + counts[j][b - 1] }
+                    LongArray(BINS).also { c -> for (b in 1 until BINS) c[b] = c[b - 1] + pass.counts[j][b - 1] }
                 }
-            val total = counts[0].sum()
+            val total = pass.counts[0].sum()
             val likeness = MarkLikeness(marks, center, columns, below, total, emptyMap())
-            val strengths = best.mapValues { (id, pair) ->
-                val n = sizes.getValue(id)
-                Row(FloatArray(m) { j -> likeness.strength(j, pair.first[j], n) }, pair.second)
-            }
+            val strengths =
+                pass.best.mapValues { (id, pair) ->
+                    val n = pass.sizes.getValue(id)
+                    Row(FloatArray(m) { j -> likeness.strength(j, pair.first[j], n) }, pair.second)
+                }
             return MarkLikeness(marks, center, columns, below, total, strengths)
         }
 

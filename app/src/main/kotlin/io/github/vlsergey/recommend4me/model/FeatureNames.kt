@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.likeness.MarkLikeness
 import io.github.vlsergey.recommend4me.picture.PictureRepository
@@ -47,56 +48,29 @@ object FeatureNames {
      * are read from their sources.
      */
     fun labels(features: Collection<String>, sources: List<SourceStore>): Map<String, FeatureLabel> {
-        val facetLabels = HashMap<String, String>()
-        val numberLabels = HashMap<String, String>()
-        val blockLabels = HashMap<String, String>()
-        sources.forEach { s ->
-            s.schema.facets.forEach { facetLabels.putIfAbsent(facetId(s.source, it), I18nKeys.facetLabel(s.id, it)) }
-            s.schema.numbers.forEach {
-                numberLabels.putIfAbsent(numberId(s.source, it), I18nKeys.numberLabel(s.id, it))
-            }
-            TextVectors.blocks(s.id, s.schema).values.forEach { (block, label) ->
-                blockLabels.putIfAbsent(block, label)
-            }
-        }
-        // The names of the facet values and the keys of those of the application's own, asked of every source that has
-        // the facet
-        val wanted = features.mapNotNull(::parseFacet).groupBy({ it.first }, { it.second })
-        val names = HashMap<Pair<String, String>, String>()
-        val nameKeys = HashMap<Pair<String, String>, String>()
-        // The names the user gave values, each source's corrections read once: facet to its named corrections
-        val named =
-            if (wanted.isEmpty()) emptyMap()
-            else
-                sources.associateWith { s -> s.corrections.allFacets().filter { it.name != null }.groupBy { it.facet } }
-        wanted.forEach { (facetId, keys) ->
-            sources.forEach { s ->
-                s.schema.facets
-                    .filter { facetId(s.source, it) == facetId }
-                    .forEach { def ->
-                        s.names(def.key, keys).forEach { (key, name) -> names.putIfAbsent(facetId to key, name) }
-                        keys.forEach { key ->
-                            s.nameKey(def.key, key)?.let { nameKeys.putIfAbsent(facetId to key, it) }
-                        }
-                        named.getValue(s)[def.key].orEmpty().forEach { names.putIfAbsent(facetId to it.key, it.name!!) }
-                    }
-            }
-        }
-        return features.associateWith { feature ->
-            parseFacet(feature)?.let { (facetId, key) ->
-                FeatureLabel(facetLabels[facetId] ?: facetId, names[facetId to key] ?: key, nameKeys[facetId to key])
-            }
-                ?: when (feature.substringBefore(':')) {
-                    "num" -> FeatureLabel(numberLabels[feature.removePrefix("num:")] ?: feature)
-                    "prev" -> FeatureLabel(PREVIOUS_LABEL, feature.removePrefix("prev:"))
-                    "source" ->
-                        feature.removePrefix("source:").let { id ->
-                            FeatureLabel(SOURCE_LABEL, id, I18nKeys.qualified(id, I18nKeys.TITLE))
-                        }
-                    else -> FeatureLabel(BLOCKS[feature] ?: blockLabels[feature] ?: feature)
-                }
-        }
+        val schema = SchemaLabels(sources)
+        val values = ValueNames(features, sources)
+        return features.associateWith { label(it, schema, values) }
     }
+
+    /** What the user is shown of the [feature], by the labels of the [schema] and the names of the [values]. */
+    private fun label(feature: String, schema: SchemaLabels, values: ValueNames): FeatureLabel =
+        parseFacet(feature)?.let { (facetId, key) ->
+            FeatureLabel(
+                schema.facets[facetId] ?: facetId,
+                values.names[facetId to key] ?: key,
+                values.nameKeys[facetId to key],
+            )
+        }
+            ?: when (feature.substringBefore(':')) {
+                "num" -> FeatureLabel(schema.numbers[feature.removePrefix("num:")] ?: feature)
+                "prev" -> FeatureLabel(PREVIOUS_LABEL, feature.removePrefix("prev:"))
+                "source" ->
+                    feature.removePrefix("source:").let { id ->
+                        FeatureLabel(SOURCE_LABEL, id, I18nKeys.qualified(id, I18nKeys.TITLE))
+                    }
+                else -> FeatureLabel(BLOCKS[feature] ?: schema.blocks[feature] ?: feature)
+            }
 
     /** The parts an explanation switches off as a whole besides the facets and single blocks. */
     const val PREVIOUS = "part:previous"
@@ -150,6 +124,58 @@ object FeatureNames {
     val STANDARD_KEYS: Set<String> =
         setOf(PREVIOUS_LABEL, SOURCE_LABEL, model("pictures"), model("reviews"), TextVectors.TITLE_LABEL) +
             BLOCKS.values
+}
+
+/** The keys of the labels of the facets, the numbers and the text blocks of the [sources], by the model's ids. */
+private class SchemaLabels(sources: List<SourceStore>) {
+    val facets = HashMap<String, String>()
+    val numbers = HashMap<String, String>()
+    val blocks = HashMap<String, String>()
+
+    init {
+        sources.forEach { s ->
+            s.schema.facets.forEach {
+                facets.putIfAbsent(FeatureNames.facetId(s.source, it), I18nKeys.facetLabel(s.id, it))
+            }
+            s.schema.numbers.forEach {
+                numbers.putIfAbsent(FeatureNames.numberId(s.source, it), I18nKeys.numberLabel(s.id, it))
+            }
+            TextVectors.blocks(s.id, s.schema).values.forEach { (block, label) -> blocks.putIfAbsent(block, label) }
+        }
+    }
+}
+
+/**
+ * The names of the facet values among the [features] and the keys of those of the application's own, asked of every one
+ * of the [sources] that has the facet; by the facet's id and the value's key.
+ */
+private class ValueNames(features: Collection<String>, sources: List<SourceStore>) {
+    val names = HashMap<Pair<String, String>, String>()
+    val nameKeys = HashMap<Pair<String, String>, String>()
+
+    init {
+        val wanted = features.mapNotNull(FeatureNames::parseFacet).groupBy({ it.first }, { it.second })
+        // The names the user gave values, each source's corrections read once: facet to its named corrections
+        val named =
+            if (wanted.isEmpty()) emptyMap()
+            else
+                sources.associateWith { s -> s.corrections.allFacets().filter { it.name != null }.groupBy { it.facet } }
+        for ((facetId, keys) in wanted) for (s in sources) {
+            s.schema.facets
+                .filter { FeatureNames.facetId(s.source, it) == facetId }
+                .forEach { def -> read(s, def, facetId, keys, named.getValue(s)[def.key].orEmpty()) }
+        }
+    }
+
+    /**
+     * The names of the [keys] of the facet [def] of the source [s], whose id across the sources is [facetId]: the
+     * data's, the keys of the application's own, the ones the user gave ([named]).
+     */
+    private fun read(s: SourceStore, def: FacetDef, facetId: String, keys: List<String>, named: List<FacetCorrection>) {
+        s.names(def.key, keys).forEach { (key, name) -> names.putIfAbsent(facetId to key, name) }
+        keys.forEach { key -> s.nameKey(def.key, key)?.let { nameKeys.putIfAbsent(facetId to key, it) } }
+        named.forEach { names.putIfAbsent(facetId to it.key, it.name!!) }
+    }
 }
 
 /**

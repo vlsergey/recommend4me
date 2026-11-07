@@ -149,7 +149,7 @@ class ItemList(
                 val versions = keys.associate { it.id to it.version }
                 val graded = cards.graded(s.ratings.all(), versions)
                 val grades = graded.mapNotNull { (id, g) -> g.grade?.let { id to it } }.toMap()
-                val predicted = type.models.predicted(s.id)
+                val predicted = type.predictions.predicted(s.id)
                 val marks = s.interest.all()
                 val numbers =
                     if (order == ItemOrder.NUMBER && sortNumber != null) numberOf(s, sortNumber).orEmpty()
@@ -160,8 +160,8 @@ class ItemList(
                     if (order == ItemOrder.SURPRISE && places != null) {
                         val low = places.values.min()
                         val high = places.values.max()
-                        type.models
-                            .heldOut(s.id)
+                        type.heldOut
+                            .scores(s.id)
                             .mapNotNull { (id, score) ->
                                 val place = places[grades[id]] ?: return@mapNotNull null
                                 id to

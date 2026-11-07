@@ -66,31 +66,9 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
             val grad = DoubleArray(theta.size)
             for (step in 1..ITERATIONS) {
                 grad.fill(0.0)
-                for (i in useful.indices) {
-                    val e = useful[i]
-                    val row = rows[i]
-                    var s = 0.0
-                    for (j in row) s += theta[j]
-                    // The chance of the span [low, high] and its slopes: F(high) − F(low − 1), F(k) = σ(θ_k − s)
-                    val hi = if (e.high < k) sigmoid(theta[n + e.high] - s) else 1.0
-                    val lo = if (e.low > 0) sigmoid(theta[n + e.low - 1] - s) else 0.0
-                    val p = max(hi - lo, 1e-12)
-                    val dHi = if (e.high < k) hi * (1 - hi) else 0.0
-                    val dLo = if (e.low > 0) lo * (1 - lo) else 0.0
-                    // Of −log p: the slope by the strength, and by the thresholds of the span's ends
-                    val ds = (dHi - dLo) / p
-                    for (j in row) grad[j] += ds
-                    if (e.high < k) grad[n + e.high] -= dHi / p
-                    if (e.low > 0) grad[n + e.low - 1] += dLo / p
-                }
+                for (i in useful.indices) addSlope(useful[i], rows[i], theta, n, k, grad)
                 for (j in 0 until n) grad[j] += LAMBDA * theta[j]
-                for (j in theta.indices) {
-                    m[j] = 0.9 * m[j] + 0.1 * grad[j]
-                    v[j] = 0.999 * v[j] + 0.001 * grad[j] * grad[j]
-                    val mh = m[j] / (1 - Math.pow(0.9, step.toDouble()))
-                    val vh = v[j] / (1 - Math.pow(0.999, step.toDouble()))
-                    theta[j] -= RATE * mh / (sqrt(vh) + 1e-8)
-                }
+                adamStep(theta, grad, m, v, step)
                 // The thresholds kept rising
                 for (j in 1 until k) theta[n + j] = max(theta[n + j], theta[n + j - 1] + GAP)
             }
@@ -100,13 +78,58 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
             )
         }
 
+        /**
+         * The slope of −log of the chance of the work [e]'s span added to [grad]: by the strength — the weights of its
+         * features, [row] — and by the thresholds of the span's ends. θ is the [n] weights, then the [k] thresholds.
+         */
+        private fun addSlope(e: RatingExample, row: IntArray, theta: DoubleArray, n: Int, k: Int, grad: DoubleArray) {
+            var s = 0.0
+            for (j in row) s += theta[j]
+            // The chance of the span [low, high] and its slopes: F(high) − F(low − 1), F(k) = σ(θ_k − s)
+            val hi = if (e.high < k) sigmoid(theta[n + e.high] - s) else 1.0
+            val lo = if (e.low > 0) sigmoid(theta[n + e.low - 1] - s) else 0.0
+            val p = max(hi - lo, LEAST_CHANCE)
+            val dHi = if (e.high < k) hi * (1 - hi) else 0.0
+            val dLo = if (e.low > 0) lo * (1 - lo) else 0.0
+            // Of −log p: the slope by the strength, and by the thresholds of the span's ends
+            val ds = (dHi - dLo) / p
+            for (j in row) grad[j] += ds
+            if (e.high < k) grad[n + e.high] -= dHi / p
+            if (e.low > 0) grad[n + e.low - 1] += dLo / p
+        }
+
+        /** Adam's step number [step] of [theta] by the slope [grad], [m] and [v] its running means. */
+        private fun adamStep(theta: DoubleArray, grad: DoubleArray, m: DoubleArray, v: DoubleArray, step: Int) {
+            for (j in theta.indices) {
+                m[j] = DECAY * m[j] + NEW * grad[j]
+                v[j] = SQUARES_DECAY * v[j] + NEW_SQUARE * grad[j] * grad[j]
+                val mh = m[j] / (1 - Math.pow(DECAY, step.toDouble()))
+                val vh = v[j] / (1 - Math.pow(SQUARES_DECAY, step.toDouble()))
+                theta[j] -= RATE * mh / (sqrt(vh) + EPSILON)
+            }
+        }
+
         /** The loss of the [model] on the [examples]: the mean −log of the chance of their spans. */
         fun loss(model: AgeRatingModel, examples: List<RatingExample>): Double =
             examples
                 .map { e ->
                     val p = model.chances(e.features)
-                    -ln(max(1e-12, (e.low..e.high).sumOf { p[it] }))
+                    -ln(max(LEAST_CHANCE, (e.low..e.high).sumOf { p[it] }))
                 }
                 .average()
+
+        /** The least chance of a span taken: its −log stays finite. */
+        private const val LEAST_CHANCE = 1e-12
+
+        /** Adam's decay of the running mean of the slopes, and the share of the new slope in it. */
+        private const val DECAY = 0.9
+        private const val NEW = 0.1
+
+        /** Adam's decay of the running mean of the slopes' squares, and the share of the new square in it. */
+        private const val SQUARES_DECAY = 0.999
+        private const val NEW_SQUARE = 0.001
+
+        /** Adam's guard against a division by a mean of squares of nought. */
+        private const val EPSILON = 1e-8
     }
 }
