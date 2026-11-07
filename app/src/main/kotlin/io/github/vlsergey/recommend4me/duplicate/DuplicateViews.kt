@@ -16,11 +16,14 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import org.springframework.stereotype.Component
 
-/** A pair with what ranks it: its layers, none of an answered pair not kept. */
+/**
+ * A pair with what ranks it: its layers, none of an answered pair not kept; its chances of one work and of one series.
+ */
 internal class Ranked(
     val pair: Pair<ItemKey, ItemKey>,
     val layers: DuplicateCandidate?,
     val chance: Double?,
+    val seriesChance: Double?,
     val priority: Double,
 )
 
@@ -48,6 +51,7 @@ class DuplicateViews(private val sizes: WorkSizes) {
                 first = first.work,
                 second = second.work,
                 chance = r.chance?.toBigDecimal(),
+                seriesChance = r.seriesChance?.toBigDecimal(),
                 priority = r.priority.toBigDecimal(),
                 title = d?.title?.toBigDecimal(),
                 description = d?.description?.toBigDecimal(),

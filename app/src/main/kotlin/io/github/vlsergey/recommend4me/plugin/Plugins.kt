@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.plugin
 
 import io.github.vlsergey.recommend4me.contenttype.ContentType
+import io.github.vlsergey.recommend4me.duplicate.PairModel
 import io.github.vlsergey.recommend4me.encoder.ImageEncoder
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.encoder.TextReranker
@@ -31,6 +32,7 @@ class Plugins(
     scorers: ObjectProvider<Scorer>,
     searches: ObjectProvider<SearchProvider>,
     suggesters: ObjectProvider<FacetSuggester>,
+    pairModels: ObjectProvider<PairModel>,
     catalogues: ObjectProvider<UniverseCatalogue>,
     tagCatalogues: ObjectProvider<TagCatalogue>,
     types: ObjectProvider<ContentType>,
@@ -46,6 +48,9 @@ class Plugins(
      * Every way of working out the values of a facet; each facet of each source learns with one of them ([suggester]).
      */
     val suggesters: List<FacetSuggester> = suggesters.orderedStream().toList()
+
+    /** Every way of telling how likely two works of different sites are one work, one series ([PairModel]). */
+    val pairModels: List<PairModel> = pairModels.orderedStream().toList()
     val catalogues: List<UniverseCatalogue> = catalogues.orderedStream().toList()
 
     /** The catalogues the tags are bound to entries of ([TagCatalogue]). */

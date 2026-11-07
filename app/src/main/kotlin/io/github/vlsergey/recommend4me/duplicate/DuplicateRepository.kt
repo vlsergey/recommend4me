@@ -10,10 +10,10 @@ import org.jooq.DSLContext
  * Two works of different sites that may be one — [first] the smaller key — with how alike each layer of theirs is (none
  * of a layer either has not): the cosines of the vectors of their titles and of their descriptions, the mean of the
  * smaller over the larger of the numbers of their size ([size]), and of every facet the sites share both have the
- * cosine of their values weighed by rarity ([facets], by the facet). How likely they are one work is the model's of the
- * user's answers ([DuplicateModel]), made when read. [foundFor]: the works it was found for — whose likeliest of the
- * other site it is — [FIRST], [SECOND], both, or neither (an answered pair the search did not keep). [sameAuthor]: the
- * dictionary of authors gives the two one author, fully or in part
+ * cosine of their values weighed by rarity ([facets], by the facet) — its [layers]. How likely they are one work, and
+ * one series, is the models' of the user's answers ([PairChances]), made when read. [foundFor]: the works it was found
+ * for — whose likeliest of the other site it is — [FIRST], [SECOND], both, or neither (an answered pair the search did
+ * not keep). [sameAuthor]: the dictionary of authors gives the two one author, fully or in part
  * ([io.github.vlsergey.recommend4me.author.AuthorKin]).
  */
 class DuplicateCandidate(
@@ -29,6 +29,10 @@ class DuplicateCandidate(
     val pair: Pair<ItemKey, ItemKey>
         get() = first to second
 
+    /** How alike the two are, as a model of pairs reads it. */
+    val layers: PairLayers
+        get() = PairLayers(title, description, size, facets, sameAuthor)
+
     companion object {
         /** Of [foundFor], the bit of the first work, and of the second. */
         const val FIRST = 1
@@ -37,10 +41,18 @@ class DuplicateCandidate(
 }
 
 /**
- * When the candidates were last looked for, by which encoder of texts, of how many works; the weights of the model of
- * the user's answers by feature, none before any.
+ * When the candidates were last looked for, by which encoder of texts, of how many works; the models of the user's
+ * answers as the plugin of pairs [model] packed them ([PairModel]): of one work ([same]) and of one series ([series]),
+ * none of a kind no pair was said to be of.
  */
-class DuplicateSearch(val madeAt: Instant, val encoder: String, val works: Int, val weights: Map<String, Double>?)
+class DuplicateSearch(
+    val madeAt: Instant,
+    val encoder: String,
+    val works: Int,
+    val model: String?,
+    val same: ByteArray?,
+    val series: ByteArray?,
+)
 
 /** The candidates of the last search of the content type, in its model database: made anew whole by every search. */
 class DuplicateRepository(private val db: DSLContext) {
@@ -73,14 +85,18 @@ class DuplicateRepository(private val db: DSLContext) {
             .set(DUPLICATE_SEARCH.MADE_AT, search.madeAt)
             .set(DUPLICATE_SEARCH.ENCODER, search.encoder)
             .set(DUPLICATE_SEARCH.WORKS, search.works)
-            .set(DUPLICATE_SEARCH.WEIGHTS, search.weights?.let(::written))
+            .set(DUPLICATE_SEARCH.MODEL, search.model)
+            .set(DUPLICATE_SEARCH.SAME_MODEL, search.same)
+            .set(DUPLICATE_SEARCH.SERIES_MODEL, search.series)
             .execute()
     }
 
-    /** The weights of the model of the user's answers fitted anew, of the candidates as they are. */
-    fun keepWeights(weights: Map<String, Double>?) {
+    /** The models of the user's answers fitted anew by the plugin of pairs [model], of the candidates as they are. */
+    fun keepModels(model: String, same: ByteArray?, series: ByteArray?) {
         db.update(DUPLICATE_SEARCH)
-            .set(DUPLICATE_SEARCH.WEIGHTS, weights?.let(::written))
+            .set(DUPLICATE_SEARCH.MODEL, model)
+            .set(DUPLICATE_SEARCH.SAME_MODEL, same)
+            .set(DUPLICATE_SEARCH.SERIES_MODEL, series)
             .where(DUPLICATE_SEARCH.ID.eq(1))
             .execute()
     }
@@ -88,12 +104,7 @@ class DuplicateRepository(private val db: DSLContext) {
     /** The last search; null when there was none. */
     fun search(): DuplicateSearch? =
         db.selectFrom(DUPLICATE_SEARCH).fetchOne()?.let {
-            DuplicateSearch(
-                it.madeAt!!,
-                it.encoder!!,
-                it.works!!,
-                it.weights?.let(::read)?.mapValues { (_, v) -> v.toDouble() },
-            )
+            DuplicateSearch(it.madeAt!!, it.encoder!!, it.works!!, it.model, it.sameModel, it.seriesModel)
         }
 
     /** Every candidate: of some hundred thousand, read for one request and let go. */

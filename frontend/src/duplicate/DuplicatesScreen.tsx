@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, CopyIcon, ExternalLinkIcon, LanguagesIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, SplitIcon, Undo2Icon, UserIcon } from "lucide-react";
+import { ChevronDownIcon, CopyIcon, EqualIcon, EqualNotIcon, ExternalLinkIcon, LanguagesIcon, LibraryBigIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, Undo2Icon, UserIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateSort, type DuplicateWork, type SizeNumber } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -39,20 +39,21 @@ const sameRow = (a: DuplicatePair, b: DuplicatePair) => a.answer === b.answer;
 /** The user's word on a pair. */
 type Verdict = NonNullable<DuplicatePair["answer"]>;
 
-/** The answers of the buttons: one work, different works. */
+/** The answers of the buttons: one work (=), different works (≠). */
 const VERDICTS: { verdict: Verdict; icon: React.ReactNode; word: "same" | "different" }[] = [
-  { verdict: "SAME", icon: <CopyIcon />, word: "same" },
-  { verdict: "DIFFERENT", icon: <SplitIcon />, word: "different" },
+  { verdict: "SAME", icon: <EqualIcon />, word: "same" },
+  { verdict: "DIFFERENT", icon: <EqualNotIcon />, word: "different" },
 ];
 
-/** The answers of related works, behind a drop-down beside the buttons: a translation, a part. */
-const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | "partial" }[] = [
+/** The answers of related works, behind a drop-down beside the buttons: a translation, a part, one series. */
+const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | "partial" | "series" }[] = [
   { verdict: "TRANSLATION", icon: <LanguagesIcon />, word: "translation" },
   { verdict: "PARTIAL", icon: <PuzzleIcon />, word: "partial" },
+  { verdict: "SERIES", icon: <LibraryBigIcon />, word: "series" },
 ];
 
-/** What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default. */
-const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE", "UNCERTAIN"];
+/** What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default; or the chance of one series alone. */
+const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE", "SERIES", "UNCERTAIN"];
 
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
@@ -255,6 +256,11 @@ function PairRow({
             {percent(p.chance)}
           </span>
         )}
+        {p.seriesChance != null && (
+          <span className="flex items-center gap-1 font-semibold text-foreground tabular-nums" title={t("PairRow.seriesChanceHint")}>
+            <LibraryBigIcon className="size-3.5" /> {percent(p.seriesChance)}
+          </span>
+        )}
         {p.title != null && <span className="tabular-nums">{t("PairRow.title", { value: percent(p.title) })}</span>}
         {p.description != null && <span className="tabular-nums">{t("PairRow.description", { value: percent(p.description) })}</span>}
         {p.facets?.map((f) => (
@@ -267,7 +273,8 @@ function PairRow({
             {t("PairRow.size", { value: percent(p.size) })}
           </span>
         )}
-        {sort !== "UNCERTAIN" && p.priority != null && p.priority > 0 && (
+        {/* Of the pairs in doubt the order says nothing of the work; of the sort by one series it is that chance, shown already */}
+        {sort !== "UNCERTAIN" && sort !== "SERIES" && p.priority != null && p.priority > 0 && (
           // Of the sort by size the priority is words: a whole number, not a score of two digits
           <span className="tabular-nums" title={t(sort === "SIZE" ? "PairRow.prioritySizeHint" : "PairRow.priorityHint")}>
             {t("PairRow.priority", { value: sort === "SIZE" ? number(Math.round(p.priority)) : p.priority.toFixed(2) })}

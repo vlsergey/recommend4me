@@ -1,8 +1,9 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
-import io.github.vlsergey.recommend4me.matrix.Floats
+import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -24,49 +25,29 @@ internal fun familyOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACE
 
 /**
  * The works of one site as the search reads them: those with a vector of their title, its unit rows ([titles], one row
- * a work, [width] numbers), and of their descriptions ([descriptions], a row of noughts and [described] false of a work
- * without one); the values of the facets the sites share ([values], by their places among every value of the type) —
- * weighed once every site is read ([weigh]), and of every value the works that have it with its weight in each; the
- * numbers of its size the sites share ([sizes], by the standard number, nought when not known); and every work's
- * normalized authors ([authors]).
+ * a work), and of their descriptions ([descriptions], a row of noughts and [described] false of a work without one);
+ * the values of the facets the sites share ([values], by their places among every value of the type); the numbers of
+ * its size the sites share ([sizes], by the standard number, nought when not known); and every work's normalized
+ * authors ([authors]). Handed to the model of pairs as its [works], weighed once every site is read.
  */
 internal class SearchSide(
     val store: SourceStore,
     val ids: List<String>,
-    val width: Int,
-    val titles: Floats,
-    val descriptions: Floats,
+    val titles: Matrix,
+    val descriptions: Matrix,
     val described: BooleanArray,
     val values: Array<IntArray>,
     val sizes: Map<String, DoubleArray>,
     val authors: Array<LongArray>,
 ) {
-    /** Of every normalized author, the works of this site they are of. */
-    val withAuthor: Map<Long, List<Int>> =
-        HashMap<Long, MutableList<Int>>().also { out ->
-            authors.forEachIndexed { i, own -> own.forEach { out.getOrPut(it) { ArrayList() } += i } }
-        }
-
     /**
-     * Of every work, the weight of each of its [values]: the value's rarity among every work of the type, the work's
-     * values of each facet of unit length.
+     * The works as the model of pairs reads them ([SiteWorks]): of every work the weight of each of its [values] — the
+     * value's [rarity] among every work of the type, the work's values of each facet of unit length —, the facets it
+     * has a value of (a bit a facet, by the places of [familyOf]), its numbers of size by the [sizeKeys] (nought of one
+     * the site has not), and with its authors every author the dictionary gives as one with them ([kin]).
      */
-    lateinit var weights: Array<FloatArray>
-
-    /** Of every work, the facets it has a value of: a bit a facet, by its place among the type's ([familyOf]). */
-    lateinit var facets: LongArray
-
-    /** Of every value of the type, the works of this site that have it ([withValueItems]) and its weight in each. */
-    lateinit var withValueItems: Array<IntArray>
-    lateinit var withValueWeights: Array<FloatArray>
-
-    /**
-     * Its works' values weighed by the [rarity] of every value, every facet's of a work apart, and every value's works
-     * laid out.
-     */
-    fun weigh(rarity: FloatArray, familyOf: IntArray) {
-        facets = LongArray(values.size) { i -> values[i].fold(0L) { bits, v -> bits or (1L shl familyOf[v]) } }
-        weights =
+    fun works(rarity: FloatArray, familyOf: IntArray, sizeKeys: List<String>, kin: AuthorKin): SiteWorks {
+        val weights =
             Array(values.size) { i ->
                 val w = FloatArray(values[i].size) { k -> rarity[values[i][k]] }
                 val norms = HashMap<Int, Double>()
@@ -76,18 +57,19 @@ internal class SearchSide(
                 }
                 w
             }
-        val count = IntArray(rarity.size)
-        values.forEach { own -> own.forEach { count[it]++ } }
-        withValueItems = Array(rarity.size) { IntArray(count[it]) }
-        withValueWeights = Array(rarity.size) { FloatArray(count[it]) }
-        val filled = IntArray(rarity.size)
-        values.forEachIndexed { i, own ->
-            own.forEachIndexed { k, t ->
-                withValueItems[t][filled[t]] = i
-                withValueWeights[t][filled[t]] = weights[i][k]
-                filled[t]++
-            }
-        }
+        return SiteWorks(
+            store.id,
+            ids,
+            titles,
+            descriptions,
+            described,
+            values,
+            weights,
+            LongArray(values.size) { i -> values[i].fold(0L) { bits, v -> bits or (1L shl familyOf[v]) } },
+            Array(sizeKeys.size) { k -> sizes[sizeKeys[k]] ?: DoubleArray(ids.size) },
+            authors,
+            Array(ids.size) { i -> authors[i].flatMap { kin.of(it) }.distinct().toLongArray() },
+        )
     }
 
     companion object {
@@ -109,22 +91,20 @@ internal class SearchSide(
                 s.textVectors.keys().filter { it.second == TextVectors.TITLE }.map { it.first }.distinct().sorted()
             if (ids.isEmpty()) return null
             val at = ids.withIndex().associate { it.value to it.index }
-            var width = 0
-            var titles: Floats? = null
-            var descriptions: Floats? = null
+            var titles: Matrix? = null
+            var descriptions: Matrix? = null
             val described = BooleanArray(ids.size)
             s.textVectors.forEach(encoder, listOfNotNull(TextVectors.TITLE, description)) { id, key, vector ->
                 val i = at[id] ?: return@forEach
                 if (titles == null) {
-                    width = vector.size
-                    titles = Floats(ids.size * width)
-                    descriptions = Floats(ids.size * width)
+                    titles = Matrix(ids.size, vector.size)
+                    descriptions = Matrix(ids.size, vector.size)
                 }
-                if (vector.size != width) return@forEach
+                if (vector.size != titles!!.cols) return@forEach
                 val unit = Vectors.unit(vector)
-                if (key == TextVectors.TITLE) titles!!.put(unit, 0, i * width, width)
+                if (key == TextVectors.TITLE) titles!!.held.put(unit, 0, titles!!.row(i), unit.size)
                 else {
-                    descriptions!!.put(unit, 0, i * width, width)
+                    descriptions!!.held.put(unit, 0, descriptions!!.row(i), unit.size)
                     described[i] = true
                 }
             }
@@ -133,7 +113,6 @@ internal class SearchSide(
                 SearchSide(
                     s,
                     ids,
-                    width,
                     it,
                     descriptions!!,
                     described,

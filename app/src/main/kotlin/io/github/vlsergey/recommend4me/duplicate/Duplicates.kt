@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -15,6 +16,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
@@ -24,22 +26,24 @@ private val log = LoggerFactory.getLogger(Duplicates::class.java)
 
 /**
  * The user's word on a pair: one work; different works; or related works ([related]) — one the TRANSLATION of the
- * other, one holding a PARTIAL of the other's text (a site's fewer chapters, a collection) — not linked, each its own
- * grade and interest, left out of the model of the answers ([DuplicateModel.ofAnswers]): a translation's authors differ
- * while its tags and description are the other's — neither one work nor two.
+ * other, one holding a PARTIAL of the other's text (a site's fewer chapters, a collection), two works of one SERIES
+ * (the volumes of a cycle) — not linked, each its own grade and interest. A translation and a part are left out of the
+ * model of one work ([PairModels.fit]): a translation's authors differ while its tags and description are the other's —
+ * neither one work nor two; two works of one series are two works, and what the model of a series learns from.
  */
 enum class DuplicateAnswer {
     SAME,
     DIFFERENT,
     TRANSLATION,
-    PARTIAL;
+    PARTIAL,
+    SERIES;
 
     /**
-     * Related works, kept by their kind ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]):
-     * neither one work nor two.
+     * Related works, kept by their kind ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]): not
+     * linked.
      */
     val related: Boolean
-        get() = this == TRANSLATION || this == PARTIAL
+        get() = this == TRANSLATION || this == PARTIAL || this == SERIES
 }
 
 /**
@@ -56,11 +60,13 @@ enum class DuplicateAnswer {
  * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct],
  * [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]).
  *
- * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work is a model of the user's answers ([DuplicateModel])
- * over how alike its layers are, fitted at every search and a few seconds after the answers ([answered]); the search
- * keeps of every work the pair the model finds likeliest. The pairs are shown by the score by the formula of the list
- * (the prediction times the chance of interest) of the work the pair was found for times that chance: a likely pair of
- * a work the user would read first ([DuplicatePages]); the words on pairs are kept in a journal ([DuplicateJournal]).
+ * THE ANSWERS TEACH THE COMPARING: how likely a pair is one work, and how likely it is one series of works, are models
+ * of the user's answers over how alike its layers are — a plugin's ([PairModel], [PairModels]) — fitted at every search
+ * and a few seconds after the answers ([answered]); the search keeps of every work the pair every model finds
+ * likeliest, every pair scored by both at once, on the card when there is one. The pairs are shown by the score by the
+ * formula of the list (the prediction times the chance of interest) of the work the pair was found for times that
+ * chance: a likely pair of a work the user would read first ([DuplicatePages]); the words on pairs are kept in a
+ * journal ([DuplicateJournal]).
  */
 @Component
 class Duplicates(
@@ -69,6 +75,9 @@ class Duplicates(
     private val workload: Workload,
     private val works: Works,
     private val workEvents: WorkEvents,
+    private val models: PairModels,
+    /** The card, when the launch asks for it: the search made there. */
+    private val cards: ObjectProvider<CardSource>,
 ) {
     private val worker = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "duplicates").apply { isDaemon = true }
@@ -116,32 +125,45 @@ class Duplicates(
     }
 
     /**
-     * The search of the type ([PairSearch]), its pairs kept in place of the last search's, and the model of the answers
-     * fitted on them.
+     * The search of the type ([TypeSearch]) by the models as the last fitting left them — of one work, and of one
+     * series when there is one —, its pairs kept in place of the last search's, and the models of the answers fitted on
+     * them. None without a plugin of pairs.
      */
     private fun search(type: TypeStore) {
         val encoder = plugins.textEncoder()?.id ?: return
+        val model = models.model() ?: return
         val started = System.currentTimeMillis()
-        val search = PairSearch.read(type, encoder)
-        val read = System.currentTimeMillis() - started
         val said = said(type)
-        val found = search.found(said)
+        val search = TypeSearch.read(type, encoder, said)
+        val read = System.currentTimeMillis() - started
+        val kept = models.of(type)
+        val found =
+            search.found(
+                said,
+                model,
+                listOfNotNull(kept?.same ?: model.prior(), kept?.series),
+                cards.getIfAvailable()?.cublas(),
+            )
         val compared = System.currentTimeMillis() - started
-        val fitted = DuplicateModel.ofAnswers(found.values, said)
-        type.duplicates.replace(found.values, DuplicateSearch(Instant.now(), encoder, search.works, fitted?.weights))
+        val fitted = PairModels.fit(model, found.values, said)
+        type.duplicates.replace(
+            found.values,
+            DuplicateSearch(Instant.now(), encoder, search.works, model.id, fitted.same?.pack(), fitted.series?.pack()),
+        )
         log.info(
             "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs in {} ms " +
-                "(reading {}, comparing {}, keeping {}): {}",
+                "(reading {}, comparing {}, keeping {}); a model of one work {}, of one series {}",
             type.id,
             search.works,
             search.sides.size,
-            search.families.size,
+            search.search.families.size,
             found.size,
             System.currentTimeMillis() - started,
             read,
             compared - read,
             System.currentTimeMillis() - started - compared,
-            fitted?.weights,
+            fitted.same != null,
+            fitted.series != null,
         )
     }
 
@@ -181,24 +203,7 @@ class Duplicates(
                     // The boundary of the worker's thread: whatever the fitting throws is logged, the type let go of
                     @Suppress("TooGenericExceptionCaught")
                     try {
-                        workload.run(work, asked = true) {
-                            val started = System.currentTimeMillis()
-                            val said = said(type)
-                            val pairs = type.duplicates.all()
-                            val model = DuplicateModel.ofAnswers(pairs, said)
-                            type.duplicates.keepWeights(model?.weights)
-                            log.info(
-                                "{}: the model of the duplicates fitted on {} pairs, {} said one work, {} related, " +
-                                    "{} different, in {} ms: {}",
-                                type.id,
-                                pairs.size,
-                                said.values.count { it == DuplicateAnswer.SAME },
-                                said.values.count { it.related },
-                                said.values.count { it == DuplicateAnswer.DIFFERENT },
-                                System.currentTimeMillis() - started,
-                                model?.weights,
-                            )
-                        }
+                        workload.run(work, asked = true) { fitAnew(type) }
                     } catch (e: Exception) {
                         log.warn("{}: the model of the duplicates was not fitted: {}", type.id, e.message, e)
                     } finally {
@@ -212,10 +217,33 @@ class Duplicates(
     }
 
     /**
+     * The models of the answers fitted anew on the pairs kept as they are, and kept: none without a plugin of pairs.
+     */
+    private fun fitAnew(type: TypeStore) {
+        val model = models.model() ?: return
+        val started = System.currentTimeMillis()
+        val said = said(type)
+        val pairs = type.duplicates.all()
+        val fitted = PairModels.fit(model, pairs, said)
+        type.duplicates.keepModels(model.id, fitted.same?.pack(), fitted.series?.pack())
+        log.info(
+            "{}: the models of the pairs fitted on {} pairs, {} said one work, {} one series, {} related otherwise, " +
+                "{} different, in {} ms",
+            type.id,
+            pairs.size,
+            said.values.count { it == DuplicateAnswer.SAME },
+            said.values.count { it == DuplicateAnswer.SERIES },
+            said.values.count { it.related && it != DuplicateAnswer.SERIES },
+            said.values.count { it == DuplicateAnswer.DIFFERENT },
+            System.currentTimeMillis() - started,
+        )
+    }
+
+    /**
      * The user's word on the pair, in place of any before: one work — their normalized works merged, the grade and
-     * interest shared — different works, or related ones (a translation, a part: each its own grade and interest), [b]
-     * taken out of a work holding both. A word is a word on the two normalized works: of every item of them alike.
-     * False when either is no work of the type, or they are one item.
+     * interest shared — different works, or related ones (a translation, a part, one series: each its own grade and
+     * interest), [b] taken out of a work holding both. A word is a word on the two normalized works: of every item of
+     * them alike. False when either is no work of the type, or they are one item.
      */
     fun answer(typeId: String, a: ItemKey, b: ItemKey, verdict: DuplicateAnswer): Boolean {
         val type = stores.type(typeId)?.takeIf { isPair(it, a, b) } ?: return false

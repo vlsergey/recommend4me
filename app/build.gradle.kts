@@ -38,6 +38,8 @@ dependencies {
     testImplementation(project(":plugins:scorer-pairwise"))
     // The search of the works by their words, of this build
     testImplementation(project(":plugins:search-lucene"))
+    // The pairs of works across the sites, by the model of this build
+    testImplementation(project(":plugins:pair-logistic"))
 }
 
 // --- jOOQ: the classes of the tables of every kind of database file, generated from its migrations ---

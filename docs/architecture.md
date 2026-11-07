@@ -26,6 +26,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/scorer-boosting` | Gradient boosted trees on the pairwise logistic loss, Newton leaves; the number of trees chosen by cross-validation. |
 | `plugins/search-lucene` | Search by words and by meaning over one Lucene index per content type. |
 | `plugins/catalogue-wikidata` | The universes of fan fiction and their characters, from Wikidata. |
+| `plugins/pair-logistic` | The works of different sites that may be one work, or one series of works: a logistic model of how alike their layers are, one a kind, fitted on the user's answers on pairs; and the search of the pairs by both at once, on the card when there is one. |
 | `plugins/suggester-bilinear` | The values a work should have — tags, universes, characters, pairings — by one model of every work and every value. |
 | `plugins/source-ao3` | archiveofourown.org, browser tracking and a work's page on request. |
 | `plugins/source-author-today` | author.today, browser tracking only. |

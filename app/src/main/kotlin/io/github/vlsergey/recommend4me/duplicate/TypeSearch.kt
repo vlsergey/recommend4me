@@ -1,0 +1,143 @@
+package io.github.vlsergey.recommend4me.duplicate
+
+import io.github.vlsergey.recommend4me.author.AuthorKin
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.source.TypeStore
+
+/**
+ * THE SEARCH OF A TYPE'S PAIRS: every site read ([SearchSide]) — every value of the type weighed by how rare it is
+ * among every work of the type (the logarithm of the works over those with it: "finished", a value of most works, tells
+ * little, a character of a few much) — and handed to the model of pairs ([PairModel.search]) with the pairs the user
+ * answered on, passed over: of every work, the likeliest of every other site by every model of the kinds of pairs, both
+ * ways. The pairs kept with their layers ([PairSearch.layers]), marked found for the work they are the likeliest of
+ * ([found]); every pair the user answered on with them, found or not: what the models learn from.
+ */
+internal class TypeSearch
+private constructor(private val type: TypeStore, val sides: List<SearchSide>, val search: PairSearch) {
+    /** The works of every site read. */
+    val works: Int = sides.sumOf { it.ids.size }
+
+    private val bySource = sides.withIndex().associate { (k, side) -> side.store.id to k }
+
+    /**
+     * The pairs the [model] keeps by every model of [models], on the [card] when there is one, and every pair answered
+     * on ([said]).
+     */
+    fun found(
+        said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+        model: PairModel,
+        models: List<FittedPairModel>,
+        card: Cublas?,
+    ): HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate> {
+        val found = HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate>()
+        model.search(search, models, card).forEach { f ->
+            val sought = key(f.site, f.item)
+            val (first, second) = type.links.ordered(sought, key(f.otherSite, f.other))
+            val candidate =
+                found.getOrPut(first to second) { candidate(first, second, f.site, f.item, f.otherSite, f.other) }
+            // Found for this work: the one it is the likeliest of the other site of
+            candidate.foundFor =
+                candidate.foundFor or (if (sought == first) DuplicateCandidate.FIRST else DuplicateCandidate.SECOND)
+        }
+        said.keys
+            .filter { it !in found }
+            .forEach { pair ->
+                placeOf(pair)?.let { p -> found[pair] = candidate(pair.first, pair.second, p.a, p.i, p.b, p.j) }
+            }
+        return found
+    }
+
+    private fun key(site: Int, item: Int) = ItemKey(sides[site].store.id, sides[site].ids[item])
+
+    /**
+     * The pair of the [a]-th site's [i]-th work and the [b]-th's [j]-th, [first] and [second] in the order kept, with
+     * its layers.
+     */
+    private fun candidate(first: ItemKey, second: ItemKey, a: Int, i: Int, b: Int, j: Int): DuplicateCandidate {
+        val layers = search.layers(a, i, b, j)
+        return DuplicateCandidate(
+            first,
+            second,
+            layers.title,
+            layers.description,
+            layers.size,
+            layers.facets,
+            sameAuthor = layers.sameAuthor,
+        )
+    }
+
+    /**
+     * Of a [pair], its sites' and works' places, its first first; null when either is not read, or the two are not
+     * compared.
+     */
+    private fun placeOf(pair: Pair<ItemKey, ItemKey>): Places? {
+        val a = bySource[pair.first.source]
+        val b = bySource[pair.second.source]
+        if (a == null || b == null) return null
+        val i = sides[a].ids.binarySearch(pair.first.id)
+        val j = sides[b].ids.binarySearch(pair.second.id)
+        return Places(a, i, b, j).takeIf { i >= 0 && j >= 0 && search.compared(a, b) }
+    }
+
+    /** The places of a pair: its first work's site and place, its second's. */
+    private class Places(val a: Int, val i: Int, val b: Int, val j: Int)
+
+    companion object {
+        /**
+         * The search of the [type] by the [encoder]'s vectors: every site read, every value of the type weighed by how
+         * rare it is among every work of the type, its facet given its place; the pairs answered on ([said]) passed
+         * over both ways.
+         */
+        fun read(type: TypeStore, encoder: String, said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>): TypeSearch {
+            val places = HashMap<String, Int>()
+            val ratios = type.sizes.all()
+            val sides = type.sources.mapNotNull { SearchSide.read(it, encoder, places, ratios) }
+            val works = sides.sumOf { it.ids.size }
+            val having = IntArray(places.size)
+            sides.forEach { side -> side.values.forEach { own -> own.forEach { having[it]++ } } }
+            val rarity =
+                FloatArray(places.size) { t ->
+                    if (having[t] == 0) 0f else Math.log(works.toDouble() / having[t]).toFloat()
+                }
+            // Every value's facet: the name before its value ("characters:wikidata:Q…")
+            val names =
+                arrayOfNulls<String>(places.size).also { out -> places.forEach { (name, at) -> out[at] = name } }
+            val families = names.map { it!!.substringBefore(':') }.distinct().sorted()
+            val familyAt = families.withIndex().associate { it.value to it.index }
+            val familyOf = IntArray(places.size) { familyAt.getValue(names[it]!!.substringBefore(':')) }
+            val sizeKeys = sides.flatMap { it.sizes.keys }.distinct().sorted()
+            val kin = AuthorKin(type.authors.told())
+            val search =
+                PairSearch(
+                    sides.map { it.works(rarity, familyOf, sizeKeys, kin) },
+                    families,
+                    familyOf,
+                    sizeKeys,
+                    answered(sides, said),
+                )
+            return TypeSearch(type, sides, search)
+        }
+
+        /**
+         * The pairs answered on ([said]): of every ordered pair of sites, of a work of the first by its place the works
+         * of the second by theirs.
+         */
+        private fun answered(
+            sides: List<SearchSide>,
+            said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+        ): Map<Pair<Int, Int>, Map<Int, IntArray>> {
+            val bySource = sides.withIndex().associate { (k, side) -> side.store.id to k }
+            val out = HashMap<Pair<Int, Int>, HashMap<Int, MutableList<Int>>>()
+            said.keys.forEach { (x, y) ->
+                val a = bySource[x.source] ?: return@forEach
+                val b = bySource[y.source] ?: return@forEach
+                val i = sides[a].ids.binarySearch(x.id).takeIf { it >= 0 } ?: return@forEach
+                val j = sides[b].ids.binarySearch(y.id).takeIf { it >= 0 } ?: return@forEach
+                out.getOrPut(a to b) { HashMap() }.getOrPut(i) { ArrayList() } += j
+                out.getOrPut(b to a) { HashMap() }.getOrPut(j) { ArrayList() } += i
+            }
+            return out.mapValues { (_, byWork) -> byWork.mapValues { it.value.toIntArray() } }
+        }
+    }
+}

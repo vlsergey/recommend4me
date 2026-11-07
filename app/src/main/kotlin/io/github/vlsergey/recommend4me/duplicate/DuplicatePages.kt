@@ -27,6 +27,7 @@ class DuplicatePages(
     private val duplicates: Duplicates,
     private val views: DuplicateViews,
     private val sizes: WorkSizes,
+    private val models: PairModels,
 ) {
     /**
      * A page of the pairs of the type: not [answered] — those neither linked (by any way, through other works too) nor
@@ -36,9 +37,9 @@ class DuplicatePages(
      * prediction times the chance of interest: a work the user would read first), its chance of interest, its predicted
      * grade, or nothing — a work of a high score, the likeliest of many works of another site, does not lift every pair
      * of them; equal, the likelier pair first. Or times the pair's own mean size ([DuplicateSort.SIZE]): the long works
-     * first. Or, of the pairs in doubt ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change
-     * ([DuplicateModel.boundary]): what an answer teaches the model most. Every pair read for the request and let go.
-     * Null of no such type.
+     * first. Or by the chance the pair is one series of works ([DuplicateSort.SERIES]). Or, of the pairs in doubt
+     * ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairChances.boundary]): what an
+     * answer teaches the model most. Every pair read for the request and let go. Null of no such type.
      */
     fun page(
         typeId: String,
@@ -50,7 +51,7 @@ class DuplicatePages(
         val type = stores.type(typeId) ?: return null
         val said = duplicates.said(type)
         val search = type.duplicates.search()
-        val model = DuplicateModel(search?.weights)
+        val chances = models.of(type)
         val kept = type.duplicates.all()
         // The size of every work of the pairs, in words: of the sort by the pair's size alone
         val words =
@@ -58,9 +59,13 @@ class DuplicatePages(
             else wordsOf(type, (kept.map { it.pair } + said.keys).flatMap { listOf(it.first, it.second) }.toSet())
         val boundary =
             if (sort == DuplicateSort.UNCERTAIN)
-                model.boundary(kept) { c -> said[c.pair]?.takeIf { !it.related }?.let { it == DuplicateAnswer.SAME } }
+                chances?.boundary(kept) { c ->
+                    said[c.pair]
+                        ?.takeIf { it == DuplicateAnswer.SAME || it == DuplicateAnswer.DIFFERENT }
+                        ?.let { it == DuplicateAnswer.SAME }
+                } ?: 0.0
             else 0.0
-        val ranking = Ranking(sort, model, worthOf(type, sort), words, boundary)
+        val ranking = Ranking(sort, chances, worthOf(type, sort), words, boundary)
         val rows =
             if (!answered) kept.filter { it.pair !in said }.map { ranking.ranked(it.pair, it) }
             else kept.associateBy { it.pair }.let { byPair -> said.keys.map { ranking.ranked(it, byPair[it]) } }
@@ -77,7 +82,7 @@ class DuplicatePages(
             pending = duplicates.isSearching(type),
             searchedAt = search?.madeAt?.atOffset(ZoneOffset.UTC),
             works = search?.works,
-            learnt = search?.weights != null,
+            learnt = chances?.learnt == true,
         )
     }
 
@@ -107,12 +112,12 @@ class DuplicatePages(
     fun ofItem(key: ItemKey): List<DuplicatePair> {
         val type = stores.typeOf(key.source)
         val own = works.of(type).members(key).toSet()
-        val model = DuplicateModel(type.duplicates.search()?.weights)
+        val chances = models.of(type)
         val found =
             type.duplicates
                 .all()
                 .filter { (it.pair.first in own) != (it.pair.second in own) }
-                .map { c -> model.chance(c).let { Ranked(c.pair, c, it, it) } }
+                .map { c -> chances?.same(c).let { Ranked(c.pair, c, it, chances?.series(c), it ?: 0.0) } }
                 .sortedByDescending { it.priority }
                 // Found by several items of the work, the other is one: the likeliest pair of them, an answer going
                 // across the work
@@ -146,33 +151,43 @@ private fun DuplicateSort.worth(grade: Double, interest: Double): Double =
         DuplicateSort.GRADE -> grade
         DuplicateSort.CHANCE,
         DuplicateSort.SIZE,
+        DuplicateSort.SERIES,
         DuplicateSort.UNCERTAIN -> 1.0
     }
 
 /**
- * How the [sort] ranks a pair: by the [model]'s chance it is one work, times what the sort says of the work it was
- * found for ([worth]), of its size in [words], or by how near it is to the [boundary] of the user's answers.
+ * How the [sort] ranks a pair: by the [chances] it is one work, times what the sort says of the work it was found for
+ * ([worth]), of its size in [words], or by how near it is to the [boundary] of the user's answers; or by the chance it
+ * is one series. None of a pair of no model of pairs.
  */
 private class Ranking(
     private val sort: DuplicateSort,
-    private val model: DuplicateModel,
+    private val chances: PairChances?,
     private val worth: Map<ItemKey, Double>,
     private val words: Map<ItemKey, Double>,
     private val boundary: Double,
 ) {
     /** The pair of its [layers] (none of an answered pair not kept) with what ranks it. */
     fun ranked(pair: Pair<ItemKey, ItemKey>, layers: DuplicateCandidate?): Ranked {
-        val chance = layers?.let(model::chance)
+        val chance = layers?.let { chances?.same(it) }
+        val series = layers?.let { chances?.series(it) }
         val priority =
             when (sort) {
                 DuplicateSort.CHANCE -> chance ?: 0.0
-                DuplicateSort.UNCERTAIN -> layers?.let { 1 / (1 + abs(model.logit(it) - boundary)) } ?: 0.0
+                DuplicateSort.SERIES -> series ?: 0.0
+                DuplicateSort.UNCERTAIN -> doubt(layers)
                 DuplicateSort.SIZE -> size(pair) * (chance ?: 0.0)
                 DuplicateSort.FORMULA,
                 DuplicateSort.INTEREST,
                 DuplicateSort.GRADE -> sought(pair, layers) * (chance ?: 0.0)
             }
-        return Ranked(pair, layers, chance, priority)
+        return Ranked(pair, layers, chance, series, priority)
+    }
+
+    /** How near the pair of [layers] is to where the user's answers change: one at it, less the farther. */
+    private fun doubt(layers: DuplicateCandidate?): Double {
+        if (layers == null || chances == null) return 0.0
+        return 1 / (1 + abs(chances.logit(layers) - boundary))
     }
 
     /** The mean of the two works' sizes, of those known: of a work of no size known, the other's alone. */

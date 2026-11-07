@@ -3668,7 +3668,7 @@ components:
             $ref: '#/components/schemas/WorkSite'
         relations:
           type: array
-          description: The works the user said to be related to this one - a translation, a part
+          description: The works the user said to be related to this one - a translation, a part, a work of one series
           items:
             $ref: '#/components/schemas/WorkRelation'
 
@@ -3686,7 +3686,7 @@ components:
           type: string
         kind:
           type: string
-          enum: [TRANSLATION, PARTIAL]
+          enum: [TRANSLATION, PARTIAL, SERIES]
 
     WorkSite:
       type: object
@@ -5063,6 +5063,9 @@ components:
         chance:
           type: number
           description: The chance the pair is one work, by the model of the user's answers (the mean of the layers before any answer); none of an answered pair the search did not compare
+        seriesChance:
+          type: number
+          description: The chance the pair is two works of one series, by its own model of the user's answers; none before any pair is said to be of one series
         priority:
           type: number
           description: What the pairs are ordered by - the chance times what the sort says of the work the pair was found for (of both, the larger)
@@ -5085,8 +5088,8 @@ components:
           description: The dictionary of authors gives the two one author - a normalized author of both, or two the user said are partly one
         answer:
           type: string
-          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
-          description: The user's word - one work (linked), different, one the translation of the other, or one a part of the other; none when not answered
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
+          description: The user's word - one work (linked), different, one the translation of the other, one a part of the other, or two works of one series; none when not answered
 
     AuthorOfferPage:
       type: object
@@ -5311,14 +5314,15 @@ components:
 
     DuplicateSort:
       type: string
-      enum: [FORMULA, CHANCE, INTEREST, GRADE, SIZE, UNCERTAIN]
+      enum: [FORMULA, CHANCE, INTEREST, GRADE, SIZE, SERIES, UNCERTAIN]
       default: FORMULA
       description: >
         What the chance a pair is one work is multiplied by, of the work the pair was found for (of both, the larger):
         FORMULA - its score by the formula of the list, the predicted grade (not below nought) times the chance of
         interest; INTEREST - the chance of interest alone; GRADE - the predicted grade alone; CHANCE - nothing, the
         likeliest pairs first. SIZE - of the pair, not of one work: the mean size of its two works in words, stated by
-        their sites or worked out of their characters (of one known, its own; of neither, nought). UNCERTAIN - no
+        their sites or worked out of their characters (of one known, its own; of neither, nought). SERIES - no such
+        product: the chance the pair is two works of one series alone, the likeliest first. UNCERTAIN - no
         such product: the pairs nearest where the user's answers change from different to one work first, whose
         answer teaches the model most
 
@@ -5398,11 +5402,11 @@ components:
           $ref: '#/components/schemas/DuplicateWork'
         answer:
           type: string
-          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
           description: The word said; none - the word taken back
         before:
           type: string
-          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
           description: The word the pair had before; none - no word (of a restored one, unknown)
         restored:
           type: boolean
@@ -5443,11 +5447,13 @@ components:
           $ref: '#/components/schemas/ItemRef'
         verdict:
           type: string
-          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL]
+          enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
           description: >
             One work (linked, the grade and interest shared); different works; or related works - one the translation of
-            the other, one holding a part of the other's text (some of its chapters, a collection it is in; a volume of a series is a work of its own) - not linked, each its own grade, left out of the
-            model of the answers
+            the other, one holding a part of the other's text (some of its chapters, a collection it is in), two works of
+            one series (its volumes, each a work of its own) - not linked, each its own grade. A translation and a part are
+            left out of the model of one work; a pair of one series is two works to it, and what the model of a series
+            learns from
 
     MarkedWork:
       type: object

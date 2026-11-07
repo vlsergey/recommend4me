@@ -6,8 +6,8 @@ import io.github.vlsergey.recommend4me.api.model.AuthorSaid
 import io.github.vlsergey.recommend4me.api.model.AuthorSide
 import io.github.vlsergey.recommend4me.api.model.AuthorWorkPair
 import io.github.vlsergey.recommend4me.duplicate.DuplicateAnswer
-import io.github.vlsergey.recommend4me.duplicate.DuplicateModel
 import io.github.vlsergey.recommend4me.duplicate.Duplicates
+import io.github.vlsergey.recommend4me.duplicate.PairModels
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -27,6 +27,7 @@ class AuthorOffers(
     private val works: Works,
     private val duplicates: Duplicates,
     private val sides: AuthorSides,
+    private val models: PairModels,
 ) {
 
     /** Two works of two authors, what is known of them: the user's word they match by, the chance they are one. */
@@ -117,13 +118,15 @@ class AuthorOffers(
      */
     private fun workPairs(type: TypeStore): List<WorkPair> {
         val said = duplicates.said(type)
-        val model = DuplicateModel(type.duplicates.search()?.weights)
+        val chances = models.of(type)
         val out = ArrayList<WorkPair>()
         val kept = type.duplicates.all()
         val found = kept.associateBy { it.pair }
         fun tells(answer: DuplicateAnswer?) =
             answer == null || answer == DuplicateAnswer.SAME || answer == DuplicateAnswer.PARTIAL
-        kept.forEach { c -> if (tells(said[c.pair])) out += WorkPair(c.first, c.second, said[c.pair], model.chance(c)) }
+        kept.forEach { c ->
+            if (tells(said[c.pair])) out += WorkPair(c.first, c.second, said[c.pair], chances?.same(c))
+        }
         said
             .filterKeys { it !in found }
             .forEach { (pair, answer) -> if (tells(answer)) out += WorkPair(pair.first, pair.second, answer, null) }

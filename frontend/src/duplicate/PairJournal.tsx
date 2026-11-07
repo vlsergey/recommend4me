@@ -24,11 +24,12 @@ const WORDS = {
   DIFFERENT: "PairRow.different",
   TRANSLATION: "PairRow.translation",
   PARTIAL: "PairRow.partial",
+  SERIES: "PairRow.series",
 } as const satisfies Record<NonNullable<Word>, string>;
 
 /**
  * THE JOURNAL OF THE WORDS ON PAIRS of works of the type, the newest first: every word said — one work,
- * different, a translation, a part, here or in the window of a work — and every word taken back, with
+ * different, a translation, a part, one series, here or in the window of a work — and every word taken back, with
  * the word the pair had before. The newest word on a pair, while the pair has it, is undone by a press:
  * the pair given back the word before, itself a word of the journal. Read when opened, and as often as
  * chosen; an undoing reads nothing — the word is marked undone where it stands.

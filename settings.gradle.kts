@@ -25,6 +25,7 @@ include(
     "plugins:encoder-e5",
     "plugins:encoder-siglip2",
     "plugins:reranker-bge",
+    "plugins:pair-logistic",
     "plugins:scorer-pairwise",
     "plugins:scorer-knn",
     "plugins:scorer-fm",

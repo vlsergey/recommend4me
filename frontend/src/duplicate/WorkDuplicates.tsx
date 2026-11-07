@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLinkIcon, Undo2Icon } from "lucide-react";
+import { ExternalLinkIcon, LibraryBigIcon, Undo2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, refKey, sameItem, unwrap, type ContentTypeInfo, type DuplicatePair, type ItemRef, type WorkRelation, type WorkSite } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -13,12 +13,20 @@ import { itemKey } from "@/item/lists";
 
 type Verdict = NonNullable<DuplicatePair["answer"]>;
 
-const VERDICTS: { verdict: Verdict; word: "same" | "different" | "translation" | "partial" }[] = [
+const VERDICTS: { verdict: Verdict; word: "same" | "different" | "translation" | "partial" | "series" }[] = [
   { verdict: "SAME", word: "same" },
   { verdict: "DIFFERENT", word: "different" },
   { verdict: "TRANSLATION", word: "translation" },
   { verdict: "PARTIAL", word: "partial" },
+  { verdict: "SERIES", word: "series" },
 ];
+
+/** The word of a kind of relation of two works, as the buttons name it. */
+const RELATION_WORDS = {
+  TRANSLATION: "PairRow.translation",
+  PARTIAL: "PairRow.partial",
+  SERIES: "PairRow.series",
+} as const satisfies Record<WorkRelation["kind"], string>;
 
 /** How many pairs are shown at first and by each press for more: a work may be the likeliest of hundreds of others, none hidden. */
 const STEP = 10;
@@ -74,7 +82,16 @@ export function WorkDuplicates({ type, item, sites, corrections }: { type: Conte
                 {other.title}
                 <ExternalLinkIcon className="ml-1 inline size-3 opacity-60" />
               </a>
-              {p.chance != null && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{percent(p.chance)}</span>}
+              {p.chance != null && (
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={t("PairRow.chanceHint")}>
+                  {percent(p.chance)}
+                </span>
+              )}
+              {p.seriesChance != null && (
+                <span className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-muted-foreground" title={t("PairRow.seriesChanceHint")}>
+                  <LibraryBigIcon className="size-3" /> {percent(p.seriesChance)}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap gap-1">
               {VERDICTS.map(({ verdict, word }) => (
@@ -126,7 +143,7 @@ export function WorkRelations({ type, item, relations }: { type: ContentTypeInfo
     <ul className="flex flex-col gap-1 text-sm">
       {relations.map((r) => (
         <li key={refKey(r)} className="flex items-baseline gap-2">
-          <span className="shrink-0 text-xs text-muted-foreground">{t(r.kind === "TRANSLATION" ? "PairRow.translation" : "PairRow.partial")}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{t(RELATION_WORDS[r.kind])}</span>
           <span className="shrink-0 text-xs text-muted-foreground" title={sourceTitle(r.source)}>
             {sourceShort(r.source)}
           </span>
