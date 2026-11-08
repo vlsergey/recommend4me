@@ -70,6 +70,13 @@ private constructor(
                 FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG),
             )
     }
+    private val cudaDeviceSynchronize: MethodHandle by lazy {
+        Linker.nativeLinker()
+            .downcallHandle(
+                runtime.find("cudaDeviceSynchronize").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT),
+            )
+    }
     private val cudaFreeHost: MethodHandle by lazy {
         Linker.nativeLinker()
             .downcallHandle(
@@ -247,6 +254,15 @@ private constructor(
 
     /** Room for [bytes] bytes on the card; null when it has none left. */
     fun allocateBytes(bytes: Long): DeviceBytes? = runCatching { DeviceBytes(bytes) }.getOrNull()
+
+    /**
+     * Every work handed to the card done: a kernel and a product return before they end, and the time of what follows
+     * would be theirs — a measure of where the time goes waits for them here.
+     */
+    fun synchronize() {
+        val status = cudaDeviceSynchronize.invokeExact() as Int
+        check(status == 0) { "the card's work failed: CUDA error $status" }
+    }
 
     private fun memset(at: MemorySegment, bytes: Long) {
         val status = cudaMemset.invokeExact(at, 0, bytes) as Int

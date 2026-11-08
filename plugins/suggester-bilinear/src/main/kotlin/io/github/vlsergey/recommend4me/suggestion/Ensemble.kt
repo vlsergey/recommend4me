@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.matrix.Simd
-import io.github.vlsergey.recommend4me.matrix.weightedLogisticRow
 import java.util.concurrent.CancellationException
 import kotlin.concurrent.withLock
 import org.slf4j.LoggerFactory
@@ -70,19 +69,11 @@ internal class Ensemble(
     private val duT = Floats(count * r * n)
     private val vT = Floats(count * r * m)
 
-    /** The rows of items a block of the pairs takes: a block of them against every value, held at once. */
-    private val blockRows = minOf(n, maxOf(1, BLOCK / maxOf(1, m)))
-    private val scores = Floats(blockRows * m)
-    private val ones = Floats(maxOf(blockRows, 1)).also { o -> for (k in 0 until o.count) o[k] = 1f }
-
-    // A row of the pairs that weigh anything, worked on in Java between the products: made once, as long as the longest
-    // row
-    private val longest = p.longest
+    /** A row of the pairs that weigh anything, read by the held-out loss: made once. */
     private val pairRow = p.row()
-    private val z = FloatArray(longest)
-    private val shift = FloatArray(longest)
-    private val slopes = FloatArray(longest)
-    private val sums = FloatArray(2)
+
+    /** The pairs on the processor, when they are not on the card: made at the first need. */
+    private val onProcessor by lazy { PairsOnProcessor(p, r, heldOut, uT, vT, bias, pair, duT, gE, gBias, gPair) }
 
     /** The names as texts of a work: their coordinates of every model, their loss and their slopes. */
     private val h = p.hints.size
@@ -288,12 +279,16 @@ internal class Ensemble(
      * A are read there, and their gradient left there.
      */
     internal fun evaluate(losses: FloatArray, aOnCard: Boolean = false) {
+        val onPairs = pairsOnCard
+        if (onPairs != null) {
+            evaluateOnCard(onPairs, losses, aOnCard)
+            return
+        }
         val k = active
         val kr = k * r
         // Uᵀ = Aᵀ Xᵀ and Vᵀ = Bᵀ Zᵀ + Eᵀ of every model, one product each
-        val onPairs = pairsOnCard
         var at = System.nanoTime()
-        products.coordinates(kr, aOnCard, keep = onPairs != null)
+        products.coordinates(kr, aOnCard)
         featuresNanos += System.nanoTime() - at
         at = System.nanoTime()
         Blas.gemm(false, true, kr, m, dz, bT, 0, dz, p.z.held, 0, dz, vT, 0, m)
@@ -301,42 +296,21 @@ internal class Ensemble(
         if (h > 0) names.coordinates(k)
         restNanos += System.nanoTime() - at
         at = System.nanoTime()
-        if (onPairs != null) {
-            val c = onCard!!
-            onPairs.evaluate(
-                k,
-                slotModel,
-                heldOut,
-                totals,
-                c.uT,
-                c.duT,
-                pair,
-                vT,
-                bias,
-                names.uhT,
-                gE,
-                gBias,
-                names.duhT,
-                gPair,
-                losses,
-            )
-            for (slot in 0 until k) losses[slot] = losses[slot] / totals[slotModel[slot]]
-        } else
-            for (slot in 0 until k) {
-                val model = slotModel[slot]
-                val scale = 1 / totals[model]
-                val common = pair[slot * Bilinear.PAIR + 1]
-                var loss = pairs(slot, model, scale, common)
-                if (h > 0) loss += names.loss(slot, scale, common)
-                losses[slot] = loss * scale
-            }
+        for (slot in 0 until k) {
+            val model = slotModel[slot]
+            val scale = 1 / totals[model]
+            val common = pair[slot * Bilinear.PAIR + 1]
+            var loss = onProcessor.loss(slot, model, scale, common)
+            if (h > 0) loss += names.loss(slot, scale, common)
+            losses[slot] = loss * scale
+        }
         pairsNanos += System.nanoTime() - at
         // dBᵀ = dVᵀ Z and dAᵀ = dUᵀ X of every model, one product each; the names' part added to dA after
         at = System.nanoTime()
         Blas.gemm(false, false, kr, dz, m, gE, 0, m, p.z.held, 0, dz, gB, 0, dz)
         restNanos += System.nanoTime() - at
         at = System.nanoTime()
-        products.gradient(kr, aOnCard, duOnCard = onPairs != null)
+        products.gradient(kr, aOnCard)
         featuresNanos += System.nanoTime() - at
         at = System.nanoTime()
         if (h > 0) {
@@ -345,6 +319,42 @@ internal class Ensemble(
             if (aOnCard) onCard!!.gA.upload(gA, 0, 0, kr * dx)
         }
         addPenalty(k, aOnCard, losses)
+        restNanos += System.nanoTime() - at
+    }
+
+    /**
+     * [evaluate] with the pairs and the names on the card ([PairsOnCard]): the items' coordinates and their slopes, the
+     * values' and the names' coordinates, the names' slopes there and never brought over; the slopes of A taken back
+     * only when the searches are not there. The card waited for before every reading of the time: what it was handed
+     * runs while the processor goes on, and its time would be told of whatever waits for it next.
+     */
+    private fun evaluateOnCard(onPairs: PairsOnCard, losses: FloatArray, aOnCard: Boolean) {
+        val k = active
+        val kr = k * r
+        val c = onCard!!
+        var at = System.nanoTime()
+        products.coordinates(kr, aOnCard, keep = true)
+        c.cublas.synchronize()
+        featuresNanos += System.nanoTime() - at
+        at = System.nanoTime()
+        onPairs.coordinates(k, bT, eT, c.aT)
+        c.cublas.synchronize()
+        restNanos += System.nanoTime() - at
+        at = System.nanoTime()
+        onPairs.evaluate(k, slotModel, heldOut, totals, c.uT, c.duT, pair, bias, gBias, gPair, losses)
+        for (slot in 0 until k) losses[slot] = losses[slot] / totals[slotModel[slot]]
+        c.cublas.synchronize()
+        pairsNanos += System.nanoTime() - at
+        // dAᵀ = dUᵀ X, then the names' part onto it there; dBᵀ = dVᵀ Z
+        at = System.nanoTime()
+        products.gradient(kr, aOnCard, duOnCard = true, bringBack = false)
+        onPairs.gradient(k, gE, gB, c.gA)
+        if (!aOnCard) c.gA.download(gA, 0, 0, kr * dx)
+        c.cublas.synchronize()
+        featuresNanos += System.nanoTime() - at
+        at = System.nanoTime()
+        addPenalty(k, aOnCard, losses)
+        c.cublas.synchronize()
         restNanos += System.nanoTime() - at
     }
 
@@ -374,60 +384,6 @@ internal class Ensemble(
             gPair[slot * Bilinear.PAIR + 1] = gPair[slot * Bilinear.PAIR + 1] - 2 * lambda * common
             losses[slot] += lambda * (penalty - common * common)
         }
-    }
-
-    /**
-     * The pairs of the items and their values of the model in [slot], a block of rows at a time: the scores of every
-     * pair, S = U Vᵀ; of those that weigh anything the loss and the slope, written over S, the rest nought; dU = S V,
-     * dV = Sᵀ U, the slopes of the biases its columns summed. The loss summed, not averaged; the slopes of the pair's
-     * own weights into the gradient.
-     */
-    private fun pairs(slot: Int, model: Int, scale: Float, common: Float): Float {
-        val uAt = slot * r * n
-        val vAt = slot * r * m
-        val biasAt = slot * m
-        val pairAt = slot * Bilinear.PAIR
-        val example = pair[pairAt]
-        var loss = 0f
-        var gCommon = 0f
-        var gExample = 0f
-        var from = 0
-        while (from < n) {
-            val rows = minOf(blockRows, n - from)
-            // S = U Vᵀ of the block's rows: Uᵀ's columns of them against Vᵀ
-            Blas.gemm(true, false, rows, m, r, uT, uAt + from, n, vT, vAt, m, scores, 0, m)
-            for (b in 0 until rows) {
-                val i = from + b
-                val at = b * m
-                val len = if (p.foldOf[i] == heldOut[model]) 0 else p.pairsOf(i, pairRow)
-                if (len == 0) {
-                    scores.clear(at, m)
-                    continue
-                }
-                val values = pairRow.values
-                for (j in 0 until len) {
-                    z[j] = scores[at + values[j]] + example * pairRow.examples[j]
-                    shift[j] = bias[biasAt + values[j]] + common
-                }
-                sums[0] = 0f
-                sums[1] = 0f
-                Simd.weightedLogisticRow(z, shift, pairRow.weights, pairRow.labels, len, scale, slopes, sums)
-                loss += sums[0]
-                gCommon += sums[1]
-                for (j in 0 until len) gExample += slopes[j] * pairRow.examples[j]
-                scores.clear(at, m)
-                for (j in 0 until len) scores[at + values[j]] = slopes[j]
-            }
-            // dUᵀ of the block's rows = Vᵀ Sᵀ; dVᵀ += Uᵀ of them · S; the biases' slopes += Sᵀ 1
-            Blas.gemm(false, true, r, rows, m, vT, vAt, m, scores, 0, m, duT, uAt + from, n)
-            val first = if (from == 0) 0f else 1f
-            Blas.gemm(false, false, r, m, rows, uT, uAt + from, n, scores, 0, m, gE, vAt, m, first)
-            Blas.gemv(true, rows, m, scores, 0, m, ones, 0, gBias, biasAt, first)
-            from += rows
-        }
-        gPair[pairAt] = gExample
-        gPair[pairAt + 1] = gCommon
-        return loss
     }
 
     /**
@@ -494,11 +450,6 @@ internal class Ensemble(
     }
 
     companion object {
-        /**
-         * The scores of the pairs held at once, a block of the items' rows against every value: memory, not meaning.
-         */
-        const val BLOCK = 8 shl 20
-
         /** The pieces of a model's point ([pieces]): A, B, E, the biases, the pair's own weights. */
         private const val PIECES = 5
 

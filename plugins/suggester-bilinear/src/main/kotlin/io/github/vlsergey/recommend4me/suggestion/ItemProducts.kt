@@ -47,6 +47,8 @@ internal class ItemProducts(
         val gA: Cublas.DeviceFloats,
         val part: Cublas.DeviceFloats,
         val rows: Cublas.DeviceFloats,
+        /** The items' ones there ([OnesOnCard]). */
+        val ones: OnesOnCard,
         /** What was put there for the fitting: freed with it — the application's rows are the application's. */
         private val made: List<AutoCloseable>,
     ) : AutoCloseable {
@@ -75,11 +77,25 @@ internal class ItemProducts(
         val g = room(count.toLong() * r * dx)
         val part = room(maxOf(1L, count.toLong() * r * p.x.widest))
         val rows = room(maxOf(1L, minOf(FeatureKernels.CARD_ROWS, p.x.widest).toLong() * p.x.longest))
+        val ones = OnesOnCard.of(c, p.x, made)
         // Every block and every room on the card, or nothing kept there
-        return if (blocks.any { it == null } || listOf(a, u, du, g, part, rows).any { it == null }) {
+        return if (blocks.any { it == null } || listOf(a, u, du, g, part, rows).any { it == null } || ones == null) {
             made.forEach { it.close() }
             null
-        } else OnCard(c, kernels, blocks.map { it!! }, a!!, u!!, du!!, g!!, part!!, rows!!, made)
+        } else
+            OnCard(
+                c,
+                kernels,
+                blocks.map { it!! },
+                a!!,
+                u!!,
+                du!!,
+                g!!,
+                part!!,
+                rows!!,
+                ones,
+                made,
+            )
     }
 
     override fun close() {
@@ -97,9 +113,8 @@ internal class ItemProducts(
             p.x.transposedCoordinates(aT, kr, uT, blockPart)
             return
         }
-        if (aOnCard) c.aT.download(aT, 0, 0, kr * dx) else c.aT.upload(aT, 0, 0, kr * dx)
-        p.x.onesCoordinates(aT, kr, uT)
-        c.uT.upload(uT, 0, 0, kr * n)
+        if (!aOnCard) c.aT.upload(aT, 0, 0, kr * dx)
+        c.kernels.launch("ones_coordinates", kr.toLong() * n, kr, n, dx, c.ones.at, c.ones.features, c.aT, c.uT)
         // A block's rows multiplied a run at a time, then carried onto its items' columns
         p.x.blocks.forEachIndexed { k, b ->
             val rows = c.blocks[k]
@@ -131,18 +146,17 @@ internal class ItemProducts(
     /**
      * dAᵀ = dUᵀ X of the first [kr] rows: the vectors' part on the card when they are there, beside the ones' part made
      * here and sent; taken back unless the searches read it there ([aOnCard]) — then only for the names to add their
-     * part.
+     * part — or unless the caller takes it back itself ([bringBack]): the names' part added there first.
      */
-    fun gradient(kr: Int, aOnCard: Boolean, duOnCard: Boolean = false) {
+    fun gradient(kr: Int, aOnCard: Boolean, duOnCard: Boolean = false, bringBack: Boolean = !aOnCard || named) {
         val c = onCard
         if (c == null) {
             p.x.transposedGradient(duT, kr, gA, blockPart)
             return
         }
-        // Written there by the pairs on the card ([duOnCard]) and brought over for the ones, else sent
-        if (duOnCard) c.duT.download(duT, 0, 0, kr * n) else c.duT.upload(duT, 0, 0, kr * n)
-        p.x.onesGradient(duT, kr, gA)
-        c.gA.upload(gA, 0, 0, kr * dx)
+        // Written there by the pairs on the card ([duOnCard]), else sent
+        if (!duOnCard) c.duT.upload(duT, 0, 0, kr * n)
+        c.kernels.launch("ones_gradient", kr.toLong() * dx, kr, n, dx, c.ones.itemsAt, c.ones.items, c.duT, c.gA)
         // The columns of a block's items taken, then multiplied by its rows a run at a time — onto the block's
         // columns of dA, nought of the ones' part sent
         p.x.blocks.forEachIndexed { k, b ->
@@ -169,7 +183,7 @@ internal class ItemProducts(
                 )
             }
         }
-        if (!aOnCard || named) c.gA.download(gA, 0, 0, kr * dx)
+        if (bringBack) c.gA.download(gA, 0, 0, kr * dx)
     }
 
     /**
@@ -183,6 +197,49 @@ internal class ItemProducts(
             FeatureKernels.floats(c.kernels, rows, from, many, c.rows)
             work(from, many)
             from += many
+        }
+    }
+}
+
+/**
+ * THE ITEMS' ONES ON THE CARD ([ItemFeatures.ones]): the constant, the marks of their blocks, their values of the other
+ * facets — by the items, where each item's begin ([at]) and its features ([features]), for the coordinates; by the
+ * features, where each feature's begin ([itemsAt]) and its items ([items]), for the gradient back. Put there once for
+ * the fitting: the ones of every model summed there, never the weights A brought over for them.
+ */
+internal class OnesOnCard(
+    val at: Cublas.DeviceBytes,
+    val features: Cublas.DeviceBytes,
+    val itemsAt: Cublas.DeviceBytes,
+    val items: Cublas.DeviceBytes,
+) {
+    companion object {
+        /** The ones of [x] put on the card of [c], what was put there into [made]; null when it has no room. */
+        fun of(c: Cublas, x: ItemFeatures, made: MutableList<AutoCloseable>): OnesOnCard? {
+            fun ints(of: IntArray) =
+                c.allocateBytes(maxOf(1L, of.size.toLong() * Int.SIZE_BYTES))?.also {
+                    made += it
+                    it.upload(of)
+                }
+            val (at, features) = x.onesFlat()
+            val (itemsAt, items) = byFeature(x, at, features)
+            val put = listOf(ints(at), ints(features), ints(itemsAt), ints(items))
+            return if (null in put) null else OnesOnCard(put[0]!!, put[1]!!, put[2]!!, put.last()!!)
+        }
+
+        /**
+         * The ones by the features: of every feature of the layout, where its items begin — of [ItemFeatures.width] +
+         * 1, the last their number — and its items in their order; of the ones by the items, [at] and [features].
+         */
+        private fun byFeature(x: ItemFeatures, at: IntArray, features: IntArray): Pair<IntArray, IntArray> {
+            val width = x.width
+            val first = IntArray(width + 1)
+            features.forEach { first[it + 1]++ }
+            for (c in 0 until width) first[c + 1] += first[c]
+            val next = first.copyOf(width)
+            val items = IntArray(features.size)
+            for (i in 0 until x.rows) for (k in at[i] until at[i + 1]) items[next[features[k]]++] = i
+            return first to items
         }
     }
 }

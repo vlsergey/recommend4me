@@ -16,6 +16,8 @@ internal object FeatureKernels {
             "gather_columns",
             "scatter_rows",
             "ones_rows",
+            "ones_coordinates",
+            "ones_gradient",
             "shown_one",
             "shown_pack",
             "shown_likely",

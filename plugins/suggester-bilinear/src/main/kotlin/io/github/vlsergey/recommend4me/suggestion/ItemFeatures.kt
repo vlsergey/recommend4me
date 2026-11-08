@@ -228,7 +228,7 @@ internal class ItemFeatures(
      * Of the ones alone, Uᵀ = Aᵀ Xᵀ written into [uT]: the blocks' part is added to it after. A row of Aᵀ on a core of
      * its own.
      */
-    fun onesCoordinates(aT: Floats, k: Int, uT: Floats) {
+    private fun onesCoordinates(aT: Floats, k: Int, uT: Floats) {
         IntStream.range(0, k).parallel().forEach { q ->
             val aAt = q * width
             val uAt = q * rows
@@ -244,7 +244,7 @@ internal class ItemFeatures(
      * Of the ones alone, dAᵀ = dUᵀ X written into [gA] — the blocks' columns nought, written by their products after. A
      * row of dAᵀ on a core of its own: none written by two.
      */
-    fun onesGradient(duT: Floats, k: Int, gA: Floats) {
+    private fun onesGradient(duT: Floats, k: Int, gA: Floats) {
         IntStream.range(0, k).parallel().forEach { q ->
             val gAt = q * width
             val uAt = q * rows

@@ -55,6 +55,33 @@ extern "C" __global__ void ones_rows(int n, int width, const int* at, const int*
     out[t] = s;
 }
 
+// THE ONES OF THE ITEMS OF EVERY MODEL: Uᵀ (kr × n) = of every row q of Aᵀ (kr × width) and every item
+// i, the weights of its ones summed — at[i] .. at[i + 1] of ones — what the blocks' products add to after
+extern "C" __global__ void ones_coordinates(int kr, int n, int width, const int* at, const int* ones, const float* aT, float* uT) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= (long long) kr * n) return;
+    int q = (int) (t / n);
+    int i = (int) (t % n);
+    const float* a = aT + (size_t) q * width;
+    float s = 0.0f;
+    for (int k = at[i]; k < at[i + 1]; k++) s += a[ones[k]];
+    uT[t] = s;
+}
+
+// And back: dAᵀ (kr × width) = of every row q and every feature c, the slopes of the items whose one it
+// is summed — of the feature c, its items at[c] .. at[c + 1] of items; nought of a feature no item has
+// as a one, the blocks' columns, which their products write after
+extern "C" __global__ void ones_gradient(int kr, int n, int width, const int* at, const int* items, const float* duT, float* gA) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= (long long) kr * width) return;
+    int q = (int) (t / width);
+    int c = (int) (t % width);
+    const float* d = duT + (size_t) q * n;
+    float s = 0.0f;
+    for (int k = at[c]; k < at[c + 1]; k++) s += d[items[k]];
+    gA[t] = s;
+}
+
 // THE CHOICE OF WHAT A ROW IS SHOWN WITH, a block a row. Of the row r: its item, the item's fold f —
 // its coordinates U[item, f·rank ..] by the fold's model; its values — those of cols from colAt[r],
 // colLen[r] of them, or every value when colAt[r] < 0 — each scored as the processor does
