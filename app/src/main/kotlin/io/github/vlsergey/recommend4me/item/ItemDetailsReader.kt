@@ -142,7 +142,8 @@ class ItemDetailsReader(
         val fields = store.corrections.fieldsOf(key.id)
         val work = cards.ofWork(type, clusters, key, store.items.facets(key.id), members.chances[key], read = members)
         val names = namesOf(store, work, corrections)
-        val model = explanations.details(key)
+        // What the model of the grades reads of the work, of the chances made of its items already
+        val model = explanations.details(key, members.chances)
         val matches = ItemMatches(stores, type, key)
         return ItemDetails(
             summary = summary,

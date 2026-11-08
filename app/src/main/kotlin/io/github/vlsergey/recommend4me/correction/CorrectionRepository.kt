@@ -130,9 +130,25 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
      * The answers of every item of the source on the values [keys] of the [facet]: what names or holds those values.
      */
     fun facetsWith(facet: String, keys: Collection<String>): List<FacetCorrection> {
-        if (keys.isEmpty()) return emptyList()
         val f = WORK_FACET_CORRECTION
-        return seenFacets(f.FACET.eq(facet).and(f.VALUE_KEY.`in`(keys)))
+        // The answers by the index of the values, then the source's items of their works: joined in one query, every
+        // item of the source was walked to find them
+        val answers =
+            db.select(f.WORK, f.VALUE_KEY, f.ADDED, f.NAME)
+                .from(f)
+                .where(f.FACET.eq(facet), f.VALUE_KEY.`in`(keys))
+                .fetch()
+        if (answers.isEmpty()) return emptyList()
+        val items =
+            db.select(SITE_WORK.NORMALIZED, SITE_WORK.ITEM)
+                .from(SITE_WORK)
+                .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.NORMALIZED.`in`(answers.map { it.value1() }.toSet()))
+                .fetchGroups(SITE_WORK.NORMALIZED, SITE_WORK.ITEM)
+        return answers.flatMap { a ->
+            items[a.value1()].orEmpty().map { item ->
+                FacetCorrection(item!!, facet, a.value2()!!, a.value3()!!, a.value4())
+            }
+        }
     }
 
     private companion object {

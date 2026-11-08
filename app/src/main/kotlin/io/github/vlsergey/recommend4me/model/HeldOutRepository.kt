@@ -73,6 +73,18 @@ class HeldOutRepository(private val db: DSLContext) {
             it.value1()!! to it.value2()!!
         }
 
+    /** The predictions of the items [ids] of a source by the model that had not seen them: item to score. */
+    fun scores(source: String, ids: Collection<String>): Map<String, Double> {
+        val asked = ids.toHashSet()
+        return if (asked.size > BATCH) scores(source).filterKeys { it in asked }
+        else
+            db.select(HELD_OUT.ITEM_ID, HELD_OUT.SCORE)
+                .from(HELD_OUT)
+                .where(HELD_OUT.SOURCE.eq(source), HELD_OUT.ITEM_ID.`in`(asked))
+                .fetch()
+                .associate { it.value1()!! to it.value2()!! }
+    }
+
     private companion object {
         const val BATCH = 1000
     }

@@ -30,6 +30,8 @@ internal class ShownFacets(
     private val complete: Set<String>,
     /** Whether a facet of tags is among those asked for. */
     ofTags: Boolean,
+    /** Of values read already, what the catalogue says of them, null of one it says nothing of: facet to key to it. */
+    private val described: Map<String, Map<String, String?>> = emptyMap(),
 ) {
     private val base = ModelValues.of(store.schema, work.site, work.chances)
     // A tag under another gives the work the other too, shown as such; a tag the user said it has
@@ -125,10 +127,12 @@ internal class ShownFacets(
             val unnamed = (keys + offered).filter { names[def.key]?.containsKey(it) != true }
             val more = if (unnamed.isEmpty()) emptyMap() else store.names(def.key, unnamed)
             fun name(key: String) = names[def.key]?.get(key) ?: more[key] ?: added[key] ?: key
-            // What the catalogue says of a universe or a character shown: one read of the facet's
-            val described = store.descriptions(def.key, keys + offered + removed)
+            // What the catalogue says of a universe or a character shown: of those not read already, one read of the
+            // facet's
+            val given = described[def.key].orEmpty()
+            val read = store.descriptions(def.key, (keys + offered + removed).filter { it !in given })
             fun info(key: String, corrected: FacetValueInfo.Corrected?, offer: Boolean = false) =
-                valueInfo(key, name(key), described[key], corrected, offer)
+                valueInfo(key, name(key), given[key] ?: read[key], corrected, offer)
             return ItemFacet(
                 facet = def.key,
                 labelKey = I18nKeys.facetLabel(store.id, def),

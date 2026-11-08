@@ -17,6 +17,7 @@ import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.suggestion.Chance
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
@@ -312,7 +313,7 @@ class CatalogueReader(
     }
 
     /** One item as the model reads it, without its vectors; null when there is no such item. */
-    fun item(type: TypeStore, key: ItemKey): CatalogueItem? {
+    fun item(type: TypeStore, key: ItemKey, made: Map<String, Map<String, Chance>>? = null): CatalogueItem? {
         val s = type.source(key.source) ?: return null
         return s.items.find(key.id)?.let { head ->
             val facetIds =
@@ -322,7 +323,7 @@ class CatalogueReader(
                 ModelValues.of(
                     s.schema,
                     s.items.facets(key.id),
-                    suggestions.chancesOf(s, listOf(key.id), wanted)[key.id],
+                    made ?: suggestions.chancesOf(s, listOf(key.id), wanted)[key.id],
                 )
             val ignored = s.ignoredTags()
             val corrected =
@@ -339,10 +340,14 @@ class CatalogueReader(
      * The work of the item as the model reads it, without its vectors, named by the first of its items; null when there
      * is no such item.
      */
-    fun work(type: TypeStore, key: ItemKey): CatalogueItem? {
+    fun work(
+        type: TypeStore,
+        key: ItemKey,
+        made: Map<ItemKey, Map<String, Map<String, Chance>>>? = null,
+    ): CatalogueItem? {
         val members = works.of(type).members(key).sortedBy { it.toString() }
-        if (members.size == 1) return item(type, key)
-        val own = members.mapNotNull { item(type, it) }
+        if (members.size == 1) return item(type, key, made?.get(key))
+        val own = members.mapNotNull { item(type, it, made?.get(it)) }
         return own.takeIf { it.isNotEmpty() }?.let { WorkFeatures.item(it.first().key, it) }
     }
 

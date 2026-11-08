@@ -13,6 +13,7 @@ import io.github.vlsergey.recommend4me.setvector.SetEmbedding
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.suggestion.Chance
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import kotlin.math.abs
 import org.springframework.stereotype.Component
@@ -55,13 +56,13 @@ class Explanations(
         return if (model == null || input == null) emptyList() else explain(model, input, type)
     }
 
-    fun details(key: ItemKey): Details {
+    fun details(key: ItemKey, made: Map<ItemKey, Map<String, Map<String, Chance>>>? = null): Details {
         val type = stores.typeOf(key.source)
         val store = type.source(key.source)!!
         val stored = likenesses.stored(type)
         val model = kept.load(type)
         val reviews = store.reviews.ofItem(key.id)
-        val input = model?.let { scoring.inputOf(type, key, stored) }
+        val input = model?.let { scoring.inputOf(type, key, stored, made) }
         return when {
             model == null ->
                 Details(

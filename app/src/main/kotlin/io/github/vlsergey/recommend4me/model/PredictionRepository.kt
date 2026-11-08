@@ -87,6 +87,18 @@ class PredictionRepository(private val db: DSLContext) {
             .fetch()
             .associate { it.value1()!! to Predicted(it.value2()!!, it.value3()) }
 
+    /** The predictions of the items [ids] of a source with their chances of interest: item to both. */
+    fun predicted(source: String, ids: Collection<String>): Map<String, Predicted> {
+        val asked = ids.toHashSet()
+        return if (asked.size > BATCH) predicted(source).filterKeys { it in asked }
+        else
+            db.select(PREDICTION.ITEM_ID, PREDICTION.SCORE, PREDICTION.INTEREST)
+                .from(PREDICTION)
+                .where(PREDICTION.SOURCE.eq(source), PREDICTION.ITEM_ID.`in`(asked))
+                .fetch()
+                .associate { it.value1()!! to Predicted(it.value2()!!, it.value3()) }
+    }
+
     companion object {
         private const val BATCH = 1000
 

@@ -131,7 +131,21 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
 
     fun all(): List<Rating> = seen(WORK_RATING.GRADE.isNotNull)
 
+    /**
+     * The grades of the items [ids]: by their ids up to a [BATCH] of them; of more, every grade read and picked from.
+     */
+    fun ofItems(ids: Collection<String>): List<Rating> {
+        val asked = ids.toHashSet()
+        return if (asked.size > BATCH) all().filter { it.itemId in asked }
+        else seen(WORK_RATING.GRADE.isNotNull.and(SITE_WORK.ITEM.`in`(asked)))
+    }
+
     fun gradedItems(): Set<String> = all().mapTo(HashSet()) { it.itemId }
 
     fun count(): Int = all().size
+
+    private companion object {
+        /** The ids asked for by their ids at most; of more, every grade of the source is read once and picked from. */
+        const val BATCH = 1000
+    }
 }

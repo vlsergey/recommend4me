@@ -68,10 +68,14 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         empty: (FacetDef) -> Boolean = { false },
         /** The facets the user said the work's values of are all named: none offered besides. */
         complete: Set<String> = emptySet(),
+        /**
+         * Of values read already, what the catalogue says of them, null of one it says nothing of: facet to key to it.
+         */
+        described: Map<String, Map<String, String?>> = emptyMap(),
         only: (String) -> Boolean,
     ): List<ItemFacet> {
         val ofTags = store.schema.facets.any { only(it.key) && it.key in store.tagFacets }
-        val shown = ShownFacets(store, work, corrections, names, sources, empty, complete, ofTags)
+        val shown = ShownFacets(store, work, corrections, names, sources, empty, complete, ofTags, described)
         return store.schema.facets.filter { only(it.key) }.mapNotNull(shown::of)
     }
 
@@ -264,24 +268,31 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         // The chances of the facets on a card alone, made now of these works with every other item of theirs
         private val chances =
             ids.mapNotNull { id -> read.members.chances[ItemKey(source, id)]?.let { id to it } }.toMap()
-        private val names = onCard.associateWith { facet ->
-            store.names(
-                facet,
-                ids.flatMap {
-                    facets[it]?.get(facet).orEmpty() +
-                        ModelValues.named(chances[it]?.get(facet)) +
-                        corrections[it].orEmpty().filter { c -> c.facet == facet }.map { c -> c.key }
-                },
-            )
+        // Of every facet on a card, every value the cards may show: their items' and their other items', given and
+        // chanced, and answered on
+        private val shownKeys = onCard.associateWith { facet ->
+            ids.flatMap { id ->
+                    read.clusters.members(ItemKey(source, id)).flatMap { m ->
+                        read.members.facets[m]?.get(facet).orEmpty() +
+                            ModelValues.named(read.members.chances[m]?.get(facet))
+                    } + corrections[id].orEmpty().filter { c -> c.facet == facet }.map { c -> c.key }
+                }
+                .toSet()
+        }
+        private val names = shownKeys.mapValues { (facet, keys) -> store.names(facet, keys) }
+        // What the catalogue says of them, read once for every card: a value it says nothing of told so, not asked
+        // again
+        private val described = shownKeys.mapValues { (facet, keys) ->
+            store.descriptions(facet, keys).let { d -> keys.associateWith { d[it] } }
         }
         private val numbers = store.items.numbersOf(ids)
-        private val ratings = store.ratings.all().filter { it.itemId in ids.toSet() }
+        private val ratings = store.ratings.ofItems(ids)
         private val versions =
             ids.mapNotNull { id -> read.heads[ItemKey(source, id)]?.first?.let { id to it.version } }.toMap()
         private val graded = graded(ratings, versions)
-        private val predicted = type.predictions.predicted(source)
-        private val heldOut = type.heldOut.scores(source)
-        private val interest = store.interest.all()
+        private val predicted = type.predictions.predicted(source, ids)
+        private val heldOut = type.heldOut.scores(source, ids)
+        private val interest = store.interest.ofItems(ids)
         private val signals = store.signals.all()
 
         /** The card of every item that has a head, by its key. */
@@ -306,7 +317,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 version = head.version,
                 url = head.url,
                 updatedAt = head.updatedAt.atOffset(ZoneOffset.UTC),
-                facets = facets(store, work, corrections[id].orEmpty(), names) { it in onCard },
+                facets = facets(store, work, corrections[id].orEmpty(), names, described = described) { it in onCard },
                 numbers = Corrected.numbers(numbers[id].orEmpty(), fields[id].orEmpty()),
                 cover =
                     clusters
