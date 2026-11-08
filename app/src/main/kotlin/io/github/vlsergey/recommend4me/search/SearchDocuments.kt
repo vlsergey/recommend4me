@@ -111,8 +111,12 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
         private val every = ids == null
         private val site = if (every) EveryItemFacets.siteOf(s) else s.items.facetsOf(this.ids)
         private val facets = site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
-        private val facetCorrections =
-            if (every) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(this.ids)
+        /**
+         * Every answer of the source: they are few. The names the user gave values are read of all of them — a value
+         * the user named on one work is named so on every work — whether every work is read or a few.
+         */
+        private val answers = s.corrections.allFacets()
+        private val facetCorrections = if (every) answers.groupBy { it.itemId } else s.corrections.facetsOf(this.ids)
         private val fields = if (every) s.corrections.allFields() else s.corrections.fieldsOf(this.ids)
         private val texts = if (every) everyText() else s.items.textsOf(this.ids)
 
@@ -134,11 +138,7 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
                         this.ids.flatMapTo(LinkedHashSet()) {
                             corrected[it]?.get(def.key).orEmpty() + site[it]?.get(def.key).orEmpty()
                         },
-                    ) +
-                        facetCorrections.values
-                            .flatten()
-                            .filter { it.facet == def.key && it.name != null }
-                            .associate { it.key to it.name!! }
+                    ) + answers.filter { it.facet == def.key && it.name != null }.associate { it.key to it.name!! }
             }
         private val meaningful = schema.texts.filter { it.searchByMeaning }.map { it.key }.toSet()
         private val encoder = plugins.textEncoder()?.takeIf { passages }
