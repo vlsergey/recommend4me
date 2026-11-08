@@ -1,5 +1,5 @@
 {
-  "DuplicatesScreen.description": "Za svako delo — najverovatniji par sa svakog drugog sajta: porede se sva polja zajednička sajtovima, osim samog teksta — naslov, opis, oznake, univerzumi, likovi, parovi, status i druge vrednosti, veličina. Prvo parovi gde je ocena po formuli dela za koje je par tražen, pomnožena verovatnoćom da je to jedno delo, viša. „Jedno delo” ih povezuje kao u prozoru dela: ocena i interesovanje postaju zajednički. „Različita” — par se više ne nudi. Odgovori uče model verovatnoće.",
+  "DuplicatesScreen.description": "Za svaki rad — najverovatniji par „isti rad” i najverovatniji par „isti ciklus” među radovima svih sajtova, uključujući njegov sopstveni: porede se sva polja zajednička sajtovima, osim samog teksta — naslov, opis, oznake, univerzumi, likovi, parovi, status i druge osobine, veličina. Na vrhu su parovi kod kojih je ocena po formuli rada za koji je par tražen, pomnožena verovatnoćom da je to isti rad, veća. „Isti rad” ih povezuje kao veza u prozoru rada: ocena i interesovanje postaju zajednički. „Različiti” — par se više ne nudi. Odgovori uče modele verovatnoća.",
   "DuplicatesScreen.failed": "Parovi nisu pročitani: {{error}}",
   "DuplicatesScreen.journal": "Dnevnik",
   "DuplicatesScreen.journalHint": "Svi odgovori na parove i povučeni odgovori, najnoviji prvi, sa poništavanjem",

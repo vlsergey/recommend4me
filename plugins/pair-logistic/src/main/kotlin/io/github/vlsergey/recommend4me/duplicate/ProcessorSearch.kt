@@ -4,41 +4,33 @@ import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
 
 /**
- * THE SEARCH IN THE MAIN MEMORY, of a launch without a card: every work of a site against every work of another by
- * every layer at once ([Against]), and every model's score of every pair made of them, the likeliest of every model
- * kept.
+ * THE SEARCH IN THE MAIN MEMORY, of a launch without a card: every work of a site against every work of every site, its
+ * own too, by every layer at once ([Against]), and every model's score of every pair made of them: of every work the
+ * likeliest of every model kept ([Likeliest]).
  */
 internal object ProcessorSearch {
     fun search(search: PairSearch, models: List<Logistic.Laid>): List<FoundPair> {
-        val out = ArrayList<FoundPair>()
+        val likeliest = Likeliest(search, models.size)
         for (a in search.sites.indices) for (b in search.sites.indices) {
-            if (search.compared(a, b)) out += Against(search, a, b, models).pairs()
+            if (search.compared(a, b)) Against(search, a, b, models, likeliest).offer()
         }
-        return out
-    }
-
-    /**
-     * Of the [a]-th site's [i]-th work, the works of the [b]-th it is likeliest with by every model ([best], -1: none),
-     * each once with the bits of its models.
-     */
-    fun found(a: Int, i: Int, b: Int, best: IntArray): List<FoundPair> {
-        val kinds = LinkedHashMap<Int, Int>()
-        best.forEachIndexed { k, j -> if (j >= 0) kinds.merge(j, 1 shl k, Int::or) }
-        return kinds.map { (j, bits) -> FoundPair(a, i, b, j, bits) }
+        return likeliest.found()
     }
 }
 
 /**
- * THE [a]-TH SITE'S WORKS AGAINST THE [b]-TH'S IN THE MAIN MEMORY: the cosines of their titles' and their descriptions'
- * vectors, a block of rows of the first against the whole second ([Blas.gemm]); of the values of the facets the sites
- * share, through the works of the second that have each value ([Inverted]); of their size, of every number both have
- * the smaller over the larger, their mean; whether the dictionary of authors gives them one author.
+ * THE [a]-TH SITE'S WORKS AGAINST THE [b]-TH'S IN THE MAIN MEMORY — of one site, against each other, a work never with
+ * itself —, every model's likeliest of every work offered to the [likeliest]: the cosines of their titles' and their
+ * descriptions' vectors, a block of rows of the first against the whole second ([Blas.gemm]); of the values of the
+ * facets the sites share, through the works of the second that have each value ([Inverted]); of their size, of every
+ * number both have the smaller over the larger, their mean; whether the dictionary of authors gives them one author.
  */
 private class Against(
     private val search: PairSearch,
     private val a: Int,
     private val b: Int,
     private val models: List<Logistic.Laid>,
+    private val likeliest: Likeliest,
 ) {
     private val x = search.sites[a]
     private val y = search.sites[b]
@@ -65,8 +57,7 @@ private class Against(
     private val best = IntArray(models.size)
     private val scores = DoubleArray(models.size)
 
-    fun pairs(): List<FoundPair> {
-        val out = ArrayList<FoundPair>()
+    fun offer() {
         var from = 0
         while (from < x.count) {
             val m = minOf(rows, x.count - from)
@@ -102,14 +93,13 @@ private class Against(
                 0,
                 n,
             )
-            for (r in 0 until m) out += row(from + r, r)
+            for (r in 0 until m) row(from + r, r)
             from += m
         }
-        return out
     }
 
-    /** The [i]-th work, the [r]-th row of its block: of every model, the likeliest work of the second site. */
-    private fun row(i: Int, r: Int): List<FoundPair> {
+    /** The [i]-th work, the [r]-th row of its block: of every model, the likeliest work of the second site offered. */
+    private fun row(i: Int, r: Int) {
         titles.take(title, 0, r * n, n)
         descriptions.take(description, 0, r * n, n)
         touch(i)
@@ -118,14 +108,13 @@ private class Against(
         val own = passedOver[i]
         own?.forEach { passed[it] = true }
         choose(i)
-        val found = ProcessorSearch.found(a, i, b, best)
+        best.forEachIndexed { k, j -> likeliest.offer(a, i, k, scores[k], b, j) }
         for (q in 0 until touches) {
             isTouched[touched[q]] = false
             for (f in valued.indices) valued[f][touched[q]] = 0f
         }
         ofOneAuthor.forEach { sameAuthor[it] = false }
         own?.forEach { passed[it] = false }
-        return found
     }
 
     /**
@@ -148,12 +137,15 @@ private class Against(
         }
     }
 
-    /** Of every model, the work of the second site of the highest score with the [i]-th, those passed over left out. */
+    /**
+     * Of every model, the work of the second site of the highest score with the [i]-th, those passed over left out —
+     * and itself, of one site.
+     */
     private fun choose(i: Int) {
         best.fill(-1)
         scores.fill(Double.NEGATIVE_INFINITY)
         for (j in 0 until n) {
-            if (passed[j]) continue
+            if (passed[j] || a == b && j == i) continue
             val sized = size(i, j)
             val both = x.facets[i] and y.facets[j]
             val hasDescription = x.described[i] && y.described[j]

@@ -12,9 +12,9 @@ import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
- * The search keeps of every work, of every other site, the work likeliest by every model: the chance of the pair it
- * keeps is the highest of the chances of every pair of that work, the answered ones passed over — in the main memory
- * and on the card alike.
+ * The search keeps of every work the work of any site — its own too, never itself — likeliest by every model: the
+ * chance of the pair it keeps is the highest of the chances of every pair of that work, the answered ones passed over —
+ * in the main memory and on the card alike.
  */
 class SearchTest {
     private val families = listOf("characters", "status", "tags")
@@ -60,14 +60,14 @@ class SearchTest {
 
     private fun search(random: Random): PairSearch {
         val sites = listOf(site(random, "a", 300, 24), site(random, "b", 500, 24), site(random, "c", 40, 16))
-        // A few pairs answered on, passed over both ways
+        // A few pairs answered on, passed over both ways: of two sites, and of one
         val answered = HashMap<Pair<Int, Int>, HashMap<Int, IntArray>>()
-        repeat(30) {
-            val i = random.nextInt(300)
-            val j = random.nextInt(500)
-            answered.getOrPut(0 to 1) { HashMap() }.merge(i, intArrayOf(j)) { x, y -> x + y }
-            answered.getOrPut(1 to 0) { HashMap() }.merge(j, intArrayOf(i)) { x, y -> x + y }
+        fun answer(a: Int, i: Int, b: Int, j: Int) {
+            answered.getOrPut(a to b) { HashMap() }.merge(i, intArrayOf(j)) { x, y -> x + y }
+            answered.getOrPut(b to a) { HashMap() }.merge(j, intArrayOf(i)) { x, y -> x + y }
         }
+        repeat(30) { answer(0, random.nextInt(300), 1, random.nextInt(500)) }
+        repeat(30) { answer(0, random.nextInt(150), 0, 150 + random.nextInt(150)) }
         return PairSearch(sites, families, familyOf, listOf("words", "chars"), answered)
     }
 
@@ -92,29 +92,34 @@ class SearchTest {
         )
 
     /**
-     * Every pair kept is the likeliest of its work and site by every model it is kept for, every other one by them too.
+     * Of every work, by every model, one pair kept — the likeliest of every work of every site compared, its own site
+     * too, itself never, the answered passed over —, and as many pairs as there are models at most.
      */
     private fun assertLikeliest(search: PairSearch, models: List<Logistic>, found: List<FoundPair>) {
-        val byWork = found.groupBy { Triple(it.site, it.item, it.otherSite) }
-        for (a in search.sites.indices) for (b in search.sites.indices) {
-            if (!search.compared(a, b)) continue
-            val passed = search.answered[a to b].orEmpty()
-            for (i in 0 until search.sites[a].count) {
-                val kept = byWork[Triple(a, i, b)].orEmpty()
-                models.forEachIndexed { k, model ->
-                    val chosen = kept.filter { it.kinds and (1 shl k) != 0 }
-                    assertEquals(1, chosen.size, "site $a work $i of site $b, model $k: ${chosen.size} kept")
-                    val chances =
-                        (0 until search.sites[b].count)
-                            .filter { it !in (passed[i] ?: IntArray(0)) }
-                            .map { j -> model.chance(search.layers(a, i, b, j)) }
-                    val got = model.chance(search.layers(a, i, b, chosen.single().other))
-                    assertTrue(chosen.single().other !in (passed[i] ?: IntArray(0)), "an answered pair kept")
-                    assertTrue(
-                        got >= chances.max() - 1e-5,
-                        "site $a work $i, model $k: $got, the likeliest ${chances.max()}",
-                    )
-                }
+        val byWork = found.groupBy { it.site to it.item }
+        fun passed(a: Int, i: Int, b: Int) = search.answered[a to b]?.get(i) ?: IntArray(0)
+        for (a in search.sites.indices) for (i in 0 until search.sites[a].count) {
+            val kept = byWork[a to i].orEmpty()
+            assertTrue(kept.size <= models.size, "site $a work $i: ${kept.size} pairs kept")
+            models.forEachIndexed { k, model ->
+                val chosen = kept.filter { it.kinds and (1 shl k) != 0 }
+                assertEquals(1, chosen.size, "site $a work $i, model $k: ${chosen.size} kept")
+                val c = chosen.single()
+                assertTrue(c.otherSite != a || c.other != i, "site $a work $i kept with itself")
+                assertTrue(c.other !in passed(a, i, c.otherSite), "an answered pair kept")
+                val chances =
+                    search.sites.indices
+                        .filter { search.compared(a, it) }
+                        .flatMap { b ->
+                            (0 until search.sites[b].count)
+                                .filter { j -> (b != a || j != i) && j !in passed(a, i, b) }
+                                .map { j -> model.chance(search.layers(a, i, b, j)) }
+                        }
+                val got = model.chance(search.layers(a, i, c.otherSite, c.other))
+                assertTrue(
+                    got >= chances.max() - 1e-5,
+                    "site $a work $i, model $k: $got, the likeliest ${chances.max()}",
+                )
             }
         }
     }

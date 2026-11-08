@@ -10,9 +10,10 @@ import java.util.stream.IntStream
  * THE SEARCH OF A TYPE'S PAIRS: every site read ([SearchSide]) — every value of the type weighed by how rare it is
  * among every work of the type (the logarithm of the works over those with it: "finished", a value of most works, tells
  * little, a character of a few much) — and handed to the model of pairs ([PairModel.search]) with the pairs the user
- * answered on, passed over: of every work, the likeliest of every other site by every model of the kinds of pairs, both
- * ways. The pairs kept with their layers ([PairSearch.layers]), marked found for the work they are the likeliest of
- * ([found]); every pair the user answered on with them, found or not: what the models learn from.
+ * answered on, passed over: of every work, the likeliest of any site — its own too, never itself — by every model of
+ * the kinds of pairs, both ways: of one work and one series, a pair or two a work. The pairs kept with their layers
+ * ([PairSearch.layers]), marked found for the work they are the likeliest of ([found]); every pair the user answered on
+ * with them, found or not: what the models learn from.
  */
 internal class TypeSearch
 private constructor(private val type: TypeStore, val sides: List<SearchSide>, val search: PairSearch) {
@@ -32,7 +33,7 @@ private constructor(private val type: TypeStore, val sides: List<SearchSide>, va
         card: Cublas?,
     ): HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate> {
         // Of every pair in the order kept, the first find of it, and for which of its works it was found: the one it is
-        // the likeliest of the other site of
+        // the likeliest of
         val firsts = LinkedHashMap<Pair<ItemKey, ItemKey>, FoundPair>()
         val foundFor = HashMap<Pair<ItemKey, ItemKey>, Int>()
         model.search(search, models, card).forEach { f ->

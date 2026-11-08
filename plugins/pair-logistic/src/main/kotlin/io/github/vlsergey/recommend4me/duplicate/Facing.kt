@@ -8,7 +8,8 @@ import io.github.vlsergey.recommend4me.matrix.CudaKernels
  * its authors with their kin as lists of the second's works ([RowLists]), the works the user answered on; and the
  * planes of a block of rows against every work of the second — the products of their titles ([t]) and descriptions
  * ([d]), the facets they share ([v], a plane a facet), whether they are of one author ([s]) — and every model's
- * likeliest work of every row ([best]). Freed with its [CardRoom].
+ * likeliest work of every row ([best]) with its score ([scores]); of one site, a work never with itself. Freed with its
+ * [CardRoom].
  */
 internal class Facing(
     private val search: PairSearch,
@@ -64,22 +65,28 @@ internal class Facing(
     private val s = room.bytes(rows.toLong() * n)
     private val best = room.bytes(rows.toLong() * models * Int.SIZE_BYTES)
     private val bestBack = room.pinned(rows.toLong() * models * Int.SIZE_BYTES)
+    private val scores = room.bytes(rows.toLong() * models * Float.SIZE_BYTES)
+    private val scoresBack = room.pinned(rows.toLong() * models * Float.SIZE_BYTES)
 
-    /** Of every work of the first site, the likeliest of the second by every model. */
-    fun pairs(kernels: CudaKernels, card: Cublas): List<FoundPair> {
-        val out = ArrayList<FoundPair>()
+    /** Of every work of the first site, the likeliest of the second by every model offered to the [likeliest]. */
+    fun offer(kernels: CudaKernels, card: Cublas, likeliest: Likeliest) {
         var from = 0
         while (from < own.count) {
             val m = minOf(rows, own.count - from)
             val chosen = block(from, m, kernels, card)
-            for (r in 0 until m) out +=
-                ProcessorSearch.found(a, from + r, b, chosen.copyOfRange(r * models, (r + 1) * models))
+            val score = scoresBack.floats(0, m * models)
+            for (r in 0 until m) for (k in 0 until models) {
+                val at = r * models + k
+                likeliest.offer(a, from + r, k, score[at].toDouble(), b, chosen[at])
+            }
             from += m
         }
-        return out
     }
 
-    /** The [m] rows from [from] on against every work of the second site: of every row, every model's likeliest. */
+    /**
+     * The [m] rows from [from] on against every work of the second site: of every row, every model's likeliest, its
+     * score brought back with it.
+     */
     private fun block(from: Int, m: Int, kernels: CudaKernels, card: Cublas): IntArray {
         products(from, m, card)
         // A block of the kernel's threads a row
@@ -176,9 +183,12 @@ internal class Facing(
             models,
             weights,
             families,
+            if (a == b) 1 else 0,
             best,
+            scores,
         )
         best.download(bestBack, m.toLong() * models * Int.SIZE_BYTES)
+        scores.download(scoresBack, m.toLong() * models * Float.SIZE_BYTES)
         return bestBack.ints(0, m * models)
     }
 

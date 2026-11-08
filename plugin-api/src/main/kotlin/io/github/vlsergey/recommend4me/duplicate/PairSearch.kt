@@ -66,8 +66,11 @@ class PairSearch(
         require(sites.all { it.sizes.size == sizes.size }) { "Not a row of every number of size of every site" }
     }
 
-    /** Whether the works of the [a]-th site and of the [b]-th are compared at all: two sites, vectors alike. */
-    fun compared(a: Int, b: Int): Boolean = a != b && sites[a].width == sites[b].width
+    /**
+     * Whether the works of the [a]-th site and of the [b]-th are compared at all: of vectors alike — a site with itself
+     * too, a work never with itself.
+     */
+    fun compared(a: Int, b: Int): Boolean = sites[a].width == sites[b].width
 
     /** THE LAYERS OF THE PAIR of the [a]-th site's [i]-th work and the [b]-th site's [j]-th, worked out alone. */
     fun layers(a: Int, i: Int, b: Int, j: Int): PairLayers {

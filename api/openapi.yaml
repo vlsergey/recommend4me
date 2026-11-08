@@ -567,11 +567,12 @@ paths:
     get:
       tags: [duplicates]
       operationId: getDuplicates
-      summary: Pairs of works of different sites that may be one work, the likeliest first, to say whether they are
+      summary: Pairs of works that may be one work or one series, the likeliest first, to say whether they are
       description: |
-        As the last search of the type found them (searchDuplicates): of every work, the work of every
-        other site likeliest one work with it - compared by every field every site has alike, the text
-        aside - no threshold, every pair kept. Ordered by the chance the pair is one work, by the model
+        As the last search of the type found them (searchDuplicates): of every work, the work of any
+        site - its own too, never itself - likeliest one work with it, and the one likeliest one series
+        with it - compared by every field every site has alike, the text aside - no threshold, every pair
+        kept. Ordered by the chance the pair is one work, by the model
         of the user's answers, times what the sort says of the work the pair was found for (of both, the
         larger). The pairs shown by their answer: "open" those not answered on - neither one work (linked,
         by any way) nor said to be different or related -, "answers" those answered with these words; the

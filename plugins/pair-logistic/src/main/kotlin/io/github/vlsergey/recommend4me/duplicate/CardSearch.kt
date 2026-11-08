@@ -6,11 +6,12 @@ import kotlin.concurrent.withLock
 
 /**
  * THE SEARCH ON THE CARD ([ProcessorSearch]'s, made there): every site's works put on the card once — their titles' and
- * descriptions' vectors, what they have ([Inverted]), their sizes — and of every two sites a block of rows of one
- * against the whole other at a time ([Facing]): the cosines of their titles and descriptions by two products of cuBLAS,
- * the facets their values share and their works of one author by kernels of their own (`search.cu`), and every model's
- * score of every pair in one more, which keeps of every row the likeliest work of every model. Nothing of a pair comes
- * back but the works kept.
+ * descriptions' vectors, what they have ([Inverted]), their sizes — and of every two sites, and of every site with
+ * itself, a block of rows of one against the whole other at a time ([Facing]): the cosines of their titles and
+ * descriptions by two products of cuBLAS, the facets their values share and their works of one author by kernels of
+ * their own (`search.cu`), and every model's score of every pair in one more, which keeps of every row the likeliest
+ * work of every model with its score; of every work the likeliest of every site kept ([Likeliest]). Nothing of a pair
+ * comes back but the works kept and their scores.
  */
 internal object CardSearch {
     private val NAMES = listOf("facets_onto", "authors_onto", "best")
@@ -33,15 +34,15 @@ internal object CardSearch {
             CardRoom(card).use { room ->
                 val weights = room.floatsOf(models.flatMap { it.flat().asList() }.toFloatArray())
                 val sites = search.sites.map { s -> SiteOnCard(s, Inverted(s, search.familyOf.size), room) }
-                val out = ArrayList<FoundPair>()
+                val likeliest = Likeliest(search, models.size)
                 for (a in sites.indices) for (b in sites.indices) {
                     if (!search.compared(a, b)) continue
                     CardRoom(card).use { own ->
-                        val facing = Facing(search, a, b, sites[a], sites[b], models.size, weights, own)
-                        out += facing.pairs(kernels, card)
+                        Facing(search, a, b, sites[a], sites[b], models.size, weights, own)
+                            .offer(kernels, card, likeliest)
                     }
                 }
-                out
+                likeliest.found()
             }
         }
 }

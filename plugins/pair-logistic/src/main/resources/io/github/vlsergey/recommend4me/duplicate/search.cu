@@ -105,11 +105,13 @@ __device__ float score_of(
 // passAt[i + 1] of pass), the layers made of the products T and D, the facets V, the authors S, the descriptions both
 // have, the sizes (of every number both state, the smaller over the larger, their mean) — and every model's score of
 // them: of every model the work of the highest score, of equal ones the first, written at best[r][model] (-1: none)
+// with its score at scores[r][model]. Of one site against itself (self), a work is never its own pair
 extern "C" __global__ void best(
     int rows, int from, int n, int nA, const float* T, const float* D, const float* V, const unsigned char* S,
     const unsigned char* describedA, const unsigned char* describedB, const unsigned long long* facetsA,
     const unsigned long long* facetsB, int sizes, const float* sizesA, const float* sizesB,
-    const int* passAt, const int* pass, int models, const float* weights, int families, int* best
+    const int* passAt, const int* pass, int models, const float* weights, int families, int self, int* best,
+    float* scores
 ) {
     __shared__ float bestScore[MAX_MODELS][BLOCK];
     __shared__ int bestAt[MAX_MODELS][BLOCK];
@@ -124,6 +126,7 @@ extern "C" __global__ void best(
     unsigned long long facetsOwn = facetsA[i];
     size_t plane = (size_t) rows * n;
     for (int j = threadIdx.x; j < n; j += blockDim.x) {
+        if (self && j == i) continue;
         bool passed = false;
         for (int p = passAt[i]; p < passAt[i + 1]; p++) if (pass[p] == j) { passed = true; break; }
         if (passed) continue;
@@ -160,5 +163,8 @@ extern "C" __global__ void best(
         }
         __syncthreads();
     }
-    if (threadIdx.x == 0) for (int m = 0; m < models; m++) best[(size_t) r * models + m] = bestAt[m][0];
+    if (threadIdx.x == 0) for (int m = 0; m < models; m++) {
+        best[(size_t) r * models + m] = bestAt[m][0];
+        scores[(size_t) r * models + m] = bestScore[m][0];
+    }
 }

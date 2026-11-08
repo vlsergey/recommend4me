@@ -57,10 +57,8 @@ class PairAnswers(private val works: Works) {
         derived.forEach { out[it] = DuplicateAnswer.SERIES }
         works.of(type).linkedWorks().forEach { members ->
             members.forEachIndexed { k, a ->
-                members
-                    .drop(k + 1)
-                    .filter { it.source != a.source }
-                    .forEach { b -> out[type.links.ordered(a, b)] = DuplicateAnswer.SAME }
+                // Of one site too: the pairs are looked for on every site, its own among them
+                members.drop(k + 1).forEach { b -> out[type.links.ordered(a, b)] = DuplicateAnswer.SAME }
             }
         }
         return Said(out, derived)

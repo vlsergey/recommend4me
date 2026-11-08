@@ -23,16 +23,16 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(Duplicates::class.java)
 
 /**
- * THE WORKS OF DIFFERENT SITES THAT MAY BE ONE WORK, and the user's word on each pair. A search ([search]), in the
- * queue of the computations, compares every work of every site of the content type with every work of every other site
- * by every field of a work every site has alike, the text itself aside: the vectors of their titles and of their
- * descriptions (the encoder of texts reads many languages: an original on Archive of Our Own and its translation on
- * fanfics.me are near), the values of every facet the sites share, each apart ([SearchSide]), and the numbers of their
- * size — and keeps of every work the one of every other site likeliest one work with it, of the pairs the user did not
- * answer on (the next likeliest in their place: of a work linked, a translation or a part of it on the same site may be
- * there); no threshold, none hidden. It runs on start when the type was never searched, and when the user asks. The
- * pairs are answered on as the work's window links the works: one work — their normalized works merged, its grade and
- * interest one — different works, or related ones (a translation, a part: each its own grade), never offered again
+ * THE WORKS THAT MAY BE ONE WORK, OR ONE SERIES, and the user's word on each pair. A search ([search]), in the queue of
+ * the computations, compares every work of every site of the content type with every work of every site, its own too —
+ * never with itself — by every field of a work every site has alike, the text itself aside: the vectors of their titles
+ * and of their descriptions (the encoder of texts reads many languages: an original on Archive of Our Own and its
+ * translation on fanfics.me are near), the values of every facet the sites share, each apart ([SearchSide]), and the
+ * numbers of their size — and keeps of every work the one likeliest one work with it and the one likeliest one series
+ * with it, of the pairs the user did not answer on (the next likeliest in their place): a pair or two a work, no
+ * threshold, none hidden. It runs on start when the type was never searched, and when the user asks. The pairs are
+ * answered on as the work's window links the works: one work — their normalized works merged, its grade and interest
+ * one — different works, or related ones (a translation, a part: each its own grade), never offered again
  * ([io.github.vlsergey.recommend4me.correction.TypeLinkRepository.distinct],
  * [io.github.vlsergey.recommend4me.correction.TypeLinkRepository.relate]).
  *
