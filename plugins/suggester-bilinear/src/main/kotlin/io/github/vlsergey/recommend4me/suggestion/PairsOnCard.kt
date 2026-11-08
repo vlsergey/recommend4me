@@ -98,6 +98,26 @@ private constructor(
     private val valueLabel = room.floatsOf(entries.byValueLabel)
     private val valueExample = room.floatsOf(entries.byValueExample)
 
+    /**
+     * The pairs that weigh anything listed, when they are few of the items × the values ([ListedPairs]): then they
+     * alone are gone through, not every pair of the dense sweep; null — the sweep.
+     */
+    private val listed = ListedPairs.of(p)?.let { ListedOnCard(it, room) }
+
+    /** [ListedPairs] on the card. */
+    private class ListedOnCard(list: ListedPairs, room: CardRoom) {
+        val firstOfItem = room.longs(list.firstOfItem)
+        val value = room.ints(list.value)
+        val weight = room.floatsOf(list.weight)
+        val label = room.floatsOf(list.label)
+        val example = room.floatsOf(list.example)
+        val firstOfValue = room.longs(list.firstOfValue)
+        val item = room.ints(list.item)
+        val byValueWeight = room.floatsOf(list.byValueWeight)
+        val byValueLabel = room.floatsOf(list.byValueLabel)
+        val byValueExample = room.floatsOf(list.byValueExample)
+    }
+
     // The names: their coordinates of every model and their slopes; of every model its names' and values' coordinates
     // gathered by the groups, a row of rank numbers each
     private val groups = p.hintGroups
@@ -212,6 +232,33 @@ private constructor(
      * item; the values' and the biases' slopes into [gE] and [gBias] — a thread a value.
      */
     private fun pairs(k: Int, uT: Cublas.DeviceFloats, duT: Cublas.DeviceFloats) {
+        val list = listed
+        if (list != null) listedPairs(k, uT, duT, list) else sweptPairs(k, uT, duT)
+    }
+
+    /** [pairs] of the pairs that weigh anything [list]ed: they alone gone through. */
+    private fun listedPairs(k: Int, uT: Cublas.DeviceFloats, duT: Cublas.DeviceFloats, list: ListedOnCard) {
+        val known = r == KNOWN_RANK
+        kernels.launch(
+            if (known) "listed_items_16" else "listed_items",
+            // A warp an item
+            n.toLong() * k * WARP,
+            *(listOf(k, n, m, r, uT, vT, bias, params, heldOutOf, foldOf) +
+                    listOf(list.firstOfItem, list.value, list.weight, list.label, list.example, duT, sums))
+                .toTypedArray(),
+        )
+        kernels.launch(
+            if (known) "listed_values_16" else "listed_values",
+            blocksOf(m) * k * CudaKernels.BLOCK,
+            *(listOf(k, n, m, r, uT, vT, bias, params, heldOutOf, foldOf) +
+                    listOf(list.firstOfValue, list.item, list.byValueWeight, list.byValueLabel) +
+                    listOf(list.byValueExample, gE, gBias))
+                .toTypedArray(),
+        )
+    }
+
+    /** [pairs] of every pair of the items × the values swept, those that weigh nothing passed over. */
+    private fun sweptPairs(k: Int, uT: Cublas.DeviceFloats, duT: Cublas.DeviceFloats) {
         val known = r == KNOWN_RANK
         kernels.launch(
             if (known) "pairs_items_16" else "pairs_items",
@@ -414,6 +461,9 @@ private constructor(
     companion object {
         private const val SUMS = 3
 
+        /** The threads of a warp, which `listed_items` gives an item. */
+        private const val WARP = 32
+
         /** The numbers a model is read with: its scale, the weight of the example, the common bias. */
         private const val PARAMS = 3
 
@@ -435,6 +485,10 @@ private constructor(
                 "pairs_items_16",
                 "pairs_values",
                 "pairs_values_16",
+                "listed_items",
+                "listed_items_16",
+                "listed_values",
+                "listed_values_16",
                 "gather",
                 "names_values",
                 "names_values_16",

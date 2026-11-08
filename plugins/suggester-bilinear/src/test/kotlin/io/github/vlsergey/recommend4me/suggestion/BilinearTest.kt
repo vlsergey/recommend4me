@@ -44,6 +44,33 @@ class BilinearTest {
         )
     }
 
+    /**
+     * A task whose pairs that weigh are few of the items × the values: two items of values of their own, one of three
+     * values it may have, one of any — the pairs listed ([ListedPairs]), not swept.
+     */
+    private fun sparseTask(): SuggestionTask {
+        val random = Random(9)
+        val n = 12
+        val d = 6
+        val m = 40
+        return SuggestionTask(
+            itemIds = List(n) { "i$it" },
+            inputs = listOf(block(random, "text:title", n, d, 5), block(random, "text:annotation", n, d, 3)),
+            values = randomRows(random, m, d),
+            valueKeys = List(m) { "v$it" },
+            assigned = List(n) { i -> if (i == 1) intArrayOf(1) else if (i == 2) intArrayOf(2, 5) else IntArray(0) },
+            confirmed = List(n) { IntArray(0) },
+            rejected = List(n) { i -> if (i == 3) intArrayOf(1) else IntArray(0) },
+            context = List(n) { i -> intArrayOf(i % 2) },
+            contextKeys = listOf("f\u0001a", "f\u0001b"),
+            lackWeight = 0.5,
+            examples = List(n) { i -> if (i == 2) intArrayOf(7) else IntArray(0) },
+            hints = IntArray(m) { it }.let { all -> List(6) { k -> NameHint(k, all) } },
+            hintTexts = randomRows(random, 6, d),
+            allowed = intArrayOf(2, 0, 1).let { shared -> List(n) { i -> if (i == 1) shared else null } },
+        )
+    }
+
     /** [rows] rows of [d] numbers drawn from [random]. */
     private fun randomRows(random: Random, rows: Int, d: Int) =
         Matrix(rows, d).also { v ->
@@ -151,6 +178,11 @@ class BilinearTest {
         compareTogether(task(), cublas)
         // And of the rank the application fits by: its kernels compiled with the rank known
         compareTogether(task(), cublas, rank = 16)
+        // And of the pairs that weigh listed, not swept
+        val sparse = sparseTask()
+        assertTrue(ListedPairs.of(Problem(sparse, Design.of(sparse), BilinearSuggester.FOLDS)) != null, "not listed")
+        compareTogether(sparse, cublas)
+        compareTogether(sparse, cublas, rank = 16)
     }
 
     private fun compareTogether(task: SuggestionTask, card: Cublas? = null, rank: Int = 3) {

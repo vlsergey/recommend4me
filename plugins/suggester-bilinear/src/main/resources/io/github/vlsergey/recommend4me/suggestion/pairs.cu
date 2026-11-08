@@ -580,3 +580,143 @@ extern "C" __global__ void losses_of(
     if (s >= k) return;
     losses[s] = (float) (sums[3 * s] * inverse[s] + lambda[s] * penalties[s]);
 }
+
+// THE PAIRS THAT WEIGH ANYTHING, LISTED, of a task where they are few of the items × the values — the
+// characters' of a work of a universe its universe's alone: every pair of the list, of every model, the
+// same as the dense kernels weigh it (a value merely lacked, the item's own), nothing gone through of the
+// pairs that weigh nothing. By the items — `first` where an item's pairs begin, their values ascending
+// — and by the values — their items ascending.
+
+// THE ITEMS' SIDE: a warp an item of a model, its lanes taking its pairs in turn — the loss and the slopes
+// summed, dU = Σ slope·V written (nought of an item outside the training): an item of a universe's two
+// thousand characters is not one thread's two thousand waits for the values' coordinates
+template <int R>
+__device__ void listed_items_of(
+    int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut,
+    const int* foldOf, const long long* first, const int* value, const float* weight, const float* label, const float* example,
+    float* duT, double* sums
+) {
+    if (R > 0) r = R;
+    __shared__ double warpSums[BLOCK / 32][3];
+    long long w = ((long long) blockIdx.x * blockDim.x + threadIdx.x) / 32;
+    int lane = threadIdx.x & 31, warp = threadIdx.x >> 5;
+    int slot = (int) (w / n);
+    int i = (int) (w % n);
+    // A block of the same slot's items: the block's sums are one model's
+    bool real = slot < k;
+    Model mo = model_of(params, heldOut, real ? slot : 0);
+    bool on = real && foldOf[i] != mo.heldOut;
+    const float* u = uT + (size_t) slot * r * n;
+    const float* v = vT + (size_t) slot * r * m;
+    const float* b = bias + (size_t) slot * m;
+    float a[R > 0 ? R : MAX_RANK], acc[R > 0 ? R : MAX_RANK];
+    for (int q = 0; q < r; q++) {
+        a[q] = on ? u[(size_t) q * n + i] : 0.0f;
+        acc[q] = 0.0f;
+    }
+    float l = 0.0f, dCommon = 0.0f, dExample = 0.0f;
+    long long to = on ? first[i + 1] : 0;
+    for (long long p = (on ? first[i] : 0) + lane; p < to; p += 32) {
+        int j = value[p];
+        float c[R > 0 ? R : MAX_RANK];
+        float z = b[j] + mo.common;
+        for (int q = 0; q < r; q++) {
+            c[q] = v[(size_t) q * m + j];
+            z += a[q] * c[q];
+        }
+        float ex = example[p];
+        float loss, slope;
+        logistic(z + mo.example * ex, label[p], weight[p], mo.scale, &loss, &slope);
+        l += loss;
+        dCommon += slope;
+        dExample += slope * ex;
+        for (int q = 0; q < r; q++) acc[q] += slope * c[q];
+    }
+    for (int q = 0; q < r; q++) {
+        float x = acc[q];
+        for (int offset = 16; offset > 0; offset >>= 1) x += __shfl_down_sync(0xffffffff, x, offset);
+        if (lane == 0 && real) duT[(size_t) slot * r * n + (size_t) q * n + i] = x;
+    }
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        l += __shfl_down_sync(0xffffffff, l, offset);
+        dCommon += __shfl_down_sync(0xffffffff, dCommon, offset);
+        dExample += __shfl_down_sync(0xffffffff, dExample, offset);
+    }
+    if (lane == 0) {
+        warpSums[warp][0] = l;
+        warpSums[warp][1] = dCommon;
+        warpSums[warp][2] = dExample;
+    }
+    __syncthreads();
+    // The block's warps of one slot or two (where one slot's items end): each warp's sums to its own
+    if (lane == 0 && real) {
+        long long firstWarp = ((long long) blockIdx.x * blockDim.x) / 32;
+        // The first warp of its slot in the block sums for the slot's warps after it
+        if (warp == 0 || (firstWarp + warp - 1) / n != slot) {
+            double s0 = 0.0, s1 = 0.0, s2 = 0.0;
+            for (int x = warp; x < BLOCK / 32; x++) {
+                long long wx = firstWarp + x;
+                if (wx / n != slot) break;
+                s0 += warpSums[x][0];
+                s1 += warpSums[x][1];
+                s2 += warpSums[x][2];
+            }
+            atomicAdd(sums + 3 * slot, s0);
+            atomicAdd(sums + 3 * slot + 1, s1);
+            atomicAdd(sums + 3 * slot + 2, s2);
+        }
+    }
+}
+
+#define LISTED_ITEMS_PARAMETERS int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut, const int* foldOf, const long long* first, const int* value, const float* weight, const float* label, const float* example, float* duT, double* sums
+#define LISTED_ITEMS_ARGUMENTS k, n, m, r, uT, vT, bias, params, heldOut, foldOf, first, value, weight, label, example, duT, sums
+
+extern "C" __global__ void listed_items(LISTED_ITEMS_PARAMETERS) { listed_items_of<0>(LISTED_ITEMS_ARGUMENTS); }
+extern "C" __global__ void listed_items_16(LISTED_ITEMS_PARAMETERS) { listed_items_of<16>(LISTED_ITEMS_ARGUMENTS); }
+
+// THE VALUES' SIDE: a thread a value of a model, its pairs one by one — of the items of the model's
+// training — their slopes made again of the same numbers; dV = Σ slope·U and the slope of its bias written
+template <int R>
+__device__ void listed_values_of(
+    int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut,
+    const int* foldOf, const long long* first, const int* item, const float* weight, const float* label, const float* example,
+    float* gE, float* gBias
+) {
+    if (R > 0) r = R;
+    int tiles = (m + BLOCK - 1) / BLOCK;
+    int slot = blockIdx.x / tiles;
+    if (slot >= k) return;
+    int j = (blockIdx.x % tiles) * BLOCK + threadIdx.x;
+    if (j >= m) return;
+    Model mo = model_of(params, heldOut, slot);
+    const float* u = uT + (size_t) slot * r * n;
+    const float* v = vT + (size_t) slot * r * m;
+    float c[R > 0 ? R : MAX_RANK], acc[R > 0 ? R : MAX_RANK];
+    for (int q = 0; q < r; q++) {
+        c[q] = v[(size_t) q * m + j];
+        acc[q] = 0.0f;
+    }
+    float base = bias[(size_t) slot * m + j] + mo.common;
+    float sum = 0.0f;
+    for (long long p = first[j]; p < first[j + 1]; p++) {
+        int i = item[p];
+        if (foldOf[i] == mo.heldOut) continue;
+        float a[R > 0 ? R : MAX_RANK];
+        float z = base;
+        for (int q = 0; q < r; q++) {
+            a[q] = u[(size_t) q * n + i];
+            z += c[q] * a[q];
+        }
+        float slope = slope_of(z + mo.example * example[p], label[p], weight[p], mo.scale);
+        sum += slope;
+        for (int q = 0; q < r; q++) acc[q] += slope * a[q];
+    }
+    for (int q = 0; q < r; q++) gE[(size_t) slot * r * m + (size_t) q * m + j] = acc[q];
+    gBias[(size_t) slot * m + j] = sum;
+}
+
+#define LISTED_VALUES_PARAMETERS int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut, const int* foldOf, const long long* first, const int* item, const float* weight, const float* label, const float* example, float* gE, float* gBias
+#define LISTED_VALUES_ARGUMENTS k, n, m, r, uT, vT, bias, params, heldOut, foldOf, first, item, weight, label, example, gE, gBias
+
+extern "C" __global__ void listed_values(LISTED_VALUES_PARAMETERS) { listed_values_of<0>(LISTED_VALUES_ARGUMENTS); }
+extern "C" __global__ void listed_values_16(LISTED_VALUES_PARAMETERS) { listed_values_of<16>(LISTED_VALUES_ARGUMENTS); }
