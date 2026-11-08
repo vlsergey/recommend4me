@@ -130,6 +130,7 @@ class Duplicates(
             )
         val compared = System.currentTimeMillis() - started
         val fitted = PairModels.fit(model, found.values, said)
+        val fit = System.currentTimeMillis() - started
         val now = Instant.now()
         type.duplicates.replace(
             found.values,
@@ -141,12 +142,12 @@ class Duplicates(
                 fitted.same?.pack(),
                 fitted.series?.pack(),
                 now,
-                System.currentTimeMillis() - started - compared,
+                fit - compared,
             ),
         )
         log.info(
             "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs in {} ms " +
-                "(reading {}, comparing {}, keeping {}); a model of one work {}, of one series {}",
+                "(reading {}, comparing {}, fitting {}, writing {}); a model of one work {}, of one series {}",
             type.id,
             search.works,
             search.sides.size,
@@ -155,7 +156,8 @@ class Duplicates(
             System.currentTimeMillis() - started,
             read,
             compared - read,
-            System.currentTimeMillis() - started - compared,
+            fit - compared,
+            System.currentTimeMillis() - started - fit,
             fitted.same != null,
             fitted.series != null,
         )
