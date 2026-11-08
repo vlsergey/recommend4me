@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { api, unwrap, type Grade, type ItemRef, type ItemSummary } from "@/api/client";
+import type { Grade, ItemRef, ItemSummary } from "@/api/client";
 import { toast } from "@/components/ui/toast";
 import { ItemDialog } from "./ItemDialog";
 import { writeTopHash } from "./dialogStack";
 import { readItemHash } from "./itemHash";
 import { itemKey } from "./lists";
 import { useRateItem } from "./useRateItem";
+import { readWork } from "./workRead";
 
 /**
  * The dialog of one item known only by its source and id — from outside the list: a page the
@@ -15,11 +16,12 @@ import { useRateItem } from "./useRateItem";
  */
 export function ItemRefDialog({ item, onClose }: { item: ItemRef | null; onClose: () => void }) {
   const { t } = useTranslation("item");
+  const queryClient = useQueryClient();
   const details = useQuery({
     queryKey: item ? itemKey(item) : ["item", "none"],
     enabled: item !== null,
     // Run only with an item ([enabled]): no item reads none
-    queryFn: async () => (item ? unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: { source: item.source, item: item.item } } })) : null),
+    queryFn: async () => (item ? readWork(queryClient, item) : null),
   });
   const rate = useRateItem();
   const onRate = useCallback((summary: ItemSummary, grade: Grade | null) => rate.mutateAsync({ summary, grade }).catch(() => undefined), [rate]);

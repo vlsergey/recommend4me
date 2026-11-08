@@ -6,7 +6,6 @@ import {
   api,
   ensureOk,
   sameItem,
-  unwrap,
   type ContentTypeInfo,
   type FeatureContribution,
   type Grade,
@@ -42,6 +41,7 @@ import { itemHref, readItemHash, writeItemHash } from "./itemHash";
 import { ItemNumbers } from "./ItemNumbers";
 import { ItemTexts } from "./ItemTexts";
 import { ITEMS, itemKey } from "./lists";
+import { workQuery } from "./workRead";
 import { Cover, InterestButtons, RatingButtons, ScoreBadge, SearchMatchLine, SignalBadges } from "./pieces";
 import { RelatedWorks } from "./RelatedWorks";
 import { RemoveItem } from "./RemoveItem";
@@ -93,12 +93,9 @@ export function WorkScreen({
   // The item the form reads the work through, and the one read on the left: another only when chosen
   const [ref, setRef] = useState<ItemRef>({ source: summary.source, item: summary.item });
   const [read, setRead] = useState<ItemRef>(ref);
-  const queryOf = (item: ItemRef) => ({
-    queryKey: itemKey(item),
-    queryFn: async () => unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: item } })),
-  });
-  const details = useQuery(queryOf(ref));
-  const other = useQuery({ ...queryOf(read), enabled: !sameItem(read, ref), placeholderData: keepPreviousData });
+  // Read so that an answer given meanwhile is never shown undone ([readWork])
+  const details = useQuery(workQuery(queryClient, ref));
+  const other = useQuery({ ...workQuery(queryClient, read), enabled: !sameItem(read, ref), placeholderData: keepPreviousData });
   const corrections = useCorrections(ref, type.id);
   // A phone opens on the work while it is to be read, on the answers once graded
   const [page, setPage] = useState<"answers" | "work">(summary.grade ? "answers" : "work");

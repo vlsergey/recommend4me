@@ -1,9 +1,11 @@
 package io.github.vlsergey.recommend4me.tagtext
 
 import io.github.vlsergey.recommend4me.api.TagsByTextApi
+import io.github.vlsergey.recommend4me.api.model.AnsweredFacet
 import io.github.vlsergey.recommend4me.api.model.TagByText
 import io.github.vlsergey.recommend4me.api.model.TagByTextAnswer
 import io.github.vlsergey.recommend4me.api.model.TagsByText
+import io.github.vlsergey.recommend4me.correction.AnsweredFacets
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
@@ -42,11 +44,19 @@ class TagsByTextController(private val stores: Stores, private val tags: TextTag
         )
     }
 
-    override fun answerTagByText(source: String, item: String, tagByTextAnswer: TagByTextAnswer): ResponseEntity<Unit> {
-        val store =
-            stores.source(source)?.takeIf { it.items.find(item) != null } ?: return ResponseEntity.notFound().build()
+    /** The user's word on a pair kept; of a yes, what the answer made of the facet of tags ([AnsweredFacets]). */
+    override fun answerTagByText(
+        source: String,
+        item: String,
+        tagByTextAnswer: TagByTextAnswer,
+    ): ResponseEntity<List<AnsweredFacet>> {
         val a = tagByTextAnswer
-        val kept = tags.answer(store, item, a.key, a.part, a.paragraph, TagTextVerdict.valueOf(a.verdict.value))
-        return if (kept) ResponseEntity.noContent().build() else ResponseEntity.notFound().build()
+        val verdict = TagTextVerdict.valueOf(a.verdict.value)
+        val store =
+            stores.source(source)?.takeIf {
+                it.items.find(item) != null && tags.answer(it, item, a.key, a.part, a.paragraph, verdict)
+            } ?: return ResponseEntity.notFound().build()
+        val yes = verdict == TagTextVerdict.YES
+        return ResponseEntity.ok(if (yes) AnsweredFacets.of(store, item, store.tagFacets.first()) else emptyList())
     }
 }

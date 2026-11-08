@@ -12,9 +12,7 @@ import { percent } from "@/i18n/format";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
 import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
-import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
 import { TagNameLink } from "@/tag/TagNameLink";
-import { useTagsChanged } from "@/tag/tagQueries";
 
 export const tagsByTextKey = (item: ItemRef) => ["tagsByText", item.source, item.item];
 
@@ -88,7 +86,6 @@ export function TagsByText({
 function TagsByTextList({ item, facet, corrections, every }: { item: ItemRef; facet: string; corrections: Corrections; every: number }) {
   const { t } = useTranslation("tagtext");
   const queryClient = useQueryClient();
-  const tagsChanged = useTagsChanged();
   const list = useQuery({
     queryKey: tagsByTextKey(item),
     queryFn: async () =>
@@ -100,7 +97,7 @@ function TagsByTextList({ item, facet, corrections, every }: { item: ItemRef; fa
   const shown = calm.shown ?? [];
   /** The user's word on a row: once kept, the row leaves. */
   const answer = async (tag: TagByText, verdict: TagByTextVerdict) => {
-    await corrections.answerTagByText(facet, tag, verdict);
+    await corrections.answerTagByText(tag, verdict);
     calm.remove([rowOf(tag)]);
   };
   /** The work has not the tag — the user's word on the facet, as ✕ of a value of it: once kept, every row of the tag leaves. */
@@ -110,12 +107,9 @@ function TagsByTextList({ item, facet, corrections, every }: { item: ItemRef; fa
   };
   /** The tag ignored altogether, as the bin of the screen of the tags does: once kept, its rows leave, and it is offered the work no more. */
   const ignore = async (tag: TagByText) => {
-    unwrap(await api.PUT("/api/tags/ignored", { body: { tag: tag.key, ignored: true } }));
+    await corrections.ignoreTag(facet, tag.key);
     calm.remove(shown.filter((x) => x.key === tag.key).map(rowOf));
-    await tagsChanged();
     queryClient.invalidateQueries({ queryKey: tagsByTextKey(item) });
-    queryClient.invalidateQueries({ queryKey: suggestionsKey(item) });
-    queryClient.invalidateQueries({ queryKey: candidatesKey(item) });
   };
   return (
     <div className="-mx-1 flex min-h-0 flex-col gap-3 overflow-y-auto px-1">

@@ -34,27 +34,87 @@
     return v;
   }
 
+  /** Given by the site, the model or a draft before any answer: confirmed by a yes, not added. */
+  const given = (v) => (!v.corrected && !v.offered && !v.implied) || (v.chance || 0) > 0.5 || !!v.draftedFrom;
+
   /**
-   * The user's word on a value as shown: has it — the site's value confirmed, another added; has
-   * it not — taken away. A suggestion answered on is no longer a suggestion.
+   * The facets an answer touched as the application says the answers make them ([answered]: its
+   * AnsweredFacet), as the page shows them until the work is read anew — the values' chances and the
+   * sites' word as shown: a value answered on is the user's — CONFIRMED of one the site, the model
+   * or a draft gave, ADDED of any other — or REMOVED, crossed out in its place; one whose answer was
+   * taken back is the site's and the model's again, or goes when only the user gave it; one shown no
+   * more goes, and so does every other of a facet of one value a value was added to; a tag the work
+   * has by a tag under it the user confirmed is marked so — not one the work has of itself — and
+   * shown if it was not. [named] — the name of the value answered on, as the page shows it. Answered,
+   * a suggestion is no longer one.
+   */
+  function facetsShown(item, answered, named) {
+    answered.forEach((a) => {
+      const f = (item.facets || []).find((x) => x.facet === a.facet);
+      if (!f) return;
+      const answers = new Map(a.answers.map((x) => [x.key, x]));
+      const hidden = new Set(a.hidden);
+      const implied = new Set(a.implied.map((x) => x.key));
+      const replaced = f.single === true && a.answers.some((x) => x.added);
+      f.values = (f.values || []).flatMap((v) => {
+        const word = answers.get(v.key);
+        if (word) {
+          if (!word.added) return [{ ...v, corrected: "REMOVED", offered: null, implied: null }];
+          const corrected = v.corrected === "CONFIRMED" || v.corrected === "ADDED" ? v.corrected : given(v) ? "CONFIRMED" : "ADDED";
+          return [{ ...v, corrected, offered: null, implied: null }];
+        }
+        if (hidden.has(v.key) || replaced) return [];
+        if (v.corrected) return v.corrected === "ADDED" && !given(v) ? [] : [{ ...v, corrected: null }];
+        if (implied.has(v.key) && (v.offered || v.implied)) return [{ ...v, implied: true, offered: null }];
+        return [v];
+      });
+      const known = new Set(f.values.map((v) => v.key));
+      a.answers.filter((x) => !known.has(x.key)).forEach((x) => {
+        const name = named?.key === x.key ? named : null;
+        f.values.push({ key: x.key, name: name?.name || x.name || x.key, nameKey: name?.nameKey, corrected: x.added ? "ADDED" : "REMOVED" });
+      });
+      a.implied.filter((x) => !known.has(x.key) && !answers.has(x.key)).forEach((x) => {
+        f.values.push({ key: x.key, name: x.name, nameKey: x.nameKey, implied: true });
+      });
+      const s = (item.suggestions || []).find((x) => x.facet === a.facet);
+      if (s) s.suggested = (s.suggested || []).filter((x) => !answers.has(x.key));
+    });
+  }
+
+  /** What an answer kept says it made of the facets: the FacetAnswer's, or the list the tags by the text answer with. */
+  const answeredOf = (answer) => (Array.isArray(answer) ? answer : answer?.facets);
+
+  /**
+   * The user's word on a value as shown once kept: by what the application says the answers make
+   * of the facets it touched ([facetsShown]). A suggestion answered on is no longer a suggestion.
    */
   function answeredShown(facet, value, added) {
-    return (item) => {
+    return (item, answer) => {
+      const answered = answeredOf(answer);
+      if (answered) {
+        facetsShown(item, answered, value);
+        return;
+      }
+      // Of no word of the application on the facets: the answer alone
       const s = (item.suggestions || []).find((x) => x.facet === facet);
       if (s) s.suggested = (s.suggested || []).filter((x) => x.key !== value.key);
       const v = shownValue(item, facet, value.key, value.name, value.nameKey);
-      const site = !v.offered && !v.inferred && v.corrected !== "ADDED";
-      v.corrected = added ? (site ? "CONFIRMED" : "ADDED") : "REMOVED";
+      v.corrected = added ? (given(v) ? "CONFIRMED" : "ADDED") : "REMOVED";
     };
   }
 
-  /** The user's word on a value taken back, as shown: a value only the user gave goes. */
+  /** The user's word on a value taken back, as shown once kept: by what the application says the answers make of the facets. */
   function unansweredShown(facet, key) {
-    return (item) => {
+    return (item, answer) => {
+      const answered = answeredOf(answer);
+      if (answered) {
+        facetsShown(item, answered);
+        return;
+      }
       const f = (item.facets || []).find((x) => x.facet === facet);
       const v = f && (f.values || []).find((x) => x.key === key);
       if (!v) return;
-      if (v.corrected === "ADDED" && !v.inferred) f.values = f.values.filter((x) => x !== v);
+      if (v.corrected === "ADDED" && !given(v)) f.values = f.values.filter((x) => x !== v);
       else v.corrected = null;
     };
   }
@@ -113,15 +173,17 @@
     return out;
   }
 
-  /** The order a facet's values of an item were first shown in, by their keys: kept while the page is open. */
+  /** The order a facet's chips of an item were first shown in, by their values' keys: kept while the page is open. */
   const orders = new Map();
   const firstShown = new Map();
 
   /**
-   * The values in the order first shown — the application's: by the model's chance, the likeliest
-   * first, the user's answers aside, a rejected value too, and a tag above another before it: an
-   * answer changes how a value looks, never where it is, until the page is opened again. A value
-   * that comes later goes after them.
+   * The chips of a facet's line in the order first shown — the work's values in the application's
+   * order: by the model's chance, the likeliest first, the user's answers aside, a rejected value
+   * too, and a tag above another before it; then the suggested, then the candidates "…" showed —
+   * whichever a value was then: an answer changes how a value looks, never where it is — a
+   * suggestion or a candidate answered on becomes the work's value where it stood — until the page
+   * is opened again. A value that comes later goes after them. [values] — anything with a key.
    */
   function stableOrder(item, facet, values) {
     const id = `${item.summary.source}/${item.summary.item}/${facet}`;
@@ -204,6 +266,7 @@
     unansweredShown,
     correct,
     uncorrect,
+    facetsShown,
     percent,
     answers,
     stableOrder,

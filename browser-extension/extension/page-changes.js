@@ -9,7 +9,7 @@
   window.__recommend4mePage = window.__recommend4mePage || {};
   const r4m = window.__recommend4mePage;
   if (r4m.started) return;
-  const { api, enc, el, load, render } = r4m;
+  const { el, load, render } = r4m;
 
   /** Why the last change not about a value failed; kept until the next change. */
   r4m.message = null;
@@ -21,8 +21,8 @@
   const failed = new Map();
   /** The changes, sent one after another in the order made. */
   let queue = Promise.resolve();
-  /** How many times the page has waited for the chances made after answers: a wait begun before the last change is stale. */
-  let settling = 0;
+  /** How many changes the application has kept: a read of the work begun before one is stale (page-view.js load). */
+  r4m.kept = 0;
 
   /**
    * What moves the work's prediction (page-panel.js) is read apart from the page: of a graded work
@@ -94,17 +94,15 @@
   /**
    * Runs a change. The value it is [about] is marked as being saved until the application answers
    * — a click must be seen to have landed — and ITS EFFECT IS SHOWN ONCE THE APPLICATION HAS KEPT
-   * IT, never before: [shown] changes the work as shown the way the application keeps it. Changes
-   * go one after another in the order made, none is dropped, and nothing is read between them: the
-   * application only writes them. Once no change has come for [SETTLE_MS] the page is read as the
-   * application now knows it ([loadLater]), and again once the chances the answers change are made
-   * ([settledLater]).
+   * IT, never before: [shown] changes the work as shown the way the application keeps it, by what
+   * the change answered with. Changes go one after another in the order made, none is dropped, and
+   * nothing is read between them: the application only writes them. Once no change has come for
+   * [SETTLE_MS] the page is read as the application now knows it, its chances made of the answers
+   * as it is read ([loadLater]); a read a change was kept during shows nothing older than the page.
    */
   function act(change, shown, about) {
     if (r4m.pending === 0) r4m.message = null;
     r4m.pending++;
-    // A wait for the chances of the answers before is stale now
-    settling++;
     // A new change puts off reading the work and what moves the prediction
     clearTimeout(explanationTimer);
     clearTimeout(loadTimer);
@@ -115,16 +113,18 @@
     render();
     queue = queue.then(async () => {
       let kept = false;
+      let answer;
       try {
-        await change();
+        answer = await change();
         kept = true;
+        r4m.kept++;
       } catch (e) {
         if (about) failed.set(about, e.message);
         else r4m.message = e.message;
       }
       if (kept && shown && r4m.view?.item) {
         try {
-          shown(r4m.view.item);
+          shown(r4m.view.item, answer);
         } catch {
           // The work read after the quiet shows it all the same
         }
@@ -139,14 +139,13 @@
 
   let loadTimer = null;
 
-  /** The work read as the application now knows it once no change has come for [SETTLE_MS]; the chances the answers change once they are made. */
+  /** The work read as the application now knows it once no change has come for [SETTLE_MS]: its chances made of the answers as it is read. */
   function loadLater() {
     clearTimeout(loadTimer);
     loadTimer = setTimeout(async () => {
       if (r4m.pending !== 0) return;
       await load();
       explanationLater();
-      settledLater();
     }, SETTLE_MS);
   }
 
@@ -156,23 +155,6 @@
     explanationTimer = setTimeout(() => {
       if (r4m.view?.item && r4m.pending === 0) r4m.readExplanation(r4m.view.item);
     }, SETTLE_MS);
-  }
-
-  /**
-   * The work read again once the application has made the chances the answers changed — made
-   * apart from them, a second or two. An answer given meanwhile makes this one stale: the reading
-   * after it waits for the chances of all of them.
-   */
-  async function settledLater() {
-    const asked = ++settling;
-    const item = r4m.view?.item;
-    if (!item) return;
-    try {
-      await api("GET", `/api/items/${enc(item.summary.source)}/${enc(item.summary.item)}/suggestions/settled`);
-    } catch {
-      return;
-    }
-    if (asked === settling && r4m.pending === 0) await load();
   }
 
   Object.assign(r4m, { saving, failed, act, apart, button, ownButton, withFailure, withFailures });

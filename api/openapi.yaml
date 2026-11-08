@@ -391,23 +391,6 @@ paths:
         '404':
           description: No such item
 
-  /api/items/{source}/{item}/suggestions/settled:
-    get:
-      tags: [suggestions]
-      operationId: settleSuggestions
-      summary: Answers at once - the work's chances are made when it is read, there is nothing to wait for
-      description: |
-        Never waits: a work's chances are made when it is read, of its answers as they are. Kept for
-        the callers that ask before they read the work and its suggestions anew.
-      parameters:
-        - $ref: '#/components/parameters/Source'
-        - $ref: '#/components/parameters/Item'
-      responses:
-        '204':
-          description: The work's chances are current
-        '404':
-          description: No such item
-
   /api/items/{source}/{item}/candidates:
     get:
       tags: [suggestions]
@@ -514,8 +497,14 @@ paths:
             schema:
               $ref: '#/components/schemas/TagByTextAnswer'
       responses:
-        '204':
-          description: Kept
+        '200':
+          description: Kept; of YES, what the answer made of the facet of tags - none of another verdict
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnsweredFacet'
         '404':
           description: No such item, tag or paragraph
 
@@ -1352,8 +1341,12 @@ paths:
           schema:
             type: string
       responses:
-        '204':
-          description: Taken back; nothing read back
+        '200':
+          description: Taken back; nothing of the work read back, what the answers now make of the facets it touched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacetAnswer'
 
   /api/items/{source}/{item}/corrections/complete:
     put:
@@ -4092,7 +4085,7 @@ components:
 
     FacetAnswer:
       type: object
-      required: [facet, key]
+      required: [facet, key, facets]
       description: An answer on a value as kept - the page shows it by this, nothing of the work read back
       properties:
         facet:
@@ -4103,6 +4096,65 @@ components:
         name:
           type: string
           description: The name the answer was given with, when it named the value
+        facets:
+          type: array
+          description: What the answer made of the facets it touched, the page showing it at once
+          items:
+            $ref: '#/components/schemas/AnsweredFacet'
+
+    AnsweredFacet:
+      type: object
+      required: [facet, answers, implied, hidden]
+      description: |
+        A facet of the work as the user's answers make it, read of the answers alone - no chance,
+        nothing of the model: the answer on a facet and its other facet of characters. The page keeps
+        what it shows of the facet's other values - their chances, the site's word - and changes
+        only what the answers decide.
+      properties:
+        facet:
+          type: string
+        answers:
+          type: array
+          description: Every answer of the user on the facet of the work, the one just given among them
+          items:
+            $ref: '#/components/schemas/ValueAnswer'
+        implied:
+          type: array
+          description: The tags the work has by a tag under it the user said it has
+          items:
+            $ref: '#/components/schemas/NamedValue'
+        hidden:
+          type: array
+          description: |
+            The values the facet shows no more, not even crossed out, but those answered on: the tags
+            under one the user said the work has not, the characters in its other facet of characters
+          items:
+            type: string
+
+    ValueAnswer:
+      type: object
+      required: [key, added]
+      properties:
+        key:
+          type: string
+        added:
+          type: boolean
+          description: The work has it by the user's word; false - it has it not
+        name:
+          type: string
+          description: The value's name
+
+    NamedValue:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        nameKey:
+          type: string
+          description: The key of the name of a value of the application's own
 
     FieldCorrection:
       type: object

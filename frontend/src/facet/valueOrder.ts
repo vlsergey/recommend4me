@@ -9,7 +9,7 @@ export const decided = (v: FacetValueInfo) => v.corrected !== undefined && v.cor
  * the user's answers aside, a rejected value too, a value the model has no chance of after them;
  * and a tag above another before it, whatever its chance.
  */
-function firstOrder(values: FacetValueInfo[]): string[] {
+function firstOrder(values: { key: string }[]): string[] {
   return values.map((v) => v.key);
 }
 
@@ -18,7 +18,7 @@ function firstOrder(values: FacetValueInfo[]): string[] {
  * where it is — the next value stays under the cursor — until the card is opened again. A value
  * that comes later goes after them.
  */
-export function useStableOrder(values: FacetValueInfo[]): FacetValueInfo[] {
+export function useStableOrder<T extends { key: string }>(values: T[]): T[] {
   const order = useRef<string[]>([]);
   const known = new Set(order.current);
   const fresh = firstOrder(values.filter((v) => !known.has(v.key)));

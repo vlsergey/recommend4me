@@ -6,13 +6,17 @@ export const TAGS = "tags";
 /** The pause in the typing after which a list of the tags is asked again. */
 export const QUERY_SETTLE_MS = 400;
 
-/** What a change of the tags is read anew by: the tags, the works, the filters. */
+/**
+ * What a change of the tags is read anew by: the tags, the works, the filters — the works not when
+ * the change was made on a work's own screen ([works] false), which shows it at once and reads the
+ * work anew once its answers are quiet.
+ */
 export function useTagsChanged() {
   const queryClient = useQueryClient();
-  return () =>
+  return ({ works = true }: { works?: boolean } = {}) =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: [TAGS] }),
-      queryClient.invalidateQueries({ queryKey: ["item"] }),
+      works && queryClient.invalidateQueries({ queryKey: ["item"] }),
       queryClient.invalidateQueries({ queryKey: ["facets"] }),
     ]);
 }

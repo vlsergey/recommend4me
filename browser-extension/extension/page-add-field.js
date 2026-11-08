@@ -96,8 +96,9 @@
         act(
           async () => {
             made = await correct(item, facet, { entry }, true);
+            return made;
           },
-          (shownItem) => answeredShown(facet, { key: made.key, name: made.name || name, nameKey, offered: true }, true)(shownItem),
+          (shownItem, answer) => answeredShown(facet, { key: made.key, name: made.name || name, nameKey, offered: true }, true)(shownItem, answer),
           about(facet, key),
         );
         return;

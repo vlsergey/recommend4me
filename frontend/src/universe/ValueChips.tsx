@@ -1,9 +1,6 @@
-import { Fragment } from "react";
 import type { Candidate, FacetValueInfo, ItemRef, SuggestedValue } from "@/api/client";
-import { FacetValue, LaterOffers, MoreCandidates, SearchButton } from "@/correction/FacetCorrections";
+import { SearchButton, ValueLine } from "@/correction/FacetCorrections";
 import type { Corrections } from "@/correction/useCorrections";
-import { useLaterOffer, useStableOrder } from "@/facet/valueOrder";
-import { SuggestedChip } from "@/suggestion/Suggestions";
 import { CHARACTERS, PAIRINGS, SECONDARY_CHARACTERS } from "./fanficFields";
 
 /** The fields whose values the work's texts name — a character, two in one paragraph: "…" offers the most named beside the likeliest. */
@@ -31,23 +28,19 @@ export function Chips({
   search?: { onClick: () => void; title: string };
   candidates?: Candidate[];
 }) {
-  const ordered = useStableOrder(values);
-  const later = useLaterOffer(ordered);
   if (values.length === 0 && suggested.length === 0 && !item) return <div className="text-sm text-muted-foreground">—</div>;
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {values.length === 0 && suggested.length === 0 && <span className="text-sm text-muted-foreground">—</span>}
-      {ordered.map((v) => (
-        <Fragment key={v.key}>
-          {v.key === later && <LaterOffers />}
-          <FacetValue facet={facet} value={v} corrections={corrections} mentions={candidates?.find((c) => c.key === v.key)?.mentions} />
-        </Fragment>
-      ))}
-      {suggested.map((v) => (
-        <SuggestedChip key={v.key} facet={facet} value={v} corrections={corrections} />
-      ))}
-      {item && <MoreCandidates item={item} facet={facet} shown={[...values, ...suggested]} corrections={corrections} byText={BY_TEXT.includes(facet)} />}
+    <ValueLine
+      item={item}
+      facet={facet}
+      values={values}
+      suggested={suggested}
+      corrections={corrections}
+      byText={BY_TEXT.includes(facet)}
+      mentions={(key) => candidates?.find((c) => c.key === key)?.mentions}
+    >
+      {values.length === 0 && suggested.length === 0 && <span className="order-first text-sm text-muted-foreground">—</span>}
       {search && <SearchButton onClick={search.onClick} title={search.title} />}
-    </div>
+    </ValueLine>
   );
 }

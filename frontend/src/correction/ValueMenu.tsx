@@ -1,15 +1,11 @@
 import { useContext, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { EllipsisIcon, ExternalLinkIcon, FileSearchIcon, ListChecksIcon, MoveRightIcon, Trash2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, unwrap } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { followLink, navigate, screenHref, type Screen } from "@/screen/screens";
-import { candidatesKey, suggestionsKey } from "@/suggestion/useSuggestions";
-import { useTagsChanged } from "@/tag/tagQueries";
 import type { Corrections } from "./useCorrections";
 import { ValueActions, type AskedValue } from "./valueActions";
 
@@ -23,9 +19,6 @@ type Choice = { label: string; icon: ReactNode } & ({ screen: Screen } | { press
 /** What can be done with a value, the evidence aside: by a chip's menu and by a finger's sheet alike. */
 function useChoices(asked: AskedValue, corrections: Corrections, tag: boolean): Choice[] {
   const { t } = useTranslation("correction");
-  const item = useContext(ValueActions)?.item;
-  const queryClient = useQueryClient();
-  const tagsChanged = useTagsChanged();
   const { facet, value } = asked;
   const other = OTHER_CHARACTERS[facet];
   const choices: Choice[] = [];
@@ -37,18 +30,7 @@ function useChoices(asked: AskedValue, corrections: Corrections, tag: boolean): 
       icon: <MoveRightIcon />,
       press: () => corrections.setFacet(other, { key: value }, true),
     });
-  if (tag)
-    choices.push({
-      label: t("ValueMenu.ignore"),
-      icon: <Trash2Icon />,
-      press: async () => {
-        unwrap(await api.PUT("/api/tags/ignored", { body: { tag: value, ignored: true } }));
-        await tagsChanged();
-        if (!item) return;
-        queryClient.invalidateQueries({ queryKey: suggestionsKey(item) });
-        queryClient.invalidateQueries({ queryKey: candidatesKey(item) });
-      },
-    });
+  if (tag) choices.push({ label: t("ValueMenu.ignore"), icon: <Trash2Icon />, press: () => corrections.ignoreTag(facet, value) });
   return choices;
 }
 

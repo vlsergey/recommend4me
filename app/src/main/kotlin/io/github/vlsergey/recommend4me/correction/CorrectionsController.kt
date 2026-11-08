@@ -100,9 +100,10 @@ private fun refuseJoin(store: SourceStore, item: String, other: SourceStore, oth
 /**
  * The user's corrections of an item. Every correction of its fields and links is a change of the item's searchable data
  * — its texts are encoded again and it is indexed again — and of what the model reads. An answer on a facet is written,
- * and nothing else — nothing of the work read back: a second answer right after the first waits for no reading. The
- * page shows the answer once it is kept and reads the work anew once the answers have settled; its chances are made of
- * the answer when it is read ([FacetSuggestions.chances]).
+ * and nothing else — nothing of the work read back: a second answer right after the first waits for no reading. It
+ * answers with what the answers make of the facets it touched, read of the answers alone ([AnsweredFacets]): the page
+ * shows the answer whole once it is kept, and reads the work anew once the answers have settled; its chances are made
+ * of the answer when it is read ([FacetSuggestions.chances]).
  */
 @RestController
 class CorrectionsController(
@@ -150,14 +151,24 @@ class CorrectionsController(
             answering.write(store, item, c.facet, key, c.added, name.takeIf { !known })
         }
         return ResponseEntity.ok(
-            FacetAnswer(c.facet, key, name ?: ofEntry?.let { store.names(c.facet, listOf(it))[it] })
+            FacetAnswer(
+                c.facet,
+                key,
+                AnsweredFacets.of(store, item, c.facet),
+                name ?: ofEntry?.let { store.names(c.facet, listOf(it))[it] },
+            )
         )
     }
 
-    override fun uncorrectFacet(source: String, item: String, facet: String, key: String): ResponseEntity<Unit> {
+    override fun uncorrectFacet(
+        source: String,
+        item: String,
+        facet: String,
+        key: String,
+    ): ResponseEntity<FacetAnswer> {
         val store = stores.withItem(source, item) ?: return ResponseEntity.notFound().build()
         answering.answered(store, item, listOf(facet)) { store.corrections.unsetFacet(item, facet, key) }
-        return ResponseEntity.noContent().build()
+        return ResponseEntity.ok(FacetAnswer(facet, key, AnsweredFacets.of(store, item, facet)))
     }
 
     override fun completeFacet(source: String, item: String, facet: String): ResponseEntity<Unit> =

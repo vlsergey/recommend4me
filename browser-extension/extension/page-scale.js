@@ -58,10 +58,10 @@
 
   /** A step of a scale chosen, as shown: the user's other answer on it goes, the step is the user's. */
   function chosenShown(facet, step) {
-    return (item) => {
+    return (item, answer) => {
       const f = (item.facets || []).find((x) => x.facet === facet);
       if (f) f.values = (f.values || []).filter((v) => !(v.corrected === "ADDED" && v.key !== step.key)).map((v) => (v.key !== step.key && v.corrected === "CONFIRMED" ? { ...v, corrected: null } : v));
-      answeredShown(facet, step, true)(item);
+      answeredShown(facet, step, true)(item, answer);
       shownValue(item, facet, step.key, step.name, step.nameKey).offered = false;
     };
   }

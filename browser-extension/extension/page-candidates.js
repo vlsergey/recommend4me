@@ -61,8 +61,10 @@
    * keys), as many as asked, as suggestions — and "…" to see [MORE_STEP] more, while there are. Of
    * the characters and the pairings ([BY_TEXT]) a press shows [MORE_LIKELIEST] more of the likeliest
    * and [MORE_NAMED] more the work's texts name most — 3 times at least, with how many — each once.
+   * The chips by their keys, for the line to order with its others (stableOrder): one answered on
+   * stays where it stood; the button, or null when there are no more.
    */
-  function moreOf(item, facet, line, shown) {
+  function moreOf(item, facet, shown) {
     const byText = BY_TEXT.has(facet);
     const presses = more.get(facet) || 0;
     const likeliestStep = byText ? MORE_LIKELIEST : MORE_STEP;
@@ -73,24 +75,22 @@
     const named = (all || []).filter((c) => c.named === true);
     const rest = likeliest.filter((c) => !shown.has(c.key));
     const restNamed = named.filter((c) => !shown.has(c.key));
-    const show = (c, byCount) => {
-      const chip = suggestedChip(item, facet, c);
-      const count = mentionsText(c.mentions);
-      chip.title = [c.description, count ? t("candidate.title", { mentions: count }) : t("value.suggested")].filter(Boolean).join("\n");
-      // The most named: with how many times, after the chance
-      if (byCount && c.mentions) chip.insertBefore(el("r4m-mentions", null, `${c.mentions}×`), chip.querySelector(".r4m-yes"));
-      line.appendChild(chip);
-    };
-    rest.slice(0, likeliestStep * presses).forEach((c) => {
-      show(c, false);
+    const show = (c, byCount) => ({
+      key: c.key,
+      chip: () => {
+        const chip = suggestedChip(item, facet, c);
+        const count = mentionsText(c.mentions);
+        chip.title = [c.description, count ? t("candidate.title", { mentions: count }) : t("value.suggested")].filter(Boolean).join("\n");
+        // The most named: with how many times, after the chance
+        if (byCount && c.mentions) chip.insertBefore(el("r4m-mentions", null, `${c.mentions}×`), chip.querySelector(".r4m-yes"));
+        return chip;
+      },
     });
-    restNamed.slice(0, namedStep * presses).forEach((c) => {
-      show(c, true);
-    });
+    const chips = [...rest.slice(0, likeliestStep * presses).map((c) => show(c, false)), ...restNamed.slice(0, namedStep * presses).map((c) => show(c, true))];
     // Fewer read than asked for: there are no more
     const done = all && read && likeliest.length < read.limit && rest.length <= likeliestStep * presses &&
       (!byText || (named.length < read.named && restNamed.length <= namedStep * presses));
-    if (done) return;
+    if (done) return { chips, button: null };
     const b = el("button", "r4m-button r4m-more", "…");
     b.type = "button";
     // One key, not a word of every plural form: the counts are always the same, the words written for them
@@ -105,7 +105,7 @@
       more.set(facet, next);
       render();
     });
-    line.appendChild(b);
+    return { chips, button: b };
   }
 
   /** The keys of the values a facet's line shows: the work's, the user's, the suggested. */

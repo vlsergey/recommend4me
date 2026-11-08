@@ -176,7 +176,6 @@ class SiteUniversesTest : SiteTestBase() {
         // Said to have no universe, a work has no characters of one: only its site's line, and the original characters
         // offered
         corrections.completeFacet("site", "q9", "universe")
-        suggestionsApi.settleSuggestions("site", "q9")
         val none = outside()
         assertTrue(
             none.all { f ->
@@ -276,21 +275,29 @@ class SiteUniversesTest : SiteTestBase() {
                 "fake:C2" in keysOf("characters")
         )
         // Said secondary, it leaves the main ones — the model's word yields to the user's
-        corrections.correctFacet(
-            "site",
-            "n1",
-            FacetCorrection(facet = "secondary-characters", added = true, key = "fake:C2"),
-        )
+        val secondary =
+            corrections.correctFacet(
+                "site",
+                "n1",
+                FacetCorrection(facet = "secondary-characters", added = true, key = "fake:C2"),
+            )
         assertTrue(
             "fake:C2" !in keysOf("characters") && "fake:C2" !in candidatesOf("characters"),
             "main ${keysOf("characters")}",
         )
+        // The answer tells the page of both facets: the main ones show it no more
+        val facets = secondary.body!!.facets.associateBy { it.facet }
+        assertEquals(setOf("secondary-characters", "characters"), facets.keys)
+        assertTrue("fake:C2" in facets.getValue("characters").hidden, "main ${facets["characters"]}")
         // Said main then, it is secondary no more: the earlier answer is taken back, not shown crossed out
-        corrections.correctFacet("site", "n1", FacetCorrection(facet = "characters", added = true, key = "fake:C2"))
+        val main =
+            corrections.correctFacet("site", "n1", FacetCorrection(facet = "characters", added = true, key = "fake:C2"))
         assertTrue(
             "fake:C2" in keysOf("characters") && "fake:C2" !in keysOf("secondary-characters"),
             "main ${keysOf("characters")}, secondary ${keysOf("secondary-characters")}",
         )
+        val after = main.body!!.facets.associateBy { it.facet }.getValue("secondary-characters")
+        assertTrue(after.answers.none { it.key == "fake:C2" } && "fake:C2" in after.hidden, "secondary $after")
     }
 
     /** The original characters, many persons, main and secondary both; every pair of the main ones given or offered. */
@@ -351,10 +358,8 @@ class SiteUniversesTest : SiteTestBase() {
         fun other(details: io.github.vlsergey.recommend4me.api.model.ItemDetails) =
             details.allFacets.single { it.facet == "universe" }.propertyValues.any { it.key == "fake:U1" } ||
                 suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.any { it.key == "fake:U1" }
-        // An answer is kept at once, the chances it changes made apart: the page reads the work again once they are
-        // made
-        fun settled(item: String) =
-            suggestionsApi.settleSuggestions("site", item).let { items.getItem("site", item).body!! }
+        // An answer is kept at once; the chances it changes are made as the work is read
+        fun settled(item: String) = items.getItem("site", item).body!!
         corrections.correctFacet("site", "f1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
         assertTrue(other(settled("f1")))
         corrections.completeFacet("site", "f1", "universe")

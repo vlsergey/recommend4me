@@ -74,10 +74,13 @@
     if (editable && open.length > 1) {
       const all = `all|${facet.facet}`;
       label.appendChild(withFailure(ownButton(t("facet.confirmAll", { count: open.length }), t("facet.confirmAllTitle"), async () => {
-        for (const v of open) await correct(item, facet.facet, { key: v.key }, true);
-      }, "r4m-button r4m-all", (shown) => {
+        // The last answer kept says what all of them made of the facet
+        let last;
+        for (const v of open) last = await correct(item, facet.facet, { key: v.key }, true);
+        return last;
+      }, "r4m-button r4m-all", (shown, last) => {
         open.forEach((v) => {
-          answeredShown(facet.facet, v, true)(shown);
+          answeredShown(facet.facet, v, true)(shown, last);
         });
       }, all), all));
     }
@@ -93,20 +96,27 @@
     if (words) block.appendChild(words);
     const allNamed = completeButton(item, facet);
     if (allNamed) label.appendChild(allNamed);
-    const ordered = stableOrder(item, facet.facet, values);
-    const later = laterOffer(item, facet.facet, ordered);
-    ordered.forEach((v) => {
-      if (v === later) line.appendChild(Object.assign(el("r4m-later"), { title: t("facet.laterOffers") }));
-      line.appendChild(valueChip(item, facet.facet, v, editable));
-    });
+    // The work's values, the suggested ones and the candidates "…" showed, in the order first shown, whichever they were then
+    const chips = values.map((v) => ({ key: v.key, value: v, chip: () => valueChip(item, facet.facet, v, editable) }));
+    let more = null;
     if (editable) {
       (suggestions?.suggested || []).forEach((v) => {
-        line.appendChild(suggestedChip(item, facet.facet, v));
+        chips.push({ key: v.key, chip: () => suggestedChip(item, facet.facet, v) });
       });
       // A facet of one value that has one offers no other: one chosen in its place replaces it
-      if (!facet.complete && !held(facet)) moreOf(item, facet.facet, line, shownKeys(facet, suggestions));
-      line.appendChild(field);
+      if (!facet.complete && !held(facet)) {
+        more = moreOf(item, facet.facet, shownKeys(facet, suggestions));
+        chips.push(...more.chips);
+      }
     }
+    const ordered = stableOrder(item, facet.facet, chips);
+    const later = laterOffer(item, facet.facet, ordered.filter((c) => c.value).map((c) => c.value));
+    ordered.forEach((c) => {
+      if (c.value && c.value === later) line.appendChild(Object.assign(el("r4m-later"), { title: t("facet.laterOffers") }));
+      line.appendChild(c.chip());
+    });
+    if (more?.button) line.appendChild(more.button);
+    if (editable) line.appendChild(field);
     block.appendChild(line);
     const text = byTextBlock(item, facet);
     if (text) block.appendChild(text);
@@ -149,13 +159,19 @@
       e.insertAdjacentElement("afterend", tools);
     });
     const after = el("r4m-chips");
-    values.filter((v) => v.corrected === "ADDED" || (v.inferred && v.corrected !== "REMOVED")).forEach((v) => {
-      after.appendChild(valueChip(item, decor.facet, v));
-    });
+    // The user's values and the model's, the suggested ones and the candidates "…" showed, in the order first shown, whichever they were then
+    const chips = values
+      .filter((v) => v.corrected === "ADDED" || (v.inferred && v.corrected !== "REMOVED"))
+      .map((v) => ({ key: v.key, chip: () => valueChip(item, decor.facet, v) }));
     (suggestions?.suggested || []).forEach((v) => {
-      after.appendChild(suggestedChip(item, decor.facet, v));
+      chips.push({ key: v.key, chip: () => suggestedChip(item, decor.facet, v) });
     });
-    if (!facet.complete && !held(facet)) moreOf(item, decor.facet, after, shownKeys(facet, suggestions));
+    const more = !facet.complete && !held(facet) ? moreOf(item, decor.facet, shownKeys(facet, suggestions)) : null;
+    if (more) chips.push(...more.chips);
+    stableOrder(item, decor.facet, chips).forEach((c) => {
+      after.appendChild(c.chip());
+    });
+    if (more?.button) after.appendChild(more.button);
     const field = addField(item, decor.facet, labelOf(facet), held(facet));
     after.appendChild(field);
     const allNamed = completeButton(item, facet);

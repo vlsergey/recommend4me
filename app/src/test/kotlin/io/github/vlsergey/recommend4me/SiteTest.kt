@@ -109,17 +109,14 @@ class SiteTest : SiteTestBase() {
         assertEquals("c1" to 1, dragons.part to dragons.paragraph)
         assertEquals("One", dragons.partTitle)
         // Not enough: the paragraph is offered for the tag no more, nothing learnt
-        assertEquals(
-            204,
-            tagsByText
-                .answerTagByText(
-                    "site",
-                    "tt3",
-                    TagByTextAnswer(dragons.key, "c1", 1, TagByTextAnswer.Verdict.ENOUGH_NOT),
-                )
-                .statusCode
-                .value(),
-        )
+        val enough =
+            tagsByText.answerTagByText(
+                "site",
+                "tt3",
+                TagByTextAnswer(dragons.key, "c1", 1, TagByTextAnswer.Verdict.ENOUGH_NOT),
+            )
+        // Of no yes, nothing made of the facet
+        assertEquals(200 to emptyList(), enough.statusCode.value() to enough.body)
         assertTrue(list().tags.none { it.key == dragons.key && it.paragraph == 1 }, "list ${list()}")
         return dragons.key
     }
@@ -161,34 +158,38 @@ class SiteTest : SiteTestBase() {
     private fun answeredOn(store: SourceStore, dragons: String) {
         // Yes: the tag is the work's, answered on it, offered no more
         val ships = list().tags.single { it.name == "Ships" }
-        assertEquals(
-            204,
-            tagsByText
-                .answerTagByText(
-                    "site",
-                    "tt3",
-                    TagByTextAnswer(ships.key, ships.part, ships.paragraph, TagByTextAnswer.Verdict.YES),
-                )
-                .statusCode
-                .value(),
-        )
+        val yes =
+            tagsByText.answerTagByText(
+                "site",
+                "tt3",
+                TagByTextAnswer(ships.key, ships.part, ships.paragraph, TagByTextAnswer.Verdict.YES),
+            )
+        // What the yes made of the facet of tags, for the page to show it at once
+        assertTrue(yes.body!!.single().answers.any { it.key == ships.key && it.added }, "answered ${yes.body}")
         assertTrue(store.corrections.facetsOf("tt3").any { it.facet == "tags" && it.key == ships.key && it.added })
         assertTrue(list().tags.none { it.key == ships.key })
         // Of the tags' hierarchy: a tag above one the work has, it has — not asked
         val space = list().tags.single { it.name == "Space" }
         tagsApi.relateTags(TagRelationRequest(ships.key, space.key, TagRelation.PARENT))
         assertTrue(list().tags.none { it.key == space.key }, "list ${list()}")
+        // The answer tells the page the tag above it is the work's by it
+        val above =
+            corrections.correctFacet("site", "tt3", FacetCorrection(facet = "tags", added = true, key = ships.key))
+        assertEquals(listOf(space.key), above.body!!.facets.single().implied.map { it.key })
         tagsApi.relateTags(TagRelationRequest(ships.key, space.key, TagRelation.NONE))
         // And a tag under one the work has not, it has not either
         assertTrue(list().tags.any { it.key == dragons }, "list ${list()}")
         tagsApi.relateTags(TagRelationRequest(dragons, space.key, TagRelation.PARENT))
-        corrections.correctFacet("site", "tt3", FacetCorrection(facet = "tags", added = false, key = space.key))
+        val denied =
+            corrections.correctFacet("site", "tt3", FacetCorrection(facet = "tags", added = false, key = space.key))
         assertTrue(list().tags.none { it.key == dragons }, "list ${list()}")
+        // The answer tells the page the tag under it is shown no more
+        assertTrue(dragons in denied.body!!.facets.single().hidden, "hidden ${denied.body}")
         corrections.uncorrectFacet("site", "tt3", "tags", space.key)
         tagsApi.relateTags(TagRelationRequest(dragons, space.key, TagRelation.NONE))
         // Wrong: of answers of both kinds the model is fitted, and every tag offered has its chance
         assertEquals(
-            204,
+            200,
             tagsByText
                 .answerTagByText(
                     "site",

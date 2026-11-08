@@ -22,6 +22,7 @@ export type SourceMode = Schemas["SourceMode"];
 export type TagsByText = Schemas["TagsByText"];
 export type TagByText = Schemas["TagByText"];
 export type TagByTextVerdict = Schemas["TagByTextAnswer"]["verdict"];
+export type AnsweredFacet = Schemas["AnsweredFacet"];
 export type MarkedWork = Schemas["MarkedWork"];
 export type MarkVerdict = Schemas["MarkVerdict"];
 export type MarkingOrder = Schemas["MarkingOrder"];

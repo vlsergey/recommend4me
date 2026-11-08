@@ -36,12 +36,24 @@
 
   // --- Loading ---
 
+  /**
+   * The page read as the application knows it. A read a change of the work was kept during — the
+   * page showing it already, a read of seconds — is stale: the work shown stays, and the read after
+   * the changes' quiet brings the rest (page-changes.js).
+   */
   async function load() {
     loadedAt = Date.now();
     try {
       await speakChosen();
       r4m.server = await browser.runtime.sendMessage({ type: "server" });
-      r4m.view = await api("GET", `/api/pages?url=${enc(location.href)}`);
+      const before = r4m.kept;
+      const view = await api("GET", `/api/pages?url=${enc(location.href)}`);
+      const shown = r4m.view?.item;
+      if (r4m.kept !== before && shown && view.item && keyOf(view.item) === keyOf(shown)) {
+        render();
+        return;
+      }
+      r4m.view = view;
       r4m.unread = null;
       // The work read anew: the candidates the fields offer may be others now
       r4m.staleFields();

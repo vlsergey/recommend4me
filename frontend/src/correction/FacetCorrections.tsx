@@ -29,7 +29,7 @@ const OFFERED = 30;
 const MORE_STEP = 5;
 
 /**
- * Of a facet whose values the work's texts name ([MoreCandidates] byText): how many more of the
+ * Of a facet whose values the work's texts name ([ValueLine] byText): how many more of the
  * likeliest a press of "…" shows, and how many more of those the texts name most (3 times at least).
  */
 const MORE_LIKELIEST = 2;
@@ -62,17 +62,24 @@ export function FieldBlock({
   const { t } = useTranslation("correction");
   // The work's values the user has not answered on — not those only offered, nor those it has by a tag under them
   const open = facet?.values.filter((v) => !decided(v) && !v.offered && !v.implied) ?? [];
+  // How many "✓ all" is answering on while at work: it stays as pressed till the last is kept
+  const [confirming, setConfirming] = useState<number | null>(null);
   const confirmAll = async () => {
     if (!corrections || !facet) return;
-    for (const v of open) await corrections.setFacet(facet.facet, { key: v.key }, true);
+    setConfirming(open.length);
+    try {
+      for (const v of open) await corrections.setFacet(facet.facet, { key: v.key }, true);
+    } finally {
+      setConfirming(null);
+    }
   };
   return (
     <section data-field={field} className="flex scroll-mt-24 flex-col gap-1">
       <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
         {name}
-        {corrections && !facet?.steps?.length && open.length > 1 && (
+        {corrections && !facet?.steps?.length && (open.length > 1 || confirming !== null) && (
           <AsyncButton variant="outline" size="xs" className={cn(SMALL_BUTTON, "text-[11px]")} onClick={confirmAll} title={t("FacetLine.confirmAllHint")}>
-            {t("FacetLine.confirmAll", { n: open.length })}
+            {t("FacetLine.confirmAll", { n: confirming ?? open.length })}
           </AsyncButton>
         )}
         {tools}
@@ -117,8 +124,6 @@ export function FacetLine({
   suggested?: SuggestedValue[];
 }) {
   const { t } = useTranslation("correction");
-  const values = useStableOrder(f.values);
-  const later = useLaterOffer(values);
   const [search, setSearch] = useState<{ word: string } | null>(null);
   // A value of this facet alone found by its name, when the facet takes values the user adds
   const own = source.facets.filter((d) => d.key === f.facet && d.editable);
@@ -159,20 +164,10 @@ export function FacetLine({
     >
       {/* The tags the work's own text is closest to: a source of the field too, above its values */}
       {f.tags && <TagsByText item={item} facet={f.facet} corrections={corrections} />}
-      <div className="flex flex-wrap gap-1">
-        {values.map((v) => (
-          <Fragment key={v.key}>
-            {v.key === later && <LaterOffers />}
-            <FacetValue facet={f.facet} value={v} corrections={corrections} tagLink={f.tags === true} />
-          </Fragment>
-        ))}
-        {suggested.map((v) => (
-          <SuggestedChip key={v.key} facet={f.facet} value={v} corrections={corrections} tagLink={f.tags === true} />
-        ))}
-        {/* A facet of one value that has it offers no other: one chosen in its place replaces it */}
-        {!held && <MoreCandidates item={item} facet={f.facet} shown={[...f.values, ...suggested]} corrections={corrections} tagLink={f.tags === true} />}
+      {/* A facet of one value that has it offers no other: one chosen in its place replaces it */}
+      <ValueLine item={item} facet={f.facet} values={f.values} suggested={suggested} corrections={corrections} tagLink={f.tags === true} offers={!held}>
         {addable && <SearchButton onClick={() => setSearch(search ? null : { word: "" })} title={t(held ? "FacetLine.change" : "FacetLine.search")} />}
-      </div>
+      </ValueLine>
       {search && addable && <AddFacetValue key={search.word} source={addable} corrections={corrections} word={search.word} onClose={() => setSearch(null)} />}
     </FieldBlock>
   );
@@ -196,86 +191,129 @@ export function SearchButton({ onClick, title }: { onClick: () => void; title: s
   );
 }
 
+/** A chip of a line of values, by its value's key: the work's value, a suggestion, a candidate "…" showed. */
+type LineChip = { key: string; chip: ReactNode; value?: FacetValueInfo };
+
+type LineProps = {
+  facet: string;
+  values: FacetValueInfo[];
+  suggested?: SuggestedValue[];
+  corrections: Corrections;
+  /** The values are normalized tags: their names link to their pages. */
+  tagLink?: boolean;
+  /** How often the work's texts name a value, when they were counted. */
+  mentions?: (key: string) => number | null | undefined;
+  /** After the chips: 🔍. */
+  children?: ReactNode;
+};
+
 /**
- * "…" after a facet's values: each press shows the next [MORE_STEP] likeliest candidates the line
- * does not show yet ([shown]), dashed, to answer on — one answered on gives its place to the next —
- * until there are none. How many stays while the work is open. Only so many read as are shown —
- * the line's values and those asked for — not every candidate: of the tags, some 8 600, 2.4 MB, read
- * again after every answer, hung an iPad.
+ * A LINE OF A FACET'S VALUES: the work's values, the suggested ones and the candidates "…" showed
+ * ([item]; none while not [offers]), in the order they were first shown, whichever they were then —
+ * a suggestion or a candidate answered on becomes the work's value, or is crossed out, where it
+ * stood, the next one staying under the cursor — till the work is opened again ([useStableOrder]);
+ * the offers that came after the work was opened after a quiet line; [children] last.
+ */
+export function ValueLine({ item, byText, offers = true, ...line }: LineProps & { item?: ItemRef; byText?: boolean; offers?: boolean }) {
+  if (!item) return <OrderedLine {...line} candidates={[]} />;
+  return <LineWithCandidates {...line} item={item} byText={byText} offers={offers} />;
+}
+
+function OrderedLine({
+  facet,
+  values,
+  suggested = [],
+  corrections,
+  tagLink,
+  mentions,
+  candidates,
+  more,
+  children,
+}: LineProps & { candidates: LineChip[]; more?: ReactNode }) {
+  const chips: LineChip[] = [
+    ...values.map((v) => ({ key: v.key, value: v, chip: <FacetValue facet={facet} value={v} corrections={corrections} tagLink={tagLink} mentions={mentions?.(v.key)} /> })),
+    ...suggested.map((v) => ({ key: v.key, chip: <SuggestedChip facet={facet} value={v} corrections={corrections} tagLink={tagLink} /> })),
+    ...candidates,
+  ];
+  const ordered = useStableOrder(chips);
+  const later = useLaterOffer(ordered.flatMap((c) => (c.value ? [c.value] : [])));
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {ordered.map((c) => (
+        <Fragment key={c.key}>
+          {c.key === later && <LaterOffers />}
+          {c.chip}
+        </Fragment>
+      ))}
+      {more}
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The line with "…": each press shows the next [MORE_STEP] likeliest candidates the line does not
+ * show yet, dashed, to answer on — one answered on stays where it is, and the next one comes after
+ * the rest — until there are none. How many stays while the work is open. Only so many read as are
+ * shown — the line's values and those asked for — not every candidate: of the tags, some 8 600,
+ * 2.4 MB, read again after every answer, hung an iPad.
  *
  * [byText] — of the characters and the pairings, which the work's texts name: a press shows the next
  * [MORE_LIKELIEST] likeliest and the next [MORE_NAMED] the texts name most of the rest — 3 times at
  * least, with how many — each candidate once. The texts are counted for this alone: no model reads them.
  */
-export function MoreCandidates({
-  item,
-  facet,
-  shown,
-  corrections,
-  tagLink,
-  byText,
-}: {
-  item: ItemRef;
-  facet: string;
-  shown: { key: string }[];
-  corrections: Corrections;
-  /** The values are normalized tags: their names link to their pages. */
-  tagLink?: boolean;
-  /** The work's texts name the facet's values: the most named offered beside the likeliest. */
-  byText?: boolean;
-}) {
+function LineWithCandidates({ item, byText, offers, ...line }: LineProps & { item: ItemRef; byText?: boolean; offers: boolean }) {
   const { t } = useTranslation("correction");
   const queryClient = useQueryClient();
+  const { facet, corrections, tagLink } = line;
   const [presses, setPresses] = useState(0);
   const likeliestStep = byText ? MORE_LIKELIEST : MORE_STEP;
   const namedStep = byText ? MORE_NAMED : 0;
+  const shown = [...line.values, ...(line.suggested ?? [])];
   // The line's values may be among the candidates: read so many more
   const wanted = (n: number) => shown.length + n;
   const asked = (p: number) => ({ limit: wanted(likeliestStep * p), named: byText ? wanted(namedStep * p) : undefined });
   const now = asked(presses);
   const candidates = useCandidates(item, facet, presses > 0, now.limit, now.named);
   const keys = new Set(shown.map((v) => v.key));
-  const read = candidates.data ?? [];
+  const read = candidates.isError ? [] : (candidates.data ?? []);
   const likeliest = read.filter((c) => c.named !== true);
   const named = read.filter((c) => c.named === true);
   const rest = likeliest.filter((c) => !keys.has(c.key));
   const restNamed = named.filter((c) => !keys.has(c.key));
-  if (candidates.isError) return null;
   // Fewer read than asked for: there are no more
   const settled = candidates.data !== undefined && !candidates.isPlaceholderData;
   const done =
-    settled &&
-    likeliest.length < now.limit &&
-    rest.length <= likeliestStep * presses &&
-    (now.named === undefined || (named.length < now.named && restNamed.length <= namedStep * presses));
+    candidates.isError ||
+    (settled &&
+      likeliest.length < now.limit &&
+      rest.length <= likeliestStep * presses &&
+      (now.named === undefined || (named.length < now.named && restNamed.length <= namedStep * presses)));
   // The press reads the next ones and shows them once they are there: the button is at work while
   // ITS press is ([AsyncButton]) — never while the candidates are read anew after answers, which
   // waits for the work's chances
-  const more = async () => {
+  const press = async () => {
     const next = asked(presses + 1);
     await queryClient.fetchQuery(candidatesQuery(item, facet, next.limit, next.named));
     setPresses(presses + 1);
   };
+  const chipOf = (c: (typeof read)[number], mentions?: number | null): LineChip => ({
+    key: c.key,
+    chip: (
+      <FacetValue
+        facet={facet}
+        value={{ key: c.key, name: c.name, nameKey: c.nameKey, chance: c.chance ?? undefined, offered: true }}
+        corrections={corrections}
+        tagLink={tagLink}
+        mentions={mentions}
+      />
+    ),
+  });
+  // The most named by the work's texts: with how many times, the chance after the name as of any
+  const more = offers ? [...rest.slice(0, likeliestStep * presses).map((c) => chipOf(c)), ...restNamed.slice(0, namedStep * presses).map((c) => chipOf(c, c.mentions))] : [];
   const title = byText ? t("MoreCandidates.showMoreByText", { likeliest: MORE_LIKELIEST, named: MORE_NAMED }) : t("MoreCandidates.showMore", { count: MORE_STEP });
-  return (
-    <>
-      {rest.slice(0, likeliestStep * presses).map((c) => (
-        <FacetValue key={c.key} facet={facet} value={{ key: c.key, name: c.name, nameKey: c.nameKey, chance: c.chance ?? undefined, offered: true }} corrections={corrections} tagLink={tagLink} />
-      ))}
-      {/* The most named by the work's texts: with how many times, the chance after the name as of any */}
-      {restNamed.slice(0, namedStep * presses).map((c) => (
-        <FacetValue
-          key={c.key}
-          facet={facet}
-          value={{ key: c.key, name: c.name, nameKey: c.nameKey, chance: c.chance ?? undefined, offered: true }}
-          corrections={corrections}
-          tagLink={tagLink}
-          mentions={c.mentions}
-        />
-      ))}
-      {!done && <AsyncButton variant="outline" size="xs" className={SMALL_BUTTON} onClick={more} title={title} aria-label={title} icon="…" />}
-    </>
-  );
+  const button = offers && !done && <AsyncButton variant="outline" size="xs" className={SMALL_BUTTON} onClick={press} title={title} aria-label={title} icon="…" />;
+  return <OrderedLine {...line} candidates={more} more={button} />;
 }
 
 /** The keys of the titles of a value by the user's answer on it, translated at render. */

@@ -302,8 +302,8 @@
     const s = item.summary;
     const on = `bytext|${tag.key}|${tag.part}|${tag.paragraph}`;
     // Kept, the pair is offered no more and its row leaves; of a yes the tag is the work's, shown as any answer is
-    const shown = (verdict) => (work) => {
-      if (verdict === "YES") answeredShown(facet, { key: tag.key, name: tag.name, offered: true }, true)(work);
+    const shown = (verdict) => (work, answer) => {
+      if (verdict === "YES") answeredShown(facet, { key: tag.key, name: tag.name, offered: true }, true)(work, answer);
       removeByText(state, [byTextKey(tag)]);
     };
     /** Every row of the tag: what leaves once the tag is said not the work's, or ignored. */
@@ -319,13 +319,19 @@
     });
     // The work has not the tag: the user's word on the facet, as ✕ of a value of it — every row of the tag leaves
     answers.appendChild(
-      ownButton(`⊘ ${t("byText.absent")}`, t("byText.absentHint"), () => correct(item, facet, { key: tag.key }, false), "r4m-button", (work) => {
-        answeredShown(facet, { key: tag.key, name: tag.name, offered: true }, false)(work);
+      ownButton(`⊘ ${t("byText.absent")}`, t("byText.absentHint"), () => correct(item, facet, { key: tag.key }, false), "r4m-button", (work, answer) => {
+        answeredShown(facet, { key: tag.key, name: tag.name, offered: true }, false)(work, answer);
         removeByText(state, ofTag());
       }, on),
     );
     // The tag ignored altogether, as the bin of the screen of the tags does: offered nowhere, read by no model — every row of it leaves
-    const bin = ownButton("", t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button r4m-bin", () => removeByText(state, ofTag()), on);
+    // Ignored, the tag is gone from the work's values at once, but where the user answered on it
+    const ignored = (work) => {
+      const f = (work.facets || []).find((x) => x.facet === facet);
+      if (f) f.values = (f.values || []).filter((v) => v.key !== tag.key || v.corrected);
+      removeByText(state, ofTag());
+    };
+    const bin = ownButton("", t("byText.ignoreHint"), () => api("PUT", "/api/tags/ignored", { tag: tag.key, ignored: true }), "r4m-button r4m-bin", ignored, on);
     bin.setAttribute("aria-label", t("byText.ignore"));
     bin.appendChild(binIcon());
     answers.appendChild(bin);

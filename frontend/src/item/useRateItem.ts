@@ -5,6 +5,7 @@ import { findSource, gradeLabel } from "@/contenttype/types";
 import i18n from "@/i18n/i18n";
 import { applyGrade, itemKey, ITEMS } from "./lists";
 import { heldOutLater } from "./useHeldOut";
+import { readWork } from "./workRead";
 
 type Rate = { summary: ItemSummary; grade: Grade | null };
 
@@ -68,7 +69,7 @@ export function useTakeBackGrade(shown: ItemRef) {
         params: { path: { source: record.source, item: record.item }, query: { version: record.version || undefined } },
       }),
     );
-    const details = unwrap(await api.GET("/api/items/{source}/{item}", { params: { path: { source: shown.source, item: shown.item } } }));
+    const details = await readWork(queryClient, shown);
     queryClient.setQueryData(itemKey(shown), details);
     applyGrade(queryClient, details.summary);
     heldOutLater(queryClient, details.summary);

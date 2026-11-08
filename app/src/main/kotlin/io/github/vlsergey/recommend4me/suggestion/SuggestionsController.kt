@@ -50,10 +50,6 @@ class SuggestionsController(
         return ResponseEntity.ok(suggestions.ofItem(store, item).map { it.toApi(store) })
     }
 
-    override fun settleSuggestions(source: String, item: String): ResponseEntity<Unit> =
-        // Nothing to wait for: a work's chances are made when it is read, of its answers as they are
-        if (storeWith(source, item) == null) ResponseEntity.notFound().build() else ResponseEntity.noContent().build()
-
     override fun getCandidates(
         source: String,
         item: String,
