@@ -28,6 +28,15 @@ import org.springframework.stereotype.Component
 /** The grade of the current version of a work, and the latest grade of an earlier one with its version. */
 data class Graded(val grade: Int?, val previousGrade: Int?, val previousVersion: String?)
 
+/**
+ * Of items of works shown, every one's own values on its site and its chances of the facets wanted, read once a source
+ * — one chain of the models a source for them all, not one an item ([ItemCards.membersRead]).
+ */
+class MembersRead(
+    val facets: Map<ItemKey, Map<String, List<String>>>,
+    val chances: Map<ItemKey, Map<String, Map<String, Chance>>>,
+)
+
 /** The cards of works as the list shows them, read in batch: one query per table per source. */
 @Component
 class ItemCards(private val stores: Stores, private val works: Works, private val suggestions: FacetSuggestions) {
@@ -80,6 +89,8 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         site: Map<String, List<String>>,
         chances: Map<String, Map<String, Chance>>?,
         wanted: Collection<String>? = null,
+        /** The work's other items read already, with those of other works: read here when not. */
+        read: MembersRead? = null,
     ): WorkValues {
         val members = clusters.members(key)
         val store = type.source(key.source) ?: return WorkValues(site, chances)
@@ -93,7 +104,27 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
             }
         val own = WorkValues(site, chances, given.bySite, given.lets)
         val others = members.drop(1)
-        return if (others.isEmpty()) own else withOthers(type, store, others, own, wanted)
+        return if (others.isEmpty()) own
+        else withOthers(store, others, own, wanted, read ?: membersRead(type, others, wanted))
+    }
+
+    /**
+     * Of the items [members], every one's own values on its site and its chances of the [wanted] facets (all when
+     * null): read once a source, one chain of the models for all of its items.
+     */
+    fun membersRead(type: TypeStore, members: Collection<ItemKey>, wanted: Collection<String>?): MembersRead {
+        val facets = HashMap<ItemKey, Map<String, List<String>>>()
+        val chances = HashMap<ItemKey, Map<String, Map<String, Chance>>>()
+        members
+            .groupBy { it.source }
+            .forEach { (source, items) ->
+                val s = type.source(source) ?: return@forEach
+                val ids = items.map { it.id }
+                s.items.facetsOf(ids).forEach { (id, f) -> facets[ItemKey(source, id)] = f }
+                val made = if (wanted == null) suggestions.chances(s, ids) else suggestions.chancesOf(s, ids, wanted)
+                made.forEach { (id, c) -> chances[ItemKey(source, id)] = c }
+            }
+        return MembersRead(facets, chances)
     }
 
     /**
@@ -101,11 +132,11 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
      * out ([wanted] of them, all when null): a value given by more than one, by the likeliest.
      */
     private fun withOthers(
-        type: TypeStore,
         store: SourceStore,
         others: List<ItemKey>,
         work: WorkValues,
         wanted: Collection<String>?,
+        read: MembersRead,
     ): WorkValues {
         val wantedFacets = store.schema.facets.filter { wanted == null || it.key in wanted }
         val worked = wantedFacets.filter { it.infer }.map { it.key }
@@ -113,12 +144,8 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         val values = LinkedHashMap(work.site)
         val likely = HashMap(work.chances.orEmpty())
         others.forEach { m ->
-            val s = type.source(m.source) ?: return@forEach
-            val theirs = s.items.facetsOf(listOf(m.id))[m.id].orEmpty()
-            val made =
-                (if (wanted == null) suggestions.chances(s, listOf(m.id))
-                    else suggestions.chancesOf(s, listOf(m.id), wanted))[m.id]
-                    .orEmpty()
+            val theirs = read.facets[m].orEmpty()
+            val made = read.chances[m].orEmpty()
             worked.forEach { facet -> theirs[facet]?.let { values[facet] = (values[facet].orEmpty() + it).distinct() } }
             chanced.forEach { facet -> made[facet]?.let { likelier(likely, facet, it) } }
         }
@@ -146,10 +173,29 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         clusters: WorkClusters = works.of(type),
         /** The user's word on the works for the line searched, when searched. */
         judged: Map<ItemKey, Boolean> = emptyMap(),
+        /** Every item of the works of [keys] read already, with the chances of the facets on a card at least. */
+        members: MembersRead? = null,
     ): List<ItemSummary> {
         val out = HashMap<ItemKey, ItemSummary>()
-        val members = keys.flatMap { clusters.members(it) }.distinct()
-        val read = CardsRead(type, clusters, headsOf(members), picturesOf(members), matches, places, judged)
+        val all = keys.flatMap { clusters.members(it) }.distinct()
+        // Every item of the works shown, theirs and their other items', read once a source: the facets of every card
+        val onCard =
+            keys
+                .map { it.source }
+                .distinct()
+                .flatMap { stores.source(it)?.schema?.facets.orEmpty().filter { f -> f.onCard }.map { f -> f.key } }
+                .toSet()
+        val read =
+            CardsRead(
+                type,
+                clusters,
+                headsOf(all),
+                picturesOf(all),
+                members ?: membersRead(type, all, onCard),
+                matches,
+                places,
+                judged,
+            )
         keys
             .groupBy { it.source }
             .forEach { (source, list) ->
@@ -196,6 +242,8 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         val clusters: WorkClusters,
         val heads: Map<ItemKey, Pair<StoredItem, String>>,
         val pictures: Map<ItemKey, Pair<Int, Boolean>>,
+        /** Every item of the works shown: its site's values and its chances of the facets on a card. */
+        val members: MembersRead,
         val matches: Map<ItemKey, io.github.vlsergey.recommend4me.search.SearchMatch>,
         val places: Map<ItemKey, TextPlace>,
         val judged: Map<ItemKey, Boolean>,
@@ -209,12 +257,13 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         private val read: CardsRead,
     ) {
         private val type = read.type
-        private val facets = store.items.facetsOf(ids)
+        private val facets = ids.mapNotNull { id -> read.members.facets[ItemKey(source, id)]?.let { id to it } }.toMap()
         private val corrections = store.corrections.facetsOf(ids)
         private val fields = store.corrections.fieldsOf(ids)
         private val onCard = store.schema.facets.filter { it.onCard }.map { it.key }.toSet()
-        // The chances of the facets on a card alone, made now of these works
-        private val chances = suggestions.chancesOf(store, ids, onCard)
+        // The chances of the facets on a card alone, made now of these works with every other item of theirs
+        private val chances =
+            ids.mapNotNull { id -> read.members.chances[ItemKey(source, id)]?.let { id to it } }.toMap()
         private val names = onCard.associateWith { facet ->
             store.names(
                 facet,
@@ -248,7 +297,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
             val id = key.id
             val g = graded[id]
             val clusters = read.clusters
-            val work = ofWork(type, clusters, key, facets[id].orEmpty(), chances[id], onCard)
+            val work = ofWork(type, clusters, key, facets[id].orEmpty(), chances[id], onCard, read.members)
             return ItemSummary(
                 source = source,
                 item = id,

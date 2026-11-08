@@ -155,15 +155,14 @@ private class ValueNames(features: Collection<String>, sources: List<SourceStore
 
     init {
         val wanted = features.mapNotNull(FeatureNames::parseFacet).groupBy({ it.first }, { it.second })
-        // The names the user gave values, each source's corrections read once: facet to its named corrections
-        val named =
-            if (wanted.isEmpty()) emptyMap()
-            else
-                sources.associateWith { s -> s.corrections.allFacets().filter { it.name != null }.groupBy { it.facet } }
         for ((facetId, keys) in wanted) for (s in sources) {
             s.schema.facets
                 .filter { FeatureNames.facetId(s.source, it) == facetId }
-                .forEach { def -> read(s, def, facetId, keys, named.getValue(s)[def.key].orEmpty()) }
+                .forEach { def ->
+                    // The names the user gave these values: the answers on them alone read
+                    val named = s.corrections.facetsWith(def.key, keys).filter { it.name != null }
+                    read(s, def, facetId, keys, named)
+                }
         }
     }
 

@@ -29,6 +29,7 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.source.downloadsPages
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
+import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.ZoneOffset
 import org.springframework.stereotype.Component
@@ -110,29 +111,36 @@ class ItemDetailsReader(
     private val cards: ItemCards,
     private val explanations: Explanations,
     private val works: Works,
-    private val suggestions: FacetSuggestions,
     private val sitesSay: SitesSay,
 ) {
-    /** The work as the dialog shows it, its chances made now in memory ([FacetSuggestions.chances]). */
+    /**
+     * The work as the dialog shows it, its chances made now in memory ([FacetSuggestions.chances]): of every item of
+     * the work in one chain a source, for its card and its form alike.
+     */
     fun read(key: ItemKey): ItemDetails? {
         val store = stores.source(key.source) ?: return null
         val type = stores.typeOf(key.source)
-        return cards.cards(type, listOf(key)).firstOrNull()?.let { summary -> details(store, type, key, summary) }
+        val clusters = works.of(type)
+        val members = cards.membersRead(type, clusters.members(key), null)
+        return cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull()?.let { summary ->
+            details(store, type, key, summary, clusters, members)
+        }
     }
 
-    /** Everything the dialog shows of the item [key] of the [store], its card [summary] read. */
-    private fun details(store: SourceStore, type: TypeStore, key: ItemKey, summary: ItemSummary): ItemDetails {
-        val clusters = works.of(type)
+    /**
+     * Everything the dialog shows of the item [key] of the [store], its card [summary] and its work's [members] read.
+     */
+    private fun details(
+        store: SourceStore,
+        type: TypeStore,
+        key: ItemKey,
+        summary: ItemSummary,
+        clusters: WorkClusters,
+        members: MembersRead,
+    ): ItemDetails {
         val corrections = store.corrections.facetsOf(key.id)
         val fields = store.corrections.fieldsOf(key.id)
-        val work =
-            cards.ofWork(
-                type,
-                clusters,
-                key,
-                store.items.facets(key.id),
-                suggestions.chances(store, listOf(key.id))[key.id],
-            )
+        val work = cards.ofWork(type, clusters, key, store.items.facets(key.id), members.chances[key], read = members)
         val names = namesOf(store, work, corrections)
         val model = explanations.details(key)
         val matches = ItemMatches(stores, type, key)
@@ -308,12 +316,12 @@ class ItemDetailsReader(
         val defs =
             store.schema.facets.filter { it.role in roles }.sortedBy { if (it.role == FacetRole.SERIES) 0 else 1 }
         if (defs.isEmpty()) return emptyList()
-        val corrections = store.corrections.allFacets()
         val shown = HashSet<String>()
         return defs.flatMap { def ->
             val keys = values[def.key].orEmpty()
             val bySite = store.items.itemsWith(def.key, keys)
-            val own = corrections.filter { it.facet == def.key && it.key in keys }
+            // The user's answers on these values alone: who else the user said is of them, or is not
+            val own = store.corrections.facetsWith(def.key, keys)
             keys.mapNotNull { value ->
                 val removed = own.filter { it.key == value && !it.added }.map { it.itemId }.toSet()
                 val ids =

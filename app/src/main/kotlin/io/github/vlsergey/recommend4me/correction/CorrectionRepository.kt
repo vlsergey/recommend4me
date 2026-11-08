@@ -126,6 +126,15 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
     /** Every facet correction: they are few, the user makes them by hand. */
     fun allFacets(): List<FacetCorrection> = seenFacets(DSL.noCondition())
 
+    /**
+     * The answers of every item of the source on the values [keys] of the [facet]: what names or holds those values.
+     */
+    fun facetsWith(facet: String, keys: Collection<String>): List<FacetCorrection> {
+        if (keys.isEmpty()) return emptyList()
+        val f = WORK_FACET_CORRECTION
+        return seenFacets(f.FACET.eq(facet).and(f.VALUE_KEY.`in`(keys)))
+    }
+
     private companion object {
         /** The ids asked for by their ids at most; of more, every answer of the source is read once and picked from. */
         const val BATCH = 1000
