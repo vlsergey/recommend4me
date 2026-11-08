@@ -109,7 +109,13 @@ private constructor(private val type: TypeStore, val sides: List<SearchSide>, va
         fun read(type: TypeStore, encoder: String, said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>): TypeSearch {
             val places = HashMap<String, Int>()
             val ratios = type.sizes.all()
-            val sides = type.sources.mapNotNull { SearchSide.read(it, encoder, places, ratios) }
+            // The sites read side by side, each its own database: their values placed after, in the sites' order
+            val sides =
+                type.sources
+                    .parallelStream()
+                    .map { SearchSide.read(it, encoder, ratios) }
+                    .toList()
+                    .mapNotNull { it?.placed(places) }
             val works = sides.sumOf { it.ids.size }
             val having = IntArray(places.size)
             sides.forEach { side -> side.values.forEach { own -> own.forEach { having[it]++ } } }
