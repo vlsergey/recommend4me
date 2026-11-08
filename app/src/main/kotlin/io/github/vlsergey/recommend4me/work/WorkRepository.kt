@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.work
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -27,7 +28,7 @@ class WorkRepository(private val db: DSLContext) {
             .flatMap { chunk ->
                 db.select(SITE_WORK.ITEM, SITE_WORK.VERSION)
                     .from(SITE_WORK)
-                    .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.ITEM.`in`(chunk))
+                    .where(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk))
                     .fetch { it.value1()!! to it.value2()!! }
             }
             .toMap()
@@ -47,7 +48,7 @@ class WorkRepository(private val db: DSLContext) {
             .flatMap { chunk ->
                 db.select(SITE_WORK.ITEM, SITE_WORK.NORMALIZED)
                     .from(SITE_WORK)
-                    .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.ITEM.`in`(chunk))
+                    .where(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk))
                     .fetch { it.value1()!! to it.value2()!! }
             }
             .toMap()

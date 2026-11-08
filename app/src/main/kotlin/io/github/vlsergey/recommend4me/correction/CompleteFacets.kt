@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.correction
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_COMPLETE
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -7,7 +8,6 @@ import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
 import org.jooq.Condition
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 
 /**
  * THE FACETS WHOSE VALUES ARE ALL NAMED: the user's word that a work has no value of a facet but those it has, as the
@@ -57,7 +57,7 @@ internal class WorkCompleteFacets(
             .from(SITE_WORK)
             .join(c)
             .on(c.WORK.eq(SITE_WORK.NORMALIZED))
-            .where(SITE_WORK.SOURCE.eq(source), condition)
+            .where(condition)
             .fetch()
             .groupBy({ it.value1()!! }, { it.value2()!! })
             .mapValues { it.value.toSet() }
@@ -66,12 +66,12 @@ internal class WorkCompleteFacets(
     override fun completeOf(ids: Collection<String>): Map<String, Set<String>> {
         val asked = ids.toHashSet()
         return if (asked.size > BATCH) allComplete().filterKeys { it in asked }
-        else seenComplete(SITE_WORK.ITEM.`in`(asked))
+        else seenComplete(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked))
     }
 
     override fun completeOf(itemId: String): Set<String> = completeOf(listOf(itemId))[itemId].orEmpty()
 
-    override fun allComplete(): Map<String, Set<String>> = seenComplete(DSL.noCondition())
+    override fun allComplete(): Map<String, Set<String>> = seenComplete(SITE_WORK.SOURCE.eq(source))
 
     private companion object {
         /** The ids asked for by their ids at most; of more, every word of the source is read once and picked from. */

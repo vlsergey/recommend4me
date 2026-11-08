@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.model.tables.references.HELD_OUT
 import io.github.vlsergey.recommend4me.database.model.tables.references.HELD_OUT_EXPLAINED
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -80,7 +81,7 @@ class HeldOutRepository(private val db: DSLContext) {
         else
             db.select(HELD_OUT.ITEM_ID, HELD_OUT.SCORE)
                 .from(HELD_OUT)
-                .where(HELD_OUT.SOURCE.eq(source), HELD_OUT.ITEM_ID.`in`(asked))
+                .where(SourceItems.of(HELD_OUT.SOURCE, HELD_OUT.ITEM_ID, source, asked))
                 .fetch()
                 .associate { it.value1()!! to it.value2()!! }
     }

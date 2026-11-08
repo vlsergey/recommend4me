@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.correction
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FACET_CORRECTION
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -57,7 +58,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
     fun removeFacetValue(facet: String, key: String): List<String> {
         val f = WORK_FACET_CORRECTION
         val value = f.FACET.eq(facet).and(f.VALUE_KEY.eq(key))
-        val items = seenFacets(value).map { it.itemId }
+        val items = seenFacets(value.and(SITE_WORK.SOURCE.eq(source))).map { it.itemId }
         db.deleteFrom(f).where(value, f.WORK.`in`(ownWorks())).execute()
         return items
     }
@@ -68,7 +69,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
             .from(SITE_WORK)
             .join(f)
             .on(f.WORK.eq(SITE_WORK.NORMALIZED))
-            .where(SITE_WORK.SOURCE.eq(source), condition)
+            .where(condition)
             .fetch { FacetCorrection(it.value1()!!, it.value2()!!, it.value3()!!, it.value4()!!, it.value5()) }
     }
 
@@ -83,7 +84,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
         val asked = ids.toHashSet()
         val read =
             if (asked.size > BATCH) allFacets().filter { it.itemId in asked }
-            else seenFacets(SITE_WORK.ITEM.`in`(asked))
+            else seenFacets(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked))
         return read.groupBy { it.itemId }
     }
 
@@ -124,7 +125,7 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
     }
 
     /** Every facet correction: they are few, the user makes them by hand. */
-    fun allFacets(): List<FacetCorrection> = seenFacets(DSL.noCondition())
+    fun allFacets(): List<FacetCorrection> = seenFacets(SITE_WORK.SOURCE.eq(source))
 
     /**
      * The answers of every item of the source on the values [keys] of the [facet]: what holds those values; [named]
@@ -140,11 +141,14 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
                 .where(f.FACET.eq(facet), f.VALUE_KEY.`in`(keys), if (named) f.NAME.isNotNull else DSL.noCondition())
                 .fetch()
         if (answers.isEmpty()) return emptyList()
+        // By the index of the works alone: with the source beside it, H2 walks the source's items ([SourceItems])
         val items =
-            db.select(SITE_WORK.NORMALIZED, SITE_WORK.ITEM)
+            db.select(SITE_WORK.NORMALIZED, SITE_WORK.ITEM, SITE_WORK.SOURCE)
                 .from(SITE_WORK)
-                .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.NORMALIZED.`in`(answers.map { it.value1() }.toSet()))
-                .fetchGroups(SITE_WORK.NORMALIZED, SITE_WORK.ITEM)
+                .where(SITE_WORK.NORMALIZED.`in`(answers.map { it.value1() }.toSet()))
+                .fetch()
+                .filter { it.value3() == source }
+                .groupBy({ it.value1() }, { it.value2() })
         return answers.flatMap { a ->
             items[a.value1()].orEmpty().map { item ->
                 FacetCorrection(item!!, facet, a.value2()!!, a.value3()!!, a.value4())

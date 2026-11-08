@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.correction
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_FIELD_CORRECTION
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -7,7 +8,6 @@ import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
 import org.jooq.Condition
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 
 /**
  * THE USER'S OWN CONTENTS OF A WORK'S FIELDS over the site's — its title, a text, a number ([Corrected]) — as the items
@@ -62,7 +62,7 @@ internal class WorkFieldCorrections(
             .from(SITE_WORK)
             .join(f)
             .on(f.WORK.eq(SITE_WORK.NORMALIZED))
-            .where(SITE_WORK.SOURCE.eq(source), condition)
+            .where(condition)
             .fetch()
             .groupBy({ it.value1()!! }, { it.value2()!! to it.value3()!! })
             .mapValues { it.value.toMap() }
@@ -72,10 +72,10 @@ internal class WorkFieldCorrections(
 
     override fun fieldsOf(ids: Collection<String>): Map<String, Map<String, String>> =
         ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
-            out.apply { putAll(seenFields(SITE_WORK.ITEM.`in`(chunk))) }
+            out.apply { putAll(seenFields(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk))) }
         }
 
-    override fun allFields(): Map<String, Map<String, String>> = seenFields(DSL.noCondition())
+    override fun allFields(): Map<String, Map<String, String>> = seenFields(SITE_WORK.SOURCE.eq(source))
 
     private companion object {
         /** The ids of a query: memory, not meaning. */

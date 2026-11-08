@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.model.tables.references.PREDICTION
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.jooq.DSLContext
@@ -34,7 +35,7 @@ class PredictionRepository(private val db: DSLContext) {
             gone.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
                 ids.chunked(BATCH).forEach { chunk ->
                     tx.deleteFrom(PREDICTION)
-                        .where(PREDICTION.SOURCE.eq(source), PREDICTION.ITEM_ID.`in`(chunk))
+                        .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, chunk))
                         .execute()
                 }
             }
@@ -94,7 +95,7 @@ class PredictionRepository(private val db: DSLContext) {
         else
             db.select(PREDICTION.ITEM_ID, PREDICTION.SCORE, PREDICTION.INTEREST)
                 .from(PREDICTION)
-                .where(PREDICTION.SOURCE.eq(source), PREDICTION.ITEM_ID.`in`(asked))
+                .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, asked))
                 .fetch()
                 .associate { it.value1()!! to Predicted(it.value2()!!, it.value3()) }
     }

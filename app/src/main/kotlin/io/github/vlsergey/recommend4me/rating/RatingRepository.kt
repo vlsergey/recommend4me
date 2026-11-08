@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.rating
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_RATING
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -37,7 +38,7 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
             .on(r.WORK.eq(SITE_WORK.NORMALIZED))
             .join(through)
             .on(through.SOURCE.eq(r.SOURCE), through.ITEM.eq(r.ITEM))
-            .where(SITE_WORK.SOURCE.eq(source), condition)
+            .where(condition)
             .orderBy(SITE_WORK.ITEM, r.RATED_AT)
             .fetch {
                 Rating(
@@ -104,7 +105,8 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
             }
     }
 
-    fun ofItem(itemId: String): List<Rating> = seen(SITE_WORK.ITEM.eq(itemId)).sortedByDescending { it.ratedAt }
+    fun ofItem(itemId: String): List<Rating> =
+        seen(SITE_WORK.SOURCE.eq(source).and(SITE_WORK.ITEM.eq(itemId))).sortedByDescending { it.ratedAt }
 
     /** Every grade of the work of the item as it was given, the newest first. */
     fun given(itemId: String): List<GivenRating> {
@@ -129,7 +131,7 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
             }
     }
 
-    fun all(): List<Rating> = seen(WORK_RATING.GRADE.isNotNull)
+    fun all(): List<Rating> = seen(WORK_RATING.GRADE.isNotNull.and(SITE_WORK.SOURCE.eq(source)))
 
     /**
      * The grades of the items [ids]: by their ids up to a [BATCH] of them; of more, every grade read and picked from.
@@ -137,7 +139,7 @@ class RatingRepository(private val db: DSLContext, private val source: String, p
     fun ofItems(ids: Collection<String>): List<Rating> {
         val asked = ids.toHashSet()
         return if (asked.size > BATCH) all().filter { it.itemId in asked }
-        else seen(WORK_RATING.GRADE.isNotNull.and(SITE_WORK.ITEM.`in`(asked)))
+        else seen(WORK_RATING.GRADE.isNotNull.and(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked)))
     }
 
     fun gradedItems(): Set<String> = all().mapTo(HashSet()) { it.itemId }

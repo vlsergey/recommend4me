@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.interest
 
+import io.github.vlsergey.recommend4me.database.SourceItems
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_INTEREST
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -39,20 +40,20 @@ class InterestRepository(private val db: DSLContext, private val source: String,
     fun ofItems(ids: Collection<String>): Map<String, InterestMark> {
         val asked = ids.toHashSet()
         return if (asked.size > BATCH) all().filterKeys { it in asked }
-        else seenOf(SITE_WORK.ITEM.`in`(asked)).associateBy { it.itemId }
+        else seenOf(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked)).associateBy { it.itemId }
     }
 
-    private fun seen(itemId: String): List<InterestMark> = seenOf(SITE_WORK.ITEM.eq(itemId))
+    private fun seen(itemId: String): List<InterestMark> =
+        seenOf(SITE_WORK.SOURCE.eq(source).and(SITE_WORK.ITEM.eq(itemId)))
 
-    /** The marks of the source's items [items] picks; of all of them when null. */
+    /** The marks of the source's items [items] picks — the condition on the source among it —; of all when null. */
     private fun seenOf(items: Condition?): List<InterestMark> {
         val i = WORK_INTEREST
-        val own = SITE_WORK.SOURCE.eq(source)
         return db.select(SITE_WORK.ITEM, i.INTERESTING, i.MARKED_AT)
             .from(SITE_WORK)
             .join(i)
             .on(i.WORK.eq(SITE_WORK.NORMALIZED))
-            .where(if (items == null) own else own.and(items))
+            .where(items ?: SITE_WORK.SOURCE.eq(source))
             .fetch { InterestMark(it.value1()!!, it.value2()!!, it.value3()!!) }
     }
 
