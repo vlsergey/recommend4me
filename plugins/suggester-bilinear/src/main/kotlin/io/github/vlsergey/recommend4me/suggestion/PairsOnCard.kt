@@ -76,6 +76,10 @@ private constructor(
     private val masks = room.ints(masksOf(groupOf, words))
     private val foldOf = room.ints(p.foldOf)
 
+    /** The items in the order of the arrays of values they may have: the threads of a warp alike ([pairs]). */
+    private val order =
+        room.ints((0 until n).sortedBy { i -> p.pairs.may[i]?.let(groupOf::getValue) ?: -1 }.toIntArray())
+
     /**
      * Every pair of an item not merely lacked, an entry each — one it has, one the user rejected, a draft, one barred
      * (weighing nought), one the site gives as an example — twice: by the items, the values of each ascending, for the
@@ -231,6 +235,7 @@ private constructor(
             entryWeight,
             entryLabel,
             entryExample,
+            order,
             duT,
             sums,
         )

@@ -10,19 +10,25 @@
 // written and read back, nor any sum of a thread's added into another's.
 
 // The logistic loss of z against the label y, weighed by w, and its slope scaled: softplus and the
-// sigmoid of one exponent, as the processor's (Simd.logistic)
+// sigmoid of one exponent, as the processor's (Simd.logistic) — by the card's fast instructions (the
+// exponent, the logarithm, the reciprocal of a few units in the last place), log(1 + e) of a small e
+// by its series, which the logarithm of 1 + e would lose
+__device__ __forceinline__ float softplus_of(float e) {
+    return e > 1e-3f ? __logf(1.0f + e) : e * (1.0f - 0.5f * e);
+}
+
 __device__ __forceinline__ void logistic(float z, float y, float w, float scale, float* loss, float* slope) {
-    float e = expf(-fabsf(z));
-    float inverse = 1.0f / (1.0f + e);
+    float e = __expf(-fabsf(z));
+    float inverse = __frcp_rn(1.0f + e);
     float sigmoid = z >= 0.0f ? inverse : e * inverse;
-    *loss = w * (fmaxf(z, 0.0f) + log1pf(e) - y * z);
+    *loss = w * (fmaxf(z, 0.0f) + softplus_of(e) - y * z);
     *slope = w * (sigmoid - y) * scale;
 }
 
 // The slope alone, of the same numbers: the side that sums no loss
 __device__ __forceinline__ float slope_of(float z, float y, float w, float scale) {
-    float e = expf(-fabsf(z));
-    float inverse = 1.0f / (1.0f + e);
+    float e = __expf(-fabsf(z));
+    float inverse = __frcp_rn(1.0f + e);
     float sigmoid = z >= 0.0f ? inverse : e * inverse;
     return w * (sigmoid - y) * scale;
 }
@@ -35,6 +41,23 @@ __device__ __forceinline__ float slope_of(float z, float y, float w, float scale
 
 // The values or items a block holds at once of the other side, by rank: as many as fit 16 KB
 #define CHUNK(R) ((R) > 0 ? 4096 / (R) : 64)
+
+// A row of r coordinates of the block's memory into registers: of the rank compiled as known, four
+// numbers a reading, a quarter of the readings the products would make of them one by one
+template <int R>
+__device__ __forceinline__ void row_of_block(const float* from, int r, float* into) {
+    if (R == 16) {
+        const float4* four = reinterpret_cast<const float4*>(from);
+        for (int k = 0; k < 4; k++) {
+            float4 x = four[k];
+            into[4 * k] = x.x;
+            into[4 * k + 1] = x.y;
+            into[4 * k + 2] = x.z;
+            into[4 * k + 3] = x.w;
+        }
+    } else
+        for (int q = 0; q < r; q++) into[q] = from[q];
+}
 
 // The block's three sums added into sums[0..2]
 __device__ void block_sums(double a, double b, double c, double* sums) {
@@ -92,16 +115,19 @@ __device__ void pairs_items_of(
     int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut,
     const float* lack, const int* group, const unsigned int* masks, int words, const int* foldOf,
     const long long* firstEntry, const int* entryValue, const float* entryWeight, const float* entryLabel, const float* entryExample,
-    float* duT, double* sums
+    const int* order, float* duT, double* sums
 ) {
     if (R > 0) r = R;
     const int C = CHUNK(R);
-    __shared__ float vs[4096];
+    __shared__ __align__(16) float vs[4096];
     __shared__ float bs[CHUNK(R)];
     int tiles = (n + BLOCK - 1) / BLOCK;
     int slot = blockIdx.x / tiles;
     if (slot >= k) return;
-    int i = (blockIdx.x % tiles) * BLOCK + threadIdx.x;
+    // The items in the order of the arrays of values they may have: a warp's threads go through the same
+    // values, not each through its own
+    int at = (blockIdx.x % tiles) * BLOCK + threadIdx.x;
+    int i = at < n ? order[at] : n;
     Model mo = model_of(params, heldOut, slot);
     const float* u = uT + (size_t) slot * r * n;
     const float* v = vT + (size_t) slot * r * m;
@@ -128,38 +154,58 @@ __device__ void pairs_items_of(
         for (int t = threadIdx.x; t < many; t += BLOCK) bs[t] = b[from + t] + mo.common;
         __syncthreads();
         if (!on) continue;
+        // The sums of a chunk in single precision, then added in double: a double sum a pair is the slowest
+        // of the card's numbers
+        float cl = 0.0f, cc = 0.0f, ce = 0.0f;
+        // The item's mask of the values it may have, a word of 32 values read at a time
+        unsigned word = 0;
         for (int jj = 0; jj < many; jj++) {
             int j = from + jj;
+            if (jj == 0 || (j & 31) == 0) {
+                if (g >= 0) word = masks[(size_t) g * words + (j >> 5)];
+                // The next 32 values, of none of which a thread of the warp has a pair: passed over at once —
+                // the items of the same arrays of values side by side ([order]), most words are so
+                bool idle = next >= j + 32 && (w <= 0.0f || (g >= 0 && word == 0u));
+                if (__all_sync(__activemask(), idle)) {
+                    jj += 31 - (j & 31);
+                    continue;
+                }
+            }
             float slope, loss;
-            const float* vj = vs + jj * r;
+            float vj[R > 0 ? R : MAX_RANK];
             if (j == next) {
+                row_of_block<R>(vs + jj * r, r, vj);
                 float z = bs[jj];
                 for (int q = 0; q < r; q++) z += a[q] * vj[q];
                 float we = entryWeight[e];
                 if (we > 0.0f) {
                     float ex = entryExample[e];
                     logistic(z + mo.example * ex, entryLabel[e], we, mo.scale, &loss, &slope);
-                    l += loss;
-                    dExample += slope * ex;
+                    cl += loss;
+                    ce += slope * ex;
                 } else slope = 0.0f;
                 e++;
                 next = e < end ? entryValue[e] : m;
-            } else if (w > 0.0f && may(g, masks, words, j)) {
+            } else if (w > 0.0f && (g < 0 || ((word >> (j & 31)) & 1u))) {
+                row_of_block<R>(vs + jj * r, r, vj);
                 float z = bs[jj];
                 for (int q = 0; q < r; q++) z += a[q] * vj[q];
                 logistic(z, 0.0f, w, mo.scale, &loss, &slope);
-                l += loss;
+                cl += loss;
             } else continue;
-            dCommon += slope;
+            cc += slope;
             for (int q = 0; q < r; q++) acc[q] += slope * vj[q];
         }
+        l += cl;
+        dCommon += cc;
+        dExample += ce;
     }
     if (i < n) for (int q = 0; q < r; q++) duT[(size_t) slot * r * n + (size_t) q * n + i] = acc[q];
     block_sums(l, dCommon, dExample, sums + 3 * slot);
 }
 
-#define PAIRS_ITEMS_PARAMETERS int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut, const float* lack, const int* group, const unsigned int* masks, int words, const int* foldOf, const long long* firstEntry, const int* entryValue, const float* entryWeight, const float* entryLabel, const float* entryExample, float* duT, double* sums
-#define PAIRS_ITEMS_ARGUMENTS k, n, m, r, uT, vT, bias, params, heldOut, lack, group, masks, words, foldOf, firstEntry, entryValue, entryWeight, entryLabel, entryExample, duT, sums
+#define PAIRS_ITEMS_PARAMETERS int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut, const float* lack, const int* group, const unsigned int* masks, int words, const int* foldOf, const long long* firstEntry, const int* entryValue, const float* entryWeight, const float* entryLabel, const float* entryExample, const int* order, float* duT, double* sums
+#define PAIRS_ITEMS_ARGUMENTS k, n, m, r, uT, vT, bias, params, heldOut, lack, group, masks, words, foldOf, firstEntry, entryValue, entryWeight, entryLabel, entryExample, order, duT, sums
 
 extern "C" __global__ void pairs_items(PAIRS_ITEMS_PARAMETERS) { pairs_items_of<0>(PAIRS_ITEMS_ARGUMENTS); }
 extern "C" __global__ void pairs_items_16(PAIRS_ITEMS_PARAMETERS) { pairs_items_of<16>(PAIRS_ITEMS_ARGUMENTS); }
@@ -178,7 +224,7 @@ __device__ void pairs_values_of(
 ) {
     if (R > 0) r = R;
     const int C = CHUNK(R);
-    __shared__ float us[4096];
+    __shared__ __align__(16) float us[4096];
     __shared__ float ws[CHUNK(R)];
     __shared__ int gs[CHUNK(R)];
     int tiles = (m + BLOCK - 1) / BLOCK;
@@ -218,18 +264,22 @@ __device__ void pairs_values_of(
             int i = from + ii;
             float w = ws[ii];
             float slope;
-            const float* ui = us + ii * r;
+            float ui[R > 0 ? R : MAX_RANK];
             if (i == next) {
                 float we = entryWeight[e];
                 if (w >= 0.0f && we > 0.0f) {
+                    row_of_block<R>(us + ii * r, r, ui);
                     float z = base;
                     for (int q = 0; q < r; q++) z += c[q] * ui[q];
                     float ex = entryExample[e];
                     slope = slope_of(z + mo.example * ex, entryLabel[e], we, mo.scale);
-                } else slope = 0.0f;
+                }
                 e++;
                 next = e < end ? entryItem[e] : n;
+                // No pair of it: nothing read of its coordinates, nothing added
+                if (!(w >= 0.0f && we > 0.0f)) continue;
             } else if (w > 0.0f && may(gs[ii], masks, words, j)) {
+                row_of_block<R>(us + ii * r, r, ui);
                 float z = base;
                 for (int q = 0; q < r; q++) z += c[q] * ui[q];
                 slope = slope_of(z, 0.0f, w, mo.scale);
@@ -281,7 +331,7 @@ __device__ void names_values_of(
 ) {
     if (R > 0) r = R;
     const int C = CHUNK(R);
-    __shared__ float us[4096];
+    __shared__ __align__(16) float us[4096];
     __shared__ int ps[CHUNK(R)];
     int slot = blockIdx.x / tileCount;
     if (slot >= k) return;
@@ -311,17 +361,22 @@ __device__ void names_values_of(
         for (int t = threadIdx.x; t < many; t += BLOCK) ps[t] = positive[firstRow[g] + from + t];
         __syncthreads();
         if (!on) continue;
+        // The sums of a chunk in single precision, then added in double
+        float cl = 0.0f, cc = 0.0f;
         for (int row = 0; row < many; row++) {
-            const float* a = us + row * r;
+            float a[R > 0 ? R : MAX_RANK];
+            row_of_block<R>(us + row * r, r, a);
             float z = base;
             for (int q = 0; q < r; q++) z += a[q] * b[q];
             float loss, slope;
             logistic(z, ps[row] == col ? 1.0f : 0.0f, 1.0f, scale, &loss, &slope);
-            l += loss;
-            dCommon += slope;
+            cl += loss;
+            cc += slope;
             for (int q = 0; q < r; q++) acc[q] += a[q] * slope;
             sum += slope;
         }
+        l += cl;
+        dCommon += cc;
     }
     if (on) {
         for (int q = 0; q < r; q++) atomicAdd(gE + (size_t) slot * r * m + (size_t) q * m + val, acc[q]);
@@ -347,7 +402,7 @@ __device__ void names_items_of(
 ) {
     if (R > 0) r = R;
     const int C = CHUNK(R);
-    __shared__ float vs[4096];
+    __shared__ __align__(16) float vs[4096];
     __shared__ float bs[CHUNK(R)];
     int slot = blockIdx.x / tileCount;
     if (slot >= k) return;
@@ -375,7 +430,8 @@ __device__ void names_items_of(
         __syncthreads();
         if (!on) continue;
         for (int col = 0; col < many; col++) {
-            const float* bc = vs + col * r;
+            float bc[R > 0 ? R : MAX_RANK];
+            row_of_block<R>(vs + col * r, r, bc);
             float z = bs[col];
             for (int q = 0; q < r; q++) z += own[q] * bc[q];
             float slope = slope_of(z, positiveCol == from + col ? 1.0f : 0.0f, 1.0f, scale);
