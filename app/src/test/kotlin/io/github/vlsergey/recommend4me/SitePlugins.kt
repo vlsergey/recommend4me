@@ -11,6 +11,8 @@ import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PageDecor
+import io.github.vlsergey.recommend4me.source.SeriesData
+import io.github.vlsergey.recommend4me.source.SeriesWork
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
@@ -161,6 +163,11 @@ class SitePlugins {
 
             /** A page of a tag's other names: "<name>,<name>", the tag in the address. */
             const val SYNONYMS = "https://site.example/synonyms/"
+
+            /**
+             * A series' page: "<title>|<description>|<id>,<id>", its every work in order, the series in the address.
+             */
+            const val SERIES = "https://site.example/series/"
         }
 
         override val id = "site"
@@ -186,7 +193,7 @@ class SitePlugins {
                 universeLine = "pairings",
             )
         override val modes = setOf(SourceMode.BROWSER)
-        override val capturePatterns = listOf(Regex("https://site\\.example/(work|tags|synonyms)/.*"))
+        override val capturePatterns = listOf(Regex("https://site\\.example/(work|tags|synonyms|series)/.*"))
 
         override fun itemUrl(itemId: String) = "https://site.example/work/$itemId"
 
@@ -214,8 +221,26 @@ class SitePlugins {
                     description(page, context)
                     emptyList()
                 }
+                page.url.startsWith(SiteSource.SERIES) -> series(page, context)
                 else -> listOf(work(page, context))
             }
+
+        /** A series' page: the series and its every work in order; the works. */
+        private fun series(page: CapturedPage, context: SourceContext): List<String> {
+            val (title, description, ids) = page.html.split('|')
+            val works = ids.split(',').filter { it.isNotBlank() }
+            context.items.keepSeries(
+                SeriesData(
+                    page.url.removePrefix(SiteSource.SERIES),
+                    page.url,
+                    title,
+                    description,
+                    works = works.map { SeriesWork(it) },
+                    whole = true,
+                )
+            )
+            return works
+        }
 
         /** A page of a tag's other names: each a tag of its own of the same thing. */
         private fun synonyms(page: CapturedPage, context: SourceContext) {

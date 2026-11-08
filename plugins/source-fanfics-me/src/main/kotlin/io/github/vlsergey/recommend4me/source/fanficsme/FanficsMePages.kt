@@ -41,6 +41,7 @@ class FanficsMePages(context: SourceContext) {
     private val fields = FanficsMeFields(items)
     private val comments = FanficsMeComments(items)
     private val meanings = FanficsMeTagMeanings(items)
+    private val series = FanficsMeSeries(items)
 
     fun read(page: CapturedPage): List<String> {
         val uri = runCatching { URI(page.url) }.getOrNull()
@@ -53,6 +54,9 @@ class FanficsMePages(context: SourceContext) {
         }
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
+        // A series' own page, and a list of series: after the cards, whose works they list
+        SERIE_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
+        if (SERIES_LIST.matches(path)) series.list(doc)
         // The header of a work: on its own page, and on the reader of a work the site shows a guest not
         head(doc, page.capturedAt)?.let { touched += it }
         val work = WORK.matchEntire(path)?.groupValues?.get(1)
@@ -265,6 +269,12 @@ class FanficsMePages(context: SourceContext) {
          * of it.
          */
         private val WORK = Regex("/fic(\\d+)(?:/comments)?/?")
+
+        /** A series' own page: "/serie4940". */
+        private val SERIE_PAGE = Regex("/serie(\\d+)/?")
+
+        /** A list of series: an author's ("/user52961/series"), every one ("/series", "/serie?page=2"). */
+        private val SERIES_LIST = Regex("(/user\\d+)?/series?/?")
         private const val READER = "/read.php"
         private val READER_ID = Regex("(?:^|&)id=(\\d+)(?:&|$)")
         private val CHAPTER = Regex("[?&]chapter=(\\d+)")

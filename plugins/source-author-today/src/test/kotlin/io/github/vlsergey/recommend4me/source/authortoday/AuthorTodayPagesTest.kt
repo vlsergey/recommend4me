@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.source.authortoday
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
+import io.github.vlsergey.recommend4me.source.SeriesWork
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -71,6 +72,9 @@ class AuthorTodayPagesTest {
         assertEquals(listOf("661269"), capture(context, "https://author.today/work/661269", page("work-661269.html")))
         val facets = context.facets.getValue("661269")
         assertTrue("выживание" in facets.getValue("tag"), facets.toString())
+        // Its series, and its number there: "#9"
+        assertEquals(listOf("54335"), facets["series"])
+        assertEquals(9, context.seriesPlaces.getValue("54335")["661269"])
         // The genres after the tags of the block
         val tags = facets.getValue("tag")
         assertEquals(listOf("уся", "попаданцы в магические миры", "боевая фантастика"), tags.takeLast(3))
@@ -164,5 +168,42 @@ class AuthorTodayPagesTest {
         assertEquals(listOf("661269"), capture(context, url, changed))
         assertEquals(tags, context.facets.getValue("661269").getValue("tag"))
         assertEquals(texts, context.texts.getValue("661269").toMap())
+    }
+
+    @Test
+    fun `a series' page gives its title, status, dates, description and every work of it numbered`() {
+        val context = MemorySourceContext()
+        capture(context, "https://author.today/work/series/30377", page("series-30377.html"))
+        val series = context.series.getValue("30377")
+        assertEquals("Вперед в прошлое", series.title)
+        assertEquals("https://author.today/work/series/30377", series.url)
+        assertEquals("in-progress", series.status)
+        assertEquals(Instant.parse("2023-10-02T21:04:09.57Z"), series.begunAt)
+        assertEquals(Instant.parse("2026-11-07T21:15:07.7972251Z"), series.updatedAt)
+        assertTrue(series.description!!.startsWith("Все ли, что делается, - к лучшему?"), series.description)
+        assertEquals(22, series.works.size)
+        assertEquals(SeriesWork("300411", 1), series.works.first())
+        assertEquals((1..22).toList(), series.works.map { it.position })
+        assertTrue(series.whole)
+        // A series of two authors
+        capture(context, "https://author.today/work/series/61877", page("series-61877.html"))
+        val other = context.series.getValue("61877")
+        assertEquals("Поступь гнева", other.title)
+        assertEquals("in-progress", other.status)
+        assertEquals(Instant.parse("2026-10-25T20:34:42.587Z"), other.begunAt)
+    }
+
+    @Test
+    fun `an author's list of series gives each with its status, description and every work of it in its order`() {
+        val context = MemorySourceContext()
+        capture(context, "https://author.today/u/denratmanov/series", page("user-series.html"))
+        assertEquals(listOf("59008", "40669", "32216", "30377", "25283"), context.series.keys.toList())
+        val first = context.series.getValue("59008")
+        assertEquals("Миллениум", first.title)
+        assertEquals("in-progress", first.status)
+        assertTrue(first.description!!.startsWith("Твое рождение было ошибкой"), first.description)
+        assertEquals(listOf("639991", "650808"), first.works.take(2).map { it.itemId })
+        assertEquals("finished", context.series.getValue("32216").status)
+        assertEquals(22, context.series.getValue("30377").works.size)
     }
 }

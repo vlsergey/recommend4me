@@ -43,6 +43,7 @@ import { ItemTexts } from "./ItemTexts";
 import { ITEMS, itemKey } from "./lists";
 import { workQuery } from "./workRead";
 import { Cover, InterestButtons, RatingButtons, ScoreBadge, SearchMatchLine, SignalBadges } from "./pieces";
+import { WorkSeries } from "@/series/WorkSeries";
 import { RelatedWorks } from "./RelatedWorks";
 import { RemoveItem } from "./RemoveItem";
 import { FITTING, useHeldOut } from "./useHeldOut";
@@ -470,6 +471,7 @@ function LeftPage({
             <ItemNumbers numbers={d.allNumbers} source={source} />
           </Part>
           <Part title={t("ItemDialog.seriesAndAuthor")}>
+            {d.series && <WorkSeries type={type} series={d.series} current={ref} />}
             <RelatedWorks type={type} related={d.related} />
           </Part>
         </>
@@ -503,7 +505,7 @@ function LeftPage({
       {view === "sites" && (
         <>
           <Part title={t("WorkScreen.sites")}>
-            <SitesTable type={type} sites={sites} shown={shown} onShow={onShow} onTakeOut={onTakeOut} />
+            <SitesTable type={type} sites={sites} series={d.series?.key} shown={shown} onShow={onShow} onTakeOut={onTakeOut} />
           </Part>
           <Part title={t("ItemDialog.sameWork")}>
             <section className="flex flex-col gap-1">

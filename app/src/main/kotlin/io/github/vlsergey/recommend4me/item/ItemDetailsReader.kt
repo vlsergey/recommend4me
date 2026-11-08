@@ -8,16 +8,16 @@ import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.api.model.NumberValue
 import io.github.vlsergey.recommend4me.api.model.PartInfo
 import io.github.vlsergey.recommend4me.api.model.PictureInfo
-import io.github.vlsergey.recommend4me.api.model.Prediction
 import io.github.vlsergey.recommend4me.api.model.RatingRecord
-import io.github.vlsergey.recommend4me.api.model.RelatedWork
 import io.github.vlsergey.recommend4me.api.model.RelatedWorks
 import io.github.vlsergey.recommend4me.api.model.ReviewInfo
+import io.github.vlsergey.recommend4me.api.model.SeriesDetails
 import io.github.vlsergey.recommend4me.api.model.TextValue
 import io.github.vlsergey.recommend4me.api.model.WorkRelation
 import io.github.vlsergey.recommend4me.api.model.WorkSite
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
+import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.model.ContributionGroup
 import io.github.vlsergey.recommend4me.model.Details
@@ -25,6 +25,8 @@ import io.github.vlsergey.recommend4me.model.Explanations
 import io.github.vlsergey.recommend4me.model.LabelledContribution
 import io.github.vlsergey.recommend4me.model.ReadWork
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.series.SeriesViews
+import io.github.vlsergey.recommend4me.series.seriesFacetOf
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -115,6 +117,8 @@ class ItemDetailsReader(
     private val explanations: Explanations,
     private val works: Works,
     private val sitesSay: SitesSay,
+    private val lines: WorkLines,
+    private val series: SeriesViews,
 ) {
     /**
      * The work as the dialog shows it, its chances made now in memory ([FacetSuggestions.chances]): of every item of
@@ -148,6 +152,7 @@ class ItemDetailsReader(
         // What the model of the grades reads of the work, of the chances made of its items already
         val model = explanations.details(key, ReadWork(clusters.members(key), members.chances))
         val matches = ItemMatches(stores, type, key)
+        val ownSeries = series.ofWork(type, clusters.members(key))
         return ItemDetails(
             summary = summary,
             titleCorrected = Corrected.TITLE in fields,
@@ -176,8 +181,9 @@ class ItemDetailsReader(
             pictureMatches = matches.pictures(model.pictureMatches),
             reviewMatches = matches.reviews(model.reviewMatches),
             canRefresh = store.source.downloadsPages,
-            related = related(type, store, key, Corrected.facets(work.site, corrections), names),
-            sites = sites(type, clusters.members(key)),
+            related = related(type, store, key, Corrected.facets(work.site, corrections), names, ownSeries),
+            series = ownSeries,
+            sites = sites(type, clusters.members(key), ownSeries),
             relations = relations(type, clusters.members(key)),
         )
     }
@@ -242,8 +248,11 @@ class ItemDetailsReader(
             )
         }
 
-    /** What each item of a work says of it: the one that says the most first ([Works.fullness]). */
-    private fun sites(type: TypeStore, members: List<ItemKey>): List<WorkSite> {
+    /**
+     * What each item of a work says of it: the one that says the most first ([Works.fullness]), each with its series of
+     * its site and its number there, of the work's normalized [series].
+     */
+    private fun sites(type: TypeStore, members: List<ItemKey>, series: SeriesDetails?): List<WorkSite> {
         val encoder = plugins.imageEncoder()?.id
         return works.fullestFirst(type, members).mapNotNull { m ->
             val s = type.source(m.source) ?: return@mapNotNull null
@@ -259,6 +268,12 @@ class ItemDetailsReader(
                         keys.map { names[it] ?: it }
                     }
                     .orEmpty()
+            val siteSeries =
+                seriesFacetOf(s)
+                    ?.let { facet -> s.items.facets(m.id)[facet]?.firstOrNull() }
+                    ?.let { value ->
+                        series?.sites?.firstOrNull { it.source == m.source && it.key == value }
+                    }
             WorkSite(
                 source = m.source,
                 item = m.id,
@@ -273,6 +288,16 @@ class ItemDetailsReader(
                 pictureCount = s.pictures.ofItem(m.id, encoder).size,
                 partCount = s.parts.ofItem(m.id).size,
                 canRefresh = s.source.downloadsPages,
+                series = siteSeries,
+                seriesPosition =
+                    siteSeries?.let { own ->
+                        series
+                            ?.works
+                            ?.firstOrNull { w -> ItemKey(w.work.source, w.work.item) in members }
+                            ?.places
+                            ?.firstOrNull { it.source == own.source }
+                            ?.position
+                    },
             )
         }
     }
@@ -283,6 +308,7 @@ class ItemDetailsReader(
         return type.links
             .relations()
             .entries
+            .filter { it.value != TypeLinkRepository.SERIES }
             .mapNotNull { (pair, kind) ->
                 val other =
                     when {
@@ -304,9 +330,9 @@ class ItemDetailsReader(
     }
 
     /**
-     * The other works of the series the work is a part of and of the people who made it — the facets of the roles
-     * SERIES and AUTHOR — in the same source, with the user's grades: how the user liked the volumes before tells most
-     * of a volume after. The series first; a work shown there is not shown again under its author.
+     * The other works of the people who made the work — the facet of the role AUTHOR — in the same source, with the
+     * user's grades: how the user liked their works before tells of this one. A work of its normalized [series] is not
+     * shown again under its author.
      */
     private fun related(
         type: TypeStore,
@@ -314,13 +340,11 @@ class ItemDetailsReader(
         key: ItemKey,
         values: Map<String, List<String>>,
         names: Map<String, Map<String, String>>,
+        series: SeriesDetails?,
     ): List<RelatedWorks> {
-        // The series first: an author's works already shown as volumes are not shown again under the author
-        val roles = mapOf(FacetRole.SERIES to ApiFacetRole.SERIES, FacetRole.AUTHOR to ApiFacetRole.AUTHOR)
-        val defs =
-            store.schema.facets.filter { it.role in roles }.sortedBy { if (it.role == FacetRole.SERIES) 0 else 1 }
+        val defs = store.schema.facets.filter { it.role == FacetRole.AUTHOR }
         if (defs.isEmpty()) return emptyList()
-        val shown = HashSet<String>()
+        val shown = series?.works.orEmpty().filter { it.work.source == store.id }.mapTo(HashSet()) { it.work.item }
         return defs.flatMap { def ->
             val keys = values[def.key].orEmpty()
             val bySite = store.items.itemsWith(def.key, keys)
@@ -334,7 +358,8 @@ class ItemDetailsReader(
                         .filter { it != key.id && it !in removed && it !in shown }
                 if (ids.isEmpty()) return@mapNotNull null
                 shown += ids
-                val items = works(type, store, ids)
+                val items =
+                    lines.of(type, store, ids).values.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
                 // A value the user added is named as they wrote it
                 val name =
                     names[def.key]?.get(value)
@@ -343,36 +368,13 @@ class ItemDetailsReader(
                 RelatedWorks(
                     facet = def.key,
                     labelKey = I18nKeys.facetLabel(store.id, def),
-                    role = roles.getValue(def.role!!),
+                    role = ApiFacetRole.AUTHOR,
                     value = value,
                     name = name,
                     items = items,
                 )
             }
         }
-    }
-
-    /**
-     * The works [ids] of the [store] as the screen lists them among a work's series and author, by title: their titles,
-     * the user's grades, the model's predictions — no card, so none of their values and chances read.
-     */
-    private fun works(type: TypeStore, store: SourceStore, ids: List<String>): List<RelatedWork> {
-        val heads = store.items.heads(ids)
-        val fields = store.corrections.fieldsOf(ids)
-        val graded = cards.graded(store.ratings.ofItems(ids), heads.mapValues { it.value.version })
-        val predicted = type.predictions.predicted(store.id, ids)
-        return ids.mapNotNull { id ->
-                heads[id]?.let { head ->
-                    RelatedWork(
-                        source = store.id,
-                        item = id,
-                        title = Corrected.title(head.title, fields[id].orEmpty()),
-                        grade = graded[id]?.grade,
-                        prediction = predicted[id]?.let { Prediction(it.score) },
-                    )
-                }
-            }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
     }
 
     /** The grades of the work [key] is of as they were given, newest first. */

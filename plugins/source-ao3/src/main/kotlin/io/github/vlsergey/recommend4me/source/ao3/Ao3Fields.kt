@@ -28,6 +28,8 @@ import org.jsoup.nodes.Element
  * markup, and the same words mean the same here.
  */
 internal class Ao3Fields(private val items: ItemStore) {
+    /** The numbers of the works in their series. */
+    private val series = Ao3Series(items)
 
     fun authors(id: String, links: List<Element>) {
         val authors =
@@ -105,9 +107,12 @@ internal class Ao3Fields(private val items: ItemStore) {
         items.setFacet(id, TAG, values.distinctBy { it.key })
     }
 
+    /** The work's series of the link [a], and its number there as the text around the link says ("Part 6 of"). */
     fun series(id: String, a: Element) {
         val key = a.attr("href").removePrefix("/series/").substringBefore('?').substringBefore('/')
-        if (key.isNotEmpty()) items.setFacet(id, SERIES, listOf(FacetValue(key, a.text().trim())))
+        if (key.isEmpty()) return
+        items.setFacet(id, SERIES, listOf(FacetValue(key, a.text().trim())))
+        series.place(id, key, a)
     }
 
     /**

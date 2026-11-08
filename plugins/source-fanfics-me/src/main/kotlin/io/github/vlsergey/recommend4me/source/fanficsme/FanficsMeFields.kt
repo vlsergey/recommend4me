@@ -29,6 +29,8 @@ import org.jsoup.nodes.Element
  * the series, the notes of the author.
  */
 internal class FanficsMeFields(private val items: ItemStore) {
+    /** The series of the works, and their numbers there. */
+    private val series = FanficsMeSeries(items)
 
     /** The direction by the label after the title: "(гет)", "(джен)", "(слэш)", "(фемслэш)". */
     fun direction(id: String, heading: Element) {
@@ -57,9 +59,12 @@ internal class FanficsMeFields(private val items: ItemStore) {
         (info["Жанр"] ?: info["Жанры"])?.let { tags(id, it, info) }
         info["Размер"]?.let { size(id, it) }
         info["Статус"]?.let { status(id, it) }
-        info["Серия"]?.selectFirst("a[href^=/serie]")?.let { a ->
-            SERIE_LINK.matchEntire(a.attr("href"))?.groupValues?.get(1)?.let {
-                items.setFacet(id, SERIES, listOf(FacetValue(it, clean(a.text()))))
+        info["Серия"]?.let { line ->
+            line.selectFirst("a[href^=/serie]")?.let { a ->
+                SERIE_LINK.matchEntire(a.attr("href"))?.groupValues?.get(1)?.let {
+                    items.setFacet(id, SERIES, listOf(FacetValue(it, clean(a.text()))))
+                    series.place(id, it, line)
+                }
             }
         }
         info["Примечания автора"]?.let { items.setTexts(id, mapOf(NOTES to PageText.of(it))) }

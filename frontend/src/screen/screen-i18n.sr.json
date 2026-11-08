@@ -33,6 +33,8 @@
   "Stop.title": "Zaustaviti aplikaciju?",
   "Menu.authors": "Autori",
   "Menu.authors.title": "Autori sajtova: spojiti jednog pisca po delima koja se poklapaju ili označiti različitim",
+  "Menu.series": "Ciklusi",
+  "Menu.series.title": "Ciklusi dela: ciklusi sajtova jednog dela su jedan ciklus, sa delima po redu",
   "Menu.duplicates": "Duplikati",
   "Menu.duplicates.title": "Dela sa različitih sajtova koja mogu biti jedno: označiti jedno delo ili različita"
 }

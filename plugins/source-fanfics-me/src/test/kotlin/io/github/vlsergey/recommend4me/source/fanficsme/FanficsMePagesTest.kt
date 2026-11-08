@@ -140,11 +140,48 @@ class FanficsMePagesTest {
         // The work's own status, not its original's
         assertEquals(listOf("in-progress"), facets["status"])
         assertEquals(listOf("4940"), facets["series"])
+        // Its number in the series, after the series' name: "#1"
+        assertEquals(mapOf(work to 1), context.seriesPlaces.getValue("4940").toMap())
         assertEquals(listOf("nc-17"), facets[AgeRating.SITE_KEY])
         assertTrue("рейтинг за секс" in facets.getValue("tag"))
         val texts = context.texts.getValue(work)
         assertEquals("Not with a Half-blood, redux", texts[FanficsMe.ORIGINAL_TITLE])
         assertEquals("https://archiveofourown.org/works/63705664", texts[FanficsMe.ORIGINAL_LINK])
+    }
+
+    @Test
+    fun `a series' page gives its title, status, description and every work of it in its order`() {
+        val context = MemorySourceContext()
+        val works = listOf("233580", "234099", "244283")
+        assertEquals(works, capture(context, "https://fanfics.me/serie4423", "serie.html"))
+        val series = context.series.getValue("4423")
+        assertEquals("Техника английского профессора", series.title)
+        assertEquals("https://fanfics.me/serie4423", series.url)
+        assertEquals("in-progress", series.status)
+        assertTrue(series.description!!.startsWith("— Джордж, вы не могли бы говорить"), series.description)
+        assertEquals(works, series.works.map { it.itemId })
+        assertTrue(series.whole)
+    }
+
+    @Test
+    fun `a list of an author's series gives each with every work of it, a series of no title its placeholder`() {
+        val context = MemorySourceContext()
+        capture(context, "https://fanfics.me/user52961/series", "user-series.html")
+        assertEquals(listOf("4940", "4897", "4874"), context.series.keys.take(3))
+        val first = context.series.getValue("4940")
+        assertEquals("Только не с полукровкой", first.title)
+        assertEquals("finished", first.status)
+        assertEquals("", first.description)
+        assertEquals(listOf("251745", "252775", "252073", "252072", "252281"), first.works.map { it.itemId })
+        assertEquals(
+            "Цикл историй об отряде разумных, которые совсем не собирались становиться героями",
+            context.series.getValue("4874").description,
+        )
+        // A series the author gave no title: the site's word for it
+        val untitled = MemorySourceContext()
+        capture(untitled, "https://fanfics.me/serie1", "serie-untitled.html")
+        assertEquals("Без названия", untitled.series.getValue("1").title)
+        assertEquals("finished", untitled.series.getValue("1").status)
     }
 
     @Test

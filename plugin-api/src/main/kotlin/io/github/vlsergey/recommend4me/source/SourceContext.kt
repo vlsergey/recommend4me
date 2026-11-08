@@ -67,9 +67,9 @@ interface SiteSignals {
  * be gone.
  *
  * Its items' facets are its [ItemFacetStore], their reviews its [ItemReviewStore], the parts of their text its
- * [ItemPartStore].
+ * [ItemPartStore], the series they are parts of its [ItemSeriesStore].
  */
-interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore {
+interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore, ItemSeriesStore {
     /** Creates or updates an item; true when it is new or its version changed. */
     fun upsert(item: ItemHead, now: Instant): Boolean
 
@@ -145,6 +145,50 @@ interface ItemPartStore {
     /** The parts of the item: id to whether its text is kept. */
     fun parts(itemId: String): Map<String, Boolean>
 }
+
+/**
+ * THE SERIES OF A SOURCE'S ITEMS — a site's cycle of works, as its own page says it ([SeriesData]), and the place of a
+ * work in it. A part of [ItemStore]. A work's series as the work's page or card names it is the value of its facet of
+ * the role [FacetRole.SERIES], written as any facet: the application makes the work a work of that series too.
+ */
+interface ItemSeriesStore {
+    /**
+     * What a series' page — or a list of an author's series — says of it: a series known updated, a field the page does
+     * not show kept as it was. Its works in the order listed, each in the series; a series listed whole
+     * ([SeriesData.whole]) has no other: a work no longer listed is taken out of it.
+     */
+    fun keepSeries(series: SeriesData)
+
+    /** The item's [position] in the series [key] — "#3", "Part 3 of" — as the work's own page tells it. */
+    fun placeInSeries(itemId: String, key: String, position: Int)
+}
+
+/**
+ * What a site says of one of its series: its [key] — the key of the value of the facet of the role [FacetRole.SERIES]
+ * that names it — and its page. Of [title], [description], [status], [begunAt] and [updatedAt] a null is a field the
+ * page does not show, kept as it was; a blank [description] is one the page shows to be none. [status]: the key of a
+ * standard status of the works ([io.github.vlsergey.recommend4me.contenttype.Books.Status]): of a series of a frozen
+ * work, frozen; else of an unfinished one, in progress; else finished.
+ */
+data class SeriesData(
+    val key: String,
+    val url: String,
+    val title: String? = null,
+    val description: String? = null,
+    val status: String? = null,
+    val begunAt: Instant? = null,
+    val updatedAt: Instant? = null,
+    /** Its works in the order of the page. */
+    val works: List<SeriesWork> = emptyList(),
+    /** Whether [works] are every work of the series: a page of a list of several, or a list cut short, is not. */
+    val whole: Boolean = false,
+)
+
+/**
+ * A work of a series as its page lists it: the item, and its number in the series when the page tells it ("1.", "Part 3
+ * of"); of none, its place in a list [SeriesData.whole] is its order there.
+ */
+data class SeriesWork(val itemId: String, val position: Int? = null)
 
 /** What every item has. */
 data class ItemHead(

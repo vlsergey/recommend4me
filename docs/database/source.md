@@ -19,6 +19,8 @@
 | `picture` | a work's picture: the cover first, then the screenshots |
 | `item_picture_vector` | the cover's vector and the mean direction of the screenshots |
 | `review` | an opinion of another reader, its text kept by the key it is encoded under |
+| `series` | a series of the site — a cycle of works — as its own page, or a list of an author's series, said it last: its page, title, description, status and dates |
+| `series_place` | the number of a work in a series of the site, as the site tells it; that the work is of the series is its facet of the series |
 | `part` | a part of a work's text — a chapter — kept whole, with the hash of its text, its characters and words counted once |
 | `part_vector` | the vector of every window of a part |
 | `part_paragraph_vector` | the vector of every paragraph of a part — its lines with a letter in them, short ones in a row joined — what the tags are held against to be offered by the text |
@@ -150,6 +152,21 @@ erDiagram
         TIMESTAMPTZ posted_at "null"
         BIGINT text_key "null"
     }
+    series {
+        VARCHAR series_key PK
+        VARCHAR url
+        VARCHAR title "null"
+        CLOB description "null"
+        VARCHAR status "null"
+        TIMESTAMPTZ begun_at "null"
+        TIMESTAMPTZ updated_at "null"
+        TIMESTAMPTZ seen_at
+    }
+    series_place {
+        VARCHAR series_key PK
+        VARCHAR item_id PK, FK
+        INTEGER position
+    }
     set_vector {
         VARCHAR item_id PK, FK
         VARCHAR kind PK
@@ -185,6 +202,7 @@ erDiagram
     item ||--o{ part : "item_id"
     item ||--o{ picture : "item_id"
     item ||--o{ review : "item_id"
+    item ||--o{ series_place : "item_id"
     item ||--o{ set_vector : "item_id"
     item ||--o{ text_vector : "item_id"
     item ||--o{ text_window : "item_id"

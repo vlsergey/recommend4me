@@ -37,6 +37,7 @@ tags:
   - name: marking
   - name: duplicates
   - name: authors
+  - name: series
   - name: workload
   - name: launcher
 
@@ -739,6 +740,84 @@ paths:
                 $ref: '#/components/schemas/AuthorOfferPage'
         '404':
           description: No such type
+
+  /api/types/{type}/series:
+    get:
+      tags: [series]
+      operationId: listSeries
+      summary: A page of the normalized series of the type, the most works first
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: search
+          in: query
+          description: Only those a title of theirs on a site holds this
+          schema:
+            type: string
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: The series, their works counted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeriesPage'
+        '404':
+          description: No such type
+
+  /api/types/{type}/series/one:
+    get:
+      tags: [series]
+      operationId: getSeries
+      summary: A normalized series with what every site says of it and its works in order
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: key
+          in: query
+          required: true
+          description: The key of the series ("ficbook/28510", "said-12")
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeriesDetails'
+        '404':
+          description: No such type or series
+
+  /api/types/{type}/series/works:
+    delete:
+      tags: [series]
+      operationId: takeOutOfSeries
+      summary: The work taken out of the series the user put it in; a series of a site keeps its works
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: source
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: item
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Taken out, or the user had not put it in a series
+        '404':
+          description: No such type or work
 
   /api/authors/answer:
     put:
@@ -3760,9 +3839,11 @@ components:
           description: The source can download the item's page again
         related:
           type: array
-          description: The other works of its series, then of the people who made it (but those of the series), with the user's grades
+          description: The other works of the people who made it, but those of its series, with the user's grades
           items:
             $ref: '#/components/schemas/RelatedWorks'
+        series:
+          $ref: '#/components/schemas/SeriesDetails'
         sites:
           type: array
           description: What each item of the work says of it, the one that says the most first
@@ -3770,7 +3851,7 @@ components:
             $ref: '#/components/schemas/WorkSite'
         relations:
           type: array
-          description: The works the user said to be related to this one - a translation, a part, a work of one series
+          description: The works the user said to be related to this one - a translation, a part
           items:
             $ref: '#/components/schemas/WorkRelation'
 
@@ -3788,7 +3869,7 @@ components:
           type: string
         kind:
           type: string
-          enum: [TRANSLATION, PARTIAL, SERIES]
+          enum: [TRANSLATION, PARTIAL]
 
     WorkSite:
       type: object
@@ -3830,6 +3911,11 @@ components:
           type: integer
         partCount:
           type: integer
+        series:
+          $ref: '#/components/schemas/SeriesSite'
+        seriesPosition:
+          type: integer
+          description: Its number in its series of the site, when the site tells it
 
     RelatedWorks:
       type: object
@@ -5311,6 +5397,113 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AuthorSide'
+
+    SeriesPage:
+      type: object
+      required: [total, series]
+      properties:
+        total:
+          type: integer
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeriesRow'
+
+    SeriesRow:
+      type: object
+      required: [key, title, sites, works]
+      description: A normalized series as its list shows it
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+          description: The title of its first series of a site, or of its first work
+        sites:
+          type: array
+          description: Its series of the sites
+          items:
+            $ref: '#/components/schemas/SeriesSite'
+        works:
+          type: integer
+
+    SeriesSite:
+      type: object
+      required: [source, key, title, seen, works]
+      description: |
+        A series of a site, as its page said it last; of a series whose page was never seen, the
+        title its works name it by alone.
+      properties:
+        source:
+          type: string
+        key:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          description: A standard status of the works, its key
+        statusKey:
+          type: string
+          description: The key of the status' name
+        begunAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        seen:
+          type: boolean
+          description: Its page was read
+        works:
+          type: integer
+          description: Its works the site names
+
+    SeriesDetails:
+      type: object
+      required: [key, title, sites, works]
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        sites:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeriesSite'
+        works:
+          type: array
+          description: Its works in order - the sites' numbers held together by pairs
+          items:
+            $ref: '#/components/schemas/SeriesWork'
+
+    SeriesWork:
+      type: object
+      required: [work, places, said]
+      properties:
+        work:
+          $ref: '#/components/schemas/RelatedWork'
+        places:
+          type: array
+          description: Its number in every series of a site that numbers it
+          items:
+            $ref: '#/components/schemas/SeriesPlace'
+        said:
+          type: boolean
+          description: The user put it in the series ("one series"); it can be taken out
+
+    SeriesPlace:
+      type: object
+      required: [source, position]
+      properties:
+        source:
+          type: string
+        position:
+          type: integer
 
     AuthorKind:
       type: string

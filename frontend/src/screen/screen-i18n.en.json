@@ -33,6 +33,8 @@
   "Stop.title": "Stop the application?",
   "Menu.authors": "Authors",
   "Menu.authors.title": "The sites' authors: merge one writer by the works that match, or mark them different",
+  "Menu.series": "Series",
+  "Menu.series.title": "The series of works: every site's series of a work one series, with the works in order",
   "Menu.duplicates": "Duplicates",
   "Menu.duplicates.title": "Works of different sites that may be one: mark them one work or different"
 }

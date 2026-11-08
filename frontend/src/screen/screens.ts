@@ -26,7 +26,9 @@ export type Screen =
   /** The works of different sites that may be one, of a content type ("/duplicates/<type>"); of the one shown last at "/duplicates". */
   | { kind: "duplicates"; type?: string }
   /** The normalized authors of a content type ("/authors/<type>"); of the one shown last at "/authors". */
-  | { kind: "authors"; type?: string };
+  | { kind: "authors"; type?: string }
+  /** The normalized series of a content type ("/series/<type>"); of the one shown last at "/series". */
+  | { kind: "series"; type?: string };
 
 export function parseScreen(path: string): Screen {
   const parts = path.split("/").filter((p) => p.length > 0).map((p) => {
@@ -43,6 +45,7 @@ export function parseScreen(path: string): Screen {
   if (parts[0] === "models") return { kind: "models", type: parts[1] };
   if (parts[0] === "duplicates") return { kind: "duplicates", type: parts[1] };
   if (parts[0] === "authors") return { kind: "authors", type: parts[1] };
+  if (parts[0] === "series") return { kind: "series", type: parts[1] };
   return { kind: "works", type: parts[0] };
 }
 
@@ -66,6 +69,8 @@ export function screenHref(screen: Screen): string {
       return screen.type ? `/duplicates/${encodeURIComponent(screen.type)}` : "/duplicates";
     case "authors":
       return screen.type ? `/authors/${encodeURIComponent(screen.type)}` : "/authors";
+    case "series":
+      return screen.type ? `/series/${encodeURIComponent(screen.type)}` : "/series";
   }
 }
 

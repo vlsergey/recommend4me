@@ -63,14 +63,15 @@ class SourceContexts(
     }
 
     /**
-     * The source's writes, one at a time ([SourceStore.writing]); its reads free. Its items' facets, reviews and parts
-     * are kept by stores of their own.
+     * The source's writes, one at a time ([SourceStore.writing]); its reads free. Its items' facets, reviews, parts and
+     * series are kept by stores of their own.
      */
     private class Items(private val store: SourceStore, private val events: ApplicationEventPublisher) :
         ItemStore,
         ItemFacetStore by SourceItemFacets(store, events),
         ItemReviewStore by SourceItemReviews(store),
-        ItemPartStore by SourceItemParts(store, events) {
+        ItemPartStore by SourceItemParts(store, events),
+        ItemSeriesStore by SourceItemSeries(store) {
         private fun <T> write(block: () -> T): T = store.writing.withLock(block)
 
         override fun upsert(item: ItemHead, now: Instant): Boolean = write { store.items.upsert(item, now) }

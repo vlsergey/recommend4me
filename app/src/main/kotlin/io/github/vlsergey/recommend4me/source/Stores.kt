@@ -31,6 +31,8 @@ import io.github.vlsergey.recommend4me.rating.RatingRepository
 import io.github.vlsergey.recommend4me.review.ReviewRepository
 import io.github.vlsergey.recommend4me.search.SearchJudgmentRepository
 import io.github.vlsergey.recommend4me.search.SearchScoreRepository
+import io.github.vlsergey.recommend4me.series.SeriesGroups
+import io.github.vlsergey.recommend4me.series.SiteSeriesRepository
 import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
 import io.github.vlsergey.recommend4me.setvector.SetVectorRepository
 import io.github.vlsergey.recommend4me.signal.SignalRepository
@@ -45,6 +47,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacetDefs
 import io.github.vlsergey.recommend4me.universe.UniverseNames
 import io.github.vlsergey.recommend4me.universe.UniverseRepository
+import io.github.vlsergey.recommend4me.work.TypeWorks
 import io.github.vlsergey.recommend4me.work.WorkPairJournal
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.nio.file.Path
@@ -113,6 +116,9 @@ class SourceStore(
     val files = PictureFiles(folder)
     val reviews = ReviewRepository(dbs.source.dsl)
     val parts = PartRepository(dbs.source.dsl)
+
+    /** What the pages of the site's series say of them, and the places of the works in them. */
+    val series = SiteSeriesRepository(dbs.source.dsl)
     val textVectors = TextVectorRepository(dbs.source.dsl)
     val setVectors = SetVectorRepository(dbs.source.dsl)
     val pages = CapturedPageRepository(dbs.source.dsl)
@@ -266,18 +272,26 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val id: String
         get() = type.id
 
+    /** The normalized works of the type's items. */
+    val works = TypeWorks(WorkRepository(databases.dictionaries.dsl), sources.map { it.id })
+
+    /** The works the user said to be one series. */
+    val seriesGroups = SeriesGroups(databases.dictionaries.dsl)
+
     val links =
         TypeLinkRepository(
             WorkRepository(databases.dictionaries.dsl),
             WorkPairJournal(databases.dictionaries.dsl),
             sources.map { it.id },
             sources.flatMapTo(HashSet()) { it.singleFacets },
+            seriesGroups,
         )
     val universes =
         UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
     val authors = AuthorRepository(databases.dictionaries.dsl)
+
     val models = ModelRepository(databases.model(type.id))
     val predictions = PredictionRepository(databases.model(type.id))
     val heldOut = HeldOutRepository(databases.model(type.id))

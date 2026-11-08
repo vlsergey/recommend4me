@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
@@ -28,24 +29,24 @@ enum class DuplicateAnswer {
 }
 
 /**
- * The user's word on every pair, the smaller key first ([words]), and of them the pairs of one series by a chain of
- * words "one series" ([derived], [io.github.vlsergey.recommend4me.correction.PairWords.inSeries]): weighing as one
- * said, told apart only to be shown so.
+ * The user's word on every pair, the smaller key first ([words]), and of them the pairs of one normalized series the
+ * user did not say so of ([derived], [TypeSeries]) — by the series of the sites, or a work of the series another said
+ * to be one series: weighing as one said, told apart only to be shown so.
  */
 class Said(private val words: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>, val derived: Set<Pair<ItemKey, ItemKey>>) :
     Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> by words
 
 /**
  * THE USER'S WORD ON EVERY PAIR of works across the sites of a type, read anew at every asking: a word is on the two
- * normalized works, of every pair of their items alike; two works of one series by a chain of words are of one series
- * as if said so.
+ * normalized works, of every pair of their items alike; two works of one normalized series are of one series as if said
+ * so.
  */
 @Component
 class PairAnswers(private val works: Works) {
 
     /**
      * The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different,
-     * related — one series by the chain too.
+     * related — one series of every two works of a normalized series too.
      */
     fun said(type: TypeStore): Said {
         val out = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
@@ -53,7 +54,20 @@ class PairAnswers(private val works: Works) {
         type.links.relations().forEach { (pair, kind) ->
             runCatching { DuplicateAnswer.valueOf(kind) }.getOrNull()?.takeIf { it.related }?.let { out[pair] = it }
         }
-        val derived = type.links.inSeries().filter { it !in out }.toSet()
+        val derived = HashSet<Pair<ItemKey, ItemKey>>()
+        val series = TypeSeries.read(type)
+        val items = type.works.itemsOf(series.all.flatMap { it.works })
+        series.all.forEach { s ->
+            val works = s.works.toList()
+            works.forEachIndexed { k, x ->
+                works.drop(k + 1).forEach { y ->
+                    for (i in items[x].orEmpty()) for (j in items[y].orEmpty()) {
+                        val pair = type.links.ordered(i, j)
+                        if (pair !in out) derived += pair
+                    }
+                }
+            }
+        }
         derived.forEach { out[it] = DuplicateAnswer.SERIES }
         works.of(type).linkedWorks().forEach { members ->
             members.forEachIndexed { k, a ->

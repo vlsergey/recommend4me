@@ -37,6 +37,7 @@ class AuthorTodayPages(context: SourceContext) {
     private val marks = AuthorTodayMarks(context)
     private val reviews = AuthorTodayReviews(items)
     private val reader = AuthorTodayReader(items)
+    private val series = AuthorTodaySeries(items)
 
     fun read(page: CapturedPage): List<String> {
         val doc = Jsoup.parse(page.html, page.url)
@@ -45,6 +46,9 @@ class AuthorTodayPages(context: SourceContext) {
         val loggedIn = LOGGED_IN.find(page.html)?.groupValues?.get(1) == "true"
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt, loggedIn)
+        // A series' own page, and an author's list of series: after the cards, whose works they list
+        AuthorTodaySeries.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
+        if (AUTHOR_SERIES.matches(path)) series.list(doc)
         WORK.matchEntire(path)?.let { m ->
             val id = m.groupValues[1]
             when (m.groupValues[2]) {
@@ -136,7 +140,10 @@ class AuthorTodayPages(context: SourceContext) {
             }
         this.genres.write(id, form, genres, tags)
         block.status()?.let { items.setFacet(id, STATUS, listOf(it)) }
-        block.series()?.let { items.setFacet(id, SERIES, listOf(it)) }
+        block.series()?.let {
+            items.setFacet(id, SERIES, listOf(it))
+            series.place(id, panel)
+        }
         // The work's "18+" told by its panel; a panel without it says nothing — the card says so
         if (panel.selectFirst(".label-adult-only") != null) ageRating(id, adult = true)
         val like = LIKE_BUTTON.find(html)
@@ -215,6 +222,9 @@ class AuthorTodayPages(context: SourceContext) {
 
     companion object {
         private val WORK = Regex("/work/(\\d+)(/reviews)?/?")
+
+        /** An author's list of series: "/u/denratmanov/series". */
+        private val AUTHOR_SERIES = Regex("/u/[^/]+/series/?")
         private val REVIEW = Regex("/review/(\\d+)/?")
         private val READER = Regex("/reader/(\\d+)/(\\d+)/?")
         private val WORK_ID = Regex("^/work/(\\d+)")

@@ -131,8 +131,21 @@ interface read of it is generic:
 - **reviews** — other readers' opinions: f95zone reviews, author.today рецензии, ficbook and
   Archive of Our Own comments; each encoded whole.
 - **parts** — the text of a book's chapters, cut into windows; a vector for every window.
+- **series** — a site's cycle of works: the work's facet of the role SERIES names it (one a site:
+  the first the site lists of the work), its own page — or a list of an author's series — tells its
+  title, description, status, dates and works (`ItemSeriesStore.keepSeries`, kept in `series`), and
+  a work's number in it is kept in `series_place`. Seeing a series' page makes the series and puts
+  every work listed on it in it.
 
 A source may keep tables of its own in its source database (its own Flyway history).
+
+A **normalized series** (`series/TypeSeries`) is made on reading, never kept: the series of the
+sites and the groups of works the user said to be one series (`series_group`) are one series with
+every other one sharing a normalized work with them — a work is of one series — named by the
+smallest key of a site's series ("ficbook/28510"). Its works go in the order every site's numbers
+give by pairs (`SeriesOrder`). The answer "one series" on a pair of works puts both in one group;
+"different" or the word taken back takes the user's works out, a site's series keeps its own. The
+model reads every site's series and the normalized one as features.
 
 ## Corrections
 

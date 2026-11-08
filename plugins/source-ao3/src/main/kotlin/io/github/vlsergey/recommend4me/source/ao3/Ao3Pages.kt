@@ -36,12 +36,15 @@ class Ao3Pages(private val context: SourceContext) {
 
     private val items = context.items
     private val fields = Ao3Fields(items)
+    private val series = Ao3Series(items)
 
     fun read(page: CapturedPage): List<String> {
         val doc = Jsoup.parse(page.html, page.url)
         val path = runCatching { URI(page.url).path }.getOrDefault("")
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
+        // A series' own page: after the cards, whose works it lists
+        Ao3Series.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
         WORK.matchEntire(path)?.let { m ->
             val id = m.groupValues[1]
             when (m.groupValues[2]) {

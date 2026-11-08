@@ -5,6 +5,7 @@ import type { Grade, ItemRef, ItemSummary } from "@/api/client";
 import { toast } from "@/components/ui/toast";
 import { ItemDialog } from "./ItemDialog";
 import { writeTopHash } from "./dialogStack";
+import { isSeriesHash } from "@/series/seriesHash";
 import { readItemHash } from "./itemHash";
 import { itemKey } from "./lists";
 import { useRateItem } from "./useRateItem";
@@ -54,7 +55,10 @@ export function ItemRefDialog({ item, onClose }: { item: ItemRef | null; onClose
 export function HashItemDialog() {
   const [item, setItem] = useState(readItemHash);
   useEffect(() => {
-    const onHash = () => setItem(readItemHash());
+    // A series opened from a work leaves the work open under it
+    const onHash = () => {
+      if (!isSeriesHash()) setItem(readItemHash());
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);

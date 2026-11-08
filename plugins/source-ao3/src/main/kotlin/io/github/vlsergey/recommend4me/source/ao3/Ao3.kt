@@ -89,8 +89,11 @@ class Ao3 : Source {
             kindFrom = FANDOM,
         )
 
-    /** 2: the category a standard direction, with ficbook's. 3: the warnings among the site's tags. */
-    override val parserVersion = 3
+    /**
+     * 2: the category a standard direction, with ficbook's. 3: the warnings among the site's tags. 4: the series' own
+     * pages, the number of a work in its series.
+     */
+    override val parserVersion = 4
 
     /** Its own changes of the values kept: the direction made a standard one, the warnings tags. */
     override val migrations = listOf("classpath:db/ao3")

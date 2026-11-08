@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me
 
+import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.CardsRequest
 import io.github.vlsergey.recommend4me.api.model.CatalogueEntryRef
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
@@ -499,12 +500,26 @@ class SiteTest : SiteTestBase() {
         capture("s1|Space 1|space|Starships cross the galaxy 1|Pilot/Captain|Галактика")
         capture("s2|Space 2|space|Starships cross the galaxy 2|Pilot/Captain|Галактика")
         gradesController.rateItem("site", "s2", RatingRequest(5))
-        val series = items.getItem("site", "s1").body!!.related.single()
-        assertEquals(
-            Triple("Галактика", ApiFacetRole.SERIES, listOf("s2")),
-            Triple(series.name, series.role, series.items.map { it.item }),
+        val series = items.getItem("site", "s1").body!!.series!!
+        assertEquals("Галактика", series.title)
+        assertEquals(listOf("s1", "s2"), series.works.map { it.work.item })
+        assertEquals(5, series.works.single { it.work.item == "s2" }.work.grade)
+        assertTrue(items.getItem("site", "s1").body!!.related.none { it.role == ApiFacetRole.SERIES })
+
+        // The series' page seen: a work it lists is of it, the works in its order; listed whole, a work not
+        // listed is of it no more
+        capture("s3|Space 0|space|Starships cross the galaxy 0|Pilot/Captain")
+        captures.capturePage(
+            CaptureRequest("${SitePlugins.SiteSource.SERIES}галактика", "Галактика|Starships.|s3,s2,s1")
         )
-        assertEquals(5, series.items.single().grade)
+        val seen = items.getItem("site", "s3").body!!.series!!
+        assertEquals(listOf("s3", "s2", "s1"), seen.works.map { it.work.item })
+        assertEquals(listOf(1, 2, 3), seen.works.map { it.places.single().position })
+        assertEquals("Starships.", seen.sites.single().description)
+        assertTrue(seen.sites.single().seen)
+        captures.capturePage(CaptureRequest("${SitePlugins.SiteSource.SERIES}галактика", "Галактика|Starships.|s3,s1"))
+        assertEquals(null, items.getItem("site", "s2").body!!.series)
+        assertEquals(listOf("s3", "s1"), items.getItem("site", "s1").body!!.series!!.works.map { it.work.item })
 
         // The cards of a list get the works' grades
         gradesController.rateItem("site", "s1", RatingRequest(4))

@@ -22,6 +22,10 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
     val pictures = HashMap<String, List<String?>>()
     val reviews = HashMap<String, MutableMap<String, ReviewData>>()
     val parts = HashMap<String, MutableMap<String, PartData>>()
+    /** Every series kept, by its key: the last word of its page. */
+    val series = LinkedHashMap<String, SeriesData>()
+    /** Of every series, the places of its works its works' own pages told: item to position. */
+    val seriesPlaces = HashMap<String, MutableMap<String, Int>>()
     val signalValues = HashMap<Pair<String, String>, String>()
     val settingValues = HashMap<String, String>()
     val pages = LinkedHashMap<String, String>()
@@ -115,6 +119,14 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
 
             override fun parts(itemId: String): Map<String, Boolean> =
                 parts[itemId].orEmpty().mapValues { it.value.content != null }
+
+            override fun keepSeries(series: SeriesData) {
+                this@MemorySourceContext.series[series.key] = series
+            }
+
+            override fun placeInSeries(itemId: String, key: String, position: Int) {
+                seriesPlaces.getOrPut(key) { HashMap() }[itemId] = position
+            }
         }
 
     override val database: DSLContext

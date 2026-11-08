@@ -27,6 +27,8 @@ class Screens(private val stores: Stores) {
         "/models/**",
         "/duplicates",
         "/duplicates/**",
+        "/series",
+        "/series/**",
         "/authors",
         "/authors/**",
     )

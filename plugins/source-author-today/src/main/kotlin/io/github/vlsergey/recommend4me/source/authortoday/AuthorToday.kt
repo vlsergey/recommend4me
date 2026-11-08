@@ -69,7 +69,7 @@ class AuthorToday : Source {
         listOf(
             Regex(
                 "https://author\\.today/" +
-                    "(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews))([/?#].*)?"
+                    "(work|reader|review|search|collection|collections|top|u/[^/]+/(works|library|reviews|series))([/?#].*)?"
             )
         )
 
@@ -78,9 +78,9 @@ class AuthorToday : Source {
      * standard "read". 4: the shelf as the standard one. 5: the pages that failed when several pages of one work were
      * read at once read again. 6: the alternative history as a kind of its own, the erotic fan fiction as fan fiction.
      * 7: the age ratings a card lets the work have, by its "18+". 8: of a work without it, G to R. 9: the genres the
-     * site's tags.
+     * site's tags. 10: the series' own pages and an author's list of them, the number of a work in its series.
      */
-    override val parserVersion = 9
+    override val parserVersion = 10
 
     /** The genres kept before as a facet of their own moved among the site's tags. */
     override val migrations = listOf("classpath:db/author.today")

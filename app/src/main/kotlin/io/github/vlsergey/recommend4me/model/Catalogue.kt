@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Rating
+import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.setvector.SetVectors
 import io.github.vlsergey.recommend4me.source.NumberDef
@@ -144,9 +145,10 @@ class CatalogueReader(
             }
 
         val reading = VectorReading(kept, plugins.textEncoder(), plugins.imageEncoder(), type.embeddings.ids())
+        val series = TypeSeries.read(type)
         type.sources.forEach { s ->
             val laps = Laps()
-            items += readItems(s, severalSources, laps = laps)
+            items += readItems(s, severalSources, series, laps = laps)
             reading.read(s, laps)
             log.info("{}/{}: catalogue read in ms: {}", type.id, s.id, laps)
         }
@@ -192,7 +194,9 @@ class CatalogueReader(
         val clusters = works.of(type)
         val wanted = (ratings.map { it.key } + also).flatMapTo(HashSet()) { clusters.members(it) }
         val of = wanted.groupBy({ it.source }, { it.id })
-        val items = type.sources.flatMap { s -> of[s.id]?.let { readItems(s, type.sources.size > 1, it) }.orEmpty() }
+        val series = TypeSeries.read(type)
+        val items =
+            type.sources.flatMap { s -> of[s.id]?.let { readItems(s, type.sources.size > 1, series, it) }.orEmpty() }
         val vectors = vectorsOfMany(type, wanted.toList())
         val keys = items.map { it.key }.toSet()
         val likeness = likenesses.asMade(type, ratings.map { it.key }.filter { it in keys }.toSet())
@@ -249,11 +253,13 @@ class CatalogueReader(
 
     /**
      * The items of one source as the model reads them: their facets and numbers with the user's corrections, the source
-     * when the type has several. Of the items [ids], when given; of every item in one pass over each table.
+     * when the type has several, the normalized series of their works ([series]). Of the items [ids], when given; of
+     * every item in one pass over each table.
      */
     private fun readItems(
         s: SourceStore,
         severalSources: Boolean,
+        series: TypeSeries,
         ids: List<String>? = null,
         laps: Laps = Laps(),
     ): List<CatalogueItem> {
@@ -305,6 +311,7 @@ class CatalogueReader(
                         TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets)
                     val categorical = categoricalOf(corrected, facetIds, ignored, ::feature)
                     if (severalSources) categorical += source
+                    categorical += listOfNotNull(series.keyOf(ItemKey(s.id, k.id))).map(FeatureNames::series)
                     val numeric = numericOf(s, numberDefs, numbers[k.id].orEmpty(), fields[k.id].orEmpty())
                     CatalogueItem(ItemKey(s.id, k.id), k.version, k.updatedAt, categorical, numeric)
                 }
@@ -330,6 +337,9 @@ class CatalogueReader(
                 TagHierarchy.corrected(base, s.corrections.facetsOf(key.id), s.hierarchies(), s.singleFacets)
             val categorical = categoricalOf(corrected, facetIds, ignored, FeatureNames::facet)
             if (type.sources.size > 1) categorical += "source:${s.id}"
+            type.works.worksOf(listOf(key))[key]?.let { work ->
+                TypeSeries.around(type, listOf(work)).ofWork(work)?.let { categorical += FeatureNames.series(it.key) }
+            }
             val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
             val numeric = numericOf(s, numberDefs, s.items.numbers(key.id), s.corrections.fieldsOf(key.id))
             CatalogueItem(key, head.version, head.updatedAt, categorical, numeric)

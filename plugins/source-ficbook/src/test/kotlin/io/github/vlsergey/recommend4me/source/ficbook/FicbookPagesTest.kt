@@ -315,4 +315,42 @@ class FicbookPagesTest {
         source.capture(CapturedPage(url, otherTags, now), context)
         assertEquals(tags, context.facets.getValue(work).getValue("tag"))
     }
+
+    @Test
+    fun `a series' page gives its title, description and every work of it in its order`() {
+        val context = MemorySourceContext()
+        val works =
+            listOf(
+                "7194723",
+                "7412901",
+                "7890444",
+                "8387412",
+                "9021110",
+                "10129384",
+                "11851704",
+                "019b5f41-2ae7-7952-bb86-204f7fe5123e",
+                "019bdcf2-94ec-7af9-a408-42a474dd644d",
+            )
+        assertEquals(works, capture(context, "https://ficbook.net/series/20989", "series.html"))
+        val series = context.series.getValue("20989")
+        assertEquals("Гарри Поттер и Три Пожилых Леди", series.title)
+        assertEquals("https://ficbook.net/series/20989", series.url)
+        assertTrue(series.description!!.startsWith("Настоящая сила Британии"), series.description)
+        assertEquals(null, series.status)
+        assertEquals(works, series.works.map { it.itemId })
+        assertTrue(series.whole)
+        assertEquals(listOf("20989"), context.facets.getValue("7412901")["series"])
+    }
+
+    @Test
+    fun `an author's list of series gives each with its description and every work of it`() {
+        val context = MemorySourceContext()
+        capture(context, "https://ficbook.net/authors/3093607/series", "author-series.html")
+        assertEquals(listOf("21006", "20989"), context.series.keys.toList())
+        val first = context.series.getValue("21006")
+        assertEquals("Привет", first.title)
+        assertEquals("Короткая повесть в одном письме и одной случайной встрече", first.description)
+        assertEquals(listOf("9265345", "10161264"), first.works.map { it.itemId })
+        assertEquals(9, context.series.getValue("20989").works.size)
+    }
 }

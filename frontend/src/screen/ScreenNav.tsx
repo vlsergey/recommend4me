@@ -134,6 +134,17 @@ function menu({ types, type, screen, theme, onTheme, onCapture, onJobDialog, onS
           title: t("Menu.authors.title"),
           active: screen.kind === "authors",
         },
+        {
+          key: "series",
+          screen: { kind: "series", type: type.id },
+          label: (
+            <>
+              <LibraryIcon /> {t("Menu.series")}
+            </>
+          ),
+          title: t("Menu.series.title"),
+          active: screen.kind === "series",
+        },
         ...(universes
           ? [
               {

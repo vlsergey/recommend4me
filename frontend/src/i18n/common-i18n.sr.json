@@ -81,5 +81,6 @@
   "Theme.system": "Kao u sistemu",
   "Theme.title": "Tema",
   "App.failed.authors": "Autori se ne prikazuju",
+  "App.failed.series": "Ciklusi se ne prikazuju",
   "App.failed.duplicates": "Duplikati se ne prikazuju"
 }

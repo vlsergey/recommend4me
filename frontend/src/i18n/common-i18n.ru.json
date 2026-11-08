@@ -81,5 +81,6 @@
   "Theme.system": "Как в системе",
   "Theme.title": "Тема",
   "App.failed.authors": "Авторы не показываются",
+  "App.failed.series": "Циклы не показываются",
   "App.failed.duplicates": "Дубли не показываются"
 }

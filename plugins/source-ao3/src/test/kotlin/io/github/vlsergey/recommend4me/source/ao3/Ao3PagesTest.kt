@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
+import io.github.vlsergey.recommend4me.source.SeriesWork
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
 import kotlin.test.Test
@@ -135,6 +136,48 @@ class Ao3PagesTest {
         assertTrue(first.content.startsWith("Ah GreedLing"), first.content)
         assertEquals(Instant.parse("2026-08-03T22:41:00Z"), first.postedAt)
         assertTrue(reviews.size > 1)
+        // Its series, and its number there: "Part 6 of"
+        assertEquals(listOf("5585796"), context.facets.getValue("89821571")["series"])
+        assertEquals(6, context.seriesPlaces.getValue("5585796")["89821571"])
+    }
+
+    @Test
+    fun `a series' page gives its title, dates, description, whether it is complete, and its works numbered`() {
+        val context = MemorySourceContext()
+        // The markup of a series' page as the archive writes it; the archive answered 418 when it was to be captured
+        val html =
+            """
+            <html><body><div id="main" class="series-show">
+            <h2 class="heading">Magic is Born From Desire</h2>
+            <div class="wrapper"><dl class="series meta group">
+            <dt>Creator:</dt><dd><a rel="author" href="/users/someone/pseuds/someone">someone</a></dd>
+            <dt>Series Begun:</dt><dd>2024-03-01</dd>
+            <dt>Series Updated:</dt><dd>2026-08-02</dd>
+            <dt>Description:</dt><dd><blockquote class="userstuff"><p>Magic, and what it wants.</p></blockquote></dd>
+            <dt>Stats:</dt><dd><dl class="stats"><dt>Words:</dt><dd>120,000</dd><dt>Works:</dt><dd>2</dd>
+            <dt>Complete:</dt><dd>No</dd></dl></dd>
+            </dl></div>
+            <ul class="series work index group">
+            <li id="work_85351946" class="work blurb group"><div class="header module"><h4 class="heading">
+            <a href="/works/85351946">Fifth</a></h4></div>
+            <ul class="series"><li>Part <strong>5</strong> of <a href="/series/5585796">Magic is Born From Desire</a></li></ul></li>
+            <li id="work_89821571" class="work blurb group"><div class="header module"><h4 class="heading">
+            <a href="/works/89821571">Sixth</a></h4></div>
+            <ul class="series"><li>Part <strong>6</strong> of <a href="/series/5585796">Magic is Born From Desire</a></li></ul></li>
+            </ul>
+            </div></body></html>
+            """
+                .trimIndent()
+        val url = "https://archiveofourown.org/series/5585796"
+        assertTrue(source.capturePatterns.any { it.matches(url) })
+        source.capture(CapturedPage(url, html, Instant.parse("2026-11-09T00:00:00Z")), context)
+        val series = context.series.getValue("5585796")
+        assertEquals("Magic is Born From Desire", series.title)
+        assertEquals("in-progress", series.status)
+        assertEquals("Magic, and what it wants.", series.description)
+        assertEquals(Instant.parse("2024-03-01T00:00:00Z"), series.begunAt)
+        assertEquals(listOf(SeriesWork("85351946", 5), SeriesWork("89821571", 6)), series.works)
+        assertTrue(!series.whole)
     }
 
     @Test

@@ -90,11 +90,14 @@ class FanficsMe : Source {
     /** The translators kept before as a facet of their own made the authors of their translations. */
     override val migrations = listOf("classpath:db/fanfics.me")
 
+    /** 2: the series' own pages and the lists of them, the number of a work in its series. */
+    override val parserVersion = 2
+
     override val capturePatterns =
         listOf(
             Regex(
                 "https://fanfics\\.me/" +
-                    "(fic\\d+|read\\.php|find|fandom\\d+|character\\d+|paring[\\d_]+|serie\\d+|collection\\d+" +
+                    "(fic\\d+|read\\.php|find|fandom\\d+|character\\d+|paring[\\d_]+|serie\\d+|series?|collection\\d+" +
                     "|user\\d+|translations|recommends|fics_rating|html)([/?#].*)?"
             )
         )

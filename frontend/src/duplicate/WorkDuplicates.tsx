@@ -22,11 +22,10 @@ const VERDICTS: { verdict: Verdict; word: "same" | "different" | "translation" |
   { verdict: "SERIES", word: "series" },
 ];
 
-/** The word of a kind of relation of two works, as the buttons name it. */
+/** The word of a kind of relation of two works, as the buttons name it; works of one series are shown with their series. */
 const RELATION_WORDS = {
   TRANSLATION: "PairRow.translation",
   PARTIAL: "PairRow.partial",
-  SERIES: "PairRow.series",
 } as const satisfies Record<WorkRelation["kind"], string>;
 
 /** How many pairs are shown at first and by each press for more: a work may be the likeliest of hundreds of others, none hidden. */

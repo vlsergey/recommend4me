@@ -26,6 +26,8 @@
 | `normalized_work` | a work of the user's, whatever sites have it |
 | `site_work` | an item of a site bound to a normalized work: at first of its own, merged when the user says two are one work; several of one site may be one |
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
+| `series_group` | a group of works the user said to be one series ("one series" of two works) |
+| `series_group_work` | a work of a group of the user's, in one at most: a normalized series is made on reading of the groups and the series of the sites, every one of them sharing a work with another one series with it |
 | `work_pair_journal` | every word the user said on two items being one work or not — one work, different, a translation, a part — and every word taken back (`answer` none), with the word the pair had before (`answer_before`), by the two items as pressed, the newest last: what a word is undone by; `restored`: written of what was kept before the journal was, the word before unknown |
 | `work_rating` | the grade of a work, and the item and version it was given through: one current of a work, the rest grades of releases before |
 | `work_interest` | the user's word on whether a work is interesting at all |
@@ -101,6 +103,15 @@ erDiagram
         BIGINT first_work PK, FK
         BIGINT other_work PK, FK
         VARCHAR kind
+        TIMESTAMPTZ said_at
+    }
+    series_group {
+        BIGINT id PK
+        TIMESTAMPTZ made_at
+    }
+    series_group_work {
+        BIGINT work PK, FK
+        BIGINT series FK
         TIMESTAMPTZ said_at
     }
     site_author {
@@ -311,6 +322,7 @@ erDiagram
     normalized_tag ||--o{ tag_vector : "tag"
     normalized_work ||--o{ normalized_work_relation : "first_work"
     normalized_work ||--o{ normalized_work_relation : "other_work"
+    normalized_work ||--o{ series_group_work : "work"
     normalized_work ||--o{ site_work : "normalized"
     normalized_work ||--o{ work_facet_complete : "work"
     normalized_work ||--o{ work_facet_correction : "work"
@@ -318,6 +330,7 @@ erDiagram
     normalized_work ||--o{ work_field_correction : "work"
     normalized_work ||--o{ work_interest : "work"
     normalized_work ||--o{ work_rating : "work"
+    series_group ||--o{ series_group_work : "series"
     tag_entry ||--o{ normalized_author_entry : "catalogue, entry"
     tag_entry ||--o{ normalized_tag_entry : "catalogue, entry"
     tag_entry ||--o{ tag_entry_above : "catalogue, above"

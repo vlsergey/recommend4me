@@ -15,6 +15,8 @@ import { usePluginNamespaces } from "@/i18n/usePluginNamespaces";
 import { NumberFilters, validRanges, type NumberRanges } from "@/number/NumberFilters";
 import { ItemBoard, type Layout, type ListState } from "@/item/ItemBoard";
 import { HashItemDialog } from "@/item/ItemRefDialog";
+import { HashSeriesDialog } from "@/series/SeriesDialog";
+import { SeriesScreen } from "@/series/SeriesScreen";
 import { ITEMS } from "@/item/lists";
 import { BY_SCORE, validSort, type SortChoice } from "@/item/sort";
 import { SortMenu } from "@/item/SortMenu";
@@ -60,7 +62,7 @@ export function App() {
   const screen = useScreen();
   const [remembered, setRemembered] = usePref<string>("type", "");
   const list = types.data ?? [];
-  const named = screen.kind === "works" || screen.kind === "models" || screen.kind === "duplicates" || screen.kind === "authors" ? list.find((t) => t.id === screen.type) : undefined;
+  const named = screen.kind === "works" || screen.kind === "models" || screen.kind === "duplicates" || screen.kind === "authors" || screen.kind === "series" ? list.find((t) => t.id === screen.type) : undefined;
   const type = named ?? list.find((t) => t.id === remembered) ?? list[0];
   useEffect(() => {
     if (!type || screen.kind !== "works") return;
@@ -238,6 +240,11 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
           <AuthorsScreen type={type} />
         </ErrorBoundary>
       )}
+      {screen.kind === "series" && (
+        <ErrorBoundary resetKey={type.id} title={t("App.failed.series")}>
+          <SeriesScreen type={type} />
+        </ErrorBoundary>
+      )}
       {screen.kind === "duplicates" && (
         <ErrorBoundary resetKey={type.id} title={t("App.failed.duplicates")}>
           <DuplicatesScreen type={type} />
@@ -372,6 +379,7 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
       <CaptureDialog open={captureOpen} onOpenChange={setCaptureOpen} />
       <StopDialog open={stopOpen} onOpenChange={setStopOpen} onStopped={() => setStopped(true)} />
       <HashItemDialog />
+      <HashSeriesDialog />
     </div>
   );
 }

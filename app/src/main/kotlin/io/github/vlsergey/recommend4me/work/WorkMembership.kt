@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.W
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_INTEREST
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.WORK_RATING
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.series.SeriesGroups
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -24,7 +25,8 @@ class WorkMembership(private val db: DSLContext) {
     /**
      * The normalized work [from] merged into [into]: every item of it bound to [into], the words on it moved to [into]
      * — a word [into] has on the same work kept, none of [into] with itself — its grades, mark and corrections too, the
-     * newest of the two the one that stands — of the [single] facets one value — and [from] gone.
+     * newest of the two the one that stands — of the [single] facets one value — its series said the series of [into]
+     * ([SeriesGroups.merged]), and [from] gone.
      */
     fun merge(from: Long, into: Long, now: Instant, single: Set<String> = emptySet()) = db.transaction { c ->
         val tx = DSL.using(c)
@@ -43,6 +45,7 @@ class WorkMembership(private val db: DSLContext) {
             ?.let { newest -> putInterest(tx, into, newest.interesting!!, newest.markedAt!!) }
         giveWord(tx, from, into, newestOnly = true)
         keepOneOfSingle(tx, into, single)
+        SeriesGroups.merged(tx, from, into)
         tx.deleteFrom(NORMALIZED_WORK).where(NORMALIZED_WORK.ID.eq(from)).execute()
     }
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { number } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { cn } from "@/lib/utils";
+import { seriesHref } from "@/series/seriesHash";
 import { RefreshButton } from "./WorkParts";
 
 /**
@@ -19,12 +20,15 @@ import { RefreshButton } from "./WorkParts";
 export function SitesTable({
   type,
   sites,
+  series,
   shown,
   onShow,
   onTakeOut,
 }: {
   type: ContentTypeInfo;
   sites: WorkSite[];
+  /** The key of the work's normalized series, its window opened from every site's series. */
+  series?: string;
   shown: ItemRef;
   onShow: (site: ItemRef) => void;
   onTakeOut: (site: ItemRef) => Promise<unknown>;
@@ -38,6 +42,23 @@ export function SitesTable({
   const rows: { label: string; plain: (s: WorkSite) => string | undefined; cell?: (s: WorkSite) => ReactNode }[] = [
     { label: t("WorkSites.title"), plain: (s) => s.siteTitle },
     { label: t("WorkSites.authors"), plain: (s) => s.authors.join(", ") || undefined },
+    {
+      label: t("WorkSites.series"),
+      plain: (s) => (s.series ? `${s.series.title}${s.seriesPosition ? ` #${s.seriesPosition}` : ""}` : undefined),
+      cell: (s) =>
+        s.series && (
+          <span>
+            {series ? (
+              <a href={seriesHref(type.id, series)} className="underline-offset-2 hover:underline" title={t("WorkSites.seriesOpen")}>
+                {s.series.title}
+              </a>
+            ) : (
+              s.series.title
+            )}
+            {s.seriesPosition && <span className="text-muted-foreground tabular-nums"> #{s.seriesPosition}</span>}
+          </span>
+        ),
+    },
     { label: t("WorkSites.description"), plain: description, cell: (s) => <span className="line-clamp-6">{description(s)}</span> },
     ...numbers.map(([key, labelKey]) => {
       const of = (s: WorkSite) => s.numbers.find((n) => n.key === key)?.siteValue ?? undefined;

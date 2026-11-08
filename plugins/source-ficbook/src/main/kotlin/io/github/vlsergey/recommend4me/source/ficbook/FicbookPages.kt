@@ -34,6 +34,7 @@ class FicbookPages(private val context: SourceContext) {
     private val items = context.items
     private val fields = FicbookFields(items)
     private val meanings = FicbookTagMeanings(items)
+    private val series = FicbookSeries(items)
 
     fun read(page: CapturedPage): List<String> {
         val path = runCatching { URI(page.url).path }.getOrDefault("")
@@ -45,6 +46,9 @@ class FicbookPages(private val context: SourceContext) {
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
         if (TAG_PAGE.matches(path)) meanings.tagPage(doc)
+        // A series' own page, and an author's list of series: after the cards, whose works they list
+        FicbookSeries.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
+        if (AUTHOR_SERIES.matches(path)) series.list(doc)
         READFIC.matchEntire(path)?.let { m ->
             val id = m.groupValues[1]
             val rest = m.groupValues[2]
@@ -258,6 +262,9 @@ class FicbookPages(private val context: SourceContext) {
         private val READFIC = Regex("/readfic/([0-9a-f-]+)/?([^/]*)/?")
         private val TAG_PAGE = Regex("/tags/\\d+/?")
 
+        /** An author's list of series: "/authors/3093607/series". */
+        private val AUTHOR_SERIES = Regex("/authors/[^/]+/series/?")
+
         /** The site's search of tags ([Ficbook.tagSearch]). */
         private const val TAG_SEARCH = "/tags/search"
 
@@ -267,7 +274,8 @@ class FicbookPages(private val context: SourceContext) {
          */
         private const val NOT_THE_TEXT = ".js-fanfic-text-promo-placeholder, [class*=promo], script, style"
 
-        private fun workId(href: String): String? =
+        /** The id of the work a link leads to: "/readfic/7194723", "/readfic/019b5f41-…". */
+        internal fun workId(href: String): String? =
             READFIC.matchEntire(href.substringBefore('?').substringBefore('#'))?.groupValues?.get(1)
     }
 }
