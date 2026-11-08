@@ -47,8 +47,19 @@ private constructor(
     private val gBias = room.floats(count.toLong() * m)
     private val params = room.floats(count.toLong() * PARAMS)
     private val heldOutOf = room.bytes(count.toLong() * Int.SIZE_BYTES)
-    private val paramsHost = Floats(count * PARAMS)
     private val heldOutHost = IntArray(count)
+
+    // The pair's own weights of every slot and their slopes; of a slot its scale and its penalty sent, its penalty's
+    // sum and its loss made
+    private val pair = room.floats(count.toLong() * Bilinear.PAIR)
+    private val gPair = room.floats(count.toLong() * Bilinear.PAIR)
+    private val scales = room.floats(count.toLong())
+    private val lambdas = room.floats(count.toLong())
+    private val penalties = room.bytes(count.toLong() * Double.SIZE_BYTES)
+    private val lossesOnCard = room.floats(count.toLong())
+    private val scalesHost = Floats(count)
+    private val lambdasHost = Floats(count)
+    private val lossesHost = Floats(count)
 
     /** Of every model, its three sums: the loss, the slopes of the common bias and of the example. */
     private val sums = room.bytes(count.toLong() * SUMS * Double.SIZE_BYTES)
@@ -112,31 +123,40 @@ private constructor(
     private val texts = if (h > 0) NameTextsOnCard(p, cublas, kernels, room, count, r, uh!!, duh!!) else null
 
     /**
-     * The values' coordinates of the first [k] models, Vᵀ = Bᵀ Zᵀ + Eᵀ, made here of their weights [bTHost] and
-     * [eTHost] sent; and, when there are names, the names' coordinates of the weights A here ([aT]).
+     * The point and the gradient of every slot here ([SlotsOnCard]): the weights A and their slopes of the items'
+     * features ([aT], [gA]), B and E of the values', the biases and the pair's own weights of the pairs.
      */
-    fun coordinates(k: Int, bTHost: Floats, eTHost: Floats, aT: Cublas.DeviceFloats) {
-        values.coordinates(k, bTHost, eTHost)
+    fun slots(aT: Cublas.DeviceFloats, gA: Cublas.DeviceFloats) =
+        SlotsOnCard(
+            listOf(aT, values.bT, values.eT, bias, pair),
+            listOf(gA, values.gB, gE, gBias, gPair),
+            intArrayOf(r * p.design.itemWidth, r * p.design.valueWidth, r * m, m, Bilinear.PAIR),
+        )
+
+    /**
+     * The values' and, when there are names, the names' coordinates of the first [k] models, of their weights here —
+     * the names' of A ([aT]).
+     */
+    fun coordinates(k: Int, aT: Cublas.DeviceFloats) {
+        values.coordinates(k)
         texts?.coordinates(k * r, aT)
     }
 
     /**
-     * The values' slopes of the first [k] models taken back into [gEHost], those of B made of them into [gBHost]; and,
-     * when there are names, their slopes carried onto the slopes of A here ([gA]) — once the items' features have
-     * written theirs there.
+     * The slopes of B of the first [k] models, and, when there are names, theirs carried onto the slopes of A here
+     * ([gA]) — once the items' features have written theirs there.
      */
-    fun gradient(k: Int, gEHost: Floats, gBHost: Floats, gA: Cublas.DeviceFloats) {
-        values.gradient(k, gEHost, gBHost)
+    fun gradient(k: Int, gA: Cublas.DeviceFloats) {
+        values.gradient(k)
         texts?.gradient(k * r, gA)
     }
 
     /**
-     * The pairs and the names of the first [k] slots, the model in each by [slotModel]: as [Ensemble.pairs] and
-     * [Ensemble.names] of each, the values' and the names' coordinates made here before ([coordinates]). Read: the
-     * items' coordinates [uT] here, the biases [biasHost] and the pair's own weights [pair] in the main memory.
-     * Written: the items', the values' and the names' slopes here ([gradient] takes the values' back); the biases'
-     * [gBiasHost] and the pair's own [gPair] in the main memory; every model's loss, summed and not scaled, into
-     * [losses].
+     * The pairs and the names of the first [k] slots, the model in each by [slotModel] — scaled by one over its
+     * training's weight ([totals]), its held-out fold of [heldOut]: as [Ensemble]'s on the processor, every number here
+     * — the items' coordinates [uT] and their slopes [duT], the values' and the names' coordinates made before
+     * ([coordinates]), the biases and the pair's own weights of the slots ([slots]). Their losses and slopes summed,
+     * kept here till [finish].
      */
     fun evaluate(
         k: Int,
@@ -145,37 +165,42 @@ private constructor(
         totals: FloatArray,
         uT: Cublas.DeviceFloats,
         duT: Cublas.DeviceFloats,
-        pair: Floats,
-        biasHost: Floats,
-        gBiasHost: Floats,
-        gPair: Floats,
-        losses: FloatArray,
     ) {
-        val kr = k * r
-        bias.upload(biasHost, 0, 0, k * m)
         for (slot in 0 until k) {
-            val model = slotModel[slot]
-            paramsHost[slot * PARAMS] = 1 / totals[model]
-            paramsHost[slot * PARAMS + 1] = pair[slot * Bilinear.PAIR]
-            paramsHost[slot * PARAMS + 2] = pair[slot * Bilinear.PAIR + 1]
-            heldOutHost[slot] = heldOut[model]
+            scalesHost[slot] = 1 / totals[slotModel[slot]]
+            heldOutHost[slot] = heldOut[slotModel[slot]]
         }
-        params.upload(paramsHost, 0, 0, k * PARAMS)
+        scales.upload(scalesHost, 0, 0, k)
         heldOutOf.upload(heldOutHost)
+        kernels.launch("params_of", k.toLong(), k, scales, pair, Bilinear.PAIR, params)
         sums.zero()
         pairs(k, uT, duT)
         if (h > 0) {
-            duh!!.zero(0, kr.toLong() * h)
+            duh!!.zero(0, k.toLong() * r * h)
             namesOf(k)
         }
-        gBias.download(gBiasHost, 0, 0, k * m)
-        val got = sums.doubles(k * SUMS)
-        for (slot in 0 until k) {
-            val at = slot * SUMS
-            losses[slot] = got[at].toFloat()
-            gPair[slot * Bilinear.PAIR] = got[at + 2].toFloat()
-            gPair[slot * Bilinear.PAIR + 1] = got[at + 1].toFloat()
-        }
+    }
+
+    /**
+     * The losses of the first [k] slots finished, the model in each by [slotModel], into [losses]: the pair's own
+     * slopes of the sums, the penalty of every weight of the [slots] but the common bias — its weight of [lambdas] —
+     * with its slope, and the loss over the training's weight with its penalty.
+     */
+    fun finish(k: Int, slotModel: IntArray, lambdasOf: FloatArray, slots: SlotsOnCard, losses: FloatArray) {
+        for (slot in 0 until k) lambdasHost[slot] = lambdasOf[slotModel[slot]]
+        lambdas.upload(lambdasHost, 0, 0, k)
+        kernels.launch("pair_slopes", k.toLong(), k, sums, Bilinear.PAIR, gPair)
+        penalties.zero()
+        // The pieces of the point, then of the gradient, then their sizes, as the kernel reads them
+        val pieces = slots.point + slots.gradient + slots.sizes.toList()
+        kernels.launch(
+            "penalty",
+            k.toLong() * PER_SLOT * CudaKernels.BLOCK,
+            *(listOf(k, slots.size, lambdas) + pieces + penalties).toTypedArray(),
+        )
+        kernels.launch("losses_of", k.toLong(), k, sums, scales, lambdas, penalties, lossesOnCard)
+        lossesOnCard.download(lossesHost, 0, 0, k)
+        for (slot in 0 until k) losses[slot] = lossesHost[slot]
     }
 
     /**
@@ -387,6 +412,9 @@ private constructor(
         /** The numbers a model is read with: its scale, the weight of the example, the common bias. */
         private const val PARAMS = 3
 
+        /** The blocks of a slot of `penalty` (`PER_SLOT` of `pairs.cu`). */
+        private const val PER_SLOT = 64
+
         /** The rank of the application's fittings, which the `_16` kernels are compiled for. */
         private const val KNOWN_RANK = 16
 
@@ -410,6 +438,10 @@ private constructor(
                 "names_sum",
                 "add_base",
                 "names_back",
+                "params_of",
+                "penalty",
+                "pair_slopes",
+                "losses_of",
             )
 
         /** Where each of the [sizes] begins, one after another. */

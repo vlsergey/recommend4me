@@ -440,3 +440,87 @@ extern "C" __global__ void names_back(
         for (int b = 0; b < blocks; b++) g[offsets[b]] += sum;
     }
 }
+
+// THE LOSS OF EVERY MODEL ON THE CARD, ITS NUMBERS THERE: a model's point and gradient in five pieces
+// of the slot it holds — the weights A, B, E, the biases, the pair's own weights — na .. nf numbers of
+// each a slot, the slots one after another; the order of a model's numbers the pieces' one after another
+
+#define PER_SLOT 64
+
+// The piece of a slot's number e and where it lies
+__device__ __forceinline__ float* piece_of(
+    int e, int s, float* a, float* b, float* c, float* d, float* f, int na, int nb, int nc, int nd, int nf
+) {
+    if (e < na) return a + (size_t) s * na + e;
+    e -= na;
+    if (e < nb) return b + (size_t) s * nb + e;
+    e -= nb;
+    if (e < nc) return c + (size_t) s * nc + e;
+    e -= nc;
+    if (e < nd) return d + (size_t) s * nd + e;
+    return f + (size_t) s * nf + (e - nd);
+}
+
+// What a slot is read with, three numbers each: its scale, of scales; the weight of the example and the
+// common bias, of its point's pair's own weights (nf a slot)
+extern "C" __global__ void params_of(int k, const float* scales, const float* pair, int nf, float* params) {
+    int s = blockIdx.x * blockDim.x + threadIdx.x;
+    if (s >= k) return;
+    params[3 * s] = scales[s];
+    params[3 * s + 1] = pair[(size_t) s * nf];
+    params[3 * s + 2] = pair[(size_t) s * nf + 1];
+}
+
+// The block's sum of one number added into *sum
+__device__ void slot_sum(double x, double* sum) {
+    __shared__ double s[BLOCK];
+    int t = threadIdx.x;
+    s[t] = x;
+    __syncthreads();
+    for (int half = BLOCK / 2; half > 0; half >>= 1) {
+        if (t < half) s[t] += s[t + half];
+        __syncthreads();
+    }
+    if (t == 0) atomicAdd(sum, s[0]);
+}
+
+// The penalty of every slot of the first k on its point (p…), its slope added to its gradient (g…):
+// θ·θ summed into penalties[s] and 2λθ added — of every weight but the common bias, the pair's own
+// second weight, the base rate of every value
+extern "C" __global__ void penalty(
+    int k, int size, const float* lambda,
+    float* pa, float* pb, float* pc, float* pd, float* pf,
+    float* ga, float* gb, float* gc, float* gd, float* gf, int na, int nb, int nc, int nd, int nf, double* penalties
+) {
+    int s = blockIdx.x / PER_SLOT;
+    if (s >= k) return;
+    float l2 = 2.0f * lambda[s];
+    int common = size - nf + 1;
+    double sum = 0.0;
+    for (int e = (blockIdx.x % PER_SLOT) * BLOCK + threadIdx.x; e < size; e += PER_SLOT * BLOCK) {
+        if (e == common) continue;
+        float v = *piece_of(e, s, pa, pb, pc, pd, pf, na, nb, nc, nd, nf);
+        *piece_of(e, s, ga, gb, gc, gd, gf, na, nb, nc, nd, nf) += l2 * v;
+        sum += (double) v * v;
+    }
+    slot_sum(sum, penalties + s);
+}
+
+// Of every slot of the first k, the pair's own slopes of its sums (the loss, the slopes of the common
+// bias and of the example, three a slot): the example's first, nf a slot — before the penalty adds to them
+extern "C" __global__ void pair_slopes(int k, const double* sums, int nf, float* gPair) {
+    int s = blockIdx.x * blockDim.x + threadIdx.x;
+    if (s >= k) return;
+    gPair[(size_t) s * nf] = (float) sums[3 * s + 2];
+    gPair[(size_t) s * nf + 1] = (float) sums[3 * s + 1];
+}
+
+// Of every slot of the first k, its loss: the pairs' and the names' over its training's weight
+// (inverse[s] one over it), with its penalty
+extern "C" __global__ void losses_of(
+    int k, const double* sums, const float* inverse, const float* lambda, const double* penalties, float* losses
+) {
+    int s = blockIdx.x * blockDim.x + threadIdx.x;
+    if (s >= k) return;
+    losses[s] = (float) (sums[3 * s] * inverse[s] + lambda[s] * penalties[s]);
+}

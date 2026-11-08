@@ -132,34 +132,23 @@ internal class Ensemble(
     private val points = Array(count) { pieces(it, gradient = false) }
     private val grads = Array(count) { pieces(it, gradient = true) }
 
+    /** Where a fitting's time went, summed over its rounds: told in the log of the fitting ([timing]). */
+    private val spent = FitTiming()
+
+    /** A step of every model on the card, when the items' features and the pairs are there. */
+    private val stepOnCard: EnsembleOnCard? = pairsOnCard?.let {
+        EnsembleOnCard(r, products, onCard!!, it, slotModel, heldOut, totals, lambdas, spent)
+    }
+
     /**
      * What a fitting of every model gives: the weights of each, in [Bilinear]'s layout, how many losses each took, when
      * each ended.
      */
     class Fits(val weights: List<FloatArray>, val losses: IntArray, val endedAt: LongArray)
 
-    // Where a fitting's time went, summed over its rounds: told in the log of the fitting ([timing])
-    private var rounds = 0
-    private var searchNanos = 0L
-    private var featuresNanos = 0L
-    private var pairsNanos = 0L
-    private var restNanos = 0L
-
-    /**
-     * Where the time of the fitting went: its rounds; the searches' own work (the directions, the steps); the two
-     * products of the items' features with what they send and take back; the pairs and the names; the rest — the
-     * values' products, the penalty.
-     */
+    /** Where the time of the fitting went ([FitTiming]). */
     val timing: String
-        get() =
-            "%d rounds: the searches %d ms, the items' features %d ms, the pairs and names %d ms, the rest %d ms"
-                .format(
-                    rounds,
-                    searchNanos / NANOS_IN_MILLI,
-                    featuresNanos / NANOS_IN_MILLI,
-                    pairsNanos / NANOS_IN_MILLI,
-                    restNanos / NANOS_IN_MILLI,
-                )
+        get() = spent.told()
 
     /** Whether the searches of the last fitting were on the card. */
     var searchesOnCard = false
@@ -173,6 +162,20 @@ internal class Ensemble(
     fun fit(starts: List<FloatArray>, maxSteps: Int, stop: () -> Boolean): Fits = onTheCard {
         Blas.wide {
             val c = onCard
+            val step = stepOnCard
+            if (c != null && step != null) {
+                val kernels = SearchesOnCard.kernels(c.cublas)
+                if (kernels != null)
+                    CardRoom(c.cublas).use { room ->
+                        try {
+                            val searches = SearchesOnCard(kernels, room, count, size, maxSteps)
+                            searchesOnCard = true
+                            return@wide fitOnCard(searches, step, starts, stop)
+                        } catch (e: CardRoom.NoRoom) {
+                            log.info("the searches of {} models one by one: {}", count, e.message)
+                        }
+                    }
+            }
             if (c != null) {
                 SearchOnCard(c.cublas).use { space ->
                     try {
@@ -215,6 +218,42 @@ internal class Ensemble(
     }
 
     /**
+     * Every model fitted by the [searches] of them all on the card, its point written into its slot there and its
+     * gradient read from it — every number of the fitting on the card ([EnsembleOnCard]).
+     */
+    private fun fitOnCard(
+        searches: SearchesOnCard,
+        step: EnsembleOnCard,
+        starts: List<FloatArray>,
+        stop: () -> Boolean,
+    ): Fits {
+        searches.begin(starts.map { layout.ordered(it) })
+        val losses = FloatArray(count)
+        val endedAt = LongArray(count)
+        while (active > 0) {
+            if (stop()) throw CancellationException("the search is given up")
+            var at = System.nanoTime()
+            searches.propose(active, slotModel, step.slots)
+            spent.searches += System.nanoTime() - at
+            step.step(active, losses)
+            at = System.nanoTime()
+            searches.answer(active, slotModel, losses, step.slots)
+            spent.searches += System.nanoTime() - at
+            spent.rounds++
+            // A model whose search ended leaves the products: the last one still searching takes its slot
+            var slot = 0
+            while (slot < active) {
+                val model = slotModel[slot]
+                if (searches.done(model)) {
+                    endedAt[model] = System.currentTimeMillis()
+                    leave(slot)
+                } else slot++
+            }
+        }
+        return Fits(List(count) { layout.standard(searches.result(it)) }, searches.evaluations.copyOf(), endedAt)
+    }
+
+    /**
      * Every model fitted by its search of [searches], its point written into [places] and its gradient read from
      * [gradients] of its slot.
      */
@@ -233,12 +272,12 @@ internal class Ensemble(
             if (stop()) throw CancellationException("the search is given up")
             var at = System.nanoTime()
             for (slot in 0 until active) searches[slotModel[slot]].propose(places[slot])
-            searchNanos += System.nanoTime() - at
+            spent.searches += System.nanoTime() - at
             evaluate(losses, aOnCard)
             at = System.nanoTime()
             for (slot in 0 until active) searches[slotModel[slot]].answer(losses[slot], places[slot], gradients[slot])
-            searchNanos += System.nanoTime() - at
-            rounds++
+            spent.searches += System.nanoTime() - at
+            spent.rounds++
             // A model whose search ended leaves the products: the last one still searching takes its slot
             var slot = 0
             while (slot < active) {
@@ -279,9 +318,9 @@ internal class Ensemble(
      * A are read there, and their gradient left there.
      */
     internal fun evaluate(losses: FloatArray, aOnCard: Boolean = false) {
-        val onPairs = pairsOnCard
-        if (onPairs != null) {
-            evaluateOnCard(onPairs, losses, aOnCard)
+        val onCardStep = stepOnCard
+        if (onCardStep != null) {
+            onCardStep.step(active, losses, aOnCard, points, grads, gA)
             return
         }
         val k = active
@@ -289,12 +328,12 @@ internal class Ensemble(
         // Uᵀ = Aᵀ Xᵀ and Vᵀ = Bᵀ Zᵀ + Eᵀ of every model, one product each
         var at = System.nanoTime()
         products.coordinates(kr, aOnCard)
-        featuresNanos += System.nanoTime() - at
+        spent.features += System.nanoTime() - at
         at = System.nanoTime()
         Blas.gemm(false, true, kr, m, dz, bT, 0, dz, p.z.held, 0, dz, vT, 0, m)
         Simd.axpy(1f, eT, 0, vT, 0, kr * m)
         if (h > 0) names.coordinates(k)
-        restNanos += System.nanoTime() - at
+        spent.rest += System.nanoTime() - at
         at = System.nanoTime()
         for (slot in 0 until k) {
             val model = slotModel[slot]
@@ -304,14 +343,14 @@ internal class Ensemble(
             if (h > 0) loss += names.loss(slot, scale, common)
             losses[slot] = loss * scale
         }
-        pairsNanos += System.nanoTime() - at
+        spent.pairs += System.nanoTime() - at
         // dBᵀ = dVᵀ Z and dAᵀ = dUᵀ X of every model, one product each; the names' part added to dA after
         at = System.nanoTime()
         Blas.gemm(false, false, kr, dz, m, gE, 0, m, p.z.held, 0, dz, gB, 0, dz)
-        restNanos += System.nanoTime() - at
+        spent.rest += System.nanoTime() - at
         at = System.nanoTime()
         products.gradient(kr, aOnCard)
-        featuresNanos += System.nanoTime() - at
+        spent.features += System.nanoTime() - at
         at = System.nanoTime()
         if (h > 0) {
             names.gradient(k)
@@ -319,43 +358,7 @@ internal class Ensemble(
             if (aOnCard) onCard!!.gA.upload(gA, 0, 0, kr * dx)
         }
         addPenalty(k, aOnCard, losses)
-        restNanos += System.nanoTime() - at
-    }
-
-    /**
-     * [evaluate] with the pairs and the names on the card ([PairsOnCard]): the items' coordinates and their slopes, the
-     * values' and the names' coordinates, the names' slopes there and never brought over; the slopes of A taken back
-     * only when the searches are not there. The card waited for before every reading of the time: what it was handed
-     * runs while the processor goes on, and its time would be told of whatever waits for it next.
-     */
-    private fun evaluateOnCard(onPairs: PairsOnCard, losses: FloatArray, aOnCard: Boolean) {
-        val k = active
-        val kr = k * r
-        val c = onCard!!
-        var at = System.nanoTime()
-        products.coordinates(kr, aOnCard, keep = true)
-        c.cublas.synchronize()
-        featuresNanos += System.nanoTime() - at
-        at = System.nanoTime()
-        onPairs.coordinates(k, bT, eT, c.aT)
-        c.cublas.synchronize()
-        restNanos += System.nanoTime() - at
-        at = System.nanoTime()
-        onPairs.evaluate(k, slotModel, heldOut, totals, c.uT, c.duT, pair, bias, gBias, gPair, losses)
-        for (slot in 0 until k) losses[slot] = losses[slot] / totals[slotModel[slot]]
-        c.cublas.synchronize()
-        pairsNanos += System.nanoTime() - at
-        // dAᵀ = dUᵀ X, then the names' part onto it there; dBᵀ = dVᵀ Z
-        at = System.nanoTime()
-        products.gradient(kr, aOnCard, duOnCard = true, bringBack = false)
-        onPairs.gradient(k, gE, gB, c.gA)
-        if (!aOnCard) c.gA.download(gA, 0, 0, kr * dx)
-        c.cublas.synchronize()
-        featuresNanos += System.nanoTime() - at
-        at = System.nanoTime()
-        addPenalty(k, aOnCard, losses)
-        c.cublas.synchronize()
-        restNanos += System.nanoTime() - at
+        spent.rest += System.nanoTime() - at
     }
 
     /**
@@ -452,8 +455,5 @@ internal class Ensemble(
     companion object {
         /** The pieces of a model's point ([pieces]): A, B, E, the biases, the pair's own weights. */
         private const val PIECES = 5
-
-        /** The nanoseconds of a millisecond: the log tells the times in milliseconds. */
-        private const val NANOS_IN_MILLI = 1_000_000L
     }
 }
