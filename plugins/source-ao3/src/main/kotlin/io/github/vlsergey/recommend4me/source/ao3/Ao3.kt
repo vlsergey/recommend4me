@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source.ao3
 
+import io.github.vlsergey.recommend4me.cast.CastHabit
 import io.github.vlsergey.recommend4me.cast.SaidCast
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
@@ -173,10 +174,10 @@ class Ao3 : Source {
      * The site's habit: a relationship "A/B" a pairing; a platonic one "A & B" no pairing, its names each alone; a
      * character alone.
      */
-    override fun cast(entries: List<FacetValue>): SaidCast {
+    override val castHabit = CastHabit { entries ->
         val written = entries.map { it.name ?: it.key }
         val (romantic, other) = written.partition { '/' in it }
-        return SaidCast.of(romantic + other.flatMap { it.split(" & ") }, '/')
+        SaidCast.of(romantic + other.flatMap { it.split(" & ") }, '/')
     }
 
     /** The work's whole page — every chapter, the adult works' warning passed — read as if the browser had sent it. */

@@ -10,6 +10,7 @@ class FicbookCastTest {
     fun `a pairing by its slash, a character alone, the names as written`() {
         val cast =
             Ficbook()
+                .castHabit
                 .cast(
                     listOf(
                         FacetValue("авелин/брайан", "Брайан/Авелин"),
