@@ -159,9 +159,11 @@ private class ValueNames(features: Collection<String>, sources: List<SourceStore
             s.schema.facets
                 .filter { FeatureNames.facetId(s.source, it) == facetId }
                 .forEach { def ->
+                    // Of a facet the sources share — the layer's —, the values a source named already not asked again
+                    val left = keys.filter { (facetId to it) !in names }
                     // The names the user gave these values: the answers on them alone read
-                    val named = s.corrections.facetsWith(def.key, keys).filter { it.name != null }
-                    read(s, def, facetId, keys, named)
+                    if (left.isNotEmpty())
+                        read(s, def, facetId, left, s.corrections.facetsWith(def.key, left, named = true))
                 }
         }
     }
