@@ -340,14 +340,10 @@ class CatalogueReader(
      * The work of the item as the model reads it, without its vectors, named by the first of its items; null when there
      * is no such item.
      */
-    fun work(
-        type: TypeStore,
-        key: ItemKey,
-        made: Map<ItemKey, Map<String, Map<String, Chance>>>? = null,
-    ): CatalogueItem? {
-        val members = works.of(type).members(key).sortedBy { it.toString() }
-        if (members.size == 1) return item(type, key, made?.get(key))
-        val own = members.mapNotNull { item(type, it, made?.get(it)) }
+    fun work(type: TypeStore, key: ItemKey, read: ReadWork? = null): CatalogueItem? {
+        val members = (read?.members ?: works.of(type).members(key)).sortedBy { it.toString() }
+        if (members.size == 1) return item(type, key, read?.chances?.get(key))
+        val own = members.mapNotNull { item(type, it, read?.chances?.get(it)) }
         return own.takeIf { it.isNotEmpty() }?.let { WorkFeatures.item(it.first().key, it) }
     }
 
@@ -356,8 +352,11 @@ class CatalogueReader(
      * of what is kept alone, so of several items the mean of their sets too, the sets of all of them made in a
      * computation ([SetVectors.ofWork]).
      */
-    fun vectors(type: TypeStore, key: ItemKey): Map<String, FloatArray> {
-        val members = works.of(type).members(key)
+    fun vectors(
+        type: TypeStore,
+        key: ItemKey,
+        members: List<ItemKey> = works.of(type).members(key),
+    ): Map<String, FloatArray> {
         val read = vectorsOfMany(type, members)
         return WorkFeatures.vectors(members.mapNotNull { read[it] })
     }

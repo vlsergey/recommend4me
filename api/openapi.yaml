@@ -3851,7 +3851,28 @@ components:
           type: array
           description: Its other works in the same source, by title
           items:
-            $ref: '#/components/schemas/ItemSummary'
+            $ref: '#/components/schemas/RelatedWork'
+
+    RelatedWork:
+      type: object
+      required: [source, item, title]
+      description: |
+        Another work of the series or of the author, as the work's screen lists it: its title, the
+        user's grade or else the model's prediction - no card: its values and their chances are
+        not read.
+      properties:
+        source:
+          type: string
+        item:
+          type: string
+        title:
+          type: string
+          description: The title as the user corrected it
+        grade:
+          type: integer
+          description: The user's grade of its current version
+        prediction:
+          $ref: '#/components/schemas/Prediction'
 
     MatchFeedbackRequest:
       type: object

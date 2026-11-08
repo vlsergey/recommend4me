@@ -5,7 +5,6 @@ import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.suggestion.Chance
 import io.github.vlsergey.recommend4me.work.Works
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -74,17 +73,22 @@ class Scoring(
         type: TypeStore,
         key: ItemKey,
         stored: TypeLikeness,
-        /** The chances of the work's items made already, of the facets the model reads at least: not made again. */
-        made: Map<ItemKey, Map<String, Map<String, Chance>>>? = null,
+        /** The work read already: its items and their chances, not read again. */
+        read: ReadWork? = null,
     ): ItemInput? {
-        val item = reader.work(type, key, made) ?: return null
+        val item = reader.work(type, key, read) ?: return null
         val ratings =
             type.source(key.source)!!.ratings.ofItem(key.id).map {
                 TypedRating(item.key, it.version, it.grade, it.ratedAt)
             }
         val previous = CatalogueReader.previousGradesOfCurrentVersions(ratings) { item.version }[item.key]
-        val likeness = works.of(type).members(key).map { likenesses.of(type, it, stored) }.filter { it.isNotEmpty() }
-        return CatalogueReader.inputOf(item, reader.vectors(type, key) + WorkFeatures.vectors(likeness), previous)
+        val members = read?.members ?: works.of(type).members(key)
+        val likeness = members.map { likenesses.of(type, it, stored) }.filter { it.isNotEmpty() }
+        return CatalogueReader.inputOf(
+            item,
+            reader.vectors(type, key, members) + WorkFeatures.vectors(likeness),
+            previous,
+        )
     }
 
     private companion object {

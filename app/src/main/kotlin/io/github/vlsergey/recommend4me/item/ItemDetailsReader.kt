@@ -8,7 +8,9 @@ import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.api.model.NumberValue
 import io.github.vlsergey.recommend4me.api.model.PartInfo
 import io.github.vlsergey.recommend4me.api.model.PictureInfo
+import io.github.vlsergey.recommend4me.api.model.Prediction
 import io.github.vlsergey.recommend4me.api.model.RatingRecord
+import io.github.vlsergey.recommend4me.api.model.RelatedWork
 import io.github.vlsergey.recommend4me.api.model.RelatedWorks
 import io.github.vlsergey.recommend4me.api.model.ReviewInfo
 import io.github.vlsergey.recommend4me.api.model.TextValue
@@ -21,6 +23,7 @@ import io.github.vlsergey.recommend4me.model.ContributionGroup
 import io.github.vlsergey.recommend4me.model.Details
 import io.github.vlsergey.recommend4me.model.Explanations
 import io.github.vlsergey.recommend4me.model.LabelledContribution
+import io.github.vlsergey.recommend4me.model.ReadWork
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -143,7 +146,7 @@ class ItemDetailsReader(
         val work = cards.ofWork(type, clusters, key, store.items.facets(key.id), members.chances[key], read = members)
         val names = namesOf(store, work, corrections)
         // What the model of the grades reads of the work, of the chances made of its items already
-        val model = explanations.details(key, members.chances)
+        val model = explanations.details(key, ReadWork(clusters.members(key), members.chances))
         val matches = ItemMatches(stores, type, key)
         return ItemDetails(
             summary = summary,
@@ -331,10 +334,7 @@ class ItemDetailsReader(
                         .filter { it != key.id && it !in removed && it !in shown }
                 if (ids.isEmpty()) return@mapNotNull null
                 shown += ids
-                val items =
-                    cards
-                        .cards(type, ids.map { ItemKey(store.id, it) })
-                        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                val items = works(type, store, ids)
                 // A value the user added is named as they wrote it
                 val name =
                     names[def.key]?.get(value)
@@ -350,6 +350,29 @@ class ItemDetailsReader(
                 )
             }
         }
+    }
+
+    /**
+     * The works [ids] of the [store] as the screen lists them among a work's series and author, by title: their titles,
+     * the user's grades, the model's predictions — no card, so none of their values and chances read.
+     */
+    private fun works(type: TypeStore, store: SourceStore, ids: List<String>): List<RelatedWork> {
+        val heads = store.items.heads(ids)
+        val fields = store.corrections.fieldsOf(ids)
+        val graded = cards.graded(store.ratings.ofItems(ids), heads.mapValues { it.value.version })
+        val predicted = type.predictions.predicted(store.id, ids)
+        return ids.mapNotNull { id ->
+                heads[id]?.let { head ->
+                    RelatedWork(
+                        source = store.id,
+                        item = id,
+                        title = Corrected.title(head.title, fields[id].orEmpty()),
+                        grade = graded[id]?.grade,
+                        prediction = predicted[id]?.let { Prediction(it.score) },
+                    )
+                }
+            }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
     }
 
     /** The grades of the work [key] is of as they were given, newest first. */
