@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.cast.TaskCast
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.laps.Laps
@@ -67,21 +68,38 @@ internal class FacetRead(
         }
         laps.lap("corrected")
         val values = asked.kept ?: chosenFrom(corrected, answers, drafted)
-        val context = TaskContext.of(store, read, asked.modelled, facet.key)
-        laps.lap("context", context.keys.size)
-        val inputs = inputs(site)
-        laps.lap("inputs", inputs.size)
+        val ownContext = TaskContext.of(store, read, asked.modelled, facet.key)
+        laps.lap("context", ownContext.keys.size)
+        val ownInputs = inputs(site)
+        laps.lap("inputs", ownInputs.size)
+        // The site's line of characters and pairings as the way chosen reads it: its inputs and its columns in place of
+        // the line's own
+        val cast = asked.cast?.let { TaskCast.of(it, ids, it.casts(store, ids, site), ownInputs, ownContext.keysOf()) }
+        val context = cast?.let { TaskContext.ofKeys(it.context, shared = only == null) } ?: ownContext
+        val inputs = cast?.inputs ?: ownInputs
+        if (cast != null) laps.lap("cast: ${asked.cast.reader.id}", inputs.size)
         // An item whose values of the facet are all named: every other value rejected by the user's word
         val allNamed = BooleanArray(ids.size) { facet.key in read.complete[ids[it]].orEmpty() }
         val index = ValueIndex(values)
-        val task = task(values, index, Owned(corrected, answers, drafted, allNamed), context, inputs)
+        val task = task(values, index, Owned(corrected, answers, drafted, allNamed), context, inputs, cast?.named)
         laps.lap("task: made")
         val held = held(task, index, site, corrections, within, drafted)
         laps.lap("task: held")
         // The task of some works, or of the scoring kept, tells nothing of what the weights were fitted on
         val basis =
             if (only != null || asked.kept != null) FacetData.NO_BASIS
-            else FacetBasis.of(store, facet.key, encoder, read, values, task.groupings, asked.hintNames, learnt)
+            else
+                FacetBasis.of(
+                    store,
+                    facet.key,
+                    encoder,
+                    read,
+                    values,
+                    task.groupings,
+                    asked.hintNames,
+                    learnt,
+                    cast?.signature,
+                )
         return FacetData(ids, values, task, held, allNamed, basis)
     }
 
@@ -164,7 +182,8 @@ internal class FacetRead(
     /**
      * The task of the facet's [values] ([index]): EVERY WORK'S ARRAYS MADE SIDE BY SIDE ON EVERY CORE, each of its own
      * work alone, of what is read already — what it has, was answered of ([owned]), may have and may not, is taught by
-     * besides — with the names of the values, their groups, the [context] and the [inputs].
+     * besides — with the names of the values, their groups, the [context] and the [inputs]; [named]: of every row, the
+     * values the site's line names, a witness among the examples, never a value taught.
      */
     private fun task(
         values: List<String>,
@@ -172,6 +191,7 @@ internal class FacetRead(
         owned: Owned,
         context: TaskContext,
         inputs: List<InputBlock>,
+        named: List<List<String>>?,
     ): SuggestionTask {
         // Of the scoring kept, no names: it knows every value's coordinates
         val names =
@@ -200,7 +220,10 @@ internal class FacetRead(
             }
         laps.lap("task: answered")
         val (allowedOf, barredOf) = limits(index)
-        val examplesOf = ofEvery(ids.size) { i -> asked.examples?.invoke(ids[i])?.let(index::of) ?: IntArray(0) }
+        val examplesOf =
+            ofEvery(ids.size) { i ->
+                index.of(asked.examples?.invoke(ids[i]).orEmpty() + named?.get(i).orEmpty())
+            }
         val draftsOf = ofEvery(ids.size) { i -> index.of(owned.drafted[ids[i]].orEmpty()) }
         laps.lap("task: examples and drafts")
         return SuggestionTask(

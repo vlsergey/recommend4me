@@ -75,6 +75,8 @@
   "ModelsScreen.minutesSeconds": "{{minutes}} min {{seconds}} s",
   "ModelsScreen.notFitted": "Još nije naučen: naučiće se sam čim bude na čemu",
   "ModelsScreen.pairFitHint": "Ponovo obučiti oba modela na pronađenim parovima i vašim odgovorima",
+  "ModelsScreen.cast": "Red likova",
+  "ModelsScreen.castHint": "Kako se red sajta sa likovima i parovima daje ovom modelu: ceo, svako ime posebno, kao atributi, preko rečnika ili sve odjednom. Posle izbora model se uči iznova",
   "ModelsScreen.pairMethod": "Dodatak",
   "ModelsScreen.pairMethodHint": "Dodatak kojim se traže i porede parovi ovog tipa. Posle izbora parovi se traže ponovo, modeli se uče zajedno sa pretragom",
   "ModelsScreen.pairSearch": "Ponovo potraži parove",

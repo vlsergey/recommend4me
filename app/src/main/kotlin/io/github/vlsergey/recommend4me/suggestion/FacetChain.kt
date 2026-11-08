@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.cast.CastReading
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.laps.Laps
@@ -25,6 +26,7 @@ internal class FacetChain(
     models: ObjectProvider<FacetModel>,
     private val vocabularies: FacetVocabularies,
     private val passes: WorkPasses,
+    private val casts: CastReading,
 ) {
     /**
      * The facets worked out by models of their own ([FacetModel]): no suggester of them fitted, their chances theirs.
@@ -195,6 +197,7 @@ internal class FacetChain(
                 barred = vocabulary?.barred,
                 examples = vocabulary?.examples,
                 kept = kept.values,
+                cast = casts.asked(store, facet, vocabulary),
                 laps = laps,
             )
         if (data.values.isEmpty()) return null
@@ -298,6 +301,7 @@ internal class FacetChain(
             lackWeight = vocabulary?.lackWeight ?: 1.0,
             hintNames = vocabulary?.hintNames.orEmpty(),
             hintAmong = vocabulary?.hintAmong ?: { emptyList() },
+            cast = casts.asked(store, facet, vocabulary),
         )
 
     companion object {

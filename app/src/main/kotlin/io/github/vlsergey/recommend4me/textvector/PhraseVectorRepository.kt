@@ -25,6 +25,18 @@ class PhraseVectorRepository(private val db: DSLContext, private val writing: Re
         return out
     }
 
+    /** Which of the texts whose keys are given have a vector by [encoder] stored: their keys, the vectors not read. */
+    fun kept(keys: Collection<Long>, encoder: String): Set<Long> {
+        val out = HashSet<Long>()
+        keys.distinct().chunked(TextVectorRepository.BATCH).forEach { chunk ->
+            db.select(PHRASE_VECTOR.TEXT_KEY)
+                .from(PHRASE_VECTOR)
+                .where(PHRASE_VECTOR.TEXT_KEY.`in`(chunk), PHRASE_VECTOR.ENCODER.eq(encoder))
+                .fetch { out += it.value1()!! }
+        }
+        return out
+    }
+
     /** Stores vectors of short texts; one of another encoder under the same key is replaced. */
     fun savePhrases(rows: List<Pair<Long, FloatArray>>, encoder: String) {
         rows.chunked(TextVectorRepository.BATCH).forEach { chunk ->

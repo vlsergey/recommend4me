@@ -56,7 +56,8 @@ internal object FacetBasis {
      * ([grouped]) are part of what is learnt: a universe added or removed, a sex learnt of a character, fits again.
      * What is kept of the chances is part of it too: a new rule of what to keep makes them again. And the names the
      * values go by ([hintNames]): an alias added to the dictionary is a new text to learn from. [learnt]: the values
-     * each work learns from.
+     * each work learns from. [cast]: how the site's line of characters and pairings was read
+     * ([TaskCast.signature][io.github.vlsergey.recommend4me.cast.TaskCast.signature]), null of a facet that reads none.
      */
     fun of(
         store: SourceStore,
@@ -67,6 +68,7 @@ internal object FacetBasis {
         grouped: List<ValueGrouping>,
         hintNames: Map<String, List<String>>,
         learnt: Map<String, Map<String, List<String>>>,
+        cast: String?,
     ): Long {
         val ids = read.ids
         val fingerprints = fingerprints(store, encoder, read)
@@ -90,7 +92,9 @@ internal object FacetBasis {
                 "\u0002" +
                 (store.hierarchies()[facet]?.signature() ?: "") +
                 "\u0002" +
-                otherFacets(store, facet, read, learnt)
+                otherFacets(store, facet, read, learnt) +
+                // Only of a facet that reads the line: the bases of the others stay as they were
+                (cast?.let { "\u0002cast=$it" } ?: "")
         )
     }
 

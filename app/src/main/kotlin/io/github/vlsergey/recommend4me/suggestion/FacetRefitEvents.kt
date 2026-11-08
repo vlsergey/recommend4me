@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.cast.CastNamesEncoded
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.part.PartsSaved
@@ -19,6 +20,9 @@ internal class FacetRefitEvents(private val refits: FacetRefits) {
     @EventListener fun textVectorsChanged(event: TextVectorsChanged) = refits.changed(event.source, "texts")
 
     @EventListener fun partsSaved(event: PartsSaved) = refits.changed(event.source, "parts")
+
+    /** The names of the works' casts encoded: the models of the characters and pairings read them. */
+    @EventListener fun castNamesEncoded(event: CastNamesEncoded) = refits.changed(event.source, "castNames")
 
     /** The user's answer on a work's value: what the models of the facets learn from. */
     @EventListener fun answered(event: FacetAnswered) = refits.changed(event.source, "answer")

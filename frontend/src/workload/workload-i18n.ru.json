@@ -1,6 +1,7 @@
 {
   "Reason.answer": "ответ о значениях работы",
   "Reason.asked": "по вашей просьбе",
+  "Reason.castNames": "закодированы имена из строк персонажей",
   "Reason.catalogueGrew": "каталог вырос",
   "Reason.chances": "изменились вероятности значений",
   "Reason.correction": "исправлены значения работы",
@@ -31,6 +32,7 @@
   "Span.minutesSeconds": "{{minutes}} мин {{seconds}} с",
   "Span.seconds": "{{value}} с",
   "What.ageRatingModel": "Модель возрастного рейтинга по тегам",
+  "What.castNames": "Векторы имён из строк персонажей",
   "What.duplicates": "Поиск дублей на разных сайтах",
   "What.heldOut": "Модель без оценки работы",
   "What.interestScorersCompared": "Сравнение способов интереса",

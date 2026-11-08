@@ -1,6 +1,7 @@
 {
   "Reason.answer": "an answer on a work's values",
   "Reason.asked": "asked by you",
+  "Reason.castNames": "names of the casts encoded",
   "Reason.catalogueGrew": "the catalogue grew",
   "Reason.chances": "the model's chances of values changed",
   "Reason.correction": "a work's values corrected",
@@ -31,6 +32,7 @@
   "Span.minutesSeconds": "{{minutes}} min {{seconds}} s",
   "Span.seconds": "{{value}} s",
   "What.ageRatingModel": "The model of the age rating by the tags",
+  "What.castNames": "Vectors of the names of the casts",
   "What.duplicates": "Duplicates across the sites looked for",
   "What.heldOut": "The model that has not seen a graded work",
   "What.interestScorersCompared": "Methods of interest compared",

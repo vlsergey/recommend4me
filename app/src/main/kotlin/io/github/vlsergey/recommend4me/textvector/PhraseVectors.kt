@@ -41,6 +41,14 @@ class PhraseVectors(private val plugins: Plugins) {
         return keyed.mapNotNull { (key, text) -> vectors[key]?.let { text to it } }.toMap()
     }
 
+    /** The texts that have no vector kept yet, nothing read of those that have; none without an encoder. */
+    fun missing(store: SourceStore, texts: Collection<String>, encoder: TextEncoder? = encoder()): List<String> {
+        encoder ?: return emptyList()
+        val keyed = texts.distinct().associateBy(Vectors::keyOf)
+        val kept = store.textVectors.phrases.kept(keyed.keys, encoder.id)
+        return keyed.filterKeys { it !in kept }.values.toList()
+    }
+
     private fun encode(store: SourceStore, texts: List<String>, encoder: TextEncoder): Map<String, FloatArray> {
         val started = System.currentTimeMillis()
         val out = HashMap<String, FloatArray>()

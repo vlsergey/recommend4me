@@ -69,6 +69,8 @@
   "ModelsScreen.minutesSeconds": "{{minutes}} min {{seconds}} s",
   "ModelsScreen.notFitted": "Not fitted yet: it fits by itself once there is something to learn from",
   "ModelsScreen.pairFitHint": "Fit both models again on the pairs found and your answers",
+  "ModelsScreen.cast": "Line of characters",
+  "ModelsScreen.castHint": "How the site's line of characters and pairings is given to this model: the line whole, every name apart, as features, found in the dictionary, or all at once. Once chosen, the model is fitted anew",
   "ModelsScreen.pairMethod": "Plugin",
   "ModelsScreen.pairMethodHint": "The plugin the pairs of this type are looked for and compared by. Once chosen, the pairs are looked for anew, the models fitted with the search",
   "ModelsScreen.pairSearch": "Look for pairs anew",

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.plugin
 
+import io.github.vlsergey.recommend4me.cast.CastReader
 import io.github.vlsergey.recommend4me.contenttype.ContentType
 import io.github.vlsergey.recommend4me.duplicate.PairModel
 import io.github.vlsergey.recommend4me.encoder.ImageEncoder
@@ -33,6 +34,7 @@ class Plugins(
     searches: ObjectProvider<SearchProvider>,
     suggesters: ObjectProvider<FacetSuggester>,
     pairModels: ObjectProvider<PairModel>,
+    castReaders: ObjectProvider<CastReader>,
     catalogues: ObjectProvider<UniverseCatalogue>,
     tagCatalogues: ObjectProvider<TagCatalogue>,
     types: ObjectProvider<ContentType>,
@@ -51,6 +53,13 @@ class Plugins(
 
     /** Every way of telling how likely two works of different sites are one work, one series ([PairModel]). */
     val pairModels: List<PairModel> = pairModels.orderedStream().toList()
+
+    /**
+     * Every way the sites' lines of characters and pairings are given to the models of the characters and pairings
+     * ([CastReader]); each such facet of each source reads its line with one of them
+     * ([CastReading][io.github.vlsergey.recommend4me.cast.CastReading]).
+     */
+    val castReaders: List<CastReader> = castReaders.orderedStream().toList()
     val catalogues: List<UniverseCatalogue> = catalogues.orderedStream().toList()
 
     /** The catalogues the tags are bound to entries of ([TagCatalogue]). */
@@ -68,7 +77,7 @@ class Plugins(
         }
         log.info(
             "sources {}, text encoders {}, picture encoders {}, rerankers {}, scorers {}, search {}, suggesters {}, " +
-                "catalogues {}, tag catalogues {}",
+                "ways of reading the casts {}, catalogues {}, tag catalogues {}",
             this.sources.map { it.id },
             this.textEncoders.map { it.id },
             this.imageEncoders.map { it.id },
@@ -76,6 +85,7 @@ class Plugins(
             this.scorers.map { it.id },
             search?.id,
             this.suggesters.map { it.id },
+            this.castReaders.map { it.id },
             this.catalogues.map { it.id },
             this.tagCatalogues.map { it.id },
         )

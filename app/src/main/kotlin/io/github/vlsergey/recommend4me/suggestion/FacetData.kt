@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.cast.CastAsked
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -70,6 +71,7 @@ internal class FacetData(
             hintNames: Map<String, List<String>> = emptyMap(),
             hintAmong: (String) -> Collection<String> = { emptyList() },
             kept: List<String>? = null,
+            cast: CastAsked? = null,
             laps: Laps = Laps(),
         ): FacetData =
             FacetRead(
@@ -89,6 +91,7 @@ internal class FacetData(
                         hintNames,
                         hintAmong,
                         kept,
+                        cast,
                     ),
                     laps,
                 )
@@ -113,4 +116,6 @@ internal class FacetAsked(
     val hintNames: Map<String, List<String>>,
     val hintAmong: (String) -> Collection<String>,
     val kept: List<String>?,
+    /** How the facet reads the site's line of characters and pairings; null of a facet that reads none. */
+    val cast: CastAsked?,
 )

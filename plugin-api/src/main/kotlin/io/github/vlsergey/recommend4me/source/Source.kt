@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.cast.SaidCast
 import io.github.vlsergey.recommend4me.universe.CatalogueLookup
 import io.github.vlsergey.recommend4me.universe.LayerDraft
 import java.time.Instant
@@ -113,6 +114,16 @@ interface Source : BrowserTracking, SitePictures {
      * drafts nothing.
      */
     fun draft(facets: Map<String, List<FacetValue>>, lookup: CatalogueLookup): List<LayerDraft> = emptyList()
+
+    /**
+     * What the work's line of characters and pairings says, split as the site's authors usually write it ([SaidCast]),
+     * of the [entries] the source keeps of it — the values of its facet of the line
+     * ([UniverseFacets.PAIRINGS_FACET][io.github.vlsergey.recommend4me.universe.UniverseFacets.PAIRINGS_FACET]), keys
+     * and names as written. The habit of the fan sites, ficbook's first: the entries apart by commas — kept apart
+     * already, a value each — the names of a pairing by "/" ("Гарри Поттер/Драко Малфой" a pairing, "Гермиона
+     * Грейнджер" a name alone). A site of another habit says its own.
+     */
+    fun cast(entries: List<FacetValue>): SaidCast = SaidCast.of(entries.map { it.name ?: it.key }, '/')
 
     /** How the extension marks the site's pages up; null — it does not. */
     val pageDecor: PageDecor?

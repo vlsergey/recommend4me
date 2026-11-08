@@ -33,6 +33,7 @@ tags:
   - name: tagCatalogues
   - name: tagsByText
   - name: pairings
+  - name: casts
   - name: marking
   - name: duplicates
   - name: authors
@@ -2372,6 +2373,31 @@ paths:
         '404':
           description: No such type, source, facet or method
 
+  /api/types/{type}/models/facets/{source}/{facet}/cast:
+    put:
+      tags: [casts]
+      operationId: chooseFacetCast
+      summary: Makes a way of reading the site's line of characters and pairings the one the facet of the source reads it with, and fits the facet's model from scratch in the background
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/Source'
+        - name: facet
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MethodChoice'
+      responses:
+        '204':
+          description: Chosen; the fitting started
+        '404':
+          description: No such type, source, facet reading the line, or way
+
   /api/types/{type}/models/pairs/method:
     put:
       tags: [duplicates]
@@ -4321,6 +4347,14 @@ components:
         methods:
           type: array
           description: Every method it may learn with; one chosen in place of another for this model alone
+          items:
+            type: string
+        cast:
+          type: string
+          description: Of a facet whose values the site writes in its line of characters and pairings, the way the line is read with - a plugin named by its words "<way>:title"
+        casts:
+          type: array
+          description: Every way the line may be read with; one chosen in place of another for this facet alone
           items:
             type: string
         fittedAt:

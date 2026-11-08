@@ -40,6 +40,8 @@ dependencies {
     testImplementation(project(":plugins:search-lucene"))
     // The pairs of works across the sites, by the model of this build
     testImplementation(project(":plugins:pair-logistic"))
+    // The ways of reading the sites' lines of characters and pairings, as the application is installed with them
+    testImplementation(project(":plugins:cast-reading"))
 }
 
 // --- jOOQ: the classes of the tables of every kind of database file, generated from its migrations ---

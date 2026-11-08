@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.api.model.MethodQuality
 import io.github.vlsergey.recommend4me.api.model.ModelQuality
 import io.github.vlsergey.recommend4me.api.model.ModelState
 import io.github.vlsergey.recommend4me.api.model.ModelTrial
+import io.github.vlsergey.recommend4me.cast.CastReading
 import io.github.vlsergey.recommend4me.duplicate.PairModelStates
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -34,6 +35,7 @@ class ModelsController(
     private val plugins: Plugins,
     private val stores: Stores,
     private val pairs: PairModelStates,
+    private val castReading: CastReading,
 ) : ModelsApi {
 
     override fun listModels(type: String): ResponseEntity<List<ModelState>> {
@@ -92,9 +94,12 @@ class ModelsController(
     /** The model of every facet the application works out of every source of the type, as it was last fitted. */
     private fun facetModels(typeStore: TypeStore): List<ModelState> {
         val methods = plugins.suggesters.map { it.id }
+        val casts = plugins.castReaders.map { it.id }
         return typeStore.sources.flatMap { store ->
             val kept = store.suggestions.suggesters().associateBy(SuggesterStatus::facet)
             suggestions.facetsOf(store).map { def ->
+                // The way the site's line is read: of a facet that reads it alone
+                val cast = castReading.reads(store, def)
                 val s = kept[def.key]
                 val report = s?.fit?.report
                 ModelState(
@@ -105,6 +110,8 @@ class ModelsController(
                     labelKey = I18nKeys.facetLabel(store.id, def),
                     method = plugins.suggester(store.id, def.key)?.id,
                     methods = methods,
+                    cast = castReading.readerOf(store.id, def.key)?.id?.takeIf { cast },
+                    casts = if (cast) casts else null,
                     fittedAt = s?.fittedAt?.atOffset(ZoneOffset.UTC),
                     millis = s?.fit?.millis,
                     quality = report?.let { ModelQuality(ModelQuality.Measure.LOSS, it.loss, it.lossError) },

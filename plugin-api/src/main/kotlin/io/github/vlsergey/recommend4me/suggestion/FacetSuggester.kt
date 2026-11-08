@@ -171,8 +171,10 @@ class SuggestionTask(
     /**
      * The values the site gives each item as the facet's examples, from a facet of its own
      * ([FacetDef.examplesFrom][io.github.vlsergey.recommend4me.source.FacetDef.examplesFrom]) — among the [assigned]
-     * too. Of the item's own word this alone is a witness of its values: a value the site gives the work is likelier
-     * the work's, however rare; empty for a facet without.
+     * too — and those its line of characters and pairings names
+     * ([CastRead.named][io.github.vlsergey.recommend4me.cast.CastRead.named]), which are not. Of the item's own word
+     * this alone is a witness of its values: a value the site gives the work is likelier the work's, however rare;
+     * empty for a facet without.
      */
     val examples: List<IntArray> = List(assigned.size) { IntArray(0) },
     /**

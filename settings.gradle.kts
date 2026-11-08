@@ -20,6 +20,7 @@ include(
     "libs:optim",
     "libs:onnx",
     "app",
+    "plugins:cast-reading",
     "plugins:catalogue-wikidata",
     "plugins:encoder-bge-m3",
     "plugins:encoder-e5",

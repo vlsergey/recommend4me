@@ -243,7 +243,11 @@ function isFacetModel(m: ModelState): m is FacetModelState {
   return m.kind === "FACET" && m.source !== undefined && m.facet !== undefined;
 }
 
-/** The model of a facet of a source: its suggester, fitted on its own; searched anew from scratch on asking. */
+/**
+ * The model of a facet of a source: its suggester, fitted on its own; searched anew from scratch on asking.
+ * A facet whose values the site writes in its line of characters and pairings: the way the line is read,
+ * chosen among those installed (the model fitted anew with it).
+ */
 function FacetCard({ type, m }: { type: ContentTypeInfo; m: FacetModelState }) {
   const { t } = useTranslation("model");
   const queryClient = useQueryClient();
@@ -251,6 +255,17 @@ function FacetCard({ type, m }: { type: ContentTypeInfo; m: FacetModelState }) {
     mutationFn: async (method: string) => {
       ensureOk(
         await api.PUT("/api/types/{type}/models/facets/{source}/{facet}/method", {
+          params: { path: { type: type.id, source: m.source, facet: m.facet } },
+          body: { method },
+        }),
+      );
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: modelsKey(type.id) }),
+  });
+  const chooseCast = useMutation({
+    mutationFn: async (method: string) => {
+      ensureOk(
+        await api.PUT("/api/types/{type}/models/facets/{source}/{facet}/cast", {
           params: { path: { type: type.id, source: m.source, facet: m.facet } },
           body: { method },
         }),
@@ -277,6 +292,23 @@ function FacetCard({ type, m }: { type: ContentTypeInfo; m: FacetModelState }) {
       note={m.fromScratch === false ? t("ModelsScreen.walkedOn") : undefined}
       actions={
         <>
+          {(m.casts ?? []).length > 1 && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title={t("ModelsScreen.castHint")}>
+              {t("ModelsScreen.cast")}
+              <select
+                value={m.cast ?? ""}
+                disabled={m.running || chooseCast.isPending}
+                onChange={(e) => chooseCast.mutate(e.target.value)}
+                className="h-8 max-w-64 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
+              >
+                {(m.casts ?? []).map((id) => (
+                  <option key={id} value={id}>
+                    {scorerTitle(id)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {(m.methods ?? []).length > 1 && (
             <FacetComparisonDialog
               type={type}

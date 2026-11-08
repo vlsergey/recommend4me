@@ -8,7 +8,25 @@ import io.github.vlsergey.recommend4me.source.SourceStore
  * ([SuggestionTask.context], [SuggestionTask.contextKeys]).
  */
 internal class TaskContext(val of: List<IntArray>, val keys: List<String>) {
+    /** Of every work, the columns of its context by their keys, in its order. */
+    fun keysOf(): List<List<String>> = of.map { row -> row.map { keys[it] } }
+
     companion object {
+        /**
+         * The context of the works whose columns are given by their keys ([rows]): every key one column, in the order
+         * the works first have them — when [shared], of a key more than one work has alone, as [of] makes them.
+         */
+        fun ofKeys(rows: List<List<String>>, shared: Boolean): TaskContext {
+            val names = ArrayList<String>()
+            val number = HashMap<String, Int>()
+            val numbered = rows.map { row ->
+                row.map { k -> number.getOrPut(k) { names.add(k).let { names.size - 1 } } }.distinct().toIntArray()
+            }
+            val counts =
+                if (shared) IntArray(names.size).also { n -> numbered.forEach { r -> r.forEach { n[it]++ } } } else null
+            return columns(names, numbered, counts)
+        }
+
         /**
          * The context of the [facet] of the works of [read]: of the facets the source has now, the site's own among
          * them. THE CHAIN: of the facets before this one, the values the model gives the item besides the site's and

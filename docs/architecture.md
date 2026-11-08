@@ -27,6 +27,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/search-lucene` | Search by words and by meaning over one Lucene index per content type. |
 | `plugins/catalogue-wikidata` | The universes of fan fiction and their characters, from Wikidata. |
 | `plugins/pair-logistic` | The works of different sites that may be one work, or one series of works: a logistic model of how alike their layers are, one a kind, fitted on the user's answers on pairs; and the search of the pairs by both at once, on the card when there is one. |
+| `plugins/cast-reading` | The ways the sites' lines of characters and pairings — split by each site's habit into names and pairings, a half structure with no guarantee — are given to the models of the characters and the pairings: the line whole as one vector (as from the first), every name a vector and the mean of them, every name and pairing a feature, the names found in the dictionary of the universes as the site's word on its characters, or all at once; one chosen for each such facet on the page of the models. |
 | `plugins/suggester-bilinear` | The values a work should have — tags, universes, characters, pairings — by one model of every work and every value. |
 | `plugins/source-ao3` | archiveofourown.org, browser tracking and a work's page on request. |
 | `plugins/source-author-today` | author.today, browser tracking only. |
