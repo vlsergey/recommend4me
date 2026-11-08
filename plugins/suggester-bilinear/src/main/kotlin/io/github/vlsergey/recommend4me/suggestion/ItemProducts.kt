@@ -46,7 +46,8 @@ internal class ItemProducts(
         val duT: Cublas.DeviceFloats,
         val gA: Cublas.DeviceFloats,
         val part: Cublas.DeviceFloats,
-        val rows: Cublas.DeviceFloats,
+        /** The weights, a run of a block's rows and the slopes of a block's items in brain floating point. */
+        val halves: HalvesOnCard,
         /** The items' ones there ([OnesOnCard]). */
         val ones: OnesOnCard,
         /** What was put there for the fitting: freed with it — the application's rows are the application's. */
@@ -76,10 +77,11 @@ internal class ItemProducts(
         val du = room(count.toLong() * r * n)
         val g = room(count.toLong() * r * dx)
         val part = room(maxOf(1L, count.toLong() * r * p.x.widest))
-        val rows = room(maxOf(1L, minOf(FeatureKernels.CARD_ROWS, p.x.widest).toLong() * p.x.longest))
+        val halves = HalvesOnCard.of(c, count.toLong() * r * dx, p.x, count.toLong() * r, made)
         val ones = OnesOnCard.of(c, p.x, made)
         // Every block and every room on the card, or nothing kept there
-        return if (blocks.any { it == null } || listOf(a, u, du, g, part, rows).any { it == null } || ones == null) {
+        val missing = listOf(a, u, du, g, part).any { it == null } || halves == null || ones == null
+        return if (blocks.any { it == null } || missing) {
             made.forEach { it.close() }
             null
         } else
@@ -92,8 +94,8 @@ internal class ItemProducts(
                 du!!,
                 g!!,
                 part!!,
-                rows!!,
-                ones,
+                halves!!,
+                ones!!,
                 made,
             )
     }
@@ -114,21 +116,23 @@ internal class ItemProducts(
             return
         }
         if (!aOnCard) c.aT.upload(aT, 0, 0, kr * dx)
+        // The weights as brain floating point, for the tensor cores' products
+        c.kernels.launch("floats_to_bf16", kr.toLong() * dx, kr.toLong() * dx, c.aT, c.halves.a)
         c.kernels.launch("ones_coordinates", kr.toLong() * n, kr, n, dx, c.ones.at, c.ones.features, c.aT, c.uT)
         // A block's rows multiplied a run at a time, then carried onto its items' columns
         p.x.blocks.forEachIndexed { k, b ->
             val rows = c.blocks[k]
             runs(c, rows) { from, many ->
-                c.cublas.gemm(
+                c.cublas.gemmHalves(
                     false,
                     true,
                     kr,
                     many,
                     b.dim,
-                    c.aT,
+                    c.halves.a,
                     b.column.toLong(),
                     dx,
-                    c.rows,
+                    c.halves.rows,
                     0,
                     b.dim,
                     c.part,
@@ -156,23 +160,49 @@ internal class ItemProducts(
         }
         // Written there by the pairs on the card ([duOnCard]), else sent
         if (!duOnCard) c.duT.upload(duT, 0, 0, kr * n)
-        c.kernels.launch("ones_gradient", kr.toLong() * dx, kr, n, dx, c.ones.itemsAt, c.ones.items, c.duT, c.gA)
+        // The features no item has as a one nought, those of the ones' slopes summed: a thread or a warp each
+        c.gA.zero(0, kr.toLong() * dx)
+        val ones = c.ones
+        listOf(ones.light to 1, ones.heavy to WARP).forEach { (columns, threads) ->
+            c.kernels.launch(
+                if (threads == 1) "ones_gradient_light" else "ones_gradient_heavy",
+                kr.toLong() * columns.count * threads,
+                kr,
+                n,
+                dx,
+                columns.count,
+                columns.list,
+                ones.itemsAt,
+                ones.items,
+                c.duT,
+                c.gA,
+            )
+        }
         // The columns of a block's items taken, then multiplied by its rows a run at a time — onto the block's
         // columns of dA, nought of the ones' part sent
         p.x.blocks.forEachIndexed { k, b ->
             val rows = c.blocks[k]
-            c.kernels.launch("gather_columns", kr.toLong() * b.count, kr, b.count, c.duT, n, rows.items, c.part)
+            c.kernels.launch(
+                "gather_columns_bf16",
+                kr.toLong() * b.count,
+                kr,
+                b.count,
+                c.duT,
+                n,
+                rows.items,
+                c.halves.part,
+            )
             runs(c, rows) { from, many ->
-                c.cublas.gemm(
+                c.cublas.gemmHalves(
                     false,
                     false,
                     kr,
                     b.dim,
                     many,
-                    c.part,
+                    c.halves.part,
                     from.toLong(),
                     b.count,
-                    c.rows,
+                    c.halves.rows,
                     0,
                     b.dim,
                     c.gA,
@@ -187,17 +217,22 @@ internal class ItemProducts(
     }
 
     /**
-     * Every run of [FeatureKernels.CARD_ROWS] rows of a block made single precision into the card's [OnCard.rows]:
-     * [work] of its first row and its number.
+     * Every run of [FeatureKernels.CARD_ROWS] rows of a block made brain floating point into the card's
+     * [HalvesOnCard.rows]: [work] of its first row and its number.
      */
     private inline fun runs(c: OnCard, rows: CardRows, work: (Int, Int) -> Unit) {
         var from = 0
         while (from < rows.count) {
             val many = minOf(FeatureKernels.CARD_ROWS, rows.count - from)
-            FeatureKernels.floats(c.kernels, rows, from, many, c.rows)
+            FeatureKernels.halves(c.kernels, rows, from, many, c.halves.rows)
             work(from, many)
             from += many
         }
+    }
+
+    private companion object {
+        /** The threads of a warp, which `ones_gradient_heavy` gives a feature. */
+        const val WARP = 32
     }
 }
 
@@ -212,8 +247,19 @@ internal class OnesOnCard(
     val features: Cublas.DeviceBytes,
     val itemsAt: Cublas.DeviceBytes,
     val items: Cublas.DeviceBytes,
+    /**
+     * The features some item has as a one: of few items ([light], a thread each) and of many ([heavy], a warp each).
+     */
+    val light: Columns,
+    val heavy: Columns,
 ) {
+    /** A list of features on the card, and how many. */
+    class Columns(val list: Cublas.DeviceBytes, val count: Int)
+
     companion object {
+        /** The items a feature has as a one from which a warp, not a thread, sums their slopes. */
+        private const val HEAVY = 64
+
         /** The ones of [x] put on the card of [c], what was put there into [made]; null when it has no room. */
         fun of(c: Cublas, x: ItemFeatures, made: MutableList<AutoCloseable>): OnesOnCard? {
             fun ints(of: IntArray) =
@@ -223,8 +269,20 @@ internal class OnesOnCard(
                 }
             val (at, features) = x.onesFlat()
             val (itemsAt, items) = byFeature(x, at, features)
+            val counted = (0 until x.width).filter { itemsAt[it + 1] > itemsAt[it] }
+            val (heavy, light) = counted.partition { itemsAt[it + 1] - itemsAt[it] >= HEAVY }
             val put = listOf(ints(at), ints(features), ints(itemsAt), ints(items))
-            return if (null in put) null else OnesOnCard(put[0]!!, put[1]!!, put[2]!!, put.last()!!)
+            val lists = listOf(ints(light.toIntArray()), ints(heavy.toIntArray()))
+            return if (null in put || null in lists) null
+            else
+                OnesOnCard(
+                    put[0]!!,
+                    put[1]!!,
+                    put[2]!!,
+                    put.last()!!,
+                    Columns(lists.first()!!, light.size),
+                    Columns(lists.last()!!, heavy.size),
+                )
         }
 
         /**
@@ -240,6 +298,30 @@ internal class OnesOnCard(
             val items = IntArray(features.size)
             for (i in 0 until x.rows) for (k in at[i] until at[i + 1]) items[next[features[k]]++] = i
             return first to items
+        }
+    }
+}
+
+/**
+ * WHAT THE ITEMS' FEATURES' PRODUCTS READ ON THE TENSOR CORES ([ItemProducts.OnCard]), in brain floating point (16
+ * bits: single precision's range, a fraction of 8 bits) — two bytes a number: the weights of every model ([a]), a run
+ * of a block's rows ([rows]), the slopes of a block's items ([part]); the products summed and written in single
+ * precision. Twice as fast as the single precision's products, which on this card are its cores' alone.
+ */
+internal class HalvesOnCard(val a: Cublas.DeviceBytes, val rows: Cublas.DeviceBytes, val part: Cublas.DeviceBytes) {
+    companion object {
+        private const val HALF = 2L
+
+        /**
+         * The rooms of [weights] numbers of the weights, of a run of the rows of [x] and of [kr] rows of its widest
+         * block's items, on the card of [c], what was put there into [made]; null when it has no room.
+         */
+        fun of(c: Cublas, weights: Long, x: ItemFeatures, kr: Long, made: MutableList<AutoCloseable>): HalvesOnCard? {
+            fun room(numbers: Long) = c.allocateBytes(maxOf(1L, numbers) * HALF)?.also { made += it }
+            val a = room(weights)
+            val rows = room(minOf(FeatureKernels.CARD_ROWS, x.widest).toLong() * x.longest)
+            val part = room(kr * x.widest)
+            return if (a == null || rows == null || part == null) null else HalvesOnCard(a, rows, part)
         }
     }
 }

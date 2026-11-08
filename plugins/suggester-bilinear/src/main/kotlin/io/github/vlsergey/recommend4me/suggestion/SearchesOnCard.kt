@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
+import java.lang.foreign.MemorySegment
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
@@ -28,8 +29,9 @@ internal class SearchesOnCard(
     private val x = room.floats(count.toLong() * size)
     private val g = room.floats(count.toLong() * size)
     private val d = room.floats(count.toLong() * size)
-    private val steps = room.floats(count.toLong() * memory * size)
-    private val changes = room.floats(count.toLong() * memory * size)
+    // The remembered steps and changes in brain floating point, two bytes a number (`searches.cu`)
+    private val steps = room.bytes(count.toLong() * memory * size * HALF)
+    private val changes = room.bytes(count.toLong() * memory * size * HALF)
 
     // What a round sends and takes back: the models of a list, their slots and places of the ring, their sums; the
     // ring's places and the ρ of every remembered step of every model of the list, the sums of its loops
@@ -46,6 +48,9 @@ internal class SearchesOnCard(
     private val gammas = room.bytes(count.toLong() * Float.SIZE_BYTES)
     private val inverses = room.bytes(count.toLong() * Float.SIZE_BYTES)
     private val slopes = room.bytes(count.toLong() * Double.SIZE_BYTES)
+
+    /** Of every model of the list, no remembered step: a step that moves or sums nothing of it. */
+    private val nothing = room.bytes(count.toLong() * Int.SIZE_BYTES)
     private val stepOf = room.bytes(count.toLong() * Float.SIZE_BYTES)
     private val begunOf = room.bytes(count.toLong() * Int.SIZE_BYTES)
 
@@ -171,10 +176,9 @@ internal class SearchesOnCard(
     private fun directions(models: List<Int>) {
         val c = models.size
         list.upload(models.toIntArray())
-        kernels.launch("direction_begin", c.toLong() * size, c, size, list, g, d)
         val most = models.maxOf { remembered[it] }
-        val ringOf = IntArray(most * c)
-        val rhoOf = FloatArray(most * c)
+        val ringOf = IntArray(maxOf(1, most) * c)
+        val rhoOf = FloatArray(maxOf(1, most) * c)
         models.forEachIndexed { idx, q ->
             for (r in 0 until most) {
                 val k = if (r < remembered[q]) (oldest[q] + r) % memory else -1
@@ -182,13 +186,20 @@ internal class SearchesOnCard(
                 rhoOf[r * c + idx] = if (k >= 0) rho[q][k] else 0f
             }
         }
-        if (most > 0) {
-            rings.upload(ringOf)
-            rhosOf.upload(rhoOf)
-            alphaDots.zero()
-            betaDots.zero()
-        }
-        for (r in most - 1 downTo 0) loop(c, r, steps, changes, alphaDots, second = 0)
+        rings.upload(ringOf)
+        rhosOf.upload(rhoOf)
+        nothing.upload(IntArray(c) { -1 })
+        alphaDots.zero()
+        betaDots.zero()
+        // d = g, with the product the first loop's first step moves by; then a step a remembered step, the newest
+        // first, each with the product of the step before it
+        step(c, Step(dotted = if (most > 0) most - 1 else null, w = steps, dotsOut = alphaDots), begin = true)
+        for (r in most - 1 downTo 0) step(
+            c,
+            Step(along = r, v = changes, dotsIn = alphaDots, dotted = (r - 1).takeIf { it >= 0 }, w = steps),
+        )
+        // d ·= γ, with the product the second loop's first step moves by; then a step a remembered step, the oldest
+        // first
         gammas.upload(
             FloatArray(c) { idx ->
                 val q = models[idx]
@@ -196,8 +207,12 @@ internal class SearchesOnCard(
                 else ((oldest[q] + remembered[q] - 1) % memory).let { k -> syOf[q][k] / yyOf[q][k] }
             }
         )
-        kernels.launch("direction_scale", c.toLong() * size, c, size, list, gammas, d)
-        for (r in 0 until most) loop(c, r, changes, steps, betaDots, second = 1)
+        step(c, Step(dotted = if (most > 0) 0 else null, w = changes, dotsOut = betaDots), scale = true)
+        for (r in 0 until most) step(
+            c,
+            Step(along = r, v = steps, dotsIn = betaDots, dotted = (r + 1).takeIf { it < most }, w = changes),
+            second = 1,
+        )
         slopes.zero()
         kernels.launch("direction_end", c.toLong() * PER_MODEL * CudaKernels.BLOCK, c, size, list, g, d, slopes)
         val got = slopes.doubles(c)
@@ -220,45 +235,47 @@ internal class SearchesOnCard(
     }
 
     /**
-     * A step of a loop of the direction, of the remembered step [r] of every model of the list of [c]: the product of
-     * its [dotted] (the steps or the changes) with d into [dots], then d moved along its [moved] by it — of the first
-     * loop ([second] 0) by −α, of the second by α − β.
+     * A step of a loop of the direction ([step]): d moved [along] the remembered step of that place (of the steps of
+     * the loop, its vectors [v] — the changes or the steps — the products it moves by in [dotsIn]), and the product of
+     * the [dotted] one's vectors [w] with d as it is then into [dotsOut]; null: no move, no product.
      */
-    private fun loop(
-        c: Int,
-        r: Int,
-        dotted: Cublas.DeviceFloats,
-        moved: Cublas.DeviceFloats,
-        dots: Cublas.DeviceBytes,
-        second: Int,
-    ) {
-        val ringAt = rings.at(r.toLong() * c * Int.SIZE_BYTES)
-        val dotsAt = dots.at(r.toLong() * c * Double.SIZE_BYTES)
+    private class Step(
+        val along: Int? = null,
+        val v: Cublas.DeviceBytes? = null,
+        val dotsIn: Cublas.DeviceBytes? = null,
+        val dotted: Int? = null,
+        val w: Cublas.DeviceBytes? = null,
+        val dotsOut: Cublas.DeviceBytes? = null,
+    )
+
+    /**
+     * The [step] of every model of the list of [c] in one pass over d (`ring_step`): of the first loop ([second] 0) d
+     * moved by −α, of the second by α − β; d made the gradient first ([begin]) or multiplied by γ first ([scale]).
+     */
+    private fun step(c: Int, step: Step, second: Int = 0, begin: Boolean = false, scale: Boolean = false) {
+        fun at(table: Cublas.DeviceBytes, r: Int?, bytes: Int) =
+            if (r == null) MemorySegment.NULL else table.at(r.toLong() * c * bytes)
+        fun ringAt(r: Int?) = if (r == null) nothing.at(0) else rings.at(r.toLong() * c * Int.SIZE_BYTES)
+        val outAt = step.dotsOut ?: if (second == 0) alphaDots else betaDots
         kernels.launch(
-            "ring_dot",
+            "ring_step",
             c.toLong() * PER_MODEL * CudaKernels.BLOCK,
             c,
             size,
             list,
-            ringAt,
             memory,
-            dotted,
-            d,
-            dotsAt,
-        )
-        kernels.launch(
-            "ring_axpy",
-            c.toLong() * size,
-            c,
-            size,
-            list,
-            ringAt,
-            memory,
-            moved,
-            rhosOf.at(r.toLong() * c * Float.SIZE_BYTES),
-            dotsAt,
-            alphas.at(r.toLong() * c * Float.SIZE_BYTES),
+            ringAt(step.along),
+            step.v ?: steps,
+            at(rhosOf, step.along, Float.SIZE_BYTES),
+            at(step.dotsIn ?: alphaDots, step.along, Double.SIZE_BYTES),
+            at(alphas, step.along, Float.SIZE_BYTES),
             second,
+            ringAt(step.dotted),
+            step.w ?: steps,
+            at(outAt, step.dotted, Double.SIZE_BYTES),
+            if (scale) gammas.at(0) else MemorySegment.NULL,
+            if (begin) 1 else 0,
+            g,
             d,
         )
     }
@@ -268,6 +285,9 @@ internal class SearchesOnCard(
         (if (gradient) slotsOnCard.gradient else slotsOnCard.point) + slotsOnCard.sizes.toList()
 
     companion object {
+        /** The bytes of a number of brain floating point. */
+        private const val HALF = 2
+
         /** The sums of a model a launch brings back: s·y, y·y, g·g. */
         private const val SUMS = 3
 
@@ -278,10 +298,7 @@ internal class SearchesOnCard(
             listOf(
                 "propose",
                 "remember",
-                "direction_begin",
-                "ring_dot",
-                "ring_axpy",
-                "direction_scale",
+                "ring_step",
                 "direction_end",
                 "direction_reset",
             )

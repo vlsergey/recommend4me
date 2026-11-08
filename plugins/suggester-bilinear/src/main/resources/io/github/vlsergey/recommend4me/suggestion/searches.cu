@@ -13,6 +13,17 @@
 
 #define BLOCK 256
 
+// THE REMEMBERED STEPS AND CHANGES IN BRAIN FLOATING POINT (16 bits: single precision's range, a fraction of 8
+// bits): what a direction reads twenty times a step, half the bytes; the point, the gradient and the direction
+// single
+__device__ __forceinline__ unsigned short to_half(float x) {
+    unsigned short r;
+    asm("cvt.rn.bf16.f32 %0, %1;" : "=h"(r) : "f"(x));
+    return r;
+}
+
+__device__ __forceinline__ float of_half(unsigned short h) { return __uint_as_float(((unsigned) h) << 16); }
+
 // The blocks of a model of a launch over its size numbers
 #define PER_MODEL 64
 
@@ -90,7 +101,7 @@ extern "C" __global__ void propose(
 // search begins there, −1), x and g made the new ones; the sums s·y, y·y and g·g of the new g
 extern "C" __global__ void remember(
     int count, int size, const int* list, const int* slots, const int* ring, int memory,
-    float* X, float* G, float* S, float* Y,
+    float* X, float* G, unsigned short* S, unsigned short* Y,
     float* pa, float* pb, float* pc, float* pd, float* pf,
     float* ga, float* gb, float* gc, float* gd, float* gf, int na, int nb, int nc, int nd, int nf, double* sums
 ) {
@@ -106,8 +117,8 @@ extern "C" __global__ void remember(
             float sv = p - X[at];
             float yv = gn - G[at];
             size_t r = ((size_t) q * memory + k) * size + e;
-            S[r] = sv;
-            Y[r] = yv;
+            S[r] = to_half(sv);
+            Y[r] = to_half(yv);
             sy += (double) sv * yv;
             yy += (double) yv * yv;
         }
@@ -118,61 +129,44 @@ extern "C" __global__ void remember(
     sums3(sy, yy, gg, sums + 3 * idx);
 }
 
-// d = g of every model of the list
-extern "C" __global__ void direction_begin(int count, int size, const int* list, const float* G, float* D) {
-    long long i = (long long) blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= (long long) count * size) return;
-    int q = list[i / size];
-    size_t at = (size_t) q * size + i % size;
-    D[at] = G[at];
-}
-
-// Of every model of the list whose remembered step of this round is `ring[idx]` (−1: none), V of it
-// (its step or its change) times d summed into dots[idx]
-extern "C" __global__ void ring_dot(
-    int count, int size, const int* list, const int* ring, int memory, const float* V, const float* D, double* dots
+// A STEP OF A LOOP OF THE DIRECTION, of every model of the list, one pass over d: d moved along V of its
+// remembered step `along[idx]` (−1: none) — of the first loop (second = 0) by −α, α = ρ · (s·d of that
+// step, in dotsIn) kept in alpha; of the second by α − β, β = ρ · (y·d, in dotsIn) — and, d as it is
+// then, W of its remembered step `dotted[idx]` (−1: none) times d summed into dotsOut: the product the
+// next step moves by. `scale` (or null) multiplies d first: between the loops, d ·= γ; `begin` makes d
+// the gradient first
+extern "C" __global__ void ring_step(
+    int count, int size, const int* list, int memory, const int* along, const unsigned short* V, const float* rho, const double* dotsIn,
+    float* alpha, int second, const int* dotted, const unsigned short* W, double* dotsOut, const float* scale, int begin,
+    const float* G, float* D
 ) {
     int idx = blockIdx.x / PER_MODEL;
     if (idx >= count) return;
-    int k = ring[idx];
-    if (k < 0) return;
     int q = list[idx];
-    const float* v = V + ((size_t) q * memory + k) * size;
-    const float* dq = D + (size_t) q * size;
-    double sum = 0.0;
-    for (int e = (blockIdx.x % PER_MODEL) * BLOCK + threadIdx.x; e < size; e += PER_MODEL * BLOCK) sum += (double) v[e] * dq[e];
-    sum1(sum, dots + idx);
-}
-
-// d += c · V of the remembered step `ring[idx]` of every model of the list: of the first loop
-// (second = 0) c = −α, α = ρ · s·d kept in alpha; of the second, c = α − β, β = ρ · y·d
-extern "C" __global__ void ring_axpy(
-    int count, int size, const int* list, const int* ring, int memory, const float* V, const float* rho,
-    const double* dots, float* alpha, int second, float* D
-) {
-    long long i = (long long) blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= (long long) count * size) return;
-    int idx = (int) (i / size);
-    int e = (int) (i % size);
-    int k = ring[idx];
-    if (k < 0) return;
-    int q = list[idx];
-    float product = rho[idx] * (float) dots[idx];
-    float c;
-    if (second) c = alpha[idx] - product;
-    else {
-        c = -product;
-        if (e == 0) alpha[idx] = product;
+    int ka = along[idx], kd = dotted[idx];
+    float c = 0.0f;
+    if (ka >= 0) {
+        float product = rho[idx] * (float) dotsIn[idx];
+        if (second) c = alpha[idx] - product;
+        else {
+            c = -product;
+            if (blockIdx.x % PER_MODEL == 0 && threadIdx.x == 0) alpha[idx] = product;
+        }
     }
-    D[(size_t) q * size + e] += c * V[((size_t) q * memory + k) * size + e];
-}
-
-// d ·= γ of every model of the list
-extern "C" __global__ void direction_scale(int count, int size, const int* list, const float* gamma, float* D) {
-    long long i = (long long) blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= (long long) count * size) return;
-    int idx = (int) (i / size);
-    D[(size_t) list[idx] * size + i % size] *= gamma[idx];
+    float gamma = scale != 0 ? scale[idx] : 1.0f;
+    float* dq = D + (size_t) q * size;
+    const float* gq = G + (size_t) q * size;
+    const unsigned short* v = ka >= 0 ? V + ((size_t) q * memory + ka) * size : 0;
+    const unsigned short* w = kd >= 0 ? W + ((size_t) q * memory + kd) * size : 0;
+    double sum = 0.0;
+    for (int e = (blockIdx.x % PER_MODEL) * BLOCK + threadIdx.x; e < size; e += PER_MODEL * BLOCK) {
+        float x = begin ? gq[e] : dq[e];
+        x *= gamma;
+        if (ka >= 0) x += c * of_half(v[e]);
+        dq[e] = x;
+        if (kd >= 0) sum += (double) of_half(w[e]) * x;
+    }
+    if (kd >= 0) sum1(sum, dotsOut + idx);
 }
 
 // d = −d of every model of the list, and its slope g·d summed into slopes[idx]

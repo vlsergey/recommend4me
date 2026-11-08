@@ -12,12 +12,16 @@ internal object FeatureKernels {
     val NAMES =
         listOf(
             "halves_to_floats",
+            "halves_to_bf16",
+            "floats_to_bf16",
+            "gather_columns_bf16",
             "scatter_columns",
             "gather_columns",
             "scatter_rows",
             "ones_rows",
             "ones_coordinates",
-            "ones_gradient",
+            "ones_gradient_light",
+            "ones_gradient_heavy",
             "shown_one",
             "shown_pack",
             "shown_likely",
@@ -42,6 +46,15 @@ internal object FeatureKernels {
     fun floats(kernels: CudaKernels, rows: CardRows, from: Int, count: Int, into: Cublas.DeviceFloats) {
         val n = count.toLong() * rows.dim
         kernels.launch("halves_to_floats", n, n, rows.vectors.at(from.toLong() * rows.dim * 2), into)
+    }
+
+    /**
+     * The rows [from] to [from] + [count] of [rows], kept in half precision, written into [into] as brain floating
+     * point.
+     */
+    fun halves(kernels: CudaKernels, rows: CardRows, from: Int, count: Int, into: Cublas.DeviceBytes) {
+        val n = count.toLong() * rows.dim
+        kernels.launch("halves_to_bf16", n, n, rows.vectors.at(from.toLong() * rows.dim * 2), into)
     }
 
     private var compiledFor: Cublas? = null

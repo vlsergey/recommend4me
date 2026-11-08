@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import java.util.Random
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -175,17 +176,24 @@ class BilinearTest {
         assumeTrue(dir != null, "no CUDA libraries")
         val cublas = Cublas.open(dir!!)
         assumeTrue(cublas != null, "no cuBLAS to run on")
-        compareTogether(task(), cublas)
+        // The items' features' products on the tensor cores, in brain floating point: within its digits, piece by
+        // piece of the gradient
+        compareTogether(task(), cublas, sixteenBits = true)
         // And of the rank the application fits by: its kernels compiled with the rank known
-        compareTogether(task(), cublas, rank = 16)
+        compareTogether(task(), cublas, rank = 16, sixteenBits = true)
         // And of the pairs that weigh listed, not swept
         val sparse = sparseTask()
         assertTrue(ListedPairs.of(Problem(sparse, Design.of(sparse), BilinearSuggester.FOLDS)) != null, "not listed")
-        compareTogether(sparse, cublas)
-        compareTogether(sparse, cublas, rank = 16)
+        compareTogether(sparse, cublas, sixteenBits = true)
+        compareTogether(sparse, cublas, rank = 16, sixteenBits = true)
     }
 
-    private fun compareTogether(task: SuggestionTask, card: Cublas? = null, rank: Int = 3) {
+    private fun compareTogether(
+        task: SuggestionTask,
+        card: Cublas? = null,
+        rank: Int = 3,
+        sixteenBits: Boolean = false,
+    ) {
         val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
         val lambdas = floatArrayOf(0.1f, 0.01f, 0.001f, 0.01f)
         val folds = intArrayOf(0, 1, 2, 4)
@@ -199,6 +207,14 @@ class BilinearTest {
         thetas.forEachIndexed { k, theta ->
             val grad = FloatArray(alone.size)
             val loss = alone.lossAndGradient(theta, grad, lambdas[k]) { problem.foldOf[it] != folds[k] }
+            if (sixteenBits) {
+                assertTrue(
+                    abs(loss - losses[k]) < LOSS_16 * abs(loss),
+                    "model $k: loss $loss alone, ${losses[k]} together",
+                )
+                sixteenBitPieces(problem, rank, k, grad, gradients[k])
+                return@forEachIndexed
+            }
             assertTrue(abs(loss - losses[k]) < 1e-4 * abs(loss), "model $k: loss $loss alone, ${losses[k]} together")
             val at = grad.indices.maxBy { abs(grad[it] - gradients[k][it]) / max(1e-4f, abs(grad[it])) }
             val worst = abs(grad[at] - gradients[k][at]) / max(1e-4f, abs(grad[at]))
@@ -217,6 +233,34 @@ class BilinearTest {
                 "model $k: the worst relative difference of the gradient $worst, at $at of $part: " +
                     "${grad[at]} alone, ${gradients[k][at]} together",
             )
+        }
+    }
+
+    /**
+     * The gradient [together] of model [k] within the digits of brain floating point of the one [alone]: of every piece
+     * — A, B, E, the biases, the pair's own weights — the difference's length a small part of the piece's own. Not
+     * number by number: a slope that is the sum of terms that all but cancel keeps few of the digits of its terms.
+     */
+    private fun sixteenBitPieces(problem: Problem, rank: Int, k: Int, alone: FloatArray, together: FloatArray) {
+        val sizes =
+            listOf(
+                "A" to problem.design.itemWidth * rank,
+                "B" to problem.design.valueWidth * rank,
+                "E" to problem.m * rank,
+                "bias" to problem.m,
+                "pair" to Bilinear.PAIR,
+            )
+        var from = 0
+        sizes.forEach { (piece, size) ->
+            var diff = 0.0
+            var own = 0.0
+            for (at in from until from + size) {
+                diff += (alone[at] - together[at]).toDouble().let { it * it }
+                own += alone[at].toDouble().let { it * it }
+            }
+            val relative = sqrt(diff) / max(sqrt(own), TINY)
+            assertTrue(relative < GRADIENT_16, "model $k: the gradient of $piece differs by $relative of its length")
+            from += size
         }
     }
 
@@ -381,5 +425,18 @@ class BilinearTest {
             worst = max(worst, abs(numeric - grad[k]) / max(1e-3, abs(numeric) + abs(grad[k])))
         }
         assertTrue(worst < 0.02, "the worst relative error $worst")
+    }
+
+    private companion object {
+        /**
+         * The digits of brain floating point (a fraction of 8 bits, rounded: half of 2⁻⁸ an input), a product of two
+         * inputs rounded twice: of a loss summed of the pairs, its relative part; of a piece of the gradient, the
+         * relative length of its difference — with room, the sums' errors not all of a sign.
+         */
+        const val LOSS_16 = 1e-3
+        const val GRADIENT_16 = 1e-2
+
+        /** A piece's length below which its difference is told against this: of no length at all. */
+        const val TINY = 1e-12
     }
 }

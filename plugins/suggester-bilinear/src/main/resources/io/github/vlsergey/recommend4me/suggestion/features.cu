@@ -17,6 +17,40 @@ extern "C" __global__ void halves_to_floats(long long n, const unsigned short* s
     out[t] = f;
 }
 
+// A single number as brain floating point (16 bits: single precision's range, a fraction of 8 bits)
+__device__ __forceinline__ unsigned short bf16_of(float f) {
+    unsigned short r;
+    asm("cvt.rn.bf16.f32 %0, %1;" : "=h"(r) : "f"(f));
+    return r;
+}
+
+// out = the n half-precision numbers of src (a block's rows as kept) as brain floating point, for the
+// tensor cores' products to read
+extern "C" __global__ void halves_to_bf16(long long n, const unsigned short* src, unsigned short* out) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    unsigned short h = src[t];
+    float f;
+    asm("cvt.f32.f16 %0, %1;" : "=f"(f) : "h"(h));
+    out[t] = bf16_of(f);
+}
+
+// out = the n single numbers of src as brain floating point
+extern "C" __global__ void floats_to_bf16(long long n, const float* src, unsigned short* out) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= n) return;
+    out[t] = bf16_of(src[t]);
+}
+
+// out (k × count) = the columns of the block's items of src (k × n), as brain floating point
+extern "C" __global__ void gather_columns_bf16(int k, int count, const float* src, int n, const int* items, unsigned short* out) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= (long long) k * count) return;
+    int q = (int) (t / count);
+    int j = (int) (t % count);
+    out[t] = bf16_of(src[(size_t) q * n + items[j]]);
+}
+
 // out (k × n) += src (k × count) onto the columns of the block's items: an item once in a block
 extern "C" __global__ void scatter_columns(int k, int count, const float* src, const int* items, float* out, int n) {
     long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
@@ -68,18 +102,38 @@ extern "C" __global__ void ones_coordinates(int kr, int n, int width, const int*
     uT[t] = s;
 }
 
-// And back: dAᵀ (kr × width) = of every row q and every feature c, the slopes of the items whose one it
-// is summed — of the feature c, its items at[c] .. at[c + 1] of items; nought of a feature no item has
-// as a one, the blocks' columns, which their products write after
-extern "C" __global__ void ones_gradient(int kr, int n, int width, const int* at, const int* items, const float* duT, float* gA) {
+// And back: dAᵀ (kr × width) of every row q and every feature c some item has as a one, the slopes of
+// the items whose one it is summed — of the feature c, its items at[c] .. at[c + 1] of items. The
+// features of few items a thread each (`columns` of them, a list of `count`); those of many — the
+// constant, the marks of the blocks — a warp each, its lanes taking the items in turn: a feature of
+// every item is not one thread's walk through them all. The rest of dAᵀ made nought before, the blocks'
+// products adding onto it after
+extern "C" __global__ void ones_gradient_light(
+    int kr, int n, int width, int count, const int* columns, const int* at, const int* items, const float* duT, float* gA
+) {
     long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
-    if (t >= (long long) kr * width) return;
-    int q = (int) (t / width);
-    int c = (int) (t % width);
+    if (t >= (long long) kr * count) return;
+    int q = (int) (t / count);
+    int c = columns[t % count];
     const float* d = duT + (size_t) q * n;
     float s = 0.0f;
     for (int k = at[c]; k < at[c + 1]; k++) s += d[items[k]];
-    gA[t] = s;
+    gA[(size_t) q * width + c] = s;
+}
+
+extern "C" __global__ void ones_gradient_heavy(
+    int kr, int n, int width, int count, const int* columns, const int* at, const int* items, const float* duT, float* gA
+) {
+    long long w = ((long long) blockIdx.x * blockDim.x + threadIdx.x) / 32;
+    int lane = threadIdx.x & 31;
+    if (w >= (long long) kr * count) return;
+    int q = (int) (w / count);
+    int c = columns[w % count];
+    const float* d = duT + (size_t) q * n;
+    float s = 0.0f;
+    for (int k = at[c] + lane; k < at[c + 1]; k += 32) s += d[items[k]];
+    for (int offset = 16; offset > 0; offset >>= 1) s += __shfl_down_sync(0xffffffff, s, offset);
+    if (lane == 0) gA[(size_t) q * width + c] = s;
 }
 
 // THE CHOICE OF WHAT A ROW IS SHOWN WITH, a block a row. Of the row r: its item, the item's fold f —

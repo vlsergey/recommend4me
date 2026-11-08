@@ -19,7 +19,7 @@ __device__ __forceinline__ float softplus_of(float e) {
 
 __device__ __forceinline__ void logistic(float z, float y, float w, float scale, float* loss, float* slope) {
     float e = __expf(-fabsf(z));
-    float inverse = __frcp_rn(1.0f + e);
+    float inverse = __fdividef(1.0f, 1.0f + e);
     float sigmoid = z >= 0.0f ? inverse : e * inverse;
     *loss = w * (fmaxf(z, 0.0f) + softplus_of(e) - y * z);
     *slope = w * (sigmoid - y) * scale;
@@ -28,7 +28,7 @@ __device__ __forceinline__ void logistic(float z, float y, float w, float scale,
 // The slope alone, of the same numbers: the side that sums no loss
 __device__ __forceinline__ float slope_of(float z, float y, float w, float scale) {
     float e = __expf(-fabsf(z));
-    float inverse = __frcp_rn(1.0f + e);
+    float inverse = __fdividef(1.0f, 1.0f + e);
     float sigmoid = z >= 0.0f ? inverse : e * inverse;
     return w * (sigmoid - y) * scale;
 }

@@ -243,7 +243,8 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
             p.pairs.own[i].forEachIndexed { k, v -> if (p.pairs.ownWeight[i][k] != 0f) used[v] = true }
         }
         if (every) used.fill(true)
-        p.hints.forEach { hint -> hint.among.forEach { used[it] = true } }
+        // The names' rivals: one array for every name of the same universe, gone through once
+        p.hints.forEach { hint -> if (marked.add(hint.among)) hint.among.forEach { used[it] = true } }
         val eAt = dx * rank + dz * rank
         val se = 0.1 / sqrt(rank.toDouble())
         for (v in 0 until m) if (used[v])
