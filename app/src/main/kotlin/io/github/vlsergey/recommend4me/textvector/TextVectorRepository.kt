@@ -54,6 +54,24 @@ class TextVectorRepository(private val db: DSLContext) {
         return out
     }
 
+    /**
+     * Of the texts [keys] of the items [ids] (every item when null) with a vector by [encoder], what their passages are
+     * made of, no vector read: item to text key to "hash/windows" — the hash of the text and how many windows it has
+     * (none till counted).
+     */
+    fun marksOf(ids: Collection<String>?, encoder: String, keys: Collection<String>): Map<String, Map<String, String>> {
+        val out = HashMap<String, MutableMap<String, String>>()
+        if (keys.isEmpty()) return out
+        fun read(only: Collection<String>?) =
+            db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.TEXT_HASH, TEXT_VECTOR.WINDOWS)
+                .from(TEXT_VECTOR)
+                .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.TEXT_KEY.`in`(keys))
+                .and(only?.let { TEXT_VECTOR.ITEM_ID.`in`(it) } ?: DSL.noCondition())
+                .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = "${it.value3()}/${it.value4()}" }
+        if (ids == null) read(null) else ids.distinct().chunked(BATCH).forEach(::read)
+        return out
+    }
+
     /** The items with a stored vector of the text [key], of any encoder, in the order of their ids. */
     fun itemsWith(key: String): List<String> =
         db.selectDistinct(TEXT_VECTOR.ITEM_ID)

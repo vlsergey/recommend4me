@@ -19,7 +19,7 @@
 | `picture` | a work's picture: the cover first, then the screenshots |
 | `item_picture_vector` | the cover's vector and the mean direction of the screenshots |
 | `review` | an opinion of another reader, its text kept by the key it is encoded under |
-| `part` | a part of a work's text — a chapter — kept whole, its characters and words counted once |
+| `part` | a part of a work's text — a chapter — kept whole, with the hash of its text, its characters and words counted once |
 | `part_vector` | the vector of every window of a part |
 | `part_paragraph_vector` | the vector of every paragraph of a part — its lines with a letter in them, short ones in a row joined — what the tags are held against to be offered by the text |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
@@ -108,6 +108,7 @@ erDiagram
         VARCHAR paragraphs_encoder "null"
         INTEGER chars "null"
         INTEGER words "null"
+        VARCHAR content_hash "null"
     }
     part_paragraph_vector {
         VARCHAR item_id PK, FK

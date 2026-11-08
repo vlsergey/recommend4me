@@ -8,13 +8,15 @@ import io.github.vlsergey.recommend4me.item.ItemKey
  * text the encoder reads, each with its vector.
  *
  * [language]: the language its description is written in (ISO 639-1) — what a text of it too short to tell its own is
- * stemmed as; null when it is not known.
+ * stemmed as; null when it is not known. [fingerprint]: what the document is made of, as the application tells it
+ * without making it ([SearchProvider.sync]); null — the provider's own of the document.
  */
 class SearchDocument(
     val key: ItemKey,
     val fields: List<SearchField>,
     val passages: List<SearchPassage>,
     val language: String? = null,
+    val fingerprint: Long? = null,
 )
 
 /**
@@ -166,10 +168,16 @@ interface SearchProvider : NameCounting {
     fun rebuild(contentType: String, documents: Sequence<SearchDocument>)
 
     /**
-     * The index brought to [documents], every item of the type, on a start: of a provider that keeps its index between
-     * the runs, only what changed written again; of any other, made anew.
+     * The index brought to every item of the type, on a start: [fingerprints] tells what each item's document is made
+     * of ([SearchDocument.fingerprint]), [documents] makes the documents of the items asked for. Of a provider that
+     * keeps its index between the runs, the documents of the items whose fingerprint changed alone made and written
+     * again, those gone removed; of any other, made anew of every one.
      */
-    fun sync(contentType: String, documents: Sequence<SearchDocument>) = rebuild(contentType, documents)
+    fun sync(
+        contentType: String,
+        fingerprints: Map<ItemKey, Long>,
+        documents: (Collection<ItemKey>) -> Sequence<SearchDocument>,
+    ) = rebuild(contentType, documents(fingerprints.keys))
 
     fun update(contentType: String, documents: List<SearchDocument>, removed: Collection<ItemKey>)
 

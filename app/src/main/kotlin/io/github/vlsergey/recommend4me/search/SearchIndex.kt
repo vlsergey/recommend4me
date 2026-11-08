@@ -105,8 +105,12 @@ class SearchIndex(
         val latch = built[type.id] ?: return
         try {
             workload.run(Work("searchIndex", type = type.id), reasons) {
-                // Kept between the runs: what changed since written again
-                if (latch.count > 0) provider.sync(type.id, documents.documentsOf(type))
+                // Kept between the runs: the documents of the works whose fingerprint changed since alone made and
+                // written again, of the same values of the model their fingerprints were made of
+                if (latch.count > 0) {
+                    val prints = documents.printsOf(type)
+                    provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys, prints.chances) }
+                }
             }
         } finally {
             latch.countDown()

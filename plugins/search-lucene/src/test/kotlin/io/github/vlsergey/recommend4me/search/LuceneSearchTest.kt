@@ -162,18 +162,32 @@ class LuceneSearchTest {
         }
     }
 
+    /**
+     * The index brought to [docs] as a start brings it, of their fingerprints; the keys of the documents it asked to be
+     * made added to [asked].
+     */
+    private fun sync(index: LuceneIndex, docs: List<SearchDocument>, asked: MutableList<ItemKey> = ArrayList()): Int =
+        index.sync(docs.associate { it.key to DocumentPrints.of(it) }) { keys ->
+            asked += keys
+            docs.filter { it.key in keys }.asSequence()
+        }
+
     @Test
-    fun `the index is kept between the runs, only what changed written again`() {
+    fun `the index is kept between the runs, only what changed made and written again`() {
         val dir = Files.createTempDirectory("search")
         LuceneIndex(dir.resolve("types").resolve("books").resolve("search-index")).use { index ->
-            assertEquals(3, index.sync(documents.asSequence()))
-            // Nothing changed: nothing written
-            assertEquals(0, index.sync(documents.asSequence()))
+            assertEquals(3, sync(index, documents))
+            // Nothing changed: nothing made, nothing written
+            val asked = ArrayList<ItemKey>()
+            assertEquals(0, sync(index, documents, asked))
+            assertTrue(asked.isEmpty())
         }
         // Another run: the index opened again as it was left
         LuceneIndex(dir.resolve("types").resolve("books").resolve("search-index")).use { index ->
             val changed = listOf(documents[0], doc("2", "Beach Night", "Somebody", "The night at the beach."))
-            assertEquals(1, index.sync(changed.asSequence()))
+            val asked = ArrayList<ItemKey>()
+            assertEquals(1, sync(index, changed, asked))
+            assertEquals(listOf(ItemKey("test", "2")), asked)
             index.search { searcher -> assertEquals(2, index.items(searcher)) }
         }
         LuceneSearch(dir).use { search ->

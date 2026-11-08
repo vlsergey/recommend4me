@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.Corrected
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -13,6 +14,7 @@ import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.suggestion.WorkChances
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
+import io.github.vlsergey.recommend4me.vector.Vectors
 import org.springframework.stereotype.Component
 
 /**
@@ -23,19 +25,47 @@ import org.springframework.stereotype.Component
 class SearchDocuments(private val plugins: Plugins, private val suggestions: FacetSuggestions) {
 
     /**
-     * Every document of a type, streamed: the items read a chunk at a time; the values the model gives them made of
-     * every work of a source in one pass first, and its tree of tags read once, held while its chunks are read.
+     * Of every item of a type, what its document is made of ([SearchDocument.fingerprint]), its chapters and the
+     * vectors not read: of every source its items' heads, values, answers and texts in one pass each, and of its texts
+     * and chapters their hashes and how their vectors were made. With them, the values the model gives the works of
+     * every source, made of every work in one pass: the documents of those whose fingerprint changed are made of the
+     * same ([documentsOf]).
      */
-    fun documentsOf(type: TypeStore): Sequence<SearchDocument> = sequence {
+    fun printsOf(type: TypeStore): TypePrints {
+        val prints = HashMap<ItemKey, Long>()
+        val chances = HashMap<String, WorkChances>()
         for (s in type.sources) {
-            val ids = s.items.keys().map { it.id }
-            val chances = suggestions.chances(s, null)
+            val made = suggestions.chances(s, null)
+            chances[s.id] = made
+            val read = Read(s, null, true, made, s.hierarchies())
+            read.heads.forEach { (id, head) -> prints[ItemKey(s.id, id)] = read.printOf(id, head) }
+        }
+        return TypePrints(prints, chances)
+    }
+
+    /**
+     * The documents of the items [keys] of a type, streamed: read a chunk at a time, of the values the model gives the
+     * works of every source ([chances]), each source's tree of tags read once.
+     */
+    fun documentsOf(
+        type: TypeStore,
+        keys: Collection<ItemKey>,
+        chances: Map<String, WorkChances>,
+    ): Sequence<SearchDocument> = sequence {
+        for ((source, list) in keys.groupBy { it.source }) {
+            val s = type.sources.firstOrNull { it.id == source } ?: continue
             val hierarchies = s.hierarchies()
-            for (chunk in ids.chunked(CHUNK)) yieldAll(
-                documents(s, chunk, chances = chances, hierarchies = hierarchies).values
+            for (chunk in list.map { it.id }.chunked(CHUNK)) yieldAll(
+                documents(s, chunk, chances = chances[source], hierarchies = hierarchies).values
             )
         }
     }
+
+    /**
+     * What the documents of every item of a type are made of ([prints]) and the values the model gives the works of
+     * every source ([chances]) they were made with.
+     */
+    class TypePrints(val prints: Map<ItemKey, Long>, val chances: Map<String, WorkChances>)
 
     /**
      * The documents of the items [ids] of a source, read in one batch per table: their fields — the chapters read among
@@ -61,33 +91,49 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
         return read.heads.map { (id, head) -> ItemKey(s.id, id) to read.documentOf(id, head) }.toMap()
     }
 
-    /** What the documents of the items [ids] of [s] are made of, read in one batch per table. */
+    /**
+     * What the documents of the items [ids] of [s] — of every item when null — are made of, read in one batch per table
+     * (of every item, one pass over each table). The chapters' texts and the vectors read only for a document made
+     * ([documentOf]); the fingerprint ([printOf]) reads their hashes alone.
+     */
     private inner class Read(
         private val s: SourceStore,
-        ids: List<String>,
+        ids: List<String>?,
         passages: Boolean,
         chances: WorkChances,
         hierarchies: Map<String, TagHierarchy>,
     ) {
         private val schema = s.schema
-        val heads = s.items.heads(ids)
-        private val site = s.items.facetsOf(ids)
+        val heads: Map<String, StoredItem> =
+            ids?.let { s.items.heads(it) }
+                ?: HashMap<String, StoredItem>().also { all -> s.items.forEachHead { all[it.id] = it } }
+        private val ids: List<String> = ids ?: heads.keys.toList()
+        private val every = ids == null
+        private val site = if (every) EveryItemFacets.siteOf(s) else s.items.facetsOf(this.ids)
         private val facets = site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
-        private val facetCorrections = s.corrections.facetsOf(ids)
-        private val fields = s.corrections.fieldsOf(ids)
-        private val texts = s.items.textsOf(ids)
+        private val facetCorrections =
+            if (every) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(this.ids)
+        private val fields = if (every) s.corrections.allFields() else s.corrections.fieldsOf(this.ids)
+        private val texts = if (every) everyText() else s.items.textsOf(this.ids)
 
         /** The values of every item as the user says, the user's own among them: what is indexed — and named. */
-        private val corrected = ids.associateWith { id ->
-            TagHierarchy.corrected(facets[id].orEmpty(), facetCorrections[id].orEmpty(), hierarchies, s.singleFacets)
-        }
+        private val corrected =
+            this.ids.associateWith { id ->
+                TagHierarchy.corrected(
+                    facets[id].orEmpty(),
+                    facetCorrections[id].orEmpty(),
+                    hierarchies,
+                    s.singleFacets,
+                )
+            }
         private val names =
             schema.facets.associate { def ->
                 def.key to
                     s.names(
                         def.key,
-                        ids.flatMap { corrected[it]?.get(def.key).orEmpty() + site[it]?.get(def.key).orEmpty() }
-                            .distinct(),
+                        this.ids.flatMapTo(LinkedHashSet()) {
+                            corrected[it]?.get(def.key).orEmpty() + site[it]?.get(def.key).orEmpty()
+                        },
                     ) +
                         facetCorrections.values
                             .flatten()
@@ -98,16 +144,35 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
         private val encoder = plugins.textEncoder()?.takeIf { passages }
 
         // The texts a work is found by meaning by alone: the title's vector is read by no passage
-        private val vectors = encoder?.let { e -> s.textVectors.ofMany(ids, e.id, meaningful) }.orEmpty()
-        private val windows = encoder?.let { e -> s.textVectors.windows.windowsOf(ids, e.id) }.orEmpty()
-        private val parts = s.parts.contentsOf(ids)
-        private val partWindows = encoder?.let { e -> s.parts.windows.windowsByParts(ids, e.id) }.orEmpty()
+        private val vectors by lazy { encoder?.let { e -> s.textVectors.ofMany(this.ids, e.id, meaningful) }.orEmpty() }
+        private val windows by lazy { encoder?.let { e -> s.textVectors.windows.windowsOf(this.ids, e.id) }.orEmpty() }
+        private val parts by lazy { s.parts.contentsOf(this.ids) }
+        private val partWindows by lazy {
+            encoder?.let { e -> s.parts.windows.windowsByParts(this.ids, e.id) }.orEmpty()
+        }
+
+        /** Of the texts searched by meaning and of the chapters, what their passages are made of, no vector read. */
+        private val textMarks by lazy {
+            encoder?.let { e -> s.textVectors.marksOf(if (every) null else this.ids, e.id, meaningful) }.orEmpty()
+        }
+        private val partMarks by lazy { s.parts.marks.of(if (every) null else this.ids) }
 
         /** A word in a chapter says the least of what the work is about: its weight the least of the texts'. */
         private val partWeight = schema.texts.minOfOrNull { it.searchWeight } ?: 0f
 
-        /** The document of the item [id] of the [head]. */
-        fun documentOf(id: String, head: StoredItem): SearchDocument {
+        /** Every text of every item, of the keys of the schema: one pass over the table. */
+        private fun everyText(): Map<String, Map<String, String>> {
+            val keys = schema.texts.map { it.key }
+            val out = HashMap<String, Map<String, String>>()
+            if (keys.isNotEmpty()) s.items.forEachTexts(keys) { id, texts -> out[id] = texts }
+            return out
+        }
+
+        /**
+         * The fields of the item [id] of the [head] but its chapters — its title, its facets, its texts — and the
+         * language its description is written in.
+         */
+        private fun ownFields(id: String, head: StoredItem): Pair<List<SearchField>, String?> {
             val own = fields[id].orEmpty()
             val itemFacets = corrected[id].orEmpty()
             val itemTexts = Corrected.texts(texts[id].orEmpty(), own)
@@ -121,12 +186,56 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
                     docFields += SearchField(def.key, def.key, def.searchWeight, listOf(it), counted = true)
                 }
             }
+            return docFields to descriptionLanguage(schema, itemFacets)
+        }
+
+        /** What the document of the item [id] of the [head] is made of ([SearchDocument.fingerprint]). */
+        fun printOf(id: String, head: StoredItem): Long =
+            ownFields(id, head).let { (own, language) -> printOf(id, own, language) }
+
+        /**
+         * What the document of the item [id] is made of: the fields but its chapters ([own]) whole, the [language]; of
+         * its texts searched by meaning and of its chapters, their hashes and how their vectors were made — the same
+         * text and the same vectors make the same passages — and the encoder and the version of how documents are made
+         * ([DOCUMENTS]).
+         */
+        private fun printOf(id: String, own: List<SearchField>, language: String?): Long {
+            val text = StringBuilder()
+            fun put(value: Any?) {
+                text.append(value).append('\u0000')
+            }
+            put(DOCUMENTS)
+            put(encoder?.id)
+            put(language)
+            own.forEach { f ->
+                put(f.key)
+                put(f.name)
+                put(f.group)
+                put(f.weight)
+                put("" + f.list + f.naming + f.counted)
+                // In order: the values of every work read at once come in the table's, those of a few by their places
+                f.values.sorted().forEach(::put)
+            }
+            textMarks[id]?.entries?.sortedBy { it.key }?.forEach { (key, mark) -> put("$key=$mark") }
+            partMarks[id]?.forEach { p ->
+                put(p.partId)
+                put(p.title)
+                put(p.hash)
+                put(if (encoder != null && p.encoder == encoder.id) p.encodedHash else null)
+            }
+            return Vectors.keyOf(text.toString())
+        }
+
+        /** The document of the item [id] of the [head]. */
+        fun documentOf(id: String, head: StoredItem): SearchDocument {
+            val (own, language) = ownFields(id, head)
+            val docFields = ArrayList(own)
             val docPassages = ArrayList<SearchPassage>()
             docFields
                 .filter { it.key in meaningful }
                 .forEach { f -> docPassages += passagesOf(f, vectors[id]?.get(f.key), windows[id]?.get(f.key)) }
             chapters(id, docFields, docPassages)
-            return SearchDocument(ItemKey(s.id, id), docFields, docPassages, descriptionLanguage(schema, itemFacets))
+            return SearchDocument(ItemKey(s.id, id), docFields, docPassages, language, printOf(id, own, language))
         }
 
         /**
@@ -206,6 +315,12 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
     companion object {
         /** The items read and indexed at once: memory, not meaning. */
         private const val CHUNK = 500
+
+        /**
+         * The version of how a document is made of what it is made of, in its fingerprint ([Read.printOf]): a change of
+         * the making makes every document again.
+         */
+        private const val DOCUMENTS = 1
 
         /** The field of the title. */
         const val TITLE = "title"

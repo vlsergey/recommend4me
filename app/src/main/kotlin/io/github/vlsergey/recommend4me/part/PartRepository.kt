@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.part
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
 import io.github.vlsergey.recommend4me.source.PartData
+import io.github.vlsergey.recommend4me.vector.Vectors
 import java.time.Instant
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -29,6 +30,9 @@ class PartRepository(private val db: DSLContext) {
     /** The vector of every paragraph of every part. */
     val paragraphs = ParagraphVectorRepository(db)
 
+    /** What every part is made of, its text not read. */
+    val marks = PartMarks(db)
+
     /**
      * Stores parts, a known one updated; a part named without its text keeps the text it had, and a part whose text
      * changed is encoded again.
@@ -46,6 +50,7 @@ class PartRepository(private val db: DSLContext) {
                     .set(PART.POSITION, if (p.position >= 0) p.position else UNKNOWN_POSITION)
                     .set(PART.TITLE, p.title?.take(TITLE_WIDTH))
                     .set(PART.CONTENT, p.content)
+                    .set(PART.CONTENT_HASH, p.content?.let(Vectors::hash))
                     .set(PART.PUBLISHED_AT, p.publishedAt)
                     .execute()
                 return@forEach
@@ -54,10 +59,12 @@ class PartRepository(private val db: DSLContext) {
             if (p.position >= 0) update = update.set(PART.POSITION, p.position)
             p.title?.let { update = update.set(PART.TITLE, it.take(TITLE_WIDTH)) }
             if (p.publishedAt != null) update = update.set(PART.PUBLISHED_AT, p.publishedAt)
-            if (p.content != null && p.content != known.value1()) {
+            val content = p.content
+            if (content != null && content != known.value1()) {
                 update =
                     update
-                        .set(PART.CONTENT, p.content)
+                        .set(PART.CONTENT, content)
+                        .set(PART.CONTENT_HASH, Vectors.hash(content))
                         .setNull(PART.ENCODER)
                         .setNull(PART.ENCODED_HASH)
                         .setNull(PART.PARAGRAPHS_ENCODER)

@@ -19,6 +19,7 @@ import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PartData
+import io.github.vlsergey.recommend4me.workload.inBackground
 import java.time.Instant
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -431,6 +432,27 @@ class TwoSitesTest : TwoSitesTestBase() {
                     .map { it.key to it.values }
             }",
         )
+    }
+
+    @Test
+    fun `a work's fingerprint read of every work is its document's, made a few works at a time`() {
+        alpha("f1|Prints|print|A keeper of prints||")
+        alpha("f2|Other prints|print|Prints of another kind||")
+        val type = stores.type("books")!!
+        // Of the works as they are now: what the background changes meanwhile is read again
+        var told = ""
+        val alike =
+            waitFor(60) {
+                inBackground {
+                    val read = searchDocuments.printsOf(type)
+                    val keys = read.prints.keys.filter { it.source == "alpha" }
+                    val made =
+                        searchDocuments.documentsOf(type, keys, read.chances).associate { it.key to it.fingerprint }
+                    told = "read ${keys.associateWith { read.prints[it] }}, made $made"
+                    keys.isNotEmpty() && made == keys.associateWith { read.prints[it] }
+                }
+            }
+        assertTrue(alike, told)
     }
 
     @Test
