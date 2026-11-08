@@ -36,11 +36,11 @@ private constructor(
     private val cublasSaxpy: MethodHandle,
     private val cublasSscal: MethodHandle,
     private val cudaMemset: MethodHandle,
-    private val handle: MemorySegment,
+    internal val handle: MemorySegment,
     /** The folder of the libraries, and the runtime's own: what the kernels of [kernels] are compiled and loaded by. */
     private val dir: Path,
     private val runtime: SymbolLookup,
-    private val blas: SymbolLookup,
+    internal val blas: SymbolLookup,
 ) {
     /**
      * HELD BY WHOEVER WORKS ON THE CARD, for as long as the work: one thread at a time on its one handle and its
@@ -53,13 +53,13 @@ private constructor(
      * The scalars a call hands over and takes back — α, β, a dot's result: one place for them, made once; one thread at
      * a time.
      */
-    private val scalars: MemorySegment = Arena.global().allocate(ValueLayout.JAVA_FLOAT, 4)
+    internal val scalars: MemorySegment = Arena.global().allocate(ValueLayout.JAVA_FLOAT, 4)
 
     /** Where a call reads α of a product, or the c of an axpy or of a scaling: the first of [scalars]. */
-    private val alphaAt: MemorySegment = scalars.asSlice(0, Float.SIZE_BYTES.toLong())
+    internal val alphaAt: MemorySegment = scalars.asSlice(0, Float.SIZE_BYTES.toLong())
 
     /** Where a product reads β: the second of [scalars]. */
-    private val betaAt: MemorySegment = scalars.asSlice(Float.SIZE_BYTES.toLong(), Float.SIZE_BYTES.toLong())
+    internal val betaAt: MemorySegment = scalars.asSlice(Float.SIZE_BYTES.toLong(), Float.SIZE_BYTES.toLong())
 
     /** Where a dot writes its result: the third of [scalars]. */
     private val resultAt: MemorySegment = scalars.asSlice(2L * Float.SIZE_BYTES, Float.SIZE_BYTES.toLong())
@@ -343,70 +343,8 @@ private constructor(
         check(status == 0) { "a product on the card failed: cuBLAS status $status" }
     }
 
-    private val cublasGemmEx: MethodHandle by lazy {
-        val int = ValueLayout.JAVA_INT
-        val address = ValueLayout.ADDRESS
-        Linker.nativeLinker()
-            .downcallHandle(
-                blas.find("cublasGemmEx").orElseThrow(),
-                FunctionDescriptor.of(
-                    int,
-                    *arrayOf(address, int, int, int, int, int, address, address, int, int, address, int, int) +
-                        arrayOf(address, address, int, int, int, int),
-                ),
-            )
-    }
-
-    /**
-     * [gemm] of matrices of brain floating point ([a] and [b]: two bytes a number, their offsets [aAt] and [bAt] in
-     * numbers), [c] single precision, summed in single precision — by the card's tensor cores, where the single
-     * precision's products are its cores' alone.
-     */
-    fun gemmHalves(
-        transA: Boolean,
-        transB: Boolean,
-        m: Int,
-        n: Int,
-        k: Int,
-        a: DeviceBytes,
-        aAt: Long,
-        lda: Int,
-        b: DeviceBytes,
-        bAt: Long,
-        ldb: Int,
-        c: DeviceFloats,
-        cAt: Long,
-        ldc: Int,
-        beta: Float = 0f,
-        alpha: Float = 1f,
-    ) {
-        if (m == 0 || n == 0) return
-        scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 0, alpha)
-        scalars.setAtIndex(ValueLayout.JAVA_FLOAT, 1, beta)
-        val status =
-            cublasGemmEx.invokeWithArguments(
-                handle,
-                if (transB) OP_T else OP_N,
-                if (transA) OP_T else OP_N,
-                n,
-                m,
-                k,
-                alphaAt,
-                b.at(bAt * HALF_BYTES),
-                BF16,
-                ldb,
-                a.at(aAt * HALF_BYTES),
-                BF16,
-                lda,
-                betaAt,
-                c.at(cAt),
-                FLOAT,
-                ldc,
-                COMPUTE_FLOAT,
-                GEMM_DEFAULT,
-            ) as Int
-        check(status == 0) { "a product of halves on the card failed: cuBLAS status $status" }
-    }
+    /** The products of brain floating point on the tensor cores ([HalfProducts]), through this handle. */
+    val halves: HalfProducts by lazy { HalfProducts(this) }
 
     /** `Σ a[aAt + q] · b[bAt + q]` for q under [n], on the card; the sum brought back. */
     fun dot(a: DeviceFloats, aAt: Long, b: DeviceFloats, bAt: Long, n: Int): Float {
@@ -430,21 +368,11 @@ private constructor(
     }
 
     companion object {
-        private const val OP_N = 0
-        private const val OP_T = 1
+        internal const val OP_N = 0
+        internal const val OP_T = 1
         private const val HOST_TO_DEVICE = 1
         private const val DEVICE_TO_HOST = 2
         private const val DEVICE_TO_DEVICE = 3
-
-        // The types and the way of cublasGemmEx: brain floating point in, single precision out and summed, the
-        // library's own choice of the algorithm (CUDA_R_16BF, CUDA_R_32F, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT)
-        private const val BF16 = 14
-        private const val FLOAT = 0
-        private const val COMPUTE_FLOAT = 68
-        private const val GEMM_DEFAULT = -1
-
-        /** The bytes of a number of brain floating point. */
-        private const val HALF_BYTES = 2L
 
         private var opened: Cublas? = null
         private var tried = false

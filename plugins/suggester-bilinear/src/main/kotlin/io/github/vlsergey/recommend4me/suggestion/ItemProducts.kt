@@ -123,7 +123,7 @@ internal class ItemProducts(
         p.x.blocks.forEachIndexed { k, b ->
             val rows = c.blocks[k]
             runs(c, rows) { from, many ->
-                c.cublas.gemmHalves(
+                c.cublas.halves.gemm(
                     false,
                     true,
                     kr,
@@ -193,7 +193,7 @@ internal class ItemProducts(
                 c.halves.part,
             )
             runs(c, rows) { from, many ->
-                c.cublas.gemmHalves(
+                c.cublas.halves.gemm(
                     false,
                     false,
                     kr,
