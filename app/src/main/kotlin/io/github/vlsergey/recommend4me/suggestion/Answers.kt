@@ -10,9 +10,8 @@ import io.github.vlsergey.recommend4me.source.SourceStore
  * three times a facet.
  */
 internal class Answers(val byItem: Map<String, List<FacetCorrection>>, val complete: Map<String, Set<String>>) {
-    /** Every answer, one work after another. */
-    val all: List<FacetCorrection>
-        get() = byItem.values.flatten()
+    /** Every answer, one work after another: made once, the dictionaries of several facets reading it. */
+    val all: List<FacetCorrection> by lazy { byItem.values.flatten() }
 
     companion object {
         /** Of the works [ids] — of every work when null — read now. */

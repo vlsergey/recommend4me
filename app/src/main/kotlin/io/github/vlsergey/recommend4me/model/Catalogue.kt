@@ -221,12 +221,13 @@ class CatalogueReader(
         val vectors = HashMap(read)
         val merged = HashMap<ItemKey, CatalogueItem>()
         val itemOf = items.associateBy { it.key }
-        clusters.linkedWorks().forEach { members ->
-            val own = members.mapNotNull(itemOf::get)
+        val linked = clusters.linkedWorks().filter { it.first() in itemOf }
+        // The sets of every work of several items read at once, not a reading a work
+        val sets = setVectors.ofWorks(type, linked)
+        linked.forEachIndexed { w, members ->
             val name = members.first()
-            if (name !in itemOf) return@forEach
-            merged[name] = WorkFeatures.item(name, own)
-            val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + setVectors.ofWork(type, members)
+            merged[name] = WorkFeatures.item(name, members.mapNotNull(itemOf::get))
+            val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + sets[w]
             members.forEach(vectors::remove)
             vectors[name] = joined
         }

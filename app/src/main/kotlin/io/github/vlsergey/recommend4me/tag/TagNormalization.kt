@@ -105,8 +105,14 @@ class TagNormalization(private val stores: Stores) {
                 .associate { (s, f) -> s.id to keysOf(s, f).filter { SiteTagRef(s.id, it) !in bound } }
                 .filterValues { it.isNotEmpty() }
         val synonyms = sites.associate { (s, f) -> s.id to s.items.facetSynonyms(f) }
-        if (fresh.isEmpty() && synonyms.values.all { of -> of.isEmpty() }) return 0
-        val binding = Binding(scope, bound, sites.associate { (s, f) -> s.id to s.names(f) }, synonyms)
+        // With no tag new, a synonym is bound only of a tag bound before and itself not yet: none such, nothing to do
+        val synonymsLeft = synonyms.any { (source, of) ->
+            of.any { (synonym, key) -> SiteTagRef(source, synonym) !in bound && SiteTagRef(source, key) in bound }
+        }
+        if (fresh.isEmpty() && !synonymsLeft) return 0
+        // The names of the sites' tags read only for the tags new: a synonym is bound by its tag, not by a name
+        val names = if (fresh.isEmpty()) emptyMap() else sites.associate { (s, f) -> s.id to s.names(f) }
+        val binding = Binding(scope, bound, names, synonyms)
         val made = binding.fresh(fresh) + binding.synonyms()
         if (made > 0) log.info("{} tags of the sites bound to normalized tags", made)
         return made
@@ -124,15 +130,15 @@ class TagNormalization(private val stores: Stores) {
     ) {
         private val now = Instant.now()
 
-        /** The normalized tags every name is bound to, of every site. */
-        private val byName = HashMap<String, MutableSet<Long>>()
-        private val boundNow = HashMap<SiteTagRef, Long>()
-
-        init {
-            bound.forEach { (ref, id) ->
-                byName.getOrPut(LayerValues.keyOf(namesOf[ref.source]?.get(ref.tag) ?: ref.tag)) { HashSet() } += id
+        /** The normalized tags every name is bound to, of every site: made at the first tag new, of none else. */
+        private val byName: HashMap<String, MutableSet<Long>> by lazy {
+            HashMap<String, MutableSet<Long>>().also { out ->
+                bound.forEach { (ref, id) ->
+                    out.getOrPut(LayerValues.keyOf(namesOf[ref.source]?.get(ref.tag) ?: ref.tag)) { HashSet() } += id
+                }
             }
         }
+        private val boundNow = HashMap<SiteTagRef, Long>()
 
         private fun idOf(ref: SiteTagRef) = bound[ref] ?: boundNow[ref]
 

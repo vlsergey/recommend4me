@@ -22,6 +22,22 @@ internal class ParagraphMarks(input: TokenStream, private val text: String) : To
     private var held: AttributeSource.State? = null
     private var lastEnd = -1
 
+    /**
+     * The first line break at or after [searchedFrom] (-1: none): looked for again only once a word ends past it, not
+     * at every word — a long line without one was read to its end a word.
+     */
+    private var nextBreak = -1
+    private var searchedFrom = Int.MAX_VALUE
+
+    /** The first line break at or after [from], -1 when none. */
+    private fun breakFrom(from: Int): Int {
+        if (from < searchedFrom || nextBreak in 0 until from) {
+            nextBreak = text.indexOf('\n', from)
+            searchedFrom = from
+        }
+        return nextBreak
+    }
+
     override fun incrementToken(): Boolean {
         val word = held
         return when {
@@ -51,7 +67,7 @@ internal class ParagraphMarks(input: TokenStream, private val text: String) : To
      */
     private fun markedOrPassed() {
         val start = offset.startOffset()
-        val begins = lastEnd < 0 || text.indexOf('\n', lastEnd).let { it in lastEnd until start }
+        val begins = lastEnd < 0 || breakFrom(lastEnd).let { it in lastEnd until start }
         if (!begins) {
             lastEnd = offset.endOffset()
             return
@@ -68,6 +84,8 @@ internal class ParagraphMarks(input: TokenStream, private val text: String) : To
         super.reset()
         held = null
         lastEnd = -1
+        nextBreak = -1
+        searchedFrom = Int.MAX_VALUE
     }
 
     companion object {

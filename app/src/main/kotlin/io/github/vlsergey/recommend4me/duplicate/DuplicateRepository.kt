@@ -64,24 +64,7 @@ class DuplicateRepository(private val db: DSLContext) {
     fun replace(candidates: Collection<DuplicateCandidate>, search: DuplicateSearch) = db.transaction { c ->
         val tx = c.dsl()
         tx.deleteFrom(DUPLICATE_CANDIDATE).execute()
-        candidates.chunked(BATCH).forEach { chunk ->
-            tx.batch(
-                    chunk.map { d ->
-                        tx.insertInto(DUPLICATE_CANDIDATE)
-                            .set(DUPLICATE_CANDIDATE.SOURCE, d.first.source)
-                            .set(DUPLICATE_CANDIDATE.ITEM_ID, d.first.id)
-                            .set(DUPLICATE_CANDIDATE.OTHER_SOURCE, d.second.source)
-                            .set(DUPLICATE_CANDIDATE.OTHER_ITEM_ID, d.second.id)
-                            .set(DUPLICATE_CANDIDATE.TITLE, d.title)
-                            .set(DUPLICATE_CANDIDATE.DESCRIPTION, d.description)
-                            .set(DUPLICATE_CANDIDATE.SIZE, d.size)
-                            .set(DUPLICATE_CANDIDATE.FACETS, d.facets.takeIf { it.isNotEmpty() }?.let(::written))
-                            .set(DUPLICATE_CANDIDATE.FOUND_FOR, d.foundFor.toByte())
-                            .set(DUPLICATE_CANDIDATE.SAME_AUTHOR, d.sameAuthor)
-                    }
-                )
-                .execute()
-        }
+        keep(tx, candidates)
         tx.deleteFrom(DUPLICATE_SEARCH).execute()
         tx.insertInto(DUPLICATE_SEARCH)
             .set(DUPLICATE_SEARCH.ID, 1)
@@ -94,6 +77,58 @@ class DuplicateRepository(private val db: DSLContext) {
             .set(DUPLICATE_SEARCH.FITTED_AT, search.fittedAt)
             .set(DUPLICATE_SEARCH.FIT_MILLIS, search.fitMillis)
             .execute()
+    }
+
+    /**
+     * The [candidates] written by [tx], one statement prepared and bound a row each: half a million statements of their
+     * own, each parsed by the database apart, were most of a search's half a minute of keeping.
+     */
+    private fun keep(tx: DSLContext, candidates: Collection<DuplicateCandidate>) {
+        candidates.chunked(BATCH).forEach { chunk ->
+            val batch =
+                tx.batch(
+                    tx.insertInto(
+                            DUPLICATE_CANDIDATE,
+                            DUPLICATE_CANDIDATE.SOURCE,
+                            DUPLICATE_CANDIDATE.ITEM_ID,
+                            DUPLICATE_CANDIDATE.OTHER_SOURCE,
+                            DUPLICATE_CANDIDATE.OTHER_ITEM_ID,
+                            DUPLICATE_CANDIDATE.TITLE,
+                            DUPLICATE_CANDIDATE.DESCRIPTION,
+                            DUPLICATE_CANDIDATE.SIZE,
+                            DUPLICATE_CANDIDATE.FACETS,
+                            DUPLICATE_CANDIDATE.FOUND_FOR,
+                            DUPLICATE_CANDIDATE.SAME_AUTHOR,
+                        )
+                        .values(
+                            null as String?,
+                            null as String?,
+                            null as String?,
+                            null as String?,
+                            null as Float?,
+                            null as Float?,
+                            null as Float?,
+                            null as String?,
+                            null as Byte?,
+                            null as Boolean?,
+                        )
+                )
+            chunk.forEach { d ->
+                batch.bind(
+                    d.first.source,
+                    d.first.id,
+                    d.second.source,
+                    d.second.id,
+                    d.title,
+                    d.description,
+                    d.size,
+                    d.facets.takeIf { it.isNotEmpty() }?.let(::written),
+                    d.foundFor.toByte(),
+                    d.sameAuthor,
+                )
+            }
+            batch.execute()
+        }
     }
 
     /**
@@ -126,8 +161,14 @@ class DuplicateRepository(private val db: DSLContext) {
             )
         }
 
-    /** Every candidate: of some hundred thousand, read for one request and let go. */
-    fun all(): List<DuplicateCandidate> =
+    /**
+     * Every candidate: of some hundred thousand, read for one request and let go — streamed, not held twice as rows and
+     * as candidates. The few names of the sources and of the facets' families one string each, not a copy a pair.
+     */
+    fun all(): List<DuplicateCandidate> {
+        val out = ArrayList<DuplicateCandidate>()
+        val names = HashMap<String, String>()
+        val one = { s: String -> names.getOrPut(s) { s } }
         db.select(
                 DUPLICATE_CANDIDATE.SOURCE,
                 DUPLICATE_CANDIDATE.ITEM_ID,
@@ -142,25 +183,44 @@ class DuplicateRepository(private val db: DSLContext) {
             )
             .from(DUPLICATE_CANDIDATE)
             .fetchSize(FETCH)
-            .fetch { r ->
-                DuplicateCandidate(
-                    ItemKey(r.value1()!!, r.value2()!!),
-                    ItemKey(r.value3()!!, r.value4()!!),
-                    r.value5()!!,
-                    r.value6(),
-                    r.value7(),
-                    r.value8()?.let(::read)?.mapValues { (_, v) -> v.toFloat() }.orEmpty(),
-                    r.value9()!!.toInt(),
-                    r.value10()!!,
-                )
+            .fetchLazy()
+            .use { cursor ->
+                cursor.forEach { r ->
+                    out +=
+                        DuplicateCandidate(
+                            ItemKey(one(r.value1()!!), r.value2()!!),
+                            ItemKey(one(r.value3()!!), r.value4()!!),
+                            r.value5()!!,
+                            r.value6(),
+                            r.value7(),
+                            r.value8()?.let { numbers(it, one) }.orEmpty(),
+                            r.value9()!!.toInt(),
+                            r.value10()!!,
+                        )
+                }
             }
+        return out
+    }
 
     /** Numbers by name as kept: "<name>=<number>" a line. */
     private fun written(numbers: Map<String, Number>): String =
         numbers.entries.joinToString("\n") { (name, v) -> "$name=$v" }
 
-    private fun read(text: String): Map<String, String> =
-        text.lines().filter { '=' in it }.associate { it.substringBeforeLast('=') to it.substringAfterLast('=') }
+    /**
+     * The numbers by name of a [text] [written]: a line's name before its last '=', a line of none passed over; each
+     * name as [one] gives it.
+     */
+    private fun numbers(text: String, one: (String) -> String): Map<String, Float> {
+        val out = LinkedHashMap<String, Float>()
+        var from = 0
+        while (from <= text.length) {
+            val end = text.indexOf('\n', from).takeIf { it >= 0 } ?: text.length
+            val eq = text.lastIndexOf('=', end - 1)
+            if (eq >= from) out[one(text.substring(from, eq))] = text.substring(eq + 1, end).toFloat()
+            from = end + 1
+        }
+        return out
+    }
 
     companion object {
         private const val BATCH = 1000

@@ -26,21 +26,24 @@ class SearchScoreRepository(private val db: DSLContext) {
         if (scores.isEmpty()) return
         db.transaction { c ->
             val tx = c.dsl()
-            tx.batch(
-                    scores.map { (key, s) ->
-                        tx.insertInto(SEARCH_SCORE)
-                            .set(SEARCH_SCORE.RERANKER, reranker)
-                            .set(SEARCH_SCORE.QUERY, query)
-                            .set(SEARCH_SCORE.SOURCE, key.source)
-                            .set(SEARCH_SCORE.ITEM_ID, key.id)
-                            .set(SEARCH_SCORE.TEXTS_HASH, s.textsHash)
-                            .set(SEARCH_SCORE.SCORE, s.score)
-                            .onDuplicateKeyUpdate()
-                            .set(SEARCH_SCORE.TEXTS_HASH, s.textsHash)
-                            .set(SEARCH_SCORE.SCORE, s.score)
-                    }
+            // One statement prepared and bound a row each, not each row's statement parsed apart
+            val fields =
+                listOf(
+                    SEARCH_SCORE.RERANKER,
+                    SEARCH_SCORE.QUERY,
+                    SEARCH_SCORE.SOURCE,
+                    SEARCH_SCORE.ITEM_ID,
+                    SEARCH_SCORE.TEXTS_HASH,
+                    SEARCH_SCORE.SCORE,
                 )
-                .execute()
+            val batch =
+                tx.batch(
+                    tx.mergeInto(SEARCH_SCORE, fields)
+                        .key(SEARCH_SCORE.RERANKER, SEARCH_SCORE.QUERY, SEARCH_SCORE.SOURCE, SEARCH_SCORE.ITEM_ID)
+                        .values(fields.map { null })
+                )
+            scores.forEach { (key, s) -> batch.bind(reranker, query, key.source, key.id, s.textsHash, s.score) }
+            batch.execute()
         }
     }
 

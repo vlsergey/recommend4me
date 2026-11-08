@@ -87,8 +87,7 @@ internal class SearchSide(
             ratios: Map<Long, Double>,
         ): SearchSide? {
             val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-            val ids =
-                s.textVectors.keys().filter { it.second == TextVectors.TITLE }.map { it.first }.distinct().sorted()
+            val ids = s.textVectors.itemsWith(TextVectors.TITLE)
             if (ids.isEmpty()) return null
             val at = ids.withIndex().associate { it.value to it.index }
             var titles: Matrix? = null
@@ -194,7 +193,9 @@ private class WorkValues(private val s: SourceStore) {
         siteLayers(bound)
         drafted()
         answered()
-        ignored.forEach { (facet, keys) -> keys.forEach { k -> own.values.forEach { it -= "${familyOf(facet)}:$k" } } }
+        // The ignored values named once, each work's taken out of it in one pass
+        val gone = ignored.flatMapTo(HashSet()) { (facet, keys) -> keys.map { "${familyOf(facet)}:$it" } }
+        if (gone.isNotEmpty()) own.values.forEach { it.removeAll(gone) }
         standard()
         // The authors as the normalized authors they are: one writer's accounts on two sites one value
         ids.forEachIndexed { i, id -> authors[i].forEach { add(id, AUTHOR_FAMILY, AuthorRepository.key(it)) } }

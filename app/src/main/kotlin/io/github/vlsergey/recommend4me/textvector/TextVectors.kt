@@ -204,8 +204,11 @@ class TextVectors(
         /** The key of the label of the title among the texts: "standard:text.title". */
         val TITLE_LABEL = I18nKeys.qualified(I18nKeys.STANDARD, "text.title")
 
-        /** Texts per encoder call; their windows share batches of the graph. */
-        private const val BATCH = 32
+        /**
+         * Texts per encoder call; their windows share batches of the graph, sorted by length among them: of a few, the
+         * graph's batches ran half full.
+         */
+        private const val BATCH = 128
         private const val DELAY_SECONDS = 5L
 
         /** Its step of the start: after the kept pages are read again (1), before the pictures' vectors (4). */

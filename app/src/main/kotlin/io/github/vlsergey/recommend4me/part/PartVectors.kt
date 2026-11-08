@@ -64,19 +64,35 @@ class PartVectors(
     @Suppress("TooGenericExceptionCaught")
     private fun encodeWaiting() {
         try {
-            workload.run(Work("partVectors"), mapOf("parts" to 1)) { while (!stopping && encodeSome() > 0) continue }
+            workload.run(Work("partVectors"), mapOf("parts" to 1)) {
+                val reached = Reached()
+                while (!stopping && encodeSome(reached) > 0) continue
+            }
         } catch (e: Exception) {
             log.error("parts were not encoded", e)
         }
     }
 
-    /** Encodes a batch of parts of every source, their windows and then their paragraphs; returns how many. */
-    private fun encodeSome(): Int {
+    /**
+     * Of one run, the last part of every source given to encode, of its windows and of its paragraphs: the next batch
+     * looked for past it. A part left unencoded is met again on the next run.
+     */
+    private class Reached {
+        val windows = HashMap<String, Pair<String, String>>()
+        val paragraphs = HashMap<String, Pair<String, String>>()
+    }
+
+    /**
+     * Encodes a batch of parts of every source, their windows and then their paragraphs, from past those [reached];
+     * returns how many.
+     */
+    private fun encodeSome(reached: Reached): Int {
         val encoder = plugins.textEncoder() ?: return 0
         var done = 0
         stores.sources.forEach { s ->
-            val todo = s.parts.windows.toEncode(encoder.id, BATCH)
+            val todo = s.parts.windows.toEncode(encoder.id, BATCH, reached.windows[s.id])
             if (todo.isEmpty()) return@forEach
+            reached.windows[s.id] = todo.last().place
             busy = true
             val windows = encoder.encodeWindows(todo.map { it.content })
             todo.forEachIndexed { i, part ->
@@ -87,20 +103,27 @@ class PartVectors(
             done += todo.size
         }
         stores.sources.forEach { s ->
-            val todo = s.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), BATCH)
+            val todo =
+                s.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), BATCH, reached.paragraphs[s.id])
             if (todo.isEmpty()) return@forEach
+            reached.paragraphs[s.id] = todo.last().place
             busy = true
-            todo.forEach { part ->
-                val texts = Paragraphs.of(part.content)
-                val vectors = texts.chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
+            // The paragraphs of every part of the batch encoded together, then given back to their parts: a chapter's
+            // few dozen alone ran the graph's batches half empty
+            val texts = todo.map { Paragraphs.of(it.content) }
+            val vectors = texts.flatten().chunked(PARAGRAPHS).flatMap { encoder.encode(it) }
+            var from = 0
+            todo.forEachIndexed { i, part ->
+                val own = texts[i]
                 s.parts.paragraphs.saveParagraphVectors(
                     part.itemId,
                     part.partId,
                     Paragraphs.keyOf(encoder.id),
                     part.hash,
-                    vectors,
-                    texts.map(Vectors::hash),
+                    vectors.subList(from, from + own.size),
+                    own.map(Vectors::hash),
                 )
+                from += own.size
             }
             done += todo.size
         }

@@ -3,11 +3,20 @@ package io.github.vlsergey.recommend4me.part
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART_VECTOR
 import io.github.vlsergey.recommend4me.vector.Vectors
+import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
 /** A part whose text is to be encoded: its text and the hash it will be kept with. */
-class PartToEncode(val itemId: String, val partId: String, val content: String, val hash: String)
+class PartToEncode(val itemId: String, val partId: String, val content: String, val hash: String) {
+    /** Where the part stands in the order of the table's key: (item, part). */
+    val place: Pair<String, String>
+        get() = itemId to partId
+}
+
+/** The parts past [after] (item, part) in the order of the table's key; every part when null. */
+internal fun pastPart(after: Pair<String, String>?): Condition =
+    after?.let { (item, part) -> DSL.row(PART.ITEM_ID, PART.PART_ID).gt(item, part) } ?: DSL.noCondition()
 
 /**
  * The vector of every window of every part of one source's works, by an encoder: a long text is a set of vectors rather
@@ -15,12 +24,18 @@ class PartToEncode(val itemId: String, val partId: String, val content: String, 
  */
 class PartVectorRepository(private val db: DSLContext) {
 
-    /** The parts whose text has no vectors by [encoder] yet, at most [limit]. */
-    fun toEncode(encoder: String, limit: Int): List<PartToEncode> =
+    /**
+     * The parts whose text has no vectors by [encoder] yet, at most [limit], in the order of the table's key from past
+     * [after] (item, part; from the first when null): a pass goes on from the last it was given, not from the start of
+     * the table again a batch.
+     */
+    fun toEncode(encoder: String, limit: Int, after: Pair<String, String>? = null): List<PartToEncode> =
         db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
             .from(PART)
             .where(PART.CONTENT.isNotNull)
             .and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder)))
+            .and(pastPart(after))
+            .orderBy(PART.ITEM_ID, PART.PART_ID)
             .limit(limit)
             .fetch { PartToEncode(it.value1()!!, it.value2()!!, it.value3()!!, Vectors.hash(it.value3()!!)) }
 
@@ -32,13 +47,21 @@ class PartVectorRepository(private val db: DSLContext) {
         db.transaction { c ->
             val tx = DSL.using(c)
             tx.deleteFrom(PART_VECTOR).where(PART_VECTOR.ITEM_ID.eq(itemId), PART_VECTOR.PART_ID.eq(partId)).execute()
-            windows.forEachIndexed { i, v ->
-                tx.insertInto(PART_VECTOR)
-                    .set(PART_VECTOR.ITEM_ID, itemId)
-                    .set(PART_VECTOR.PART_ID, partId)
-                    .set(PART_VECTOR.WINDOW_NO, i)
-                    .set(PART_VECTOR.VEC, Vectors.half(v))
-                    .execute()
+            if (windows.isNotEmpty()) {
+                // One statement prepared and bound a window each
+                val batch =
+                    tx.batch(
+                        tx.insertInto(
+                                PART_VECTOR,
+                                PART_VECTOR.ITEM_ID,
+                                PART_VECTOR.PART_ID,
+                                PART_VECTOR.WINDOW_NO,
+                                PART_VECTOR.VEC,
+                            )
+                            .values(null as String?, null as String?, null as Int?, null as ByteArray?)
+                    )
+                windows.forEachIndexed { i, v -> batch.bind(itemId, partId, i, Vectors.half(v)) }
+                batch.execute()
             }
             tx.update(PART)
                 .set(PART.ENCODER, encoder)

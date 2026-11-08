@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.universe.TextsByLanguage.encode
 import io.github.vlsergey.recommend4me.universe.TextsByLanguage.encodeAll
 import java.time.Instant
 import org.jooq.DSLContext
+import org.jooq.Query
 
 /**
  * A UNIVERSE AS ITS CATALOGUE GIVES IT NOW, WRITTEN INTO THE DICTIONARY: its name and every entry replaced by what the
@@ -80,21 +81,32 @@ internal class UniverseFromCatalogue(private val db: DSLContext) {
         t.deleteFrom(UNIVERSE_PROPERTY)
             .where(UNIVERSE_PROPERTY.CATALOGUE.eq(catalogue), UNIVERSE_PROPERTY.UNIVERSE_ID.eq(entry.id))
             .execute()
-        entry.properties
-            .flatMap { (p, values) -> values.distinct().map { p to it } }
-            .chunked(BATCH)
-            .forEach { chunk ->
-                t.batch(
-                        chunk.map { (property, value) ->
-                            t.insertInto(UNIVERSE_PROPERTY)
-                                .set(UNIVERSE_PROPERTY.CATALOGUE, catalogue)
-                                .set(UNIVERSE_PROPERTY.UNIVERSE_ID, entry.id)
-                                .set(UNIVERSE_PROPERTY.PROPERTY, property)
-                                .set(UNIVERSE_PROPERTY.PROPERTY_VALUE, value.take(TEXT_WIDTH))
-                        }
-                    )
-                    .execute()
-            }
+        val fields =
+            listOf(
+                UNIVERSE_PROPERTY.CATALOGUE,
+                UNIVERSE_PROPERTY.UNIVERSE_ID,
+                UNIVERSE_PROPERTY.PROPERTY,
+                UNIVERSE_PROPERTY.PROPERTY_VALUE,
+            )
+        bound(
+            t,
+            t.insertInto(UNIVERSE_PROPERTY, fields).values(fields.map { null }),
+            entry.properties.flatMap { (p, values) ->
+                values.distinct().map { listOf(catalogue, entry.id, p, it.take(TEXT_WIDTH)) }
+            },
+        )
+    }
+
+    /**
+     * The [rows] written by the one [statement], prepared once and bound a row each: not each row's own statement
+     * parsed by the database apart.
+     */
+    private fun bound(t: DSLContext, statement: Query, rows: List<List<Any?>>) {
+        rows.chunked(BATCH).forEach { chunk ->
+            val batch = t.batch(statement)
+            chunk.forEach { batch.bind(*it.toTypedArray()) }
+            batch.execute()
+        }
     }
 
     /**
@@ -110,24 +122,37 @@ internal class UniverseFromCatalogue(private val db: DSLContext) {
         t.deleteFrom(UNIVERSE_CHARACTER)
             .where(UNIVERSE_CHARACTER.CATALOGUE.eq(catalogue), UNIVERSE_CHARACTER.UNIVERSE_ID.eq(universe))
             .execute()
-        characters.chunked(BATCH).forEach { chunk ->
-            t.batch(
-                    chunk.map { c ->
-                        t.insertInto(UNIVERSE_CHARACTER)
-                            .set(UNIVERSE_CHARACTER.CATALOGUE, catalogue)
-                            .set(UNIVERSE_CHARACTER.UNIVERSE_ID, universe)
-                            .set(UNIVERSE_CHARACTER.CHARACTER_ID, c.id)
-                            .set(UNIVERSE_CHARACTER.NAMES, c.names.joinToString("\n"))
-                            .set(UNIVERSE_CHARACTER.DESCRIPTION, c.description?.take(TEXT_WIDTH))
-                            .set(UNIVERSE_CHARACTER.URL, c.url.take(TEXT_WIDTH))
-                            .set(UNIVERSE_CHARACTER.SEX, c.sex?.name)
-                            .set(UNIVERSE_CHARACTER.LABELS, encode(c.labels))
-                            .set(UNIVERSE_CHARACTER.ALIASES, encodeAll(c.aliases))
-                            .set(UNIVERSE_CHARACTER.DESCRIPTIONS, encode(c.descriptions))
-                    }
+        val fields =
+            listOf(
+                UNIVERSE_CHARACTER.CATALOGUE,
+                UNIVERSE_CHARACTER.UNIVERSE_ID,
+                UNIVERSE_CHARACTER.CHARACTER_ID,
+                UNIVERSE_CHARACTER.NAMES,
+                UNIVERSE_CHARACTER.DESCRIPTION,
+                UNIVERSE_CHARACTER.URL,
+                UNIVERSE_CHARACTER.SEX,
+                UNIVERSE_CHARACTER.LABELS,
+                UNIVERSE_CHARACTER.ALIASES,
+                UNIVERSE_CHARACTER.DESCRIPTIONS,
+            )
+        bound(
+            t,
+            t.insertInto(UNIVERSE_CHARACTER, fields).values(fields.map { null }),
+            characters.map { c ->
+                listOf(
+                    catalogue,
+                    universe,
+                    c.id,
+                    c.names.joinToString("\n"),
+                    c.description?.take(TEXT_WIDTH),
+                    c.url.take(TEXT_WIDTH),
+                    c.sex?.name,
+                    encode(c.labels),
+                    encodeAll(c.aliases),
+                    encode(c.descriptions),
                 )
-                .execute()
-        }
+            },
+        )
     }
 
     /** The statements of every entry of the universe [universe]: an entry given twice states them once. */
@@ -137,23 +162,25 @@ internal class UniverseFromCatalogue(private val db: DSLContext) {
         universe: String,
         characters: List<UniverseCharacter>,
     ) {
-        val statements =
+        val fields =
+            listOf(
+                UNIVERSE_CHARACTER_PROPERTY.CATALOGUE,
+                UNIVERSE_CHARACTER_PROPERTY.UNIVERSE_ID,
+                UNIVERSE_CHARACTER_PROPERTY.CHARACTER_ID,
+                UNIVERSE_CHARACTER_PROPERTY.PROPERTY,
+                UNIVERSE_CHARACTER_PROPERTY.PROPERTY_VALUE,
+            )
+        bound(
+            t,
+            t.insertInto(UNIVERSE_CHARACTER_PROPERTY, fields).values(fields.map { null }),
             characters
                 .distinctBy { it.id }
-                .flatMap { c -> c.properties.flatMap { (p, values) -> values.distinct().map { Triple(c.id, p, it) } } }
-        statements.chunked(BATCH).forEach { chunk ->
-            t.batch(
-                    chunk.map { (character, property, value) ->
-                        t.insertInto(UNIVERSE_CHARACTER_PROPERTY)
-                            .set(UNIVERSE_CHARACTER_PROPERTY.CATALOGUE, catalogue)
-                            .set(UNIVERSE_CHARACTER_PROPERTY.UNIVERSE_ID, universe)
-                            .set(UNIVERSE_CHARACTER_PROPERTY.CHARACTER_ID, character)
-                            .set(UNIVERSE_CHARACTER_PROPERTY.PROPERTY, property)
-                            .set(UNIVERSE_CHARACTER_PROPERTY.PROPERTY_VALUE, value.take(TEXT_WIDTH))
+                .flatMap { c ->
+                    c.properties.flatMap { (p, values) ->
+                        values.distinct().map { listOf(catalogue, universe, c.id, p, it.take(TEXT_WIDTH)) }
                     }
-                )
-                .execute()
-        }
+                },
+        )
     }
 
     /** The classes every entry of the universe [universe] is of. */
@@ -163,42 +190,37 @@ internal class UniverseFromCatalogue(private val db: DSLContext) {
         universe: String,
         characters: List<UniverseCharacter>,
     ) {
-        characters
-            .flatMap { c -> c.classes.distinct().map { c.id to it } }
-            .chunked(BATCH)
-            .forEach { chunk ->
-                t.batch(
-                        chunk.map { (character, cls) ->
-                            t.insertInto(UNIVERSE_CHARACTER_CLASS)
-                                .set(UNIVERSE_CHARACTER_CLASS.CATALOGUE, catalogue)
-                                .set(UNIVERSE_CHARACTER_CLASS.UNIVERSE_ID, universe)
-                                .set(UNIVERSE_CHARACTER_CLASS.CHARACTER_ID, character)
-                                .set(UNIVERSE_CHARACTER_CLASS.CLASS_ID, cls)
-                        }
-                    )
-                    .execute()
-            }
+        val fields =
+            listOf(
+                UNIVERSE_CHARACTER_CLASS.CATALOGUE,
+                UNIVERSE_CHARACTER_CLASS.UNIVERSE_ID,
+                UNIVERSE_CHARACTER_CLASS.CHARACTER_ID,
+                UNIVERSE_CHARACTER_CLASS.CLASS_ID,
+            )
+        bound(
+            t,
+            t.insertInto(UNIVERSE_CHARACTER_CLASS, fields).values(fields.map { null }),
+            characters.flatMap { c -> c.classes.distinct().map { listOf(catalogue, universe, c.id, it) } },
+        )
     }
 
     /** The [classes] of the catalogue, named, each with whether its entries are characters: added or refreshed. */
     private fun writeClasses(t: DSLContext, catalogue: String, classes: List<UniverseClass>) {
-        classes.chunked(BATCH).forEach { chunk ->
-            t.batch(
-                    chunk.map { c ->
-                        t.insertInto(UNIVERSE_CLASS)
-                            .set(UNIVERSE_CLASS.CATALOGUE, catalogue)
-                            .set(UNIVERSE_CLASS.CLASS_ID, c.id)
-                            .set(UNIVERSE_CLASS.NAME, c.name.take(NAME_WIDTH))
-                            .set(UNIVERSE_CLASS.IS_CHARACTER, c.character)
-                            .set(UNIVERSE_CLASS.LABELS, encode(c.labels))
-                            .onDuplicateKeyUpdate()
-                            .set(UNIVERSE_CLASS.NAME, c.name.take(NAME_WIDTH))
-                            .set(UNIVERSE_CLASS.IS_CHARACTER, c.character)
-                            .set(UNIVERSE_CLASS.LABELS, encode(c.labels))
-                    }
-                )
-                .execute()
-        }
+        val fields =
+            listOf(
+                UNIVERSE_CLASS.CATALOGUE,
+                UNIVERSE_CLASS.CLASS_ID,
+                UNIVERSE_CLASS.NAME,
+                UNIVERSE_CLASS.IS_CHARACTER,
+                UNIVERSE_CLASS.LABELS,
+            )
+        bound(
+            t,
+            t.mergeInto(UNIVERSE_CLASS, fields)
+                .key(UNIVERSE_CLASS.CATALOGUE, UNIVERSE_CLASS.CLASS_ID)
+                .values(fields.map { null }),
+            classes.map { c -> listOf(catalogue, c.id, c.name.take(NAME_WIDTH), c.character, encode(c.labels)) },
+        )
     }
 
     private companion object {

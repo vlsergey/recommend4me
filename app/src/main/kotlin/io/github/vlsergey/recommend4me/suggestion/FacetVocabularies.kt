@@ -34,7 +34,7 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
         site: Map<String, Map<String, List<String>>>? = null,
     ): Vocabulary? =
         universes.of(store, facet, ids, made, characters, answers, light, site)
-            ?: examplesVocabulary(store, facet, ids, light, site)
+            ?: examplesVocabulary(store, facet, ids, answers, light, site)
 
     /**
      * The values of a facet of the layer learnt from a facet of the sites ([FacetDef.examplesFrom]): every value of
@@ -43,17 +43,20 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
      *
      * Of the works [ids] alone, when given, or [light] — read by the model kept, which knows its values — their
      * examples alone: the values of every source, their names and the user's answers are what a fitting learns from (of
-     * every work of a source, read for nothing, five seconds). [site]: the site's values of those works read already.
+     * every work of a source, read for nothing, five seconds). [site]: the site's values of those works read already;
+     * [answers]: the user's answers, as the operation read them.
      */
     private fun examplesVocabulary(
         store: SourceStore,
         facet: FacetDef,
         ids: Collection<String>?,
+        answers: Answers,
         light: Boolean = false,
         site: Map<String, Map<String, List<String>>>? = null,
     ): Vocabulary? {
         val from = store.schema.facets.firstOrNull { it.key == facet.examplesFrom } ?: return null
-        return if (ids != null || light) worksExamples(store, from, ids, site) else everyExample(store, facet, from)
+        return if (ids != null || light) worksExamples(store, from, ids, site)
+        else everyExample(store, facet, from, answers, site)
     }
 
     /**
@@ -83,17 +86,27 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
      *
      * A value the site lacks says little of the work: authors leave out most tags that fit. How little, the user's
      * answers tell — of the values the site did not give a work, the share the user rejected rather than confirmed, by
-     * the rule of succession: as much as a lacking value weighs as a value the work has not.
+     * the rule of succession: as much as a lacking value weighs as a value the work has not. [answers] and [site] (when
+     * given) of every work, as the operation read them: not read again.
      */
-    private fun everyExample(store: SourceStore, facet: FacetDef, from: FacetDef): Vocabulary {
-        val values = tagsOf(store, from)
-        val bound = store.tags.bindingsOf(store.id)
+    private fun everyExample(
+        store: SourceStore,
+        facet: FacetDef,
+        from: FacetDef,
+        answers: Answers,
+        site: Map<String, Map<String, List<String>>>?,
+    ): Vocabulary {
+        val bindings = store.tags.bindings()
+        val values = tagsOf(store, from, bindings)
+        val bound = HashMap<String, Long>()
+        bindings.forEach { (ref, tag) -> if (ref.source == store.id) bound[ref.tag] = tag }
         val own = HashMap<String, List<String>>()
-        store.items.forEachFacet(from.key) { id, keys ->
+        fun put(id: String, keys: List<String>) {
             own[id] = keys.mapNotNull { bound[it]?.let(TagRepository::key) }.distinct()
         }
-        val answered =
-            store.corrections.allFacets().filter { it.facet == facet.key && it.key !in own[it.itemId].orEmpty() }
+        if (site != null) site.forEach { (id, facets) -> facets[from.key]?.let { put(id, it) } }
+        else store.items.forEachFacet(from.key, ::put)
+        val answered = answers.all.filter { it.facet == facet.key && it.key !in own[it.itemId].orEmpty() }
         val denied = answered.count { !it.added }
         return Vocabulary(
             values,
@@ -105,10 +118,9 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
 
     /**
      * Every normalized tag a site's tag of the type is bound to, of every source of the type, with its name: a tag is
-     * read by its name as the user and the sites name it ([TagRepository]).
+     * read by its name as the user and the sites name it ([TagRepository]). [bindings]: every site's tag bound, read.
      */
-    private fun tagsOf(store: SourceStore, from: FacetDef): Map<String, String> {
-        val bindings = store.tags.bindings()
+    private fun tagsOf(store: SourceStore, from: FacetDef, bindings: Map<SiteTagRef, Long>): Map<String, String> {
         val values = HashMap<String, String>()
         stores.typeOf(store.id).sources.forEach { s ->
             val theirs =
@@ -120,7 +132,8 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
                 }
             }
         }
-        store.tags.stats.shown(values.keys).forEach { (key, name) -> values[key] = name }
+        // Every tag's name read whole: of tens of thousands, not a thousand at a time
+        store.tags.stats.shown(null).forEach { (key, name) -> if (key in values) values[key] = name }
         return values
     }
 }

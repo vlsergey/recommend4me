@@ -126,13 +126,17 @@ class SearchIndex(
         if (keys.isEmpty()) return
         // The works taken here are this update's own: another update is of others
         workload.run(updating(type.id), reasons, joinAlike = false) {
-            val docs = HashMap<ItemKey, SearchDocument>()
+            // A chunk at a time: the chapters and the vectors of thousands of works — a refit's, a new encoder's — are
+            // not held at once
             keys
                 .groupBy { it.source }
                 .forEach { (source, list) ->
-                    stores.source(source)?.let { docs += documents.documents(it, list.map { k -> k.id }) }
+                    list.chunked(CHUNK).forEach { chunk ->
+                        val docs: Map<ItemKey, SearchDocument> =
+                            stores.source(source)?.let { documents.documents(it, chunk.map { k -> k.id }) }.orEmpty()
+                        provider.update(type.id, docs.values.toList(), chunk.filter { it !in docs })
+                    }
                 }
-            provider.update(type.id, docs.values.toList(), keys.filter { it !in docs })
         }
     }
 
@@ -148,5 +152,8 @@ class SearchIndex(
          * times as it grows.
          */
         const val UPDATE_QUIET_MS = 2000L
+
+        /** The works indexed again at a time: memory, not meaning. */
+        const val CHUNK = 500
     }
 }

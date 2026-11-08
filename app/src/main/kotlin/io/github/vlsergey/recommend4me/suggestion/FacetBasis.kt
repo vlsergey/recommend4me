@@ -1,9 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
-import io.github.vlsergey.recommend4me.encoder.TextEncoder
-import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.universe.LayerDraft
 import io.github.vlsergey.recommend4me.vector.Vectors
 
@@ -55,25 +52,24 @@ internal object FacetBasis {
      * The fingerprint of the whole [facet] of every work of [read]. The values chosen from ([values]) and their groups
      * ([grouped]) are part of what is learnt: a universe added or removed, a sex learnt of a character, fits again.
      * What is kept of the chances is part of it too: a new rule of what to keep makes them again. And the names the
-     * values go by ([hintNames]): an alias added to the dictionary is a new text to learn from. [learnt]: the values
-     * each work learns from. [cast]: how the site's line of characters and pairings was read
+     * values go by ([hintNames]): an alias added to the dictionary is a new text to learn from. [cast]: how the site's
+     * line of characters and pairings was read
      * ([TaskCast.signature][io.github.vlsergey.recommend4me.cast.TaskCast.signature]), null of a facet that reads none.
+     * What every facet's basis reads alike is made once for the pass ([WorksRead.bases]).
      */
     fun of(
-        store: SourceStore,
         facet: String,
-        encoder: TextEncoder,
         read: WorksRead,
         values: List<String>,
         grouped: List<ValueGrouping>,
         hintNames: Map<String, List<String>>,
-        learnt: Map<String, Map<String, List<String>>>,
         cast: String?,
     ): Long {
         val ids = read.ids
-        val fingerprints = fingerprints(store, encoder, read)
+        val bases = read.bases
+        val fingerprints = bases.fingerprints
         return Vectors.keyOf(
-            ids.indices.sortedBy { ids[it] }.joinToString(",") { "${ids[it]}:${fingerprints[it]}" } +
+            bases.order.joinToString(",") { "${ids[it]}:${fingerprints[it]}" } +
                 "\u0002" +
                 values.joinToString("\u0001") +
                 "\u0002" +
@@ -90,67 +86,29 @@ internal object FacetBasis {
                 ) +
                 // The tags under others: a tag put under another is learnt again
                 "\u0002" +
-                (store.hierarchies()[facet]?.signature() ?: "") +
+                (read.hierarchies[facet]?.signature() ?: "") +
                 "\u0002" +
-                otherFacets(store, facet, read, learnt) +
+                otherFacets(facet, read) +
                 // Only of a facet that reads the line: the bases of the others stay as they were
                 (cast?.let { "\u0002cast=$it" } ?: "")
         )
-    }
-
-    /** Every work's [fingerprint], in the order of the works of [read]. */
-    private fun fingerprints(store: SourceStore, encoder: TextEncoder, read: WorksRead): LongArray {
-        val ids = read.ids
-        val hashes = HashMap<String, MutableList<String>>()
-        store.textVectors.hashes(encoder.id).forEach { (k, hash) -> hashes.getOrPut(k.first) { ArrayList() } += hash }
-        val windowCounts = store.parts.windows.windowCounts(encoder.id)
-        return LongArray(ids.size) { i ->
-            val id = ids[i]
-            fingerprint(
-                read.site[id].orEmpty(),
-                read.corrections[id].orEmpty(),
-                hashes[id].orEmpty(),
-                windowCounts[id] ?: 0,
-                read.complete[id].orEmpty(),
-                read.drafts[id].orEmpty(),
-            )
-        }
     }
 
     /**
      * The fingerprint of the other facets' values as the site and the user give them: one of them changed is learnt
      * from again. NOT WHAT THE MODEL GAVE of the other facets: each refit of one changes what the next reads, the
      * circle never settles, and every start would fit every facet again for nothing new. The model's values are read as
-     * they are when the chances are made.
+     * they are when the chances are made. The values the facet learns from besides the site's (the examples, the
+     * drafts) are of the facet itself, left out here: the other facets are the site's and the user's alone.
      */
-    private fun otherFacets(
-        store: SourceStore,
-        facet: String,
-        read: WorksRead,
-        learnt: Map<String, Map<String, List<String>>>,
-    ): Long {
+    private fun otherFacets(facet: String, read: WorksRead): Long {
         val ids = read.ids
-        val schema = store.schema
-        val hierarchies = store.hierarchies()
-        val facets = schema.facets.map { it.key }.toSet()
+        val bases = read.bases
+        val facets = bases.facets
         return Vectors.keyOf(
-            ids.indices
-                .sortedBy { ids[it] }
-                .joinToString(",") { i ->
-                    val id = ids[i]
-                    id +
-                        ":" +
-                        TagHierarchy.corrected(
-                                ModelValues.of(schema, learnt[id].orEmpty(), null),
-                                read.corrections[id].orEmpty(),
-                                hierarchies,
-                                store.singleFacets,
-                            )
-                            .filterKeys { it != facet && it in facets }
-                            .entries
-                            .sortedBy { it.key }
-                            .joinToString(";") { (f, keys) -> f + "=" + keys.sorted().joinToString("+") }
-                }
+            bases.order.joinToString(",") { i ->
+                ids[i] + ":" + facets[i].filter { it.first != facet }.joinToString(";") { it.second }
+            }
         )
     }
 }

@@ -64,19 +64,22 @@ data class Chance(
  */
 class SuggestionRepository(private val db: DSLContext, private val source: String) {
 
-    fun suggester(facet: String): StoredSuggester? =
-        db.selectFrom(FACET_SUGGESTER)
-            .where(FACET_SUGGESTER.SOURCE.eq(source), FACET_SUGGESTER.FACET.eq(facet))
-            .fetchOne()
-            ?.let {
+    /** The facet's suggester as fitted: its columns alone, not its scoring and its report read for nothing. */
+    fun suggester(facet: String): StoredSuggester? {
+        val s = FACET_SUGGESTER
+        return db.select(s.SUGGESTER, s.FITTED_AT, s.BASIS, s.CONTENT, s.VALUE_KEYS)
+            .from(s)
+            .where(s.SOURCE.eq(source), s.FACET.eq(facet))
+            .fetchOne {
                 StoredSuggester(
-                    it.suggester!!,
-                    it.fittedAt!!,
-                    it.basis!!,
-                    it.content!!,
-                    it.valueKeys?.split(LINE)?.filter { k -> k.isNotEmpty() }.orEmpty(),
+                    it.value1()!!,
+                    it.value2()!!,
+                    it.value3()!!,
+                    it.value4()!!,
+                    it.value5()?.split(LINE)?.filter { k -> k.isNotEmpty() }.orEmpty(),
                 )
             }
+    }
 
     fun saveSuggester(
         facet: String,
@@ -242,23 +245,25 @@ class ValueNameRepository(private val db: DSLContext) {
      */
     @Synchronized
     fun save(facet: String, encoder: String, rows: List<Triple<String, String, FloatArray>>) {
+        // One statement prepared and bound a row each, not each row's statement — its vector inlined — parsed apart
         rows.chunked(BATCH).forEach { chunk ->
-            db.batch(
-                    chunk.map { (key, hash, vector) ->
-                        val packed = Vectors.half(vector)
-                        db.insertInto(FACET_VALUE_VECTOR)
-                            .set(FACET_VALUE_VECTOR.FACET, facet)
-                            .set(FACET_VALUE_VECTOR.VALUE_KEY, key.take(KEY_LENGTH))
-                            .set(FACET_VALUE_VECTOR.ENCODER, encoder)
-                            .set(FACET_VALUE_VECTOR.NAME_HASH, hash)
-                            .set(FACET_VALUE_VECTOR.VEC, packed)
-                            .onDuplicateKeyUpdate()
-                            .set(FACET_VALUE_VECTOR.ENCODER, encoder)
-                            .set(FACET_VALUE_VECTOR.NAME_HASH, hash)
-                            .set(FACET_VALUE_VECTOR.VEC, packed)
-                    }
+            val batch =
+                db.batch(
+                    db.mergeInto(
+                            FACET_VALUE_VECTOR,
+                            FACET_VALUE_VECTOR.FACET,
+                            FACET_VALUE_VECTOR.VALUE_KEY,
+                            FACET_VALUE_VECTOR.ENCODER,
+                            FACET_VALUE_VECTOR.NAME_HASH,
+                            FACET_VALUE_VECTOR.VEC,
+                        )
+                        .key(FACET_VALUE_VECTOR.FACET, FACET_VALUE_VECTOR.VALUE_KEY)
+                        .values(null as String?, null as String?, null as String?, null as String?, null as ByteArray?)
                 )
-                .execute()
+            chunk.forEach { (key, hash, vector) ->
+                batch.bind(facet, key.take(KEY_LENGTH), encoder, hash, Vectors.half(vector))
+            }
+            batch.execute()
         }
     }
 }

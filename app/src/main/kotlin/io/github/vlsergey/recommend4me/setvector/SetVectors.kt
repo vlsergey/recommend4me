@@ -93,23 +93,27 @@ class SetVectors(
      * use: the reviews of one work on two sites are one set. A review not encoded yet is encoded now: for a
      * computation, not a request.
      */
-    fun ofWork(type: TypeStore, items: List<ItemKey>): Map<String, FloatArray> {
-        val bySource = items.groupBy({ it.source }, { it.id })
-        return SetKind.entries
-            .mapNotNull { kind ->
-                val encoder = sets.encoderOf(kind)
-                val embedding = encoder?.let { e -> type.embeddings.find(kind)?.takeIf { it.encoder == e } }
-                embedding?.let { used ->
-                    val all = bySource.flatMap { (source, ids) ->
-                        type
-                            .source(source)
-                            ?.let { s -> sets.members(s, kind, used.encoder, ids).values.flatten() }
-                            .orEmpty()
-                    }
-                    used.embedding.of(all)?.let { kind.key to it }
-                }
+    fun ofWork(type: TypeStore, items: List<ItemKey>): Map<String, FloatArray> = ofWorks(type, listOf(items)).single()
+
+    /**
+     * [ofWork] of every work of [works] (each its items), the members of all of them read at once: a source's and a
+     * kind's in one reading, not a reading a work.
+     */
+    fun ofWorks(type: TypeStore, works: List<List<ItemKey>>): List<Map<String, FloatArray>> {
+        val bySource = works.flatten().groupBy({ it.source }, { it.id }).mapValues { it.value.distinct() }
+        val out = List(works.size) { HashMap<String, FloatArray>() }
+        SetKind.entries.forEach { kind ->
+            val encoder = sets.encoderOf(kind)
+            val used = encoder?.let { e -> type.embeddings.find(kind)?.takeIf { it.encoder == e } } ?: return@forEach
+            val members = bySource.mapValues { (source, ids) ->
+                type.source(source)?.let { s -> sets.members(s, kind, used.encoder, ids) }.orEmpty()
             }
-            .toMap()
+            works.forEachIndexed { w, items ->
+                val all = items.flatMap { members[it.source]?.get(it.id).orEmpty() }
+                used.embedding.of(all)?.let { out[w][kind.key] = it }
+            }
+        }
+        return out
     }
 
     /** Fits the missing directions of a type, then makes the vectors of every item whose set grew. */
@@ -125,22 +129,26 @@ class SetVectors(
      * fitted first when missing; true when the worker is stopping, the pass to end.
      */
     private fun refreshKind(type: TypeStore, kind: SetKind, pass: Pass): Boolean {
-        val encoder = sets.encoderOf(kind)
-        val embedding = encoder?.let { directions.inUse(type, kind, it) }
-        return encoder != null &&
-            embedding != null &&
-            type.sources.any { s -> refreshSource(s, kind, encoder, embedding, pass) && stopping }
+        val encoder = sets.encoderOf(kind) ?: return false
+        // The sizes of the sets read once, for the directions and for what grew alike: of the chapters, a join of
+        // every window's row
+        val sizes = type.sources.associateWith { sets.sizes(it, kind, encoder) }
+        val embedding = directions.inUse(type, kind, encoder, sizes)
+        return embedding != null &&
+            type.sources.any { s -> refreshSource(s, kind, embedding, sizes[s].orEmpty(), pass) && stopping }
     }
 
-    /** The vectors of the sets of [kind] made of every item of [s] whose set grew; whether there was any. */
+    /**
+     * The vectors of the sets of [kind] made of every item of [s] whose set grew — of the size [have] — whether there
+     * was any.
+     */
     private fun refreshSource(
         s: SourceStore,
         kind: SetKind,
-        encoder: String,
         embedding: StoredEmbedding,
+        have: Map<String, Int>,
         pass: Pass,
     ): Boolean {
-        val have = sets.sizes(s, kind, encoder)
         val stored = if (have.isEmpty()) emptyMap() else s.setVectors.sources(kind, embedding.id)
         val todoSet = have.filter { (id, n) -> n > 0 && stored[id] != n }.keys
         if (todoSet.isEmpty()) return false

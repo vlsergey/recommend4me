@@ -75,8 +75,8 @@ class LayerDrafts(
             return
         }
         val lookup = DictionaryLookup.load(stores.typeOf(store.id).universes)
-        val facets = HashMap<String, Map<String, List<String>>>()
-        event.ids.chunked(BATCH).forEach { facets += store.items.facetsOf(it) }
+        // Of many works one streamed pass, not a thousand at a time: each IN of a thousand is a scan in H2
+        val facets = store.items.facetsOf(event.ids)
         // The names of the values as written, of every facet of the works at once
         val keys = HashMap<String, HashSet<String>>()
         facets.values.forEach { of -> of.forEach { (facet, values) -> keys.getOrPut(facet) { HashSet() } += values } }
@@ -231,8 +231,6 @@ class LayerDrafts(
 
     companion object {
         val DRAFTING = Work("layerDrafts")
-
-        private const val BATCH = 1000
 
         /**
          * The place of the drafting among the listeners of a change of works: after the sites' tags are bound

@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import kotlin.math.abs
 import kotlin.math.exp
 
 /**
@@ -156,9 +155,6 @@ internal class Logistic(val weights: Map<String, Double>?) : FittedPairModel {
         /** The feature of whether both have the layer: "<layer>?". */
         fun has(feature: String) = "$feature?"
 
-        /** How far the weights are held to nought: the user's few answers do not swing them wide. */
-        private const val PENALTY = 1.0
-
         private const val STEPS = 50
 
         /** The features of a pair by their names: the constant, every layer both have and that they have it. */
@@ -198,97 +194,24 @@ internal class Logistic(val weights: Map<String, Double>?) : FittedPairModel {
             if (yes == 0) return null
             val no = said.count { it == false }
             val lack = (no + 1.0) / (yes + no + 2.0)
-            val names =
-                (listOf(CONSTANT, TITLE, DESCRIPTION, has(DESCRIPTION), SIZE, has(SIZE), SAME_AUTHOR) +
-                    pairs.flatMap { it.facets.keys }.distinct().sorted().flatMap { listOf(facet(it), has(facet(it))) })
-            val at = names.withIndex().associate { it.value to it.index }
-            val count = names.size
-            // Every pair's features as the places and the values of those it has
-            val places = ArrayList<IntArray>(pairs.size)
-            val values = ArrayList<DoubleArray>(pairs.size)
-            pairs.forEach { c ->
-                val own = features(c)
-                places += IntArray(own.size)
-                values += DoubleArray(own.size)
-                own.entries.forEachIndexed { k, (name, x) ->
-                    places.last()[k] = at.getValue(name)
-                    values.last()[k] = x
+            val rows = PairRows.of(pairs)
+            val words =
+                ByteArray(said.size) {
+                    when (said[it]) {
+                        true -> PairRows.YES
+                        false -> PairRows.NO
+                        null -> PairRows.UNSAID
+                    }
                 }
-            }
-            val w = DoubleArray(count)
+            val w = DoubleArray(rows.names.size)
             var steps = 0
             var moved = Double.POSITIVE_INFINITY
-            while (steps++ < STEPS && moved >= MOVED) moved = step(w, places, values, said, lack)
-            return Logistic(names.indices.associate { names[it] to w[it] })
-        }
-
-        /**
-         * One Newton's step of the weights [w] of the pairs' features ([places], [values]) by the user's [said], a pair
-         * not answered weighing [lack]: how far the weights moved, the most of any.
-         */
-        private fun step(
-            w: DoubleArray,
-            places: List<IntArray>,
-            values: List<DoubleArray>,
-            said: List<Boolean?>,
-            lack: Double,
-        ): Double {
-            val count = w.size
-            val gradient = DoubleArray(count)
-            val hessian = Array(count) { DoubleArray(count) }
-            for (i in places.indices) {
-                val weight = if (said[i] == null) lack else 1.0
-                val y = if (said[i] == true) 1.0 else 0.0
-                val p = places[i]
-                val x = values[i]
-                var z = 0.0
-                for (k in p.indices) z += w[p[k]] * x[k]
-                val chance = sigmoid(z)
-                val r = weight * chance * (1 - chance)
-                for (k in p.indices) {
-                    gradient[p[k]] += weight * (chance - y) * x[k]
-                    for (q in p.indices) hessian[p[k]][p[q]] += r * x[k] * x[q]
-                }
-            }
-            for (k in 1 until count) {
-                gradient[k] += PENALTY * w[k]
-                hessian[k][k] += PENALTY
-            }
-            // A feature no pair has: its weight held where it is
-            for (k in 0 until count) if (hessian[k][k] == 0.0) hessian[k][k] = 1.0
-            val step = solve(hessian, gradient)
-            var moved = 0.0
-            for (k in 0 until count) {
-                w[k] -= step[k]
-                moved = maxOf(moved, abs(step[k]))
-            }
-            return moved
+            while (steps++ < STEPS && moved >= MOVED) moved = rows.step(w, words, lack)
+            return Logistic(rows.names.indices.associate { rows.names[it] to w[it] })
         }
 
         /** A step of the weights small enough for the fitting to end. */
         private const val MOVED = 1e-6
-
-        /** A pivot nearer nought than this leaves its weight where it is. */
-        private const val SINGULAR = 1e-12
-
-        /** The solution of a x = b by Gauss's elimination with the largest pivot: a small system. */
-        private fun solve(a: Array<DoubleArray>, b: DoubleArray): DoubleArray {
-            val n = b.size
-            val m = Array(n) { i -> a[i].copyOf(n + 1).also { it[n] = b[i] } }
-            for (c in 0 until n) {
-                val pivot = (c until n).maxBy { abs(m[it][c]) }
-                val t = m[c]
-                m[c] = m[pivot]
-                m[pivot] = t
-                if (abs(m[c][c]) < SINGULAR) continue
-                for (r in 0 until n) {
-                    if (r == c) continue
-                    val f = m[r][c] / m[c][c]
-                    if (f != 0.0) for (k in c..n) m[r][k] -= f * m[c][k]
-                }
-            }
-            return DoubleArray(n) { if (abs(m[it][it]) < SINGULAR) 0.0 else m[it][n] / m[it][it] }
-        }
 
         /** The weights of [bytes] written by [pack]; null of bytes of no weight. */
         fun read(bytes: ByteArray): Logistic? {

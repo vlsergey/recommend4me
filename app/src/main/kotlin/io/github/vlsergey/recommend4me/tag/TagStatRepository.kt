@@ -101,18 +101,15 @@ class TagStatRepository(private val db: DSLContext) {
                 .filter { (id, s) -> id in alive && stored[id] != (s.name.take(NAME_WIDTH) to s.rule.name) }
                 .chunked(BATCH)
                 .forEach { chunk ->
-                    tx.batch(
-                            chunk.map { (id, s) ->
-                                tx.insertInto(TAG_STAT)
-                                    .set(TAG_STAT.TAG, id)
-                                    .set(TAG_STAT.CALCULATED_NAME, s.name.take(NAME_WIDTH))
-                                    .set(TAG_STAT.CALCULATED_RULE, s.rule.name)
-                                    .onDuplicateKeyUpdate()
-                                    .set(TAG_STAT.CALCULATED_NAME, s.name.take(NAME_WIDTH))
-                                    .set(TAG_STAT.CALCULATED_RULE, s.rule.name)
-                            }
+                    // One statement prepared and bound a row each; a tag's other columns kept as they are
+                    val batch =
+                        tx.batch(
+                            tx.mergeInto(TAG_STAT, TAG_STAT.TAG, TAG_STAT.CALCULATED_NAME, TAG_STAT.CALCULATED_RULE)
+                                .key(TAG_STAT.TAG)
+                                .values(null as Long?, null as String?, null as String?)
                         )
-                        .execute()
+                    chunk.forEach { (id, s) -> batch.bind(id, s.name.take(NAME_WIDTH), s.rule.name) }
+                    batch.execute()
                 }
         }
     }

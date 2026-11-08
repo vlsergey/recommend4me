@@ -1,8 +1,11 @@
 package io.github.vlsergey.recommend4me.agerating
 
+import java.util.stream.IntStream
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
@@ -42,6 +45,9 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
         private const val ITERATIONS = 400
         private const val RATE = 0.05
 
+        /** The works a thread sums the slopes of at a time: work enough a task, not meaning. */
+        private const val CHUNK = 4096
+
         /** The least a threshold rises over the one below it. */
         private const val GAP = 1e-3
 
@@ -64,9 +70,26 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
             val m = DoubleArray(theta.size)
             val v = DoubleArray(theta.size)
             val grad = DoubleArray(theta.size)
+            val chunks = (useful.size + CHUNK - 1) / CHUNK
             for (step in 1..ITERATIONS) {
                 grad.fill(0.0)
-                for (i in useful.indices) addSlope(useful[i], rows[i], theta, n, k, grad)
+                // The works summed in chunks at once, the chunks' slopes added after: the last digits alone
+                IntStream.range(0, chunks)
+                    .parallel()
+                    .mapToObj { c ->
+                        DoubleArray(theta.size).also { part ->
+                            for (i in c * CHUNK until min(useful.size, (c + 1) * CHUNK)) addSlope(
+                                useful[i],
+                                rows[i],
+                                theta,
+                                n,
+                                k,
+                                part,
+                            )
+                        }
+                    }
+                    .toList()
+                    .forEach { part -> for (j in grad.indices) grad[j] += part[j] }
                 for (j in 0 until n) grad[j] += LAMBDA * theta[j]
                 adamStep(theta, grad, m, v, step)
                 // The thresholds kept rising
@@ -100,12 +123,13 @@ class AgeRatingModel(val weights: Map<String, Double>, val thresholds: DoubleArr
 
         /** Adam's step number [step] of [theta] by the slope [grad], [m] and [v] its running means. */
         private fun adamStep(theta: DoubleArray, grad: DoubleArray, m: DoubleArray, v: DoubleArray, step: Int) {
+            // The corrections of the means' start at nought: of the step, the same for every weight
+            val mBias = 1 - DECAY.pow(step)
+            val vBias = 1 - SQUARES_DECAY.pow(step)
             for (j in theta.indices) {
                 m[j] = DECAY * m[j] + NEW * grad[j]
                 v[j] = SQUARES_DECAY * v[j] + NEW_SQUARE * grad[j] * grad[j]
-                val mh = m[j] / (1 - Math.pow(DECAY, step.toDouble()))
-                val vh = v[j] / (1 - Math.pow(SQUARES_DECAY, step.toDouble()))
-                theta[j] -= RATE * mh / (sqrt(vh) + EPSILON)
+                theta[j] -= RATE * (m[j] / mBias) / (sqrt(v[j] / vBias) + EPSILON)
             }
         }
 

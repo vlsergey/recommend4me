@@ -20,6 +20,7 @@ import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.FieldInfos
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
+import org.apache.lucene.index.LeafReader
 import org.apache.lucene.index.Term
 import org.apache.lucene.index.VectorSimilarityFunction
 import org.apache.lucene.search.DocIdSetIterator
@@ -78,8 +79,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         documents.forEach { doc ->
             val id = doc.key.toString()
             seen += id
-            if (kept[id] == fingerprint(doc)) return@forEach
-            lock.withLock { writer.updateDocuments(idTerm(doc.key), documents(doc)) }
+            val fingerprint = fingerprint(doc)
+            if (kept[id] == fingerprint) return@forEach
+            lock.withLock { writer.updateDocuments(idTerm(doc.key), documents(doc, fingerprint)) }
             written++
         }
         lock.withLock {
@@ -150,13 +152,57 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         return count
     }
 
+    /**
+     * The [documents] written, those [removed] taken out. A document of the fingerprint the index keeps is not written
+     * again — a chance or an answer that changed nothing it is made of — save while a rebuild is under way, which may
+     * hold it older. Each written one made once, for the index and the one being built alike.
+     */
     fun update(documents: List<SearchDocument>, removed: Collection<ItemKey>) = lock.withLock {
+        val kept = if (building == null) keptFingerprints(documents.map { it.key.toString() }) else emptyMap()
+        val written = documents.mapNotNull { doc ->
+            val fingerprint = fingerprint(doc)
+            if (kept[doc.key.toString()] == fingerprint) null else doc.key to documents(doc, fingerprint)
+        }
         listOfNotNull(writer, building).forEach { w ->
-            documents.forEach { w.updateDocuments(idTerm(it.key), documents(it)) }
+            written.forEach { (key, docs) -> w.updateDocuments(idTerm(key), docs) }
             removed.forEach { w.deleteDocuments(idTerm(it)) }
         }
-        commit(writer)
-        searchers.maybeRefresh()
+        if (written.isNotEmpty() || removed.isNotEmpty()) {
+            commit(writer)
+            searchers.maybeRefresh()
+        }
+    }
+
+    /**
+     * The fingerprints the index keeps of the items' documents of [ids], by id, as the searcher of the index after its
+     * last change reads them: of the items' documents alone, a passage keeps none.
+     */
+    private fun keptFingerprints(ids: List<String>): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        val searcher = searchers.acquire()
+        try {
+            for (leaf in searcher.indexReader.leaves()) ids.forEach { id ->
+                keptIn(leaf.reader(), id)?.let { out[id] = it }
+            }
+        } finally {
+            searchers.release(searcher)
+        }
+        return out
+    }
+
+    /** The fingerprint the segment [r] keeps of the item's document of [id], null when it has none live. */
+    private fun keptIn(r: LeafReader, id: String): Long? {
+        val docs = r.postings(Term(ID, id)) ?: return null
+        val live = r.liveDocs
+        val stored = r.storedFields()
+        var kept: Long? = null
+        var doc = docs.nextDoc()
+        while (doc != DocIdSetIterator.NO_MORE_DOCS) {
+            if (live == null || live.get(doc))
+                stored.document(doc, KEPT_FIELDS).getField(FINGERPRINT)?.numericValue()?.toLong()?.let { kept = it }
+            doc = docs.nextDoc()
+        }
+        return kept
     }
 
     /** Runs [action] with a searcher of the index as it is now. */
@@ -218,6 +264,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
 
         /** What an item's document was made of ([fingerprint]): written again when it changes. */
         const val FINGERPRINT = "fingerprint"
+
+        /** The stored fields an item's fingerprint is read with. */
+        private val KEPT_FIELDS = setOf(ID, FINGERPRINT)
 
         /**
          * The version of how the documents are made — the fields, the stemming, the marks — kept with every commit: an
@@ -344,8 +393,11 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             )
         }
 
-        /** The documents of an item: of its fields, and of every passage of it with a vector. */
-        private fun documents(doc: SearchDocument): List<Document> {
+        /**
+         * The documents of an item: of its fields, and of every passage of it with a vector; [print] — the item's
+         * [fingerprint], made once by the caller.
+         */
+        private fun documents(doc: SearchDocument, print: Long = fingerprint(doc)): List<Document> {
             val id = doc.key.toString()
             // Every value stemmed as its language: a stream of its own each, of an analyzer that reuses none
             val stemmers = HashMap<String, Analyzer>()
@@ -371,14 +423,17 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
                     }
                     // The languages its texts were stemmed as: what a name looked for in them is read as
                     add(StoredField(LANGUAGES, used.joinToString(",")))
-                    add(StoredField(FINGERPRINT, fingerprint(doc)))
+                    add(StoredField(FINGERPRINT, print))
                 }
+            // Every field's text made once, not a field looked for and its text joined again a passage
+            val texts = HashMap<String, String>()
+            doc.fields.forEach { texts.putIfAbsent(it.key, it.text) }
             val passages =
                 doc.passages.mapNotNull { p ->
                     val vector = p.vector ?: return@mapNotNull null
                     // A piece of no phrase — "-", a changelog of dates — says nothing, and its vector lies
                     // near every query: the same few items were found by meaning whatever was looked for
-                    val text = p.text(doc) ?: return@mapNotNull null
+                    val text = p.within(texts[p.field]) ?: return@mapNotNull null
                     if (Phrases.split(text).isEmpty()) return@mapNotNull null
                     Document().apply {
                         add(StringField(ID, id, Field.Store.YES))

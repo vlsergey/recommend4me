@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.source.TypeStore
+import java.util.stream.IntStream
 
 /**
  * THE SEARCH OF A TYPE'S PAIRS: every site read ([SearchSide]) — every value of the type weighed by how rare it is
@@ -30,15 +31,30 @@ private constructor(private val type: TypeStore, val sides: List<SearchSide>, va
         models: List<FittedPairModel>,
         card: Cublas?,
     ): HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate> {
-        val found = HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate>()
+        // Of every pair in the order kept, the first find of it, and for which of its works it was found: the one it is
+        // the likeliest of the other site of
+        val firsts = LinkedHashMap<Pair<ItemKey, ItemKey>, FoundPair>()
+        val foundFor = HashMap<Pair<ItemKey, ItemKey>, Int>()
         model.search(search, models, card).forEach { f ->
             val sought = key(f.site, f.item)
-            val (first, second) = type.links.ordered(sought, key(f.otherSite, f.other))
-            val candidate =
-                found.getOrPut(first to second) { candidate(first, second, f.site, f.item, f.otherSite, f.other) }
-            // Found for this work: the one it is the likeliest of the other site of
-            candidate.foundFor =
-                candidate.foundFor or (if (sought == first) DuplicateCandidate.FIRST else DuplicateCandidate.SECOND)
+            val pair = type.links.ordered(sought, key(f.otherSite, f.other))
+            firsts.putIfAbsent(pair, f)
+            foundFor.merge(
+                pair,
+                if (sought == pair.first) DuplicateCandidate.FIRST else DuplicateCandidate.SECOND,
+                Int::or,
+            )
+        }
+        // The layers of every pair at once: two products of a thousand numbers each, of half a million pairs
+        val pairs = firsts.entries.toList()
+        val made = arrayOfNulls<DuplicateCandidate>(pairs.size)
+        IntStream.range(0, pairs.size).parallel().forEach { k ->
+            val (pair, f) = pairs[k]
+            made[k] = candidate(pair.first, pair.second, f.site, f.item, f.otherSite, f.other)
+        }
+        val found = HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate>(pairs.size * 2)
+        pairs.forEachIndexed { k, (pair, _) ->
+            found[pair] = made[k]!!.also { it.foundFor = foundFor.getValue(pair) }
         }
         said.keys
             .filter { it !in found }

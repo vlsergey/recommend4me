@@ -18,11 +18,7 @@ private val log = LoggerFactory.getLogger(FacetFitting::class.java)
  * the pass — the context of the facets after it in the chain. One fitting of a facet at a time; a fitting of one facet
  * does not wait for a long fitting of another.
  */
-internal class FacetFitting(
-    private val chain: FacetChain,
-    private val vocabularies: FacetVocabularies,
-    private val passes: WorkPasses,
-) {
+internal class FacetFitting(private val chain: FacetChain, private val vocabularies: FacetVocabularies) {
     /** One lock a facet, by "source/facet". */
     private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
@@ -52,6 +48,9 @@ internal class FacetFitting(
      * the context of the facets after it. [stop] is asked between the stages, and by the fitting between its steps:
      * newer data came, and the work is given up with a [CancellationException] before anything made of the old is kept.
      * Answers the works whose given values a refit changed: every work scored by the model before and after it.
+     *
+     * [works] — every work read once for the whole pass, its inputs on the card: the facet's chances given to its
+     * context ([WorksRead.given]) for the facets after it.
      */
     fun fit(
         store: SourceStore,
@@ -61,11 +60,12 @@ internal class FacetFitting(
         encoder: TextEncoder,
         made: MadeChances,
         stop: () -> Boolean,
+        works: WorksRead,
         anew: Boolean = false,
     ): List<String> =
         lockOf(store, facets[k]).withLock {
-            passes.worksRead(store, encoder, null, card = true).use { works ->
-                fit(store, facets[k], suggester, encoder, made, stop, anew, works)
+            fit(store, facets[k], suggester, encoder, made, stop, anew, works).also {
+                works.given(store, facets[k].key, made)
             }
         }
 

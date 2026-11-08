@@ -54,13 +54,13 @@ class SearchField(
  */
 class SearchPassage(val field: String, val from: Int, val to: Int, val vector: FloatArray? = null) {
     /** The piece's text, of the document it is of. */
-    fun text(doc: SearchDocument): String? =
-        doc.fields
-            .firstOrNull { it.key == field }
-            ?.text
-            ?.let { t ->
-                if (from in 0..to && to <= t.length) t.substring(from, to) else null
-            }
+    fun text(doc: SearchDocument): String? = within(doc.fields.firstOrNull { it.key == field }?.text)
+
+    /**
+     * The piece's text, of the [text][SearchField.text] of its field: of many passages of one document, the field's
+     * text made once for all of them.
+     */
+    fun within(text: String?): String? = text?.takeIf { from in 0..to && to <= it.length }?.substring(from, to)
 }
 
 /**

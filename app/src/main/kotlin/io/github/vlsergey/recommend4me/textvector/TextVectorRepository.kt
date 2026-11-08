@@ -30,20 +30,39 @@ class TextVectorRepository(private val db: DSLContext) {
     val phrases = PhraseVectorRepository(db, writing)
 
     /** The hash of every stored vector of [encoder]: (item, text key) to hash. */
-    fun hashes(encoder: String, itemId: String? = null): Map<Pair<String, String>, String> =
+    fun hashes(encoder: String): Map<Pair<String, String>, String> =
         db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.TEXT_HASH)
             .from(TEXT_VECTOR)
             .where(TEXT_VECTOR.ENCODER.eq(encoder))
-            .and(itemId?.let { TEXT_VECTOR.ITEM_ID.eq(it) } ?: DSL.noCondition())
             .fetch()
             .associate { (it.value1()!! to it.value2()!!) to it.value3()!! }
 
-    /** Every stored (item, text key), of any encoder. */
-    fun keys(itemId: String? = null): Set<Pair<String, String>> =
-        db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY)
+    /**
+     * Every stored text of the items [ids] (every item when null), of any encoder, in one read: (item, text key) to the
+     * hash of its vector by [encoder], null of a vector of another.
+     */
+    fun kept(encoder: String, ids: Collection<String>? = null): Map<Pair<String, String>, String?> {
+        val out = HashMap<Pair<String, String>, String?>()
+        fun read(only: Collection<String>?) =
+            db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.ENCODER, TEXT_VECTOR.TEXT_HASH)
+                .from(TEXT_VECTOR)
+                .where(only?.let { TEXT_VECTOR.ITEM_ID.`in`(it) } ?: DSL.noCondition())
+                .fetch {
+                    out[it.value1()!! to it.value2()!!] = if (it.value3() == encoder) it.value4() else null
+                }
+        if (ids == null) read(null) else ids.distinct().chunked(BATCH).forEach(::read)
+        return out
+    }
+
+    /** The items with a stored vector of the text [key], of any encoder, in the order of their ids. */
+    fun itemsWith(key: String): List<String> =
+        db.selectDistinct(TEXT_VECTOR.ITEM_ID)
             .from(TEXT_VECTOR)
-            .where(itemId?.let { TEXT_VECTOR.ITEM_ID.eq(it) } ?: DSL.noCondition())
-            .fetchSet { it.value1()!! to it.value2()!! }
+            .where(TEXT_VECTOR.TEXT_KEY.eq(key))
+            .fetch {
+                it.value1()!!
+            }
+            .sorted()
 
     /**
      * The text's vector; the windows of the text it had before are of another text, and go
@@ -79,16 +98,28 @@ class TextVectorRepository(private val db: DSLContext) {
     }
 
     /** Vectors of the items [ids] by [encoder]: item to text key to vector. */
-    fun ofMany(ids: Collection<String>, encoder: String): Map<String, Map<String, FloatArray>> =
-        halvesOf(ids, encoder).mapValues { (_, own) -> own.mapValues { Vectors.fromHalf(it.value) } }
+    fun ofMany(
+        ids: Collection<String>,
+        encoder: String,
+        keys: Collection<String>? = null,
+    ): Map<String, Map<String, FloatArray>> =
+        halvesOf(ids, encoder, keys).mapValues { (_, own) -> own.mapValues { Vectors.fromHalf(it.value) } }
 
-    /** [ofMany] as stored: every vector its half-precision numbers, little-endian ([Vectors.fromHalf]). */
-    fun halvesOf(ids: Collection<String>, encoder: String): Map<String, Map<String, ByteArray>> {
+    /**
+     * [ofMany] as stored: every vector its half-precision numbers, little-endian ([Vectors.fromHalf]). [keys]: of those
+     * texts alone, of every text when null.
+     */
+    fun halvesOf(
+        ids: Collection<String>,
+        encoder: String,
+        keys: Collection<String>? = null,
+    ): Map<String, Map<String, ByteArray>> {
         val out = HashMap<String, MutableMap<String, ByteArray>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.VEC)
                 .from(TEXT_VECTOR)
                 .where(TEXT_VECTOR.ITEM_ID.`in`(chunk), TEXT_VECTOR.ENCODER.eq(encoder))
+                .and(keys?.let { TEXT_VECTOR.TEXT_KEY.`in`(it) } ?: DSL.noCondition())
                 .fetch { out.getOrPut(it.value1()!!) { HashMap() }[it.value2()!!] = it.value3()!! }
         }
         return out

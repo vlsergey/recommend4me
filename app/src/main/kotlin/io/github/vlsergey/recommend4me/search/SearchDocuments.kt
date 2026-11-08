@@ -94,15 +94,17 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
                             .filter { it.facet == def.key && it.name != null }
                             .associate { it.key to it.name!! }
             }
+        private val meaningful = schema.texts.filter { it.searchByMeaning }.map { it.key }.toSet()
         private val encoder = plugins.textEncoder()?.takeIf { passages }
-        private val vectors = encoder?.let { e -> s.textVectors.ofMany(ids, e.id) }.orEmpty()
+
+        // The texts a work is found by meaning by alone: the title's vector is read by no passage
+        private val vectors = encoder?.let { e -> s.textVectors.ofMany(ids, e.id, meaningful) }.orEmpty()
         private val windows = encoder?.let { e -> s.textVectors.windows.windowsOf(ids, e.id) }.orEmpty()
         private val parts = s.parts.contentsOf(ids)
         private val partWindows = encoder?.let { e -> s.parts.windows.windowsByParts(ids, e.id) }.orEmpty()
 
         /** A word in a chapter says the least of what the work is about: its weight the least of the texts'. */
         private val partWeight = schema.texts.minOfOrNull { it.searchWeight } ?: 0f
-        private val meaningful = schema.texts.filter { it.searchByMeaning }.map { it.key }.toSet()
 
         /** The document of the item [id] of the [head]. */
         fun documentOf(id: String, head: StoredItem): SearchDocument {

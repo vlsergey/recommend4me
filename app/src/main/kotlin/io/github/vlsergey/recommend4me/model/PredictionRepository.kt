@@ -41,20 +41,18 @@ class PredictionRepository(private val db: DSLContext) {
             val changed = predicted.filter { (key, p) ->
                 stored[key]?.let { (score, interest) -> same(score, p.score) && same(interest, p.interest) } != true
             }
+            // One statement prepared and bound a row each: every row's own statement parsed by the database apart was
+            // seconds of the training when the scores moved
             changed.chunked(BATCH).forEach { chunk ->
-                tx.batch(
-                        chunk.map { (key, p) ->
-                            tx.insertInto(PREDICTION)
-                                .set(PREDICTION.SOURCE, key.source)
-                                .set(PREDICTION.ITEM_ID, key.id)
-                                .set(PREDICTION.SCORE, p.score)
-                                .set(PREDICTION.INTEREST, p.interest)
-                                .onDuplicateKeyUpdate()
-                                .set(PREDICTION.SCORE, p.score)
-                                .set(PREDICTION.INTEREST, p.interest)
-                        }
+                val batch =
+                    tx.batch(
+                        tx.mergeInto(PREDICTION)
+                            .columns(PREDICTION.SOURCE, PREDICTION.ITEM_ID, PREDICTION.SCORE, PREDICTION.INTEREST)
+                            .key(PREDICTION.SOURCE, PREDICTION.ITEM_ID)
+                            .values(null as String?, null as String?, null as Double?, null as Double?)
                     )
-                    .execute()
+                chunk.forEach { (key, p) -> batch.bind(key.source, key.id, p.score, p.interest) }
+                batch.execute()
             }
         }
     }

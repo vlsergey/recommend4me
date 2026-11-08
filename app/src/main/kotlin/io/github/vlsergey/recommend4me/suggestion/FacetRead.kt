@@ -49,7 +49,7 @@ internal class FacetRead(
         val corrections = read.corrections
         laps.lap("works' values")
         // Of a facet of tags, the user's answers with what they say of the tags above and under them
-        val hierarchy = store.hierarchies()[facet.key]
+        val hierarchy = read.hierarchies[facet.key]
         val answers =
             if (hierarchy == null) corrections else corrections.mapValues { hierarchy.expand(facet.key, it.value) }
         val within = hierarchy?.let { mapOf(facet.key to it) }.orEmpty()
@@ -74,7 +74,7 @@ internal class FacetRead(
         laps.lap("inputs", ownInputs.size)
         // The site's line of characters and pairings as the way chosen reads it: its inputs and its columns in place of
         // the line's own
-        val cast = asked.cast?.let { TaskCast.of(it, ids, it.casts(store, ids, site), ownInputs, ownContext.keysOf()) }
+        val cast = asked.cast?.let { TaskCast.of(it, ids, read.casts(store, it), ownInputs, ownContext.keysOf()) }
         val context = cast?.let { TaskContext.ofKeys(it.context, shared = only == null) } ?: ownContext
         val inputs = cast?.inputs ?: ownInputs
         if (cast != null) laps.lap("cast: ${asked.cast.reader.id}", inputs.size)
@@ -88,18 +88,7 @@ internal class FacetRead(
         // The task of some works, or of the scoring kept, tells nothing of what the weights were fitted on
         val basis =
             if (only != null || asked.kept != null) FacetData.NO_BASIS
-            else
-                FacetBasis.of(
-                    store,
-                    facet.key,
-                    encoder,
-                    read,
-                    values,
-                    task.groupings,
-                    asked.hintNames,
-                    learnt,
-                    cast?.signature,
-                )
+            else FacetBasis.of(facet.key, read, values, task.groupings, asked.hintNames, cast?.signature)
         return FacetData(ids, values, task, held, allNamed, basis)
     }
 

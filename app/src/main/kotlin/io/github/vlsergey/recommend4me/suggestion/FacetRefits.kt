@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -41,9 +42,9 @@ internal class FacetRefits(
     private val workload: Workload,
     private val chain: FacetChain,
     vocabularies: FacetVocabularies,
-    passes: WorkPasses,
+    private val passes: WorkPasses,
 ) {
-    private val fitting = FacetFitting(chain, vocabularies, passes)
+    private val fitting = FacetFitting(chain, vocabularies)
 
     private val waiting: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val worker = Executors.newSingleThreadScheduledExecutor { r ->
@@ -140,25 +141,28 @@ internal class FacetRefits(
      * planned for ([changed]); null — those alone.
      *
      * Every facet a work of the queue of its own; the chances of every work of the facets before, made in the pass, are
-     * the context of the next — held for the pass alone. The works whose given values a refit changed are told once at
-     * its end ([FacetChancesChanged]).
+     * the context of the next — held for the pass alone. Every work read once for the pass, its inputs on the card till
+     * its end: the facets read alike, not each facet reading all again. The works whose given values a refit changed
+     * are told once at its end ([FacetChancesChanged]).
      */
     private fun refresh(store: SourceStore, givenUp: Boolean, reasons: Map<String, Int>?) {
         val encoder = plugins.textEncoder() ?: return
         val generation = generationOf(store.id).get()
         val stop = if (givenUp) ({ generationOf(store.id).get() != generation }) else ({ false })
         val facets = chain.facetsOf(store)
-        val made = chain.seeded(store, null)
         val changedIds = LinkedHashSet<String>()
-        facets.forEachIndexed { k, facet ->
-            val work = refreshing(store.id, facet)
-            val planned = workload.take(work)
-            val suggester = plugins.suggester(store.id, facet.key) ?: return@forEachIndexed
-            workload.run(
-                work,
-                reasons.orEmpty().toMutableMap().apply { planned.forEach { (key, n) -> merge(key, n, Int::plus) } },
-            ) {
-                changedIds += fitting.fit(store, facets, k, suggester, encoder, made, stop)
+        passes.worksRead(store, encoder, null, card = true).use { works ->
+            val made = chain.seeded(store, null, works.drafts, EveryItemFacets(works.site, works.corrections))
+            facets.forEachIndexed { k, facet ->
+                val work = refreshing(store.id, facet)
+                val planned = workload.take(work)
+                val suggester = plugins.suggester(store.id, facet.key) ?: return@forEachIndexed
+                workload.run(
+                    work,
+                    reasons.orEmpty().toMutableMap().apply { planned.forEach { (key, n) -> merge(key, n, Int::plus) } },
+                ) {
+                    changedIds += fitting.fit(store, facets, k, suggester, encoder, made, stop, works)
+                }
             }
         }
         if (changedIds.isNotEmpty()) events.publishEvent(FacetChancesChanged(store.id, changedIds.toList()))
@@ -192,16 +196,11 @@ internal class FacetRefits(
             val suggester = plugins.suggester(store.id, facet.key) ?: return
             val changedIds =
                 workload.run(Work("suggesterAnew", source = store.id, facet = facet.key), mapOf("asked" to 1), true) {
-                    fitting.fit(
-                        store,
-                        facets,
-                        k,
-                        suggester,
-                        encoder,
-                        chain.chain(store, null, k),
-                        { false },
-                        anew = true,
-                    )
+                    // The context and the fitting of one reading of every work
+                    passes.worksRead(store, encoder, null, card = true).use { works ->
+                        val made = chain.chain(store, encoder, works, k)
+                        fitting.fit(store, facets, k, suggester, encoder, made, { false }, works, anew = true)
+                    }
                 }
             if (changedIds.isNotEmpty()) events.publishEvent(FacetChancesChanged(store.id, changedIds))
         } catch (e: Exception) {

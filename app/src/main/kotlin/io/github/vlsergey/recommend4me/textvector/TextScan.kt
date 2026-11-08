@@ -15,11 +15,8 @@ class TextToEncode(val itemId: String, val key: String, val text: String, val ha
  */
 class TextScan(private val store: SourceStore, private val only: Collection<String>?, encoder: String) {
     private val keys = store.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
-    private val stored =
-        if (only == null) store.textVectors.hashes(encoder)
-        else only.flatMap { store.textVectors.hashes(encoder, it).entries }.associate { it.toPair() }
-    private val known =
-        if (only == null) store.textVectors.keys() else only.flatMap { store.textVectors.keys(it) }.toSet()
+    /** Every text kept of the items, of any encoder, to the hash of its vector by the encoder: one read. */
+    private val stored = store.textVectors.kept(encoder, only)
     private val fields = if (only == null) store.corrections.allFields() else store.corrections.fieldsOf(only)
 
     /** The title of every item, as the user corrected it: a text the models read like any other. */
@@ -59,6 +56,6 @@ class TextScan(private val store: SourceStore, private val only: Collection<Stri
         }
     }
 
-    /** The texts whose vectors are kept and that are no more: item and key. */
-    fun gone(): List<Pair<String, String>> = known.filter { it !in present && (only == null || it.first in only) }
+    /** The texts whose vectors are kept and that are no more: item and key — of the items read alone. */
+    fun gone(): List<Pair<String, String>> = stored.keys.filter { it !in present }
 }

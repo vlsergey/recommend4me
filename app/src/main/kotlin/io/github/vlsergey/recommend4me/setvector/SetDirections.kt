@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.setvector
 
+import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
@@ -24,8 +25,14 @@ class SetDirections(private val members: SetMembers, private val workload: Workl
      * then every item's set is made again by them. None while the catalogue has fewer than two members: one has no
      * spread to find a direction in.
      */
-    fun inUse(type: TypeStore, kind: SetKind, encoder: String): StoredEmbedding? {
-        val have = type.sources.associateWith { s -> members.sizes(s, kind, encoder).values.sum() }
+    fun inUse(
+        type: TypeStore,
+        kind: SetKind,
+        encoder: String,
+        /** Of every source of the type, the size of every item's set ([SetMembers.sizes]), read by the caller. */
+        sizes: Map<SourceStore, Map<String, Int>> = type.sources.associateWith { members.sizes(it, kind, encoder) },
+    ): StoredEmbedding? {
+        val have = type.sources.associateWith { s -> sizes[s].orEmpty().values.sum() }
         val total = have.values.sum()
         val count = minOf(total, SAMPLE)
         val stored = type.embeddings.find(kind)?.takeIf { it.encoder == encoder }

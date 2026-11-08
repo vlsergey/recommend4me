@@ -64,17 +64,23 @@ class DraftRepository(private val db: DSLContext, private val source: String) {
             }
             .chunked(BATCH)
             .forEach { chunk ->
-                t.batch(
-                        chunk.map { (id, d) ->
-                            t.insertInto(LAYER_DRAFT)
-                                .set(LAYER_DRAFT.SOURCE, source)
-                                .set(LAYER_DRAFT.ITEM_ID, id)
-                                .set(LAYER_DRAFT.FACET, d.facet)
-                                .set(LAYER_DRAFT.VALUE_KEY, d.key.take(KEY_WIDTH))
-                                .set(LAYER_DRAFT.SITE_VALUE, d.from.take(SITE_VALUE_WIDTH))
-                        }
+                // One statement prepared and bound a row each, not each row's statement parsed apart
+                val batch =
+                    t.batch(
+                        t.insertInto(
+                                LAYER_DRAFT,
+                                LAYER_DRAFT.SOURCE,
+                                LAYER_DRAFT.ITEM_ID,
+                                LAYER_DRAFT.FACET,
+                                LAYER_DRAFT.VALUE_KEY,
+                                LAYER_DRAFT.SITE_VALUE,
+                            )
+                            .values(null as String?, null as String?, null as String?, null as String?, null as String?)
                     )
-                    .execute()
+                chunk.forEach { (id, d) ->
+                    batch.bind(source, id, d.facet, d.key.take(KEY_WIDTH), d.from.take(SITE_VALUE_WIDTH))
+                }
+                batch.execute()
             }
     }
 

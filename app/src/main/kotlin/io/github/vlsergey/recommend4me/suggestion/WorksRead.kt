@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.cast.CastAsked
+import io.github.vlsergey.recommend4me.cast.SaidCast
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
@@ -64,6 +66,22 @@ internal class WorksRead(
     private val inputsRead = lazy { inputs(store, ids, encoder, imageEncoder, sets, only, card) }
     val inputs: List<InputBlock> by inputsRead
 
+    /** The tags under others of every facet of tags, read once for every facet of the pass. */
+    val hierarchies: Map<String, TagHierarchy> by lazy { store.hierarchies() }
+
+    /** What the bases of the facets of the pass read alike ([FacetBasis.of]). */
+    val bases: WorkBases by lazy { WorkBases(store, encoder, this) }
+
+    /** What the line of each work says, by the source's facet of its entries: read at the first facet that reads it. */
+    private val saidCasts = HashMap<String, List<SaidCast>>()
+
+    /**
+     * What the line of each work of the pass says ([CastAsked.casts]): read once for the characters, the secondary
+     * characters and the pairings alike.
+     */
+    fun casts(store: SourceStore, asked: CastAsked): List<SaidCast> =
+        saidCasts.getOrPut(asked.entries) { asked.casts(store, ids, site) }
+
     /** The inputs on the card freed: the pass is over, and nothing of it reads them after. */
     override fun close() {
         if (inputsRead.isInitialized()) inputs.forEach { it.onCard?.close() }
@@ -114,7 +132,6 @@ internal class WorksRead(
             return it
         }
         val schema = store.schema
-        val hierarchies = store.hierarchies()
         val places = schema.facets.withIndex().associate { (k, f) -> f.key to k }
         val of = arrayOfNulls<Array<IntArray?>>(ids.size)
         // Every work's values made side by side on every core; numbered after, a work after another, as they were
@@ -152,7 +169,6 @@ internal class WorksRead(
         check(modelled === contextOf) { "${store.id}: the context of a pass given other chances than it was made of" }
         val place = made.places[facet] ?: return
         val schema = store.schema
-        val hierarchies = store.hierarchies()
         // Every work's values of it made side by side on every core; numbered after, a work after another, as they were
         val keysOf = arrayOfNulls<List<String>>(ids.size)
         IntStream.range(0, ids.size).parallel().forEach { i ->

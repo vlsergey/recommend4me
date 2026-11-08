@@ -12,12 +12,17 @@ class Paragraph(val partId: String, val number: Int, val vector: FloatArray, val
 /** The vector of every paragraph of every part of one source's works ([Paragraphs]), by an encoder. */
 class ParagraphVectorRepository(private val db: DSLContext) {
 
-    /** The parts whose paragraphs have no vectors by [encoder] yet, at most [limit]. */
-    fun paragraphsToEncode(encoder: String, limit: Int): List<PartToEncode> =
+    /**
+     * The parts whose paragraphs have no vectors by [encoder] yet, at most [limit], from past [after] in the order of
+     * the table's key ([PartVectorRepository.toEncode]).
+     */
+    fun paragraphsToEncode(encoder: String, limit: Int, after: Pair<String, String>? = null): List<PartToEncode> =
         db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
             .from(PART)
             .where(PART.CONTENT.isNotNull)
             .and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)))
+            .and(pastPart(after))
+            .orderBy(PART.ITEM_ID, PART.PART_ID)
             .limit(limit)
             .fetch { PartToEncode(it.value1()!!, it.value2()!!, it.value3()!!, Vectors.hash(it.value3()!!)) }
 
@@ -44,15 +49,24 @@ class ParagraphVectorRepository(private val db: DSLContext) {
             tx.deleteFrom(PART_PARAGRAPH_VECTOR)
                 .where(PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId), PART_PARAGRAPH_VECTOR.PART_ID.eq(partId))
                 .execute()
-            paragraphs.forEachIndexed { i, v ->
-                if (v == null) return@forEachIndexed
-                tx.insertInto(PART_PARAGRAPH_VECTOR)
-                    .set(PART_PARAGRAPH_VECTOR.ITEM_ID, itemId)
-                    .set(PART_PARAGRAPH_VECTOR.PART_ID, partId)
-                    .set(PART_PARAGRAPH_VECTOR.PARAGRAPH_NO, i)
-                    .set(PART_PARAGRAPH_VECTOR.VEC, Vectors.half(v))
-                    .set(PART_PARAGRAPH_VECTOR.TEXT_HASH, hashes[i])
-                    .execute()
+            if (paragraphs.any { it != null }) {
+                // One statement prepared and bound a paragraph each
+                val batch =
+                    tx.batch(
+                        tx.insertInto(
+                                PART_PARAGRAPH_VECTOR,
+                                PART_PARAGRAPH_VECTOR.ITEM_ID,
+                                PART_PARAGRAPH_VECTOR.PART_ID,
+                                PART_PARAGRAPH_VECTOR.PARAGRAPH_NO,
+                                PART_PARAGRAPH_VECTOR.VEC,
+                                PART_PARAGRAPH_VECTOR.TEXT_HASH,
+                            )
+                            .values(null as String?, null as String?, null as Int?, null as ByteArray?, null as String?)
+                    )
+                paragraphs.forEachIndexed { i, v ->
+                    if (v != null) batch.bind(itemId, partId, i, Vectors.half(v), hashes[i])
+                }
+                batch.execute()
             }
             tx.update(PART)
                 .set(PART.PARAGRAPHS_ENCODER, encoder)

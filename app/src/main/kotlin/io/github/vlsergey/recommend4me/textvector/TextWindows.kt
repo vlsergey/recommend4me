@@ -51,9 +51,11 @@ class TextWindows(
         val keys = store.schema.texts.filter { it.block != null || it.searchByMeaning }.map { it.key }
         var done = 0
         val started = System.currentTimeMillis()
+        var last: Pair<String, String>? = null
         while (!cancelled()) {
-            val todo = store.textVectors.windows.withoutWindows(encoder.id, keys + TITLE, BATCH)
+            val todo = store.textVectors.windows.withoutWindows(encoder.id, keys + TITLE, BATCH, last)
             if (todo.isEmpty()) break
+            last = todo.last()
             val ids = todo.map { it.first }.distinct()
             val fields = store.corrections.fieldsOf(ids)
             val site = store.items.textsOf(ids, keys)
@@ -77,7 +79,10 @@ class TextWindows(
     }
 
     private companion object {
-        /** Texts per encoder call; their windows share batches of the graph. */
-        const val BATCH = 32
+        /**
+         * Texts per encoder call; their windows share batches of the graph, sorted by length among them: of a few, the
+         * graph's batches ran half full.
+         */
+        const val BATCH = 128
     }
 }
