@@ -55,6 +55,8 @@
   "PairJournal.undoHint": "Vratiti paru ono što je imao pre ovog odgovora: {{word}}",
   "PairJournal.undone": "poništeno",
   "PairRow.chanceHint": "Verovatnoća da je ovo jedno delo: po modelu vaših odgovora (pre prvog „jedno delo” — prosečna sličnost slojeva)",
+  "PairRow.derived": "po ciklusu",
+  "PairRow.derivedHint": "Ovaj par nema svoju oznaku: oba rada su u istom ciklusu preko drugih parova „Isti ciklus”. Vredi kao označen. „Različiti” ili uklanjanje odgovora isključuju oba rada iz ciklusa",
   "PairRow.description": "opisi {{value}}",
   "PairRow.different": "Različita",
   "PairRow.differentHint": "To su različita dela: veza, ako je bila, uklanja se, par se više ne nudi",

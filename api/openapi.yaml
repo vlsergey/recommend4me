@@ -5212,6 +5212,9 @@ components:
           type: string
           enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
           description: The user's word - one work (linked), different, one the translation of the other, one a part of the other, or two works of one series; none when not answered
+        derived:
+          type: boolean
+          description: Of the answer SERIES, not said of this pair but by a chain of words "one series" its works are joined by - weighing as one said; "different" or the taking back on it takes both works out of the series, as on a pair said so
 
     AuthorOfferPage:
       type: object

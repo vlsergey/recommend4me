@@ -28,22 +28,33 @@ enum class DuplicateAnswer {
 }
 
 /**
+ * The user's word on every pair, the smaller key first ([words]), and of them the pairs of one series by a chain of
+ * words "one series" ([derived], [io.github.vlsergey.recommend4me.correction.PairWords.inSeries]): weighing as one
+ * said, told apart only to be shown so.
+ */
+class Said(private val words: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>, val derived: Set<Pair<ItemKey, ItemKey>>) :
+    Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> by words
+
+/**
  * THE USER'S WORD ON EVERY PAIR of works across the sites of a type, read anew at every asking: a word is on the two
- * normalized works, of every pair of their items alike.
+ * normalized works, of every pair of their items alike; two works of one series by a chain of words are of one series
+ * as if said so.
  */
 @Component
 class PairAnswers(private val works: Works) {
 
     /**
      * The user's word on every pair across the sites, the smaller key first: one work (linked, by any way), different,
-     * related.
+     * related — one series by the chain too.
      */
-    fun said(type: TypeStore): Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> {
+    fun said(type: TypeStore): Said {
         val out = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
         type.links.distincts().forEach { out[it] = DuplicateAnswer.DIFFERENT }
         type.links.relations().forEach { (pair, kind) ->
             runCatching { DuplicateAnswer.valueOf(kind) }.getOrNull()?.takeIf { it.related }?.let { out[pair] = it }
         }
+        val derived = type.links.inSeries().filter { it !in out }.toSet()
+        derived.forEach { out[it] = DuplicateAnswer.SERIES }
         works.of(type).linkedWorks().forEach { members ->
             members.forEachIndexed { k, a ->
                 members
@@ -52,6 +63,6 @@ class PairAnswers(private val works: Works) {
                     .forEach { b -> out[type.links.ordered(a, b)] = DuplicateAnswer.SAME }
             }
         }
-        return out
+        return Said(out, derived)
     }
 }

@@ -37,7 +37,7 @@ class DuplicateViews(private val sizes: WorkSizes) {
     /** The pairs as the user is shown them: a pair of a work no longer there, none. */
     internal fun pairs(
         type: TypeStore,
-        said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+        said: Said,
         rows: List<Ranked>,
     ): List<DuplicatePair> {
         val labels = familyLabels(type)
@@ -70,6 +70,7 @@ class DuplicateViews(private val sizes: WorkSizes) {
                         },
                 sameAuthor = kin.share(first.authors, second.authors),
                 answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
+                derived = (r.pair in said.derived).takeIf { it },
             )
         }
     }

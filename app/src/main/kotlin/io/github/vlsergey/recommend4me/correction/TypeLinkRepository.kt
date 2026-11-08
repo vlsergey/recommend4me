@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.correction
 
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.work.WorkPairJournal
+import io.github.vlsergey.recommend4me.work.WorkRelations
 import io.github.vlsergey.recommend4me.work.WorkRepository
 import java.time.Instant
 
@@ -47,8 +48,14 @@ class TypeLinkRepository(
         return true
     }
 
-    /** The two items said to be different works; [b] taken out of a work holding both. */
-    fun distinct(a: ItemKey, b: ItemKey, now: Instant) = say(a, b, DIFFERENT, now)
+    /**
+     * The two items said to be different works; [b] taken out of a work holding both. Of two works of one series, by
+     * their own word or by the chain, both taken out of it first ([partSeries]).
+     */
+    fun distinct(a: ItemKey, b: ItemKey, now: Instant) {
+        partSeries(a, b, now)
+        say(a, b, DIFFERENT, now)
+    }
 
     /**
      * The two items said to be related works of the [kind] — one the translation of the other, one a part of the other
@@ -63,11 +70,49 @@ class TypeLinkRepository(
         journal.write(a, b, kind, before, now)
     }
 
-    /** The word on the works of the two taken back. */
+    /**
+     * The word on the works of the two taken back: of two works of one series, by their own word or by the chain, both
+     * taken out of it ([partSeries]). Nothing of two works with no word.
+     */
     fun takeBack(a: ItemKey, b: ItemKey, now: Instant) {
-        val before = word(a, b, now)
+        if (partSeries(a, b, now)) return
+        val before = word(a, b, now) ?: return
         works.relations.takeBack(works.of(a, now), works.of(b, now))
         journal.write(a, b, null, before, now)
+    }
+
+    /**
+     * Of two works of one series — the word said of them, or none and a chain of words "one series" joining them — both
+     * taken out of it: every word "one series" of either taken back, each in the journal — of the two, as pressed; of
+     * another, by an item of each work. False of two works not of one series, nothing taken back.
+     */
+    private fun partSeries(a: ItemKey, b: ItemKey, now: Instant): Boolean {
+        val x = works.of(a, now)
+        val y = works.of(b, now)
+        val words = works.relations.words()
+        if (!oneSeries(x, y, words)) return false
+        val gone = words.filter { (pair, kind) -> kind == SERIES && (x in pair.toList() || y in pair.toList()) }.keys
+        val items = works.itemsOf(gone.flatMap { it.toList() }, sources)
+        gone.forEach { (first, second) ->
+            works.relations.takeBack(first, second)
+            if (WorkRelations.pair(x, y) == first to second) journal.write(a, b, null, SERIES, now)
+            else {
+                val i = items[first]?.firstOrNull()
+                val j = items[second]?.firstOrNull()
+                if (i != null && j != null) journal.write(i, j, null, SERIES, now)
+            }
+        }
+        return true
+    }
+
+    /**
+     * Whether the works [x] and [y] are two of one series by the [words]: said so, or of no word of their own and
+     * joined by a chain of words "one series". Two items of one work are parted from each other, not from a series.
+     */
+    private fun oneSeries(x: Long, y: Long, words: Map<Pair<Long, Long>, String>): Boolean {
+        val own = words[WorkRelations.pair(x, y)]
+        return x != y &&
+            (own == SERIES || own == null && WorkRelations.chains(words, SERIES).any { x in it && y in it })
     }
 
     /** The item removed from the library. */
@@ -76,5 +121,10 @@ class TypeLinkRepository(
     companion object {
         const val SAME = "SAME"
         const val DIFFERENT = "DIFFERENT"
+
+        /**
+         * Two works of one series: a word that chains — of one with a second and the second with a third, all three.
+         */
+        const val SERIES = "SERIES"
     }
 }

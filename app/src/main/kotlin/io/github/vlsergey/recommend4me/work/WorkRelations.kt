@@ -50,5 +50,27 @@ class WorkRelations(private val db: DSLContext) {
     companion object {
         /** The two works in the order a word on them is kept: the smaller id first. */
         fun pair(a: Long, b: Long): Pair<Long, Long> = if (a <= b) a to b else b to a
+
+        /**
+         * The works joined by chains of the [words] of the [kind] — two works said one series, and one of them with a
+         * third, are one series of three —, each group of two works or more.
+         */
+        fun chains(words: Map<Pair<Long, Long>, String>, kind: String): List<Set<Long>> {
+            val parent = HashMap<Long, Long>()
+            fun root(w: Long): Long {
+                var r = w
+                while (parent[r] != null && parent[r] != r) r = parent[r]!!
+                parent[w] = r
+                return r
+            }
+            words.forEach { (pair, k) ->
+                if (k == kind) {
+                    val x = root(pair.first)
+                    val y = root(pair.second)
+                    if (x != y) parent[x] = y
+                }
+            }
+            return parent.keys.groupBy(::root).values.map { it.toSet() }
+        }
     }
 }

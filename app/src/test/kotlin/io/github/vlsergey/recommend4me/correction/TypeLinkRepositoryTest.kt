@@ -114,4 +114,55 @@ class TypeLinkRepositoryTest {
             assertEquals(null, said(a1, b2))
         }
     }
+
+    @Test
+    fun `works of one series by a chain are of one series, a word that parts two of them parts both from it`() {
+        Database("dictionaries", folder.resolve("dictionaries"), "dictionaries").use { dictionaries ->
+            val links =
+                TypeLinkRepository(
+                    WorkRepository(dictionaries.dsl),
+                    WorkPairJournal(dictionaries.dsl),
+                    listOf("a", "b", "c", "d"),
+                )
+            val now = Instant.now()
+            val a = ItemKey("a", "1")
+            val b = ItemKey("b", "1")
+            val c = ItemKey("c", "1")
+            val d = ItemKey("d", "1")
+            fun chained(x: ItemKey, y: ItemKey) = links.ordered(x, y) in links.inSeries()
+            fun series(x: ItemKey, y: ItemKey) = links.relations()[links.ordered(x, y)] == "SERIES" || chained(x, y)
+            links.relate(a, b, "SERIES", now)
+            links.relate(b, c, "SERIES", now)
+            links.relate(c, d, "SERIES", now)
+            assertTrue(chained(a, c) && chained(a, d) && chained(b, d))
+            assertTrue(!chained(a, b), "a word said is no word by the chain")
+
+            // Different, of two of one series by the chain: both out of it, the rest of it one series still
+            links.distinct(a, c, now)
+            assertTrue(!series(a, b) && !series(b, c) && !series(c, d) && !series(a, d))
+            assertEquals(
+                "DIFFERENT",
+                links.relations()[links.ordered(a, c)]
+                    ?: "DIFFERENT"
+                        .takeIf {
+                            links.ordered(a, c) in links.distincts()
+                        },
+            )
+
+            // The word taken back, of two of one series by the chain: both out of it
+            links.relate(a, b, "SERIES", now)
+            links.relate(b, d, "SERIES", now)
+            links.relate(d, c, "SERIES", now)
+            assertTrue(chained(a, d))
+            links.takeBack(a, d, now)
+            assertTrue(!series(a, b) && !series(b, d) && !series(d, c))
+            // Every word of one series taken back so is in the journal, the word before it "one series"
+            assertEquals(
+                listOf(null to "SERIES", null to "SERIES", null to "SERIES"),
+                links.journal().take(3).map {
+                    it.answer to it.before
+                },
+            )
+        }
+    }
 }

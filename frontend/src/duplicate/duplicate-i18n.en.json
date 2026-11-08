@@ -51,6 +51,8 @@
   "PairJournal.undoHint": "Give the pair back what it had before this answer: {{word}}",
   "PairJournal.undone": "undone",
   "PairRow.chanceHint": "The chance this is one work: by the model of your answers (before the first \"one work\", the mean likeness of the layers)",
+  "PairRow.derived": "by the series",
+  "PairRow.derivedHint": "No word of its own: both works are of one series through other pairs said «One series». It weighs as one said. «Different» or taking the word back takes both works out of the series",
   "PairRow.description": "descriptions {{value}}",
   "PairRow.different": "Different",
   "PairRow.differentHint": "These are different works: a link, if any, is taken away, the pair is offered no more",

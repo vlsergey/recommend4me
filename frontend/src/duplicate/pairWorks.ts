@@ -30,6 +30,9 @@ export function sharing(p: DuplicatePair, pairs: DuplicatePair[]): DuplicatePair
  * pair sharing it ([sharing]) has it; the works as the word leaves them: two said one work, the second's
  * one with the first's; the second item parted from a work it was one with, a work of its own — so that
  * the next word, on any pair of them, is shared as the server shares it, before the pairs are read again.
+ * Of two works of one series, "different" or the word taken back takes both out of it: every pair of
+ * either said one series — by its word or by the chain — has none; the pairs of the rest of the series
+ * joined through them by the chain alone are told when the pairs are read again.
  */
 export function afterWord(p: DuplicatePair, verdict: Verdict | undefined, pairs: DuplicatePair[]): DuplicatePair[] {
   const touched = new Set(sharing(p, pairs));
@@ -37,6 +40,8 @@ export function afterWord(p: DuplicatePair, verdict: Verdict | undefined, pairs:
   const joined = !oneWork && verdict === "SAME";
   const parted = oneWork && verdict !== "SAME";
   const from = workOf(p.second);
+  const outOfSeries = p.answer === "SERIES" && !oneWork && (verdict === "DIFFERENT" || verdict === undefined);
+  const leaving = new Set([workOf(p.first), workOf(p.second)]);
   const moved = (w: DuplicateWork): DuplicateWork => {
     if (joined && workOf(w) === from) return { ...w, work: p.first.work };
     if (parted && isItem(w, p.second)) return { ...w, work: undefined };
@@ -45,7 +50,9 @@ export function afterWord(p: DuplicatePair, verdict: Verdict | undefined, pairs:
   return pairs.map((q) => {
     const first = moved(q.first);
     const second = moved(q.second);
-    const answer = touched.has(q) ? verdict : q.answer;
-    return first === q.first && second === q.second && answer === q.answer ? q : { ...q, first, second, answer };
+    const parts = outOfSeries && q.answer === "SERIES" && (leaving.has(workOf(q.first)) || leaving.has(workOf(q.second)));
+    const answer = touched.has(q) ? verdict : parts ? undefined : q.answer;
+    const derived = touched.has(q) || parts ? undefined : q.derived;
+    return first === q.first && second === q.second && answer === q.answer && derived === q.derived ? q : { ...q, first, second, answer, derived };
   });
 }

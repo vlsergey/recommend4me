@@ -142,11 +142,12 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const settle = (p: DuplicatePair, verdict: Verdict | undefined) => {
     wordKept.current = performance.now();
     const rows = calm.shown ?? [];
-    const touched = sharing(p, rows);
-    const stays = chosen.includes(verdict ?? "NONE");
+    // The rows whose answer the word changed to one the list is not chosen by leave
+    const after = afterWord(p, verdict, rows);
+    const leaving = rows.filter((q, i) => after[i].answer !== q.answer && !chosen.includes(after[i].answer ?? "NONE"));
     calm.change((list) => afterWord(p, verdict, list));
-    if (!stays) calm.remove(touched.map(rowOf));
-    changed(touched);
+    if (leaving.length > 0) calm.remove(leaving.map(rowOf));
+    changed(sharing(p, rows));
   };
   const answer = async (p: DuplicatePair, verdict: Verdict) => {
     ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { ...refs(p), verdict } }));
@@ -351,6 +352,11 @@ function PairRow({
               {t(`PairRow.${word}`)}
             </AsyncButton>
           ))}
+          {p.derived && (
+            <span className="self-center text-xs text-muted-foreground" title={t("PairRow.derivedHint")}>
+              {t("PairRow.derived")}
+            </span>
+          )}
           <Related answered={p.answer} locked={locked} answer={answer} />
           {/* Always in its place, of no answer disabled: a word given moves no button */}
           <AsyncButton size="sm" variant="ghost" icon={<Undo2Icon />} disabled={locked || !p.answer} title={t("PairRow.unanswerHint")} onClick={unanswer}>

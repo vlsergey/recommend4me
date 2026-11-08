@@ -28,6 +28,13 @@ interface PairWords {
     /** Every pair of items of works said to be related, the smaller key first, with the kind. */
     fun relations(): Map<Pair<ItemKey, ItemKey>, String>
 
+    /**
+     * Every pair of items of two works of one series by a chain of words "one series" ([TypeLinkRepository.SERIES]) —
+     * two works said one series, and one of them with a third: the first and the third — with no word of its own, the
+     * smaller key first. A word of one series by the chain weighs as one said.
+     */
+    fun inSeries(): Set<Pair<ItemKey, ItemKey>>
+
     /** The two keys, the smaller first: the order a pair is kept in. */
     fun ordered(a: ItemKey, b: ItemKey): Pair<ItemKey, ItemKey>
 }
@@ -71,6 +78,24 @@ internal class WorkPairWords(
 
     override fun relations(): Map<Pair<ItemKey, ItemKey>, String> =
         said().filterValues { it != TypeLinkRepository.DIFFERENT }
+
+    override fun inSeries(): Set<Pair<ItemKey, ItemKey>> {
+        val words = works.relations.words()
+        // A series of two works is the word said of them: by the chain, a series of three at least
+        val series = WorkRelations.chains(words, TypeLinkRepository.SERIES).filter { it.size > 2 }
+        if (series.isEmpty()) return emptySet()
+        val items = works.itemsOf(series.flatten(), sources)
+        val out = HashSet<Pair<ItemKey, ItemKey>>()
+        series.forEach { works ->
+            val all = works.toList()
+            all.forEachIndexed { k, x ->
+                all.drop(k + 1)
+                    .filter { y -> WorkRelations.pair(x, y) !in words }
+                    .forEach { y -> for (i in items[x].orEmpty()) for (j in items[y].orEmpty()) out += ordered(i, j) }
+            }
+        }
+        return out
+    }
 
     /** Every word on two works as said of every pair of their items. */
     private fun said(): Map<Pair<ItemKey, ItemKey>, String> {

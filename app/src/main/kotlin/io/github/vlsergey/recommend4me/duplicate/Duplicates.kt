@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -185,13 +186,15 @@ class Duplicates(
     private fun isPair(type: TypeStore, a: ItemKey, b: ItemKey) =
         type.source(a.source)?.items?.find(a.id) != null && type.source(b.source)?.items?.find(b.id) != null && a != b
 
-    /** The word on the pair taken back: that they are different or related — or, of none, that they are one work. */
+    /**
+     * The word on the pair taken back: that they are one work, or the word on their two works — of two works of one
+     * series, by their word or by the chain, both taken out of it.
+     */
     fun unanswer(typeId: String, a: ItemKey, b: ItemKey) {
         val type = stores.type(typeId) ?: return
         val now = Instant.now()
-        val pair = type.links.ordered(a, b)
-        if (pair in type.links.relations() || pair in type.links.distincts()) type.links.takeBack(a, b, now)
-        else type.links.unlink(a, b, now)
+        if (type.links.word(a, b, now) == TypeLinkRepository.SAME) type.links.unlink(a, b, now)
+        else type.links.takeBack(a, b, now)
         fitting.afterAnswer(type)
     }
 
