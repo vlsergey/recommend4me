@@ -1,4 +1,13 @@
 {
+  "AnswerAll.cancel": "Cancel",
+  "AnswerAll.confirm": "Answer “{{word}}”",
+  "AnswerAll.confirmText": "Every pair on this page with no answer gets it, as if its own button were pressed; a pair the answer on another one already decided is left as it is. Each answer goes into the journal and can be taken back in its row.",
+  "AnswerAll.confirmTitle_one": "Answer “{{word}}” on {{count}} pair?",
+  "AnswerAll.confirmTitle_other": "Answer “{{word}}” on {{count}} pairs?",
+  "AnswerAll.hint": "Answer “{{word}}” on every pair left on this page, after a confirmation",
+  "AnswerAll.label_one": "The {{count}} pair left on this page, all at once:",
+  "AnswerAll.label_other": "The {{count}} pairs left on this page, all at once:",
+  "AnswerAll.progress": "{{done}} of {{count}}",
   "DuplicatesScreen.description": "Of every work, its likeliest pair of one work and its likeliest pair of one series among the works of every site, its own too: every field the sites share is compared, the text itself aside — the title, the description, the tags, universes, characters, pairings, the status and other values, the size. First the pairs where the score by the formula of the work the pair was looked for times the chance the pair is one work is higher. \"One work\" links them as the work's window does: the grade and the interest become shared. \"Different\" — the pair is offered no more. The answers teach the models of the chances.",
   "DuplicatesScreen.failed": "The pairs were not read: {{error}}",
   "DuplicatesScreen.journal": "Journal",

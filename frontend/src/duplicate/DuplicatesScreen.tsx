@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, CopyIcon, EqualIcon, EqualNotIcon, LanguagesIcon, LibraryBigIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, Undo2Icon } from "lucide-react";
+import { ChevronDownIcon, CopyIcon, Loader2Icon, RefreshCwIcon, Undo2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateSort } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -12,9 +12,11 @@ import { ago, formatDate } from "@/i18n/format";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
 import { usePref } from "@/lib/usePref";
+import { AnswerAll } from "./AnswerAll";
 import { PairFacts, WorkSide } from "./PairCompare";
 import { PairJournal } from "./PairJournal";
 import { afterWord, sharing } from "./pairWorks";
+import { RELATED, VERDICTS, type Verdict } from "./verdicts";
 import { useRefresh } from "@/lib/useRefresh";
 import { useWork } from "@/workload/useWork";
 import { cn } from "@/lib/utils";
@@ -33,22 +35,6 @@ const rowOf = (p: DuplicatePair) => `${p.first.source}/${p.first.item}|${p.secon
 
 /** A row read again the same: its answer. */
 const sameRow = (a: DuplicatePair, b: DuplicatePair) => a.answer === b.answer;
-
-/** The user's word on a pair. */
-type Verdict = NonNullable<DuplicatePair["answer"]>;
-
-/** The answers of the buttons: one work (=), different works (≠). */
-const VERDICTS: { verdict: Verdict; icon: React.ReactNode; word: "same" | "different" }[] = [
-  { verdict: "SAME", icon: <EqualIcon />, word: "same" },
-  { verdict: "DIFFERENT", icon: <EqualNotIcon />, word: "different" },
-];
-
-/** The answers of related works, behind a drop-down beside the buttons: a translation, a part, one series. */
-const RELATED: { verdict: Verdict; icon: React.ReactNode; word: "translation" | "partial" | "series" }[] = [
-  { verdict: "TRANSLATION", icon: <LanguagesIcon />, word: "translation" },
-  { verdict: "PARTIAL", icon: <PuzzleIcon />, word: "partial" },
-  { verdict: "SERIES", icon: <LibraryBigIcon />, word: "series" },
-];
 
 /**
  * What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default; or
@@ -159,6 +145,40 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
     );
     settle(p, undefined);
   };
+  /** A word on every pair left on the page at work ([AnswerAll]): the rows take no press meanwhile. */
+  const [answeringAll, setAnsweringAll] = useState(false);
+  /**
+   * The word [verdict] on every pair shown with no answer, one after another as the presses of every row
+   * would give it: a pair a word before it answered already ([afterWord] — two works said one, every pair
+   * of them is) is not asked again. The words kept are shown at once when all are given, or when one fails
+   * — those kept before it shown all the same.
+   */
+  const answerAll = async (verdict: Verdict, progress: (done: number) => void) => {
+    const rows = calm.shown ?? [];
+    let now = rows;
+    const given: DuplicatePair[] = [];
+    setAnsweringAll(true);
+    try {
+      for (let i = 0; i < rows.length; i++) {
+        const q = now[i];
+        if (rows[i].answer || q.answer) continue;
+        ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { ...refs(q), verdict } }));
+        wordKept.current = performance.now();
+        given.push(q);
+        now = afterWord(q, verdict, now);
+        progress(given.length);
+      }
+    } finally {
+      if (given.length > 0) {
+        calm.change((list) => given.reduce((l, q) => afterWord(q, verdict, l), list));
+        const leaving = rows.filter((q, i) => now[i].answer !== q.answer && !chosen.includes(now[i].answer ?? "NONE"));
+        if (leaving.length > 0) calm.remove(leaving.map(rowOf));
+        changed(rows.filter((q, i) => now[i] !== q));
+      }
+      setAnsweringAll(false);
+    }
+  };
+  const left = shown.filter((p) => !p.answer).length;
   const searchAnew = async () => {
     ensureOk(await api.POST("/api/types/{type}/duplicates/search", { params: { path: { type: type.id } } }));
     search.asked();
@@ -260,12 +280,13 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
             <p className="text-sm text-muted-foreground">{t(!data.searchedAt ? "DuplicatesScreen.neverSearched" : chosen.length === 1 && open ? "DuplicatesScreen.none" : "DuplicatesScreen.noneChosen")}</p>
           )}
           {shown.length > 0 && (
-            <ul className={cn("flex flex-col gap-2", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>
+            <ul className={cn("flex flex-col gap-2", (calm.locked || answeringAll) && "pointer-events-none")} aria-busy={calm.locked || answeringAll}>
               {shown.map((p) => (
-                <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked} pair={p} sort={sort} answer={(verdict) => answer(p, verdict)} unanswer={() => unanswer(p)} />
+                <PairRow key={rowOf(p)} rowRef={calm.rowRef(rowOf(p))} locked={calm.locked || answeringAll} pair={p} sort={sort} answer={(verdict) => answer(p, verdict)} unanswer={() => unanswer(p)} />
               ))}
             </ul>
           )}
+          {left > 0 && <AnswerAll left={left} locked={calm.locked || answeringAll} answerAll={answerAll} />}
           {data && data.total > shown.length && (
             <Button variant="outline" size="sm" className="self-start" onClick={() => setLimit(limit + PAGE)}>
               {t("DuplicatesScreen.more", { count: Math.min(PAGE, data.total - shown.length) })}
