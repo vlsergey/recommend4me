@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { sourceShort, sourceTitle } from "@/i18n/label";
+import { usePref } from "@/lib/usePref";
 import { useRefresh } from "@/lib/useRefresh";
 import { seriesHref, seriesKey } from "./seriesHash";
 
@@ -40,8 +41,8 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
   const [typed, setTyped] = useState("");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(PAGE);
-  // Of every site with series and of the user's word: whatever by default
-  const [has, setHas] = useState<Record<string, Has>>({});
+  // Of every site with series and of the user's word: whatever by default, kept in the browser by the type
+  const [has, setHas] = usePref<Record<string, Has>>(`series.has.${type.id}`, {});
   const sites = type.sources.filter((s) => s.facets.some((f) => f.role === "SERIES")).map((s) => s.id);
   const of = (key: string): Has => has[key] ?? "any";
   const filter = {
