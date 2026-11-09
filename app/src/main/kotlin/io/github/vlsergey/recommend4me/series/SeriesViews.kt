@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.api.model.SeriesWork
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.WorkLines
+import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Component
  * ([ofWork]).
  */
 @Component
-class SeriesViews(private val stores: Stores, private val lines: WorkLines) {
+class SeriesViews(private val stores: Stores, private val lines: WorkLines, private val sizes: WorkSizes) {
 
     /** A page of the series of the type a title of which holds [search], the most works first; null of no such type. */
     fun page(typeId: String, search: String?, offset: Int, limit: Int): SeriesPage? {
@@ -80,8 +81,14 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines) {
         val shown = items.mapValues { (_, keys) -> keys.firstOrNull { it in inSeries } ?: keys.first() }
         val shownLines = linesOf(type, shown.values)
         val said = type.seriesGroups.groupsOf(series.works).keys
-        val numbered =
-            placed.values.map { places -> places.entries.mapNotNull { (k, p) -> workOf[k]?.let { it to p } }.toMap() }
+        val volumes = volumesOf(type, series)
+        val numbered = placed.map { (ref, places) ->
+            SiteOrder(
+                places.entries.mapNotNull { (k, p) -> workOf[k]?.let { it to p } }.toMap(),
+                series.sites[ref].orEmpty().mapNotNull(workOf::get).distinct().size,
+                volumes[ref] ?: 0.0,
+            )
+        }
         val titleOf = { work: Long -> shown[work]?.let { shownLines[it]?.title }.orEmpty() }
         val order = SeriesOrder.of(series.works, numbered, compareBy(String.CASE_INSENSITIVE_ORDER, titleOf))
         val works = order.mapNotNull { work ->
@@ -126,6 +133,20 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines) {
             }
         return placed
     }
+
+    /**
+     * The volume of every series of a site of the [series]: the words of its works, or of a site that states none the
+     * characters — what tells, of two sites of as many works, whose order goes first ([SeriesOrder]).
+     */
+    private fun volumesOf(type: TypeStore, series: NormalizedSeries): Map<SiteSeriesRef, Double> =
+        series.sites
+            .mapNotNull { (ref, items) ->
+                val s = type.source(ref.source) ?: return@mapNotNull null
+                val ids = items.map { it.id }
+                val own = sizes.ofItems(type, s, ids, s.items.numbersOf(ids), s.corrections.fieldsOf(ids))
+                ref to own.values.sumOf { (it.words ?: it.chars)?.value ?: 0.0 }
+            }
+            .toMap()
 
     /** The [items] as lines of a list: item to its line. */
     private fun linesOf(type: TypeStore, items: Collection<ItemKey>): Map<ItemKey, RelatedWork> {
