@@ -77,6 +77,7 @@ export type RelatedWork = Schemas["RelatedWork"];
 export type SeriesDetails = Schemas["SeriesDetails"];
 export type SeriesSite = Schemas["SeriesSite"];
 export type SeriesRow = Schemas["SeriesRow"];
+export type SeriesPage = Schemas["SeriesPage"];
 export type FacetRole = Schemas["FacetRole"];
 export type NumberRole = Schemas["NumberRole"];
 export type TextRole = Schemas["TextRole"];

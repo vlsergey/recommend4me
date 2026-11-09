@@ -37,3 +37,13 @@ export function seriesHref(type: string, key: string): string {
 export function seriesKey(type: string): readonly unknown[] {
   return ["series", type];
 }
+
+/** The key of the queries of the windows of the series of a type, each one series: read again without the list. */
+export function seriesWindowsKey(type: string): readonly unknown[] {
+  return [...seriesKey(type), "one"];
+}
+
+/** The key of the queries of the list of the series of a type. */
+export function seriesListKey(type: string): readonly unknown[] {
+  return [...seriesKey(type), "list"];
+}

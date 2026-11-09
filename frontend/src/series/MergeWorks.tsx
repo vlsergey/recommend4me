@@ -6,7 +6,7 @@ import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PairFacts, WorkSide } from "@/duplicate/PairCompare";
-import { seriesKey } from "./seriesHash";
+import { seriesKey, seriesWindowsKey } from "./seriesHash";
 
 /**
  * TWO WORKS OF A SERIES MADE ONE, asked first: the two compared as the screen of duplicates shows a pair
@@ -27,7 +27,8 @@ export function MergeWorks({ type, first, second, onClose }: { type: ContentType
   });
   const merge = async () => {
     ensureOk(await api.PUT("/api/types/{type}/duplicates/answer", { params: { path: { type: type.id } }, body: { first, second, verdict: "SAME" } }));
-    await queryClient.invalidateQueries({ queryKey: seriesKey(type.id) });
+    // The window of the series read again, the list under it not: its rows stay in their places ([SeriesDialog])
+    await queryClient.invalidateQueries({ queryKey: seriesWindowsKey(type.id) });
     await queryClient.invalidateQueries({ queryKey: ["item"] });
     onClose();
   };

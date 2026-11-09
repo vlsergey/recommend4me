@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import { usePref } from "@/lib/usePref";
 import { useRefresh } from "@/lib/useRefresh";
-import { seriesHref, seriesKey } from "./seriesHash";
+import { seriesHref, seriesListKey } from "./seriesHash";
 
 /** How many series a page shows, and how many more each "more" adds. */
 const PAGE = 50;
@@ -58,7 +58,7 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
     return () => clearTimeout(timer);
   }, [typed]);
   const list = useQuery({
-    queryKey: [...seriesKey(type.id), "list", search, filter, limit],
+    queryKey: [...seriesListKey(type.id), search, filter, limit],
     queryFn: async () =>
       unwrap(
         await api.GET("/api/types/{type}/series", {

@@ -2,14 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, unwrap, type ContentTypeInfo, type ItemRef, type SeriesSite } from "@/api/client";
+import { api, ensureOk, unwrap, type ContentTypeInfo, type ItemRef, type SeriesPage, type SeriesSite } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTypes } from "@/contenttype/types";
 import { formatDay } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { writeTopHash } from "@/item/dialogStack";
-import { isSeriesHash, readSeriesHash, type SeriesRef, seriesKey } from "./seriesHash";
+import { isSeriesHash, readSeriesHash, type SeriesRef, seriesListKey, seriesWindowsKey } from "./seriesHash";
 import { MergeWorks } from "./MergeWorks";
 import { SeriesWorks } from "./SeriesWorks";
 
@@ -23,15 +23,25 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
   const { t } = useTranslation("series");
   const queryClient = useQueryClient();
   const series = useQuery({
-    queryKey: [...seriesKey(type.id), "one", seriesRef.key],
+    queryKey: [...seriesWindowsKey(type.id), seriesRef.key],
     queryFn: async () => unwrap(await api.GET("/api/types/{type}/series/one", { params: { path: { type: type.id }, query: { key: seriesRef.key } } })),
   });
   const s = series.data;
+  // The series read again — at a press, a work taken out or two made one — its row of the list under the
+  // window takes it where it stands: the list is not read again, its rows keep their order
+  useEffect(() => {
+    if (!s) return;
+    queryClient.setQueriesData<SeriesPage>({ queryKey: seriesListKey(type.id) }, (page) =>
+      page?.series.some((r) => r.key === s.key || r.key === seriesRef.key)
+        ? { ...page, series: page.series.map((r) => (r.key === s.key || r.key === seriesRef.key ? { ...r, title: s.title, sites: s.sites, works: s.works.length } : r)) }
+        : page,
+    );
+  }, [s, queryClient, type.id, seriesRef.key]);
   // Two works dropped one on the other: made one once the user says so
   const [merging, setMerging] = useState<{ first: ItemRef; second: ItemRef } | null>(null);
   const takeOut = async (source: string, item: string) => {
     ensureOk(await api.DELETE("/api/types/{type}/series/works", { params: { path: { type: type.id }, query: { source, item } } }));
-    await queryClient.invalidateQueries({ queryKey: seriesKey(type.id) });
+    await queryClient.invalidateQueries({ queryKey: seriesWindowsKey(type.id) });
     await queryClient.invalidateQueries({ queryKey: ["item"] });
   };
   return (
@@ -41,13 +51,13 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
           <DialogTitle>{s ? s.title : series.isError ? t("Series.failed") : t("SeriesScreen.loading")}</DialogTitle>
           <div className="flex flex-wrap items-center gap-2">
             {s && <DialogDescription>{t("Series.works", { count: s.works.length })}</DialogDescription>}
-            {/* What the sites say of it changes as their pages are opened: read again at the user's word, the list under it too */}
+            {/* What the sites say of it changes as their pages are opened: read again at the user's word, the list under it not */}
             <AsyncButton
               size="xs"
               variant="outline"
               icon={<RefreshCwIcon />}
               title={t("Series.reloadHint")}
-              onClick={() => queryClient.invalidateQueries({ queryKey: seriesKey(type.id) })}
+              onClick={() => series.refetch()}
             >
               {t("Series.reload")}
             </AsyncButton>
