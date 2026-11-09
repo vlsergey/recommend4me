@@ -39,5 +39,7 @@
   "SeriesScreen.saidHint": "Your word that works are one series holds it together: the sites' series alone do not",
   "SeriesScreen.has.any": "any",
   "SeriesScreen.has.yes": "yes",
-  "SeriesScreen.has.no": "no"
+  "SeriesScreen.has.no": "no",
+  "Series.reload": "Read again",
+  "Series.reloadHint": "Read the series again as the application has it now: what the sites said of it since, the pages opened on them"
 }

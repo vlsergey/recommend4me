@@ -42,5 +42,7 @@
   "SeriesScreen.saidHint": "Drži ga vaše „jedan ciklus”: sami ciklusi sajtova za to nisu dovoljni",
   "SeriesScreen.has.any": "svejedno",
   "SeriesScreen.has.yes": "da",
-  "SeriesScreen.has.no": "ne"
+  "SeriesScreen.has.no": "ne",
+  "Series.reload": "Pročitaj ponovo",
+  "Series.reloadHint": "Ponovo pročitati ciklus kako ga aplikacija sada zna: sa onim što su sajtovi u međuvremenu rekli o njemu, na otvorenim stranicama"
 }

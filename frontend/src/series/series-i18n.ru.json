@@ -45,5 +45,7 @@
   "SeriesScreen.saidHint": "Его держит ваше «один цикл»: одних циклов сайтов для этого мало",
   "SeriesScreen.has.any": "не важно",
   "SeriesScreen.has.yes": "да",
-  "SeriesScreen.has.no": "нет"
+  "SeriesScreen.has.no": "нет",
+  "Series.reload": "Перечитать",
+  "Series.reloadHint": "Прочитать цикл заново, как его знает приложение сейчас: с тем, что сайты сказали о нём с тех пор, на открытых страницах"
 }

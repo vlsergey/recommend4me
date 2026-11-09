@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLinkIcon } from "lucide-react";
+import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, unwrap, type ContentTypeInfo, type ItemRef, type SeriesSite } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -39,7 +39,19 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{s ? s.title : series.isError ? t("Series.failed") : t("SeriesScreen.loading")}</DialogTitle>
-          {s && <DialogDescription>{t("Series.works", { count: s.works.length })}</DialogDescription>}
+          <div className="flex flex-wrap items-center gap-2">
+            {s && <DialogDescription>{t("Series.works", { count: s.works.length })}</DialogDescription>}
+            {/* What the sites say of it changes as their pages are opened: read again at the user's word, the list under it too */}
+            <AsyncButton
+              size="xs"
+              variant="outline"
+              icon={<RefreshCwIcon />}
+              title={t("Series.reloadHint")}
+              onClick={() => queryClient.invalidateQueries({ queryKey: seriesKey(type.id) })}
+            >
+              {t("Series.reload")}
+            </AsyncButton>
+          </div>
         </DialogHeader>
         {series.isError && <p className="text-sm text-destructive">{t("SeriesScreen.failed", { error: series.error.message })}</p>}
         {s && (
