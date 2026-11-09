@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLinkIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, unwrap, type ContentTypeInfo, type SeriesSite } from "@/api/client";
+import { api, ensureOk, unwrap, type ContentTypeInfo, type ItemRef, type SeriesSite } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTypes } from "@/contenttype/types";
@@ -10,12 +10,14 @@ import { formatDay } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { writeTopHash } from "@/item/dialogStack";
 import { readSeriesHash, type SeriesRef, seriesKey } from "./seriesHash";
+import { MergeWorks } from "./MergeWorks";
 import { SeriesWorks } from "./SeriesWorks";
 
 /**
  * THE WINDOW OF A NORMALIZED SERIES, over whatever is open: what every site says of it — its title
  * with the page, its status, its dates, its description — and its works in order, each with its
- * numbers on the sites; a work the user put in it taken out by its button.
+ * numbers on the sites; a work the user put in it taken out by its button, a work dragged onto
+ * another of no site in common made one work with it, asked first ([MergeWorks]).
  */
 export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeInfo; seriesRef: SeriesRef; onClose: () => void }) {
   const { t } = useTranslation("series");
@@ -25,6 +27,8 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
     queryFn: async () => unwrap(await api.GET("/api/types/{type}/series/one", { params: { path: { type: type.id }, query: { key: seriesRef.key } } })),
   });
   const s = series.data;
+  // Two works dropped one on the other: made one once the user says so
+  const [merging, setMerging] = useState<{ first: ItemRef; second: ItemRef } | null>(null);
   const takeOut = async (source: string, item: string) => {
     ensureOk(await api.DELETE("/api/types/{type}/series/works", { params: { path: { type: type.id }, query: { source, item } } }));
     await queryClient.invalidateQueries({ queryKey: seriesKey(type.id) });
@@ -54,6 +58,7 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
               <SeriesWorks
                 type={type}
                 series={s}
+                onMerge={(first, second) => setMerging({ first, second })}
                 trailing={(w) =>
                   // Of a work a site's series has, the site's word stands: nothing to take out
                   w.said &&
@@ -67,6 +72,7 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
             </section>
           </div>
         )}
+        {merging && <MergeWorks type={type} first={merging.first} second={merging.second} onClose={() => setMerging(null)} />}
       </DialogContent>
     </Dialog>
   );

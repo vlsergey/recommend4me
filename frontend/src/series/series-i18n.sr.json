@@ -30,5 +30,12 @@
   "Series.none": "Nema ciklusa ni na jednom sajtu: dela za koja ste rekli „jedan ciklus”",
   "Series.open": "Otvori ciklus",
   "Series.this": "ovo delo",
-  "Series.failed": "Ciklus se ne prikazuje"
+  "Series.failed": "Ciklus se ne prikazuje",
+  "Merge.title": "Jedno delo?",
+  "Merge.description": "Dva dela jedno pored drugog, kao na ekranu duplikata: jedno delo — ocena i interesovanje su zajednički",
+  "Merge.notFound": "Poslednja pretraga duplikata nije sačuvala ovaj par: koliko su slični, nije poznato",
+  "Merge.same": "Jedno delo",
+  "Merge.sameHint": "Ovo je jedno delo: njegove stranice na sajtovima postaju jedno delo",
+  "Merge.cancel": "Otkaži",
+  "Merge.dragHint": "Prevucite na delo drugog sajta da biste ih spojili u jedno delo"
 }

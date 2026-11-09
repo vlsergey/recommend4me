@@ -139,7 +139,21 @@ class TwoSitesTest : TwoSitesTestBase() {
         val m3 = key("beta", "m3")
         val m4 = key("alpha", "m4")
 
+        // Any two works compared as the screen of duplicates shows a pair, the word said of them with it
+        val compared = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
+        assertEquals(
+            listOf("alpha/m1", "beta/m2"),
+            listOf(compared.first, compared.second).map { "${it.source}/${it.item}" },
+        )
+        assertEquals("The Mill", compared.second.title)
+        assertEquals(null, compared.answer)
+        assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
+
         answer(m1, m2, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
+        assertEquals(
+            io.github.vlsergey.recommend4me.api.model.DuplicatePair.Answer.SAME,
+            duplicates.getDuplicatePair("books", "alpha", "m1", "beta", "m2").body!!.answer,
+        )
         // Of one of two works one, a translation: of the other too
         answer(m1, m3, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.TRANSLATION)
         assertEquals("TRANSLATION", relation(m2, m3))

@@ -70,6 +70,16 @@ class DuplicatesController(
         return ResponseEntity.noContent().build()
     }
 
+    override fun getDuplicatePair(
+        type: String,
+        source: String,
+        item: String,
+        otherSource: String,
+        otherItem: String,
+    ): ResponseEntity<DuplicatePair> =
+        pages.pair(type, ItemKey(source, item), ItemKey(otherSource, otherItem))?.let { ResponseEntity.ok(it) }
+            ?: ResponseEntity.notFound().build()
+
     override fun unanswerDuplicate(
         type: String,
         source: String,

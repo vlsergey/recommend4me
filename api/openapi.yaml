@@ -951,6 +951,43 @@ paths:
         '204':
           description: Taken back
 
+  /api/types/{type}/duplicates/pair:
+    get:
+      tags: [duplicates]
+      operationId: getDuplicatePair
+      summary: Two works compared as the screen of duplicates shows a pair - how alike they are, of the last search if it kept them, and the word said of them
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - name: source
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: item
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: otherSource
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: otherItem
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The pair, the smaller key first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicatePair'
+        '404':
+          description: No such type or work
+
   /api/types/{type}/duplicates/journal:
     get:
       tags: [duplicates]
@@ -5483,10 +5520,15 @@ components:
 
     SeriesWork:
       type: object
-      required: [work, places, said, bySite]
+      required: [work, places, said, bySite, sources]
       properties:
         work:
           $ref: '#/components/schemas/RelatedWork'
+        sources:
+          type: array
+          description: The sources of its items - two works of no source in common may be one
+          items:
+            type: string
         places:
           type: array
           description: Its number in every series of a site that numbers it

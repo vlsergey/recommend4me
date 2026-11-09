@@ -90,7 +90,14 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines) {
                 placed.entries.mapNotNull { (ref, of) ->
                     items[work].orEmpty().firstNotNullOfOrNull { of[it] }?.let { SeriesPlace(ref.source, it) }
                 }
-            SeriesWork(line, places, work in said, items[work].orEmpty().any { it in inSeries })
+            val own = items[work].orEmpty()
+            SeriesWork(
+                work = line,
+                sources = own.map { it.source }.distinct(),
+                places = places,
+                said = work in said,
+                bySite = own.any { it in inSeries },
+            )
         }
         val own = series.sites.keys.mapNotNull { sites[it] }
         return SeriesDetails(

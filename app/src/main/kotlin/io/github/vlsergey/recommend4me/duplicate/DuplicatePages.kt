@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
+import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.math.abs
 import org.springframework.stereotype.Component
@@ -141,6 +142,24 @@ class DuplicatePages(
      * What the last search found for the work of [key]: every pair of an item of it and an item of another work,
      * answered or not, the likeliest first.
      */
+    /**
+     * The two works as the screen shows a pair: how alike they are, of the last search when it kept them, and the word
+     * said of them; null of no such type, or a work no longer there.
+     */
+    fun pair(typeId: String, a: ItemKey, b: ItemKey): DuplicatePair? {
+        val type = stores.type(typeId) ?: return null
+        val pair = type.links.ordered(a, b)
+        val kept = type.duplicates.find(pair.first, pair.second)
+        val chances = models.of(type)
+        val word =
+            type.links.word(a, b, Instant.now())?.let { w -> DuplicateAnswer.entries.firstOrNull { it.name == w } }
+        val chance = kept?.let { chances?.same(it) }
+        val ranked = Ranked(pair, kept, chance, kept?.let { chances?.series(it) }, chance ?: 0.0)
+        return views
+            .pairs(type, Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet()), listOf(ranked))
+            .firstOrNull()
+    }
+
     fun ofItem(key: ItemKey): List<DuplicatePair> {
         val type = stores.typeOf(key.source)
         val own = works.of(type).members(key).toSet()

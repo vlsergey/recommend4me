@@ -157,6 +157,31 @@ class DuplicateRepository(private val db: DSLContext) {
             .execute()
     }
 
+    /** The candidate of the two works, the smaller key [first], as the last search kept it; null of none. */
+    fun find(first: ItemKey, second: ItemKey): DuplicateCandidate? {
+        val c = DUPLICATE_CANDIDATE
+        return db.select(c.TITLE, c.DESCRIPTION, c.SIZE, c.FACETS, c.FOUND_FOR, c.SAME_AUTHOR)
+            .from(c)
+            .where(
+                c.SOURCE.eq(first.source),
+                c.ITEM_ID.eq(first.id),
+                c.OTHER_SOURCE.eq(second.source),
+                c.OTHER_ITEM_ID.eq(second.id),
+            )
+            .fetchOne { r ->
+                DuplicateCandidate(
+                    first,
+                    second,
+                    r.value1()!!,
+                    r.value2(),
+                    r.value3(),
+                    r.value4()?.let { numbers(it) { s -> s } }.orEmpty(),
+                    r.value5()!!.toInt(),
+                    r.value6()!!,
+                )
+            }
+    }
+
     /** The last search; null when there was none. */
     fun search(): DuplicateSearch? =
         db.selectFrom(DUPLICATE_SEARCH).fetchOne()?.let {

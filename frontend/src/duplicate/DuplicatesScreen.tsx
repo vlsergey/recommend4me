@@ -1,21 +1,18 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDownIcon, CopyIcon, EqualIcon, EqualNotIcon, ExternalLinkIcon, LanguagesIcon, LibraryBigIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, Undo2Icon, UserIcon } from "lucide-react";
+import { ChevronDownIcon, CopyIcon, EqualIcon, EqualNotIcon, LanguagesIcon, LibraryBigIcon, Loader2Icon, PuzzleIcon, RefreshCwIcon, Undo2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateSort, type DuplicateWork, type SizeNumber } from "@/api/client";
+import { api, ensureOk, type ContentTypeInfo, type DuplicatePage, type DuplicatePair, type DuplicateSort } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ago, formatDate, number, percent } from "@/i18n/format";
-import { intlTag } from "@/i18n/i18n";
-import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
-import { itemHref } from "@/item/itemHash";
+import { ago, formatDate } from "@/i18n/format";
 import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
-import { pressKeys } from "@/lib/pressKeys";
 import { usePref } from "@/lib/usePref";
+import { PairFacts, WorkSide } from "./PairCompare";
 import { PairJournal } from "./PairJournal";
 import { afterWord, sharing } from "./pairWorks";
 import { useRefresh } from "@/lib/useRefresh";
@@ -305,39 +302,7 @@ function PairRow({
   return (
     <li ref={rowRef} className="flex flex-col gap-2 rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        {p.chance != null && (
-          <span className="font-semibold text-foreground tabular-nums" title={t("PairRow.chanceHint")}>
-            {percent(p.chance)}
-          </span>
-        )}
-        {p.seriesChance != null && (
-          <span className="flex items-center gap-1 font-semibold text-foreground tabular-nums" title={t("PairRow.seriesChanceHint")}>
-            <LibraryBigIcon className="size-3.5" /> {percent(p.seriesChance)}
-          </span>
-        )}
-        {p.title != null && <span className="tabular-nums">{t("PairRow.title", { value: percent(p.title) })}</span>}
-        {p.description != null && <span className="tabular-nums">{t("PairRow.description", { value: percent(p.description) })}</span>}
-        {p.facets?.map((f) => (
-          <span key={f.key} className="tabular-nums" title={t("PairRow.facetsHint")}>
-            {t("PairRow.facet", { name: label(f.labelKey), value: percent(f.value) })}
-          </span>
-        ))}
-        {p.size != null && (
-          <span className="tabular-nums" title={t("PairRow.sizeHint")}>
-            {t("PairRow.size", { value: percent(p.size) })}
-          </span>
-        )}
-        {!NO_PRIORITY.includes(sort) && p.priority != null && p.priority > 0 && (
-          // Of the sort by size the priority is words: a whole number, not a score of two digits
-          <span className="tabular-nums" title={t(sort === "SIZE" ? "PairRow.prioritySizeHint" : "PairRow.priorityHint")}>
-            {t("PairRow.priority", { value: sort === "SIZE" ? number(Math.round(p.priority)) : p.priority.toFixed(2) })}
-          </span>
-        )}
-        {p.sameAuthor && (
-          <span className="flex items-center gap-1 text-foreground" title={t("PairRow.sameAuthorHint")}>
-            <UserIcon className="size-3.5" /> {t("PairRow.sameAuthor")}
-          </span>
-        )}
+        <PairFacts pair={p} priority={NO_PRIORITY.includes(sort) ? undefined : sort} />
         <div className="ml-auto flex flex-wrap gap-1.5">
           {VERDICTS.map(({ verdict, icon, word }) => (
             <AsyncButton
@@ -369,79 +334,6 @@ function PairRow({
         <WorkSide work={p.second} />
       </div>
     </li>
-  );
-}
-
-/**
- * One work of a pair: its site, its title opening the work, its page on the site, its authors, fandoms,
- * status and size, its description and after it the site's own line of its characters and pairings,
- * folded together.
- */
-function WorkSide({ work: w }: { work: DuplicateWork }) {
-  const { t } = useTranslation("duplicate");
-  const [whole, setWhole] = useState(false);
-  const names = [w.authors.join(", "), w.fandoms.join(", "), w.status?.map(valueName).join(", ")].filter(Boolean).join(" · ");
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex items-baseline gap-2">
-        <span className="shrink-0 text-xs text-muted-foreground" title={sourceTitle(w.source)}>
-          {sourceShort(w.source)}
-        </span>
-        <a href={itemHref({ source: w.source, item: w.item })} className="min-w-0 font-semibold underline-offset-2 hover:underline">
-          {w.title}
-        </a>
-        <a href={w.url} target="_blank" rel="noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" title={t("WorkSide.page")}>
-          <ExternalLinkIcon className="size-3.5" />
-        </a>
-      </div>
-      {(names || w.words || w.chars) && (
-        <div className="text-xs text-muted-foreground">
-          {names}
-          {names && (w.words || w.chars) && " · "}
-          {w.words && <Size size={w.words} word="words" />}
-          {w.words && w.chars && "; "}
-          {w.chars && <Size size={w.chars} word="chars" />}
-        </div>
-      )}
-      {(w.description || w.universeLine) && (
-        // Text to select and copy: unfolded or folded by a press that selects nothing. The site's own line of
-        // the characters and pairings after the description, folded with it: one flow of lines, clamped together
-        // biome-ignore lint/a11y/useSemanticElements: text to select and copy, which a button's text cannot be
-        <div
-          role="button"
-          tabIndex={0}
-          className={cn("cursor-pointer text-sm whitespace-pre-line select-text text-muted-foreground", !whole && "line-clamp-4")}
-          title={t(whole ? "WorkSide.fold" : "WorkSide.unfold")}
-          onClick={() => {
-            if (!window.getSelection()?.toString()) setWhole(!whole);
-          }}
-          onKeyDown={pressKeys(() => setWhole(!whole))}
-        >
-          {w.description}
-          {w.description && w.universeLine && "\n"}
-          {w.universeLine && <span className="text-foreground/80">{w.universeLine}</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** How many significant digits a size keeps: the site's number three, one worked out two — it is known no better. */
-const STATED_DIGITS = 3;
-const WORKED_OUT_DIGITS = 2;
-
-/** How long a work is, short, in thousands or millions: a number worked out after a "≈". */
-function Size({ size, word }: { size: SizeNumber; word: "words" | "chars" }) {
-  const { t } = useTranslation("duplicate");
-  const count = Math.round(size.value);
-  const digits = (n: number) => n.toLocaleString(intlTag(), { maximumSignificantDigits: size.stated ? STATED_DIGITS : WORKED_OUT_DIGITS });
-  const short =
-    count >= 1_000_000 ? t("WorkSide.millions", { value: digits(count / 1_000_000) }) : count >= 1000 ? t("WorkSide.thousands", { value: digits(count / 1000) }) : digits(count);
-  const shown = t(`WorkSide.${word}`, { count, value: short });
-  return size.stated ? (
-    <span title={number(count)}>{shown}</span>
-  ) : (
-    <span title={t("WorkSide.estimate")}>≈ {shown}</span>
   );
 }
 
