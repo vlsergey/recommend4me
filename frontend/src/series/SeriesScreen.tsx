@@ -6,6 +6,7 @@ import { api, unwrap, type ContentTypeInfo } from "@/api/client";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import { useRefresh } from "@/lib/useRefresh";
 import { seriesHref, seriesKey } from "./seriesHash";
@@ -19,6 +20,14 @@ const EVERY_MS = 0;
 /** How long the typing pauses before the search of a series is read. */
 const SEARCH_SETTLE_MS = 300;
 
+/** Of a filter of a site or of the user's word: whatever, with it, without it. */
+type Has = "any" | "yes" | "no";
+
+const HAS: Has[] = ["any", "yes", "no"];
+
+/** The filter of the user's word among the filters of the sites. */
+const SAID = "said";
+
 /**
  * THE SCREEN OF THE NORMALIZED SERIES of a content type: every series of every site and the works the
  * user said to be one series, made one by the works they share — the most works first, found by a
@@ -31,6 +40,15 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
   const [typed, setTyped] = useState("");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(PAGE);
+  // Of every site with series and of the user's word: whatever by default
+  const [has, setHas] = useState<Record<string, Has>>({});
+  const sites = type.sources.filter((s) => s.facets.some((f) => f.role === "SERIES")).map((s) => s.id);
+  const of = (key: string): Has => has[key] ?? "any";
+  const filter = {
+    with: sites.filter((s) => of(s) === "yes"),
+    without: sites.filter((s) => of(s) === "no"),
+    said: of(SAID) === "any" ? undefined : of(SAID) === "yes",
+  };
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearch(typed.trim());
@@ -39,8 +57,13 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
     return () => clearTimeout(timer);
   }, [typed]);
   const list = useQuery({
-    queryKey: [...seriesKey(type.id), "list", search, limit],
-    queryFn: async () => unwrap(await api.GET("/api/types/{type}/series", { params: { path: { type: type.id }, query: { search: search || undefined, offset: 0, limit } } })),
+    queryKey: [...seriesKey(type.id), "list", search, filter, limit],
+    queryFn: async () =>
+      unwrap(
+        await api.GET("/api/types/{type}/series", {
+          params: { path: { type: type.id }, query: { search: search || undefined, ...filter, offset: 0, limit } },
+        }),
+      ),
     placeholderData: keepPreviousData,
     refetchInterval: every || false,
   });
@@ -58,6 +81,30 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
         {data && <span className="text-sm text-muted-foreground tabular-nums">{t("SeriesScreen.total", { count: data.total })}</span>}
         <RefreshSelect every={every} onChange={setEvery} className="ml-auto" />
       </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {[...sites, SAID].map((key) => (
+          <div key={key} className="flex items-center gap-1.5 text-sm">
+            <span className="text-muted-foreground" title={key === SAID ? t("SeriesScreen.saidHint") : sourceTitle(key)}>
+              {key === SAID ? t("SeriesScreen.said") : sourceShort(key)}
+            </span>
+            <Tabs
+              value={of(key)}
+              onValueChange={(v) => {
+                setHas({ ...has, [key]: v as Has });
+                setLimit(PAGE);
+              }}
+            >
+              <TabsList>
+                {HAS.map((h) => (
+                  <TabsTrigger key={h} value={h}>
+                    {t(`SeriesScreen.has.${h}`)}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        ))}
+      </div>
       {list.isLoading && <p className="text-sm text-muted-foreground">{t("SeriesScreen.loading")}</p>}
       {list.isError && <p className="text-sm text-destructive">{t("SeriesScreen.failed", { error: list.error.message })}</p>}
       {data && data.series.length === 0 && <p className="text-sm text-muted-foreground">{t("SeriesScreen.none")}</p>}
@@ -74,6 +121,11 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
                   {site.title !== s.title && `: ${site.title}`}
                 </span>
               ))}
+              {s.said && (
+                <span className="rounded bg-muted px-1 text-xs text-muted-foreground" title={t("SeriesScreen.saidHint")}>
+                  {t("SeriesScreen.said")}
+                </span>
+              )}
               <span className="ml-auto text-xs text-muted-foreground tabular-nums">{t("Series.works", { count: s.works })}</span>
             </li>
           ))}

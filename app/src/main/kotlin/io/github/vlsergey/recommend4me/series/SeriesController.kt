@@ -10,8 +10,18 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 class SeriesController(private val views: SeriesViews) : SeriesApi {
 
-    override fun listSeries(type: String, search: String?, offset: Int, limit: Int): ResponseEntity<SeriesPage> =
-        views.page(type, search, offset, limit)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+    override fun listSeries(
+        type: String,
+        search: String?,
+        with: List<String>?,
+        without: List<String>?,
+        said: Boolean?,
+        offset: Int,
+        limit: Int,
+    ): ResponseEntity<SeriesPage> =
+        views.page(type, SeriesFilter(search, with.orEmpty(), without.orEmpty(), said), offset, limit)?.let {
+            ResponseEntity.ok(it)
+        } ?: ResponseEntity.notFound().build()
 
     override fun getSeries(type: String, key: String): ResponseEntity<SeriesDetails> =
         views.one(type, key)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()

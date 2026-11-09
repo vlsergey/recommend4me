@@ -34,5 +34,10 @@
   "Merge.same": "One work",
   "Merge.sameHint": "These are one work: their items one work across the sites",
   "Merge.cancel": "Cancel",
-  "Merge.dragHint": "Drag onto a work of another site to make the two one work"
+  "Merge.dragHint": "Drag onto a work of another site to make the two one work",
+  "SeriesScreen.said": "by hand",
+  "SeriesScreen.saidHint": "Works of it you said to be one series",
+  "SeriesScreen.has.any": "any",
+  "SeriesScreen.has.yes": "yes",
+  "SeriesScreen.has.no": "no"
 }

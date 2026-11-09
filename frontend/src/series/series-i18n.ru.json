@@ -40,5 +40,10 @@
   "Merge.same": "Одна работа",
   "Merge.sameHint": "Это одна работа: её страницы на сайтах станут одной работой",
   "Merge.cancel": "Отмена",
-  "Merge.dragHint": "Перетащите на работу другого сайта, чтобы сделать их одной работой"
+  "Merge.dragHint": "Перетащите на работу другого сайта, чтобы сделать их одной работой",
+  "SeriesScreen.said": "вручную",
+  "SeriesScreen.saidHint": "Есть работы, о которых вы сказали «один цикл»",
+  "SeriesScreen.has.any": "не важно",
+  "SeriesScreen.has.yes": "да",
+  "SeriesScreen.has.no": "нет"
 }

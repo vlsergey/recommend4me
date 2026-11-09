@@ -753,6 +753,25 @@ paths:
           description: Only those a title of theirs on a site holds this
           schema:
             type: string
+        - name: with
+          in: query
+          description: Only those with a series of every one of these sources
+          schema:
+            type: array
+            items:
+              type: string
+        - name: without
+          in: query
+          description: Only those with a series of none of these sources
+          schema:
+            type: array
+            items:
+              type: string
+        - name: said
+          in: query
+          description: Only those with works the user said to be one series (true), or with none (false)
+          schema:
+            type: boolean
         - name: offset
           in: query
           schema:
@@ -5448,9 +5467,12 @@ components:
 
     SeriesRow:
       type: object
-      required: [key, title, sites, works]
+      required: [key, title, sites, works, said]
       description: A normalized series as its list shows it
       properties:
+        said:
+          type: boolean
+          description: Works of it the user said to be one series (by "one series" of two works) are among them
         key:
           type: string
         title:

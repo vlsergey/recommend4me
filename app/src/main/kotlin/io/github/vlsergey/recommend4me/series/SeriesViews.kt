@@ -25,23 +25,25 @@ import org.springframework.stereotype.Component
 @Component
 class SeriesViews(private val stores: Stores, private val lines: WorkLines, private val sizes: WorkSizes) {
 
-    /** A page of the series of the type a title of which holds [search], the most works first; null of no such type. */
-    fun page(typeId: String, search: String?, offset: Int, limit: Int): SeriesPage? {
+    /** A page of the series of the type the [filter] lets, the most works first; null of no such type. */
+    fun page(typeId: String, filter: SeriesFilter, offset: Int, limit: Int): SeriesPage? {
         val type = stores.type(typeId) ?: return null
-        val all = TypeSeries.read(type).all
+        val all = TypeSeries.read(type).all.filter(filter::lets)
         val sites = sitesOf(type, all.flatMap { it.sites.entries }.associate { it.key to it.value.size })
         val untitled = all.filter { s -> s.sites.keys.none { sites[it]?.title != null } }
         val firstTitles = titlesOf(type, untitled)
         val rows =
             all.map { s ->
                     val own = s.sites.keys.mapNotNull { sites[it] }
-                    SeriesRow(s.key, own.firstOrNull()?.title ?: firstTitles[s.key] ?: s.key, own, s.works.size)
+                    SeriesRow(
+                        key = s.key,
+                        title = own.firstOrNull()?.title ?: firstTitles[s.key] ?: s.key,
+                        sites = own,
+                        works = s.works.size,
+                        said = s.groups.isNotEmpty(),
+                    )
                 }
-                .filter { row ->
-                    search.isNullOrBlank() ||
-                        row.title.contains(search, ignoreCase = true) ||
-                        row.sites.any { it.title.contains(search, ignoreCase = true) }
-                }
+                .filter(filter::lets)
                 .sortedWith(
                     compareByDescending<SeriesRow> { it.works }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }
                 )

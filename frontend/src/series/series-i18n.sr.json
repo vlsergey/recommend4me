@@ -37,5 +37,10 @@
   "Merge.same": "Jedno delo",
   "Merge.sameHint": "Ovo je jedno delo: njegove stranice na sajtovima postaju jedno delo",
   "Merge.cancel": "Otkaži",
-  "Merge.dragHint": "Prevucite na delo drugog sajta da biste ih spojili u jedno delo"
+  "Merge.dragHint": "Prevucite na delo drugog sajta da biste ih spojili u jedno delo",
+  "SeriesScreen.said": "ručno",
+  "SeriesScreen.saidHint": "Ima dela za koja ste rekli „jedan ciklus”",
+  "SeriesScreen.has.any": "svejedno",
+  "SeriesScreen.has.yes": "da",
+  "SeriesScreen.has.no": "ne"
 }
