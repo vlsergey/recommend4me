@@ -78,8 +78,8 @@ interface Source : BrowserTracking, SitePictures {
 
     /**
      * The page of a value of the source's [facet] on the site, [key] and [name] as the source wrote them
-     * ([FacetValue]): of an author, the author's own page, else the site's search of the works by them; null when the
-     * site has neither.
+     * ([FacetValue]): of an author, the author's own page, else the site's search of the works by them; of a series,
+     * the series' own page; null when the site has none.
      */
     fun valueUrl(facet: String, key: String, name: String): String? = null
 

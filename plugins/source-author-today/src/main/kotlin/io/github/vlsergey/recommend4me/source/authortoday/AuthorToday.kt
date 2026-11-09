@@ -91,7 +91,13 @@ class AuthorToday : Source {
     override fun partUrl(itemId: String, partId: String) = "$BASE/reader/$itemId/$partId"
 
     /** An author's own page, by their login. */
-    override fun valueUrl(facet: String, key: String, name: String) = if (facet == AUTHOR) "$BASE/u/$key" else null
+    /** An author's page, and a series' page. */
+    override fun valueUrl(facet: String, key: String, name: String) =
+        when (facet) {
+            AUTHOR -> "$BASE/u/$key"
+            SERIES -> "$BASE/work/series/$key"
+            else -> null
+        }
 
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 

@@ -149,7 +149,13 @@ class Ao3 : Source {
         if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/works/$itemId/chapters/$partId"
 
     /** An author's own page, by their login. */
-    override fun valueUrl(facet: String, key: String, name: String) = if (facet == AUTHOR) "$BASE/users/$key" else null
+    /** An author's page, and a series' page. */
+    override fun valueUrl(facet: String, key: String, name: String) =
+        when (facet) {
+            AUTHOR -> "$BASE/users/$key"
+            SERIES -> "$BASE/series/$key"
+            else -> null
+        }
 
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 

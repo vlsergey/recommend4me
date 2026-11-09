@@ -114,7 +114,11 @@ class Ficbook : Source {
 
     /** An author's own page, by the id of its address. */
     override fun valueUrl(facet: String, key: String, name: String) =
-        if (facet == AUTHOR) "$BASE/authors/$key" else null
+        when (facet) {
+            AUTHOR -> "$BASE/authors/$key"
+            SERIES -> "$BASE/series/$key"
+            else -> null
+        }
 
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
