@@ -9,7 +9,7 @@ import { useTypes } from "@/contenttype/types";
 import { formatDay } from "@/i18n/format";
 import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { writeTopHash } from "@/item/dialogStack";
-import { readSeriesHash, type SeriesRef, seriesKey } from "./seriesHash";
+import { isSeriesHash, readSeriesHash, type SeriesRef, seriesKey } from "./seriesHash";
 import { MergeWorks } from "./MergeWorks";
 import { SeriesWorks } from "./SeriesWorks";
 
@@ -136,6 +136,8 @@ export function HashSeriesDialog() {
   }, []);
   const close = useCallback(() => {
     setOpened(null);
+    // The address stops naming the series: left, the same link pressed again changed nothing and opened nothing
+    if (isSeriesHash()) window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
     writeTopHash();
   }, []);
   const type = opened ? types.data?.find((x) => x.id === opened.type) : undefined;
