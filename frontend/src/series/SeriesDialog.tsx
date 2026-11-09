@@ -55,7 +55,9 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
                 type={type}
                 series={s}
                 trailing={(w) =>
-                  w.said && (
+                  // Of a work a site's series has, the site's word stands: nothing to take out
+                  w.said &&
+                  !w.bySite && (
                     <AsyncButton variant="ghost" size="xs" title={t("Series.takeOutHint")} onClick={() => takeOut(w.work.source, w.work.item)}>
                       {t("Series.takeOut")}
                     </AsyncButton>

@@ -5483,7 +5483,7 @@ components:
 
     SeriesWork:
       type: object
-      required: [work, places, said]
+      required: [work, places, said, bySite]
       properties:
         work:
           $ref: '#/components/schemas/RelatedWork'
@@ -5494,7 +5494,10 @@ components:
             $ref: '#/components/schemas/SeriesPlace'
         said:
           type: boolean
-          description: The user put it in the series ("one series"); it can be taken out
+          description: The user put it in the series ("one series")
+        bySite:
+          type: boolean
+          description: A site's series of the series has it; the user's word takes it out of none
 
     SeriesPlace:
       type: object

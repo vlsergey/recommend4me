@@ -516,6 +516,7 @@ class SiteTest : SiteTestBase() {
         assertEquals(listOf("s3", "s2", "s1"), seen.works.map { it.work.item })
         assertEquals(listOf(1, 2, 3), seen.works.map { it.places.single().position })
         assertEquals("Starships.", seen.sites.single().description)
+        assertTrue(seen.works.all { it.bySite && !it.said })
         assertTrue(seen.sites.single().seen)
         captures.capturePage(CaptureRequest("${SitePlugins.SiteSource.SERIES}галактика", "Галактика|Starships.|s3,s1"))
         assertEquals(null, items.getItem("site", "s2").body!!.series)

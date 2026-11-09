@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 /**
  * THE WORKS OF A NORMALIZED SERIES IN ORDER — every site's numbers held together by pairs — each with
  * its number on every site that numbers it, the user's grade or else the model's prediction, and the
- * mark of a work the user put in it ([trailing]: what goes at the end of its row, its button out). A
+ * mark of a work the user alone put in it ([trailing]: what goes at the end of its row, its button out). A
  * work opens over whatever is open; the [current] work is told apart.
  */
 export function SeriesWorks({
@@ -46,7 +46,8 @@ export function SeriesWorks({
                 {sourceShort(p.source)} #{p.position}
               </span>
             ))}
-            {w.said && (
+            {/* Of a work a site's series has, the site's word: the user's adds nothing */}
+            {w.said && !w.bySite && (
               <span className="shrink-0 rounded bg-muted px-1 text-xs text-muted-foreground" title={t("Series.saidHint")}>
                 {t("Series.said")}
               </span>
