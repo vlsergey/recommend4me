@@ -78,8 +78,9 @@ internal class OneFacetModel(
     private fun chancesOf(scored: FacetChain.Scored, ids: Collection<String>, v: Int): Map<String, Double> {
         val out = HashMap<String, Double>()
         val asked = ids.toHashSet()
+        // A work none of whose texts is encoded yet has none ([FacetData.judged])
         scored.data.ids.indices
-            .filter { scored.data.ids[it] in asked }
+            .filter { scored.data.ids[it] in asked && scored.data.judged[it] }
             .chunked(CHUNK)
             .forEach { chunk ->
                 val rows = scored.scores.of(chunk.toIntArray())

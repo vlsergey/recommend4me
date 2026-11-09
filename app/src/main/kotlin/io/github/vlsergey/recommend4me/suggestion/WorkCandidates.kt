@@ -287,7 +287,7 @@ internal constructor(
     /**
      * The chance of EVERY value of the [facet] for the item, of its chances [scored] — of a facet whose values a work
      * may have are limited ([Vocabulary.allowed]), of those it may have — those shown put among [made]; null when the
-     * item is not among them.
+     * item is not among them, or the model does not judge it ([FacetData.judged]).
      */
     private fun everyChance(
         facet: FacetDef,
@@ -297,7 +297,7 @@ internal constructor(
     ): List<Chance>? {
         val data = scored.data
         val scores = scored.scores
-        val i = data.ids.indexOf(itemId).takeIf { it >= 0 } ?: return null
+        val i = data.ids.indexOf(itemId).takeIf { it >= 0 && data.judged[it] } ?: return null
         ShownChances.keep(made, facet, data, scores)
         val chances = scores.of(intArrayOf(i)).single()
         val has = data.held[i].toHashSet()

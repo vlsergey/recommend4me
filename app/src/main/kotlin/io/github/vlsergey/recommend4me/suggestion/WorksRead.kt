@@ -66,6 +66,21 @@ internal class WorksRead(
     private val inputsRead = lazy { inputs(store, ids, encoder, imageEncoder, sets, only, card) }
     val inputs: List<InputBlock> by inputsRead
 
+    /** The blocks of the texts among the [inputs]: the title, the description, the notes, the site's lines. */
+    private val textBlocks = TextVectors.blocks(store.id, store.schema).values.map { it.first }.toSet()
+
+    /**
+     * Whether each work of [ids], in their order, has the vector of one of its texts at least. Every work the models of
+     * the facets learnt from has its texts' — its title's at least: one with none, captured just now and its texts not
+     * encoded yet, is of an input no model ever learnt of, and a model's chances of it are none it can give
+     * ([FacetData.judged]).
+     */
+    val encoded: BooleanArray by lazy {
+        BooleanArray(ids.size).also { out ->
+            inputs.filter { it.name in textBlocks }.forEach { block -> block.rows.forEach { out[it] = true } }
+        }
+    }
+
     /** The tags under others of every facet of tags, read once for every facet of the pass. */
     val hierarchies: Map<String, TagHierarchy> by lazy { store.hierarchies() }
 

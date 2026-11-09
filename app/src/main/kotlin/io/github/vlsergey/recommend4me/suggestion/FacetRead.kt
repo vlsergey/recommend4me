@@ -89,7 +89,7 @@ internal class FacetRead(
         val basis =
             if (only != null || asked.kept != null) FacetData.NO_BASIS
             else FacetBasis.of(facet.key, read, values, task.groupings, asked.hintNames, cast?.signature)
-        return FacetData(ids, values, task, held, allNamed, basis)
+        return FacetData(ids, values, task, held, allNamed, read.encoded, basis)
     }
 
     /**

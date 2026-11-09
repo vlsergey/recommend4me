@@ -22,6 +22,13 @@ internal class FacetData(
     val held: List<IntArray>,
     /** Whether the user said each item's values of the facet are all named: it is given no other. */
     val complete: BooleanArray,
+    /**
+     * Whether the model judges each item: one of its texts encoded at least ([WorksRead.encoded]). An item with none —
+     * captured just now, its texts not encoded yet — has no chance of the model till they are: of its inputs all
+     * absent, a state no item it learnt from was in, the model's scores tell nothing — of the tags of a site, every tag
+     * more likely than not.
+     */
+    val judged: BooleanArray,
     /** The fingerprint of the whole facet: of every item's; [NO_BASIS] of the task of some works read alone. */
     val basis: Long,
 ) {

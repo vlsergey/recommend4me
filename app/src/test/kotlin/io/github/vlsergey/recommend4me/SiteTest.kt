@@ -555,4 +555,31 @@ class SiteTest : SiteTestBase() {
         assertEquals("standard:error.noField", error.refusal.key)
         assertEquals(mapOf("field" to "nope"), error.params)
     }
+
+    @Test
+    @Order(3)
+    fun `a work captured just now, its texts not encoded yet, has no chance of the model till they are`() {
+        capture("n1|New one|space|Starships cross the galaxy, pilots fight in orbit near planets|Pilot/Captain")
+        val store = stores.source("site")!!
+        // The texts are encoded a few seconds after the capture: that done, its vectors taken away again — the work
+        // as it is before they are made, nothing to make them again
+        val until = System.currentTimeMillis() + 30_000
+        fun encoded() = store.textVectors.halvesOf(listOf("n1"), "words")
+        while (encoded().isEmpty() && System.currentTimeMillis() < until) Thread.sleep(50)
+        encoded().getValue("n1").keys.forEach { store.textVectors.delete("n1", it) }
+        // Of no input the model ever learnt of — every work it learnt from had its texts — it can tell nothing: no
+        // value given by it, no chance of any, on the page as in the work's details; the site's tag shown all the same
+        fun worked(facets: List<ItemFacet>) = facets.filter { it.facet == "tags" || it.facet == "pairing" }
+        val page = worked(pages.getPage("https://site.example/work/n1").body!!.item!!.facets)
+        val details = worked(items.getItem("site", "n1").body!!.allFacets)
+        listOf(page, details).forEach { facets ->
+            val values = facets.flatMap { it.propertyValues }
+            assertTrue(values.none { it.chance != null || it.inferred == true }, "of the model: $values")
+            assertTrue(values.any { it.key == tag("space") }, "the site's tag: $values")
+        }
+        // Its texts encoded, it is judged by them
+        refresh(store)
+        val judged = worked(pages.getPage("https://site.example/work/n1").body!!.item!!.facets)
+        assertTrue(judged.single { it.facet == "tags" }.propertyValues.all { it.chance != null }, "judged $judged")
+    }
 }

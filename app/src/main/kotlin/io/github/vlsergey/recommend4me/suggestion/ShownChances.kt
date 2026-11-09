@@ -16,9 +16,9 @@ internal object ShownChances {
     private val NONE = IntArray(0)
 
     /**
-     * The chances of the [facet] of every work of [data] put among [made] — over the drafts, which keep the model's
-     * chance — and, when [compare], the values the model alone gives each (no draft among them): what a refit compares;
-     * none made of the chain, which compares nothing.
+     * The chances of the [facet] of every work of [data] the model judges ([FacetData.judged]) put among [made] — over
+     * the drafts, which keep the model's chance — and, when [compare], the values the model alone gives each (no draft
+     * among them): what a refit compares; none made of the chain, which compares nothing.
      *
      * OF EVERY WORK THE SCORES OF THE VALUES IT IS SHOWN WITH ALONE: of those it is told of — its own, the site's
      * examples, the rejected ([SuggestionScores.scores]) — and of the others of those it may have
@@ -43,7 +43,8 @@ internal object ShownChances {
         // suggester's, a row at a time or on the card; a call of it a chunk of works was 38 of fanfics.me
         // a facet, each sending and taking back
         var at = System.nanoTime()
-        val rows = IntArray(data.ids.size) { it }
+        // The works the model judges alone: one none of whose texts is encoded yet has no chance of it
+        val rows = data.ids.indices.filter { data.judged[it] }.toIntArray()
         val told = Array(rows.size) { toldOf(data, rows[it]) }
         // Neither what it is told of nor what it may not have after all is offered besides
         val closed = rows.mapIndexed { r, i -> (told[r] + task.barred[i]).also { it.sort() } }
