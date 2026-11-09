@@ -20,6 +20,11 @@ class NormalizedSeries(
     val sites: Map<SiteSeriesRef, List<ItemKey>>,
     val groups: Set<Long>,
     val works: Set<Long>,
+    /**
+     * Whether the user's groups hold it together: without them a work of it is in no series of a site, or its series of
+     * the sites are not one. Of groups whose every word the sites' series say too, not.
+     */
+    val byHand: Boolean = false,
 )
 
 /** The source's facet of the series; none of a source without series. */
@@ -66,7 +71,7 @@ private constructor(
                     everySite()
                     everyGroup()
                 }
-            return TypeSeries(SeriesJoin(read).series(), read.workOf)
+            return TypeSeries(SeriesJoin(read.siteOf, read.workOf, read.groups).series(), read.workOf)
         }
 
         /**
@@ -84,7 +89,7 @@ private constructor(
                 seenSeries += series
                 fresh = (read.worksOf(series) + read.groupsOf(fresh)) - seenWorks
             }
-            return TypeSeries(SeriesJoin(read).series(), read.workOf)
+            return TypeSeries(SeriesJoin(read.siteOf, read.workOf, read.groups).series(), read.workOf)
         }
     }
 }

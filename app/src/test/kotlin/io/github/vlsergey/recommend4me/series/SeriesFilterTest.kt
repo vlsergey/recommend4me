@@ -12,6 +12,7 @@ class SeriesFilterTest {
             sources.associate { SiteSeriesRef(it, key) to emptyList() },
             if (said) setOf(1L) else emptySet(),
             setOf(1L),
+            byHand = said,
         )
 
     private val all =

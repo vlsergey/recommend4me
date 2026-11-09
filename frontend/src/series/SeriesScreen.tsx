@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { LibraryIcon } from "lucide-react";
+import { EyeOffIcon, LibraryIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type ContentTypeInfo } from "@/api/client";
 import { RefreshSelect } from "@/components/RefreshSelect";
@@ -116,7 +116,13 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
                 {s.title}
               </a>
               {s.sites.map((site) => (
-                <span key={`${site.source}/${site.key}`} className="text-xs text-muted-foreground" title={sourceTitle(site.source)}>
+                <span
+                  key={`${site.source}/${site.key}`}
+                  className="inline-flex items-baseline gap-1 text-xs text-muted-foreground"
+                  title={site.seen ? sourceTitle(site.source) : `${sourceTitle(site.source)} — ${t("Series.notSeen")}`}
+                >
+                  {/* A series whose page on the site was never opened: known by the works naming it alone */}
+                  {!site.seen && <EyeOffIcon className="size-3 self-center" aria-label={t("Series.notSeen")} />}
                   {sourceShort(site.source)}
                   {site.title !== s.title && `: ${site.title}`}
                 </span>

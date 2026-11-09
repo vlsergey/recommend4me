@@ -775,7 +775,7 @@ paths:
               type: string
         - name: said
           in: query
-          description: Only those with works the user said to be one series (true), or with none (false)
+          description: Only those the user's word that works are one series holds together (true), or not (false)
           schema:
             type: boolean
         - name: offset
@@ -5496,7 +5496,10 @@ components:
       properties:
         said:
           type: boolean
-          description: Works of it the user said to be one series (by "one series" of two works) are among them
+          description: |
+            The user's word that works are one series (by "one series" of two works) holds it together:
+            without it a work of it is in no series of a site, or its series of the sites are not one.
+            Words whose every one the sites' series say too, not
         key:
           type: string
         title:

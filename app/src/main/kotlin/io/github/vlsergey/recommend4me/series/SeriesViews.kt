@@ -40,7 +40,7 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
                         title = own.firstOrNull()?.title ?: firstTitles[s.key] ?: s.key,
                         sites = own,
                         works = s.works.size,
-                        said = s.groups.isNotEmpty(),
+                        said = s.byHand,
                     )
                 }
                 .filter(filter::lets)
