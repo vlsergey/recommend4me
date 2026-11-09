@@ -42,4 +42,19 @@ class SeriesOrderTest {
         assertEquals(listOf(1L, 2L), SeriesOrder.of(listOf(2L, 1L), listOf(small, large), byId))
         assertEquals(listOf(2L, 1L), SeriesOrder.of(listOf(2L, 1L), listOf(site(2, 1, volume = 900.0), large), byId))
     }
+
+    @Test
+    fun `«Паутина света» — every pair the sites say holds, though fewer sites number a work`() {
+        // author.today/work/series/1452 and fanfics.me/serie2995 as kept on 2026-11-09, by the works' items of
+        // author.today: I 18887, II 38646, III 38721, IV 38801, V 38884, «Упавшее небо» I 132343 and II 154409, VI
+        // 291611. Counted by the votes of pairs, V went before IV, though every site saying so put IV before V: a work
+        // fewer sites number has fewer pairs to win — the pairs themselves order the works now
+        val authorToday = site(18887, 38646, 38721, 38801, 38884, 132343, 154409, 291611)
+        val fanficsMe = site(18887, 38646, 38721, 38801)
+        val works = listOf(18887L, 38646L, 38721L, 38884L, 38801L, 132343L, 154409L, 291611L)
+        assertEquals(
+            listOf(18887L, 38646L, 38721L, 38801L, 38884L, 132343L, 154409L, 291611L),
+            SeriesOrder.of(works, listOf(fanficsMe, authorToday), byId),
+        )
+    }
 }
