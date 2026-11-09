@@ -273,6 +273,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ItemDetails'
+        '202':
+          description: Everything known of the item, its chances still to come (pending)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemDetails'
         '404':
           description: No such item
     delete:
@@ -2806,6 +2812,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PageView'
+        '202':
+          description: The page, the chances of its work still to come (its item pending)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageView'
         '404':
           description: No source knows the page
 
@@ -3838,7 +3850,7 @@ components:
 
     ItemDetails:
       type: object
-      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh, related, sites, relations]
+      required: [summary, allFacets, texts, allNumbers, explanation, ratings, pictures, reviews, parts, pictureMatches, reviewMatches, titleCorrected, canRefresh, related, sites, relations, pending]
       properties:
         summary:
           $ref: '#/components/schemas/ItemSummary'
@@ -3910,6 +3922,8 @@ components:
           description: The works the user said to be related to this one - a translation, a part
           items:
             $ref: '#/components/schemas/WorkRelation'
+        pending:
+          $ref: '#/components/schemas/ChancesPending'
 
     WorkRelation:
       type: object
@@ -5166,7 +5180,7 @@ components:
       description: |
         The work as a page shows it. What moves its prediction is read apart (getExplanation): of a
         graded work it is the held-out model's, fitted for the asking
-      required: [summary, facets, suggestions, pictures, reviewMarks, ratings]
+      required: [summary, facets, suggestions, pictures, reviewMarks, ratings, pending]
       properties:
         summary:
           $ref: '#/components/schemas/ItemSummary'
@@ -5195,6 +5209,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RatingRecord'
+        pending:
+          $ref: '#/components/schemas/ChancesPending'
+
+    ChancesPending:
+      type: boolean
+      description: |
+        The chances of the models of the facets are still to come: an item of the work has none of
+        its texts encoded yet - captured just now, they wait in the queue of the computations - and
+        till they are, it has the site's values, the drafts and the user's answers alone. Asked
+        again till false
 
     PageView:
       type: object

@@ -97,7 +97,10 @@ class ItemsController(
     }
 
     override fun getItem(source: String, item: String): ResponseEntity<ItemDetails> =
-        details.read(ItemKey(source, item))?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
+        details.read(ItemKey(source, item))?.let {
+            // Its chances still to come: the interface asks again till they are there
+            ResponseEntity.status(if (it.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(it)
+        } ?: ResponseEntity.notFound().build()
 
     override fun refreshItem(source: String, item: String): ResponseEntity<ItemDetails> =
         stores.answerOn(source, item) { store, _ ->

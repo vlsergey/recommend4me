@@ -48,6 +48,7 @@
   "WorkScreen.notThisWork": "Не эта работа",
   "WorkScreen.notThisWorkHint": "Вынести запись этого сайта в отдельную работу: копия оценки и разметки останется у обеих",
   "WorkScreen.open": "Открыть",
+  "WorkScreen.chancesPending": "Шансы модели появятся, когда тексты работы закодируются: пока показаны значения сайтов и ваши ответы",
   "WorkScreen.answers_one": "Ответы {{count, number}}",
   "WorkScreen.answers_few": "Ответы {{count, number}}",
   "WorkScreen.answers_many": "Ответы {{count, number}}",

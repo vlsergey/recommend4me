@@ -12,6 +12,9 @@
 
   /** How long a shown work is not read again for every new send of a growing page. */
   const RELOAD_AFTER = 15 * 1000;
+  /** How often a work whose chances are still to come (`pending`) is read again. */
+  const PENDING_EVERY = 3 * 1000;
+  let pendingTimer = null;
 
   /** What the application said of this page; null until it answers. */
   r4m.view = null;
@@ -43,6 +46,7 @@
    */
   async function load() {
     loadedAt = Date.now();
+    clearTimeout(pendingTimer);
     try {
       await speakChosen();
       r4m.server = await browser.runtime.sendMessage({ type: "server" });
@@ -64,6 +68,8 @@
       r4m.unread = e.message;
     }
     render();
+    // Its chances still to come, its texts not encoded yet: read again till they are there
+    if (r4m.view?.item?.pending) pendingTimer = setTimeout(load, PENDING_EVERY);
     // The candidates asked for are read anew too, after the work is shown: an answer changes which
     // the work may yet have, and they wait for its chances to be made
     if (r4m.view?.item && r4m.candidatesAsked()) {

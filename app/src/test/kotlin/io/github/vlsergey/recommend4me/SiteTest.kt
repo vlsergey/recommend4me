@@ -24,6 +24,7 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -558,7 +559,7 @@ class SiteTest : SiteTestBase() {
 
     @Test
     @Order(3)
-    fun `a work captured just now, its texts not encoded yet, has no chance of the model till they are`() {
+    fun `a work captured just now, its texts not encoded yet, has no chance of the model till they are, and says so`() {
         capture("n1|New one|space|Starships cross the galaxy, pilots fight in orbit near planets|Pilot/Captain")
         val store = stores.source("site")!!
         // The texts are encoded a few seconds after the capture: that done, its vectors taken away again — the work
@@ -570,8 +571,14 @@ class SiteTest : SiteTestBase() {
         // Of no input the model ever learnt of — every work it learnt from had its texts — it can tell nothing: no
         // value given by it, no chance of any, on the page as in the work's details; the site's tag shown all the same
         fun worked(facets: List<ItemFacet>) = facets.filter { it.facet == "tags" || it.facet == "pairing" }
-        val page = worked(pages.getPage("https://site.example/work/n1").body!!.item!!.facets)
-        val details = worked(items.getItem("site", "n1").body!!.allFacets)
+        val unjudgedPage = pages.getPage("https://site.example/work/n1")
+        val unjudged = items.getItem("site", "n1")
+        // Its chances still to come: the page and the details say so, the interface asking again
+        assertEquals(HttpStatus.ACCEPTED, unjudgedPage.statusCode)
+        assertEquals(HttpStatus.ACCEPTED, unjudged.statusCode)
+        assertTrue(unjudgedPage.body!!.item!!.pending && unjudged.body!!.pending)
+        val page = worked(unjudgedPage.body!!.item!!.facets)
+        val details = worked(unjudged.body!!.allFacets)
         listOf(page, details).forEach { facets ->
             val values = facets.flatMap { it.propertyValues }
             assertTrue(values.none { it.chance != null || it.inferred == true }, "of the model: $values")
@@ -579,7 +586,12 @@ class SiteTest : SiteTestBase() {
         }
         // Its texts encoded, it is judged by them
         refresh(store)
-        val judged = worked(pages.getPage("https://site.example/work/n1").body!!.item!!.facets)
+        val judgedPage = pages.getPage("https://site.example/work/n1")
+        val judged = worked(judgedPage.body!!.item!!.facets)
         assertTrue(judged.single { it.facet == "tags" }.propertyValues.all { it.chance != null }, "judged $judged")
+        // Nothing more to come
+        assertEquals(HttpStatus.OK, judgedPage.statusCode)
+        assertFalse(judgedPage.body!!.item!!.pending)
+        assertEquals(HttpStatus.OK, items.getItem("site", "n1").statusCode)
     }
 }

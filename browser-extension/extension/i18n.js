@@ -32,6 +32,7 @@ var R4M_WORDS = {
     "panel.outOf": "out of 10",
     "panel.withoutGrade": "without your grade:",
     "panel.noPrediction": "No prediction yet: the model is not trained yet or the work is not parsed yet",
+    "panel.chancesPending": "The model's chances will come once the work's texts are encoded: shown are the sites' values and your answers",
     "panel.why": "Why:",
 
     "grade.title": "Grade:",
@@ -204,6 +205,7 @@ var R4M_WORDS = {
     "panel.outOf": "из 10",
     "panel.withoutGrade": "без вашей оценки:",
     "panel.noPrediction": "Прогноза пока нет: модель ещё не обучена или работа ещё не разобрана",
+    "panel.chancesPending": "Шансы модели появятся, когда тексты работы закодируются: пока показаны значения сайтов и ваши ответы",
     "panel.why": "Почему:",
 
     "grade.title": "Оценка:",
@@ -376,6 +378,7 @@ var R4M_WORDS = {
     "panel.outOf": "od 10",
     "panel.withoutGrade": "bez vaše ocene:",
     "panel.noPrediction": "Predviđanja još nema: model još nije obučen ili delo još nije raščlanjeno",
+    "panel.chancesPending": "Šanse modela stižu kad se tekstovi dela kodiraju: zasad su prikazane vrednosti sajtova i vaši odgovori",
     "panel.why": "Zašto:",
 
     "grade.title": "Ocena:",

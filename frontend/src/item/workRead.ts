@@ -29,7 +29,16 @@ export async function readWork(queryClient: QueryClient, item: ItemRef): Promise
   }
 }
 
+/** How often a work whose chances are still to come is read again. */
+const PENDING_POLL_MS = 3000;
+
+/**
+ * The work read again while its chances are still to come (`pending`: its texts not encoded yet),
+ * till they are there; otherwise not by itself.
+ */
+export const whilePending = (query: { state: { data?: ItemDetails | null } }) => (query.state.data?.pending ? PENDING_POLL_MS : false);
+
 /** The query of the work's details, read by [readWork]. */
 export function workQuery(queryClient: QueryClient, item: ItemRef) {
-  return { queryKey: itemKey(item), queryFn: () => readWork(queryClient, item) };
+  return { queryKey: itemKey(item), queryFn: () => readWork(queryClient, item), refetchInterval: whilePending };
 }

@@ -281,6 +281,7 @@ export function WorkScreen({
             <Loading />
           ) : d ? (
             <Part title={t("ItemDialog.facets")}>
+              {d.pending && <p className="mb-2 text-xs text-muted-foreground">{t("WorkScreen.chancesPending")}</p>}
               <WorkForm type={type} source={source} details={d} item={ref} corrections={corrections} />
             </Part>
           ) : null}

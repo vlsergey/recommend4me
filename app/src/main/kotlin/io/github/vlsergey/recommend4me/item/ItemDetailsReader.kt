@@ -34,6 +34,7 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.source.downloadsPages
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
+import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.ZoneOffset
@@ -119,6 +120,7 @@ class ItemDetailsReader(
     private val sitesSay: SitesSay,
     private val lines: WorkLines,
     private val series: SeriesViews,
+    private val texts: TextVectors,
 ) {
     /**
      * The work as the dialog shows it, its chances made now in memory ([FacetSuggestions.chances]): of every item of
@@ -185,6 +187,8 @@ class ItemDetailsReader(
             series = ownSeries,
             sites = sites(type, clusters.members(key), ownSeries),
             relations = relations(type, clusters.members(key)),
+            // An item of it not judged by the models of the facets yet, its texts waiting to be encoded
+            pending = texts.awaited(clusters.members(key)),
         )
     }
 

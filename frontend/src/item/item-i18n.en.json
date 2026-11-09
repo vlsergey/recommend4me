@@ -48,6 +48,7 @@
   "WorkScreen.notThisWork": "Not this work",
   "WorkScreen.notThisWorkHint": "Take this site's item out as a work of its own: both keep a copy of the grade and the marking",
   "WorkScreen.open": "Open",
+  "WorkScreen.chancesPending": "The model's chances will come once the work's texts are encoded: shown are the sites' values and your answers",
   "WorkScreen.answers_one": "Answers {{count, number}}",
   "WorkScreen.answers_other": "Answers {{count, number}}",
   "WorkScreen.duplicates": "Found by the search of duplicates",

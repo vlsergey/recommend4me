@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.textvector
 
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceSchema
@@ -175,6 +176,21 @@ class TextVectors(
         if (ordered.size > BATCH)
             log.info("{}: {} texts encoded in {} ms", store.id, done, System.currentTimeMillis() - started)
         return done
+    }
+
+    /**
+     * Whether one of the [items] has none of its texts encoded yet and a text to encode: captured or written just now,
+     * its texts waiting in the queue of the computations. Till they are, the models of the facets do not judge it
+     * ([FacetData.judged][io.github.vlsergey.recommend4me.suggestion.FacetData]): its chances are still to come.
+     */
+    fun awaited(items: Collection<ItemKey>): Boolean {
+        val encoder = plugins.textEncoder() ?: return false
+        return items.groupBy({ it.source }, { it.id }).any { (source, ids) ->
+            val store = stores.source(source) ?: return@any false
+            val encoded = store.textVectors.kept(encoder.id, ids).filterValues { it != null }.keys.map { it.first }
+            val bare = ids - encoded.toSet()
+            bare.isNotEmpty() && TextScan(store, bare, encoder.id).todo.isNotEmpty()
+        }
     }
 
     /** The vector of a search line as a query; null without a text encoder. */

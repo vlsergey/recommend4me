@@ -9,7 +9,7 @@ import { isSeriesHash } from "@/series/seriesHash";
 import { readItemHash } from "./itemHash";
 import { itemKey } from "./lists";
 import { useRateItem } from "./useRateItem";
-import { readWork } from "./workRead";
+import { readWork, whilePending } from "./workRead";
 
 /**
  * The dialog of one item known only by its source and id — from outside the list: a page the
@@ -23,6 +23,7 @@ export function ItemRefDialog({ item, onClose }: { item: ItemRef | null; onClose
     enabled: item !== null,
     // Run only with an item ([enabled]): no item reads none
     queryFn: async () => (item ? readWork(queryClient, item) : null),
+    refetchInterval: whilePending,
   });
   const rate = useRateItem();
   const onRate = useCallback((summary: ItemSummary, grade: Grade | null) => rate.mutateAsync({ summary, grade }).catch(() => undefined), [rate]);

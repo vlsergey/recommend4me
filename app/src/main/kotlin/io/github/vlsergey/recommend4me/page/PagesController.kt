@@ -21,8 +21,10 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
 import io.github.vlsergey.recommend4me.suggestion.toApi
+import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.work.Works
 import java.net.URI
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
@@ -40,6 +42,7 @@ class PagesController(
     private val suggestions: FacetSuggestions,
     private val works: Works,
     private val sitesSay: SitesSay,
+    private val texts: TextVectors,
 ) : PagesApi {
 
     /** The source whose site the address is on: one that wants the page, or one of the same host. */
@@ -51,15 +54,18 @@ class PagesController(
         val store = sourceOf(url) ?: return ResponseEntity.notFound().build()
         val decor = store.source.pageDecor
         val itemId = runCatching { store.source.itemIdOf(url) }.getOrNull()
-        return ResponseEntity.ok(
-            PageView(
-                source = store.id,
-                type = store.type,
-                decor = decor?.toApi() ?: PageDecorInfo(emptyList()),
-                itemId = itemId,
-                item = itemId?.takeIf { store.items.find(it) != null }?.let { item(store, it, decor) },
+        val item = itemId?.takeIf { store.items.find(it) != null }?.let { item(store, it, decor) }
+        // The work's chances still to come: the extension asks again till they are there
+        return ResponseEntity.status(if (item?.pending == true) HttpStatus.ACCEPTED else HttpStatus.OK)
+            .body(
+                PageView(
+                    source = store.id,
+                    type = store.type,
+                    decor = decor?.toApi() ?: PageDecorInfo(emptyList()),
+                    itemId = itemId,
+                    item = item,
+                )
             )
-        )
     }
 
     private fun item(store: SourceStore, itemId: String, decor: PageDecor?): PageItem? {
@@ -112,6 +118,7 @@ class PagesController(
                 },
             reviewMarks = store.marks.reviewMarksOf(itemId),
             ratings = details.ratings(type, key),
+            pending = texts.awaited(clusters.members(key)),
         )
     }
 

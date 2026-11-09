@@ -48,6 +48,7 @@
   "WorkScreen.notThisWork": "Nije ovo delo",
   "WorkScreen.notThisWorkHint": "Izdvojite zapis ovog sajta u zasebno delo: oba zadržavaju kopiju ocene i oznaka",
   "WorkScreen.open": "Otvori",
+  "WorkScreen.chancesPending": "Šanse modela stižu kad se tekstovi dela kodiraju: zasad su prikazane vrednosti sajtova i vaši odgovori",
   "WorkScreen.answers_one": "Odgovori {{count, number}}",
   "WorkScreen.answers_few": "Odgovori {{count, number}}",
   "WorkScreen.answers_other": "Odgovori {{count, number}}",

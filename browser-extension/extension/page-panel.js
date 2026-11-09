@@ -116,6 +116,7 @@
       score.appendChild(el("span", "r4m-muted", t("panel.noPrediction")));
     }
     root.appendChild(score);
+    if (item.pending) root.appendChild(el("r4m-line", "r4m-muted", t("panel.chancesPending")));
 
     // Right under the prediction, what moves it; of a graded work, first the score of the model that
     // had not seen the grade — the parts are of that one
