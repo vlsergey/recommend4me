@@ -123,5 +123,6 @@
   "WorkFields.give": "Give",
   "WorkFields.edit": "Correct",
   "WorkScreen.reading": "Read:",
-  "WorkScreen.facts": "The site's facts"
+  "WorkScreen.facts": "The site's facts",
+  "WorkOpening.opening": "Opening the work…"
 }

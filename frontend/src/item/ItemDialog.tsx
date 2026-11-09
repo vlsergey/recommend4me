@@ -6,6 +6,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useSource } from "@/contenttype/types";
 import { useStackedDialog } from "./dialogStack";
 import { KEY_GRADES } from "./pieces";
+import { WorkOpening } from "./WorkOpening";
 import { WorkScreen, WORK_SCREEN_CLASS } from "./WorkScreen";
 
 type Props = {
@@ -18,6 +19,8 @@ type Props = {
   ratedLeaves: boolean;
   /** Found by a search: the user's word on whether the work answers the line. */
   onJudge?: (summary: ItemSummary, relevant: boolean | null) => Promise<unknown>;
+  /** The work asked for is being read: the screen opens at once, its parts outlined till it is there ([WorkOpening]). */
+  opening?: boolean;
 };
 
 /**
@@ -25,7 +28,7 @@ type Props = {
  * grade and move on, a press on a grade stays, ←/→ step back and forth without answering, o opens the
  * site, Esc closes. An answer never moves on.
  */
-export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves, onJudge }: Props) {
+export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves, onJudge, opening = false }: Props) {
   const { t } = useTranslation("item");
   // The work a press on a grade stays on: most works are marked after their grade, and in the list of
   // the ungraded the grade takes it from the list under the screen
@@ -100,9 +103,10 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves, 
   });
 
   return (
-    // Esc closes the dialog on top alone, not the one under it too
-    <Dialog open={summary !== undefined} onOpenChange={(open) => !open && onTop() && go(null)}>
+    // Esc closes the dialog on top alone, not the one under it too; a work still being read, its screen at once
+    <Dialog open={summary !== undefined || opening} onOpenChange={(open) => !open && (summary === undefined || onTop()) && go(null)}>
       <DialogContent ref={popup} className={WORK_SCREEN_CLASS}>
+        {!summary && opening && <WorkOpening />}
         {summary && index !== null && of && (
           // A work that fails to draw says so in the dialog, and the next one is drawn anew
           <ErrorBoundary resetKey={`${summary.source}/${summary.item}`} title={t("ItemDialog.failed")}>
