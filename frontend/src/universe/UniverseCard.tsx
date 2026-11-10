@@ -14,6 +14,7 @@ import { CatalogueSearch } from "./CatalogueSearch";
 import { EntryCharacters } from "./EntryCharacters";
 import { LocalNameEdit } from "./LocalName";
 import { SimilarUniverses } from "./SimilarUniverses";
+import { SiteFandomName } from "./SiteFandomName";
 import { entryRef, UNIVERSES, useDictionaryChanged } from "./universeQueries";
 
 /** The query of one universe as it is now. */
@@ -172,13 +173,7 @@ function Sites({ type, universe: u }: { type: ContentTypeInfo; universe: Univers
         {u.sites.map((s) => (
           <li key={`${s.source}/${s.key}`} className="flex flex-wrap items-center gap-2 px-3 py-1.5">
             <span className="text-xs text-muted-foreground">{sourceTitle(s.source)}</span>
-            {s.url ? (
-              <a href={s.url} target="_blank" rel="noreferrer" className="font-medium underline-offset-2 hover:underline">
-                {s.name}
-              </a>
-            ) : (
-              <span className="font-medium">{s.name}</span>
-            )}
+            <SiteFandomName site={s} className="font-medium" />
             <span className="text-xs text-muted-foreground tabular-nums">{t("UniverseCard.works", { count: s.works })}</span>
             {u.sites.length > 1 && (
               <span className="ml-auto flex gap-1">

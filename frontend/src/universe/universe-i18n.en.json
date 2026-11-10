@@ -137,6 +137,7 @@
   "SimilarUniverses.wordHint.DIFFERENT": "A different universe: not offered as the same",
   "SimilarUniverses.wordHint.MERGED": "The same universe: its sites' fandoms, entries, links and your answers come here",
   "SimilarUniverses.wordHint.PARENT": "Above this one: the works of this universe get that one too",
+  "SiteFandomName.page": "The fandom's page on the site",
   "UniverseCard.allUniverses": "All universes",
   "UniverseCard.cancel": "Cancel",
   "UniverseCard.catalogueName": "in Wikidata — {{name}}",

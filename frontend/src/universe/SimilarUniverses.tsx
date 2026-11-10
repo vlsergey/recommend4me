@@ -8,6 +8,7 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Input } from "@/components/ui/input";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import { followLink, screenHref } from "@/screen/screens";
+import { SiteFandomName } from "./SiteFandomName";
 import { UNIVERSES, useDictionaryChanged } from "./universeQueries";
 
 /** How many alike universes are offered. */
@@ -89,7 +90,7 @@ export function SimilarUniverses({ type, universe: u }: { type: ContentTypeInfo;
                 <div className="flex flex-wrap gap-1 text-xs text-muted-foreground">
                   {s.sites.map((site) => (
                     <span key={`${site.source}/${site.key}`} title={sourceTitle(site.source)}>
-                      {sourceShort(site.source)}: {site.name}
+                      {sourceShort(site.source)}: <SiteFandomName site={site} />
                     </span>
                   ))}
                   <span className="tabular-nums">· {t("UniverseCard.works", { count: s.works })}</span>

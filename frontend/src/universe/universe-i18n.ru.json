@@ -139,6 +139,7 @@
   "SimilarUniverses.wordHint.DIFFERENT": "Другая вселенная: не предлагать как ту же",
   "SimilarUniverses.wordHint.MERGED": "Та же вселенная: её фандомы сайтов, записи, связи и ваши ответы перейдут сюда",
   "SimilarUniverses.wordHint.PARENT": "Над этой: работы этой вселенной получат и ту",
+  "SiteFandomName.page": "Страница фандома на сайте",
   "UniverseCard.allUniverses": "Все вселенные",
   "UniverseCard.cancel": "Отмена",
   "UniverseCard.catalogueName": "в Викиданных — {{name}}",
