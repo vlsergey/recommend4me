@@ -156,7 +156,7 @@ class UniversesController(
         stores.withUniverses()
         val b = siteFandomBinding
         val to =
-            editing.bind(SiteFandomRef(b.source, b.key), b.universe?.let(::idOf))
+            editing.bind(SiteFandomRef(b.source, b.key), b.universe?.let(::idOf), b.under == true)
                 ?: throw Refusal.NO_FANDOMS.refuse(
                     HttpStatus.NOT_FOUND,
                     "No fandom ${b.key} of ${b.source} bound, or no such universe",

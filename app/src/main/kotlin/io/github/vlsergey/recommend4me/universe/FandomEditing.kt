@@ -112,16 +112,23 @@ class FandomEditing(
 
     /**
      * The site's fandom [site] bound to the universe [universe] — to a new one of its own when null: taken out of the
-     * universe it was. The user's answers stay with the universes they were given on. The universe it is bound to now;
-     * null of a site's fandom not bound, or of no such universe.
+     * universe it was, and put under it when [under] (a part of a franchise: its works of the franchise too). The
+     * user's answers stay with the universes they were given on. The universe it is bound to now; null of a site's
+     * fandom not bound, or of no such universe.
      */
-    fun bind(site: SiteFandomRef, universe: Long?): Long? {
+    fun bind(site: SiteFandomRef, universe: Long?, under: Boolean = false): Long? {
         val fandoms = dictionary().fandoms
         val was = fandoms.sites.fandomOf(site)
         if (was == null || (universe != null && !fandoms.exists(universe))) return null
         val now = Instant.now()
-        // A new universe of its own and the site's fandom bound to it, both or neither
-        val to = fandoms.transaction { f -> (universe ?: f.create(now)).also { f.sites.bind(site, it, now) } }
+        // A new universe of its own and the site's fandom bound to it — put under the one it leaves, when [under] — all
+        // or nothing
+        val to = fandoms.transaction { f ->
+            (universe ?: f.create(now)).also {
+                f.sites.bind(site, it, now)
+                if (universe == null && under) f.relations.link(it, was, now)
+            }
+        }
         log.info("{} of {} bound to universe {}, was {}", site.key, site.source, to, was)
         changed(listOf(was, to))
         return to

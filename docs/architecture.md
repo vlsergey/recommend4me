@@ -318,7 +318,8 @@ the sites' fandoms of its name are bound to, any case, when there is exactly one
 new universe of its own (`FandomNormalization`, as the works are captured and on start). From then
 on the user binds them: merges two universes that are one (their sites' fandoms, entries, links and
 the user's answers on the works go to the one kept, the newest answer standing of a work answered on
-both), takes a site's fandom out to a universe of its own, puts one under another — a work of the
+both), takes a site's fandom out to a universe of its own — or puts it down, to a universe of its own
+under the one it leaves (a part of a franchise) — puts one under another — a work of the
 child is of the parent too — tells two apart, names one. The screen of the universes offers the
 universes alike one by the meaning of their sites' fandoms' names (the names encoded as the search
 encodes short texts, kept by their sources, made in the background: `FandomVectors`) and those bound

@@ -6433,6 +6433,9 @@ components:
         universe:
           type: string
           description: The universe to bind it to; none - a new universe of its own
+        under:
+          type: boolean
+          description: Of a fandom taken out to a universe of its own, that universe put under the one it leaves
 
     SimilarUniverse:
       type: object

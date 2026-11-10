@@ -158,6 +158,8 @@
   "UniverseCard.noSites": "No site's fandom is bound to this universe.",
   "UniverseCard.ownNameBack": "Give back the name of Wikidata or the sites",
   "UniverseCard.parents": "Above it:",
+  "UniverseCard.putDown": "Put down",
+  "UniverseCard.putDownHint": "Take the site's fandom out to a universe of its own under this one — a part of the franchise: its works get this universe too; your answers on the works stay here",
   "UniverseCard.refresh": "Read Wikidata again",
   "UniverseCard.refreshHint": "Ask Wikidata again for the universe's entries — and their characters, when they are read",
   "UniverseCard.refreshed": "asked {{ago}}",

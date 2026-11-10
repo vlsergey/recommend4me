@@ -162,6 +162,8 @@
   "UniverseCard.noSites": "Nijedan fandom sajta nije vezan za ovaj univerzum.",
   "UniverseCard.ownNameBack": "Vrati naziv Vikipodataka ili sajtova",
   "UniverseCard.parents": "Iznad njega:",
+  "UniverseCard.putDown": "Spusti",
+  "UniverseCard.putDownHint": "Izdvoj fandom sajta u sopstveni univerzum ispod ovog — kao deo franšize: njegova dela dobijaju i ovaj univerzum; vaši odgovori na delima ostaju ovde",
   "UniverseCard.refresh": "Ponovo pitaj Vikipodatke",
   "UniverseCard.refreshHint": "Ponovo pitaj Vikipodatke za unose univerzuma — i likove, kad se učitavaju",
   "UniverseCard.refreshed": "pitano {{ago}}",

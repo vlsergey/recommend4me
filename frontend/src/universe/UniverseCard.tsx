@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftIcon, ChevronRightIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, Undo2Icon, UnlinkIcon, UsersIcon, XIcon } from "lucide-react";
+import { ArrowDownToLineIcon, ArrowLeftIcon, ChevronRightIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, Undo2Icon, UnlinkIcon, UsersIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, unwrap, type ContentTypeInfo, type UniverseEntryInfo, type UniverseInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -153,12 +153,15 @@ function Header({ type, universe: u }: { type: ContentTypeInfo; universe: Univer
   );
 }
 
-/** The sites' fandoms bound to the universe, of the most works first; of several, one taken out to a universe of its own. */
+/**
+ * The sites' fandoms bound to the universe, of the most works first; of several, one taken out to a universe of its
+ * own — or put down: taken out to a universe of its own under this one, a part of it (a film of a franchise).
+ */
 function Sites({ type, universe: u }: { type: ContentTypeInfo; universe: UniverseInfo }) {
   const { t } = useTranslation("universe");
   const changed = useChanged(type.id, u.value);
-  const takeOut = async (source: string, key: string) => {
-    ensureOk(await api.PUT("/api/universes/binding", { body: { source, key } }));
+  const takeOut = async (source: string, key: string, under: boolean) => {
+    ensureOk(await api.PUT("/api/universes/binding", { body: { source, key, under } }));
     await changed();
   };
   return (
@@ -178,9 +181,14 @@ function Sites({ type, universe: u }: { type: ContentTypeInfo; universe: Univers
             )}
             <span className="text-xs text-muted-foreground tabular-nums">{t("UniverseCard.works", { count: s.works })}</span>
             {u.sites.length > 1 && (
-              <AsyncButton size="xs" variant="ghost" className="ml-auto" onClick={() => takeOut(s.source, s.key)} title={t("UniverseCard.takeOutHint")} icon={<UnlinkIcon />}>
-                {t("UniverseCard.takeOut")}
-              </AsyncButton>
+              <span className="ml-auto flex gap-1">
+                <AsyncButton size="xs" variant="ghost" onClick={() => takeOut(s.source, s.key, true)} title={t("UniverseCard.putDownHint")} icon={<ArrowDownToLineIcon />}>
+                  {t("UniverseCard.putDown")}
+                </AsyncButton>
+                <AsyncButton size="xs" variant="ghost" onClick={() => takeOut(s.source, s.key, false)} title={t("UniverseCard.takeOutHint")} icon={<UnlinkIcon />}>
+                  {t("UniverseCard.takeOut")}
+                </AsyncButton>
+              </span>
             )}
           </li>
         ))}

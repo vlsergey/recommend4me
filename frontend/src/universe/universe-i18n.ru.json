@@ -166,6 +166,8 @@
   "UniverseCard.noSites": "Ни один фандом сайта не привязан к этой вселенной.",
   "UniverseCard.ownNameBack": "Вернуть название по Викиданным или сайтам",
   "UniverseCard.parents": "Над ней:",
+  "UniverseCard.putDown": "Опустить",
+  "UniverseCard.putDownHint": "Вынуть фандом сайта в отдельную вселенную под этой — как часть франшизы: его работы получат и эту вселенную; ваши ответы на работах остаются здесь",
   "UniverseCard.refresh": "Обновить из Викиданных",
   "UniverseCard.refreshHint": "Заново спросить у Викиданных записи вселенной — и персонажей, если они загружаются",
   "UniverseCard.refreshed": "спрошено {{ago}}",

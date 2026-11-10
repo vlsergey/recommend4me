@@ -161,8 +161,9 @@ class SiteUniversesTest : SiteTestBase() {
             listOf(hp) to emptyList<String>(),
             universes.getUniverse(ring).body!!.let { it.children to it.parents },
         )
-        val ofHp = universes.bindSiteFandom(SiteFandomBinding("site", "hp-movies")).body!!.value
-        universes.relateUniverses(UniverseRelationRequest(hp, ofHp, UniverseRelation.CHILD))
+        // A site's fandom put down: a universe of its own under the one it leaves
+        val ofHp = universes.bindSiteFandom(SiteFandomBinding("site", "hp-movies", under = true)).body!!.value
+        assertEquals(listOf(hp), universes.getUniverse(ofHp).body!!.parents)
         val loop =
             assertFailsWith<Refused> {
                 universes.relateUniverses(UniverseRelationRequest(ofHp, ring, UniverseRelation.CHILD))
