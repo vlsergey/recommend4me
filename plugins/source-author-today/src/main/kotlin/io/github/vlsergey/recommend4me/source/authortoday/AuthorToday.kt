@@ -135,6 +135,8 @@ class AuthorToday : Source {
             reviews = ReviewDecor("article.post[id^='post_']", idPrefix = "post_"),
             pictures = PictureDecor(".book-cover img.cover-image"),
             cards = CardDecor(".book-row", ".book-title a[href^='/work/']"),
+            // "вперед →" of the pages of a list, over it and under it; on its last page a link of no address
+            nextPage = "ul.pagination li.next a[rel=next][href]",
         )
 
     override fun capture(page: CapturedPage, context: SourceContext): List<String> =

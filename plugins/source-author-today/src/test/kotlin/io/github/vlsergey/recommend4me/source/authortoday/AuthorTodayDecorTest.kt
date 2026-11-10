@@ -82,4 +82,14 @@ class AuthorTodayDecorTest {
                 .mapNotNull(source::itemIdOf)
         assertEquals(captured, linked)
     }
+
+    @Test
+    fun `a list's next page is its link onward, and none of its first page is backward`() {
+        val doc = Jsoup.parse(page("genre-fantasy.html"), "https://author.today/work/genre/fantasy")
+        val next = doc.select(decor.nextPage!!).map { it.absUrl("href") }.distinct()
+        assertEquals(
+            listOf("https://author.today/work/genre/fantasy?usingNeuralNetworks=any&eg=-&fnd=false&page=2"),
+            next,
+        )
+    }
 }
