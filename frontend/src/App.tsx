@@ -37,7 +37,7 @@ import { StopDialog, Stopped, stopApplication, stopsWithoutAsking } from "@/scre
 import { replaceScreen, useScreen, type Screen } from "@/screen/screens";
 import { HistoryScreen } from "@/history/HistoryScreen";
 import { TagsScreen } from "@/tag/TagsScreen";
-import { UniversesScreen } from "@/universe/Universes";
+import { UniversesScreen } from "@/universe/UniversesScreen";
 import { PairingsScreen } from "@/pairing/PairingsScreen";
 
 const VIEWS: ItemView[] = ["UNRATED", "RATED", "ALL"];
@@ -222,7 +222,7 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
 
       {screen.kind === "universes" && universes && (
         <ErrorBoundary title={t("App.failed.universes")}>
-          <UniversesScreen type={universes} selected={screen.catalogue && screen.universe ? { catalogue: screen.catalogue, universe: screen.universe } : undefined} />
+          <UniversesScreen type={universes} selected={screen.universe} />
         </ErrorBoundary>
       )}
       {screen.kind === "pairings" && universes && (

@@ -35,15 +35,19 @@
 | `work_field_correction` | a field of a work as the user wrote it: the title, a text, a number |
 | `work_facet_complete` | the user said a work's values of a facet are all named |
 | `work_facet_unknown` | the user's word that whether a work has a value is not clear of it (a pairing): asked so no more, nothing learnt |
-| `universe` | a universe of the dictionary: an entry of a catalogue the user added |
-| `universe_property` | what else the catalogue says of a universe |
-| `universe_character` | a character of a universe |
+| `fandom` | a universe — a normalized fandom: the name the user gave it, whether the characters of its entries are read and given to its works (`characters`), the name of its sites' fandom of the most works (`calculated_name`, worked out); a work's value of the facet "universe" is its id |
+| `fandom_site` | every fandom of every site — the site's own key of it — and the normalized fandom it is, at first the one of its name |
+| `fandom_entry` | an entry of a catalogue a universe is bound to, kept in `universe` |
+| `fandom_parent` | a universe under another: a work of the child is of the parent too |
+| `fandom_distinct` | two universes the user told apart: never offered as one again |
+| `universe` | an entry of a catalogue a universe is bound to, as the catalogue gave it — with its characters when a universe bound to it reads them |
+| `universe_property` | what else the catalogue says of an entry |
+| `universe_character` | a character of an entry |
 | `universe_character_property` | what else the catalogue says of a character |
 | `universe_character_class` | the classes a character is an instance of |
 | `universe_class` | a class of the catalogue, and whether its instances are characters |
-| `universe_class_choice` | the user's word on a class of a universe |
-| `universe_character_choice` | the user's word on one character of a universe |
-| `site_fandom` | a site's fandom bound by the user to a universe of the dictionary: every work of the fandom drafted with it |
+| `universe_class_choice` | the user's word on a class of an entry |
+| `universe_character_choice` | the user's word on one character of an entry |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
@@ -54,6 +58,35 @@ erDiagram
         DOUBLE weight
         INTEGER works
         TIMESTAMPTZ fitted_at
+    }
+    fandom {
+        BIGINT id PK
+        VARCHAR name "null"
+        BOOLEAN characters
+        VARCHAR calculated_name "null"
+        TIMESTAMPTZ made_at
+    }
+    fandom_distinct {
+        BIGINT first_fandom PK, FK
+        BIGINT other_fandom PK, FK
+        TIMESTAMPTZ said_at
+    }
+    fandom_entry {
+        BIGINT fandom PK, FK
+        VARCHAR catalogue PK, FK
+        VARCHAR entry PK, FK
+        TIMESTAMPTZ bound_at
+    }
+    fandom_parent {
+        BIGINT child PK, FK
+        BIGINT parent PK, FK
+        TIMESTAMPTZ linked_at
+    }
+    fandom_site {
+        VARCHAR source PK
+        VARCHAR site_key PK
+        BIGINT fandom FK
+        TIMESTAMPTZ bound_at
     }
     normalized_author {
         BIGINT id PK
@@ -118,13 +151,6 @@ erDiagram
         VARCHAR source PK
         VARCHAR author PK
         BIGINT normalized FK
-        TIMESTAMPTZ bound_at
-    }
-    site_fandom {
-        VARCHAR source PK
-        VARCHAR fandom PK
-        VARCHAR catalogue PK, FK
-        VARCHAR universe_id PK, FK
         TIMESTAMPTZ bound_at
     }
     site_tag {
@@ -308,6 +334,12 @@ erDiagram
         INTEGER grade
         TIMESTAMPTZ rated_at
     }
+    fandom ||--o{ fandom_distinct : "first_fandom"
+    fandom ||--o{ fandom_distinct : "other_fandom"
+    fandom ||--o{ fandom_entry : "fandom"
+    fandom ||--o{ fandom_parent : "child"
+    fandom ||--o{ fandom_parent : "parent"
+    fandom ||--o{ fandom_site : "fandom"
     normalized_author ||--o{ normalized_author_distinct : "first_author"
     normalized_author ||--o{ normalized_author_distinct : "other_author"
     normalized_author ||--o{ normalized_author_entry : "author"
@@ -337,7 +369,7 @@ erDiagram
     tag_entry ||--o{ tag_entry_above : "catalogue, entry"
     tag_entry ||--o{ tag_entry_text : "catalogue, entry"
     tag_entry ||--o{ tag_entry_too_general : "catalogue, entry"
-    universe ||--o{ site_fandom : "catalogue, universe_id"
+    universe ||--o{ fandom_entry : "catalogue, entry"
     universe ||--o{ universe_character : "catalogue, universe_id"
     universe ||--o{ universe_character_choice : "catalogue, universe_id"
     universe ||--o{ universe_class_choice : "catalogue, universe_id"

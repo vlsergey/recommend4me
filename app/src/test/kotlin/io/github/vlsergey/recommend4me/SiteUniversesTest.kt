@@ -8,12 +8,23 @@ import io.github.vlsergey.recommend4me.api.model.LocalName
 import io.github.vlsergey.recommend4me.api.model.MarkAnswer
 import io.github.vlsergey.recommend4me.api.model.MarkVerdict
 import io.github.vlsergey.recommend4me.api.model.MarkingOrder
+import io.github.vlsergey.recommend4me.api.model.SiteFandomBinding
+import io.github.vlsergey.recommend4me.api.model.UniverseCharacters
+import io.github.vlsergey.recommend4me.api.model.UniverseEntryBinding
+import io.github.vlsergey.recommend4me.api.model.UniverseName
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
+import io.github.vlsergey.recommend4me.api.model.UniverseRelation
+import io.github.vlsergey.recommend4me.api.model.UniverseRelationRequest
+import io.github.vlsergey.recommend4me.refusal.Refusal
+import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.universe.SiteFandomRef
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -23,86 +34,167 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
 
 /**
- * The universes of the site's works: one found by its button joining the dictionary, the characters and the pairings
- * worked out within them, drafted from the site's tags through the dictionary.
+ * The universes of the site's works: the site's fandoms universes of their own, bound by name, merged and taken out by
+ * the user; an entry of the catalogue found by its button made a universe whose characters are read, the characters and
+ * the pairings worked out within them, drafted from the site's tags through the dictionary.
  */
 @Order(2)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class SiteUniversesTest : SiteTestBase() {
 
+    /** The universe of the entry U2 of the catalogue, as the test that makes it made it. */
+    private lateinit var u2: String
+
     @Test
     @Order(3)
-    fun `a universe found by the button joins the dictionary with its characters, and works are linked to it`() {
+    fun `an entry found by the button made a universe with its characters, and works are linked to it`() {
         capture("u1|Lone pilot|space|A pilot alone in orbit|")
-        assertEquals(listOf("U1"), universes.searchUniverses("Space").body!!.map { it.universe })
+        assertEquals(listOf("U1"), universeEntries.searchUniverses("Space").body!!.map { it.universe })
         val added = universes.addUniverse(UniverseRef("fake", "U1")).body!!
-        assertEquals("fake:U1", added.value)
-        assertEquals(2, added.characters)
-        assertEquals(true, universes.searchUniverses("space").body!!.single().added)
+        val u1 = added.value
+        assertEquals(listOf("fake:U1"), added.propertyEntries.map { it.value })
+        assertEquals(true to 2, added.characters to added.characterCount)
+        assertEquals(u1, universeEntries.searchUniverses("space").body!!.single().bound)
+        // Added again, it is the same universe
+        assertEquals(u1, universes.addUniverse(UniverseRef("fake", "U1")).body!!.value)
         assertEquals(
             listOf("Pilot", "The Pilot"),
-            universes.listCharacters("fake", "U1").body!!.single { it.character == "C1" }.names,
+            universeEntries.listCharacters("fake", "U1").body!!.single { it.character == "C1" }.names,
         )
         // The statements the site asked of the catalogue came with the characters, and are kept
         val pilot = stores.type("books")!!.universes.entries.characters("fake", "U1").single { it.id == "C1" }
         assertEquals(mapOf("P1" to listOf("Space Pilot")), pilot.properties)
-        assertEquals(setOf("P1"), stores.type("books")!!.universes.find("fake", "U1")!!.properties)
+        assertEquals(setOf("P1"), stores.type("books")!!.universes.findEntry("fake", "U1")!!.properties)
 
         // The station is said to be in the universe, but a place: shown, not kept as a character
-        assertEquals(3, added.total)
-        val station = universes.listCharacters("fake", "U1").body!!.single { it.character == "S1" }
+        assertEquals(3, added.propertyEntries.single().total)
+        val station = universeEntries.listCharacters("fake", "U1").body!!.single { it.character == "S1" }
         assertEquals(false, station.included)
         assertEquals(listOf("K2"), station.classes)
-        val place = universes.listUniverseClasses("fake", "U1").body!!.single { it.propertyClass == "K2" }
+        val place = universeEntries.listUniverseClasses("fake", "U1").body!!.single { it.propertyClass == "K2" }
         assertEquals(Triple("place", false, 1), Triple(place.name, place.included, place.count))
         // The user keeps the places of the universe, then leaves this one out by itself, then takes both words back
-        universes.chooseUniverseClass("fake", "U1", "K2", Inclusion(true))
-        assertEquals(3, universes.listUniverses().body!!.single { it.universe == "U1" }.characters)
-        universes.chooseUniverseEntry("fake", "U1", "S1", Inclusion(false))
-        assertEquals(false, universes.listCharacters("fake", "U1").body!!.single { it.character == "S1" }.choice)
-        assertEquals(2, universes.listUniverses().body!!.single { it.universe == "U1" }.characters)
-        universes.resetUniverseEntry("fake", "U1", "S1")
-        universes.resetUniverseClass("fake", "U1", "K2")
+        fun kept() = universes.getUniverse(u1).body!!.characterCount
+        universeEntries.chooseUniverseClass("fake", "U1", "K2", Inclusion(true))
+        assertEquals(3, kept())
+        universeEntries.chooseUniverseEntry("fake", "U1", "S1", Inclusion(false))
+        assertEquals(false, universeEntries.listCharacters("fake", "U1").body!!.single { it.character == "S1" }.choice)
+        assertEquals(2, kept())
+        universeEntries.resetUniverseEntry("fake", "U1", "S1")
+        universeEntries.resetUniverseClass("fake", "U1", "K2")
         // The words stay over a refresh of the universe
-        universes.chooseUniverseEntry("fake", "U1", "S1", Inclusion(true))
+        universeEntries.chooseUniverseEntry("fake", "U1", "S1", Inclusion(true))
         universes.addUniverse(UniverseRef("fake", "U1"))
-        assertEquals(true, universes.listCharacters("fake", "U1").body!!.single { it.character == "S1" }.included)
-        universes.resetUniverseEntry("fake", "U1", "S1")
-
-        // The universe is a value to pick for any work, linked to none yet; linked, it names itself
-        assertTrue(searchController.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == "fake:U1" })
-        corrections.correctFacet("site", "u1", FacetCorrection(facet = "universe", added = true, key = "fake:U1"))
         assertEquals(
-            "Space opera",
+            true,
+            universeEntries.listCharacters("fake", "U1").body!!.single { it.character == "S1" }.included,
+        )
+        universeEntries.resetUniverseEntry("fake", "U1", "S1")
+
+        // The universe is a value to pick for any work, linked to none yet; linked, it names itself by its entry
+        assertTrue(searchController.listFacetValues("site", "universe", "space", 10).body!!.any { it.key == u1 })
+        corrections.correctFacet("site", "u1", FacetCorrection(facet = "universe", added = true, key = u1))
+        fun universeOfWork() =
             items
                 .getItem("site", "u1")
                 .body!!
                 .allFacets
                 .single { it.facet == "universe" }
                 .propertyValues
-                .single { it.key == "fake:U1" }
-                .name,
-        )
-        assertEquals(1, universes.listUniverses().body!!.single { it.universe == "U1" }.works)
+                .find {
+                    it.key == u1
+                }
+        assertEquals("Space opera", universeOfWork()?.name)
 
-        // Removed, it takes its links with it
-        universes.removeUniverse("fake", "U1")
-        assertTrue(universes.listUniverses().body!!.none { it.universe == "U1" })
-        val left = items.getItem("site", "u1").body!!.allFacets.filter { it.facet == "universe" }
-        assertTrue(left.none { f -> f.propertyValues.any { it.key == "fake:U1" } }, "left $left")
+        // Its characters no more read: none kept is given to its works; read again, they are
+        universes.chooseUniverseCharacters(UniverseCharacters(u1, false))
+        assertEquals(false to 0, universes.getUniverse(u1).body!!.let { it.characters to it.characterCount })
+        universes.chooseUniverseCharacters(UniverseCharacters(u1, true))
+        assertEquals(2, kept())
+
+        // Unbound from its entry, the entry goes with its characters; the universe and its works' links stay
+        universes.bindUniverseEntry(UniverseEntryBinding(u1, "fake", "U1", false))
+        assertTrue(universes.getUniverse(u1).body!!.propertyEntries.isEmpty())
+        assertTrue(universeEntries.listCharacters("fake", "U1").body!!.isEmpty())
+        assertNotNull(universeOfWork())
+    }
+
+    @Test
+    @Order(4)
+    fun `the site's fandoms are universes of their own, bound by name, merged and taken out by the user`() {
+        capture("h1|Wand|magic|A wand||x1|hp:Harry Potter")
+        capture("h2|Broom|magic|A broom||x2|hp-movies:harry potter")
+        capture("h3|Ring|magic|A ring||x3|lotr:The Lord of the Rings")
+        fun universeOf(key: String) =
+            stores.type("books")!!.universes.fandoms.sites.fandomOf(SiteFandomRef("site", key))!!.toString()
+        // Two fandoms of one name, any case, are one universe; drafted to their works at once, named by the fandom
+        val hp = universeOf("hp")
+        val lotr = universeOf("lotr")
+        assertEquals(hp, universeOf("hp-movies"))
+        assertNotEquals(hp, lotr)
+        assertEquals("Harry Potter", valueOf("h1", "universe", hp)?.draftedFrom)
+        assertEquals("harry potter", valueOf("h2", "universe", hp)?.draftedFrom)
+        assertEquals("Harry Potter", universes.getUniverse(hp).body!!.name)
+
+        // The user's answer on one; merged into another, its fandoms and the answer are the other's
+        corrections.correctFacet("site", "h3", FacetCorrection(facet = "universe", added = true, key = lotr))
+        universes.relateUniverses(UniverseRelationRequest(hp, lotr, UniverseRelation.MERGED))
+        assertTrue(universes.listUniverses().body!!.none { it.value == lotr })
+        assertEquals(hp, universeOf("lotr"))
+        assertEquals(3, universes.getUniverse(hp).body!!.sites.size)
+        assertTrue(
+            stores.source("site")!!.corrections.facetsOf("h3").any { it.facet == "universe" && it.key == hp },
+            "h3 ${stores.source("site")!!.corrections.facetsOf("h3")}",
+        )
+
+        // A site's fandom taken out is a universe of its own; put under another, its works are of the other too
+        val ring = universes.bindSiteFandom(SiteFandomBinding("site", "lotr")).body!!.value
+        assertNotEquals(hp, ring)
+        universes.relateUniverses(UniverseRelationRequest(hp, ring, UniverseRelation.CHILD))
+        assertEquals(listOf(hp), universes.getUniverse(ring).body!!.parents)
+        inBackground { layerDrafts.redraftPlanned() }
+        assertNotNull(valueOf("h3", "universe", ring)?.draftedFrom)
+        assertNotNull(valueOf("h3", "universe", hp))
+        // A word on the two in place of the word before; one under a universe of its own descendants refused: a loop
+        universes.relateUniverses(UniverseRelationRequest(ring, hp, UniverseRelation.CHILD))
+        assertEquals(
+            listOf(hp) to emptyList<String>(),
+            universes.getUniverse(ring).body!!.let { it.children to it.parents },
+        )
+        val ofHp = universes.bindSiteFandom(SiteFandomBinding("site", "hp-movies")).body!!.value
+        universes.relateUniverses(UniverseRelationRequest(hp, ofHp, UniverseRelation.CHILD))
+        val loop =
+            assertFailsWith<Refused> {
+                universes.relateUniverses(UniverseRelationRequest(ofHp, ring, UniverseRelation.CHILD))
+            }
+        assertEquals(Refusal.UNIVERSE_ABOVE, loop.refusal)
+        universes.relateUniverses(UniverseRelationRequest(hp, ofHp, UniverseRelation.MERGED))
+        assertEquals(hp, universeOf("hp-movies"))
+
+        // A name of the user's over the site's
+        universes.nameUniverse(UniverseName(hp, "Мир ГП"))
+        assertEquals("Мир ГП", universes.getUniverse(hp).body!!.name)
+        universes.nameUniverse(UniverseName(hp, null))
+        assertEquals("Harry Potter", universes.getUniverse(hp).body!!.name)
+
+        // An original work has no universe of its fandom
+        capture("h4|Mine|magic|My own world||x4|originals:Originals")
+        assertTrue(
+            facetsOf("h4").find { it.facet == "universe" }?.propertyValues.orEmpty().none { it.draftedFrom != null }
+        )
     }
 
     @Test
     @Order(1)
     fun `the characters and the pairings of a work are worked out within its universes`() {
-        universes.addUniverse(UniverseRef("fake", "U2"))
+        u2 = universes.addUniverse(UniverseRef("fake", "U2")).body!!.value
         // Works of the universe, the site's line naming its pairing, and works of no universe
         repeat(12) { k ->
             capture("p$k|Pilots $k|space|Pilots fly starships in orbit near planets $k|Pilot/Captain")
             capture("q$k|Knights $k|dragons|A knight guards the princess in the castle $k|Knight/Princess")
         }
         repeat(12) { k ->
-            corrections.correctFacet("site", "p$k", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
+            corrections.correctFacet("site", "p$k", FacetCorrection(facet = "universe", added = true, key = u2))
         }
         // The user's word on half of them
         repeat(6) { k ->
@@ -166,7 +258,7 @@ class SiteUniversesTest : SiteTestBase() {
                 .allFacets
                 .single { it.facet == "universe" }
                 .propertyValues
-                .any { it.key == "fake:U2" && it.inferred == true }
+                .any { it.key == u2 && it.inferred == true }
         if (givenUniverse) {
             val chosen =
                 outside().single { it.facet == "characters" }.propertyValues.map { it.key } +
@@ -202,7 +294,7 @@ class SiteUniversesTest : SiteTestBase() {
             "n1|The captain|space|The Captain commands. The Captain waits. " +
                 "The Captain sleeps, the captain of the guard does not|"
         )
-        corrections.correctFacet("site", "n1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
+        corrections.correctFacet("site", "n1", FacetCorrection(facet = "universe", added = true, key = u2))
         refresh(store)
         // The models fitted after the quiet — here at once; how often its texts name every character is counted for its
         // candidates alone
@@ -347,26 +439,26 @@ class SiteUniversesTest : SiteTestBase() {
         val universes =
             items.getItem("site", "f1").body!!.allFacets.single { it.facet == "universe" }.propertyValues.map { it.key }
         val offeredUniverses = suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.map { it.key }
-        assertEquals("fake:U2", (universes + offeredUniverses).first(), "given $universes, offered $offeredUniverses")
+        assertEquals(u2, (universes + offeredUniverses).first(), "given $universes, offered $offeredUniverses")
 
         // Its universes all named: no other is offered, the work has its own alone
-        this.universes.addUniverse(UniverseRef("fake", "U1"))
+        val u1 = this.universes.addUniverse(UniverseRef("fake", "U1")).body!!.value
         // A universe new to the dictionary is among the values a work is scored by once the facet is
         // fitted again, after the quiet — here at once: the scoring kept is of the values it was fitted on
         inBackground { suggestions.refresh(store) }
         // The other universe: given by the model or offered among the candidates
         fun other(details: io.github.vlsergey.recommend4me.api.model.ItemDetails) =
-            details.allFacets.single { it.facet == "universe" }.propertyValues.any { it.key == "fake:U1" } ||
-                suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.any { it.key == "fake:U1" }
+            details.allFacets.single { it.facet == "universe" }.propertyValues.any { it.key == u1 } ||
+                suggestionsApi.getCandidates("site", "f1", "universe", null, null).body!!.any { it.key == u1 }
         // An answer is kept at once; the chances it changes are made as the work is read
         fun settled(item: String) = items.getItem("site", item).body!!
-        corrections.correctFacet("site", "f1", FacetCorrection(facet = "universe", added = true, key = "fake:U2"))
+        corrections.correctFacet("site", "f1", FacetCorrection(facet = "universe", added = true, key = u2))
         assertTrue(other(settled("f1")))
         corrections.completeFacet("site", "f1", "universe")
         val named = settled("f1").allFacets.single { it.facet == "universe" }
         assertEquals(true, named.complete)
         assertEquals(
-            listOf("fake:U2"),
+            listOf(u2),
             named.propertyValues.filter { it.corrected != FacetValueInfo.Corrected.REMOVED }.map { it.key },
             "values ${named.propertyValues}",
         )
@@ -379,7 +471,7 @@ class SiteUniversesTest : SiteTestBase() {
         val reopened = settled("f1")
         assertNull(reopened.allFacets.single { it.facet == "universe" }.complete)
         assertTrue(other(reopened))
-        this.universes.removeUniverse("fake", "U1")
+        this.universes.bindUniverseEntry(UniverseEntryBinding(u1, "fake", "U1", false))
     }
 
     /** An original work, an alternative history and a realistic one have no universe of another's. */
@@ -431,37 +523,40 @@ class SiteUniversesTest : SiteTestBase() {
                 .propertyValues
                 .single { it.key == "fake:C1" }
                 .name
-        this.universes.nameUniverseEntry("fake", "C1", LocalName("Лётчица"))
+        this.universeEntries.nameUniverseEntry("fake", "C1", LocalName("Лётчица"))
         assertEquals("Лётчица", characterName())
         // Kept as the universe is read again from the catalogue, its characters made anew
         this.universes.addUniverse(UniverseRef("fake", "U2"))
         assertEquals("Лётчица", characterName())
         assertEquals(
             listOf("Лётчица", "Pilot"),
-            this.universes.listCharacters("fake", "U2").body!!.single { it.character == "C1" }.names.take(2),
+            this.universeEntries.listCharacters("fake", "U2").body!!.single { it.character == "C1" }.names.take(2),
         )
-        this.universes.nameUniverseEntry("fake", "U2", LocalName("Флот"))
-        val fleet = this.universes.listUniverses().body!!.single { it.universe == "U2" }
-        assertEquals("Флот" to "Fleet", fleet.name to fleet.catalogueName)
+        this.universeEntries.nameUniverseEntry("fake", "U2", LocalName("Флот"))
+        fun fleet() = this.universes.listUniverses().body!!.single { u -> u.propertyEntries.any { it.entry == "U2" } }
+        assertEquals("Флот" to "Fleet", fleet().name to fleet().propertyEntries.single().catalogueName)
         // Taken back: the catalogue's names again
-        this.universes.nameUniverseEntry("fake", "C1", LocalName(null))
-        this.universes.nameUniverseEntry("fake", "U2", LocalName(""))
+        this.universeEntries.nameUniverseEntry("fake", "C1", LocalName(null))
+        this.universeEntries.nameUniverseEntry("fake", "U2", LocalName(""))
         assertEquals("Pilot", characterName())
-        assertNull(this.universes.listUniverses().body!!.single { it.universe == "U2" }.localName)
+        assertNull(fleet().propertyEntries.single().localName)
     }
 
     @Test
     @Order(2)
     fun `characters and universe drafted from the site's tags by the dictionary, the user's word over them`() {
-        // The dictionary without the universe: nothing to draft from
-        val dictionary = { universes.listUniverses().body!!.map { it.universe } }
-        dictionary().forEach { universes.removeUniverse("fake", it) }
+        // The dictionary without the entry: nothing to draft from
+        universes.listUniverses().body!!.forEach { u ->
+            u.propertyEntries.forEach {
+                universes.bindUniverseEntry(UniverseEntryBinding(u.value, it.catalogue, it.entry, false))
+            }
+        }
         capture("g1|Wingmen|space|Two friends fly a starship|Space Pilot & Captain")
         assertNull(valueOf("g1", "characters", "fake:C1"))
 
         // The universe added: its pilot is stated to be the site's "Space Pilot" — drafted a main character
         // of the work captured before, and of one captured now; the universe with it, the pilot's alone
-        universes.addUniverse(UniverseRef("fake", "U2"))
+        u2 = universes.addUniverse(UniverseRef("fake", "U2")).body!!.value
         // The works of the source drafted again in the background, the work captured now at once
         inBackground { layerDrafts.redraftPlanned() }
         capture("g2|Wingmen again|space|The friends fly once more|Space Pilot & Captain")
@@ -469,13 +564,13 @@ class SiteUniversesTest : SiteTestBase() {
             val pilot = assertNotNull(valueOf(id, "characters", "fake:C1"), "characters of $id: ${facetsOf(id)}")
             assertEquals("Space Pilot", pilot.draftedFrom)
             assertNull(pilot.inferred)
-            assertEquals("Space Pilot", valueOf(id, "universe", "fake:U2")?.draftedFrom, "universe of $id")
+            assertEquals("Space Pilot", valueOf(id, "universe", u2)?.draftedFrom, "universe of $id")
         }
         // The captain has no tag of the site in the catalogue: not drafted
         assertNull(valueOf("g1", "characters", "fake:C2")?.draftedFrom)
         // Drafted of the layer, not of the site: kept in the model's database
         assertEquals(
-            setOf(UniverseFacets.CHARACTERS to "fake:C1", UniverseFacets.UNIVERSE to "fake:U2"),
+            setOf(UniverseFacets.CHARACTERS to "fake:C1", UniverseFacets.UNIVERSE to u2),
             stores.source("site")!!.drafts.ofItems(listOf("g1")).getValue("g1").map { it.facet to it.key }.toSet(),
         )
         val pairing = pairingOfTheDictionary()
@@ -602,10 +697,10 @@ class SiteUniversesTest : SiteTestBase() {
         assertEquals(FacetValueInfo.Corrected.CONFIRMED, confirmed.corrected)
         assertNull(confirmed.draftedFrom)
 
-        // The universe gone, the drafts of it go too — what the model learnt of it is the model's to work out again
-        universes.removeUniverse("fake", "U2")
+        // The entry gone, the drafts of it go too — what the model learnt of it is the model's to work out again
+        universes.bindUniverseEntry(UniverseEntryBinding(u2, "fake", "U2", false))
         inBackground { layerDrafts.redraftPlanned() }
-        assertNull(valueOf("g2", "universe", "fake:U2")?.draftedFrom)
+        assertNull(valueOf("g2", "universe", u2)?.draftedFrom)
         assertTrue(stores.source("site")!!.drafts.ofItems(listOf("g1", "g2")).values.all { it.isEmpty() })
     }
 }

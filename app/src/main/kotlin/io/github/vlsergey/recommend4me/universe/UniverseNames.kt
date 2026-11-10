@@ -22,7 +22,7 @@ class UniverseNames(private val dictionary: UniverseRepository) {
     private fun layerNames(facet: String, keys: Collection<String>?): Map<String, String>? =
         when (facet) {
             UniverseFacets.KIND -> UniverseFacet.KINDS
-            UniverseFacet.KEY -> dictionary.names.universeNames(keys)
+            UniverseFacet.KEY -> dictionary.shown.of(keys)
             in UniverseFacet.CHARACTER_FACETS ->
                 UniverseFacet.ORIGINAL_CHARACTERS + dictionary.names.characterNames(keys).mapValues { it.value.first }
             UniverseFacets.PAIRINGS -> pairings(keys)
@@ -45,8 +45,11 @@ class UniverseNames(private val dictionary: UniverseRepository) {
      * facet.
      */
     fun descriptions(facet: String, keys: Collection<String>): Map<String, String> =
-        if (facet == UniverseFacet.KEY || facet in UniverseFacet.CHARACTER_FACETS) dictionary.names.descriptions(keys)
-        else emptyMap()
+        when (facet) {
+            UniverseFacet.KEY -> dictionary.shown.descriptions(keys)
+            in UniverseFacet.CHARACTER_FACETS -> dictionary.names.descriptions(keys)
+            else -> emptyMap()
+        }
 
     /**
      * Every name a character of [keys] of [facet] goes by in the user's languages, for a search by any of them; none of

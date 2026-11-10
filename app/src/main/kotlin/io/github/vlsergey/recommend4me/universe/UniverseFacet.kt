@@ -26,8 +26,8 @@ object UniverseFacet {
     val KINDS = UniverseFacets.KIND_FACET.values!!.associate { it.key to it.modelName }
 
     /**
-     * The source's facet of the site's fandoms, the works' universes told by them ([FandomBindings.universesOf]); null
-     * when it has none.
+     * The source's facet of the site's fandoms, the works' universes told by them ([FandomSites]); null when it has
+     * none.
      */
     fun fandomFacet(schema: SourceSchema): String? =
         schema.facets.firstOrNull { it.standard === UniverseFacets.FANDOM_FACET }?.key
@@ -99,22 +99,27 @@ object UniverseFacet {
     ): Map<String, CharacterSex> {
         val out = HashMap<String, CharacterSex>(ORIGINAL_SEXES)
         read.every()
-        universes.keys().forEach { u ->
+        universes.entryKeys().forEach { u ->
             read.of(u).forEach { c -> c.sex?.let { out[valueOf(u.catalogue, c.id)] = it } }
         }
         return out
     }
 
     /**
-     * The page in its catalogue of every universe of the dictionary of a type and of every character of them: value to
-     * address.
+     * The page in its catalogue of every universe of the dictionary of a type — of the first entry it is bound to — and
+     * of every character of the entries: value to address.
      */
     fun pages(universes: UniverseRepository): Map<String, String> {
         val out = HashMap<String, String>()
         val read = CharactersRead(universes)
-        universes.all(read).forEach { u ->
-            out[u.value] = u.url
-            read.of(UniverseKey(u.catalogue, u.id)).forEach { c -> out[valueOf(u.catalogue, c.id)] = c.url }
+        val entries = universes.allEntries(read).associateBy { UniverseKey(it.catalogue, it.id) }
+        entries.forEach { (key, _) -> read.of(key).forEach { c -> out[valueOf(key.catalogue, c.id)] = c.url } }
+        val dictionary = universes.dictionary()
+        dictionary.fandoms.keys.forEach { id ->
+            dictionary
+                .entriesOf(id)
+                .firstNotNullOfOrNull { entries[it] }
+                ?.let { out[FandomRepository.value(id)] = it.url }
         }
         return out
     }

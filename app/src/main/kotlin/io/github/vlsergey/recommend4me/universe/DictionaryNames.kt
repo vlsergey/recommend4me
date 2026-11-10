@@ -39,10 +39,10 @@ internal constructor(
         renames.rename(CatalogueEntity(catalogue, id), name, now)
 
     /**
-     * The name of every universe of [values] ("<catalogue>:<id>") in the dictionary, in the user's languages; of every
-     * universe when null.
+     * The name of every entry of [values] ("<catalogue>:<id>") the dictionary keeps — what a universe bound to it is
+     * named by — in the user's languages; of every entry when null.
      */
-    fun universeNames(values: Collection<String>?): Map<String, String> {
+    fun entryNames(values: Collection<String>?): Map<String, String> {
         val u = UNIVERSE
         val query = db.select(u.CATALOGUE, u.UNIVERSE_ID, u.LABELS, u.NAME).from(u)
         val rows =

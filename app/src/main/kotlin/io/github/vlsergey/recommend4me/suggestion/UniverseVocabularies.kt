@@ -6,10 +6,10 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.universe.CharactersRead
-import io.github.vlsergey.recommend4me.universe.StoredUniverse
+import io.github.vlsergey.recommend4me.universe.FandomDictionary
+import io.github.vlsergey.recommend4me.universe.FandomRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
-import io.github.vlsergey.recommend4me.universe.UniverseKey
 import org.springframework.stereotype.Component
 
 /**
@@ -69,16 +69,16 @@ internal class UniverseVocabularies(private val stores: Stores) {
         // NO NAME OF IT LOOKED FOR IN THE WORK'S WORDS (user, 2026-10-16): the universe is told by the
         // work's texts, its tags and its other values; the names below are what the fitting learns from.
         // Of the works read, the universes' keys alone: not every universe's characters read to count them
+        val dictionary = type.universes.dictionary()
         if (light) {
-            val keys = type.universes.keys().map { it.value }.toSet()
+            val keys = dictionary.values
             return Vocabulary(emptyMap(), allowed = { id -> if (original(id)) emptySet() else keys })
         }
-        val universes = type.universes.all(characters)
-        val all = universes.associate { it.value to it.name }
+        val all = type.universes.shown.of(null, dictionary)
         return Vocabulary(
             all,
             allowed = { id -> if (original(id)) emptySet() else all.keys },
-            hintNames = hintNames(universes, characters, all.keys),
+            hintNames = hintNames(type, dictionary, all, characters),
             hintAmong = { all.keys },
         )
     }
@@ -109,29 +109,37 @@ internal class UniverseVocabularies(private val stores: Stores) {
     }
 
     /**
-     * The texts naming each universe of [all]: a universe is named by its characters ("Гарри", "Хогвартс") and by its
-     * own name; every name of a universe and of each of its characters is a text that names it, and no other universe.
+     * The texts naming each universe of [all] (value to the name shown): a universe is named by its own name, by the
+     * names of its sites' fandoms and of its entries, and — of one whose characters are read — by its characters
+     * ("Гарри", "Хогвартс"); a character's names are texts that name every universe it is of.
      */
     private fun hintNames(
-        universes: List<StoredUniverse>,
+        type: TypeStore,
+        dictionary: FandomDictionary,
+        all: Map<String, String>,
         characters: CharactersRead,
-        all: Set<String>,
     ): Map<String, List<String>> {
-        val ofCharacter = HashMap<String, MutableSet<String>>()
-        val names = HashMap<String, List<String>>()
-        universes.forEach { u ->
-            names[u.value] = u.names
-            characters.of(UniverseKey(u.catalogue, u.id)).forEach { c ->
-                val value = UniverseFacet.valueOf(u.catalogue, c.id)
-                names[value] = c.names
-                ofCharacter.getOrPut(value) { HashSet() } += u.value
+        val hintNames = HashMap<String, MutableList<String>>()
+        all.forEach { (value, name) -> hintNames.getOrPut(value) { ArrayList() } += name }
+        type.sources.forEach { s ->
+            val facet = UniverseFacet.fandomFacet(s.schema) ?: return@forEach
+            val names = s.items.facetNames(facet)
+            names.forEach { (key, name) ->
+                dictionary.ofSite(s.id, key)?.let {
+                    hintNames.getOrPut(FandomRepository.value(it)) { ArrayList() } += name
+                }
             }
         }
-        val hintNames = HashMap<String, MutableList<String>>()
-        names.forEach { (value, own) ->
-            (ofCharacter[value] ?: setOf(value).filter { it in all }).forEach { u ->
-                hintNames.getOrPut(u) { ArrayList() } += own
+        val entries = dictionary.fandoms.keys.flatMap(dictionary::entriesOf).distinct()
+        val entryNames = type.universes.names.entryNames(entries.map { it.value })
+        dictionary.fandoms.keys.forEach { id ->
+            val value = FandomRepository.value(id)
+            dictionary.entriesOf(id).forEach { e ->
+                entryNames[e.value]?.let { hintNames.getOrPut(value) { ArrayList() } += it }
             }
+        }
+        dictionary.withCharacters().forEach { (value, keys) ->
+            keys.forEach { e -> characters.of(e).forEach { c -> hintNames.getOrPut(value) { ArrayList() } += c.names } }
         }
         return hintNames.mapValues { it.value.distinct() }
     }

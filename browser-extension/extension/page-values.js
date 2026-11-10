@@ -225,9 +225,9 @@
         chip.appendChild(e);
       });
     }
-    const at = v.key.indexOf(":");
     let refreshed = null;
-    if (facet === UNIVERSE && v.corrected !== "REMOVED" && at > 0) {
+    // A universe's entries of the catalogue read again, and their characters when the universe's are read
+    if (facet === UNIVERSE && v.corrected !== "REMOVED") {
       const on = `refresh|${v.key}`;
       refreshed = on;
       const b = el("button", `r4m-button${saving.has(on) ? " r4m-saving" : ""}`, "↻");
@@ -237,7 +237,7 @@
       b.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        apart(() => api("POST", "/api/universes", { catalogue: v.key.substring(0, at), universe: v.key.substring(at + 1) }), on);
+        apart(() => api("POST", "/api/universes/refresh", { universe: v.key }), on);
       });
       chip.appendChild(b);
     }

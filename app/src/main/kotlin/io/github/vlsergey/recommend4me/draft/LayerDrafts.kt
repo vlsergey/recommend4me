@@ -30,14 +30,14 @@ private val log = LoggerFactory.getLogger(LayerDrafts::class.java)
  * ([Source.catalogueProperties][io.github.vlsergey.recommend4me.source.Source.catalogueProperties]), what the source
  * drafts of it from its values on the site through the dictionary
  * ([Source.draft][io.github.vlsergey.recommend4me.source.Source.draft]) — and the universe of every character drafted
- * that is in one universe of the dictionary alone; and of every work of a source with fandoms, the universes the user
- * bound its fandoms to
- * ([FandomBindings.universesOf][io.github.vlsergey.recommend4me.universe.FandomBindings.universesOf]).
+ * that is in one universe of the dictionary alone; and of every work of a source with fandoms not said by its site to
+ * be of no universe, the universe every fandom of it is bound to
+ * ([FandomRepository][io.github.vlsergey.recommend4me.universe.FandomRepository]) and every universe above it.
  *
  * Made again when the work is captured or refreshed — before anything reads it — and, of every work of the type, when
- * the dictionary changes and on start, of every work of a source when the user binds its fandoms anew ([fandomsBound])
- * — these in the background, in the queue of the computations ([Workload]), never on the thread of the start or of a
- * request: the works whose drafts changed are then read again as any changed work is.
+ * the dictionary or the universes change and on start — these in the background, in the queue of the computations
+ * ([Workload]), never on the thread of the start or of a request: the works whose drafts changed are then read again as
+ * any changed work is.
  *
  * A draft is a value the work is given, marked so
  * ([Chance.draftedFrom][io.github.vlsergey.recommend4me.suggestion.Chance.draftedFrom]); the user's answers override
@@ -92,11 +92,6 @@ class LayerDrafts(
     fun start() {
         stores.sources.filter(::drafts).forEach { redraftLater(it.id, "start") }
     }
-
-    /**
-     * The user bound a fandom of the [source] to a universe, or took it back: every work of the source drafted again.
-     */
-    fun fandomsBound(source: String) = redraftLater(source, "fandoms")
 
     /**
      * Every work of the [source] drafted again once the askings are quiet for [QUIET_SECONDS] — a few in a row draft
@@ -180,22 +175,13 @@ class LayerDrafts(
         before: Map<String, List<LayerDraft>>,
     ): List<String> {
         val started = System.currentTimeMillis()
-        // The universes the user bound the source's fandoms to, read once for every work
         val fandom = UniverseFacet.fandomFacet(store.schema)
-        val bound = if (fandom == null) emptyMap() else stores.typeOf(store.id).universes.fandoms.universesOf(store.id)
         val made = HashMap<String, List<LayerDraft>>()
         ids.forEach { id ->
             val values =
                 facets[id].orEmpty().mapValues { (facet, keys) -> keys.map { FacetValue(it, names[facet]?.get(it)) } }
             val drafted = if (lookup.empty) emptyList() else store.source.draft(values, lookup)
-            val ofFandoms =
-                fandom
-                    ?.let { values[it] }
-                    .orEmpty()
-                    .flatMap { f ->
-                        bound[f.key].orEmpty().map { LayerDraft(UniverseFacets.UNIVERSE, it, f.name ?: f.key) }
-                    }
-            made[id] = withUniverses(drafted + ofFandoms, lookup)
+            made[id] = withUniverses(drafted + ofFandoms(store.id, fandom, values, lookup), lookup)
         }
         val changed = ids.filter { id -> made[id].orEmpty().toSet() != before[id].orEmpty().toSet() }
         if (changed.isNotEmpty()) store.drafts.replace(changed.associateWith { made[it].orEmpty() })
@@ -209,6 +195,25 @@ class LayerDrafts(
             )
         }
         return changed
+    }
+
+    /**
+     * The universes of a work's fandoms on its site ([values] of the [fandom] facet of [source]): the universe every
+     * one is bound to and every universe above it, named by the fandom. None of a work its site says is of no universe
+     * (realism, an alternative history, an original work: the fandom "originals").
+     */
+    private fun ofFandoms(
+        source: String,
+        fandom: String?,
+        values: Map<String, List<FacetValue>>,
+        lookup: DictionaryLookup,
+    ): List<LayerDraft> {
+        val kinds = values[UniverseFacets.KIND].orEmpty().map { it.key }
+        val universeless = kinds.isNotEmpty() && kinds.all { it in UniverseFacets.UNIVERSELESS }
+        val fandoms = if (fandom == null || universeless) emptyList() else values[fandom].orEmpty()
+        return fandoms.flatMap { f ->
+            lookup.universesOf(source, f.key).map { LayerDraft(UniverseFacets.UNIVERSE, it, f.name ?: f.key) }
+        }
     }
 
     /** The drafts with the universe of every character drafted that the dictionary has in one universe alone. */

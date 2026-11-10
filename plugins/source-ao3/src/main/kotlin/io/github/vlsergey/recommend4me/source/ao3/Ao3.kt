@@ -154,6 +154,8 @@ class Ao3 : Source {
         when (facet) {
             AUTHOR -> "$BASE/users/$key"
             SERIES -> "$BASE/series/$key"
+            // A fandom is a tag of the site, its key the tag's name: the page of its works
+            FANDOM -> "$BASE/tags/${Ao3Tags.path(key)}/works"
             else -> null
         }
 

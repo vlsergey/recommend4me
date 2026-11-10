@@ -81,8 +81,7 @@ class Pairings(private val stores: Stores, private val suggestions: FacetSuggest
         val characters = members.values.flatMap { it.toList() }.distinct()
         val named = dictionary.universes.names.characterNames(characters)
         val universesOf = dictionary.universes.characterUniverses()
-        val universeNames =
-            dictionary.universes.names.universeNames(characters.flatMap { universesOf[it].orEmpty() }.distinct())
+        val universeNames = dictionary.universes.shown.of(characters.flatMap { universesOf[it].orEmpty() }.distinct())
         val names = dictionary.sources.firstOrNull()?.names(UniverseFacets.PAIRINGS, keys).orEmpty()
         return keys.map { key ->
             val (a, b) = members.getValue(key)

@@ -145,7 +145,8 @@ internal object PairingVocabulary {
         val universes = WorkUniverses.universesOf(answers, made)
         val own = universes.values.flatten().toSet()
         val known = HashMap<String, List<String>>()
-        val wanted = type.universes.keys().filter { it.value in own }
+        val dictionary = type.universes.dictionary()
+        val wanted = own.flatMap(dictionary::characterEntries).distinct()
         read.read(wanted)
         wanted.forEach { u -> read.of(u).forEach { known[UniverseFacet.valueOf(u.catalogue, it.id)] = it.names } }
         val missing =

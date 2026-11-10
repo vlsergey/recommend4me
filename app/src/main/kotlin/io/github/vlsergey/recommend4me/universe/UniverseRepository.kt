@@ -74,9 +74,10 @@ class ClassInUniverse(
 )
 
 /**
- * The dictionary of universes the user agreed on, in the dictionaries: the universes themselves and their statements
- * here; their entries and the user's words on them ([entries]), the names they are shown by ([names]) and the sites'
- * fandoms bound to them ([fandoms]) each of its own.
+ * THE DICTIONARY OF UNIVERSES, in the dictionaries: the universes — the normalized fandoms, the sites' fandoms bound to
+ * them ([fandoms]) — and the entries of the catalogue they are bound to, as the catalogue gave them, with their
+ * statements here; the entries' characters and the user's words on them ([entries]), the names the universes and the
+ * characters are shown by ([names]) each of its own.
  */
 class UniverseRepository(
     private val db: DSLContext,
@@ -91,26 +92,29 @@ class UniverseRepository(
     /** The entries of the universes, which of them are kept as characters, and the user's words on them. */
     val entries = UniverseEntries(db, languages, names)
 
-    /** The sites' fandoms the user bound to the universes. */
-    val fandoms = FandomBindings(db)
+    /** The universes: the normalized fandoms, the sites' fandoms and the entries bound to them. */
+    val fandoms = FandomRepository(db)
+
+    /** The universes as one operation reads them. */
+    fun dictionary(): FandomDictionary = FandomDictionary.load(fandoms)
+
+    /** The names and the descriptions the universes are shown by. */
+    val shown = FandomNames(names, ::dictionary)
 
     /** What a catalogue answers of a universe, written into the dictionary. */
     private val fromCatalogue = UniverseFromCatalogue(db)
 
-    /**
-     * Every universe of the dictionary by its key alone, its characters not read: what the chances of a work read want
-     * of it.
-     */
-    fun keys(): List<UniverseKey> =
+    /** Every entry of the catalogue the dictionary keeps, by its key alone, its characters not read. */
+    fun entryKeys(): List<UniverseKey> =
         db.select(UNIVERSE.CATALOGUE, UNIVERSE.UNIVERSE_ID).from(UNIVERSE).fetch {
             UniverseKey(it.value1()!!, it.value2()!!)
         }
 
     /**
-     * Every universe of the dictionary with its counts; its entries of [read], read once for the operation that reads
-     * their characters too.
+     * Every entry of the catalogue the dictionary keeps with its counts; its characters of [read], read once for the
+     * operation that reads them too.
      */
-    fun all(read: CharactersRead = CharactersRead(this)): List<StoredUniverse> {
+    fun allEntries(read: CharactersRead = CharactersRead(this)): List<StoredUniverse> {
         val local = read.local
         read.every()
         return db.selectFrom(UNIVERSE)
@@ -136,8 +140,8 @@ class UniverseRepository(
             .sortedBy { it.name.lowercase() }
     }
 
-    fun find(catalogue: String, id: String): StoredUniverse? =
-        all().firstOrNull { it.catalogue == catalogue && it.id == id }
+    fun findEntry(catalogue: String, id: String): StoredUniverse? =
+        allEntries().firstOrNull { it.catalogue == catalogue && it.id == id }
 
     /**
      * Adds the universe, or refreshes it: its name and every entry replaced by what the catalogue says now, with the
@@ -153,9 +157,11 @@ class UniverseRepository(
         now: Instant,
     ) = fromCatalogue.write(catalogue, entry, characters, classes, properties, now)
 
-    /**
-     * Every statement the dictionary keeps of its universes and the works within them: universe value, property, value.
-     */
+    /** Adds the entry, or refreshes it, its characters not read: those kept before stay as they are. */
+    fun saveEntry(catalogue: String, entry: UniverseEntry, properties: Set<String>, now: Instant) =
+        fromCatalogue.writeEntry(catalogue, entry, properties, now)
+
+    /** Every statement the dictionary keeps of its entries and the works within them: entry value, property, value. */
     fun universeStatements(): List<Triple<String, String, String>> =
         db.select(
                 UNIVERSE_PROPERTY.CATALOGUE,
@@ -177,8 +183,11 @@ class UniverseRepository(
             .from(UNIVERSE_CHARACTER_PROPERTY)
             .fetch { Triple(UniverseFacet.valueOf(it.value1()!!, it.value2()!!), it.value3()!!, it.value4()!!) }
 
-    /** The universes every entry of the dictionary is in: character value to universe values. */
-    fun characterUniverses(): Map<String, Set<String>> =
+    /**
+     * The entries every character of the dictionary is of: character value to entry values; the universes of them of
+     * [FandomDictionary.universesOfCharacters].
+     */
+    fun characterEntries(): Map<String, Set<String>> =
         db.select(UNIVERSE_CHARACTER.CATALOGUE, UNIVERSE_CHARACTER.CHARACTER_ID, UNIVERSE_CHARACTER.UNIVERSE_ID)
             .from(UNIVERSE_CHARACTER)
             .fetch()
@@ -188,7 +197,10 @@ class UniverseRepository(
             )
             .mapValues { it.value.toSet() }
 
-    fun remove(catalogue: String, id: String) {
-        db.deleteFrom(UNIVERSE).where(UNIVERSE.CATALOGUE.eq(catalogue), UNIVERSE.UNIVERSE_ID.eq(id)).execute()
-    }
+    /**
+     * The universes every character of the dictionary is of: character value to universe values, of the universes whose
+     * characters are read ([FandomDictionary.universesOfCharacters]).
+     */
+    fun characterUniverses(dictionary: FandomDictionary = dictionary()): Map<String, Set<String>> =
+        dictionary.universesOfCharacters(characterEntries())
 }

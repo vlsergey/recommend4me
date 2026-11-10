@@ -53,6 +53,9 @@ internal class ItemFacetRepository(
 
     override fun setFacet(itemId: String, facet: String, values: List<FacetValue>) {
         val distinct = values.distinctBy { it.key }
+        // The names first: whoever hears of the change reads the values by them (a site's fandom bound by its name)
+        val named = distinct.filter { it.name != null }.associate { it.key to it.name!! }
+        if (named.isNotEmpty()) dictionary.nameFacetValues(facet, named)
         val before =
             db.select(ITEM_FACET.VALUE_KEY)
                 .from(ITEM_FACET)
@@ -74,8 +77,6 @@ internal class ItemFacetRepository(
             }
             changed(listOf(itemId))
         }
-        val named = distinct.filter { it.name != null }.associate { it.key to it.name!! }
-        if (named.isNotEmpty()) dictionary.nameFacetValues(facet, named)
     }
 
     override fun keepOnlyFacets(facets: Collection<String>): Map<String, Int> {

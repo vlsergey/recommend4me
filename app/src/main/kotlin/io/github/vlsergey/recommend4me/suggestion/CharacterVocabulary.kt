@@ -78,22 +78,26 @@ internal object CharacterVocabulary {
         universes: Map<String, List<String>>,
         characters: CharactersRead,
     ): Characters {
+        // The entries of every universe whose characters are read: of the works' universes, or of every one
+        val dictionary = type.universes.dictionary()
         val read =
-            type.universes.keys().let { all ->
-                if (ids == null) all
-                else ids.flatMap { universes[it].orEmpty() }.toSet().let { own -> all.filter { it.value in own } }
-            }
+            if (ids == null) dictionary.withCharacters()
+            else
+                ids.flatMap { universes[it].orEmpty() }
+                    .toSet()
+                    .associateWith(dictionary::characterEntries)
+                    .filterValues { it.isNotEmpty() }
         val ofUniverse = HashMap<String, Set<String>>()
         val values = HashMap<String, String>(UniverseFacet.ORIGINAL_CHARACTERS)
         val names = HashMap<String, List<String>>()
         val sexes = HashMap<String, CharacterSex>(UniverseFacet.ORIGINAL_SEXES)
-        // Their entries read at once: of every work every universe of the dictionary
-        if (ids == null) characters.every() else characters.read(read)
-        read.forEach { u ->
-            val own = characters.of(u)
-            ofUniverse[u.value] = own.map { UniverseFacet.valueOf(u.catalogue, it.id) }.toSet()
-            own.forEach { c ->
-                val value = UniverseFacet.valueOf(u.catalogue, c.id)
+        // Their entries read at once: of every work every entry of the dictionary
+        if (ids == null) characters.every() else characters.read(read.values.flatten().distinct())
+        read.forEach { (u, entries) ->
+            val own = entries.flatMap { e -> characters.of(e).map { e to it } }
+            ofUniverse[u] = own.map { (e, c) -> UniverseFacet.valueOf(e.catalogue, c.id) }.toSet()
+            own.forEach { (e, c) ->
+                val value = UniverseFacet.valueOf(e.catalogue, c.id)
                 values[value] = c.names.joinToString(" / ")
                 names[value] = c.names
                 c.sex?.let { sexes[value] = it }

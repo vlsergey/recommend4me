@@ -9,7 +9,8 @@ import type { Corrections } from "@/correction/useCorrections";
 import { AllNamed } from "./AllNamed";
 import { type FieldSearch, has, UNIVERSE } from "./fanficFields";
 import { type Option, Picker } from "./Picker";
-import { CatalogueSearch, useUniverses } from "./Universes";
+import { CatalogueSearch } from "./CatalogueSearch";
+import { useUniverses } from "./universeQueries";
 import { Chips } from "./ValueChips";
 
 /**
@@ -74,6 +75,7 @@ function OpenUniverses({
   const { t } = useTranslation("universe");
   // A site's word pressed: typed into the picker and the catalogue's search both, the dictionary holding few of the fandoms
   const word = search?.word;
+  // A universe found by any of its names: its own, its sites' fandoms', its entries'
   const dictionary = useUniverses(type.id);
   const linked = (value: string) => values.some((v) => v.key === value && has(v));
   const link = (value: string) => corrections.setFacet(UNIVERSE, { key: value }, true);
@@ -81,7 +83,7 @@ function OpenUniverses({
     key: u.value,
     name: u.name,
     note: u.description,
-    names: [u.name],
+    names: [...new Set([u.name, ...u.sites.map((s) => s.name), ...u.entries.map((e) => e.name)])],
     taken: linked(u.value),
   }));
 

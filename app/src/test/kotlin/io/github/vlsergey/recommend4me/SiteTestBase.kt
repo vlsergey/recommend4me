@@ -33,6 +33,7 @@ import io.github.vlsergey.recommend4me.tag.TagsController
 import io.github.vlsergey.recommend4me.tagtext.TagsByTextController
 import io.github.vlsergey.recommend4me.tagtext.TextTags
 import io.github.vlsergey.recommend4me.textvector.TextVectors
+import io.github.vlsergey.recommend4me.universe.UniverseEntriesController
 import io.github.vlsergey.recommend4me.universe.UniversesController
 import io.github.vlsergey.recommend4me.workload.inBackground
 import java.io.File
@@ -86,6 +87,7 @@ abstract class SiteTestBase {
     @Autowired lateinit var textVectors: TextVectors
     @Autowired lateinit var suggestions: FacetSuggestions
     @Autowired lateinit var universes: UniversesController
+    @Autowired lateinit var universeEntries: UniverseEntriesController
     @Autowired lateinit var recommendations: Recommendations
     @Autowired lateinit var comparisons: ScorerComparisons
     @Autowired lateinit var tagsApi: TagsController

@@ -5,7 +5,7 @@ import { api, unwrap, type CharacterInfo, type ContentTypeInfo, type FacetValueI
 import { AsyncButton } from "@/components/AsyncButton";
 import { cn } from "@/lib/utils";
 import { placeName } from "@/part/place";
-import { charactersQuery, classesQuery, keptByClasses, useInclusion, useUniverses } from "./Universes";
+import { characterEntries, charactersQuery, classesQuery, type EntryRef, entryRef, keptByClasses, useInclusion, useUniverses } from "./universeQueries";
 
 /** The characters a value is of: a character itself, the two of a pairing ("pair:a|b"). */
 const charactersOf = (value: string) => (value.startsWith("pair:") ? value.slice("pair:".length).split("|") : [value]);
@@ -89,12 +89,14 @@ function Origins({ type, values, universes }: { type: ContentTypeInfo; values: s
   const linked = universes
     .map((v) => dictionary.data?.find((u) => u.value === v.key))
     .filter((u): u is UniverseInfo => u !== undefined);
-  const characters = useQueries({ queries: linked.map((u) => charactersQuery(type.id, u)) });
+  // The entries of the linked universes whose characters are read
+  const read = linked.flatMap((u) => characterEntries(u).map((e) => ({ ...entryRef(e), name: u.name })));
+  const characters = useQueries({ queries: read.map((e) => charactersQuery(type.id, e)) });
   if (dictionary.isLoading || characters.some((q) => q.isLoading)) return <Loader2Icon className="size-4 animate-spin text-muted-foreground" />;
   const found = values.flatMap((value) =>
-    linked.flatMap((u, i) => {
+    read.flatMap((universe, i) => {
       const entry = characters[i].data?.find((c) => c.value === value);
-      return entry ? [{ universe: u, entry }] : [];
+      return entry ? [{ universe, entry }] : [];
     }),
   );
   if (found.length === 0) return null;
@@ -102,7 +104,7 @@ function Origins({ type, values, universes }: { type: ContentTypeInfo; values: s
     <section className="flex flex-col gap-2">
       <h3 className="text-sm font-medium">{t("Origins.heading")}</h3>
       {found.map(({ universe, entry }) => (
-        <Origin key={`${universe.value} ${entry.value}`} type={type} universe={universe} entry={entry} />
+        <Origin key={`${universe.catalogue}:${universe.universe} ${entry.value}`} type={type} universe={universe} entry={entry} />
       ))}
     </section>
   );
@@ -113,7 +115,7 @@ function Origins({ type, values, universes }: { type: ContentTypeInfo; values: s
  * it alone. A class pressed leaves out (or keeps) every entry of it in the universe; the entry can
  * be left out by itself; its page in the catalogue is where a wrong class is put right.
  */
-function Origin({ type, universe, entry }: { type: ContentTypeInfo; universe: UniverseInfo; entry: CharacterInfo }) {
+function Origin({ type, universe, entry }: { type: ContentTypeInfo; universe: EntryRef & { name: string }; entry: CharacterInfo }) {
   const { t } = useTranslation("universe");
   const classes = useQuery(classesQuery(type.id, universe));
   const inclusion = useInclusion(type.id, universe);

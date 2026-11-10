@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 /**
  * THE SCREENS OF THE INTERFACE, each an address of its own: the works of a content type at
  * "/<type>" ("/books", "/games"), the dictionary of universes at "/universes" (one of them at
- * "/universes/<catalogue>/<id>"), the pairings of their characters at "/pairings" (the works marked
+ * "/universes/<id>"), the pairings of their characters at "/pairings" (the works marked
  * by one at "/pairings/<key>"), the tags of every site at "/tags" (one at "/tags/<key>") — the
  * universes, the pairings and the tags are every type's; the user's grades and marks, the newest first, at
  * "/history". What a page shows is all in its address: opened in
@@ -16,7 +16,7 @@ export type Screen =
       /** The content type; none at "/" — the one shown last, put in the address ([replaceScreen]). */
       type?: string;
     }
-  | { kind: "universes"; catalogue?: string; universe?: string }
+  | { kind: "universes"; universe?: string }
   /** The pairings known ("/pairings"), the works marked by one at "/pairings/<key>". */
   | { kind: "pairings"; pairing?: string }
   | { kind: "tags"; tag?: string }
@@ -38,7 +38,7 @@ export function parseScreen(path: string): Screen {
       return p;
     }
   });
-  if (parts[0] === "universes") return { kind: "universes", catalogue: parts[1], universe: parts[2] };
+  if (parts[0] === "universes") return { kind: "universes", universe: parts[1] };
   if (parts[0] === "pairings") return { kind: "pairings", pairing: parts[1] };
   if (parts[0] === "tags") return { kind: "tags", tag: parts.length > 1 ? parts.slice(1).join("/") : undefined };
   if (parts[0] === "history") return { kind: "history" };
@@ -54,7 +54,7 @@ export function screenHref(screen: Screen): string {
     case "works":
       return screen.type ? `/${encodeURIComponent(screen.type)}` : "/";
     case "universes":
-      return screen.catalogue && screen.universe ? `/universes/${encodeURIComponent(screen.catalogue)}/${encodeURIComponent(screen.universe)}` : "/universes";
+      return screen.universe ? `/universes/${encodeURIComponent(screen.universe)}` : "/universes";
     case "pairings":
       // A pairing's key "pair:<a>|<b>" escaped whole: one piece of the address
       return screen.pairing ? `/pairings/${encodeURIComponent(screen.pairing)}` : "/pairings";

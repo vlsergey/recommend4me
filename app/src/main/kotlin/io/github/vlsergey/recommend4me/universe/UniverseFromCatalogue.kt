@@ -42,6 +42,18 @@ internal class UniverseFromCatalogue(private val db: DSLContext) {
         }
     }
 
+    /**
+     * Adds the entry, or refreshes it, its characters not read: its name and its statements of [properties] replaced by
+     * what the catalogue says now, the characters kept before staying as they are.
+     */
+    fun writeEntry(catalogue: String, entry: UniverseEntry, properties: Set<String>, now: Instant) {
+        db.transaction { tx ->
+            val t = tx.dsl()
+            writeUniverse(t, catalogue, entry, properties, now)
+            writeStatements(t, catalogue, entry)
+        }
+    }
+
     /** The universe's own row: its texts, the languages and the [properties] it was asked in and for. */
     private fun writeUniverse(
         t: DSLContext,

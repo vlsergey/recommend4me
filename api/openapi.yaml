@@ -28,7 +28,7 @@ tags:
   - name: pages
   - name: suggestions
   - name: universes
-  - name: siteFandoms
+  - name: universeEntries
   - name: tags
   - name: tagCatalogues
   - name: tagsByText
@@ -1662,10 +1662,12 @@ paths:
     get:
       tags: [universes]
       operationId: listUniverses
-      summary: The dictionary of universes of the type, with how many characters and works each has
+      summary: |
+        The universes - the normalized fandoms: every fandom of every site is bound to one, at first the one of
+        its name - with their sites' fandoms, the entries of the catalogue they are bound to and their works
       responses:
         '200':
-          description: The universes, by name
+          description: The universes, of the most works first
           content:
             application/json:
               schema:
@@ -1675,7 +1677,9 @@ paths:
     post:
       tags: [universes]
       operationId: addUniverse
-      summary: Adds a universe of a catalogue to the dictionary with its characters - or refreshes it
+      summary: |
+        An entry of a catalogue as a universe: the universe bound to it, or a new one of it whose characters are
+        read; the entry and its characters read again of the catalogue
       description: The catalogue is asked now; it may take seconds.
       requestBody:
         required: true
@@ -1685,7 +1689,7 @@ paths:
               $ref: '#/components/schemas/UniverseRef'
       responses:
         '200':
-          description: The universe as the dictionary has it now
+          description: The universe as it is now
           content:
             application/json:
               schema:
@@ -1693,9 +1697,205 @@ paths:
         '404':
           description: No such catalogue or entry
 
-  /api/universes/search:
+  /api/universes/one:
     get:
       tags: [universes]
+      operationId: getUniverse
+      parameters:
+        - name: universe
+          in: query
+          required: true
+          description: The universe's value of the facet "universe"
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The universe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '404':
+          description: No such universe
+
+  /api/universes/similar:
+    get:
+      tags: [universes]
+      operationId: listSimilarUniverses
+      summary: |
+        The universes alike one by the meaning of their sites' fandoms' names - alike the query when one is given -
+        and those bound to an entry it is bound to, the likest first, each with what the user said it is to this
+        one. Only offered: the user merges
+      parameters:
+        - name: universe
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: A text the universes are to be alike by meaning, in place of the universe's names
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: The likest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SimilarUniverse'
+        '404':
+          description: No such universe
+
+  /api/universes/name:
+    put:
+      tags: [universes]
+      operationId: nameUniverse
+      summary: The name the user gives the universe; none takes it back, and it is named by its entry or its sites again
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniverseName'
+      responses:
+        '200':
+          description: The universe as it is now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '404':
+          description: No such universe
+
+  /api/universes/characters:
+    put:
+      tags: [universes]
+      operationId: chooseUniverseCharacters
+      summary: |
+        Whether the characters of the universe's entries are read and given to its works; turned on, the entries
+        and their characters read of the catalogue now
+      description: The catalogue is asked now when turned on; it may take seconds.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniverseCharacters'
+      responses:
+        '200':
+          description: The universe as it is now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '404':
+          description: No such universe
+
+  /api/universes/entry:
+    put:
+      tags: [universes]
+      operationId: bindUniverseEntry
+      summary: |
+        The universe bound to an entry of a catalogue - read of the catalogue now, its characters too when the
+        universe's are read - or the binding taken back; an entry bound to no universe then is gone from the
+        dictionary with its characters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniverseEntryBinding'
+      responses:
+        '200':
+          description: The universe as it is now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '404':
+          description: No such universe, catalogue or entry
+
+  /api/universes/refresh:
+    post:
+      tags: [universes]
+      operationId: refreshUniverse
+      summary: The universe's entries read again of the catalogue, their characters too when the universe's are read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniverseKeyRef'
+      responses:
+        '200':
+          description: The universe as it is now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '404':
+          description: No such universe
+
+  /api/universes/relation:
+    put:
+      tags: [universes]
+      operationId: relateUniverses
+      summary: |
+        What the user says the other universe is to the universe - merged into it, under it, above it, different,
+        or nothing - in place of what was said of the two before. Merged, the other is no more: its sites' fandoms,
+        entries and links are the universe's, the user's answers on it answers on the universe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniverseRelationRequest'
+      responses:
+        '200':
+          description: The universe as it is now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '400':
+          description: A universe related to itself, or put above or under one of its own ancestors or descendants
+        '404':
+          description: No such universe
+
+  /api/universes/binding:
+    put:
+      tags: [universes]
+      operationId: bindSiteFandom
+      summary: |
+        A site's fandom bound to a universe - to a new one of its own when none is given: taken out of the universe
+        it was. The user's answers stay with the universes they were given on
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteFandomBinding'
+      responses:
+        '200':
+          description: The universe the site's fandom is bound to now
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UniverseInfo'
+        '404':
+          description: No such site's fandom, or no such universe
+
+  /api/universes/search:
+    get:
+      tags: [universeEntries]
       operationId: searchUniverses
       summary: What the catalogues find by a name - asked only by the user's button
       parameters:
@@ -1714,63 +1914,9 @@ paths:
                 items:
                   $ref: '#/components/schemas/FoundUniverse'
 
-  /api/universes/fandoms:
-    get:
-      tags: [siteFandoms]
-      operationId: listSiteFandoms
-      summary: Every fandom of every site of the types with universes, with its works and the universes the user bound it to
-      description: |
-        A fandom bound to a universe drafts every work of it with the universe - a value the work has
-        till the user says otherwise, learnt from by the models of the universes and the characters.
-      responses:
-        '200':
-          description: The fandoms, of the most works first
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/SiteFandom'
-    put:
-      tags: [siteFandoms]
-      operationId: bindSiteFandom
-      summary: Binds a fandom of a site to a universe of the dictionary, or takes the binding back
-      description: The works of the source are drafted again in the background, after a quiet of 2 s.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FandomBinding'
-      responses:
-        '204':
-          description: Saved
-        '404':
-          description: No such source with fandoms, or no such universe in the dictionary
-
-  /api/universes/{catalogue}/{universe}:
-    delete:
-      tags: [universes]
-      operationId: removeUniverse
-      summary: Takes the universe out of the dictionary, and every work's link to it
-      parameters:
-        - name: catalogue
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: universe
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Removed
-
   /api/universes/{catalogue}/{universe}/classes:
     get:
-      tags: [universes]
+      tags: [universeEntries]
       operationId: listUniverseClasses
       summary: The classes the entries of a universe are of, the most entries first
       parameters:
@@ -1788,7 +1934,7 @@ paths:
 
   /api/universes/{catalogue}/{universe}/classes/{class}:
     put:
-      tags: [universes]
+      tags: [universeEntries]
       operationId: chooseUniverseClass
       summary: The user's word on a class within the universe - its entries kept as characters, or left out
       parameters:
@@ -1811,7 +1957,7 @@ paths:
         '404':
           description: No such universe
     delete:
-      tags: [universes]
+      tags: [universeEntries]
       operationId: resetUniverseClass
       summary: Takes the user's word on the class back - the catalogue decides again
       parameters:
@@ -1830,7 +1976,7 @@ paths:
 
   /api/universes/{catalogue}/{entry}/name:
     put:
-      tags: [universes]
+      tags: [universeEntries]
       operationId: nameUniverseEntry
       summary: |
         The name the user gives a universe or a character of the dictionary over the catalogue's - shown everywhere in
@@ -1855,7 +2001,7 @@ paths:
 
   /api/universes/{catalogue}/{universe}/characters/{character}:
     put:
-      tags: [universes]
+      tags: [universeEntries]
       operationId: chooseUniverseEntry
       summary: The user's word on one entry of the universe, over its classes - kept as a character, or left out
       parameters:
@@ -1878,7 +2024,7 @@ paths:
         '404':
           description: No such universe
     delete:
-      tags: [universes]
+      tags: [universeEntries]
       operationId: resetUniverseEntry
       summary: Takes the user's word on the entry back - its classes decide again
       parameters:
@@ -1897,7 +2043,7 @@ paths:
 
   /api/universes/{catalogue}/{universe}/characters:
     get:
-      tags: [universes]
+      tags: [universeEntries]
       operationId: listCharacters
       summary: Every entry of a universe of the dictionary as the catalogue gave it, with whether it is kept as a character
       parameters:
@@ -6109,15 +6255,87 @@ components:
 
     UniverseInfo:
       type: object
-      required: [catalogue, universe, value, name, catalogueName, url, characters, total, works, addedAt, refreshedAt]
+      required: [value, name, sites, entries, characters, characterCount, works, parents, children]
+      description: A universe - a normalized fandom
+      properties:
+        value:
+          type: string
+          description: The key of the universe as a value of the facet "universe" of the works - its id
+        name:
+          type: string
+          description: What it is shown by - the user's name, else its first entry's, else its sites' fandom's of the most works
+        ownName:
+          type: string
+          description: The name the user gave it, when given
+        calculatedName:
+          type: string
+          description: The name of its sites' fandom of the most works
+        description:
+          type: string
+          description: What its first entry's catalogue says of it
+        sites:
+          type: array
+          description: The sites' fandoms bound to it, of the most works first
+          items:
+            $ref: '#/components/schemas/UniverseSite'
+        entries:
+          type: array
+          description: The entries of the catalogue it is bound to, in the order bound
+          items:
+            $ref: '#/components/schemas/UniverseEntryInfo'
+        characters:
+          type: boolean
+          description: The characters of its entries are read and given to its works
+        characterCount:
+          type: integer
+          description: The entries of its entries kept as characters
+        works:
+          type: integer
+          description: The works of its sites' fandoms on the sites
+        parents:
+          type: array
+          description: The universes it is under, by their values
+          items:
+            type: string
+        children:
+          type: array
+          description: The universes under it, by their values
+          items:
+            type: string
+
+    UniverseSite:
+      type: object
+      required: [source, key, name, works]
+      description: A fandom of a site bound to a universe
+      properties:
+        source:
+          type: string
+        key:
+          type: string
+          description: The site's own key of the fandom
+        name:
+          type: string
+          description: The fandom's name on the site; its key when the site gave none
+        works:
+          type: integer
+          description: The works of the fandom the source has
+        url:
+          type: string
+          description: The fandom's page on the site, when the source tells it
+
+    UniverseEntryInfo:
+      type: object
+      required: [catalogue, entry, value, name, catalogueName, url, characters, total, refreshedAt]
+      description: An entry of a catalogue a universe is bound to, as the catalogue gave it
       properties:
         catalogue:
           type: string
-        universe:
+        entry:
           type: string
+          description: The entry's id within the catalogue ("Q8337")
         value:
           type: string
-          description: The key of the universe as a value of the facet "universe" of the works
+          description: The entry as "<catalogue>:<id>"
         name:
           type: string
           description: What it is shown by - the user's name, else the catalogue's
@@ -6131,23 +6349,111 @@ components:
           type: string
         url:
           type: string
-          description: The universe's page in the catalogue
+          description: The entry's page in the catalogue
         characters:
           type: integer
           description: Its entries kept as characters
         total:
           type: integer
           description: Every entry the catalogue said is in it - characters, places, groups, things
-        works:
-          type: integer
-          description: The works the user linked to it
-        addedAt:
-          type: string
-          format: date-time
         refreshedAt:
           type: string
           format: date-time
-          description: When its characters were last asked of the catalogue
+          description: When it was last asked of the catalogue
+
+    UniverseKeyRef:
+      type: object
+      required: [universe]
+      properties:
+        universe:
+          type: string
+          description: The universe's value of the facet "universe"
+
+    UniverseName:
+      type: object
+      required: [universe]
+      properties:
+        universe:
+          type: string
+        name:
+          type: string
+          description: The name; none or blank takes it back
+
+    UniverseCharacters:
+      type: object
+      required: [universe, read]
+      properties:
+        universe:
+          type: string
+        read:
+          type: boolean
+          description: The characters of its entries read and given to its works
+
+    UniverseEntryBinding:
+      type: object
+      required: [universe, catalogue, entry, bound]
+      properties:
+        universe:
+          type: string
+        catalogue:
+          type: string
+        entry:
+          type: string
+        bound:
+          type: boolean
+          description: Bound to it, or the binding taken back
+
+    UniverseRelation:
+      type: string
+      description: |
+        What a universe is to another - merged into it, under it (CHILD), above it (PARENT), different, nothing;
+        DESCENDANT and ANCESTOR are read of the universes between, never said
+      enum: [MERGED, CHILD, PARENT, DIFFERENT, NONE, DESCENDANT, ANCESTOR]
+
+    UniverseRelationRequest:
+      type: object
+      required: [universe, other, relation]
+      properties:
+        universe:
+          type: string
+        other:
+          type: string
+        relation:
+          $ref: '#/components/schemas/UniverseRelation'
+
+    SiteFandomBinding:
+      type: object
+      required: [source, key]
+      properties:
+        source:
+          type: string
+        key:
+          type: string
+          description: The site's own key of the fandom
+        universe:
+          type: string
+          description: The universe to bind it to; none - a new universe of its own
+
+    SimilarUniverse:
+      type: object
+      required: [value, name, sites, works, similarity, relation]
+      properties:
+        value:
+          type: string
+        name:
+          type: string
+        sites:
+          type: array
+          items:
+            $ref: '#/components/schemas/UniverseSite'
+        works:
+          type: integer
+        similarity:
+          type: number
+          format: float
+          description: The cosine of their likest names; 1 of a universe bound to an entry this one is bound to
+        relation:
+          $ref: '#/components/schemas/UniverseRelation'
 
     FoundUniverse:
       type: object
@@ -6165,45 +6471,10 @@ components:
           type: string
         added:
           type: boolean
-          description: The dictionary has it already
-
-    SiteFandom:
-      type: object
-      required: [source, fandom, name, works, universes]
-      properties:
-        source:
-          type: string
-          description: The site's source
-        fandom:
-          type: string
-          description: The site's own key of the fandom
-        name:
-          type: string
-          description: The fandom's name on the site; its key when the site gave none
-        works:
-          type: integer
-          description: The works of the fandom the source has
-        universes:
-          type: array
-          description: The universes the user bound it to, by their values of the facet "universe"
-          items:
-            type: string
-
-    FandomBinding:
-      type: object
-      required: [source, fandom, universe, bound]
-      properties:
-        source:
-          type: string
-        fandom:
-          type: string
-          description: The site's own key of the fandom
-        universe:
-          type: string
-          description: The universe's value of the facet "universe" ("wikidata:Q8337")
+          description: The dictionary has it already, bound to a universe
         bound:
-          type: boolean
-          description: Bound to it, or the binding taken back
+          type: string
+          description: The universe it is bound to, by its value, when one is
 
     UniverseClassInfo:
       type: object

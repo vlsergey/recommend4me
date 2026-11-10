@@ -151,9 +151,9 @@ class SitePlugins {
     }
 
     /**
-     * A site whose pages are "<id>|<title>|<tags>|<annotation>|<pairings>": tags to suggest, and pairings the
-     * application works out from the line the site writes them in. What a tag means it answers at [describe] of the
-     * tag.
+     * A site whose pages are "<id>|<title>|<tags>|<annotation>|<pairings>[|<series>[|<fandoms>]]": tags to suggest,
+     * pairings the application works out from the line the site writes them in, and fandoms "<key>:<name>,…" — of the
+     * fandom "originals" an original work. What a tag means it answers at [describe] of the tag.
      */
     class SiteSource : Source {
         companion object {
@@ -184,6 +184,7 @@ class SitePlugins {
                         Books.TAG.asFacet(),
                         FacetDef("pairing", infer = true, original = "pairings"),
                         FacetDef("series", role = FacetRole.SERIES),
+                        Books.FANDOM.asFacet("fandom"),
                     ),
                 texts =
                     listOf(
@@ -279,7 +280,25 @@ class SitePlugins {
                 "tag",
                 tags.split(',').filter { it.isNotBlank() }.map { FacetValue(it, it.replaceFirstChar(Char::uppercase)) },
             )
-            parts.getOrNull(5)?.let { context.items.setFacet(id, "series", listOf(FacetValue(it.lowercase(), it))) }
+            parts
+                .getOrNull(5)
+                ?.takeIf { it.isNotBlank() }
+                ?.let {
+                    context.items.setFacet(id, "series", listOf(FacetValue(it.lowercase(), it)))
+                }
+            parts
+                .getOrNull(6)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { line ->
+                    val fandoms = line.split(',').map { FacetValue(it.substringBefore(':'), it.substringAfter(':')) }
+                    context.items.setFacet(id, "fandom", fandoms)
+                    val original = fandoms.all { it.key == "originals" }
+                    context.items.setFacet(
+                        id,
+                        UniverseFacets.KIND,
+                        listOf(FacetValue(if (original) UniverseFacets.ORIGINAL else UniverseFacets.FANFICTION)),
+                    )
+                }
             context.items.setFacet(
                 id,
                 "pairing",

@@ -9,7 +9,7 @@ import { useCandidates } from "@/suggestion/useSuggestions";
 import { AllNamed } from "./AllNamed";
 import { CHARACTERS, type FieldSearch, has, ORIGINAL_CHARACTERS } from "./fanficFields";
 import { type Option, Picker, ranked } from "./Picker";
-import { charactersQuery, useUniverses } from "./Universes";
+import { characterEntries, charactersQuery, entryRef, useUniverses } from "./universeQueries";
 import { Chips } from "./ValueChips";
 
 /**
@@ -121,7 +121,9 @@ function OpenCharacters({
   const linked = universes
     .map((v) => dictionary.data?.find((u) => u.value === v.key))
     .filter((u): u is UniverseInfo => u !== undefined);
-  const characters = useQueries({ queries: linked.map((u) => charactersQuery(type.id, u)) });
+  // The entries of the linked universes whose characters are read, each with its universe
+  const read = linked.flatMap((u) => characterEntries(u).map((e) => ({ u, e })));
+  const characters = useQueries({ queries: read.map(({ e }) => charactersQuery(type.id, entryRef(e))) });
 
   const taken = (key: string) => values.some((v) => v.key === key && has(v));
   // A character of the work's other facet of characters — the user's or the model's — is offered all
@@ -131,11 +133,13 @@ function OpenCharacters({
   // A character of several of the work's universes is offered once, with every universe it is of;
   // the entries the user left out of a universe (its places, its spells) are not offered
   const byKey = new Map<string, Option & { universes: string[] }>();
-  linked.forEach((u, i) => {
+  read.forEach(({ u }, i) => {
     for (const c of (characters[i].data ?? []).filter((c) => c.included)) {
-      const key = `${u.catalogue}:${c.character}`;
+      const key = c.value;
       const known = byKey.get(key);
-      if (known) known.universes.push(u.name);
+      if (known) {
+        if (!known.universes.includes(u.name)) known.universes.push(u.name);
+      }
       else
         byKey.set(key, {
           key,

@@ -39,6 +39,12 @@ enum class Refusal(val code: String, val params: List<String> = emptyList()) {
 
     /** No source of a type with universes by the id, or one without the site's fandoms. */
     NO_FANDOMS("noFandoms"),
+    UNIVERSE_SELF("universeSelf"),
+    UNIVERSE_ABOVE("universeAbove"),
+    UNIVERSE_BELOW("universeBelow"),
+
+    /** A universe above or under another through others: not said of the two, of the universes between. */
+    UNIVERSE_THROUGH("universeThrough"),
     NO_SUCH_TYPE("noSuchType"),
     NO_SITE_TAGS("noSiteTags"),
     TAG_SELF("tagSelf"),

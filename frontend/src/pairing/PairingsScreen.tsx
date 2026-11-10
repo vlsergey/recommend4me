@@ -14,7 +14,7 @@ import { MarkingTable } from "@/marking/MarkingTable";
 import { followLink, navigate, screenHref } from "@/screen/screens";
 import { ORIGINAL_CHARACTERS } from "@/universe/fanficFields";
 import { type Option, Picker } from "@/universe/Picker";
-import { charactersQuery, useUniverses } from "@/universe/Universes";
+import { characterEntries, charactersQuery, entryRef, useUniverses } from "@/universe/universeQueries";
 
 /** The cache key of the pairings known: their counts change with every answer on one. */
 const PAIRINGS = "pairings";
@@ -144,13 +144,17 @@ function NewPairing({ type, onChosen }: { type: ContentTypeInfo; onChosen: (key:
   const [second, setSecond] = useState<Option | null>(null);
   const dictionary = useUniverses(type.id, open);
   const universes = dictionary.data ?? [];
-  const characters = useQueries({ queries: open ? universes.map((u) => charactersQuery(type.id, u)) : [] });
+  // The entries of every universe whose characters are read, each with its universe
+  const read = universes.flatMap((u) => characterEntries(u).map((e) => ({ u, e })));
+  const characters = useQueries({ queries: open ? read.map(({ e }) => charactersQuery(type.id, entryRef(e))) : [] });
   // A character of several universes offered once, with every universe it is of
   const byKey = new Map<string, Option & { universes: string[] }>();
-  universes.forEach((u, i) => {
+  read.forEach(({ u }, i) => {
     for (const c of (characters[i]?.data ?? []).filter((c) => c.included)) {
       const known = byKey.get(c.value);
-      if (known) known.universes.push(u.name);
+      if (known) {
+        if (!known.universes.includes(u.name)) known.universes.push(u.name);
+      }
       else
         byKey.set(c.value, {
           key: c.value,

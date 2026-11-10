@@ -135,9 +135,11 @@ function Word({
 }
 
 /**
- * A fandom for all its works, from the field of universes: a word that reached nothing, bound to a
- * universe the work has; a word bound, its universe and ✕ to take it back. The write of the screen
- * of the universes: the other works get it when their drafts are made anew, in the background.
+ * A fandom for all its works, from the field of universes. Every fandom of a site is bound to a
+ * universe of its own name at first: the universe it reached shown when named otherwise, with ✕ to
+ * take the fandom out to a universe of its own; and every other universe the work has offered — "this
+ * fandom is that universe" binds it there, with all its works. The write of the screen of the
+ * universes: the other works get it when their drafts are made anew, in the background.
  */
 const folded = (name: string) => name.trim().toLocaleLowerCase();
 
@@ -145,30 +147,33 @@ function FandomBinding({ said, word, universes }: { said: SiteSaid; word: SiteWo
   const { t } = useTranslation("correction");
   const queryClient = useQueryClient();
   const item = useContext(ValueActions)?.item;
-  const bind = async (universe: string, bound: boolean) => {
-    ensureOk(await api.PUT("/api/universes/fandoms", { body: { source: said.source, fandom: word.key, universe, bound } }));
-    if (bound) toast.add({ title: t("SiteWords.boundLater"), timeout: 5000 });
+  /** The fandom bound to the [universe]; to a universe of its own when none. */
+  const bind = async (universe?: string) => {
+    ensureOk(await api.PUT("/api/universes/binding", { body: { source: said.source, key: word.key, universe } }));
+    toast.add({ title: t("SiteWords.boundLater"), timeout: 5000 });
     queryClient.invalidateQueries({ queryKey: ["universes"], refetchType: "none" });
     if (item) await queryClient.invalidateQueries({ queryKey: itemKey(item) });
   };
   const reached = universes.filter((u) => word.reaches?.includes(u.key));
+  // The fandom's own universe is the first it reached: those above it are reached with it
+  const own = reached[0];
   return (
     <>
-      {word.reaches?.length === 0 &&
-        universes
-          .filter((u) => u.corrected !== "REMOVED" && !u.offered)
-          .map((u) => (
-            <AsyncButton key={u.key} size="xs" variant="ghost" className="h-5 px-1 text-xs pointer-coarse:h-11" title={t("SiteWords.bindHint")} onClick={() => bind(u.key, true)}>
-              {t("SiteWords.bind", { universe: valueName(u) })}
-            </AsyncButton>
-          ))}
-      {reached.map((u) => (
-        <span key={u.key} className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
-          {/* A universe named as the fandom is not written twice */}
-          {folded(valueName(u)) === folded(word.name) ? <LinkIcon className="size-3" aria-label={t("SiteWords.bound", { universe: valueName(u) })} /> : <>→ {valueName(u)}</>}
-          <AsyncButton size="icon-xs" variant="ghost" title={t("SiteWords.unbind")} aria-label={t("SiteWords.unbind")} icon={<XIcon />} onClick={() => bind(u.key, false)} />
+      {own && folded(valueName(own)) !== folded(word.name) && (
+        // A universe named as the fandom is not written twice, nor taken out of itself
+        <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+          → {valueName(own)}
+          <AsyncButton size="icon-xs" variant="ghost" title={t("SiteWords.unbind")} aria-label={t("SiteWords.unbind")} icon={<XIcon />} onClick={() => bind()} />
         </span>
-      ))}
+      )}
+      {own && folded(valueName(own)) === folded(word.name) && <LinkIcon className="size-3 text-muted-foreground" aria-label={t("SiteWords.bound", { universe: valueName(own) })} />}
+      {universes
+        .filter((u) => u.corrected !== "REMOVED" && !u.offered && !reached.includes(u))
+        .map((u) => (
+          <AsyncButton key={u.key} size="xs" variant="ghost" className="h-5 px-1 text-xs pointer-coarse:h-11" title={t("SiteWords.bindHint")} onClick={() => bind(u.key)}>
+            {t("SiteWords.bind", { universe: valueName(u) })}
+          </AsyncButton>
+        ))}
     </>
   );
 }

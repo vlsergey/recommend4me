@@ -1,41 +1,35 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.item.ItemsChanged
-import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 
 private val log = LoggerFactory.getLogger(Universes::class.java)
 
-/** An entry a catalogue found, and whether the dictionary has it. */
-class FoundUniverse(val catalogue: String, val entry: UniverseEntry, val added: Boolean)
-
 /**
- * THE DICTIONARY OF UNIVERSES, every content type's: the universes the user agreed on, with their entries as the
- * catalogue gave them — the characters and whatever else it says is in them, each with its classes, the characters kept
- * unless the user says otherwise. The catalogue is asked only when the user asks — a search by the button, a universe
- * added, its characters refreshed — and what it answered is kept.
+ * THE UNIVERSES AND THE ENTRIES OF THE CATALOGUE THEY ARE BOUND TO, every content type's: an entry made a universe or
+ * bound to one, a universe's characters read or not, the user's words on the entries' names, classes and characters.
+ * The catalogue is asked only when the user asks — an entry bound, a universe's characters turned on or read again —
+ * and what it answered is kept ([EntryReading]).
  *
- * The names of the universe and of its characters are written as the names of the values of the facets "universe" and
+ * The names of the universes and of their characters are the names of the values of the facets "universe" and
  * "characters" in every source of every type that has universes, so the works name them as any value of a facet.
  */
 @Service
 class Universes(
     private val stores: Stores,
-    private val plugins: Plugins,
+    private val reading: EntryReading,
     private val events: ApplicationEventPublisher,
-    /** The languages the names of universes and characters are asked in, the user's first. */
-    @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) {
     /** The one dictionary, and every source of every type that has universes: what reads it. */
-    private class Scope(val universes: UniverseRepository, val sources: List<SourceStore>)
+    private class Scope(val universes: UniverseRepository, val sources: List<SourceStore>) {
+        val fandoms: FandomRepository
+            get() = universes.fandoms
+    }
 
     private fun scope(): Scope {
         val types = stores.types.filter { it.type.universes }
@@ -43,86 +37,69 @@ class Universes(
         return Scope(first.universes, types.flatMap { it.sources })
     }
 
-    private fun catalogue(id: String): UniverseCatalogue =
-        plugins.catalogues.firstOrNull { it.id == id } ?: throw NoSuchElementException("No catalogue $id")
-
-    /** What every catalogue finds by [query]: the user picks among them. */
-    fun search(query: String): List<FoundUniverse> {
-        val known = scope().universes.all().map { it.catalogue to it.id }.toSet()
-        return plugins.catalogues.flatMap { c ->
-            c.findUniverses(query, languages).map { FoundUniverse(c.id, it, (c.id to it.id) in known) }
-        }
-    }
-
-    /** Adds the universe to the dictionary — or refreshes it — with its characters as the catalogue gives them now. */
-    fun add(catalogueId: String, id: String): StoredUniverse {
+    /**
+     * The entry of the catalogue as a universe: the universe bound to it — the first, of several — or a new one of it
+     * whose characters are read; the entry read again of the catalogue. Its id.
+     */
+    fun add(catalogueId: String, id: String): Long {
         val scope = scope()
-        val catalogue = catalogue(catalogueId)
-        val properties = wantedProperties(catalogueId)
-        val entry =
-            catalogue.universe(id, languages, properties) ?: throw NoSuchElementException("$catalogueId has no $id")
-        val characters = catalogue.characters(id, languages, properties)
-        val classes = catalogue.classes(characters.flatMap { it.classes }.toSet(), languages)
-        scope.universes.save(catalogueId, entry, characters, classes, properties, Instant.now())
-        // Its name and its characters' are the dictionary's, read from it by every source ([UniverseNames])
-        val value = UniverseFacet.valueOf(catalogueId, id)
-        val stored = scope.universes.find(catalogueId, id)!!
-        log.info(
-            "The universe {} ({}) has {} entries of {} classes, {} of them kept as characters",
-            entry.name,
-            value,
-            characters.size,
-            classes.size,
-            stored.characters,
-        )
+        val key = UniverseKey(catalogueId, id)
+        val bound = scope.fandoms.entries.fandomsOf(key).minOrNull()
+        if (bound != null) {
+            readOf(bound)
+            return bound
+        }
+        reading.read(key, true)
+        val now = Instant.now()
+        val made =
+            scope.fandoms.transaction { f -> f.create(now, characters = true).also { f.entries.bind(it, key, now) } }
+        log.info("The entry {} made the universe {}, its characters read", key.value, made)
         dictionaryChanged(scope)
-        return stored
+        return made
     }
 
     /**
-     * The statements of the catalogue's characters every plugin wants
-     * ([Source.catalogueProperties][io.github.vlsergey.recommend4me.source.Source.catalogueProperties]).
+     * The universe [fandom] bound to the entry [key] — read of the catalogue now, its characters too when a universe
+     * bound to it reads them — or the binding taken back: an entry bound to no universe then is gone with its
+     * characters.
      */
-    private fun wantedProperties(catalogueId: String): Set<String> =
-        plugins.sources.flatMap { it.catalogueProperties[catalogueId].orEmpty() }.toSet()
-
-    /**
-     * The universes asked of their catalogue in other languages than the user's now — or before the texts were kept by
-     * language — or for other statements of their characters than the plugins want now, asked again, one by one, in the
-     * background: their names and descriptions are then there in every language of the user, and their characters'
-     * statements the plugins'.
-     */
-    @Suppress("TooGenericExceptionCaught")
-    @EventListener(ApplicationReadyEvent::class)
-    fun askInNewLanguages() {
-        if (stores.types.none { it.type.universes }) return
-        val stale =
-            scope().universes.all().filter {
-                it.languages != languages || it.properties != wantedProperties(it.catalogue)
-            }
-        if (stale.isEmpty()) return
-        Thread(
-                {
-                    stale.forEach { u ->
-                        try {
-                            add(u.catalogue, u.id)
-                        } catch (e: Exception) {
-                            // A BOUNDARY: a universe asked again of its catalogue's plugin and service in the
-                            // background may fail in any way; the failure is logged and the next universe asked
-                            log.warn("The universe {} was not asked again in {}: {}", u.value, languages, e.message)
-                        }
-                    }
-                },
-                "universes-languages",
-            )
-            .apply { isDaemon = true }
-            .start()
+    fun bindEntry(fandom: Long, key: UniverseKey, bound: Boolean) {
+        val scope = scope()
+        val row = scope.fandoms.one(fandom) ?: throw NoSuchElementException("No universe $fandom")
+        if (bound) {
+            reading.read(key, row.characters || scope.fandoms.entries.charactersRead(key))
+            scope.fandoms.entries.bind(fandom, key, Instant.now())
+        } else scope.fandoms.entries.unbind(fandom, key)
+        log.info("The universe {} {} the entry {}", fandom, if (bound) "bound to" else "no more bound to", key.value)
+        dictionaryChanged(scope)
     }
 
     /**
-     * The name the user gives a universe or a character of [catalogue] ([id]) over the catalogue's — shown everywhere
-     * in its place, read in the texts as one more name of it; null or blank takes it back. A character is named in
-     * every universe it is in.
+     * Whether the characters of the entries of the universe [fandom] are read and given to its works; turned on, its
+     * entries and their characters read of the catalogue now. Turned off, the characters kept stay, given to none.
+     */
+    fun readCharacters(fandom: Long, read: Boolean) {
+        val scope = scope()
+        scope.fandoms.one(fandom) ?: throw NoSuchElementException("No universe $fandom")
+        scope.fandoms.characters(fandom, read)
+        log.info("The characters of the universe {} {}", fandom, if (read) "read" else "no more read")
+        if (read) readOf(fandom) else dictionaryChanged(scope)
+    }
+
+    /** The entries of the universe [fandom] read again of the catalogue, their characters too when it reads them. */
+    fun readOf(fandom: Long) {
+        val scope = scope()
+        scope.fandoms.one(fandom) ?: throw NoSuchElementException("No universe $fandom")
+        scope.fandoms.entries.of(fandom).forEach { key ->
+            reading.read(key, scope.fandoms.entries.charactersRead(key))
+        }
+        dictionaryChanged(scope)
+    }
+
+    /**
+     * The name the user gives an entry or a character of [catalogue] ([id]) over the catalogue's — shown everywhere in
+     * its place, read in the texts as one more name of it; null or blank takes it back. A character is named in every
+     * entry it is in.
      */
     fun setLocalName(catalogueId: String, id: String, name: String?) {
         val scope = scope()
@@ -135,31 +112,19 @@ class Universes(
         dictionaryChanged(scope)
     }
 
-    /** The user's word on a class of the universe's entries — kept, left out, or null: as the catalogue says. */
+    /** The user's word on a class of the entry's entries — kept, left out, or null: as the catalogue says. */
     fun chooseClass(catalogueId: String, id: String, cls: String, included: Boolean?) {
         val scope = scope()
-        scope.universes.find(catalogueId, id) ?: throw NoSuchElementException("No universe $catalogueId:$id")
+        scope.universes.findEntry(catalogueId, id) ?: throw NoSuchElementException("No entry $catalogueId:$id")
         scope.universes.entries.chooseClass(catalogueId, id, cls, included)
         dictionaryChanged(scope)
     }
 
-    /** The user's word on one entry of the universe — kept, left out, or null: as its classes say. */
+    /** The user's word on one entry of the entry — kept, left out, or null: as its classes say. */
     fun chooseEntry(catalogueId: String, id: String, character: String, included: Boolean?) {
         val scope = scope()
-        scope.universes.find(catalogueId, id) ?: throw NoSuchElementException("No universe $catalogueId:$id")
+        scope.universes.findEntry(catalogueId, id) ?: throw NoSuchElementException("No entry $catalogueId:$id")
         scope.universes.entries.chooseEntry(catalogueId, id, character, included)
-        dictionaryChanged(scope)
-    }
-
-    /** Takes the universe out of the dictionary, and with it every work's link to it. */
-    fun remove(catalogueId: String, id: String) {
-        val scope = scope()
-        scope.universes.remove(catalogueId, id)
-        val value = UniverseFacet.valueOf(catalogueId, id)
-        scope.sources.forEach { s ->
-            val linked = s.corrections.removeFacetValue(UniverseFacet.KEY, value)
-            if (linked.isNotEmpty()) events.publishEvent(ItemsChanged(s.id, linked))
-        }
         dictionaryChanged(scope)
     }
 

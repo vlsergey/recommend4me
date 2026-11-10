@@ -117,6 +117,8 @@ class Ficbook : Source {
         when (facet) {
             AUTHOR -> "$BASE/authors/$key"
             SERIES -> "$BASE/series/$key"
+            // "books/rouling_dzhoan___garri_potter": the fandom's page of its works
+            FANDOM -> "$BASE/fanfiction/$key"
             else -> null
         }
 

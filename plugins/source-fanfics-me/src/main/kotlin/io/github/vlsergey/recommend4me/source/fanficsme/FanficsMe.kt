@@ -112,6 +112,7 @@ class FanficsMe : Source {
         when (facet) {
             AUTHOR -> "$BASE/user$key"
             SERIES -> "$BASE/serie$key"
+            FANDOM -> "$BASE/fandom$key"
             else -> null
         }
 

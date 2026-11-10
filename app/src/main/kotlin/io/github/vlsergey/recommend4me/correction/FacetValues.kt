@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.correction
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.tag.TagRepository
+import io.github.vlsergey.recommend4me.universe.FandomRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import org.springframework.http.HttpStatus
 
@@ -51,7 +52,7 @@ object FacetValues {
         }
         val known =
             of(store, facet)
-                .filter { facet !in ENTRIES_ONLY || ':' in it.key }
+                .filter { facet !in ENTRIES_ONLY || ofDictionary(facet, it.key) }
                 .firstOrNull { it.name.lowercase() == wanted || it.key.lowercase() == wanted }
                 ?.key
         if (known == null && facet in ENTRIES_ONLY) {
@@ -65,8 +66,12 @@ object FacetValues {
     }
 
     /**
-     * The facets whose values are entries of the dictionary alone, keyed by the catalogue — a universe
-     * ("wikidata:Q8337"), a pair of its characters: chosen, never made of a name typed.
+     * The facets whose values are entries of the dictionary alone — a universe (a normalized fandom, by its id), a pair
+     * of characters of the catalogue ("pair:wikidata:Q1|wikidata:Q2"): chosen, never made of a name typed.
      */
     private val ENTRIES_ONLY = setOf(UniverseFacets.UNIVERSE, UniverseFacets.PAIRINGS)
+
+    /** Whether [key] of a facet of [ENTRIES_ONLY] is a value of the dictionary, not a name the user made up before. */
+    private fun ofDictionary(facet: String, key: String): Boolean =
+        if (facet == UniverseFacets.UNIVERSE) FandomRepository.idOf(key) != null else ':' in key
 }

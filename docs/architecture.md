@@ -310,14 +310,41 @@ and the characters are the user's preferences (`preferences.mv.db`, `catalogue_e
 ## Universes
 
 A content type may have universes (`ContentType.universes`: books) — works may be fan fiction of
-someone else's world. One dictionary of the universes the user agreed on, each with its
-characters, is kept in the dictionaries for every such type. A universe comes from a catalogue plugin
-(`UniverseCatalogue`; `catalogue-wikidata`): a universe is a Wikidata item — a franchise, a series,
-a work — and its characters whatever is said to be in it or in its parts, with every name and
-alias in the user's languages (`recommend4me.languages`), the way the fans write them among them.
-The catalogue is asked only when the user asks — a search by the button with the variants shown,
-a universe added, its characters refreshed from the universes screen or a site's page — and
-what it answered is kept.
+someone else's world. A UNIVERSE IS A NORMALIZED FANDOM, as a normalized tag is a tag
+(`universe/FandomRepository`, the dictionaries' `fandom`): every fandom of every site — the site's
+own key of it, ficbook's "books/rouling_dzhoan___garri_potter", fanfics.me's "2", AO3's tag — is
+bound to exactly one universe (`fandom_site`). A site's fandom seen first is bound to the universe
+the sites' fandoms of its name are bound to, any case, when there is exactly one such, else to a
+new universe of its own (`FandomNormalization`, as the works are captured and on start). From then
+on the user binds them: merges two universes that are one (their sites' fandoms, entries, links and
+the user's answers on the works go to the one kept, the newest answer standing of a work answered on
+both), takes a site's fandom out to a universe of its own, puts one under another — a work of the
+child is of the parent too — tells two apart, names one. The screen of the universes offers the
+universes alike one by the meaning of their sites' fandoms' names (the names encoded as the search
+encodes short texts, kept by their sources, made in the background: `FandomVectors`) and those bound
+to the same entry; it merges nothing by itself.
+
+A universe is shown by the name the user gave it; else by the name of the first entry of a catalogue
+it is bound to; else by the name of its sites' fandom of the most works (`fandom.calculated_name`,
+worked out again as the fandoms are bound and the user's words change them).
+
+A universe may be bound to entries of a catalogue (`UniverseCatalogue`; `catalogue-wikidata`;
+`fandom_entry`): a Wikidata item — a franchise, a series, a work — kept as the catalogue gave it
+(`universe`), with every name and alias in the user's languages (`recommend4me.languages`). The
+characters of its entries — whatever the catalogue says is in it or in its parts, the way the fans
+write them among them — are read and given to its works only when the user said so of the universe
+(`fandom.characters`, "read the characters"): on for the 28 universes bound to their entries before
+the fandoms were normalized, off for every universe made since of a site's fandom. An entry made a
+universe by the search of the catalogue has its characters read. The catalogue is asked only when
+the user asks — a search by the button with the variants shown, an entry bound, a universe's
+characters turned on or read again from the universes screen or a site's page — and what it
+answered is kept. An entry bound to no universe any more is gone with its characters.
+
+A work of a site with fandoms has the universe of every fandom its site gives it, and every universe
+above it, as a draft (`LayerDrafts`): a value the work has, nothing to confirm; the user's answer on
+the work — the site's fandom wrong, one it forgot — stands over it. A work its site says is of no
+universe (the fandom "originals") has none of its fandoms. A source without fandoms (author.today)
+has its works' universes offered by the model, to be confirmed, as before.
 
 Every work of the type has five facets of the application's own beside the source's
 (`UniverseFacets`), their values kept as the user's corrections and worked out by the model as
@@ -327,8 +354,8 @@ any facet's:
   work, the last three of no universe: the site's when it says (ficbook and fanfics.me by the
   fandom "originals" — `SourceSchema.kindFrom`, shown above; author.today by its genre "Фанфик", one of
   the site's tags), suggested otherwise;
-- `universe` — the universes of the dictionary the work is fan fiction of, one or several:
-  suggested from the work's fandom, tags and texts to a work not known to be original, to be
+- `universe` — the universes the work is fan fiction of, one or several: of its sites' fandoms
+  (drafts, above), suggested from its tags and texts to a work not known to be original, to be
   confirmed;
 - `characters` — its main characters: of the characters of its universes — confirmed, or given
   by the model more likely than not and not rejected, none but the confirmed once the user said
@@ -347,7 +374,6 @@ The characters and the pairings are given to the work at once when more likely t
 site's own strings stay its facets as they are, for the model and as what the model reads. The
 universes, the characters of either kind and the pairings can each be said to be all named: the
 work keeps its own and is offered no other.
-Taking a universe out of the dictionary takes its links with it.
 
 ### Statements of the catalogue and drafts
 
@@ -360,8 +386,9 @@ the plugins want now is asked again on start.
 
 From them a source drafts values of the layer (`Source.draft`): AO3 matches its fandoms to
 universes and the names of its relationship tags ("A/B", "A & B") to characters by the tag, a
-romantic pair of two matched characters to a pairing; the application adds the universe of every
-drafted character the dictionary has in one universe alone (`LayerDrafts`). A name matching
+romantic pair of two matched characters to a pairing — an entry's statement finds the universes bound
+to the entry; the application adds the universe of every drafted character the dictionary has in one
+universe whose characters are read alone (`LayerDrafts`). A name matching
 nothing, or several entries, drafts nothing. Every matched character is a main one: the user moves
 it to the secondary ones.
 

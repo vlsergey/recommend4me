@@ -70,7 +70,7 @@ var R4M_WORDS = {
     "scale.takeBack": "Take your answer back",
     "value.suggested": "Suggestion",
 
-    "universe.refresh": "Refresh the universe's characters from the catalogue",
+    "universe.refresh": "Read the universe's Wikidata entries again, and their characters when they are read",
 
     "candidate.title": "Candidate: {{mentions}}",
     "candidate.more": "Show {{count}} more candidates",
@@ -243,7 +243,7 @@ var R4M_WORDS = {
     "scale.takeBack": "Снять ваш ответ",
     "value.suggested": "Подсказка",
 
-    "universe.refresh": "Обновить персонажей вселенной из справочника",
+    "universe.refresh": "Заново спросить у Викиданных записи вселенной — и персонажей, если они загружаются",
 
     "candidate.title": "Кандидат: {{mentions}}",
     "candidate.more": "Показать ещё {{count}} кандидатов",
@@ -416,7 +416,7 @@ var R4M_WORDS = {
     "scale.takeBack": "Povuci vaš odgovor",
     "value.suggested": "Savet",
 
-    "universe.refresh": "Osveži likove univerzuma iz kataloga",
+    "universe.refresh": "Ponovo pitaj Vikipodatke za unose univerzuma — i likove, kad se učitavaju",
 
     "candidate.title": "Kandidat: {{mentions}}",
     "candidate.more": "Prikaži još {{count}} kandidata",

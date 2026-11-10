@@ -114,16 +114,18 @@ A scale has no search: its words are not pressed, and the same key means a step.
 - **a pair's word,** in the field of pairs: the picker of pairs with both names typed; no pairs to choose from yet: the
   composing of a pair, opened;
 - **a tag's word:** the add line;
-- **a fandom's word:** the universes' picker, and under it the catalogue search with the word typed: the dictionary holds
-  28 universes and 2701 fandoms are unbound, so the catalogue is what finds it.
+- **a fandom's word:** the universes' picker — every site's fandom a universe, found by any of its sites' names — and under it
+  the catalogue search with the word typed.
 
 A word typed by the press is not the user's typing: "add as a new name" appears only once the user changes the line, or one
 press would make a character named "Юто/Агеха".
 
-**A fandom bound once for all its works** (D): when the work has a universe and a fandom's word reached nothing, the word
-offers "всем работам фандома: <universe>"; `PUT /api/universes/fandoms`, the write of the screen of the universes. It says the other
-works get it when their drafts are made anew, in the background. A bound fandom shows its universe and takes it back there; a universe
-named as the fandom is not written twice, a mark standing for it. Web interface only: the extension has no screen of bindings.
+**A fandom bound once for all its works** (D): every site's fandom is a universe of its own name at first (`fandom_site`), so a
+fandom's word always reaches its universe; every other universe the work has is offered by it — "этот фандом — <universe>" binds
+the site's fandom there with all its works (`PUT /api/universes/binding`, the write of the screen of the universes). It says the other
+works get it when their drafts are made anew, in the background. A fandom whose universe is named otherwise shows it, with ✕ to take
+the fandom out to a universe of its own; a universe named as the fandom is not written twice, a mark standing for it. Web interface
+only: the extension has no screen of the universes.
 
 **A chip's "site"** names the sites in its title and on the finger's sheet: the sources of a long field of tags can scroll
 out of sight on a small screen (over 500 px on 41 of 400 works at 1366×768).
@@ -250,7 +252,7 @@ pressing it makes it the user's word.
 2. The sources of a field in the core (`universe/`, by the standard facets, no `if` on a plugin): `originalFacet`, and for the characters
    and pairs the site's `PAIRINGS_FACET`, for the pairs `Books.DIRECTION` too, for a universe with no fandom `kindFrom`. No change of
    `FacetDef`, so of the plugin API. `kindFrom = tag` on author.today.
-3. `reaches`: the same key; `store.tags.bindingsOf` of the member's source; `site_fandom`; `store.drafts` of the member. A draft's word is
+3. `reaches`: the same key; `store.tags.bindingsOf` of the member's source; `fandom_site`; `store.drafts` of the member. A draft's word is
    kept for every word that gave the value.
 4. `ItemCards.ofWork` gives what a site says of the whole work: `fromSite` by each member's own bindings, the steps a site lets, so a
    value's marks are one whichever item is read. A check: the form of each of the 38 works read through each of its items is the same.
