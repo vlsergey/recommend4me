@@ -9,9 +9,13 @@ import kotlin.math.exp
  * gives them one author, fully or in part, fitted on the pairs the user said are of the kind and those said not to be
  * ([fit]): which facet tells it, and how much, is learnt. [weights] by the name of the feature ([TITLE], [facet]...);
  * null — the model before any answer ([LogisticPairModel.prior]): the mean of the layers both have stands for the
- * chance, the facets' mean one layer of them.
+ * chance, the facets' mean one layer of them. The chance of a learnt model is its score as the answers tell it
+ * ([calibration]).
  */
-internal class Logistic(val weights: Map<String, Double>?) : FittedPairModel {
+internal class Logistic(
+    val weights: Map<String, Double>?,
+    val calibration: Calibration = Calibration.NONE,
+) : FittedPairModel {
 
     override fun chance(layers: PairLayers): Double {
         val w =
@@ -26,15 +30,18 @@ internal class Logistic(val weights: Map<String, Double>?) : FittedPairModel {
                     .average()
         var z = 0.0
         features(layers).forEach { (name, x) -> z += (w[name] ?: 0.0) * x }
-        return sigmoid(z)
+        return calibration.chance(z)
     }
 
     /**
      * The weights by name, a line each: "<name>=<weight>" — the text the application kept of the model before it came
-     * from a plugin.
+     * from a plugin —, then the calibration's two ([SHIFT], [SLOPE]).
      */
     override fun pack(): ByteArray =
-        weights.orEmpty().entries.joinToString("\n") { (name, w) -> "$name=$w" }.toByteArray(Charsets.UTF_8)
+        (weights.orEmpty() + mapOf(SHIFT to calibration.shift, SLOPE to calibration.slope))
+            .entries
+            .joinToString("\n") { (name, w) -> "$name=$w" }
+            .toByteArray(Charsets.UTF_8)
 
     /**
      * The model as a search weighs millions of pairs: of the [families] of facets by their places, its weights laid
@@ -185,15 +192,12 @@ internal class Logistic(val weights: Map<String, Double>?) : FittedPairModel {
          * said): a pair said of the kind weighs 1, labelled 1; one said not weighs 1, labelled 0; a pair not answered
          * on — nearly every pair a search keeps is not of the kind — labelled 0 and weighing as much as an unanswered
          * one is likely not of it, by the rule of succession over the answers: (not + 1) / (answered + 2). Its features
-         * every one any pair has. Newton's steps of the penalized log-likelihood, the constant not penalized. Null when
-         * no pair is said to be of the kind.
+         * every one any pair has. Newton's steps of the penalized log-likelihood, the constant not penalized. Its score
+         * made a chance by the answers ([calibrated]). Null when no pair is said to be of the kind.
          */
         fun fit(pairs: List<PairLayers>, said: List<Boolean?>): Logistic? {
             require(said.size == pairs.size) { "${said.size} words on ${pairs.size} pairs" }
-            val yes = said.count { it == true }
-            if (yes == 0) return null
-            val no = said.count { it == false }
-            val lack = (no + 1.0) / (yes + no + 2.0)
+            if (said.none { it == true }) return null
             val rows = PairRows.of(pairs)
             val words =
                 ByteArray(said.size) {
@@ -203,24 +207,68 @@ internal class Logistic(val weights: Map<String, Double>?) : FittedPairModel {
                         null -> PairRows.UNSAID
                     }
                 }
-            val w = DoubleArray(rows.names.size)
+            val w = weights(rows, words, DoubleArray(rows.names.size))
+            return Logistic(rows.names.indices.associate { rows.names[it] to w[it] }, calibrated(rows, words, w))
+        }
+
+        /**
+         * The weights of the [rows] by the [words] on them, Newton's steps from [from]; a pair not answered weighing
+         * (not + 1) / (answered + 2) of the answers among the [words].
+         */
+        private fun weights(rows: PairRows, words: ByteArray, from: DoubleArray): DoubleArray {
+            val yes = words.count { it == PairRows.YES }
+            val no = words.count { it == PairRows.NO }
+            val lack = (no + 1.0) / (yes + no + 2.0)
+            val w = from.copyOf()
             var steps = 0
             var moved = Double.POSITIVE_INFINITY
             while (steps++ < STEPS && moved >= MOVED) moved = rows.step(w, words, lack)
-            return Logistic(rows.names.indices.associate { rows.names[it] to w[it] })
+            return w
+        }
+
+        /**
+         * The [Calibration] of the model [w] by the answered pairs of the [rows]: every one scored by the model fitted
+         * without it — the answered dealt into [FOLDS], each fold left out in its turn ([PairRows.HELD]), its model's
+         * steps from [w] —, then the chance of the scores fitted on what the user said.
+         */
+        private fun calibrated(rows: PairRows, words: ByteArray, w: DoubleArray): Calibration {
+            val answered = words.indices.filter { words[it] != PairRows.UNSAID }
+            val z = DoubleArray(answered.size)
+            for (fold in 0 until minOf(FOLDS, answered.size)) {
+                val held = answered.indices.filter { it % FOLDS == fold }
+                val training = words.copyOf()
+                held.forEach { training[answered[it]] = PairRows.HELD }
+                val without = weights(rows, training, w)
+                held.forEach { z[it] = rows.logit(without, answered[it]) }
+            }
+            return Calibration.fit(z, BooleanArray(answered.size) { words[answered[it]] == PairRows.YES })
         }
 
         /** A step of the weights small enough for the fitting to end. */
         private const val MOVED = 1e-6
 
-        /** The weights of [bytes] written by [pack]; null of bytes of no weight. */
+        /** The parts the answered pairs are dealt into, each scored by the model of the others. */
+        private const val FOLDS = 5
+
+        /** The calibration's numbers in [pack], among the weights: no feature is named so. */
+        private const val SHIFT = "calibration.shift"
+        private const val SLOPE = "calibration.slope"
+
+        /**
+         * The weights of [bytes] written by [pack]; null of bytes of no weight. A model kept with no calibration: none.
+         */
         fun read(bytes: ByteArray): Logistic? {
-            val weights =
+            val all =
                 String(bytes, Charsets.UTF_8)
                     .lines()
                     .filter { '=' in it }
                     .associate { it.substringBeforeLast('=') to it.substringAfterLast('=').toDouble() }
-            return if (weights.isEmpty()) null else Logistic(weights)
+            val weights = all - setOf(SHIFT, SLOPE)
+            if (weights.isEmpty()) return null
+            return Logistic(
+                weights,
+                Calibration(all[SHIFT] ?: Calibration.NONE.shift, all[SLOPE] ?: Calibration.NONE.slope),
+            )
         }
     }
 }

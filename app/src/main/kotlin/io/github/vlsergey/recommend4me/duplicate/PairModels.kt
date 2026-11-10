@@ -25,9 +25,9 @@ class PairChances(val same: FittedPairModel, val series: FittedPairModel?, val l
 
     /**
      * Where on the scale of the chance [at] — [logit], [seriesLogit] — the user's answers change: between the mean of
-     * the [pairs] said to be of its kind and of those said not ([said], null of one not answered). Nearly every pair a
-     * model learns from is an unanswered one, so that even a pair worth asking about has a chance of some percent: what
-     * is in doubt is told by the answers, not by a half. Nought with neither kind of answer.
+     * the [pairs] said to be of its kind and of those said not ([said], null of one not answered). The chance is of the
+     * plugin's making, a half not promised to be where the answers change: what is in doubt is told by the answers.
+     * Nought with neither kind of answer.
      */
     fun boundary(
         pairs: Collection<DuplicateCandidate>,

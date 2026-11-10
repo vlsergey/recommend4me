@@ -89,12 +89,42 @@ class LogisticTest {
         val near = laid.score(0.5f, 0.9f, true, 0f, false, 1L, { f -> valued[f][0] }, false)
         val far = laid.score(0.5f, 0.3f, true, 0f, false, 1L, { f -> valued[f][1] }, false)
         assertTrue(near > far)
-        assertEquals(model.chance(0.5f, 0.9f, mapOf("characters" to 0.8f)), Logistic.sigmoid(near), 1e-9)
+        assertEquals(model.chance(0.5f, 0.9f, mapOf("characters" to 0.8f)), model.calibration.chance(near), 1e-9)
         val read = LogisticPairModel().unpack(model.pack())!!
         assertEquals(
             model.chance(0.5f, 0.9f, mapOf("characters" to 0.8f)),
             read.chance(pair(0.5f, 0.9f, facets = mapOf("characters" to 0.8f))),
             1e-12,
         )
+        // A model kept before its calibration was: the chance its own sigmoid of the score
+        val old = Logistic.read("constant=-1.0\ntitle=2.0".toByteArray())!!
+        assertEquals(Logistic.sigmoid(0.0), old.chance(pair(0.5f, null)), 1e-12)
+    }
+
+    @Test
+    fun `the chance is what the answers say of pairs scored so, though most pairs are not answered`() {
+        // Of the pairs with alike descriptions some are answered, every other one of them said one work; the rest
+        // not answered, unlike, taken as not of the kind though the like among them are as often one work
+        val like = (0 until 400).map { pair(0.5f, 0.9f) }
+        val unlike = (0 until 20_000).map { pair(0.5f, 0.1f + (it % 5) * 0.05f) }
+        val said = like.indices.map { if (it < 200) it % 2 == 0 else null } + unlike.map { null }
+        val model = Logistic.fit(like + unlike, said)!!
+        // The model's own sigmoid of the score: the 200 like ones unanswered taken as not, it is below a half
+        val laid = model.laid(emptyList())
+        val z = laid.score(0.5f, 0.9f, true, 0f, false, 0L, { 0f }, false)
+        assertTrue(Logistic.sigmoid(z) < 0.5, "the model's own sigmoid ${Logistic.sigmoid(z)}")
+        // The answers say a half
+        assertEquals(0.5, model.chance(0.5f, 0.9f), 0.1)
+        assertTrue(model.chance(0.5f, 0.9f) > model.chance(0.5f, 0.1f))
+    }
+
+    @Test
+    fun `the calibration of scores by the answers`() {
+        // Of the score 0 one in ten said yes, of the score 2 nine in ten: answers as many as the user's
+        val z = DoubleArray(2000) { if (it < 1000) 0.0 else 2.0 }
+        val yes = BooleanArray(2000) { if (it < 1000) it % 10 == 0 else it % 10 != 0 }
+        val c = Calibration.fit(z, yes)
+        assertEquals(0.1, c.chance(0.0), 0.02)
+        assertEquals(0.9, c.chance(2.0), 0.02)
     }
 }

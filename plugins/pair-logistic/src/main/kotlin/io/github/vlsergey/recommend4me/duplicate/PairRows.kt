@@ -60,6 +60,13 @@ private constructor(
         return moved
     }
 
+    /** The score of the [i]-th pair by the weights [w]: the logit of its chance. */
+    fun logit(w: DoubleArray, i: Int): Double {
+        var z = 0.0
+        for (k in start[i] until start[i + 1]) z += w[places[k]] * values[k]
+        return z
+    }
+
     /**
      * Of the pairs [from] to [until], the slope of the loss by every weight, then the products of their features (of a
      * pair of features once: the place of the first's row, the second's column, whichever comes first in the pair).
@@ -68,13 +75,12 @@ private constructor(
         val count = w.size
         val out = DoubleArray(count + count * count)
         for (i in from until until) {
+            if (said[i] == HELD) continue
             val weight = if (said[i] == UNSAID) lack else 1.0
             val y = if (said[i] == YES) 1.0 else 0.0
             val a = start[i]
             val b = start[i + 1]
-            var z = 0.0
-            for (k in a until b) z += w[places[k]] * values[k]
-            val chance = sigmoid(z)
+            val chance = sigmoid(logit(w, i))
             val r = weight * chance * (1 - chance)
             val g = weight * (chance - y)
             for (k in a until b) {
@@ -90,10 +96,11 @@ private constructor(
     }
 
     companion object {
-        /** The user's word on a pair: of the kind, not of it, not said. */
+        /** The user's word on a pair: of the kind, not of it, not said; or a word left out of the fitting. */
         const val YES: Byte = 1
         const val NO: Byte = 0
         const val UNSAID: Byte = -1
+        const val HELD: Byte = 2
 
         /** The pairs a thread sums at a time: work enough a task, not meaning. */
         private const val CHUNK = 16_384
