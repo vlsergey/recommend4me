@@ -129,24 +129,32 @@ function UniverseList({
       {universes && shown.length === 0 && <p className="text-muted-foreground">{t("UniverseList.empty")}</p>}
       <ul className="flex flex-col divide-y rounded-lg border">
         {shown.slice(0, limit).map((u) => (
-          <li key={u.value}>
+          <li key={u.value} className={cn("flex flex-wrap items-baseline gap-x-2 px-3 py-1.5 hover:bg-muted/50", u.value === selected && "bg-muted")}>
             <a
               href={screenHref({ kind: "universes", universe: u.value })}
               onClick={(e) => followLink(e, { kind: "universes", universe: u.value })}
-              className={cn("flex flex-wrap items-baseline gap-x-2 px-3 py-1.5 hover:bg-muted/50", u.value === selected && "bg-muted")}
+              className="min-w-0 font-medium underline-offset-2 hover:underline"
             >
-              <span className="min-w-0 font-medium">{u.name}</span>
-              {u.entries.length > 0 && <BookOpenIcon className="size-3.5 self-center text-muted-foreground" aria-label={t("UniverseList.boundHint")} />}
-              {u.characters && <UsersIcon className="size-3.5 self-center text-muted-foreground" aria-label={t("UniverseList.charactersHint")} />}
-              <span className="ml-auto flex flex-wrap gap-1 text-xs text-muted-foreground">
-                {[...new Set(u.sites.map((s) => s.source))].map((s) => (
-                  <span key={s} className="rounded bg-muted px-1" title={sourceTitle(s)}>
-                    {sourceShort(s)}
-                  </span>
-                ))}
-                <span className="tabular-nums">{t("UniverseList.works", { count: u.works })}</span>
-              </span>
+              {u.name}
             </a>
+            {u.entries.length > 0 && <BookOpenIcon className="size-3.5 self-center text-muted-foreground" aria-label={t("UniverseList.boundHint")} />}
+            {u.characters && <UsersIcon className="size-3.5 self-center text-muted-foreground" aria-label={t("UniverseList.charactersHint")} />}
+            <span className="ml-auto flex flex-wrap gap-1 text-xs text-muted-foreground">
+              {/* Every site's fandom of it, its badge a link to the fandom's page on the site */}
+              {u.sites.map((s) => {
+                const title = `${sourceTitle(s.source)}: ${s.name}`;
+                return s.url ? (
+                  <a key={`${s.source}/${s.key}`} href={s.url} target="_blank" rel="noreferrer" title={title} className="rounded bg-muted px-1 underline-offset-2 hover:text-foreground hover:underline">
+                    {sourceShort(s.source)}
+                  </a>
+                ) : (
+                  <span key={`${s.source}/${s.key}`} className="rounded bg-muted px-1" title={title}>
+                    {sourceShort(s.source)}
+                  </span>
+                );
+              })}
+              <span className="tabular-nums">{t("UniverseList.works", { count: u.works })}</span>
+            </span>
           </li>
         ))}
       </ul>
