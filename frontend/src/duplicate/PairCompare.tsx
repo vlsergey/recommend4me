@@ -55,8 +55,9 @@ const AUTHOR = "author";
 /**
  * THE TWO WORKS FIELD BY FIELD: a row a field — the title, the authors, every facet either has, the size,
  * the description — the first work's on the left, the second's on the right, and between them the field's
- * name and how alike the two are, in its colour ([FieldVerdict]): read across, the left, the verdict, the
- * right. On a narrow screen the name and the verdict stand over the row, the two under them side by side.
+ * name and how alike the two are, in its colour ([FieldVerdict]), on one line: read across, the left, the
+ * verdict, the right. On a narrow screen the name and the verdict stand over the row, the two under them side
+ * by side.
  */
 export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
   const { t } = useTranslation("duplicate");
@@ -141,7 +142,7 @@ function described(w: DuplicateWork): ReactNode {
  */
 function FieldRow({ name, verdict, left, right }: { name: string; verdict: FieldVerdict; left: ReactNode; right: ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-1 px-2 py-1.5 md:grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)]">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 py-1 md:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)]">
       <Side>{left}</Side>
       <Middle name={name} verdict={verdict} />
       <Side>{right}</Side>
@@ -185,9 +186,11 @@ function Side({ children }: { children: ReactNode }) {
 function Middle({ name, verdict }: { name: string; verdict: FieldVerdict }) {
   const { t } = useTranslation("duplicate");
   return (
-    <div className="col-span-2 order-first flex items-center gap-2 md:order-none md:col-span-1 md:flex-col md:items-center md:gap-0.5 md:text-center">
-      <span className="text-[11px] leading-tight text-muted-foreground">{name}</span>
-      <span className={cn("rounded px-1.5 text-xs font-medium tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value })}>
+    <div className="col-span-2 order-first flex items-baseline gap-2 md:order-none md:col-span-1 md:justify-center">
+      <span className="min-w-0 truncate text-xs text-muted-foreground" title={name}>
+        {name}
+      </span>
+      <span className={cn("shrink-0 rounded px-1.5 text-xs font-medium tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value })}>
         {verdict.shown}
       </span>
     </div>
