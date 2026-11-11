@@ -1,4 +1,4 @@
-import type { DuplicateValue } from "@/api/client";
+import type { AuthorKin, DuplicateValue } from "@/api/client";
 import { percent } from "@/i18n/format";
 
 /**
@@ -23,9 +23,14 @@ export interface FieldVerdict {
     | "PairGrid.sizeHint"
     | "PairGrid.sameAuthorHint"
     | "PairGrid.otherAuthorHint"
+    | "PairGrid.authorKinHint"
+    | "PairGrid.authorKinPartlyHint"
+    | "PairGrid.authorKinApartHint"
     | "PairGrid.noAuthorHint"
     | "PairGrid.notComparedHint";
   value?: string;
+  /** More values of the hint, by their names. */
+  values?: Record<string, string | number>;
 }
 
 /**
@@ -113,14 +118,25 @@ export function sizeVerdict(ratio: number | undefined): FieldVerdict {
   return { tone, shown: `Δ ${percent(apart)}`, hint: "PairGrid.sizeHint", value: percent(apart) };
 }
 
+/** How many works two authors are expected to share by the chances of their pairs before they are counted kin. */
+const KIN_EXPECTED = 1;
+
 /**
- * The authors: one by the dictionary of authors, alike; both told and none in common, most likely apart;
- * the authors of one work unknown, nothing to compare.
+ * The authors: one by the dictionary of authors, alike. Both told and none in common: of the window of one
+ * pair, how close their closest two are by their works ([kin], as the offers of authors weigh it) — the
+ * user's word on them first: partly one, partly; told apart, apart; else pairs of their works said one or a
+ * part "✓k", or both of one entry, or a work expected to be one by the chances "≈x", partly; nothing of it,
+ * apart. The authors of one work unknown, nothing to compare.
  */
-export function authorVerdict(sameAuthor: boolean, first: string[], second: string[]): FieldVerdict {
+export function authorVerdict(sameAuthor: boolean, first: string[], second: string[], kin?: AuthorKin): FieldVerdict {
   if (sameAuthor) return { tone: "alike", shown: "=", hint: "PairGrid.sameAuthorHint" };
-  if (first.length > 0 && second.length > 0) return { tone: "apart", shown: "≠", hint: "PairGrid.otherAuthorHint" };
-  return { ...NOTHING, hint: "PairGrid.noAuthorHint" };
+  if (first.length === 0 || second.length === 0) return { ...NOTHING, hint: "PairGrid.noAuthorHint" };
+  if (!kin) return { tone: "apart", shown: "≠", hint: "PairGrid.otherAuthorHint" };
+  const shown = kin.matching > 0 ? `✓${kin.matching}` : kin.expected > 0 ? `≈${kin.expected.toFixed(1)}` : "≠";
+  const close = kin.matching > 0 || kin.oneEntry || kin.expected >= KIN_EXPECTED;
+  const tone = kin.said === "PARTIAL" ? "partly" : kin.said === "DIFFERENT" ? "apart" : close ? "partly" : "apart";
+  const hint = kin.said === "PARTIAL" ? "PairGrid.authorKinPartlyHint" : kin.said === "DIFFERENT" ? "PairGrid.authorKinApartHint" : "PairGrid.authorKinHint";
+  return { tone, shown, hint, values: { matching: kin.matching, expected: kin.expected.toFixed(1), entry: kin.oneEntry ? 1 : 0 } };
 }
 
 /**

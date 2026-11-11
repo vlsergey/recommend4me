@@ -4,7 +4,9 @@ import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICAT
 import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_SEARCH
 import io.github.vlsergey.recommend4me.item.ItemKey
 import java.time.Instant
+import org.jooq.Condition
 import org.jooq.DSLContext
+import org.jooq.impl.DSL
 
 /**
  * Two works of different sites that may be one — [first] the smaller key — with how alike each layer of theirs is (none
@@ -207,7 +209,18 @@ class DuplicateRepository(private val db: DSLContext) {
      * Every candidate: of some hundred thousand, read for one request and let go — streamed, not held twice as rows and
      * as candidates. The few names of the sources and of the facets' families one string each, not a copy a pair.
      */
-    fun all(): List<DuplicateCandidate> {
+    fun all(): List<DuplicateCandidate> = read(DSL.noCondition())
+
+    /** The candidates one work of which is among the [items]: of the works of an author, say. */
+    fun touching(items: Collection<ItemKey>): List<DuplicateCandidate> {
+        if (items.isEmpty()) return emptyList()
+        val c = DUPLICATE_CANDIDATE
+        val keys = items.map { DSL.row(it.source, it.id) }
+        return read(DSL.row(c.SOURCE, c.ITEM_ID).`in`(keys).or(DSL.row(c.OTHER_SOURCE, c.OTHER_ITEM_ID).`in`(keys)))
+    }
+
+    /** The candidates the [condition] picks, streamed. */
+    private fun read(condition: Condition): List<DuplicateCandidate> {
         val out = ArrayList<DuplicateCandidate>()
         val names = HashMap<String, String>()
         val one = { s: String -> names.getOrPut(s) { s } }
@@ -224,6 +237,7 @@ class DuplicateRepository(private val db: DSLContext) {
                 DUPLICATE_CANDIDATE.SAME_AUTHOR,
             )
             .from(DUPLICATE_CANDIDATE)
+            .where(condition)
             .fetchSize(FETCH)
             .fetchLazy()
             .use { cursor ->

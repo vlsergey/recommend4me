@@ -45,6 +45,7 @@ class DuplicatePages(
     private val sizes: WorkSizes,
     private val models: PairModels,
     private val plugins: Plugins,
+    private val window: PairWindow,
 ) {
     /**
      * A page of the pairs of the type the [choice] holds by their answer: those not answered on — neither linked (by
@@ -163,6 +164,7 @@ class DuplicatePages(
         return views
             .pairs(type, Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet()), listOf(ranked))
             .firstOrNull()
+            ?.let { window.of(type, it) }
     }
 
     fun ofItem(key: ItemKey): List<DuplicatePair> {

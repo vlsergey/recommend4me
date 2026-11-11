@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOffer
 import io.github.vlsergey.recommend4me.api.model.AuthorSaid
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
+import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.api.model.ItemSort
@@ -193,13 +194,24 @@ class TwoSitesTest : TwoSitesTestBase() {
         )
         assertEquals("The Mill", compared.second.title)
         assertEquals(null, compared.answer)
-        // Each shown with the values it is compared by — the site's tag by the normalized tag it is bound to
+        // Each with the values of the layer its screen gives it — the site's tag only offered there, not among them
         listOf(compared.first, compared.second).forEach { w ->
-            assertEquals(
-                listOf("tags" to listOf("river")),
-                w.facets.map { f -> f.key to f.propertyValues.map { it.name } },
-                "of ${w.item}",
-            )
+            val given =
+                items
+                    .getItem(w.source, w.item)
+                    .body!!
+                    .allFacets
+                    .filter { it.editable && it.facet == "tags" }
+                    .flatMap { f -> f.propertyValues }
+                    .filter { v ->
+                        v.corrected == FacetValueInfo.Corrected.ADDED ||
+                            v.corrected == FacetValueInfo.Corrected.CONFIRMED ||
+                            (v.corrected == null && v.offered != true && v.implied != true)
+                    }
+                    .map { it.name }
+                    .sorted()
+            assertEquals(given, w.facets.filter { it.key == "tags" }.flatMap { f -> f.propertyValues.map { it.name } })
+            assertTrue(w.facets.all { it.computed == true || !it.key.startsWith("tags") }, "of ${w.item}: ${w.facets}")
         }
         // Its layers worked out as it is shown, though no search kept it: the same title, the same vector
         assertTrue(

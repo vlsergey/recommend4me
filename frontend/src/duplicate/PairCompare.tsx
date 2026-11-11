@@ -87,7 +87,7 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
     {
       key: "authors",
       name: t("PairGrid.authors"),
-      verdict: authorVerdict(p.sameAuthor, a.authors, b.authors),
+      verdict: authorVerdict(p.sameAuthor, a.authors, b.authors, p.authorKin),
       left: a.authors.length > 0 ? a.authors.join(", ") : null,
       right: b.authors.length > 0 ? b.authors.join(", ") : null,
     },
@@ -100,11 +100,12 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
         key,
         // Of the universes of no work, the site's fandoms alone: named as they are
         name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
-        // Of the values a work may have one of, whether they meet; of any other, how alike by the layers of the pair
+        // Of the values a work may have one of, whether they meet; of the values as the works' screens give them (the
+        // window of one pair), how many they share; of any other, how alike by the layers of the pair
         verdict:
           left?.allowed || right?.allowed
             ? allowedVerdict(left?.values ?? [], right?.values ?? [])
-            : compared
+            : compared && !left?.computed && !right?.computed
               ? facetVerdict(compared.value)
               : valuesVerdict(left?.values ?? [], right?.values ?? []),
         left: valuesOf(left, key === UNIVERSE ? a.fandoms : []),
@@ -237,7 +238,7 @@ function Middle({ name, verdict }: { name: string; verdict: FieldVerdict }) {
       <span className="min-w-0 truncate text-xs text-muted-foreground" title={name}>
         {name}
       </span>
-      <span className={cn("shrink-0 rounded px-1.5 text-xs tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value })}>
+      <span className={cn("shrink-0 rounded px-1.5 text-xs tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value, ...verdict.values })}>
         {verdict.shown}
       </span>
     </div>

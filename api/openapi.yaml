@@ -5594,6 +5594,8 @@ components:
         sameAuthor:
           type: boolean
           description: The dictionary of authors gives the two one author - a normalized author of both, or two the user said are partly one
+        authorKin:
+          $ref: '#/components/schemas/AuthorKin'
         answer:
           type: string
           enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
@@ -6080,12 +6082,39 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DuplicateValue'
+        computed:
+          type: boolean
+          description: |
+            The work's values as its screen gives them - the site's, the drafts, the user's answers and the
+            model's given ones, its chances made now -: of the window of one pair alone (getDuplicatePair),
+            compared by what they share
         allowed:
           type: boolean
           description: |
             The work has one value of these, the site letting any of them - the ratings a site lets a work
             have (the site's word of a facet of one value, FacetDef.originalFacet of a single one): two
             works agree when their values meet
+
+    AuthorKin:
+      type: object
+      required: [matching, expected, oneEntry]
+      description: |
+        Of two works of no author in common, how close their closest two authors are on the evidence of
+        their works, as the offers of authors weigh it - shown, never kept: of the window of one pair alone
+      properties:
+        matching:
+          type: integer
+          description: The pairs of their works the user said are one work or a part of the other
+        expected:
+          type: number
+          description: The sum of the chances the rest of the pairs of their works the search kept are one
+        oneEntry:
+          type: boolean
+          description: Both are bound to one entry of a catalogue
+        said:
+          type: string
+          enum: [DIFFERENT, PARTIAL]
+          description: The user's word on the two authors; none of two not told
 
     DuplicateValue:
       type: object
