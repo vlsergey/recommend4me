@@ -46,6 +46,7 @@
   "PairGrid.allowedHint": "The site names the values the work may have — it has one of them: the works agree when such values meet (green: \"=\" the same, \"⊂\" one within the other, \"∩\" some in common), and differ when none are in common (red \"≠\")",
   "PairGrid.authors": "Authors",
   "PairGrid.description": "Description",
+  "PairGrid.facetHint": "How alike the values are {{value}}; a rare value weighs more than a common one. All in common green, none red, some yellow",
   "PairGrid.fandoms": "Fandom",
   "PairGrid.noAuthorHint": "The authors of one of the works are not known: nothing to compare",
   "PairGrid.notComparedHint": "Not of both works: nothing to compare",

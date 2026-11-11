@@ -13,6 +13,7 @@ import io.github.vlsergey.recommend4me.api.model.SiteAuthorKey
 import io.github.vlsergey.recommend4me.api.model.SizeNumber
 import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.contenttype.Books
+import io.github.vlsergey.recommend4me.duplicate.LoosePairs
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
@@ -180,8 +181,8 @@ class TwoSitesTest : TwoSitesTestBase() {
     }
 
     /**
-     * Any two works compared as the screen of duplicates shows a pair, field by field as they are — of no search: their
-     * values as compared, how alike their titles mean measured as the pair is shown.
+     * Any two works compared as the screen of duplicates shows a pair: their values as compared, its layers kept by the
+     * last search or worked out as it is shown.
      */
     private fun twoWorksCompared() {
         // Any two works compared as the screen of duplicates shows a pair, the word said of them with it
@@ -200,16 +201,28 @@ class TwoSitesTest : TwoSitesTestBase() {
                 "of ${w.item}",
             )
         }
-        // How alike their titles mean measured as the pair is shown, of no search: the same title, the same vector
+        // Its layers worked out as it is shown, though no search kept it: the same title, the same vector
         assertTrue(
             waitFor { duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!.title != null },
             "the titles encoded",
         )
-        assertEquals(
-            1.0,
-            duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!.title!!.toDouble(),
-            1e-3,
-        )
+        val loose = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
+        assertEquals(1.0, loose.title!!.toDouble(), 1e-3)
+        assertEquals(listOf("tags"), loose.facets.orEmpty().map { it.key }.filter { it != "author" })
+        // A search keeps how rare every value is, and the pair as the search keeps it is the pair worked out loose
+        val type = stores.type("books")!!
+        val before = type.duplicates.search()?.madeAt
+        duplicates.searchDuplicates("books")
+        assertTrue(waitFor(120) { type.duplicates.search()?.madeAt.let { it != null && it != before } }, "searched")
+        assertTrue(type.duplicates.rarity.of(listOf("tags:${tagOf("alpha", "river")}")).isNotEmpty())
+        val m1 = ItemKey("alpha", "m1")
+        val m2 = ItemKey("beta", "m2")
+        val kept = type.duplicates.find(m1, m2)!!
+        val worked = LoosePairs.candidate(type, type.duplicates.search()!!.encoder, m1, m2)!!
+        assertEquals(kept.title, worked.title, 1e-3f)
+        assertEquals(kept.facets.keys, worked.facets.keys)
+        kept.facets.forEach { (k, v) -> assertEquals(v, worked.facets.getValue(k), 1e-3f, k) }
+        assertEquals(kept.sameAuthor, worked.sameAuthor)
         assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
     }
 

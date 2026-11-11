@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -43,6 +44,7 @@ class DuplicatePages(
     private val views: DuplicateViews,
     private val sizes: WorkSizes,
     private val models: PairModels,
+    private val plugins: Plugins,
 ) {
     /**
      * A page of the pairs of the type the [choice] holds by their answer: those not answered on — neither linked (by
@@ -143,18 +145,21 @@ class DuplicatePages(
      * answered or not, the likeliest first.
      */
     /**
-     * The two works as the screen shows a pair: how alike they are, of the last search when it kept them, and the word
-     * said of them; null of no such type, or a work no longer there.
+     * The two works as the screen shows a pair: how alike they are — as the last search kept them, or of a pair it did
+     * not keep worked out now the same way ([LoosePairs]) — and the word said of them; null of no such type, or a work
+     * no longer there.
      */
     fun pair(typeId: String, a: ItemKey, b: ItemKey): DuplicatePair? {
         val type = stores.type(typeId) ?: return null
         val pair = type.links.ordered(a, b)
-        val kept = type.duplicates.find(pair.first, pair.second)
+        val kept =
+            type.duplicates.find(pair.first, pair.second)
+                ?: plugins.textEncoder()?.id?.let { LoosePairs.candidate(type, it, pair.first, pair.second) }
         val chances = models.of(type)
         val word =
             type.links.word(a, b, Instant.now())?.let { w -> DuplicateAnswer.entries.firstOrNull { it.name == w } }
         val chance = kept?.let { chances?.same(it) }
-        val ranked = Ranked(pair, chance, kept?.let { chances?.series(it) }, chance ?: 0.0)
+        val ranked = Ranked(pair, kept, chance, kept?.let { chances?.series(it) }, chance ?: 0.0)
         return views
             .pairs(type, Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet()), listOf(ranked))
             .firstOrNull()
@@ -168,7 +173,7 @@ class DuplicatePages(
             type.duplicates
                 .all()
                 .filter { (it.pair.first in own) != (it.pair.second in own) }
-                .map { c -> chances?.same(c).let { Ranked(c.pair, it, chances?.series(c), it ?: 0.0) } }
+                .map { c -> chances?.same(c).let { Ranked(c.pair, c, it, chances?.series(c), it ?: 0.0) } }
                 .sortedByDescending { it.priority }
                 // Found by several items of the work, the other is one: the likeliest pair of them, an answer going
                 // across the work
@@ -234,7 +239,7 @@ private class Ranking(
                 DuplicateSort.INTEREST,
                 DuplicateSort.GRADE -> sought(pair, layers) * (chance ?: 0.0)
             }
-        return Ranked(pair, chance, series, priority)
+        return Ranked(pair, layers, chance, series, priority)
     }
 
     /**

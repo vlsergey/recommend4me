@@ -16,7 +16,13 @@ import java.util.stream.IntStream
  * with them, found or not: what the models learn from.
  */
 internal class TypeSearch
-private constructor(private val type: TypeStore, val sides: List<SearchSide>, val search: PairSearch) {
+private constructor(
+    private val type: TypeStore,
+    val sides: List<SearchSide>,
+    val search: PairSearch,
+    /** How rare every value is among every work of the type, by its name: kept for the pairs no search keeps. */
+    val rarity: Map<String, Float>,
+) {
     /** The works of every site read. */
     val works: Int = sides.sumOf { it.ids.size }
 
@@ -139,7 +145,7 @@ private constructor(private val type: TypeStore, val sides: List<SearchSide>, va
                     sizeKeys,
                     answered(sides, said),
                 )
-            return TypeSearch(type, sides, search)
+            return TypeSearch(type, sides, search, names.indices.associate { names[it]!! to rarity[it] })
         }
 
         /**

@@ -104,10 +104,53 @@ internal class SearchSide(
                 val values = WorkValues(s).apply { read() }
                 val authors = values.authorsOf(ids)
                 values.gather(ids, authors)
-                val sizes = sizesOf(s, ids, ratios)
+                val sizes = sizesOf(s, ids, ratios, { s.items.number(it) }, s.works.allOf(s.id))
                 ReadSide(values.named(ids)) { placed ->
                     SearchSide(s, ids, it, descriptions!!, described, placed, sizes, authors)
                 }
+            }
+        }
+
+        /**
+         * The side of the works [ids] of the source alone, read as every work of it is ([read]): what a pair no search
+         * kept is compared by as it is shown ([LoosePairs]). Of the works with a vector of their title alone; null when
+         * none has one.
+         */
+        fun readOf(s: SourceStore, encoder: String, ids: List<String>, ratios: Map<Long, Double>): ReadSide? {
+            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+            val vectors = s.textVectors.ofMany(ids, encoder, listOfNotNull(TextVectors.TITLE, description))
+            val own = ids.filter { vectors[it]?.get(TextVectors.TITLE) != null }.distinct().sorted()
+            if (own.isEmpty()) return null
+            val width = vectors.getValue(own.first()).getValue(TextVectors.TITLE).size
+            val titles = Matrix(own.size, width)
+            val descriptions = Matrix(own.size, width)
+            val described = BooleanArray(own.size)
+            own.forEachIndexed { i, id ->
+                val texts = vectors.getValue(id)
+                val title = Vectors.unit(texts.getValue(TextVectors.TITLE))
+                if (title.size == width) titles.held.put(title, 0, titles.row(i), width)
+                description
+                    ?.let(texts::get)
+                    ?.takeIf { it.size == width }
+                    ?.let { v ->
+                        descriptions.held.put(Vectors.unit(v), 0, descriptions.row(i), width)
+                        described[i] = true
+                    }
+            }
+            val values = WorkValues(s, own).apply { read() }
+            val authors = values.authorsOf(own)
+            values.gather(own, authors)
+            val numbers = s.items.numbersOf(own)
+            val sizes =
+                sizesOf(
+                    s,
+                    own,
+                    ratios,
+                    { key -> numbers.mapNotNull { (id, of) -> of[key]?.let { id to it } }.toMap() },
+                    s.works.ofItems(s.id, own),
+                )
+            return ReadSide(values.named(own)) { placed ->
+                SearchSide(s, own, titles, descriptions, described, placed, sizes, authors)
             }
         }
 
@@ -116,17 +159,22 @@ internal class SearchSide(
          * — by its key; the words of a work of its characters alone, or the characters of its words alone, worked out
          * by the [ratios] of the works: so two sites compare, whichever they state.
          */
-        private fun sizesOf(s: SourceStore, ids: List<String>, ratios: Map<Long, Double>): Map<String, DoubleArray> {
+        private fun sizesOf(
+            s: SourceStore,
+            ids: List<String>,
+            ratios: Map<Long, Double>,
+            numberOf: (key: String) -> Map<String, Double>,
+            bound: Map<String, Long>,
+        ): Map<String, DoubleArray> {
             val at = ids.withIndex().associate { it.value to it.index }
             val out =
                 s.schema.numbers
                     .filter { it.standard != null && it.standard!!.role !in SITE_ROLES }
                     .associateTo(HashMap()) { n ->
                         val numbers = DoubleArray(ids.size)
-                        s.items.number(n.key).forEach { (id, v) -> at[id]?.let { numbers[it] = v } }
+                        numberOf(n.key).forEach { (id, v) -> at[id]?.let { numbers[it] = v } }
                         n.standard!!.key to numbers
                     }
-            val bound = s.works.allOf(s.id)
             val words = out.getOrPut(StandardNumbers.WORDS.key) { DoubleArray(ids.size) }
             val chars = out.getOrPut(StandardNumbers.CHARS.key) { DoubleArray(ids.size) }
             ids.forEachIndexed { i, id ->

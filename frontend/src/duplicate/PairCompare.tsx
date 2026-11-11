@@ -8,7 +8,7 @@ import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
-import { allowedVerdict, authorVerdict, type FieldVerdict, sameTextVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
+import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sameTextVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
@@ -79,7 +79,7 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
     {
       key: "title",
       name: t("PairGrid.title"),
-      // How alike they mean, measured as the pair is shown; of a text not encoded yet, whether it is the same
+      // Of a pair of no measure — its texts not encoded yet —, its fields as they are ([valuesVerdict])
       verdict: p.title != null ? textVerdict(p.title) : sameTextVerdict(a.title, b.title),
       left: <WorkHead work={a} />,
       right: <WorkHead work={b} />,
@@ -94,13 +94,19 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
     ...facetKeys(p).map((key): Row => {
       const left = a.facets.find((f) => f.key === key);
       const right = b.facets.find((f) => f.key === key);
-      const labelKey = left?.labelKey ?? right?.labelKey;
+      const compared = p.facets?.find((f) => f.key === key);
+      const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
       return {
         key,
         // Of the universes of no work, the site's fandoms alone: named as they are
         name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
-        // Of the values a work may have one of, whether they meet; of any other, how many they share
-        verdict: left?.allowed || right?.allowed ? allowedVerdict(left?.values ?? [], right?.values ?? []) : valuesVerdict(left?.values ?? [], right?.values ?? []),
+        // Of the values a work may have one of, whether they meet; of any other, how alike by the layers of the pair
+        verdict:
+          left?.allowed || right?.allowed
+            ? allowedVerdict(left?.values ?? [], right?.values ?? [])
+            : compared
+              ? facetVerdict(compared.value)
+              : valuesVerdict(left?.values ?? [], right?.values ?? []),
         left: valuesOf(left, key === UNIVERSE ? a.fandoms : []),
         right: valuesOf(right, key === UNIVERSE ? b.fandoms : []),
         lines: "line-clamp-2",
@@ -109,7 +115,7 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
     {
       key: "size",
       name: t("PairGrid.size"),
-      verdict: sizeVerdict(sizeRatio(a, b)),
+      verdict: sizeVerdict(p.size ?? sizeRatio(a, b)),
       left: sized(a) ? <Sizes work={a} /> : null,
       right: sized(b) ? <Sizes work={b} /> : null,
     },
@@ -138,11 +144,11 @@ const row = (r: Row) =>
   r.lines ? <FoldedRow key={r.key} name={r.name} verdict={r.verdict} left={r.left} right={r.right} lines={r.lines} /> : <FieldRow key={r.key} name={r.name} verdict={r.verdict} left={r.left} right={r.right} />;
 
 /**
- * The facets of the rows: every one either work has — the universes when either has its site's fandoms
- * too —, in [FACET_ORDER], any other after them; the authors apart.
+ * The facets of the rows: every one either work has or the pair was compared by — the universes when either
+ * has its site's fandoms too —, in [FACET_ORDER], any other after them; the authors apart.
  */
 function facetKeys(p: DuplicatePair): string[] {
-  const all = new Set([...p.first.facets.map((f) => f.key), ...p.second.facets.map((f) => f.key)]);
+  const all = new Set([...p.first.facets.map((f) => f.key), ...p.second.facets.map((f) => f.key), ...(p.facets ?? []).map((f) => f.key)]);
   if (p.first.fandoms.length > 0 || p.second.fandoms.length > 0) all.add(UNIVERSE);
   all.delete(AUTHOR);
   const known = FACET_ORDER.filter((k) => all.has(k));

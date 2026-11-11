@@ -60,6 +60,9 @@ class DuplicateSearch(
 /** The candidates of the last search of the content type, in its model database: made anew whole by every search. */
 class DuplicateRepository(private val db: DSLContext) {
 
+    /** How rare every value compared is, as the last search weighed it: what a pair it did not keep is compared by. */
+    val rarity = ValueRarities(db)
+
     /**
      * The candidates of a search in place of those before, and when it was made. The last search's candidates are let
      * go by a truncation, which the database does at once and commits by itself: deleting half a million rows in the
@@ -68,10 +71,13 @@ class DuplicateRepository(private val db: DSLContext) {
      * between leaves no row, and the start looks again. A reading in that second sees no search, as of a type never
      * searched.
      */
-    fun replace(candidates: Collection<DuplicateCandidate>, search: DuplicateSearch) {
+    fun replace(candidates: Collection<DuplicateCandidate>, search: DuplicateSearch, rarity: Map<String, Float>) {
         db.deleteFrom(DUPLICATE_SEARCH).execute()
         db.truncate(DUPLICATE_CANDIDATE).execute()
-        db.transaction { c -> fill(c.dsl(), candidates, search) }
+        db.transaction { c ->
+            this.rarity.replace(c.dsl(), rarity)
+            fill(c.dsl(), candidates, search)
+        }
     }
 
     /** The [candidates] and the [search] written by [tx], into tables emptied. */

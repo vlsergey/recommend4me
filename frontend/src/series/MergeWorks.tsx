@@ -10,8 +10,7 @@ import { seriesKey, seriesWindowsKey } from "./seriesHash";
 
 /**
  * TWO WORKS OF A SERIES MADE ONE, asked first: the two compared as the screen of duplicates shows a pair
- * ([PairGrid]) — field by field as they are; the chance of one work beside, when the search kept it
- * ([PairFacts]) —, and "one work" or
+ * ([PairFacts], [PairGrid]) — how alike they are, as the last search kept them or worked out now —, and "one work" or
  * nothing. One work, their items one work across the sites, as the word "one work" on a pair makes them.
  */
 export function MergeWorks({ type, first, second, onClose }: { type: ContentTypeInfo; first: ItemRef; second: ItemRef; onClose: () => void }) {

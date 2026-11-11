@@ -144,6 +144,7 @@ class Duplicates(
                 now,
                 fit - compared,
             ),
+            search.rarity,
         )
         log.info(
             "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs in {} ms " +

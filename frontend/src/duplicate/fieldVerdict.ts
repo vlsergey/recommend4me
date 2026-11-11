@@ -15,6 +15,7 @@ export interface FieldVerdict {
   /** The key of the words of the hint, in the namespace "duplicate", and its value. */
   hint:
     | "PairGrid.textHint"
+    | "PairGrid.facetHint"
     | "PairGrid.allowedHint"
     | "PairGrid.valuesHint"
     | "PairGrid.sameTextHint"
@@ -35,6 +36,10 @@ export interface FieldVerdict {
 const TEXT_ALIKE = 0.95;
 const TEXT_PARTLY = 0.85;
 
+/** A facet's cosine of every value in common, and of none — the cosine of the values weighed by their rarity. */
+const FACET_ALL = 0.99;
+const FACET_NONE = 0.01;
+
 /** How much two sizes may differ and still be alike, and partly: more than a tenth is apart (the user's word). */
 const SIZE_ALIKE = 0.05;
 const SIZE_PARTLY = 0.1;
@@ -46,6 +51,13 @@ export function textVerdict(cosine: number | undefined): FieldVerdict {
   if (cosine == null) return NOTHING;
   const tone = cosine >= TEXT_ALIKE ? "alike" : cosine >= TEXT_PARTLY ? "partly" : "apart";
   return { tone, shown: percent(cosine), hint: "PairGrid.textHint", value: percent(cosine) };
+}
+
+/** The values of a facet, by their cosine; none when it was not compared — the facet of one work alone. */
+export function facetVerdict(cosine: number | undefined): FieldVerdict {
+  if (cosine == null) return NOTHING;
+  const tone = cosine >= FACET_ALL ? "alike" : cosine <= FACET_NONE ? "apart" : "partly";
+  return { tone, shown: percent(cosine), hint: "PairGrid.facetHint", value: percent(cosine) };
 }
 
 /**
@@ -63,9 +75,10 @@ export function allowedVerdict(first: DuplicateValue[], second: DuplicateValue[]
 }
 
 /**
- * The values of a facet by how many they share: all "✓", none "≠", some "k/n" ([valuesVerdict]). Two texts
- * not encoded yet — no vector to tell how alike they mean — the same word for word "✓", else not measured
- * ([sameTextVerdict]). The sizes by their numbers ([sizeRatio]).
+ * OF A PAIR WITH NO MEASURE — its works' texts not encoded yet, the layers of a pair not worked out without them —,
+ * its fields compared as they are: the values of a facet by how many they share, all "✓", none "≠", some "k/n"
+ * ([valuesVerdict]); a text the same word for word "✓", else not measured ([sameTextVerdict]); the sizes by their
+ * numbers ([sizeRatio]).
  */
 export function valuesVerdict(first: DuplicateValue[], second: DuplicateValue[]): FieldVerdict {
   if (first.length === 0 || second.length === 0) return NOTHING;

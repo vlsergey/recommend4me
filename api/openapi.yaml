@@ -5579,10 +5579,18 @@ components:
           description: What the pairs are ordered by - the chance times what the sort says of the work the pair was found for (of both, the larger)
         title:
           type: number
-          description: The cosine of the vectors of their titles as they are, measured as the pair is shown - of no search; none when either has none yet
+          description: The cosine of the vectors of their titles
         description:
           type: number
-          description: The cosine of the vectors of their descriptions as they are, measured as the pair is shown; none when either has none
+          description: The cosine of the vectors of their descriptions; none when either has none
+        facets:
+          type: array
+          description: Of every facet the sites share both have (the tags, the universes, the characters, the status...), the cosine of their values, each weighed by its rarity; the most alike first
+          items:
+            $ref: '#/components/schemas/DuplicateFacet'
+        size:
+          type: number
+          description: Of the numbers of their size both have (words, characters, parts; the words or the characters a site does not state worked out), the smaller over the larger, their mean; none when they share none
         sameAuthor:
           type: boolean
           description: The dictionary of authors gives the two one author - a normalized author of both, or two the user said are partly one
@@ -5962,6 +5970,18 @@ components:
       enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
       description: A word on a pair - one work, different works, one the translation of the other, one a part of the other, two works of one series
 
+    DuplicateFacet:
+      type: object
+      required: [key, labelKey, value]
+      properties:
+        key:
+          type: string
+          description: The facet as compared - the facet of the layer ("characters" of the main and the secondary alike) or the standard one ("status")
+        labelKey:
+          type: string
+        value:
+          type: number
+
     DuplicateWork:
       type: object
       required: [source, item, title, url, authors, fandoms, facets]
@@ -6053,7 +6073,7 @@ components:
       properties:
         key:
           type: string
-          description: The facet as compared - the facet of the layer ("characters" of the main and the secondary alike) or the standard one ("status")
+          description: The facet as compared (DuplicateFacet.key)
         labelKey:
           type: string
         values:

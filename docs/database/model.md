@@ -17,6 +17,7 @@
 | `search_score` | the reranker's score of a work for a line searched |
 | `duplicate_candidate` | two works of different sites that may be one, as the last search of the duplicates found them — of every work the likeliest of every other site — with how alike each layer of theirs is: the title, the description, the size, every facet the sites share (`facets`, "<facet>=<cosine>" a line), whether the dictionary of authors gives them one author, fully or in part (`same_author`), and the works it was found for (`found_for`: 1 the first, 2 the second, 3 both); the chance they are one work made when read |
 | `work_size` | how many words a normalized work has to a character: of its kept text or what its sites state, else by the model of them, made again in the queue; the other of a work's two sizes is worked out of it |
+| `duplicate_value` | how rare every value two works are compared by is among every work of the type, as the last search of the duplicates weighed it (`rarity`, ln(works / works having it)), by the value's name (`name`, "characters:wikidata:Q…"): what a pair the search did not keep is compared by as it is shown; made anew whole by every search |
 | `duplicate_search` | when the duplicates were last looked for, by which encoder, of how many works, and the models of the user's answers as the plugin of pairs (`model`, its id) packed them: of one work (`same_model`) and of one series (`series_model`), none of a kind no pair was said to be of; when they were last fitted (`fitted_at`) and how long it took (`fit_millis`) |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
@@ -45,6 +46,10 @@ erDiagram
         BLOB series_model "null"
         TIMESTAMPTZ fitted_at "null"
         BIGINT fit_millis "null"
+    }
+    duplicate_value {
+        VARCHAR name PK
+        REAL rarity
     }
     facet_suggester {
         VARCHAR source PK
