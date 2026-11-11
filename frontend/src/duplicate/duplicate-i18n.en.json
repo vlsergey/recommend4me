@@ -58,6 +58,7 @@
   "PairGrid.otherAuthorHint": "Both works have their authors, and the dictionary of authors gives them none in common: most likely different authors",
   "PairGrid.sameAuthorHint": "The dictionary of authors gives the works an author in common: one normalized author, or authors marked as partly one",
   "PairGrid.sameTextHint": "The texts are not encoded yet: they are the same word for word",
+  "PairGrid.sameValueHint": "One value of each work: the same green, another red",
   "PairGrid.siteFandomsHint": "The fandom as the site names it: the application knows no universe of the work",
   "PairGrid.size": "Size",
   "PairGrid.sizeHint": "The sizes differ by {{value}} (the smaller over the larger by words, characters and parts, on average): up to 5 % green, up to 10 % yellow, more red",

@@ -62,6 +62,7 @@
   "PairGrid.otherAuthorHint": "Oba dela imaju poznate autore, ali po rečniku autora nijedan nije zajednički: najverovatnije različiti autori",
   "PairGrid.sameAuthorHint": "Po rečniku autora dela imaju zajedničkog autora: istog normativnog autora ili autore označene kao delimično iste",
   "PairGrid.sameTextHint": "Tekstovi još nisu kodirani: isti su od reči do reči",
+  "PairGrid.sameValueHint": "Svako delo ima jednu vrednost: ista — zeleno, druga — crveno",
   "PairGrid.siteFandomsHint": "Fandom kako ga sajt naziva: aplikacija ne zna univerzum dela",
   "PairGrid.size": "Veličina",
   "PairGrid.sizeHint": "Veličine se razlikuju za {{value}} (manja prema većoj po rečima, znakovima i delovima, u proseku): do 5 % zeleno, do 10 % žuto, više crveno",

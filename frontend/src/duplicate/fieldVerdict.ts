@@ -18,6 +18,7 @@ export interface FieldVerdict {
     | "PairGrid.facetHint"
     | "PairGrid.allowedHint"
     | "PairGrid.valuesHint"
+    | "PairGrid.sameValueHint"
     | "PairGrid.sameTextHint"
     | "PairGrid.notMeasuredHint"
     | "PairGrid.sizeHint"
@@ -94,6 +95,8 @@ export function valuesVerdict(first: DuplicateValue[], second: DuplicateValue[])
   const all = new Set([...a, ...b]).size;
   const tone = common === all ? "alike" : common === 0 ? "apart" : "partly";
   const shown = tone === "alike" ? "✓" : tone === "apart" ? "≠" : `${common}/${all}`;
+  // Of one value each, the same or not: a share says nothing more
+  if (a.size === 1 && b.size === 1) return { tone, shown, hint: "PairGrid.sameValueHint" };
   return { tone, shown, hint: "PairGrid.valuesHint", value: `${common}/${all}` };
 }
 
