@@ -17,6 +17,9 @@ export interface FieldVerdict {
     | "PairGrid.textHint"
     | "PairGrid.facetHint"
     | "PairGrid.allowedHint"
+    | "PairGrid.valuesHint"
+    | "PairGrid.sameTextHint"
+    | "PairGrid.notMeasuredHint"
     | "PairGrid.sizeHint"
     | "PairGrid.sameAuthorHint"
     | "PairGrid.otherAuthorHint"
@@ -69,6 +72,37 @@ export function allowedVerdict(first: DuplicateValue[], second: DuplicateValue[]
   const common = [...a].filter((v) => b.has(v)).length;
   const shown = common === 0 ? "≠" : common === a.size && common === b.size ? "=" : common === a.size || common === b.size ? "⊂" : "∩";
   return { tone: common > 0 ? "alike" : "apart", shown, hint: "PairGrid.allowedHint" };
+}
+
+/**
+ * OF A PAIR THE SEARCH DID NOT COMPARE — no measure of it kept —, its fields compared as they are: the values
+ * of a facet by how many they share, all "✓", none "≠", some "k/n" ([valuesVerdict]); a text the same word
+ * for word "✓", else not measured — how alike two texts mean is the search's to tell ([sameTextVerdict]); the
+ * sizes by their numbers ([sizeRatio]).
+ */
+export function valuesVerdict(first: DuplicateValue[], second: DuplicateValue[]): FieldVerdict {
+  if (first.length === 0 || second.length === 0) return NOTHING;
+  const of = (v: DuplicateValue) => v.nameKey ?? v.name;
+  const a = new Set(first.map(of));
+  const b = new Set(second.map(of));
+  const common = [...a].filter((v) => b.has(v)).length;
+  const all = new Set([...a, ...b]).size;
+  const tone = common === all ? "alike" : common === 0 ? "apart" : "partly";
+  const shown = tone === "alike" ? "✓" : tone === "apart" ? "≠" : `${common}/${all}`;
+  return { tone, shown, hint: "PairGrid.valuesHint", value: `${common}/${all}` };
+}
+
+export function sameTextVerdict(first: string | undefined, second: string | undefined): FieldVerdict {
+  if (!first || !second) return NOTHING;
+  const same = first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
+  return same ? { tone: "alike", shown: "✓", hint: "PairGrid.sameTextHint" } : { tone: "none", shown: "—", hint: "PairGrid.notMeasuredHint" };
+}
+
+/** Of two sizes, the smaller over the larger, by the words of both, else by their characters; none of no number of both. */
+export function sizeRatio(first: { words?: { value: number }; chars?: { value: number } }, second: typeof first): number | undefined {
+  const pair = first.words && second.words ? [first.words.value, second.words.value] : first.chars && second.chars ? [first.chars.value, second.chars.value] : null;
+  if (!pair || Math.max(...pair) <= 0) return undefined;
+  return Math.min(...pair) / Math.max(...pair);
 }
 
 /** The sizes, by the smaller over the larger: how much they differ. */

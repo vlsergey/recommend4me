@@ -8,7 +8,7 @@ import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
-import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sizeVerdict, TONE_CLASS, textVerdict } from "./fieldVerdict";
+import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sameTextVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
@@ -76,7 +76,14 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
   const a = p.first;
   const b = p.second;
   const rows: Row[] = [
-    { key: "title", name: t("PairGrid.title"), verdict: textVerdict(p.title), left: <WorkHead work={a} />, right: <WorkHead work={b} /> },
+    {
+      key: "title",
+      name: t("PairGrid.title"),
+      // Of a pair the search did not compare, its fields as they are ([valuesVerdict])
+      verdict: p.title != null ? textVerdict(p.title) : sameTextVerdict(a.title, b.title),
+      left: <WorkHead work={a} />,
+      right: <WorkHead work={b} />,
+    },
     {
       key: "authors",
       name: t("PairGrid.authors"),
@@ -94,7 +101,12 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
         // Of the universes of no work, the site's fandoms alone: named as they are
         name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
         // Of the values a work may have one of, whether they meet; of any other, how alike as the search compared them
-        verdict: left?.allowed || right?.allowed ? allowedVerdict(left?.values ?? [], right?.values ?? []) : facetVerdict(compared?.value),
+        verdict:
+          left?.allowed || right?.allowed
+            ? allowedVerdict(left?.values ?? [], right?.values ?? [])
+            : compared
+              ? facetVerdict(compared.value)
+              : valuesVerdict(left?.values ?? [], right?.values ?? []),
         left: valuesOf(left, key === UNIVERSE ? a.fandoms : []),
         right: valuesOf(right, key === UNIVERSE ? b.fandoms : []),
         lines: "line-clamp-2",
@@ -103,11 +115,18 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
     {
       key: "size",
       name: t("PairGrid.size"),
-      verdict: sizeVerdict(p.size),
+      verdict: sizeVerdict(p.size ?? sizeRatio(a, b)),
       left: sized(a) ? <Sizes work={a} /> : null,
       right: sized(b) ? <Sizes work={b} /> : null,
     },
-    { key: "description", name: t("PairGrid.description"), verdict: textVerdict(p.description), left: described(a), right: described(b), lines: "line-clamp-4" },
+    {
+      key: "description",
+      name: t("PairGrid.description"),
+      verdict: p.description != null ? textVerdict(p.description) : sameTextVerdict(a.description, b.description),
+      left: described(a),
+      right: described(b),
+      lines: "line-clamp-4",
+    },
   ];
   const both = rows.filter((r) => r.left != null && r.right != null);
   const one = rows.filter((r) => r.left == null || r.right == null);
