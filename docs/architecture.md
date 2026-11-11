@@ -490,6 +490,14 @@ The list of works is sorted by one choice of every order alike: the prediction, 
 update, the date the application first saw the work, the surprise, and every number the list can
 be sorted by — the standard ones first.
 
+## Requests answered slowly
+
+Every request of the browser is timed from its arrival to its answer (`request/SlowRequests`, a
+filter after the guard of access); one that took `recommend4me.slow-request` (500 ms) or longer is
+written to `slow-requests.log` in the data folder, and to `app.log`: its method, its address with
+the query, the status, the milliseconds, and how many other requests were being served when it
+came — those it may have waited behind.
+
 ## The site as the interface
 
 On the pages the sources want, the extension also shows the work as the application knows it,

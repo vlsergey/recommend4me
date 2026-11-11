@@ -16,6 +16,9 @@ recommend4me:
     # More names this machine is reached by, beyond localhost and its own name; a name beginning
     # with a dot stands for every name ending so
     hosts: []
+  # A request of the browser answered this long or longer is written to slow-requests.log in the
+  # data folder (request/SlowRequests)
+  slow-request: 500ms
 
 spring:
   application:
@@ -55,7 +58,8 @@ logging:
     org.flywaydb.core.internal.database.base.Database: ERROR
     # Spring's look for Gson, which the application does not use
     org.springframework.core.annotation.MergedAnnotation: ERROR
-  # THE LOG GOES TWO WAYS: to the console and to a rolling file in the data folder
+  # THE LOG GOES TWO WAYS: to the console and to a rolling file in the data folder; the requests
+  # answered slowly to a file of their own besides (logback-spring.xml)
   file:
     name: ${recommend4me.data-dir}/app.log
   logback:

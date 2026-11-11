@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+THE LOG GOES THREE WAYS: the console and the rolling app.log as Spring Boot makes them by itself
+(their names, patterns and rolling are set in application.yaml), and the requests answered slowly
+(request/SlowRequests) to a file of their own besides, slow-requests.log in the data folder.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <include resource="org/springframework/boot/logging/logback/file-appender.xml"/>
+
+    <springProperty name="DATA_DIR" source="recommend4me.data-dir"/>
+
+    <appender name="SLOW_REQUESTS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %m%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <file>${DATA_DIR}/slow-requests.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${DATA_DIR}/slow-requests.log.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="io.github.vlsergey.recommend4me.request.SlowRequests">
+        <appender-ref ref="SLOW_REQUESTS"/>
+    </logger>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
