@@ -240,6 +240,27 @@ class FanficsMePagesTest {
     }
 
     @Test
+    fun `a fandom's page and the rating of the fandoms say what each fandom is of`() {
+        assertEquals(listOf("https://fanfics.me/fandom50"), source.describing("fandom", listOf("50")).map { it.url })
+        val context = MemorySourceContext()
+        capture(context, "https://fanfics.me/fandom50", "fandom.html")
+        assertEquals(
+            mapOf(
+                "50" to
+                    "По циклу романов \"A Song of Ice and Fire\" и сериалам \"Game of Thrones\" и \"House of Dragon\""
+            ),
+            context.facetDescriptions.getValue("fandom"),
+        )
+        capture(context, "https://fanfics.me/fandoms_rating?page=1", "fandoms-rating.html")
+        val described = context.facetDescriptions.getValue("fandom")
+        assertEquals(setOf("50", "2", "1", "14"), described.keys)
+        assertEquals("Оригинальные авторские произведения", described["1"])
+        assertEquals("По вселенной \"Marvel Universe\" авторства Стэна Ли", described["14"])
+        // The rating names no fandom anew: the works name theirs
+        assertNull(context.facetNames["fandom"])
+    }
+
+    @Test
     fun `the addresses of a work's pages name the work, a cover's original comes first`() {
         assertEquals("252474", source.itemIdOf("https://fanfics.me/fic252474"))
         assertEquals("252474", source.itemIdOf("https://fanfics.me/fic252474/comments"))

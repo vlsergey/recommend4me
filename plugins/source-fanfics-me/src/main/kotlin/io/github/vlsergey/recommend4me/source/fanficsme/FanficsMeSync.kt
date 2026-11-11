@@ -17,10 +17,10 @@ private val log = LoggerFactory.getLogger(FanficsMeSync::class.java)
  * twenty cards a page, each with all the work's header says but its text.
  *
  * UPDATES — from the first page down until the works updated before the last time, then what the site's genres and
- * warnings mean. SCRAPE_ALL — every page of the search from where the last run stopped, the updates that came out
- * meanwhile, then what the genres, the warnings and the events of every fandom of the works mean. A work's own page —
- * its text, its comments — is read only when the user asks for it, or grades a work known by its card alone
- * ([FanficsMe.refresh]).
+ * warnings mean and what the fandoms not described yet are of. SCRAPE_ALL — every page of the search from where the
+ * last run stopped, the updates that came out meanwhile, then what the genres, the warnings, the fandoms and the events
+ * of every fandom of the works mean. A work's own page — its text, its comments — is read only when the user asks for
+ * it, or grades a work known by its card alone ([FanficsMe.refresh]).
  */
 class FanficsMeSync(private val context: SourceContext, private val client: FanficsMeClient) {
     private val pages = FanficsMePages(context)
@@ -38,6 +38,7 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
     private fun updates(job: Job) {
         readFromTop(job, UPDATE_PAGES, context.items.latestUpdate())
         help(job)
+        describeFandoms(job)
     }
 
     private fun whole(job: Job) {
@@ -46,6 +47,7 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
         // Updates that came out while the catalogue was read moved to its first pages
         readFromTop(job, UPDATE_PAGES, knownUntil)
         help(job)
+        describeFandoms(job)
         readKeywords(job)
         // The next whole scrape reads the catalogue from the start again
         job.state(NEXT_PAGE, null)
@@ -116,6 +118,51 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
     }
 
     /**
+     * What the fandoms of the works are of, of those not read of yet: when many, by the rating of the fandoms, which
+     * lists every fandom of the site; the rest each by its own page. A fandom whose page says nothing — or that the
+     * site has no more — is told so, blank, and not asked again.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    private fun describeFandoms(job: Job) {
+        val fandoms = HashSet<String>()
+        context.items.forEachFacet(FANDOM) { _, keys -> fandoms += keys }
+        val unread = { fandoms - context.items.facetDescriptions(FANDOM, fandoms).keys }
+        if (unread().size > BY_RATING) readRating(job)
+        val left = unread().sorted()
+        job.phase("dictionary", total = left.size)
+        left.forEachIndexed { i, key ->
+            job.checkCancelled()
+            val url = "$BASE/fandom$key"
+            try {
+                client.get(url)?.let { pages.read(CapturedPage(url, it, Instant.now())) }
+                if (context.items.facetDescriptions(FANDOM, listOf(key)).isEmpty())
+                    context.items.describeFacetValues(FANDOM, mapOf(key to ""))
+            } catch (e: Exception) {
+                // A BOUNDARY of the crawl: whatever one fandom's page throws is told as the job's error, the fandom
+                // asked again by the next run, and the next fandom read
+                job.error("fandom $key was not read: ${e.message}")
+            }
+            job.progress(i + 1, left.size)
+        }
+    }
+
+    /** Every page of the rating of the fandoms, as many as its paginator tells. */
+    private fun readRating(job: Job) {
+        var page = 1
+        var total = 1
+        job.phase("dictionary", total = total)
+        while (page <= total) {
+            job.checkCancelled()
+            val url = "$BASE/fandoms_rating?page=$page"
+            val html = client.get(url) ?: break
+            pages.read(CapturedPage(url, html, Instant.now()))
+            total = RATING_PAGE.findAll(html).mapNotNull { it.groupValues[1].toIntOrNull() }.maxOrNull() ?: total
+            job.progress(page, total)
+            page++
+        }
+    }
+
+    /**
      * The events of every fandom the works are of, in its encyclopedia, the fandoms of the most works first: what each
      * event means. Resumed where the last run stopped.
      */
@@ -158,6 +205,12 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
 
         /** A page of the list in its paginator. */
         private val PAGE_LINK = Regex("[?&]page=(\\d+)#fics")
+
+        /** A page of the rating of the fandoms in its paginator. */
+        private val RATING_PAGE = Regex("fandoms_rating\\?page=(\\d+)")
+
+        /** How many fandoms not described make the whole rating of the fandoms worth reading, not their own pages. */
+        private const val BY_RATING = 50
 
         /** Pages read from the top: of the updates, and after the whole catalogue for those that came out meanwhile. */
         private const val UPDATE_PAGES = 100

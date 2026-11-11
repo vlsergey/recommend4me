@@ -9,7 +9,9 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.tag.TagVectors
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
+import java.time.Instant
 import java.time.ZoneOffset
+import kotlin.concurrent.withLock
 import org.springframework.stereotype.Component
 
 /**
@@ -41,7 +43,38 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
             universes.allEntries().associateBy { UniverseKey(it.catalogue, it.id) }
         }
 
-        fun site(ref: SiteFandomRef): UniverseSite? {
+        /**
+         * What the sites said their fandoms [refs] are of, of those their pages were read of: a blank one the page
+         * saying nothing.
+         */
+        fun descriptions(refs: Collection<SiteFandomRef>): Map<SiteFandomRef, String> =
+            refs
+                .groupBy { it.source }
+                .flatMap { (source, of) ->
+                    val s = bySource[source] ?: return@flatMap emptyList()
+                    s.store.items.facetDescriptions(s.facet, of.map { it.key }).map { (key, text) ->
+                        SiteFandomRef(source, key) to text
+                    }
+                }
+                .toMap()
+
+        /**
+         * The sites' fandoms of [refs] not read of yet asked of the browser, once
+         * ([Source.describing][io.github.vlsergey.recommend4me.source.Source.describing]): the request written, not
+         * waited for.
+         */
+        fun askOf(refs: Collection<SiteFandomRef>, described: Map<SiteFandomRef, String>) {
+            refs
+                .filter { it !in described }
+                .groupBy { it.source }
+                .forEach { (source, of) ->
+                    val s = bySource[source] ?: return@forEach
+                    val wanted = s.store.source.describing(s.facet, of.map { it.key })
+                    if (wanted.isNotEmpty()) s.store.writing.withLock { s.store.wanted.want(wanted, Instant.now()) }
+                }
+        }
+
+        fun site(ref: SiteFandomRef, described: Map<SiteFandomRef, String>): UniverseSite? {
             val s = bySource[ref.source] ?: return null
             val name = s.names[ref.key] ?: ref.key
             return UniverseSite(
@@ -50,13 +83,14 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
                 name,
                 s.uses[ref.key] ?: 0,
                 s.store.source.valueUrl(s.facet, ref.key, name),
+                described[ref]?.takeIf { it.isNotBlank() },
             )
         }
 
-        fun sitesOf(id: Long): List<UniverseSite> =
+        fun sitesOf(id: Long, described: Map<SiteFandomRef, String> = emptyMap()): List<UniverseSite> =
             dictionary
                 .sitesOf(id)
-                .mapNotNull(::site)
+                .mapNotNull { site(it, described) }
                 .sortedWith(compareByDescending<UniverseSite> { it.works }.thenBy { it.name })
 
         fun name(id: Long): String = names[FandomRepository.value(id)] ?: "#$id"
@@ -78,17 +112,28 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
             .sortedWith(compareByDescending<UniverseInfo> { it.works }.thenBy { it.name.lowercase() })
     }
 
-    /** The universe [value]; null of no such universe. */
+    /**
+     * The universe [value], with what its sites say each fandom of it is of; a fandom not read of yet asked of the
+     * browser. Null of no such universe.
+     */
     fun one(value: String): UniverseInfo? {
         val r = Reading()
         val id = FandomRepository.idOf(value)?.takeIf { it in r.dictionary.fandoms } ?: return null
-        return info(r, id, r.universes.shown.descriptions(listOf(value), r.dictionary))
+        val refs = r.dictionary.sitesOf(id)
+        val said = r.descriptions(refs)
+        r.askOf(refs, said)
+        return info(r, id, r.universes.shown.descriptions(listOf(value), r.dictionary), said)
     }
 
-    private fun info(r: Reading, id: Long, described: Map<String, String>): UniverseInfo {
+    private fun info(
+        r: Reading,
+        id: Long,
+        described: Map<String, String>,
+        said: Map<SiteFandomRef, String> = emptyMap(),
+    ): UniverseInfo {
         val row = r.dictionary.fandoms.getValue(id)
         val value = FandomRepository.value(id)
-        val sites = r.sitesOf(id)
+        val sites = r.sitesOf(id, said)
         val entries = r.dictionary.entriesOf(id).mapNotNull { r.entries[it] }
         return UniverseInfo(
             value = value,
@@ -125,7 +170,8 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
      * The universes alike [value], the likest first, at most [limit]: of the meaning of the names of their sites'
      * fandoms — a name as the search encodes short texts, kept by its source ([FandomVectors]), a universe alike by the
      * best cosine of a name of each — alike the text [query] instead when one is given; a universe bound to an entry
-     * this one is bound to, alike wholly. Each with what the user said it is to this one. Null of no such universe.
+     * this one is bound to, alike wholly. Each with what the user said it is to this one, and what its sites say its
+     * fandoms are of. Null of no such universe.
      */
     fun similar(value: String, query: String?, limit: Int): List<SimilarUniverse>? {
         val r = Reading()
@@ -143,28 +189,30 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
                     .orEmpty()
         val own = r.dictionary.entriesOf(id).toSet()
         val relation = relationTo(r.universes.fandoms, r.dictionary, id)
-        return r.dictionary.fandoms.keys
-            .filter { it != id }
-            .map { other ->
-                val shared = asked == null && r.dictionary.entriesOf(other).any { it in own }
-                val likeness =
-                    if (shared) 1.0
-                    else TagVectors.likeness(target, r.dictionary.sitesOf(other).mapNotNull { vectors[it] })
-                other to likeness
-            }
-            .sortedWith(compareByDescending<Pair<Long, Double>> { it.second }.thenBy { it.first })
-            .take(limit.coerceIn(1, MAX_SIMILAR))
-            .map { (other, likeness) ->
-                val sites = r.sitesOf(other)
-                SimilarUniverse(
-                    value = FandomRepository.value(other),
-                    name = r.name(other),
-                    sites = sites,
-                    works = sites.sumOf { it.works },
-                    similarity = likeness.toFloat(),
-                    relation = relation(other),
-                )
-            }
+        val alike =
+            r.dictionary.fandoms.keys
+                .filter { it != id }
+                .map { other ->
+                    val shared = asked == null && r.dictionary.entriesOf(other).any { it in own }
+                    val likeness =
+                        if (shared) 1.0
+                        else TagVectors.likeness(target, r.dictionary.sitesOf(other).mapNotNull { vectors[it] })
+                    other to likeness
+                }
+                .sortedWith(compareByDescending<Pair<Long, Double>> { it.second }.thenBy { it.first })
+                .take(limit.coerceIn(1, MAX_SIMILAR))
+        val said = r.descriptions(alike.flatMap { r.dictionary.sitesOf(it.first) })
+        return alike.map { (other, likeness) ->
+            val sites = r.sitesOf(other, said)
+            SimilarUniverse(
+                value = FandomRepository.value(other),
+                name = r.name(other),
+                sites = sites,
+                works = sites.sumOf { it.works },
+                similarity = likeness.toFloat(),
+                relation = relation(other),
+            )
+        }
     }
 
     /** The vector of every site's fandom's name its source keeps, of unit length; none of a name not encoded yet. */

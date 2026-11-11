@@ -32,6 +32,9 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
         store.items.describeFacetValues(facet, descriptions)
     }
 
+    override fun facetDescriptions(facet: String, keys: Collection<String>): Map<String, String> =
+        store.items.facetDescriptions(facet, keys)
+
     override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
         if (synonyms.isEmpty()) return
         write { store.items.setFacetValueSynonyms(facet, synonyms) }

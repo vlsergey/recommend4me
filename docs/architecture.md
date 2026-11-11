@@ -74,8 +74,9 @@ work is its catalogue: twenty cards a page, each with everything a work's header
 (the authors, the fandoms, the characters and pairings by the ids of the site's encyclopedia, the
 rating, the genres, the warnings and the events, the size, the status, the summary). The whole
 scrape reads every page of it, a second apart, then what the genres, the warnings and the events
-mean (the site's help, every fandom's encyclopedia); the updates read it from the top down to the
-works known. A work's own page and its text in the reader — the notes of its author, the chapters,
+mean (the site's help, every fandom's encyclopedia) and what the fandoms are of; the updates read it
+from the top down to the works known, then what the fandoms not described yet are of — by the
+rating of the fandoms when there are many, else each by its own page. A work's own page and its text in the reader — the notes of its author, the chapters,
 the comments — are read only as a single page, or by the browser; the text of a work rated NC-17
 the site shows only to a reader logged in.
 
@@ -323,7 +324,12 @@ under the one it leaves (a part of a franchise) — puts one under another — a
 child is of the parent too — tells two apart, names one. The screen of the universes offers the
 universes alike one by the meaning of their sites' fandoms' names (the names encoded as the search
 encodes short texts, kept by their sources, made in the background: `FandomVectors`) and those bound
-to the same entry; it merges nothing by itself.
+to the same entry; it merges nothing by itself. Every site's fandom on it, on the card and among the
+alike, stands with what its site says it is of — the source's `facet_value_description` of the
+fandom: ficbook's heading of a fandom's page, "Rowling Joanne «Harry Potter» / Серия книг, 1997 -
+2007"; fanfics.me's line under a fandom's name, on its pages and in the rating of the fandoms. A
+fandom not read of yet is asked of the browser when its universe is opened (`Source.describing`), as
+a tag is; AO3 says nothing of its fandoms but their names.
 
 A universe is shown by the name the user gave it; else by the name of the first entry of a catalogue
 it is bound to; else by the name of its sites' fandom of the most works (`fandom.calculated_name`,

@@ -178,6 +178,15 @@ class SiteUniversesTest : SiteTestBase() {
         universes.nameUniverse(UniverseName(hp, null))
         assertEquals("Harry Potter", universes.getUniverse(hp).body!!.name)
 
+        // What the site says each fandom is of stands with it; a page that said nothing gives none
+        stores
+            .source("site")!!
+            .items
+            .describeFacetValues("fandom", mapOf("hp" to "By J. K. Rowling's books", "hp-movies" to ""))
+        val said = universes.getUniverse(hp).body!!.sites.associate { it.key to it.description }
+        assertEquals("By J. K. Rowling's books", said["hp"])
+        assertNull(said["hp-movies"])
+
         // An original work has no universe of its fandom
         capture("h4|Mine|magic|My own world||x4|originals:Originals")
         assertTrue(

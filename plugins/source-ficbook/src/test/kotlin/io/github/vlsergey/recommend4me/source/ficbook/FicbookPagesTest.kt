@@ -196,13 +196,30 @@ class FicbookPagesTest {
     }
 
     @Test
+    fun `a fandom's own page says what it is of, asked of the browser by its address`() {
+        val context = MemorySourceContext()
+        val key = "books/rouling_dzhoan___garri_potter"
+        val url = "https://ficbook.net/fanfiction/$key"
+        assertEquals(listOf(url), source.describing("fandom", listOf(key)).map { it.url })
+        capture(context, url, "fandom.html")
+        assertEquals(
+            mapOf(key to "Rowling Joanne «Harry Potter» / Серия книг, 1997 - 2007"),
+            context.facetDescriptions.getValue("fandom"),
+        )
+        // A page of the list of the originals has no such heading: nothing said of the fandom
+        val other = MemorySourceContext()
+        capture(other, "https://ficbook.net/fanfiction/no_fandom/originals", "fandom-originals.html")
+        assertNull(other.facetDescriptions["fandom"])
+    }
+
+    @Test
     fun `the site's search of tags, asked by the browser, says what the tag means — of its own name or a synonym`() {
         val harassment =
             "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."
         val asked = source.describing("tag", listOf("харассмент", "домогательства"))
         assertEquals(listOf(Ficbook.tagSearch("харассмент"), Ficbook.tagSearch("домогательства")), asked.map { it.url })
         assertEquals(mapOf("title" to "харассмент"), asked.first().form)
-        assertEquals(emptyList(), source.describing("fandom", listOf("x")))
+        assertEquals(emptyList(), source.describing("pairing", listOf("x")))
         asked.forEach { wanted ->
             val context = MemorySourceContext()
             assertEquals(emptyList(), capture(context, wanted.url, "tags-search.json"))

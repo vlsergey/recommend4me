@@ -27,7 +27,7 @@ import org.jsoup.nodes.Document
 /**
  * Reads the pages of ficbook.net and writes what they say: the cards of a list (a fandom, a tag, a search, a
  * collection), a work's header and table of contents, the text of a part, the comments; and what the site's tags mean
- * ([FicbookTagMeanings]).
+ * ([FicbookTagMeanings]) and what its fandoms are of ([FicbookFandoms]).
  */
 class FicbookPages(private val context: SourceContext) {
 
@@ -35,6 +35,7 @@ class FicbookPages(private val context: SourceContext) {
     private val fields = FicbookFields(items)
     private val meanings = FicbookTagMeanings(items)
     private val series = FicbookSeries(items)
+    private val fandoms = FicbookFandoms(items)
 
     fun read(page: CapturedPage): List<String> {
         val path = runCatching { URI(page.url).path }.getOrDefault("")
@@ -46,6 +47,7 @@ class FicbookPages(private val context: SourceContext) {
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
         if (TAG_PAGE.matches(path)) meanings.tagPage(doc)
+        FANDOM_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { fandoms.page(doc, it) }
         // A series' own page, and an author's list of series: after the cards, whose works they list
         FicbookSeries.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
         if (AUTHOR_SERIES.matches(path)) series.list(doc)
@@ -261,6 +263,9 @@ class FicbookPages(private val context: SourceContext) {
         /** A work's address: "/readfic/<id>", "/readfic/<id>/<part>", "/readfic/<id>/comments". */
         private val READFIC = Regex("/readfic/([0-9a-f-]+)/?([^/]*)/?")
         private val TAG_PAGE = Regex("/tags/\\d+/?")
+
+        /** A fandom's own page, the list of its works: "/fanfiction/books/rouling_dzhoan___garri_potter". */
+        private val FANDOM_PAGE = Regex("/fanfiction/([^/]+/[^/]+)/?")
 
         /** An author's list of series: "/authors/3093607/series". */
         private val AUTHOR_SERIES = Regex("/authors/[^/]+/series/?")

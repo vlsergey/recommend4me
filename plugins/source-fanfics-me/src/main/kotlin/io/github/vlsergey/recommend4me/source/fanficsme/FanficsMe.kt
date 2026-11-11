@@ -15,12 +15,14 @@ import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.PictureDecor
 import io.github.vlsergey.recommend4me.source.ReviewDecor
 import io.github.vlsergey.recommend4me.source.ScrapeProgress
+import io.github.vlsergey.recommend4me.source.SitePictures
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.source.TextRole
+import io.github.vlsergey.recommend4me.source.WantedPage
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
 
@@ -34,9 +36,10 @@ import java.time.Instant
  * The site's word on a work is structured: the fandoms, the characters and the pairings by their ids of its
  * encyclopedia; the genres, the warnings and the events ("События") of its lists — the three the site's tags here, each
  * described by the site's own help and the encyclopedia of a fandom. The author of a translation is its translator, who
- * put it on the site; the writer of the original is a facet of its own, named on the work's page alone.
+ * put it on the site; the writer of the original is a facet of its own, named on the work's page alone. A fandom is
+ * described by the line under its name, on its every page and in the rating of the fandoms.
  */
-class FanficsMe : Source {
+class FanficsMe : Source, SitePictures by FanficsMePictures {
     override val id = ID
     override val contentType = "books"
     override val homepage = BASE
@@ -90,15 +93,18 @@ class FanficsMe : Source {
     /** The translators kept before as a facet of their own made the authors of their translations. */
     override val migrations = listOf("classpath:db/fanfics.me")
 
-    /** 2: the series' own pages and the lists of them, the number of a work in its series. */
-    override val parserVersion = 2
+    /**
+     * 2: the series' own pages and the lists of them, the number of a work in its series. 3: what a fandom is of, of
+     * its pages and the rating of the fandoms.
+     */
+    override val parserVersion = 3
 
     override val capturePatterns =
         listOf(
             Regex(
                 "https://fanfics\\.me/" +
                     "(fic\\d+|read\\.php|find|fandom\\d+|character\\d+|paring[\\d_]+|serie\\d+|series?|collection\\d+" +
-                    "|user\\d+|translations|recommends|fics_rating|html)([/?#].*)?"
+                    "|user\\d+|translations|recommends|fics_rating|fandoms_rating|html)([/?#].*)?"
             )
         )
 
@@ -115,6 +121,10 @@ class FanficsMe : Source {
             FANDOM -> "$BASE/fandom$key"
             else -> null
         }
+
+    /** A fandom by its own page, whose head says what it is of. */
+    override fun describing(facet: String, tags: List<String>): List<WantedPage> =
+        if (facet == FANDOM) tags.map { WantedPage("$BASE/fandom$it") } else emptyList()
 
     override fun itemIdOf(url: String): String? =
         (WORK_ADDRESS.find(url) ?: READER_ADDRESS.find(url))?.groupValues?.get(1)
@@ -168,12 +178,6 @@ class FanficsMe : Source {
     override fun needsRefresh(itemId: String, context: SourceContext): Boolean =
         context.items.find(itemId) != null && context.items.parts(itemId).isEmpty()
 
-    /** A cover as the site lists it — "…_200_300.jpg" — and its original, the larger first. */
-    override fun pictureAddresses(url: String): List<String> = listOf(url.replace(PREVIEW_SIZE, ""), url).distinct()
-
-    override fun pictureHeaders(url: String, context: SourceContext): Map<String, String> =
-        mapOf("User-Agent" to FanficsMeClient.USER_AGENT)
-
     private val client = FanficsMeClient()
 
     companion object {
@@ -186,9 +190,6 @@ class FanficsMe : Source {
         /** The reader of a work's text: "/read.php?id=123&chapter=2". */
         private val READER_ADDRESS =
             Regex("^https?://(?:www\\.)?fanfics\\.me/read\\.php\\?(?:[^#]*&)?id=(\\d+)(?:[&#]|$)")
-
-        /** The size a cover is listed by, after its name. */
-        private val PREVIEW_SIZE = Regex("_\\d+_\\d+(?=\\.\\w+$)")
 
         /** The header of a work's page: the block holding its id. */
         private const val HEAD = "div.FicHead:has(#fic_id)"

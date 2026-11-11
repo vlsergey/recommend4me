@@ -91,6 +91,7 @@ export function SimilarUniverses({ type, universe: u }: { type: ContentTypeInfo;
                   {s.sites.map((site) => (
                     <span key={`${site.source}/${site.key}`} title={sourceTitle(site.source)}>
                       {sourceShort(site.source)}: <SiteFandomName site={site} />
+                      {site.description && <span> — {site.description}</span>}
                     </span>
                   ))}
                   <span className="tabular-nums">· {t("UniverseCard.works", { count: s.works })}</span>

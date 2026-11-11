@@ -95,9 +95,9 @@ class Ficbook : Source {
      * 9: the covers as the site draws them now: of a work's own page, and of a card of a list as a picture. 10: the
      * covers of the cards of a list, a picture of a source for every width. 11: a tag's synonyms, of its own page and
      * of the search of tags — each a tag of its own of the same thing. 12: the series' own pages and an author's list
-     * of them.
+     * of them. 13: what a fandom's own page says it is of.
      */
-    override val parserVersion = 12
+    override val parserVersion = 13
 
     override val signals =
         listOf(
@@ -151,10 +151,14 @@ class Ficbook : Source {
     /**
      * A tag by the site's search of tags, the one its page of all the tags asks: by the name — the key is the name in
      * lower case, which the search finds as well — it answers the tag's description, read by [FicbookPages]. The
-     * address carries the name: the answer is known by it.
+     * address carries the name: the answer is known by it. A fandom by its own page, whose heading says what it is of.
      */
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
-        if (facet != TAG) emptyList() else tags.map { WantedPage(tagSearch(it), mapOf("title" to it)) }
+        when (facet) {
+            TAG -> tags.map { WantedPage(tagSearch(it), mapOf("title" to it)) }
+            FANDOM -> tags.map { WantedPage("$BASE/fanfiction/$it") }
+            else -> emptyList()
+        }
 
     companion object {
         const val ID = "ficbook"

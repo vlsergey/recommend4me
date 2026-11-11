@@ -33,7 +33,8 @@ internal fun clean(text: String): String = text.replace(' ', ' ').trim()
  * Reads the pages of fanfics.me and writes what they say: the cards of a list (the search of every work, a fandom's, a
  * character's, an author's), a work's header with its table of contents and the notes of its author, the text in the
  * reader — a chapter or the whole — the comments ([FanficsMeComments]), and what the site's genres, warnings and events
- * mean, by its help and the encyclopedia of a fandom ([FanficsMeTagMeanings]).
+ * mean, by its help and the encyclopedia of a fandom ([FanficsMeTagMeanings]); what the fandoms are of, by the head of
+ * a fandom's pages and the rating of the fandoms ([FanficsMeFandoms]).
  */
 class FanficsMePages(context: SourceContext) {
 
@@ -42,16 +43,14 @@ class FanficsMePages(context: SourceContext) {
     private val comments = FanficsMeComments(items)
     private val meanings = FanficsMeTagMeanings(items)
     private val series = FanficsMeSeries(items)
+    private val fandoms = FanficsMeFandoms(items)
 
     fun read(page: CapturedPage): List<String> {
         val uri = runCatching { URI(page.url) }.getOrNull()
         val path = uri?.path.orEmpty()
         val query = uri?.rawQuery.orEmpty()
         val doc = Jsoup.parse(page.html, page.url)
-        if (path == "/html" && query.split('&').any { it in HELP_ARTICLES }) meanings.help(doc)
-        if (KEYWORDS_PAGE.matches(path) || (FANDOM_PAGE.matches(path) && "soaction=keywords" in query)) {
-            meanings.keywords(doc)
-        }
+        meaningsOf(doc, path, query)
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
         // A series' own page, and a list of series: after the cards, whose works they list
@@ -64,6 +63,19 @@ class FanficsMePages(context: SourceContext) {
         read?.let { id -> if (chapters(doc, id)) touched += id }
         work?.let { id -> if (comments.read(doc, id, page.capturedAt)) touched += id }
         return touched.toList()
+    }
+
+    /**
+     * What the pages of the site's dictionary say its values mean: the help on its genres and warnings, a fandom's
+     * events, what a fandom is of — at the head of its pages and in the rating of the fandoms.
+     */
+    private fun meaningsOf(doc: Document, path: String, query: String) {
+        if (path == "/html" && query.split('&').any { it in HELP_ARTICLES }) meanings.help(doc)
+        if (KEYWORDS_PAGE.matches(path) || (FANDOM_PAGE.matches(path) && "soaction=keywords" in query)) {
+            meanings.keywords(doc)
+        }
+        FANDOM_PAGES.matchEntire(path)?.groupValues?.get(1)?.let { fandoms.head(doc, it) }
+        if (path == FANDOMS_RATING) fandoms.rating(doc)
     }
 
     // --- Cards of a list ---
@@ -285,6 +297,12 @@ class FanficsMePages(context: SourceContext) {
          */
         private val KEYWORDS_PAGE = Regex("/fandom\\d+/keywords/?")
         private val FANDOM_PAGE = Regex("/fandom\\d+/?")
+
+        /** Every page of a fandom — its news, its works, its encyclopedia — by the fandom's id: "/fandom2/fics". */
+        private val FANDOM_PAGES = Regex("/fandom(\\d+)(?:/.*)?")
+
+        /** The rating of the fandoms, a page of it. */
+        const val FANDOMS_RATING = "/fandoms_rating"
 
         /** The site's help on its genres and its warnings, "/html?article=…". */
         private val HELP_ARTICLES = setOf("article=about_genres", "article=about_warnings")

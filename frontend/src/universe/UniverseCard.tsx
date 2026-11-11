@@ -175,6 +175,8 @@ function Sites({ type, universe: u }: { type: ContentTypeInfo; universe: Univers
             <span className="text-xs text-muted-foreground">{sourceTitle(s.source)}</span>
             <SiteFandomName site={s} className="font-medium" />
             <span className="text-xs text-muted-foreground tabular-nums">{t("UniverseCard.works", { count: s.works })}</span>
+            {/* What the site says the fandom is of, under its name */}
+            {s.description && <span className="order-last basis-full text-xs text-muted-foreground">{s.description}</span>}
             {u.sites.length > 1 && (
               <span className="ml-auto flex gap-1">
                 <AsyncButton size="xs" variant="ghost" onClick={() => takeOut(s.source, s.key, true)} title={t("UniverseCard.putDownHint")} icon={<ArrowDownToLineIcon />}>

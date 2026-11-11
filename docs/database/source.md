@@ -8,7 +8,7 @@
 | `item_version` | every version of a work seen |
 | `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order |
 | `facet_value` | the name of a value the site names by key (a tag's id) |
-| `facet_value_description` | what the site says a value means (a tag's own page) |
+| `facet_value_description` | what the site says a value means (a tag's own page, what a fandom is of) |
 | `facet_value_synonym` | another name the site gives a value (a tag's synonym): a value of its own, bound to the tag the value is bound to |
 | `facet_value_vector` | the vector of a value's name, held against texts to tell whether the value fits them |
 | `item_number` | a work's number: words, chapters, likes… |

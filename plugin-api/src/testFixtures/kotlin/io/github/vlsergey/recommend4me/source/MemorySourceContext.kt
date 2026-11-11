@@ -65,6 +65,9 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
                 facetDescriptions.getOrPut(facet) { HashMap() } += descriptions
             }
 
+            override fun facetDescriptions(facet: String, keys: Collection<String>): Map<String, String> =
+                this@MemorySourceContext.facetDescriptions[facet].orEmpty().filterKeys { it in keys }
+
             override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
                 val own = facetSynonyms.getOrPut(facet) { HashMap() }
                 own.values.removeAll { it in synonyms.keys }

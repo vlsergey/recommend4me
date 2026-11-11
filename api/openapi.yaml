@@ -6340,6 +6340,12 @@ components:
         url:
           type: string
           description: The fandom's page on the site, when the source tells it
+        description:
+          type: string
+          description: >-
+            What the site says the fandom is of ("Rowling Joanne «Harry Potter» / Серия книг, 1997 - 2007"),
+            when its page was read and says it; given of one universe and of the alike ones, not in the list
+            of all
 
     UniverseEntryInfo:
       type: object
