@@ -34,6 +34,7 @@ class PairWindow(
         val first = ItemKey(pair.first.source, pair.first.item)
         val second = ItemKey(pair.second.source, pair.second.item)
         val described = views.describe(type, listOf(first, second))
+        val clusters = works.of(type)
         val kin =
             if (pair.sameAuthor) null
             else
@@ -43,11 +44,11 @@ class PairWindow(
                     described[second]?.authors.orEmpty(),
                     answers.said(type),
                     models.of(type),
-                    works.of(type),
+                    clusters,
                 )
         return pair.copy(
-            first = pair.first.copy(facets = shownOn(pair.first.facets, details.facetsOf(first))),
-            second = pair.second.copy(facets = shownOn(pair.second.facets, details.facetsOf(second))),
+            first = pair.first.copy(facets = shownOn(pair.first.facets, details.facetsOf(first, clusters))),
+            second = pair.second.copy(facets = shownOn(pair.second.facets, details.facetsOf(second, clusters))),
             authorKin =
                 kin?.let {
                     AuthorKin(

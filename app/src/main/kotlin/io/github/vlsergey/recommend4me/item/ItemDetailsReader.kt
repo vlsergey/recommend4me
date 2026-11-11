@@ -139,13 +139,13 @@ class ItemDetailsReader(
 
     /**
      * The facets of the work of [key] as its screen shows them — the site's values, the drafts, the user's answers, the
-     * model's chances made now — and nothing else of it: what two works are compared by ([DuplicatePages.pair]
-     * [io.github.vlsergey.recommend4me.duplicate.DuplicatePages.pair]). Null of no such item.
+     * model's chances made now — and nothing else of it, of the normalized works [clusters] read already: what two
+     * works are compared by ([DuplicatePages.pair] [io.github.vlsergey.recommend4me.duplicate.DuplicatePages.pair]).
+     * Null of no such item.
      */
-    fun facetsOf(key: ItemKey): List<ItemFacet>? {
+    fun facetsOf(key: ItemKey, clusters: WorkClusters): List<ItemFacet>? {
         val store = stores.source(key.source) ?: return null
         val type = stores.typeOf(key.source)
-        val clusters = works.of(type)
         val members = cards.membersRead(type, clusters.members(key), null)
         val corrections = store.corrections.facetsOf(key.id)
         val work = cards.ofWork(type, clusters, key, store.items.facets(key.id), members.chances[key], read = members)

@@ -211,12 +211,17 @@ class DuplicateRepository(private val db: DSLContext) {
      */
     fun all(): List<DuplicateCandidate> = read(DSL.noCondition())
 
-    /** The candidates one work of which is among the [items]: of the works of an author, say. */
+    /**
+     * The candidates one work of which is among the [items]: of the works of an author, say. Found by the key of each
+     * work — the first of a pair by the table's own, the second by its index: a row of either among them all, or both
+     * at once, H2 walks the table for.
+     */
     fun touching(items: Collection<ItemKey>): List<DuplicateCandidate> {
-        if (items.isEmpty()) return emptyList()
         val c = DUPLICATE_CANDIDATE
-        val keys = items.map { DSL.row(it.source, it.id) }
-        return read(DSL.row(c.SOURCE, c.ITEM_ID).`in`(keys).or(DSL.row(c.OTHER_SOURCE, c.OTHER_ITEM_ID).`in`(keys)))
+        return items.distinct().flatMap { w ->
+            read(c.SOURCE.eq(w.source).and(c.ITEM_ID.eq(w.id))) +
+                read(c.OTHER_SOURCE.eq(w.source).and(c.OTHER_ITEM_ID.eq(w.id)))
+        }
     }
 
     /** The candidates the [condition] picks, streamed. */
