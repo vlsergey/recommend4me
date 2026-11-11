@@ -8,7 +8,7 @@ import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
-import { authorVerdict, type FieldVerdict, facetVerdict, sizeVerdict, TONE_CLASS, textVerdict } from "./fieldVerdict";
+import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sizeVerdict, TONE_CLASS, textVerdict } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
@@ -52,49 +52,77 @@ const UNIVERSE = "universe";
 /** The normalized authors, compared apart: the row of the authors tells them. */
 const AUTHOR = "author";
 
+/** A row of the grid: its field, how alike the two are of it, the two values, folded or not. */
+interface Row {
+  key: string;
+  name: string;
+  verdict: FieldVerdict;
+  left: ReactNode;
+  right: ReactNode;
+  /** Long values folded to these lines ([FoldedRow]); none, shown whole. */
+  lines?: string;
+}
+
 /**
  * THE TWO WORKS FIELD BY FIELD: a row a field — the title, the authors, every facet either has, the size,
  * the description — the first work's on the left, the second's on the right, and between them the field's
  * name and how alike the two are, in its colour ([FieldVerdict]), on one line: read across, the left, the
- * verdict, the right. On a narrow screen the name and the verdict stand over the row, the two under them side
- * by side.
+ * verdict, the right. The fields of one work alone — nothing to compare — stand below the rest, under a line
+ * of their own: told, not in the way of what is compared. On a narrow screen the name and the verdict stand
+ * over the row, the two under them side by side.
  */
 export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
   const { t } = useTranslation("duplicate");
   const a = p.first;
   const b = p.second;
-  const keys = facetKeys(p);
+  const rows: Row[] = [
+    { key: "title", name: t("PairGrid.title"), verdict: textVerdict(p.title), left: <WorkHead work={a} />, right: <WorkHead work={b} /> },
+    {
+      key: "authors",
+      name: t("PairGrid.authors"),
+      verdict: authorVerdict(p.sameAuthor, a.authors, b.authors),
+      left: a.authors.length > 0 ? a.authors.join(", ") : null,
+      right: b.authors.length > 0 ? b.authors.join(", ") : null,
+    },
+    ...facetKeys(p).map((key): Row => {
+      const left = a.facets.find((f) => f.key === key);
+      const right = b.facets.find((f) => f.key === key);
+      const compared = p.facets?.find((f) => f.key === key);
+      const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
+      return {
+        key,
+        // Of the universes of no work, the site's fandoms alone: named as they are
+        name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
+        // Of the values a work may have one of, whether they meet; of any other, how alike as the search compared them
+        verdict: left?.allowed || right?.allowed ? allowedVerdict(left?.values ?? [], right?.values ?? []) : facetVerdict(compared?.value),
+        left: valuesOf(left, key === UNIVERSE ? a.fandoms : []),
+        right: valuesOf(right, key === UNIVERSE ? b.fandoms : []),
+        lines: "line-clamp-2",
+      };
+    }),
+    {
+      key: "size",
+      name: t("PairGrid.size"),
+      verdict: sizeVerdict(p.size),
+      left: sized(a) ? <Sizes work={a} /> : null,
+      right: sized(b) ? <Sizes work={b} /> : null,
+    },
+    { key: "description", name: t("PairGrid.description"), verdict: textVerdict(p.description), left: described(a), right: described(b), lines: "line-clamp-4" },
+  ];
+  const both = rows.filter((r) => r.left != null && r.right != null);
+  const one = rows.filter((r) => r.left == null || r.right == null);
   return (
     <div className="flex flex-col divide-y rounded-md border">
-      <FieldRow name={t("PairGrid.title")} verdict={textVerdict(p.title)} left={<WorkHead work={a} />} right={<WorkHead work={b} />} />
-      <FieldRow
-        name={t("PairGrid.authors")}
-        verdict={authorVerdict(p.sameAuthor, a.authors, b.authors)}
-        left={a.authors.length > 0 ? a.authors.join(", ") : null}
-        right={b.authors.length > 0 ? b.authors.join(", ") : null}
-      />
-      {keys.map((key) => {
-        const left = a.facets.find((f) => f.key === key);
-        const right = b.facets.find((f) => f.key === key);
-        const compared = p.facets?.find((f) => f.key === key);
-        const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
-        return (
-          <FoldedRow
-            key={key}
-            // Of the universes of no work, the site's fandoms alone: named as they are
-            name={labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key}
-            verdict={facetVerdict(compared?.value)}
-            left={valuesOf(left, key === UNIVERSE ? a.fandoms : [])}
-            right={valuesOf(right, key === UNIVERSE ? b.fandoms : [])}
-            lines="line-clamp-2"
-          />
-        );
-      })}
-      <FieldRow name={t("PairGrid.size")} verdict={sizeVerdict(p.size)} left={sized(a) ? <Sizes work={a} /> : null} right={sized(b) ? <Sizes work={b} /> : null} />
-      <FoldedRow name={t("PairGrid.description")} verdict={textVerdict(p.description)} left={described(a)} right={described(b)} lines="line-clamp-4" />
+      {both.map(row)}
+      {one.length > 0 && <div className="bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">{t("PairGrid.oneSided")}</div>}
+      {one.map(row)}
     </div>
   );
 }
+
+/** A row drawn: folded when its values are long. */
+const row = (r: Row) =>
+  r.lines ? <FoldedRow key={r.key} name={r.name} verdict={r.verdict} left={r.left} right={r.right} lines={r.lines} /> : <FieldRow key={r.key} name={r.name} verdict={r.verdict} left={r.left} right={r.right} />;
 
 /**
  * The facets of the rows: every one either work has or the pair was compared by — the universes when either

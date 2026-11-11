@@ -156,6 +156,11 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
             }
         }
 
+    /**
+     * The facets of the site whose values are those a work may have one of: the site's word of a facet of one value.
+     */
+    private val allowed = s.schema.facets.filter { it.single }.mapNotNull { it.originalFacet }.toSet()
+
     /** The values compared of every work, by the facet compared: "universe" to its keys. */
     private val byFamily = values.mapValues { (_, own) ->
         own.groupBy({ it.substringBefore(':') }, { it.substringAfter(':') })
@@ -218,6 +223,7 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
                             )
                         }
                         .sortedBy { it.name },
+                allowed = (def.key in allowed).takeIf { it },
             )
         }
     }

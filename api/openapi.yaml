@@ -6080,6 +6080,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DuplicateValue'
+        allowed:
+          type: boolean
+          description: |
+            The work has one value of these, the site letting any of them - the ratings a site lets a work
+            have (the site's word of a facet of one value, FacetDef.originalFacet of a single one): two
+            works agree when their values meet
 
     DuplicateValue:
       type: object

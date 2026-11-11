@@ -1,3 +1,4 @@
+import type { DuplicateValue } from "@/api/client";
 import { percent } from "@/i18n/format";
 
 /**
@@ -12,7 +13,15 @@ export interface FieldVerdict {
   /** What was measured, short: "97 %", "Δ 12 %", "=". */
   shown: string;
   /** The key of the words of the hint, in the namespace "duplicate", and its value. */
-  hint: "PairGrid.textHint" | "PairGrid.facetHint" | "PairGrid.sizeHint" | "PairGrid.sameAuthorHint" | "PairGrid.otherAuthorHint" | "PairGrid.noAuthorHint" | "PairGrid.notComparedHint";
+  hint:
+    | "PairGrid.textHint"
+    | "PairGrid.facetHint"
+    | "PairGrid.allowedHint"
+    | "PairGrid.sizeHint"
+    | "PairGrid.sameAuthorHint"
+    | "PairGrid.otherAuthorHint"
+    | "PairGrid.noAuthorHint"
+    | "PairGrid.notComparedHint";
   value?: string;
 }
 
@@ -46,6 +55,20 @@ export function facetVerdict(cosine: number | undefined): FieldVerdict {
   if (cosine == null) return NOTHING;
   const tone = cosine >= FACET_ALL ? "alike" : cosine <= FACET_NONE ? "apart" : "partly";
   return { tone, shown: percent(cosine), hint: "PairGrid.facetHint", value: percent(cosine) };
+}
+
+/**
+ * The values each work may have one of — the ratings a site lets it have —: two works agree when their values
+ * meet, the same "=", one's within the other's "⊂", some in common "∩"; none in common they differ "≠".
+ */
+export function allowedVerdict(first: DuplicateValue[], second: DuplicateValue[]): FieldVerdict {
+  if (first.length === 0 || second.length === 0) return NOTHING;
+  const of = (v: DuplicateValue) => v.nameKey ?? v.name;
+  const a = new Set(first.map(of));
+  const b = new Set(second.map(of));
+  const common = [...a].filter((v) => b.has(v)).length;
+  const shown = common === 0 ? "≠" : common === a.size && common === b.size ? "=" : common === a.size || common === b.size ? "⊂" : "∩";
+  return { tone: common > 0 ? "alike" : "apart", shown, hint: "PairGrid.allowedHint" };
 }
 
 /** The sizes, by the smaller over the larger: how much they differ. */
