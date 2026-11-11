@@ -121,7 +121,9 @@ A word typed by the press is not the user's typing: "add as a new name" appears 
 press would make a character named "Юто/Агеха".
 
 **A fandom bound once for all its works** (D): every site's fandom is a universe of its own name at first (`fandom_site`), so a
-fandom's word always reaches its universe; every other universe the work has is offered by it — "этот фандом — <universe>" binds
+fandom's word always reaches its universe; every universe the work has that no fandom of the same site reached is offered by it —
+a universe of another site's fandom or of the user's, maybe the same; a crossover's universes, each reached by a fandom of the site,
+offer nothing — "этот фандом — <universe>" binds
 the site's fandom there with all its works (`PUT /api/universes/binding`, the write of the screen of the universes). It says the other
 works get it when their drafts are made anew, in the background. A fandom whose universe is named otherwise shows it, with ✕ to take
 the fandom out to a universe of its own; a universe named as the fandom is not written twice, a mark standing for it. Web interface
