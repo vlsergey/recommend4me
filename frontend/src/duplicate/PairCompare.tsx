@@ -190,7 +190,7 @@ function Middle({ name, verdict }: { name: string; verdict: FieldVerdict }) {
       <span className="min-w-0 truncate text-xs text-muted-foreground" title={name}>
         {name}
       </span>
-      <span className={cn("shrink-0 rounded px-1.5 text-xs font-medium tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value })}>
+      <span className={cn("shrink-0 rounded px-1.5 text-xs tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value })}>
         {verdict.shown}
       </span>
     </div>

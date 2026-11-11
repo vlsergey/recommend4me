@@ -66,10 +66,13 @@ export function authorVerdict(sameAuthor: boolean, first: string[], second: stri
   return { ...NOTHING, hint: "PairGrid.noAuthorHint" };
 }
 
-/** The colours of a tone, in the light and the dark skin alike. */
+/**
+ * The colours of a tone, in the light and the dark skin alike; what differs — partly or apart — in bold, the
+ * eye caught by it before what is alike.
+ */
 export const TONE_CLASS: Record<Tone, string> = {
-  alike: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  partly: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
-  apart: "bg-red-500/15 text-red-700 dark:text-red-300",
-  none: "bg-muted text-muted-foreground",
+  alike: "font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  partly: "font-bold bg-amber-500/20 text-amber-800 dark:text-amber-300",
+  apart: "font-bold bg-red-500/15 text-red-700 dark:text-red-300",
+  none: "font-medium bg-muted text-muted-foreground",
 };
