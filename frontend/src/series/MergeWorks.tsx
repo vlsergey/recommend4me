@@ -10,7 +10,8 @@ import { seriesKey, seriesWindowsKey } from "./seriesHash";
 
 /**
  * TWO WORKS OF A SERIES MADE ONE, asked first: the two compared as the screen of duplicates shows a pair
- * ([PairFacts], [PairGrid]) — how alike they are, of the last search if it kept them —, and "one work" or
+ * ([PairGrid]) — field by field as they are; the chance of one work beside, when the search kept it
+ * ([PairFacts]) —, and "one work" or
  * nothing. One work, their items one work across the sites, as the word "one work" on a pair makes them.
  */
 export function MergeWorks({ type, first, second, onClose }: { type: ContentTypeInfo; first: ItemRef; second: ItemRef; onClose: () => void }) {
@@ -46,7 +47,6 @@ export function MergeWorks({ type, first, second, onClose }: { type: ContentType
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <PairFacts pair={p} />
-              {p.chance == null && <span>{t("Merge.notFound")}</span>}
             </div>
             <PairGrid pair={p} />
             <div className="flex justify-end gap-2">

@@ -32,7 +32,6 @@
   "Series.failed": "Ciklus se ne prikazuje",
   "Merge.title": "Jedno delo?",
   "Merge.description": "Dva dela jedno pored drugog, kao na ekranu duplikata: jedno delo — ocena i interesovanje su zajednički",
-  "Merge.notFound": "Poslednja pretraga duplikata nije sačuvala ovaj par: koliko su slični, nije poznato",
   "Merge.same": "Jedno delo",
   "Merge.sameHint": "Ovo je jedno delo: njegove stranice na sajtovima postaju jedno delo",
   "Merge.cancel": "Otkaži",

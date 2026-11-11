@@ -139,23 +139,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         val m3 = key("beta", "m3")
         val m4 = key("alpha", "m4")
 
-        // Any two works compared as the screen of duplicates shows a pair, the word said of them with it
-        val compared = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
-        assertEquals(
-            listOf("alpha/m1", "beta/m2"),
-            listOf(compared.first, compared.second).map { "${it.source}/${it.item}" },
-        )
-        assertEquals("The Mill", compared.second.title)
-        assertEquals(null, compared.answer)
-        // Each shown with the values it is compared by — the site's tag by the normalized tag it is bound to
-        listOf(compared.first, compared.second).forEach { w ->
-            assertEquals(
-                listOf("tags" to listOf("river")),
-                w.facets.map { f -> f.key to f.propertyValues.map { it.name } },
-                "of ${w.item}",
-            )
-        }
-        assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
+        twoWorksCompared()
 
         answer(m1, m2, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
         assertEquals(
@@ -193,6 +177,40 @@ class TwoSitesTest : TwoSitesTestBase() {
             b.source,
             b.id,
         )
+    }
+
+    /**
+     * Any two works compared as the screen of duplicates shows a pair, field by field as they are — of no search: their
+     * values as compared, how alike their titles mean measured as the pair is shown.
+     */
+    private fun twoWorksCompared() {
+        // Any two works compared as the screen of duplicates shows a pair, the word said of them with it
+        val compared = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
+        assertEquals(
+            listOf("alpha/m1", "beta/m2"),
+            listOf(compared.first, compared.second).map { "${it.source}/${it.item}" },
+        )
+        assertEquals("The Mill", compared.second.title)
+        assertEquals(null, compared.answer)
+        // Each shown with the values it is compared by — the site's tag by the normalized tag it is bound to
+        listOf(compared.first, compared.second).forEach { w ->
+            assertEquals(
+                listOf("tags" to listOf("river")),
+                w.facets.map { f -> f.key to f.propertyValues.map { it.name } },
+                "of ${w.item}",
+            )
+        }
+        // How alike their titles mean measured as the pair is shown, of no search: the same title, the same vector
+        assertTrue(
+            waitFor { duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!.title != null },
+            "the titles encoded",
+        )
+        assertEquals(
+            1.0,
+            duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!.title!!.toDouble(),
+            1e-3,
+        )
+        assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
     }
 
     @Test

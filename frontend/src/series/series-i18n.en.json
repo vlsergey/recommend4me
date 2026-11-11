@@ -29,7 +29,6 @@
   "Series.failed": "The series is not shown",
   "Merge.title": "One work?",
   "Merge.description": "The two works compared as on the screen of duplicates: one work, their grades and interest shared",
-  "Merge.notFound": "The last search of duplicates did not keep this pair: how alike they are is not known",
   "Merge.same": "One work",
   "Merge.sameHint": "These are one work: their items one work across the sites",
   "Merge.cancel": "Cancel",

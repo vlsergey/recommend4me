@@ -154,7 +154,7 @@ class DuplicatePages(
         val word =
             type.links.word(a, b, Instant.now())?.let { w -> DuplicateAnswer.entries.firstOrNull { it.name == w } }
         val chance = kept?.let { chances?.same(it) }
-        val ranked = Ranked(pair, kept, chance, kept?.let { chances?.series(it) }, chance ?: 0.0)
+        val ranked = Ranked(pair, chance, kept?.let { chances?.series(it) }, chance ?: 0.0)
         return views
             .pairs(type, Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet()), listOf(ranked))
             .firstOrNull()
@@ -168,7 +168,7 @@ class DuplicatePages(
             type.duplicates
                 .all()
                 .filter { (it.pair.first in own) != (it.pair.second in own) }
-                .map { c -> chances?.same(c).let { Ranked(c.pair, c, it, chances?.series(c), it ?: 0.0) } }
+                .map { c -> chances?.same(c).let { Ranked(c.pair, it, chances?.series(c), it ?: 0.0) } }
                 .sortedByDescending { it.priority }
                 // Found by several items of the work, the other is one: the likeliest pair of them, an answer going
                 // across the work
@@ -234,7 +234,7 @@ private class Ranking(
                 DuplicateSort.INTEREST,
                 DuplicateSort.GRADE -> sought(pair, layers) * (chance ?: 0.0)
             }
-        return Ranked(pair, layers, chance, series, priority)
+        return Ranked(pair, chance, series, priority)
     }
 
     /**

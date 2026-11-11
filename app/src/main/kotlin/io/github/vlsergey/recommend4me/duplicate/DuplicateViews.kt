@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateValue
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
@@ -9,32 +8,44 @@ import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.vector.Vectors
 import org.springframework.stereotype.Component
 
-/**
- * A pair with what ranks it: its layers, none of an answered pair not kept; its chances of one work and of one series.
- */
+/** A pair with what ranks it: its chances of one work and of one series, none of an answered pair not kept. */
 internal class Ranked(
     val pair: Pair<ItemKey, ItemKey>,
-    val layers: DuplicateCandidate?,
     val chance: Double?,
     val seriesChance: Double?,
     val priority: Double,
 )
 
-/** A work as a pair shows it, and its normalized authors: what "the same author" is told by. */
-internal class Described(val work: DuplicateWork, val authors: Set<Long>)
+/**
+ * A work as a pair shows it, its normalized authors — what "the same author" is told by —, and the unit vectors of its
+ * title and its description as they are: what how alike two works' texts are is measured by, as the pair is shown.
+ */
+internal class Described(
+    val work: DuplicateWork,
+    val authors: Set<Long>,
+    val title: FloatArray? = null,
+    val description: FloatArray? = null,
+)
 
-/** THE PAIRS AND THEIR WORKS AS THE USER IS SHOWN THEM: every source's works read in one go. */
+/**
+ * THE PAIRS AND THEIR WORKS AS THE USER IS SHOWN THEM: every source's works read in one go, and every pair compared
+ * field by field as it is shown — of no search: the search tells which pairs to show and how likely each is one work,
+ * the comparison of its fields is of the works as they are now.
+ */
 @Component
-class DuplicateViews(private val sizes: WorkSizes) {
+class DuplicateViews(private val sizes: WorkSizes, private val plugins: Plugins) {
 
     /** The pairs as the user is shown them: a pair of a work no longer there, none. */
     internal fun pairs(
@@ -42,34 +53,19 @@ class DuplicateViews(private val sizes: WorkSizes) {
         said: Said,
         rows: List<Ranked>,
     ): List<DuplicatePair> {
-        val labels = familyLabels(type)
         val described = describe(type, rows.flatMap { listOf(it.pair.first, it.pair.second) })
         val kin = AuthorKin(type.authors.told())
         return rows.mapNotNull { r ->
             val first = described[r.pair.first] ?: return@mapNotNull null
             val second = described[r.pair.second] ?: return@mapNotNull null
-            val d = r.layers
             DuplicatePair(
                 first = first.work,
                 second = second.work,
                 chance = r.chance?.toBigDecimal(),
                 seriesChance = r.seriesChance?.toBigDecimal(),
                 priority = r.priority.toBigDecimal(),
-                title = d?.title?.toBigDecimal(),
-                description = d?.description?.toBigDecimal(),
-                propertySize = d?.size?.toBigDecimal(),
-                facets =
-                    d?.facets
-                        .orEmpty()
-                        .entries
-                        .sortedByDescending { it.value }
-                        .map { (family, v) ->
-                            DuplicateFacet(
-                                key = family,
-                                labelKey = labels[family] ?: family,
-                                `value` = v.toBigDecimal(),
-                            )
-                        },
+                title = cosine(first.title, second.title)?.toBigDecimal(),
+                description = cosine(first.description, second.description)?.toBigDecimal(),
                 sameAuthor = kin.share(first.authors, second.authors),
                 answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
                 derived = (r.pair in said.derived).takeIf { it },
@@ -77,18 +73,9 @@ class DuplicateViews(private val sizes: WorkSizes) {
         }
     }
 
-    /** How every facet compared is named: the label of the facet of any source of the type that is it. */
-    private fun familyLabels(type: TypeStore): Map<String, String> {
-        val labels = HashMap<String, String>()
-        type.sources.forEach { s ->
-            s.schema.facets.forEach { def ->
-                val family = comparedAs(def)
-                if (family != null && (!def.editable || family == def.key))
-                    labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
-            }
-        }
-        return labels
-    }
+    /** The cosine of two unit vectors; none when either is not there. */
+    private fun cosine(a: FloatArray?, b: FloatArray?): Double? =
+        if (a == null || b == null || a.size != b.size) null else a.indices.sumOf { a[it].toDouble() * b[it] }
 
     /** The works as the pairs show them: each source's read in one go; a work no longer there, none. */
     internal fun describe(type: TypeStore, keys: List<ItemKey>): Map<ItemKey, Described> {
@@ -99,7 +86,7 @@ class DuplicateViews(private val sizes: WorkSizes) {
             .forEach { (source, own) ->
                 val s = type.source(source) ?: return@forEach
                 val ids = own.map { it.id }
-                val shown = ShownWorks(type, s, ids, sizes)
+                val shown = ShownWorks(type, s, ids, sizes, plugins.textEncoder()?.id)
                 ids.forEach { id -> shown.described(id)?.let { out[ItemKey(source, id)] = it } }
             }
         return out
@@ -118,10 +105,20 @@ private fun comparedAs(def: FacetDef): String? =
     }
 
 /** What the pairs show of the works [ids] of one source, read in one go. */
-private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<String>, sizes: WorkSizes) {
+private class ShownWorks(
+    type: TypeStore,
+    private val s: SourceStore,
+    ids: List<String>,
+    sizes: WorkSizes,
+    encoder: String?,
+) {
     private val heads = s.items.heads(ids)
     private val fields = s.corrections.fieldsOf(ids)
     private val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+
+    /** The vectors of the titles and the descriptions as they are, by the [encoder]; none without one. */
+    private val vectors =
+        encoder?.let { s.textVectors.ofMany(ids, it, listOfNotNull(TextVectors.TITLE, description)) }.orEmpty()
 
     // The site's own line of the characters and pairings, shown after the description, folded with it
     private val universeLine = s.schema.universeLine
@@ -205,6 +202,8 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
                 chars = itemSizes[id]?.chars,
             ),
             authors.mapNotNull { normalized[it] }.toSet(),
+            vectors[id]?.get(TextVectors.TITLE)?.let(Vectors::unit),
+            description?.let { d -> vectors[id]?.get(d)?.let(Vectors::unit) },
         )
     }
 
