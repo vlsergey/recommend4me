@@ -160,8 +160,14 @@
     // The site gives it: told apart from the model's offers, the chance beside it the model's word
     if (v.fromSite && !v.draftedFrom) out.push(Object.assign(el("r4m-chance", null, t("value.fromSite")), { title: t("value.fromSiteNote") }));
     if (v.draftedFrom) {
-      // Drafted from the site's value through the dictionary: said so, not a chance of the model
-      out.push(Object.assign(el("r4m-chance", null, t("value.drafted")), { title: t("value.draftedFrom", { from: v.draftedFrom }) }));
+      // Drafted from the site's value: a universe of a fandom of the site, anything else through the dictionary — said so,
+      // not a chance of the model
+      const fandom = facet === UNIVERSE;
+      out.push(
+        Object.assign(el("r4m-chance", null, t(fandom ? "value.draftedByFandom" : "value.drafted")), {
+          title: t(fandom ? "value.draftedByFandomFrom" : "value.draftedFrom", { from: v.draftedFrom }),
+        }),
+      );
     } else if (v.chance !== undefined && v.chance !== null) {
       const unlikely = v.chance < 0.5;
       out.push(Object.assign(el("r4m-chance", unlikely ? "r4m-unlikely" : null, percent(v.chance)), {

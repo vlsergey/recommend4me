@@ -4,6 +4,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { percent } from "@/i18n/format";
 import { sourceShort } from "@/i18n/label";
 
+/** The facet of the universes: a value of it drafted is the universe of a fandom of the site. */
+const UNIVERSE = "universe";
+
 /** Below one half the model thinks the work more likely has the value not than has it. */
 const HALF = 0.5;
 
@@ -17,13 +20,18 @@ export function shownChance(value: FacetValueInfo): number | undefined {
   return value.corrected || value.implied || value.draftedFrom != null || value.chance == null ? undefined : value.chance;
 }
 
-/** "by tag" in small print by a value drafted from the site's value through the dictionary, the site's value in its title. */
-function DraftedMark({ from }: { from: string }) {
+/**
+ * In small print by a value drafted from the site's value, the site's value in its title: "by fandom" by a universe — the
+ * universe of a fandom of the work's site, nothing to confirm —, "by tag" by any other, drafted through the dictionary.
+ */
+function DraftedMark({ from, fandom }: { from: string; fandom: boolean }) {
   const { t } = useTranslation("facet");
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className="cursor-help text-[10px] text-muted-foreground" />}>{t("ChanceMark.drafted")}</TooltipTrigger>
-      <TooltipContent>{t("ChanceMark.draftedFrom", { from })}</TooltipContent>
+      <TooltipTrigger render={<span className="cursor-help text-[10px] text-muted-foreground" />}>
+        {t(fandom ? "ChanceMark.draftedByFandom" : "ChanceMark.drafted")}
+      </TooltipTrigger>
+      <TooltipContent>{t(fandom ? "ChanceMark.draftedByFandomFrom" : "ChanceMark.draftedFrom", { from })}</TooltipContent>
     </Tooltip>
   );
 }
@@ -53,9 +61,9 @@ export function unlikely(value: FacetValueInfo): boolean {
  * one half; "site" before it by a value the site gives. A drafted value the user has not answered on
  * says so instead.
  */
-export function ChanceMark({ value }: { value: FacetValueInfo }) {
+export function ChanceMark({ value, facet }: { value: FacetValueInfo; facet: string }) {
   // Null in the JSON for a value not drafted, as the chance: not only absent
-  if (value.draftedFrom != null && !value.corrected) return <DraftedMark from={value.draftedFrom} />;
+  if (value.draftedFrom != null && !value.corrected) return <DraftedMark from={value.draftedFrom} fandom={facet === UNIVERSE} />;
   const site = value.fromSite && !value.corrected && !value.implied;
   return (
     <>

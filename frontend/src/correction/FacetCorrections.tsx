@@ -392,7 +392,7 @@ export function FacetValue({
           name
         )}
       </span>
-      <ChanceMark value={value} />
+      <ChanceMark value={value} facet={facet} />
       {mentions != null && mentions > 0 && (
         <span className="text-[10px] text-muted-foreground tabular-nums" title={t("FacetValue.mentions", { n: mentions })}>
           {mentions}×
