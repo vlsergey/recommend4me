@@ -11,7 +11,8 @@ import { label, sourceShort, sourceTitle } from "@/i18n/label";
 import { writeTopHash } from "@/item/dialogStack";
 import { isSeriesHash, readSeriesHash, type SeriesRef, seriesWindowsKey } from "./seriesHash";
 import { MergeWorks } from "./MergeWorks";
-import { SeriesWorks } from "./SeriesWorks";
+import { SERIES_SORTS, type SeriesSort, SeriesWorks } from "./SeriesWorks";
+import { usePref } from "@/lib/usePref";
 
 /**
  * THE WINDOW OF A NORMALIZED SERIES, over whatever is open: what every site says of it — its title
@@ -27,6 +28,8 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
     queryFn: async () => unwrap(await api.GET("/api/types/{type}/series/one", { params: { path: { type: type.id }, query: { key: seriesRef.key } } })),
   });
   const s = series.data;
+  // How the works are listed, kept in the browser: the series' order at first
+  const [sort, setSort] = usePref<SeriesSort>("series.works.sort", "ORDER");
   // Two works dropped one on the other: made one once the user says so
   const [merging, setMerging] = useState<{ first: ItemRef; second: ItemRef } | null>(null);
   const takeOut = async (source: string, item: string) => {
@@ -64,12 +67,28 @@ export function SeriesDialog({ type, seriesRef, onClose }: { type: ContentTypeIn
               ))}
             </section>
             <section className="flex flex-col gap-2">
-              <h4 className="text-sm font-semibold" title={t("Series.orderHint")}>
-                {t("Series.order")}
-              </h4>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-semibold">{t("Series.works.heading")}</h4>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {t("Series.sort")}
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as SeriesSort)}
+                    title={sort === "ORDER" ? t("Series.orderHint") : undefined}
+                    className="h-7 rounded-md border border-input bg-transparent px-1.5 text-sm text-foreground outline-none focus-visible:border-ring dark:bg-input/30"
+                  >
+                    {SERIES_SORTS.map((o) => (
+                      <option key={o} value={o}>
+                        {t(`Series.sortBy.${o}`)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <SeriesWorks
                 type={type}
                 series={s}
+                sort={sort}
                 onMerge={(first, second) => setMerging({ first, second })}
                 trailing={(w) =>
                   // Of a work a site's series has, the site's word stands: nothing to take out

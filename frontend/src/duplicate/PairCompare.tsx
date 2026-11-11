@@ -234,7 +234,7 @@ const STATED_DIGITS = 3;
 const WORKED_OUT_DIGITS = 2;
 
 /** How long a work is, short, in thousands or millions: a number worked out after a "≈". */
-function Size({ size, word }: { size: SizeNumber; word: "words" | "chars" }) {
+export function Size({ size, word }: { size: SizeNumber; word: "words" | "chars" }) {
   const { t } = useTranslation("duplicate");
   const count = Math.round(size.value);
   const digits = (n: number) => n.toLocaleString(intlTag(), { maximumSignificantDigits: size.stated ? STATED_DIGITS : WORKED_OUT_DIGITS });

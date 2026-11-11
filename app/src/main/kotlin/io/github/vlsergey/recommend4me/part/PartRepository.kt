@@ -131,6 +131,22 @@ class PartRepository(private val db: DSLContext) {
         return out
     }
 
+    /**
+     * When the first part of each of the items [ids] was published, as its site says: the earliest date of its parts;
+     * an item none of whose parts is dated has none.
+     */
+    fun firstPublished(ids: Collection<String>): Map<String, Instant> {
+        val out = HashMap<String, Instant>()
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(PART.ITEM_ID, DSL.min(PART.PUBLISHED_AT))
+                .from(PART)
+                .where(PART.ITEM_ID.`in`(chunk), PART.PUBLISHED_AT.isNotNull)
+                .groupBy(PART.ITEM_ID)
+                .fetch { r -> r.value2()?.let { out[r.value1()!!] = it } }
+        }
+        return out
+    }
+
     fun countWithText(): Int = db.fetchCount(PART, PART.CONTENT.isNotNull)
 
     /** The parts whose text is not counted yet, at most [limit]. */

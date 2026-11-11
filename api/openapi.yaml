@@ -5735,6 +5735,12 @@ components:
         bySite:
           type: boolean
           description: A site's series of the series has it; the user's word takes it out of none
+        firstPublishedAt:
+          type: string
+          format: date-time
+          description: When its first chapter was published, the earliest of its sites as they say; none when no chapter of it is dated
+        words:
+          $ref: '#/components/schemas/SizeNumber'
 
     SeriesPlace:
       type: object

@@ -25,7 +25,6 @@
   "Series.site": "Otvori ciklus na sajtu",
   "Series.place": "Broj na {{source}}",
   "Series.sites": "Šta kažu sajtovi",
-  "Series.order": "Dela po redu",
   "Series.orderHint": "Brojevi svih sajtova spojeni u parovima: delo stoji pre drugog ako tako kaže većina sajtova",
   "Series.none": "Nema ciklusa ni na jednom sajtu: dela za koja ste rekli „jedan ciklus”",
   "Series.open": "Otvori ciklus",
@@ -44,5 +43,12 @@
   "SeriesScreen.has.yes": "da",
   "SeriesScreen.has.no": "ne",
   "Series.reload": "Pročitaj ponovo",
-  "Series.reloadHint": "Ponovo pročitati ciklus kako ga aplikacija sada zna: sa onim što su sajtovi u međuvremenu rekli o njemu, na otvorenim stranicama"
+  "Series.reloadHint": "Ponovo pročitati ciklus kako ga aplikacija sada zna: sa onim što su sajtovi u međuvremenu rekli o njemu, na otvorenim stranicama",
+  "Series.works.heading": "Dela",
+  "Series.sort": "Redosled",
+  "Series.sortBy.ORDER": "redosled ciklusa",
+  "Series.sortBy.TITLE": "po naslovu",
+  "Series.sortBy.DATE": "po datumu prvog poglavlja",
+  "Series.sortBy.SIZE": "po veličini",
+  "Series.firstPublishedHint": "Kada je objavljeno prvo poglavlje: najranije od svih sajtova dela"
 }

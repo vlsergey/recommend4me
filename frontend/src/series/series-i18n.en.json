@@ -22,7 +22,6 @@
   "Series.site": "Open the series on the site",
   "Series.place": "Its number on {{source}}",
   "Series.sites": "What the sites say",
-  "Series.order": "Works in order",
   "Series.orderHint": "Every site's numbers held together by pairs: a work goes before another as most sites say",
   "Series.none": "No site's series: the works you said to be one series",
   "Series.open": "Open the series",
@@ -41,5 +40,12 @@
   "SeriesScreen.has.yes": "yes",
   "SeriesScreen.has.no": "no",
   "Series.reload": "Read again",
-  "Series.reloadHint": "Read the series again as the application has it now: what the sites said of it since, the pages opened on them"
+  "Series.reloadHint": "Read the series again as the application has it now: what the sites said of it since, the pages opened on them",
+  "Series.works.heading": "Works",
+  "Series.sort": "Order",
+  "Series.sortBy.ORDER": "the series' order",
+  "Series.sortBy.TITLE": "by title",
+  "Series.sortBy.DATE": "by the first chapter's date",
+  "Series.sortBy.SIZE": "by size",
+  "Series.firstPublishedHint": "When the first chapter was published: the earliest of every site of the work"
 }

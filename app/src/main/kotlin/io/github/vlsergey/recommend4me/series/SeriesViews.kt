@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.api.model.SeriesWork
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.WorkLines
+import io.github.vlsergey.recommend4me.size.ItemSize
 import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.Stores
@@ -83,7 +84,11 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
         val shown = items.mapValues { (_, keys) -> keys.firstOrNull { it in inSeries } ?: keys.first() }
         val shownLines = linesOf(type, shown.values)
         val said = type.seriesGroups.groupsOf(series.works).keys
-        val volumes = volumesOf(type, series)
+        val all = items.values.flatten()
+        val facts = SeriesItemFacts(type, all, sizes)
+        val sized = facts.sizes
+        val published = facts.firstPublished
+        val volumes = volumesOf(series, sized)
         val numbered = placed.map { (ref, places) ->
             SiteOrder(
                 places.entries.mapNotNull { (k, p) -> workOf[k]?.let { it to p } }.toMap(),
@@ -106,6 +111,9 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
                 places = places,
                 said = work in said,
                 bySite = own.any { it in inSeries },
+                // Its first chapter of any of its sites; its size of the item it is shown by, else of any that tells
+                firstPublishedAt = own.mapNotNull { published[it] }.minOrNull()?.atOffset(ZoneOffset.UTC),
+                words = (listOfNotNull(shown[work]) + own).firstNotNullOfOrNull { sized[it]?.words },
             )
         }
         val own = series.sites.keys.mapNotNull { sites[it] }
@@ -140,15 +148,8 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
      * The volume of every series of a site of the [series]: the words of its works, or of a site that states none the
      * characters — what tells, of two sites of as many works, whose order goes first ([SeriesOrder]).
      */
-    private fun volumesOf(type: TypeStore, series: NormalizedSeries): Map<SiteSeriesRef, Double> =
-        series.sites
-            .mapNotNull { (ref, items) ->
-                val s = type.source(ref.source) ?: return@mapNotNull null
-                val ids = items.map { it.id }
-                val own = sizes.ofItems(type, s, ids, s.items.numbersOf(ids), s.corrections.fieldsOf(ids))
-                ref to own.values.sumOf { (it.words ?: it.chars)?.value ?: 0.0 }
-            }
-            .toMap()
+    private fun volumesOf(series: NormalizedSeries, sized: Map<ItemKey, ItemSize>): Map<SiteSeriesRef, Double> =
+        series.sites.mapValues { (_, items) -> items.sumOf { (sized[it]?.words ?: sized[it]?.chars)?.value ?: 0.0 } }
 
     /** The [items] as lines of a list: item to its line. */
     private fun linesOf(type: TypeStore, items: Collection<ItemKey>): Map<ItemKey, RelatedWork> {

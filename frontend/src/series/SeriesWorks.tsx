@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import type { ContentTypeInfo, Grade, ItemRef, SeriesDetails } from "@/api/client";
 import { sameItem } from "@/api/client";
 import { gradeLabel } from "@/contenttype/types";
+import { Size } from "@/duplicate/PairCompare";
+import { formatDay } from "@/i18n/format";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { GRADE_TEXT, shownScore } from "@/item/pieces";
@@ -20,10 +22,38 @@ function mergeable(a: SeriesWork, b: SeriesWork): boolean {
 const refOf = (w: SeriesWork): ItemRef => ({ source: w.work.source, item: w.work.item });
 
 /**
+ * How the works are listed: in the series' order — every site's numbers held together —, by their titles, by when
+ * their first chapter was published (the earliest first, a work of no dated chapter last), by their size (the
+ * largest first, a work of no known size last).
+ */
+export type SeriesSort = "ORDER" | "TITLE" | "DATE" | "SIZE";
+
+export const SERIES_SORTS: SeriesSort[] = ["ORDER", "TITLE", "DATE", "SIZE"];
+
+/** Of two values one of which is not known, the known one first; of both known or neither, a tie. */
+const knownFirst = (a: number | undefined, b: number | undefined) => (a == null ? (b == null ? 0 : 1) : b == null ? -1 : 0);
+
+const dateOf = (w: SeriesWork) => (w.firstPublishedAt ? Date.parse(w.firstPublishedAt) : undefined);
+
+/** How each sort compares two works; of a tie the series' order ([sorted]). */
+const COMPARE: Record<SeriesSort, (a: SeriesWork, b: SeriesWork) => number> = {
+  ORDER: () => 0,
+  TITLE: (a, b) => a.work.title.localeCompare(b.work.title),
+  DATE: (a, b) => knownFirst(dateOf(a), dateOf(b)) || (dateOf(a) ?? 0) - (dateOf(b) ?? 0),
+  SIZE: (a, b) => knownFirst(a.words?.value, b.words?.value) || (b.words?.value ?? 0) - (a.words?.value ?? 0),
+};
+
+/** The works with their places in the series' order, as the [sort] lists them. */
+function sorted(works: SeriesWork[], sort: SeriesSort): { w: SeriesWork; k: number }[] {
+  return works.map((w, k) => ({ w, k })).sort((a, b) => COMPARE[sort](a.w, b.w) || a.k - b.k);
+}
+
+/**
  * THE WORKS OF A NORMALIZED SERIES IN ORDER — every site's numbers held together by pairs — each with
  * its number on every site that numbers it, the user's grade or else the model's prediction, and the
  * mark of a work the user alone put in it ([trailing]: what goes at the end of its row, its button out). A
- * work opens over whatever is open; the [current] work is told apart. Given [onMerge], a work is dragged
+ * work opens over whatever is open; the [current] work is told apart. Listed as [sort] says, each keeping its
+ * number in the series' order; of a sort by the date or the size, its date or size shown. Given [onMerge], a work is dragged
  * by its handle — a mouse or a finger — onto another of no site in common to make the two one work, asked
  * first.
  */
@@ -33,9 +63,11 @@ export function SeriesWorks({
   current,
   trailing,
   onMerge,
+  sort = "ORDER",
 }: {
   type: ContentTypeInfo;
   series: SeriesDetails;
+  sort?: SeriesSort;
   current?: ItemRef;
   trailing?: (work: SeriesWork) => React.ReactNode;
   onMerge?: (dragged: ItemRef, onto: ItemRef) => void;
@@ -59,7 +91,7 @@ export function SeriesWorks({
   };
   return (
     <ol className="flex max-h-96 flex-col divide-y overflow-y-auto rounded-lg border">
-      {series.works.map((w, k) => {
+      {sorted(series.works, sort).map(({ w, k }) => {
         const own = current !== undefined && sameItem(w.work, current);
         const target = draggedWork !== undefined && mergeable(draggedWork, w);
         return (
@@ -110,6 +142,12 @@ export function SeriesWorks({
                 {w.work.title}
               </a>
             )}
+            {sort === "DATE" && (
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums" title={t("Series.firstPublishedHint")}>
+                {w.firstPublishedAt ? formatDay(w.firstPublishedAt) : "—"}
+              </span>
+            )}
+            {sort === "SIZE" && <span className="shrink-0 text-xs text-muted-foreground">{w.words ? <Size size={w.words} word="words" /> : "—"}</span>}
             {w.places.map((p) => (
               <span key={p.source} className="shrink-0 text-xs text-muted-foreground tabular-nums" title={t("Series.place", { source: sourceTitle(p.source) })}>
                 {sourceShort(p.source)} #{p.position}
