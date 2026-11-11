@@ -5978,7 +5978,7 @@ components:
 
     DuplicateWork:
       type: object
-      required: [source, item, title, url, authors, fandoms]
+      required: [source, item, title, url, authors, fandoms, facets]
       properties:
         source:
           type: string
@@ -6006,11 +6006,14 @@ components:
         universeLine:
           type: string
           description: The characters and pairings as the site writes them, its own line (SourceSchema.universeLine); none of a site without one
-        status:
+        facets:
           type: array
-          description: Whether the work is finished, in progress, frozen, as its site says
+          description: |
+            The values of every facet a pair is compared by the work has (DuplicatePair.facets) - as the
+            search compares them: the site's, the drafts, the site's tags by the normalized ones, the
+            user's answers over them, the ignored tags left out; the authors apart (authors)
           items:
-            $ref: '#/components/schemas/DuplicateStatus'
+            $ref: '#/components/schemas/DuplicateWorkFacet'
         words:
           $ref: '#/components/schemas/SizeNumber'
         chars:
@@ -6057,7 +6060,22 @@ components:
           type: boolean
           description: The newest word on its pair and what the pair has now - undone, the pair has the word before
 
-    DuplicateStatus:
+    DuplicateWorkFacet:
+      type: object
+      required: [key, labelKey, values]
+      description: The values of a work of one facet it is compared by
+      properties:
+        key:
+          type: string
+          description: The facet as compared (DuplicateFacet.key)
+        labelKey:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/DuplicateValue'
+
+    DuplicateValue:
       type: object
       required: [name]
       properties:

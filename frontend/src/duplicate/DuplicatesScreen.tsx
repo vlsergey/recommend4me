@@ -13,7 +13,7 @@ import { ITEMS, itemKey } from "@/item/lists";
 import { useCalmUpdates } from "@/lib/useCalmUpdates";
 import { usePref } from "@/lib/usePref";
 import { AnswerAll } from "./AnswerAll";
-import { PairFacts, WorkSide } from "./PairCompare";
+import { PairFacts, PairGrid } from "./PairCompare";
 import { PairJournal } from "./PairJournal";
 import { afterWord, sharing } from "./pairWorks";
 import { RELATED, VERDICTS, type Verdict } from "./verdicts";
@@ -299,8 +299,8 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
 }
 
 /**
- * A pair: the two works side by side, the chance they are one work, how alike each layer of theirs is,
- * whether the dictionary of authors gives them one author, and the answers — the one given marked, with the taking back beside.
+ * A pair: the chance they are one work, the answers — the one given marked, with the taking back beside —,
+ * and the two works field by field, each field with how alike they are ([PairGrid]).
  */
 function PairRow({
   pair: p,
@@ -350,10 +350,7 @@ function PairRow({
           </AsyncButton>
         </div>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <WorkSide work={p.first} />
-        <WorkSide work={p.second} />
-      </div>
+      <PairGrid pair={p} />
     </li>
   );
 }

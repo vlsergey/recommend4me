@@ -5,12 +5,12 @@ import { api, ensureOk, unwrap, type ContentTypeInfo, type ItemRef } from "@/api
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PairFacts, WorkSide } from "@/duplicate/PairCompare";
+import { PairFacts, PairGrid } from "@/duplicate/PairCompare";
 import { seriesKey, seriesWindowsKey } from "./seriesHash";
 
 /**
  * TWO WORKS OF A SERIES MADE ONE, asked first: the two compared as the screen of duplicates shows a pair
- * ([PairFacts], [WorkSide]) — how alike they are, of the last search if it kept them —, and "one work" or
+ * ([PairFacts], [PairGrid]) — how alike they are, of the last search if it kept them —, and "one work" or
  * nothing. One work, their items one work across the sites, as the word "one work" on a pair makes them.
  */
 export function MergeWorks({ type, first, second, onClose }: { type: ContentTypeInfo; first: ItemRef; second: ItemRef; onClose: () => void }) {
@@ -48,10 +48,7 @@ export function MergeWorks({ type, first, second, onClose }: { type: ContentType
               <PairFacts pair={p} />
               {p.chance == null && <span>{t("Merge.notFound")}</span>}
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <WorkSide work={p.first} />
-              <WorkSide work={p.second} />
-            </div>
+            <PairGrid pair={p} />
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={onClose}>
                 {t("Merge.cancel")}

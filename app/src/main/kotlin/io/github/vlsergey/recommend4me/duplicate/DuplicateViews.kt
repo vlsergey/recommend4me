@@ -2,13 +2,15 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
-import io.github.vlsergey.recommend4me.api.model.DuplicateStatus
+import io.github.vlsergey.recommend4me.api.model.DuplicateValue
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
+import io.github.vlsergey.recommend4me.api.model.DuplicateWorkFacet
 import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.size.WorkSizes
+import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
@@ -80,12 +82,7 @@ class DuplicateViews(private val sizes: WorkSizes) {
         val labels = HashMap<String, String>()
         type.sources.forEach { s ->
             s.schema.facets.forEach { def ->
-                val family =
-                    when {
-                        def.role == FacetRole.AUTHOR -> AUTHOR_FAMILY
-                        def.editable -> familyOf(def.key)
-                        else -> def.standard?.takeIf { it.values != null }?.key
-                    }
+                val family = comparedAs(def)
                 if (family != null && (!def.editable || family == def.key))
                     labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
             }
@@ -109,6 +106,17 @@ class DuplicateViews(private val sizes: WorkSizes) {
     }
 }
 
+/**
+ * The facet a site's facet [def] is compared as ([WorkValues]): its authors as the normalized authors, a facet of the
+ * layer as its family, a facet of the standard values as the standard one; none of a facet not compared.
+ */
+private fun comparedAs(def: FacetDef): String? =
+    when {
+        def.role == FacetRole.AUTHOR -> AUTHOR_FAMILY
+        def.editable -> familyOf(def.key)
+        else -> def.standard?.takeIf { it.values != null }?.key
+    }
+
 /** What the pairs show of the works [ids] of one source, read in one go. */
 private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<String>, sizes: WorkSizes) {
     private val heads = s.items.heads(ids)
@@ -127,8 +135,36 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
     private val authorNames = namesOf(authorFacet)
     private val normalized = s.authors.bindingsOf(s.id)
     private val fandomNames = namesOf(fandomFacet)
-    private val statusFacet = s.schema.facets.firstOrNull { it.role == FacetRole.STATUS }?.key
-    private val statusNames = namesOf(statusFacet)
+
+    // The values the search compared, of these works alone: shown by the facet they are compared as, the authors apart
+    private val compared =
+        WorkValues(s, ids).apply {
+            read()
+            gather(ids, Array(ids.size) { LongArray(0) })
+        }
+    private val values = ids.zip(compared.named(ids)).toMap()
+
+    /**
+     * The facet every facet compared is named by, in the order of the site's facets: the layer's own facet of it (the
+     * main characters of the characters), the site's facet of the standard values.
+     */
+    private val namedBy =
+        LinkedHashMap<String, FacetDef>().apply {
+            s.schema.facets.forEach { def ->
+                val family = comparedAs(def)?.takeIf { it != AUTHOR_FAMILY } ?: return@forEach
+                if (!def.editable || family == def.key) putIfAbsent(family, def)
+            }
+        }
+
+    /** The values compared of every work, by the facet compared: "universe" to its keys. */
+    private val byFamily = values.mapValues { (_, own) ->
+        own.groupBy({ it.substringBefore(':') }, { it.substringAfter(':') })
+    }
+
+    /** The names of the values compared, by the facet compared and the key. */
+    private val valueNames = namedBy.mapValues { (family, def) ->
+        s.names(def.key, byFamily.values.flatMap { it[family].orEmpty() }.distinct())
+    }
     private val itemSizes = sizes.ofItems(type, s, ids, s.items.numbersOf(ids), fields)
 
     // The normalized work of every item: a word on a pair is on the two works, the screen settles every pair of them
@@ -159,14 +195,30 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
                 fandoms = fandomFacet?.let { named(id, it, fandomNames) }.orEmpty(),
                 description = description?.let { shown[it] },
                 universeLine = universeLine?.let { shown[it] }?.takeIf { it.isNotBlank() },
-                status =
-                    statusFacet?.let { f ->
-                        facets[id]?.get(f).orEmpty().map { DuplicateStatus(statusNames[it] ?: it, s.nameKey(f, it)) }
-                    },
+                facets = comparedOf(id),
                 words = itemSizes[id]?.words,
                 chars = itemSizes[id]?.chars,
             ),
             authors.mapNotNull { normalized[it] }.toSet(),
         )
+    }
+
+    /** The values of the work [id] of every facet compared it has, named, by their names. */
+    private fun comparedOf(id: String): List<DuplicateWorkFacet> = namedBy.mapNotNull { (family, def) ->
+        byFamily[id]?.get(family)?.let { keys ->
+            DuplicateWorkFacet(
+                key = family,
+                labelKey = I18nKeys.facetLabel(s.id, def),
+                propertyValues =
+                    keys
+                        .map { k ->
+                            DuplicateValue(
+                                valueNames[family]?.get(k) ?: compared.given["$family:$k"] ?: k,
+                                s.nameKey(def.key, k),
+                            )
+                        }
+                        .sortedBy { it.name },
+            )
+        }
     }
 }

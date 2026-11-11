@@ -1,23 +1,23 @@
-import { useState } from "react";
-import { ExternalLinkIcon, LibraryBigIcon, UserIcon } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { ExternalLinkIcon, LibraryBigIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { DuplicatePair, DuplicateSort, DuplicateWork, SizeNumber } from "@/api/client";
+import type { DuplicatePair, DuplicateSort, DuplicateWork, DuplicateWorkFacet, SizeNumber } from "@/api/client";
 import { number, percent } from "@/i18n/format";
 import { intlTag } from "@/i18n/i18n";
 import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
+import { authorVerdict, type FieldVerdict, facetVerdict, sizeVerdict, TONE_CLASS, textVerdict } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
- * works are one: what tells how alike they are ([PairFacts]) and the two side by side ([WorkSide]).
+ * works are one: what is of the pair as a whole ([PairFacts]) and the two field by field ([PairGrid]).
  */
 
 /**
- * How alike a pair is: the chance they are one work and one series, how alike each layer of theirs is,
- * the [priority] of the list's sort when it says something of the work, whether the dictionary of authors
- * gives them one author. A pair the last search did not keep has no layers: its works alone.
+ * What is of the pair as a whole: the chance they are one work and one series, the [priority] of the
+ * list's sort when it says something of the work. How alike each field is stands by the field ([PairGrid]).
  */
 export function PairFacts({ pair: p, priority }: { pair: DuplicatePair; priority?: DuplicateSort }) {
   const { t } = useTranslation("duplicate");
@@ -33,84 +33,196 @@ export function PairFacts({ pair: p, priority }: { pair: DuplicatePair; priority
           <LibraryBigIcon className="size-3.5" /> {percent(p.seriesChance)}
         </span>
       )}
-      {p.title != null && <span className="tabular-nums">{t("PairRow.title", { value: percent(p.title) })}</span>}
-      {p.description != null && <span className="tabular-nums">{t("PairRow.description", { value: percent(p.description) })}</span>}
-      {p.facets?.map((f) => (
-        <span key={f.key} className="tabular-nums" title={t("PairRow.facetsHint")}>
-          {t("PairRow.facet", { name: label(f.labelKey), value: percent(f.value) })}
-        </span>
-      ))}
-      {p.size != null && (
-        <span className="tabular-nums" title={t("PairRow.sizeHint")}>
-          {t("PairRow.size", { value: percent(p.size) })}
-        </span>
-      )}
       {priority && p.priority != null && p.priority > 0 && (
         // Of the sort by size the priority is words: a whole number, not a score of two digits
         <span className="tabular-nums" title={t(priority === "SIZE" ? "PairRow.prioritySizeHint" : "PairRow.priorityHint")}>
           {t("PairRow.priority", { value: priority === "SIZE" ? number(Math.round(p.priority)) : p.priority.toFixed(2) })}
         </span>
       )}
-      {p.sameAuthor && (
-        <span className="flex items-center gap-1 text-foreground" title={t("PairRow.sameAuthorHint")}>
-          <UserIcon className="size-3.5" /> {t("PairRow.sameAuthor")}
-        </span>
-      )}
+    </>
+  );
+}
+
+/** The facets compared in the order the user decides by: what the work is of first, the tags last; any other after them. */
+const FACET_ORDER = ["universe", "characters", "pairings", "kind", "status", "languages", "direction", "age-rating", "age-rating-site", "tags"];
+
+/** The facet of the universes: of a work with none, the site's fandoms stand in it. */
+const UNIVERSE = "universe";
+
+/** The normalized authors, compared apart: the row of the authors tells them. */
+const AUTHOR = "author";
+
+/**
+ * THE TWO WORKS FIELD BY FIELD: a row a field — the title, the authors, every facet either has, the size,
+ * the description — the first work's on the left, the second's on the right, and between them the field's
+ * name and how alike the two are, in its colour ([FieldVerdict]): read across, the left, the verdict, the
+ * right. On a narrow screen the name and the verdict stand over the row, the two under them side by side.
+ */
+export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
+  const { t } = useTranslation("duplicate");
+  const a = p.first;
+  const b = p.second;
+  const keys = facetKeys(p);
+  return (
+    <div className="flex flex-col divide-y rounded-md border">
+      <FieldRow name={t("PairGrid.title")} verdict={textVerdict(p.title)} left={<WorkHead work={a} />} right={<WorkHead work={b} />} />
+      <FieldRow
+        name={t("PairGrid.authors")}
+        verdict={authorVerdict(p.sameAuthor, a.authors, b.authors)}
+        left={a.authors.length > 0 ? a.authors.join(", ") : null}
+        right={b.authors.length > 0 ? b.authors.join(", ") : null}
+      />
+      {keys.map((key) => {
+        const left = a.facets.find((f) => f.key === key);
+        const right = b.facets.find((f) => f.key === key);
+        const compared = p.facets?.find((f) => f.key === key);
+        const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
+        return (
+          <FoldedRow
+            key={key}
+            // Of the universes of no work, the site's fandoms alone: named as they are
+            name={labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key}
+            verdict={facetVerdict(compared?.value)}
+            left={valuesOf(left, key === UNIVERSE ? a.fandoms : [])}
+            right={valuesOf(right, key === UNIVERSE ? b.fandoms : [])}
+            lines="line-clamp-2"
+          />
+        );
+      })}
+      <FieldRow name={t("PairGrid.size")} verdict={sizeVerdict(p.size)} left={sized(a) ? <Sizes work={a} /> : null} right={sized(b) ? <Sizes work={b} /> : null} />
+      <FoldedRow name={t("PairGrid.description")} verdict={textVerdict(p.description)} left={described(a)} right={described(b)} lines="line-clamp-4" />
+    </div>
+  );
+}
+
+/**
+ * The facets of the rows: every one either work has or the pair was compared by — the universes when either
+ * has its site's fandoms too —, in [FACET_ORDER], any other after them; the authors apart.
+ */
+function facetKeys(p: DuplicatePair): string[] {
+  const all = new Set([...p.first.facets.map((f) => f.key), ...p.second.facets.map((f) => f.key), ...(p.facets ?? []).map((f) => f.key)]);
+  if (p.first.fandoms.length > 0 || p.second.fandoms.length > 0) all.add(UNIVERSE);
+  all.delete(AUTHOR);
+  const known = FACET_ORDER.filter((k) => all.has(k));
+  return [...known, ...[...all].filter((k) => !FACET_ORDER.includes(k))];
+}
+
+/** A work's values of a facet, by their names; of none, the site's own names of it [site] — its fandoms — told apart. */
+function valuesOf(facet: DuplicateWorkFacet | undefined, site: string[]): ReactNode {
+  if (facet && facet.values.length > 0) return facet.values.map(valueName).join(", ");
+  return site.length > 0 ? <SiteNames names={site} /> : null;
+}
+
+/** The site's own names of what the work is of, where the application knows no universe of it. */
+function SiteNames({ names }: { names: string[] }) {
+  const { t } = useTranslation("duplicate");
+  return (
+    <span className="italic" title={t("PairGrid.siteFandomsHint")}>
+      {names.join(", ")}
+    </span>
+  );
+}
+
+/** A work's description, the site's own line of its characters and pairings after it; none of a work with neither. */
+function described(w: DuplicateWork): ReactNode {
+  if (!w.description && !w.universeLine) return null;
+  return (
+    <>
+      {w.description}
+      {w.description && w.universeLine && "\n"}
+      {w.universeLine && <span className="text-foreground/80">{w.universeLine}</span>}
     </>
   );
 }
 
 /**
- * One work of a pair: its site, its title opening the work, its page on the site, its authors, fandoms,
- * status and size, its description and after it the site's own line of its characters and pairings,
- * folded together.
+ * A row of a field: the first work's on the left, the name and the verdict in the middle, the second's on
+ * the right; a field one work has not, a dash on its side.
  */
-export function WorkSide({ work: w }: { work: DuplicateWork }) {
+function FieldRow({ name, verdict, left, right }: { name: string; verdict: FieldVerdict; left: ReactNode; right: ReactNode }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-1 px-2 py-1.5 md:grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)]">
+      <Side>{left}</Side>
+      <Middle name={name} verdict={verdict} />
+      <Side>{right}</Side>
+    </div>
+  );
+}
+
+/**
+ * A row of a field of long values — a description, the tags — folded to a few [lines], unfolded by a press
+ * on either side for both: what is compared is read whole side by side. Text to select and copy: a press
+ * that selects something does not fold.
+ */
+function FoldedRow({ name, verdict, left, right, lines }: { name: string; verdict: FieldVerdict; left: ReactNode; right: ReactNode; lines: string }) {
   const { t } = useTranslation("duplicate");
   const [whole, setWhole] = useState(false);
-  const names = [w.authors.join(", "), w.fandoms.join(", "), w.status?.map(valueName).join(", ")].filter(Boolean).join(" · ");
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex items-baseline gap-2">
-        <span className="shrink-0 text-xs text-muted-foreground" title={sourceTitle(w.source)}>
-          {sourceShort(w.source)}
-        </span>
-        <a href={itemHref({ source: w.source, item: w.item })} className="min-w-0 font-semibold underline-offset-2 hover:underline">
-          {w.title}
-        </a>
-        <a href={w.url} target="_blank" rel="noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" title={t("WorkSide.page")}>
-          <ExternalLinkIcon className="size-3.5" />
-        </a>
+  const side = (content: ReactNode) =>
+    content == null ? null : (
+      // biome-ignore lint/a11y/useSemanticElements: text to select and copy, which a button's text cannot be
+      <div
+        role="button"
+        tabIndex={0}
+        className={cn("cursor-pointer whitespace-pre-line select-text", !whole && lines)}
+        title={t(whole ? "WorkSide.fold" : "WorkSide.unfold")}
+        onClick={() => {
+          if (!window.getSelection()?.toString()) setWhole(!whole);
+        }}
+        onKeyDown={pressKeys(() => setWhole(!whole))}
+      >
+        {content}
       </div>
-      {(names || w.words || w.chars) && (
-        <div className="text-xs text-muted-foreground">
-          {names}
-          {names && (w.words || w.chars) && " · "}
-          {w.words && <Size size={w.words} word="words" />}
-          {w.words && w.chars && "; "}
-          {w.chars && <Size size={w.chars} word="chars" />}
-        </div>
-      )}
-      {(w.description || w.universeLine) && (
-        // Text to select and copy: unfolded or folded by a press that selects nothing. The site's own line of
-        // the characters and pairings after the description, folded with it: one flow of lines, clamped together
-        // biome-ignore lint/a11y/useSemanticElements: text to select and copy, which a button's text cannot be
-        <div
-          role="button"
-          tabIndex={0}
-          className={cn("cursor-pointer text-sm whitespace-pre-line select-text text-muted-foreground", !whole && "line-clamp-4")}
-          title={t(whole ? "WorkSide.fold" : "WorkSide.unfold")}
-          onClick={() => {
-            if (!window.getSelection()?.toString()) setWhole(!whole);
-          }}
-          onKeyDown={pressKeys(() => setWhole(!whole))}
-        >
-          {w.description}
-          {w.description && w.universeLine && "\n"}
-          {w.universeLine && <span className="text-foreground/80">{w.universeLine}</span>}
-        </div>
-      )}
+    );
+  return <FieldRow name={name} verdict={verdict} left={side(left)} right={side(right)} />;
+}
+
+/** One work's side of a row: its value, or a dash of a field it has not. */
+function Side({ children }: { children: ReactNode }) {
+  return <div className="min-w-0 text-sm text-muted-foreground">{children ?? <span className="text-muted-foreground/60">—</span>}</div>;
+}
+
+/** The middle of a row: the field's name and how alike the two works are of it, in its colour, the hint telling how. */
+function Middle({ name, verdict }: { name: string; verdict: FieldVerdict }) {
+  const { t } = useTranslation("duplicate");
+  return (
+    <div className="col-span-2 order-first flex items-center gap-2 md:order-none md:col-span-1 md:flex-col md:items-center md:gap-0.5 md:text-center">
+      <span className="text-[11px] leading-tight text-muted-foreground">{name}</span>
+      <span className={cn("rounded px-1.5 text-xs font-medium tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value })}>
+        {verdict.shown}
+      </span>
     </div>
+  );
+}
+
+/** A work's head: its site, its title opening the work, its page on the site. */
+function WorkHead({ work: w }: { work: DuplicateWork }) {
+  const { t } = useTranslation("duplicate");
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="shrink-0 text-xs text-muted-foreground" title={sourceTitle(w.source)}>
+        {sourceShort(w.source)}
+      </span>
+      <a href={itemHref({ source: w.source, item: w.item })} className="min-w-0 font-semibold text-foreground underline-offset-2 hover:underline">
+        {w.title}
+      </a>
+      <a href={w.url} target="_blank" rel="noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" title={t("WorkSide.page")}>
+        <ExternalLinkIcon className="size-3.5" />
+      </a>
+    </div>
+  );
+}
+
+/** Whether the size of a work is known: its words or its characters. */
+const sized = (w: DuplicateWork) => w.words != null || w.chars != null;
+
+/** A work's size: its words and its characters, as known ([sized]). */
+function Sizes({ work: w }: { work: DuplicateWork }) {
+  return (
+    <>
+      {w.words && <Size size={w.words} word="words" />}
+      {w.words && w.chars && "; "}
+      {w.chars && <Size size={w.chars} word="chars" />}
+    </>
   );
 }
 
@@ -132,4 +244,3 @@ function Size({ size, word }: { size: SizeNumber; word: "words" | "chars" }) {
     <span title={t("WorkSide.estimate")}>≈ {shown}</span>
   );
 }
-

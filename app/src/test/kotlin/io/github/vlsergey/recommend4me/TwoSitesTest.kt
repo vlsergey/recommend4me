@@ -147,6 +147,14 @@ class TwoSitesTest : TwoSitesTestBase() {
         )
         assertEquals("The Mill", compared.second.title)
         assertEquals(null, compared.answer)
+        // Each shown with the values it is compared by — the site's tag by the normalized tag it is bound to
+        listOf(compared.first, compared.second).forEach { w ->
+            assertEquals(
+                listOf("tags" to listOf("river")),
+                w.facets.map { f -> f.key to f.propertyValues.map { it.name } },
+                "of ${w.item}",
+            )
+        }
         assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
 
         answer(m1, m2, io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.SAME)
