@@ -120,14 +120,12 @@ A scale has no search: its words are not pressed, and the same key means a step.
 A word typed by the press is not the user's typing: "add as a new name" appears only once the user changes the line, or one
 press would make a character named "Юто/Агеха".
 
-**A fandom bound once for all its works** (D): every site's fandom is a universe of its own name at first (`fandom_site`), so a
-fandom's word always reaches its universe; every universe the work has that no fandom of the same site reached is offered by it —
-a universe of another site's fandom or of the user's, maybe the same; a crossover's universes, each reached by a fandom of the site,
-offer nothing — "этот фандом — <universe>" binds
-the site's fandom there with all its works (`PUT /api/universes/binding`, the write of the screen of the universes). It says the other
-works get it when their drafts are made anew, in the background. A fandom whose universe is named otherwise shows it, with ✕ to take
-the fandom out to a universe of its own; a universe named as the fandom is not written twice, a mark standing for it. Web interface
-only: the extension has no screen of the universes.
+**A fandom's universe** (D): every site's fandom is a universe of its own name at first (`fandom_site`), so a fandom's word always
+reaches its universe. A fandom whose universe is named otherwise shows it, with ✕ to take the fandom out to a universe of its own
+(`PUT /api/universes/binding`, the write of the screen of the universes), the other works getting it when their drafts are made anew,
+in the background; a universe named as the fandom is not written twice, a mark standing for it. Two universes that are one are merged on
+the screen of the universes, among the alike ones: offered here, every universe of a crossover was offered to every fandom of it (user,
+2026-11-11). Web interface only: the extension has no screen of the universes.
 
 **A chip's "site"** names the sites in its title and on the finger's sheet: the sources of a long field of tags can scroll
 out of sight on a small screen (over 500 px on 41 of 400 works at 1366×768).

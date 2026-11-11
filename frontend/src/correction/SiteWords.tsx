@@ -135,23 +135,22 @@ function Word({
 }
 
 /**
- * A fandom for all its works, from the field of universes. Every fandom of a site is bound to a
- * universe of its own name at first: the universe it reached shown when named otherwise, with ✕ to
- * take the fandom out to a universe of its own; and every universe the work has that no fandom of the same
- * site reached offered — "this fandom is that universe" binds it there, with all its works: a universe
- * of another site's fandom or of the user's, maybe the same; the universes of a crossover, every one
- * reached by a fandom of the site, offer nothing. The write of the screen of the
- * universes: the other works get it when their drafts are made anew, in the background.
+ * A fandom's universe, in the field of universes. Every fandom of a site is bound to a universe of
+ * its own name at first: the universe it reached shown when named otherwise, with ✕ to take the
+ * fandom out to a universe of its own — the write of the screen of the universes, the other works
+ * getting it when their drafts are made anew, in the background. Two universes that are one are
+ * merged there, among the alike ones: offered here, every universe of a crossover would be offered to
+ * every fandom of it.
  */
 const folded = (name: string) => name.trim().toLocaleLowerCase();
 
-function FandomBinding({ said, word, universes, rowReached }: { said: SiteSaid; word: SiteWord; universes: FacetValueInfo[]; rowReached: Set<string> }) {
+function FandomBinding({ said, word, universes }: { said: SiteSaid; word: SiteWord; universes: FacetValueInfo[] }) {
   const { t } = useTranslation("correction");
   const queryClient = useQueryClient();
   const item = useContext(ValueActions)?.item;
-  /** The fandom bound to the [universe]; to a universe of its own when none. */
-  const bind = async (universe?: string) => {
-    ensureOk(await api.PUT("/api/universes/binding", { body: { source: said.source, key: word.key, universe } }));
+  /** The fandom taken out to a universe of its own. */
+  const takeOut = async () => {
+    ensureOk(await api.PUT("/api/universes/binding", { body: { source: said.source, key: word.key } }));
     toast.add({ title: t("SiteWords.boundLater"), timeout: 5000 });
     queryClient.invalidateQueries({ queryKey: ["universes"], refetchType: "none" });
     if (item) await queryClient.invalidateQueries({ queryKey: itemKey(item) });
@@ -165,17 +164,10 @@ function FandomBinding({ said, word, universes, rowReached }: { said: SiteSaid; 
         // A universe named as the fandom is not written twice, nor taken out of itself
         <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
           → {valueName(own)}
-          <AsyncButton size="icon-xs" variant="ghost" title={t("SiteWords.unbind")} aria-label={t("SiteWords.unbind")} icon={<XIcon />} onClick={() => bind()} />
+          <AsyncButton size="icon-xs" variant="ghost" title={t("SiteWords.unbind")} aria-label={t("SiteWords.unbind")} icon={<XIcon />} onClick={takeOut} />
         </span>
       )}
       {own && folded(valueName(own)) === folded(word.name) && <LinkIcon className="size-3 text-muted-foreground" aria-label={t("SiteWords.bound", { universe: valueName(own) })} />}
-      {universes
-        .filter((u) => u.corrected !== "REMOVED" && !u.offered && !rowReached.has(u.key))
-        .map((u) => (
-          <AsyncButton key={u.key} size="xs" variant="ghost" className="h-5 px-1 text-xs pointer-coarse:h-11" title={t("SiteWords.bindHint")} onClick={() => bind(u.key)}>
-            {t("SiteWords.bind", { universe: valueName(u) })}
-          </AsyncButton>
-        ))}
     </>
   );
 }
@@ -215,8 +207,6 @@ export function SiteWords({
     <div className="flex flex-col gap-0.5">
       {saying.map((s) => {
         const row = `${s.source}/${s.item}`;
-        // The universes every fandom of this site reached: none of them offered to another fandom of it
-        const rowReached = new Set(s.words.flatMap((w) => w.reaches ?? []));
         return (
           <div key={row} className="flex flex-col gap-0.5">
             <SiteRow source={s.source} url={s.url}>
@@ -229,7 +219,7 @@ export function SiteWords({
                     hint={(name) => t(targets.length > 1 ? "SiteWords.findWhere" : "SiteWords.find", { name })}
                     onPress={targets.length === 0 ? undefined : (name) => (targets.length === 1 ? go(targets[0], name, w.name) : setChoosing({ row, name, word: w.name }))}
                   />
-                  {bindTo && w.reaches !== undefined && w.reaches !== null && <FandomBinding said={s} word={w} universes={bindTo} rowReached={rowReached} />}
+                  {bindTo && w.reaches !== undefined && w.reaches !== null && <FandomBinding said={s} word={w} universes={bindTo} />}
                   {i < s.words.length - 1 && <span className="-ml-1 text-muted-foreground">,</span>}
                 </span>
               ))}
