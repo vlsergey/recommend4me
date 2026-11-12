@@ -8,7 +8,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.junit.jupiter.api.io.TempDir
 
-/** A work of several items is shown with the one that says the most of it, as measured and kept with its binding. */
+/**
+ * A work of several items is shown with a finished book's page first, else the one that says the most of it, as
+ * measured and kept with its binding.
+ */
 class WorkFullnessTest {
 
     @TempDir lateinit var folder: Path
@@ -21,7 +24,7 @@ class WorkFullnessTest {
             works.bindNew("a", mapOf("1" to "v", "2" to "v"), now)
             works.bindNew("b", mapOf("3" to "v"), now)
             assertEquals(listOf("1", "2"), works.unmeasured("a"))
-            works.measured("a", mapOf("1" to 5L, "2" to 70L))
+            works.measured("a", mapOf("1" to 5L, "2" to 70L), emptySet())
             works.membership.merge(works.of(ItemKey("a", "2"), now), works.of(ItemKey("a", "1"), now), now)
             works.membership.merge(works.of(ItemKey("b", "3"), now), works.of(ItemKey("a", "1"), now), now)
 
@@ -34,11 +37,18 @@ class WorkFullnessTest {
             assertEquals(ItemKey("a", "2"), clusters.shown(ItemKey("a", "1")))
             assertEquals(ItemKey("a", "1"), clusters.representative(ItemKey("b", "3")))
 
-            works.measured("b", mapOf("3" to 900L))
+            works.measured("b", mapOf("3" to 900L), emptySet())
             assertEquals(emptyList(), works.unmeasured("b"))
             assertEquals(
                 ItemKey("b", "3"),
                 WorkClusters.of(works.groups(listOf("a", "b")).values.toList()).shown(ItemKey("a", "2")),
+            )
+
+            // A finished book's page first, though the others say more
+            works.measured("a", mapOf("1" to 5L, "2" to 70L), setOf("1"))
+            assertEquals(
+                listOf(ItemKey("a", "1"), ItemKey("b", "3"), ItemKey("a", "2")),
+                WorkClusters.of(works.groups(listOf("a", "b")).values.toList()).fullestFirst(ItemKey("a", "2")),
             )
         }
     }

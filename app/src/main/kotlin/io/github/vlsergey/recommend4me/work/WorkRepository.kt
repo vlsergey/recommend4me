@@ -101,8 +101,9 @@ class WorkRepository(private val db: DSLContext) {
             ?.value1()
 
     /**
-     * The normalized works of [sources] of several items, with their items: the one that says the most of the work
-     * first ([SITE_WORK.FULLNESS]), those saying as much by their keys.
+     * The normalized works of [sources] of several items, with their items in the order the work is shown by them:
+     * those with a value it is shown by first ([SITE_WORK.SHOWN_FIRST], a finished book's), then the one that says the
+     * most of it ([SITE_WORK.FULLNESS]), those alike by their keys.
      */
     fun groups(sources: Collection<String>): Map<Long, List<ItemKey>> {
         val several =
@@ -110,28 +111,40 @@ class WorkRepository(private val db: DSLContext) {
         return db.select(SITE_WORK.NORMALIZED, SITE_WORK.SOURCE, SITE_WORK.ITEM)
             .from(SITE_WORK)
             .where(SITE_WORK.NORMALIZED.`in`(several), SITE_WORK.SOURCE.`in`(sources))
-            .orderBy(SITE_WORK.FULLNESS.desc().nullsLast(), SITE_WORK.SOURCE, SITE_WORK.ITEM)
+            .orderBy(
+                SITE_WORK.SHOWN_FIRST.desc().nullsLast(),
+                SITE_WORK.FULLNESS.desc().nullsLast(),
+                SITE_WORK.SOURCE,
+                SITE_WORK.ITEM,
+            )
             .fetch()
             .groupBy({ it.value1()!! }, { ItemKey(it.value2()!!, it.value3()!!) })
     }
 
-    /** The items of the [source] bound to a work whose fullness was never measured. */
+    /** The items of the [source] bound to a work, never measured for the order it is shown by them. */
     fun unmeasured(source: String): List<String> =
-        db.select(SITE_WORK.ITEM).from(SITE_WORK).where(SITE_WORK.SOURCE.eq(source), SITE_WORK.FULLNESS.isNull).fetch {
-            it.value1()!!
-        }
+        db.select(SITE_WORK.ITEM)
+            .from(SITE_WORK)
+            .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.FULLNESS.isNull.or(SITE_WORK.SHOWN_FIRST.isNull))
+            .fetch { it.value1()!! }
 
-    /** How much each item of the [source] says of its work ([fullness]: item to it), written where it changed. */
-    fun measured(source: String, fullness: Map<String, Long>) {
+    /**
+     * How much each item of the [source] says of its work ([fullness]: item to it) and whether it has a value the work
+     * is shown by first (those of the items among [shownFirst]), written where it changed.
+     */
+    fun measured(source: String, fullness: Map<String, Long>, shownFirst: Set<String>) {
         fullness.entries.chunked(BATCH).forEach { chunk ->
             db.batch(
                     chunk.map { (item, value) ->
+                        val first = item in shownFirst
                         db.update(SITE_WORK)
                             .set(SITE_WORK.FULLNESS, value)
+                            .set(SITE_WORK.SHOWN_FIRST, first)
                             .where(
                                 SITE_WORK.SOURCE.eq(source),
                                 SITE_WORK.ITEM.eq(item),
-                                SITE_WORK.FULLNESS.isDistinctFrom(value),
+                                SITE_WORK.FULLNESS.isDistinctFrom(value)
+                                    .or(SITE_WORK.SHOWN_FIRST.isDistinctFrom(first)),
                             )
                     }
                 )

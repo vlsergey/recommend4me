@@ -33,7 +33,8 @@ private constructor(
     FacetDictionary by dictionary,
     ItemFacets by ItemFacetRepository(db, changed, dictionary),
     ItemNumbers by ItemNumberRepository(db),
-    ItemTexts by ItemTextRepository(db, changed) {
+    ItemTexts by ItemTextRepository(db, changed),
+    ItemMeasures by ItemMeasureRepository(db) {
 
     constructor(
         db: DSLContext,

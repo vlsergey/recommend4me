@@ -113,7 +113,15 @@ class StandardFacet(
  * search read it by — one language, whatever the user reads, the texts encoded once; the user is shown it by its key,
  * in the interface's words.
  */
-class StandardValue(val key: String, val modelName: String)
+class StandardValue(
+    val key: String,
+    val modelName: String,
+    /**
+     * Of a work several sites have, the site's item with this value is the one the work is shown with — its title, its
+     * description, its size — before one that says more of it: a finished book's page before an unfinished one's.
+     */
+    val shownFirst: Boolean = false,
+)
 
 /**
  * A NUMBER EVERY SOURCE OF A CONTENT TYPE THAT HAS IT TELLS ALIKE — the chapters of a book: one number for the model

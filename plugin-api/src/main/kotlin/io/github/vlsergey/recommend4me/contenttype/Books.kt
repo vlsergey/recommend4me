@@ -14,9 +14,12 @@ object Books {
 
     val AUTHOR = StandardFacet("author", role = FacetRole.AUTHOR, onCard = true, names = true, searchWeight = 1.0f)
 
-    /** Whether the whole of the work is written: of a site that tells only that, finished or in progress. */
+    /**
+     * Whether the whole of the work is written: of a site that tells only that, finished or in progress. Of a work
+     * several sites have, the page of a site that has it finished is the one it is shown with (user, 2026-11-12).
+     */
     object Status {
-        val FINISHED = StandardValue("finished", "Завершено")
+        val FINISHED = StandardValue("finished", "Завершено", shownFirst = true)
         val IN_PROGRESS = StandardValue("in-progress", "В процессе")
         val FROZEN = StandardValue("frozen", "Заморожено")
     }

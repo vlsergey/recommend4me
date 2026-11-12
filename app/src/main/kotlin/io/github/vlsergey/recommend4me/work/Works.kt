@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.work
 
+import io.github.vlsergey.recommend4me.contenttype.StandardValue
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -59,20 +60,27 @@ class Works(private val stores: Stores) {
     fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
 
     /**
-     * How much each of the items [ids] of the source says of its work, kept with its binding
-     * ([WorkRepository.measured]) — the characters of its texts, then how many values its facets have, both counted by
-     * the database: of a work of several items the one that says the most is the one it is shown with
-     * ([WorkClusters.shown]).
+     * The order a work of several items is shown by them, of each of the items [ids] of the source, kept with its
+     * binding ([WorkRepository.measured]): whether the site gives it a value the work is shown by first
+     * ([StandardValue.shownFirst] — a finished book), then how much it says of the work — the characters of its texts,
+     * then how many values its facets have, both counted by the database. The first of them is the one the work is
+     * shown with ([WorkClusters.shown]).
      */
     private fun measure(s: SourceStore, ids: Collection<String>) {
         if (ids.isEmpty()) return
         val chars = s.items.lengthsOf(ids)
         val values = s.items.valueCountsOf(ids)
+        val first =
+            s.schema.facets.flatMapTo(HashSet()) { facet ->
+                val keys = facet.standard?.values.orEmpty().filter { it.shownFirst }.map { it.key }
+                s.items.withAnyOf(ids, facet.key, keys)
+            }
         s.works.measured(
             s.id,
             ids.associateWith { id ->
                 (chars[id] ?: 0L) * FIELDS_AT_MOST + (values[id] ?: 0).toLong().coerceAtMost(FIELDS_AT_MOST - 1)
             },
+            first,
         )
     }
 
