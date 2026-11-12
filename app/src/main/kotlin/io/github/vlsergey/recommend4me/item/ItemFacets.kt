@@ -31,6 +31,9 @@ interface ItemFacets {
      */
     fun facetsOf(ids: Collection<String>): Map<String, Map<String, List<String>>>
 
+    /** How many values of every facet together the site gives each of the items [ids]: item to values. */
+    fun valueCountsOf(ids: Collection<String>): Map<String, Int>
+
     /** The items the site gives each of the [keys] of the facet: key to items. */
     fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<String>>
 
@@ -112,6 +115,18 @@ internal class ItemFacetRepository(
         val asked = ids.toHashSet()
         return if (asked.size <= ITEM_BATCH) facetsByIds(asked) else facetsStreamed(asked)
     }
+
+    override fun valueCountsOf(ids: Collection<String>): Map<String, Int> =
+        ids.distinct()
+            .chunked(ITEM_BATCH)
+            .flatMap { chunk ->
+                db.select(ITEM_FACET.ITEM_ID, DSL.count())
+                    .from(ITEM_FACET)
+                    .where(ITEM_FACET.ITEM_ID.`in`(chunk))
+                    .groupBy(ITEM_FACET.ITEM_ID)
+                    .fetch { it.value1()!! to it.value2()!! }
+            }
+            .toMap()
 
     /** The facets of the items [asked], by their ids in one query: item to facet to keys in order. */
     private fun facetsByIds(asked: Set<String>): Map<String, Map<String, List<String>>> {

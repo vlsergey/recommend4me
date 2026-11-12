@@ -180,7 +180,7 @@ class ItemDetailsReader(
                     work,
                     corrections,
                     names,
-                    sitesSay.of(type, store, clusters.members(key)),
+                    sitesSay.of(type, store, clusters.fullestFirst(key)),
                     empty = { it.editable },
                     complete = store.corrections.completeOf(key.id),
                 ) {
@@ -201,7 +201,7 @@ class ItemDetailsReader(
             canRefresh = store.source.downloadsPages,
             related = related(type, store, key, Corrected.facets(work.site, corrections), names, ownSeries),
             series = ownSeries,
-            sites = sites(type, clusters.members(key), ownSeries),
+            sites = sites(type, clusters.fullestFirst(key), ownSeries),
             relations = relations(type, clusters.members(key)),
             // An item of it not judged by the models of the facets yet, its texts waiting to be encoded
             pending = texts.awaited(clusters.members(key)),
@@ -269,12 +269,13 @@ class ItemDetailsReader(
         }
 
     /**
-     * What each item of a work says of it: the one that says the most first ([Works.fullness]), each with its series of
-     * its site and its number there, of the work's normalized [series].
+     * What each item of a work says of it, the [members] in their order — the one that says the most first
+     * ([WorkClusters.fullestFirst]) — each with its series of its site and its number there, of the work's normalized
+     * [series].
      */
     private fun sites(type: TypeStore, members: List<ItemKey>, series: SeriesDetails?): List<WorkSite> {
         val encoder = plugins.imageEncoder()?.id
-        return works.fullestFirst(type, members).mapNotNull { m ->
+        return members.mapNotNull { m ->
             val s = type.source(m.source) ?: return@mapNotNull null
             val head = s.items.find(m.id) ?: return@mapNotNull null
             val fields = s.corrections.fieldsOf(m.id)

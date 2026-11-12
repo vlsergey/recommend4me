@@ -100,15 +100,43 @@ class WorkRepository(private val db: DSLContext) {
             .fetchOne()
             ?.value1()
 
-    /** The normalized works of [sources] of several items, with their items. */
+    /**
+     * The normalized works of [sources] of several items, with their items: the one that says the most of the work
+     * first ([SITE_WORK.FULLNESS]), those saying as much by their keys.
+     */
     fun groups(sources: Collection<String>): Map<Long, List<ItemKey>> {
         val several =
             DSL.select(SITE_WORK.NORMALIZED).from(SITE_WORK).groupBy(SITE_WORK.NORMALIZED).having(DSL.count().gt(1))
         return db.select(SITE_WORK.NORMALIZED, SITE_WORK.SOURCE, SITE_WORK.ITEM)
             .from(SITE_WORK)
             .where(SITE_WORK.NORMALIZED.`in`(several), SITE_WORK.SOURCE.`in`(sources))
+            .orderBy(SITE_WORK.FULLNESS.desc().nullsLast(), SITE_WORK.SOURCE, SITE_WORK.ITEM)
             .fetch()
             .groupBy({ it.value1()!! }, { ItemKey(it.value2()!!, it.value3()!!) })
+    }
+
+    /** The items of the [source] bound to a work whose fullness was never measured. */
+    fun unmeasured(source: String): List<String> =
+        db.select(SITE_WORK.ITEM).from(SITE_WORK).where(SITE_WORK.SOURCE.eq(source), SITE_WORK.FULLNESS.isNull).fetch {
+            it.value1()!!
+        }
+
+    /** How much each item of the [source] says of its work ([fullness]: item to it), written where it changed. */
+    fun measured(source: String, fullness: Map<String, Long>) {
+        fullness.entries.chunked(BATCH).forEach { chunk ->
+            db.batch(
+                    chunk.map { (item, value) ->
+                        db.update(SITE_WORK)
+                            .set(SITE_WORK.FULLNESS, value)
+                            .where(
+                                SITE_WORK.SOURCE.eq(source),
+                                SITE_WORK.ITEM.eq(item),
+                                SITE_WORK.FULLNESS.isDistinctFrom(value),
+                            )
+                    }
+                )
+                .execute()
+        }
     }
 
     /** The items of [works] among the [sources]. */

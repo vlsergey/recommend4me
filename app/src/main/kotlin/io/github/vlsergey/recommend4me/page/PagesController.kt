@@ -101,7 +101,7 @@ class PagesController(
                     work,
                     corrections,
                     names,
-                    sitesSay.of(type, store, clusters.members(key)),
+                    sitesSay.of(type, store, clusters.fullestFirst(key)),
                     empty = { true },
                     complete = store.corrections.completeOf(itemId),
                 ) {

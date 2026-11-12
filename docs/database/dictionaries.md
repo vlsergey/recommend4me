@@ -24,7 +24,7 @@
 | `normalized_author_distinct` | two authors the user told apart, or said are partly one (`partly`: a part of the works of one is the other's): never offered as one again |
 | `normalized_author_entry` | an entry of a catalogue (Wikidata) an author is bound to |
 | `normalized_work` | a work of the user's, whatever sites have it |
-| `site_work` | an item of a site bound to a normalized work: at first of its own, merged when the user says two are one work; several of one site may be one |
+| `site_work` | an item of a site bound to a normalized work: at first of its own, merged when the user says two are one work; several of one site may be one. How much the item says of the work (`fullness`: the characters of its texts, then the values of its facets), measured as it changes: the work is shown with the one saying the most |
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
 | `series_group` | a group of works the user said to be one series ("one series" of two works) |
 | `series_group_work` | a work of a group of the user's, in one at most: a normalized series is made on reading of the groups and the series of the sites, every one of them sharing a work with another one series with it |
@@ -169,6 +169,7 @@ erDiagram
         BIGINT normalized FK
         TIMESTAMPTZ bound_at
         VARCHAR version
+        BIGINT fullness "null"
     }
     tag_entry {
         VARCHAR catalogue PK

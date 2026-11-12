@@ -86,7 +86,9 @@ own; "one work" merges two. A translation and a part stay two works, related.
   is copied between items.
 - **Of the model:** a work is one row, made of all its items (`model/WorkFeatures.kt`, `Catalogue`); the
   prediction is the work's, written to each of its items. In the list a work is one row
-  (`item/ItemList.kt`); the card is of the item that says the most (`Works.fullness`).
+  (`item/ItemList.kt`); the card is of the item that says the most — measured as the item changes and kept
+  with its binding to the work (`site_work.fullness`, `Works.measure`), read in that order
+  (`WorkClusters.shown`, `fullestFirst`), never worked out at a request.
 - **Of the site's item, in its source:** its own data and texts, parts, pictures, reviews and the marks
   on them, the answers on the paragraphs of its text.
 - **New data about a work** goes on the normalized work, never on an item, and travels in

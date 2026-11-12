@@ -157,7 +157,7 @@ class ItemList(
 
         val rows = type.sources.filter { sources == null || it.id in sources }.flatMap { s -> rowsOf(type, s, asked) }
         val viewed =
-            oneAWork(type, clusters, rows, relevance).filter { row ->
+            oneAWork(clusters, rows, relevance).filter { row ->
                 when (view) {
                     ItemView.UNRATED -> !row.graded
                     ItemView.RATED -> row.graded
@@ -259,24 +259,20 @@ class ItemList(
 
     /**
      * The [rows] with a work one row, whatever sites have it: of those found, the item a search found best, else the
-     * one that says the most.
+     * one the work is shown with ([WorkClusters.shown]) when it is among them, else the one of them that says the most.
      */
-    private fun oneAWork(
-        type: TypeStore,
-        clusters: WorkClusters,
-        rows: List<Row>,
-        relevance: Map<ItemKey, Int>?,
-    ): List<Row> {
-        val several = rows.filter { clusters.linked(it.key) }
-        val fullness = works.fullness(type, several.map { it.key })
+    private fun oneAWork(clusters: WorkClusters, rows: List<Row>, relevance: Map<ItemKey, Int>?): List<Row> {
         val shown =
-            several
+            rows
+                .filter { clusters.linked(it.key) }
                 .groupBy { clusters.representative(it.key) }
                 .values
                 .mapTo(HashSet()) { same ->
-                    (if (relevance != null) same.minBy { relevance.getValue(it.key) }
-                        else same.maxBy { fullness[it.key] ?: 0 })
-                        .key
+                    if (relevance != null) same.minBy { relevance.getValue(it.key) }.key
+                    else {
+                        val keys = same.mapTo(HashSet()) { it.key }
+                        clusters.fullestFirst(same.first().key).first { it in keys }
+                    }
                 }
         return rows.filter { !clusters.linked(it.key) || it.key in shown }
     }

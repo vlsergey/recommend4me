@@ -17,6 +17,9 @@ interface ItemTexts {
 
     /** Every text of the [keys] of every item, streamed item by item. */
     fun forEachTexts(keys: Collection<String>, action: (itemId: String, texts: Map<String, String>) -> Unit)
+
+    /** The characters of all the texts of each of the items [ids], counted by the database: item to characters. */
+    fun lengthsOf(ids: Collection<String>): Map<String, Long>
 }
 
 /** The [ItemTexts] of the source database [db]: [changed] told of every item whose texts were written. */
@@ -86,6 +89,18 @@ internal class ItemTextRepository(private val db: DSLContext, private val change
             }
         current?.let { action(it, texts.toMap()) }
     }
+
+    override fun lengthsOf(ids: Collection<String>): Map<String, Long> =
+        ids.distinct()
+            .chunked(ITEM_BATCH)
+            .flatMap { chunk ->
+                db.select(ITEM_TEXT.ITEM_ID, DSL.sum(DSL.charLength(ITEM_TEXT.CONTENT)))
+                    .from(ITEM_TEXT)
+                    .where(ITEM_TEXT.ITEM_ID.`in`(chunk))
+                    .groupBy(ITEM_TEXT.ITEM_ID)
+                    .fetch { it.value1()!! to (it.value2()?.toLong() ?: 0L) }
+            }
+            .toMap()
 
     private companion object {
         /** The rows of texts streamed at a time — long ones, fewer than of the rest: memory, not meaning. */

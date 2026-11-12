@@ -16,19 +16,30 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(Works::class.java)
 
 /**
- * Which items are one work: the items of a normalized work of several ([WorkRepository]). An item of no other is a work
- * alone. Read at the start of every operation that needs it — such works are few, made by hand.
+ * Which items are one work: the items of a normalized work of several ([WorkRepository]), the one that says the most of
+ * it first ([WorkRepository.groups]). An item of no other is a work alone. Read at the start of every operation that
+ * needs it — such works are few, made by hand.
  */
 class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
+    /** The item that names each work of several: the first of its members by key. */
+    private val representatives = clusters.mapValues { (_, members) -> members.minBy { it.toString() } }
 
-    /** The items that are the same work as [key], [key] first; the item alone when it has no link. */
+    /**
+     * The items that are the same work as [key], [key] first, the others saying the most first; [key] alone of none.
+     */
     fun members(key: ItemKey): List<ItemKey> = clusters[key]?.let { listOf(key) + (it - key) } ?: listOf(key)
+
+    /** The items that are the same work as [key], the one that says the most first; [key] alone of none. */
+    fun fullestFirst(key: ItemKey): List<ItemKey> = clusters[key] ?: listOf(key)
+
+    /** The item the work of [key] is shown with: the one that says the most of it. */
+    fun shown(key: ItemKey): ItemKey = clusters[key]?.first() ?: key
 
     /** The work an item is of: the same number for every item of a work. */
     fun work(key: ItemKey): Long = Vectors.keyOf(representative(key).toString())
 
     /** The item that names the work: the first of its members by key. Every member keeps its own card. */
-    fun representative(key: ItemKey): ItemKey = clusters[key]?.first() ?: key
+    fun representative(key: ItemKey): ItemKey = representatives[key] ?: key
 
     fun linked(key: ItemKey): Boolean = key in clusters
 
@@ -36,13 +47,9 @@ class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
     fun linkedWorks(): List<List<ItemKey>> = clusters.values.distinct()
 
     companion object {
+        /** The works of several items as [groups] of them, each the one that says the most first. */
         fun of(groups: List<List<ItemKey>>): WorkClusters =
-            WorkClusters(
-                groups
-                    .map { members -> members.sortedBy { it.toString() } }
-                    .flatMap { members -> members.map { it to members } }
-                    .toMap()
-            )
+            WorkClusters(groups.flatMap { members -> members.map { it to members } }.toMap())
     }
 }
 
@@ -52,30 +59,21 @@ class Works(private val stores: Stores) {
     fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
 
     /**
-     * How much each of the items [keys] says of its work: the characters of its texts, then how many values its facets
-     * have. Of a work of several items the one that says the most is the one shown for it. Read for the operation: such
-     * works are few, and what a site says of them changes.
+     * How much each of the items [ids] of the source says of its work, kept with its binding
+     * ([WorkRepository.measured]) — the characters of its texts, then how many values its facets have, both counted by
+     * the database: of a work of several items the one that says the most is the one it is shown with
+     * ([WorkClusters.shown]).
      */
-    fun fullness(type: TypeStore, keys: Collection<ItemKey>): Map<ItemKey, Long> {
-        val out = HashMap<ItemKey, Long>()
-        keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
-            val s = type.source(source) ?: return@forEach
-            val texts = s.items.textsOf(ids)
-            val facets = s.items.facetsOf(ids)
-            ids.forEach { id ->
-                val chars = texts[id].orEmpty().values.sumOf { it.length.toLong() }
-                out[ItemKey(source, id)] =
-                    chars * FIELDS_AT_MOST +
-                        facets[id].orEmpty().values.sumOf { it.size.toLong() }.coerceAtMost(FIELDS_AT_MOST - 1)
-            }
-        }
-        return out
-    }
-
-    /** The [keys] the one saying the most first, those saying as much in one order whichever is read. */
-    fun fullestFirst(type: TypeStore, keys: Collection<ItemKey>): List<ItemKey> {
-        val fullness = fullness(type, keys)
-        return keys.sortedWith(compareByDescending<ItemKey> { fullness[it] ?: 0 }.thenBy { it.source }.thenBy { it.id })
+    private fun measure(s: SourceStore, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val chars = s.items.lengthsOf(ids)
+        val values = s.items.valueCountsOf(ids)
+        s.works.measured(
+            s.id,
+            ids.associateWith { id ->
+                (chars[id] ?: 0L) * FIELDS_AT_MOST + (values[id] ?: 0).toLong().coerceAtMost(FIELDS_AT_MOST - 1)
+            },
+        )
     }
 
     /**
@@ -100,13 +98,19 @@ class Works(private val stores: Stores) {
     fun itemsChanged(event: ItemsChanged) {
         val s = stores.source(event.source) ?: return
         bind(s, s.items.heads(event.ids).mapValues { it.value.version })
+        measure(s, event.ids)
     }
 
-    /** Before anything reads the works: every item bound. */
+    /** Before anything reads the works: every item bound, and measured if it never was. */
     @Order(BIND_FIRST)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        stores.sources.forEach { s -> bind(s, s.items.keys().associate { it.id to it.version }) }
+        stores.sources.forEach { s ->
+            bind(s, s.items.keys().associate { it.id to it.version })
+            val unmeasured = s.works.unmeasured(s.id)
+            measure(s, unmeasured)
+            if (unmeasured.isNotEmpty()) log.info("{}: {} items measured for their works", s.id, unmeasured.size)
+        }
     }
 
     companion object {

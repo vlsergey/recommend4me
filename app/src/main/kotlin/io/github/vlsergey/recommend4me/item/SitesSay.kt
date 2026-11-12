@@ -11,7 +11,6 @@ import io.github.vlsergey.recommend4me.universe.FandomRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacetDefs
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
-import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
 
 /**
@@ -20,28 +19,27 @@ import org.springframework.stereotype.Component
  * silence told; a field no site can speak of has none listed.
  */
 @Component
-class SitesSay(private val works: Works, private val plugins: Plugins) {
+class SitesSay(private val plugins: Plugins) {
 
     /**
-     * Of a facet of the layer ([FacetDef.editable]) of the [store]: what the [members] of the work say of it, those
-     * saying the most first.
+     * Of a facet of the layer ([FacetDef.editable]) of the [store]: what the [members] of the work say of it, in their
+     * order — those saying the most first ([io.github.vlsergey.recommend4me.work.WorkClusters.fullestFirst]).
      */
     fun of(type: TypeStore, store: SourceStore, members: List<ItemKey>): Map<String, List<SiteSaid>> {
         val fields = store.schema.facets.filter { it.editable }
         val encoder = plugins.imageEncoder()?.id
-        val read =
-            works.fullestFirst(type, members).mapNotNull { m ->
-                val s = type.source(m.source) ?: return@mapNotNull null
-                val head = s.items.find(m.id) ?: return@mapNotNull null
-                Member(
-                    m,
-                    s,
-                    head.url,
-                    s.items.facets(m.id),
-                    s.items.texts(m.id),
-                    s.drafts.ofItems(listOf(m.id))[m.id].orEmpty(),
-                )
-            }
+        val read = members.mapNotNull { m ->
+            val s = type.source(m.source) ?: return@mapNotNull null
+            val head = s.items.find(m.id) ?: return@mapNotNull null
+            Member(
+                m,
+                s,
+                head.url,
+                s.items.facets(m.id),
+                s.items.texts(m.id),
+                s.drafts.ofItems(listOf(m.id))[m.id].orEmpty(),
+            )
+        }
         val bySource = read.map { it.store }.distinctBy { it.id }
         val bound = bySource.associate { it.id to it.tags.bindingsOf(it.id) }
         // The universes the sites' fandoms are bound to, read once: of every source, the site's key to the universe
