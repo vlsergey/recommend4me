@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.cast.CastAsked
+import io.github.vlsergey.recommend4me.cast.SaidLines
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -58,9 +58,14 @@ internal class FacetData(
          * [modelled]: the values the model gives of the facets before this one in the chain, made in the same pass, and
          * the drafts of the layer; of the others the site's and the user's alone.
          *
-         * [kept]: THE TASK OF THE SCORING KEPT ([FittedSuggester.scoring]) — its values those of the scoring, in its
+         * [kept]: THE TASK OF THE SCORING KEPT ([FittedSuggester.model]) — its values those of the scoring, in its
          * order, without names, groups or texts of them: the scoring knows each; the works' own features alone read, of
          * every work or of the works [WorksRead.only]. No [basis].
+         *
+         * [siteGives]: whether the site gives values of the facet, told of every work as the model was fitted; [cast]:
+         * the works' lines read for the facet. Both read before, as everything the task is made of besides the works:
+         * the task of the chances is made with the database refused
+         * ([DatabaseRefused][io.github.vlsergey.recommend4me.database.DatabaseRefused]).
          */
         fun load(
             store: SourceStore,
@@ -78,7 +83,8 @@ internal class FacetData(
             hintNames: Map<String, List<String>> = emptyMap(),
             hintAmong: (String) -> Collection<String> = { emptyList() },
             kept: List<String>? = null,
-            cast: CastAsked? = null,
+            cast: SaidLines? = null,
+            siteGives: Boolean = false,
             laps: Laps = Laps(),
         ): FacetData =
             FacetRead(
@@ -99,6 +105,7 @@ internal class FacetData(
                         hintAmong,
                         kept,
                         cast,
+                        siteGives,
                     ),
                     laps,
                 )
@@ -123,6 +130,8 @@ internal class FacetAsked(
     val hintNames: Map<String, List<String>>,
     val hintAmong: (String) -> Collection<String>,
     val kept: List<String>?,
-    /** How the facet reads the site's line of characters and pairings; null of a facet that reads none. */
-    val cast: CastAsked?,
+    /** The site's lines of characters and pairings read for the facet; null of a facet that reads none. */
+    val cast: SaidLines?,
+    /** Whether the site gives values of the facet, told of every work, as the model was fitted. */
+    val siteGives: Boolean,
 )

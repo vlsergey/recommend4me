@@ -55,7 +55,7 @@ class TaskCastTest {
                 listOf("tag\u0001x", "pairing\u0001a", "pairing\u0001c"),
                 listOf("tag\u0001y"),
             )
-        val cast = TaskCast.of(asked, listOf("w1", "w2", "w3"), casts, listOf(annotation, line), context)
+        val cast = TaskCast.of(asked.said(casts), listOf("w1", "w2", "w3"), listOf(annotation, line), context)
         val given = reader.given!!
         // The way is given the line, the site's entries, the vectors asked for that are kept, the characters
         assertSame(line, given.line)

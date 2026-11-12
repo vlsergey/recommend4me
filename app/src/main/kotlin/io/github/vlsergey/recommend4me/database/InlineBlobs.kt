@@ -24,7 +24,11 @@ import org.jooq.ConnectionProvider
  */
 internal class InlineBlobs(private val source: DataSource) : ConnectionProvider {
 
-    override fun acquire(): Connection = proxy(source.connection)
+    /** A connection of the pool, as bytes write; none on the thread of a computation that reads nothing of it. */
+    override fun acquire(): Connection {
+        DatabaseRefused.check()
+        return proxy(source.connection)
+    }
 
     override fun release(connection: Connection) = connection.close()
 

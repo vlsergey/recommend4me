@@ -10,6 +10,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class BilinearSuggesterTest {
+    /** The chances of the items of [task] by the model [fitted] made of it: the one way to them. */
+    private fun scored(fitted: FittedSuggester, task: SuggestionTask) =
+        assertNotNull(BilinearSuggester().scoring(fitted.model(task), task))
 
     private val d = 8
 
@@ -52,7 +55,7 @@ class BilinearSuggesterTest {
     fun `a value goes with the texts that point its way, every item judged by a model that did not learn from it`() {
         val task = task(300, wrong = 5)
         val fitted = assertNotNull(BilinearSuggester().fit(task))
-        val chances = fitted.on(task).of(IntArray(task.itemCount) { it })
+        val chances = scored(fitted, task).of(IntArray(task.itemCount) { it })
         var right = 0
         var all = 0
         for (i in 0 until task.itemCount) {
@@ -105,7 +108,7 @@ class BilinearSuggesterTest {
                 allowed = List(n) { IntArray(shares.size) { it } },
             )
         val suggester = BilinearSuggester()
-        val weights = assertNotNull(suggester.weights(assertNotNull(assertNotNull(suggester.fit(task)).scoring(task))))
+        val weights = assertNotNull(suggester.weights(assertNotNull(assertNotNull(suggester.fit(task)).model(task))))
         assertEquals(values, weights.size)
         assertTrue(weights.take(shares.size).all { it > 0 && it < 1 }, weights.toList().toString())
         assertTrue(weights[0] > weights[2] && weights[2] > weights[1], weights.toList().toString())
@@ -119,7 +122,7 @@ class BilinearSuggesterTest {
         val task = task(120, wrong = 5)
         val suggester = BilinearSuggester()
         val fitted = assertNotNull(suggester.fit(task))
-        val kept = assertNotNull(fitted.scoring(task))
+        val kept = assertNotNull(fitted.model(task))
         // Some items alone, as a page reads them: their texts, the values by their keys, no names
         val rows = intArrayOf(3, 5, 40, 77)
         val texts = task.inputs.single().vectors.gather(rows)
@@ -135,7 +138,7 @@ class BilinearSuggesterTest {
                 context = List(rows.size) { IntArray(0) },
                 contextKeys = emptyList(),
             )
-        val whole = fitted.on(task).of(rows)
+        val whole = scored(fitted, task).of(rows)
         val read = assertNotNull(suggester.scoring(kept, alone)).of(IntArray(rows.size) { it })
         rows.indices.forEach { r ->
             task.valueKeys.indices.forEach { v ->
@@ -206,7 +209,7 @@ class BilinearSuggesterTest {
                 examples = examples,
             )
         val fitted = assertNotNull(BilinearSuggester().fit(task))
-        val lost = fitted.on(task).of(intArrayOf(n - 1)).single()
+        val lost = scored(fitted, task).of(intArrayOf(n - 1)).single()
         assertTrue(
             lost[0] > 0.5f && lost[1] > 0.5f && lost[2] < 0.5f && lost[3] < 0.5f,
             "a space work: ${lost.toList()}",
@@ -271,7 +274,7 @@ class BilinearSuggesterTest {
                 examples = examples,
             )
         val fitted = assertNotNull(BilinearSuggester().fit(task))
-        val lost = fitted.on(task).of(intArrayOf(n - 1)).single()
+        val lost = scored(fitted, task).of(intArrayOf(n - 1)).single()
         assertTrue(
             lost[3] > 0.5f && lost[2] > 0.5f && lost[0] < 0.5f && lost[1] < 0.5f,
             "a space work by its text: ${lost.toList()}",
@@ -336,8 +339,8 @@ class BilinearSuggesterTest {
         val fitted = assertNotNull(suggester.fit(task))
         val again = assertNotNull(suggester.unpack(fitted.pack(), task))
         val rows = IntArray(task.itemCount) { it }
-        val a = fitted.on(task).of(rows)
-        val b = again.on(task).of(rows)
+        val a = scored(fitted, task).of(rows)
+        val b = scored(again, task).of(rows)
         rows.forEach { i -> a[i].indices.forEach { v -> assertEquals(a[i][v], b[i][v], 1e-6f) } }
     }
 
@@ -351,8 +354,8 @@ class BilinearSuggesterTest {
         val again = assertNotNull(suggester.fit(task, last))
         val scratch = assertNotNull(suggester.fit(task))
         val rows = IntArray(task.itemCount) { it }
-        val a = again.on(task).of(rows)
-        val b = scratch.on(task).of(rows)
+        val a = scored(again, task).of(rows)
+        val b = scored(scratch, task).of(rows)
         // The two agree on which side of a half every pair is
         var agree = 0
         var all = 0

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -274,14 +275,9 @@ internal constructor(
         val suggester = plugins.suggester(store.id, facet.key)
         val encoder = plugins.textEncoder()
         if (suggester == null || encoder == null) return null
-        val read =
-            passes.worksRead(
-                store,
-                encoder,
-                chain.reading(store, listOf(itemId), chain.facetsOf(store).indexOf(facet) + 1),
-                characters = characters,
-            )
-        return chain.scored(store, facet, suggester, encoder, read, made)
+        return passes.worksRead(store, encoder, listOf(itemId), characters = characters).use { read ->
+            chain.scored(store, facet, suggester, encoder, read, made)
+        }
     }
 
     /**
@@ -296,12 +292,15 @@ internal constructor(
         made: MadeChances,
     ): List<Chance>? {
         val data = scored.data
-        val scores = scored.scores
         val i = data.ids.indexOf(itemId).takeIf { it >= 0 && data.judged[it] } ?: return null
-        ShownChances.keep(made, facet, data, scores)
-        val chances = scores.of(intArrayOf(i)).single()
-        val has = data.held[i].toHashSet()
-        return chances.indices.map { v -> Chance(itemId, facet.key, data.values[v], v in has, chances[v].toDouble()) }
+        return DatabaseRefused.during("the chances of every value of ${facet.key} of $itemId") {
+            scored.scores.use { scores ->
+                ShownChances.keep(made, facet, data, scores)
+                val chances = scores.of(intArrayOf(i)).single()
+                val has = data.held[i].toHashSet()
+                chances.indices.map { v -> Chance(itemId, facet.key, data.values[v], v in has, chances[v].toDouble()) }
+            }
+        }
     }
 
     companion object {

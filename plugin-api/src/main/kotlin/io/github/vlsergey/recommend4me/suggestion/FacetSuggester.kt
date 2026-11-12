@@ -255,6 +255,12 @@ class SuggestionTask(
  * A way of working out the values of a facet an item should have from its texts and its other values. Learns from every
  * item of the source: the values the site and the user gave them are the examples. What the user said of a work is the
  * application's to apply over the chances.
+ *
+ * EVERY SUGGESTER KEEPS ITS MODEL, AND AN ITEM IS SCORED BY IT ALONE (user, 2026-11-12): a fitting ends with the model
+ * ([FittedSuggester.model]), the application keeps it, and the one way to the chances of any item — of the works fitted
+ * on, of a page of one work read later — is [scoring] of that model and of the items' own features. Nothing scores on
+ * the task fitted on, nor reads the other works of the source: a suggester whose chances of a work are made of the
+ * other works — their counts, their neighbours — keeps what it reads of them in its model.
  */
 interface FacetSuggester {
     /** Stable: kept with the fitted state. */
@@ -272,33 +278,27 @@ interface FacetSuggester {
     fun fit(task: SuggestionTask, previous: FittedSuggester? = null, stop: () -> Boolean = { false }): FittedSuggester?
 
     /**
-     * A state kept by [FittedSuggester.pack]; null when it does not fit tasks of [task]'s shape — it is fitted again.
+     * A state kept by [FittedSuggester.pack], to go on from in the next fitting, or to make its [FittedSuggester.model]
+     * of the task fitted on; null when it does not fit tasks of [task]'s shape — it is fitted again.
      */
     fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester?
 
     /**
-     * The scoring kept by [FittedSuggester.scoring] readied for the items of [task]: their inputs, their context and
-     * examples are read; its values are the values the scoring was made of, in its order, without their names, groups
-     * or texts — the scoring knows what each is. Null when the bytes are not of this suggester's making, or not of the
-     * task's values.
+     * THE CHANCES OF THE ITEMS OF [task] BY THE [model] KEPT ([FittedSuggester.model]) — the one way to them: their
+     * inputs, their context and examples are read, nothing else; its values are the values the model was made of, in
+     * its order, without their names, groups or texts — the model knows what each is. An item the model was fitted on
+     * is known by its id: it is not its own witness. Null when the bytes are not of this suggester's making, or not of
+     * the task's values or inputs: the facet has no chances till it is fitted again.
      */
-    fun scoring(bytes: ByteArray, task: SuggestionTask): SuggestionScores? = null
+    fun scoring(model: ByteArray, task: SuggestionTask): SuggestionScores?
 
     /**
-     * THE WORKS THE SUGGESTER MUST READ TO SCORE THE WORKS [asked]: the suggester's own word, the application reads
-     * what it says and asks nothing else of it. Null: every work — what a suggester made of counts over the works of
-     * its task, or of their neighbours, is what it is of every one of them; one that scores a work of the work's own
-     * features answers [asked].
-     */
-    fun reads(asked: Collection<String>): Collection<String>? = null
-
-    /**
-     * WHAT THE MODEL TELLS OF EVERY VALUE OVER THE WORKS AS A WHOLE, of the scoring kept by [FittedSuggester.scoring]
+     * WHAT THE MODEL TELLS OF EVERY VALUE OVER THE WORKS AS A WHOLE, of the [model] kept ([FittedSuggester.model])
      * alone — no work read: a weight of each value, the larger the likelier a work is to have it, as the suggester's
-     * mathematics tells it (a bias, a prior, a share) — the pairings ordered by it. In the order of the scoring's
-     * values; null when the bytes are not of this suggester's making, or it tells none.
+     * mathematics tells it (a bias, a prior, a share) — the pairings ordered by it. In the order of the model's values;
+     * null when the bytes are not of this suggester's making, or it tells none.
      */
-    fun weights(bytes: ByteArray): DoubleArray? = null
+    fun weights(model: ByteArray): DoubleArray? = null
 }
 
 interface FittedSuggester {
@@ -310,19 +310,13 @@ interface FittedSuggester {
         get() = null
 
     /**
-     * Readies the scoring of the items of [task] — of the task it was fitted on, or of a later one of the same facet:
-     * what all the items share is worked out once here.
+     * THE MODEL THE ITEMS ARE SCORED BY ([FacetSuggester.scoring]), made of the [task] fitted on: what every value of
+     * it is to the scoring — its coordinates, its bias, its counts — worked out once of the task's names, groups and
+     * texts, with what carries an item's own features to it, and whatever of the task's works the scoring of another
+     * work reads — their counts, their vectors and values as neighbours. Kept by the application: a page of one work
+     * reads no dictionary, no names of every value and no other work.
      */
-    fun on(task: SuggestionTask): SuggestionScores
-
-    /**
-     * WHAT SCORING AN ITEM NEEDS, APART FROM THE TASK: what every value of [task] is to the scoring — its coordinates,
-     * its bias — worked out once of the task's names, groups and texts, with what carries an item's features to the
-     * same coordinates. Kept beside the state, it scores the items read later of their own features alone
-     * ([FacetSuggester.scoring]): a page of twenty works reads no dictionary and no names of every value. Null when the
-     * suggester has none: an item is scored on the whole task ([on]).
-     */
-    fun scoring(task: SuggestionTask): ByteArray? = null
+    fun model(task: SuggestionTask): ByteArray
 
     fun pack(): ByteArray
 }

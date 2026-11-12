@@ -17,21 +17,16 @@ internal class TaskCast(
 ) {
     companion object {
         /**
-         * The task of the works [ids] — of each what its line says ([casts]), its [inputs] and the columns of its
-         * context ([context]) — read by the way [asked] for.
+         * The task of the works [ids] — of each what its line says ([SaidLines.casts]), its [inputs] and the columns of
+         * its context ([context]) — read by the way asked for ([SaidLines.asked]), of the [lines] read before.
          */
-        fun of(
-            asked: CastAsked,
-            ids: List<String>,
-            casts: List<SaidCast>,
-            inputs: List<InputBlock>,
-            context: List<List<String>>,
-        ): TaskCast {
+        fun of(lines: SaidLines, ids: List<String>, inputs: List<InputBlock>, context: List<List<String>>): TaskCast {
+            val asked = lines.asked
+            val casts = lines.casts
+            val vectors = lines.vectors
             val ofEntries = asked.entries + "\u0001"
             val entries = context.map { row -> row.filter { it.startsWith(ofEntries) } }
             val line = inputs.firstOrNull { it.name == asked.line }
-            val texts = casts.flatMap { asked.reader.encoded(it) }.distinct()
-            val vectors = if (texts.isEmpty()) emptyMap() else asked.vectors(texts)
             val read =
                 asked.reader.read(
                     CastWorks(casts, line, entries, vectors, ids.map { asked.characters(it) }, asked.paired)

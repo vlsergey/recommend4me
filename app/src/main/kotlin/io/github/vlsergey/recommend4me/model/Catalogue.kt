@@ -179,9 +179,9 @@ class CatalogueReader(
 
     /**
      * THE GRADED WORKS ALONE, each with all its items, and [also]: what a fitting on the rows of the grades reads, and
-     * no other work — their facets and numbers read of them, their chances made as their suggesters say they read
-     * ([io.github.vlsergey.recommend4me.suggestion.FacetSuggester.reads]), their vectors by their keys. The [averages]
-     * are the caller's, of the model it goes by.
+     * no other work — their facets and numbers read of them, their chances made of them alone by the models kept
+     * ([io.github.vlsergey.recommend4me.suggestion.FacetSuggester.scoring]), their vectors by their keys. The
+     * [averages] are the caller's, of the model it goes by.
      */
     fun gradedWorks(type: TypeStore, averages: Averages, also: Collection<ItemKey> = emptyList()): Catalogue {
         val started = System.currentTimeMillis()

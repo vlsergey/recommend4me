@@ -28,7 +28,23 @@ internal class CastAsked(
         val said = WorkCasts.of(store, entries, ids.associateWith { site[it]?.get(entries).orEmpty() })
         return ids.map { said[it] ?: SaidCast.NONE }
     }
+
+    /**
+     * What the lines [casts] of the works say read for the facet, with the vectors kept of the texts the way reads of
+     * them: everything its task is made of besides the works, before the facet is worked out.
+     */
+    fun said(casts: List<SaidCast>): SaidLines {
+        val texts = casts.flatMap { reader.encoded(it) }.distinct()
+        return SaidLines(this, casts, if (texts.isEmpty()) emptyMap() else vectors(texts))
+    }
 }
+
+/**
+ * THE LINES OF THE WORKS READ FOR A FACET ([CastAsked.said]): what each work's line says ([casts], in the order of the
+ * works) and the vectors kept of the texts the way reads of them ([vectors]) — read before the facet is worked out,
+ * which reads nothing of the database.
+ */
+internal class SaidLines(val asked: CastAsked, val casts: List<SaidCast>, val vectors: Map<String, FloatArray>)
 
 /**
  * THE READING OF THE SITES' LINES OF CHARACTERS AND PAIRINGS BY THE FACETS THAT LEARN FROM THEM: of a facet whose

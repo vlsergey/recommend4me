@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.Chance
 import io.github.vlsergey.recommend4me.suggestion.FacetModel
+import io.github.vlsergey.recommend4me.suggestion.FacetModelRead
 import io.github.vlsergey.recommend4me.tag.TagsChanged
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
@@ -50,24 +51,29 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
     /** The sources whose layer has the age rating. */
     private fun sources(): List<SourceStore> = stores.sources.filter { it.schema.facet(AgeRating.KEY) != null }
 
-    override fun chances(
-        store: SourceStore,
-        ids: Collection<String>?,
-        every: EveryItemFacets?,
-    ): Map<String, Map<String, Chance>> {
+    override fun read(store: SourceStore, ids: Collection<String>?, every: EveryItemFacets?): FacetModelRead {
         // No model read for a source without the age rating
-        val model = models.takeIf { store.schema.facet(AgeRating.KEY) != null }?.read() ?: return emptyMap()
+        val model =
+            models.takeIf { store.schema.facet(AgeRating.KEY) != null }?.read() ?: return FacetModelRead { emptyMap() }
         val given = every?.takeIf { ids == null }
         val answers = given?.allCorrections ?: evidence.answersOf(store, ids)
         val features = evidence.featuresOf(store, ids, answers, given?.site)
-        return evidence.told(store, ids, answers, given?.site).mapValues { (id, t) ->
-            // Of the ratings the site lets the work have alone, their chances made one in all
-            val allowed = t.allowed.map { keys.indexOf(it) }.filter { it >= 0 }.ifEmpty { keys.indices.toList() }
-            val p = model.chances(features[id].orEmpty())
-            val sum = allowed.sumOf { p[it] }.takeIf { it > 0 } ?: 1.0
-            allowed.associate { k ->
-                keys[k] to Chance(id, AgeRating.KEY, keys[k], had = keys[k] in t.stated, chance = p[k] / sum)
-            }
+        val told = evidence.told(store, ids, answers, given?.site)
+        return FacetModelRead { chancesOf(model, features, told) }
+    }
+
+    /** The chances of every work [told] of by the [model], of its [features]. */
+    private fun chancesOf(
+        model: AgeRatingModel,
+        features: Map<String, List<String>>,
+        told: Map<String, RatingEvidence.Told>,
+    ): Map<String, Map<String, Chance>> = told.mapValues { (id, t) ->
+        // Of the ratings the site lets the work have alone, their chances made one in all
+        val allowed = t.allowed.map { keys.indexOf(it) }.filter { it >= 0 }.ifEmpty { keys.indices.toList() }
+        val p = model.chances(features[id].orEmpty())
+        val sum = allowed.sumOf { p[it] }.takeIf { it > 0 } ?: 1.0
+        allowed.associate { k ->
+            keys[k] to Chance(id, AgeRating.KEY, keys[k], had = keys[k] in t.stated, chance = p[k] / sum)
         }
     }
 

@@ -19,11 +19,13 @@ private val log = LoggerFactory.getLogger(WorksRead::class.java)
 
 /**
  * WHAT EVERY FACET OF A PASS READS ALIKE of the works [only] (every work when null): their values, the user's answers,
- * the drafts, their inputs — read at the first need, once, and handed to every facet of the pass, of which it lives no
- * longer. [imageEncoder] and [sets] (kind to the directions in use): the pictures' and the sets' vectors read.
+ * the drafts, the tags under others, their inputs — READ AS THE PASS BEGINS, once, and handed to every facet of the
+ * pass, of which it lives no longer: the computation of the facets reads nothing of the database
+ * ([DatabaseRefused][io.github.vlsergey.recommend4me.database.DatabaseRefused]). [imageEncoder] and [sets] (kind to the
+ * directions in use): the pictures' and the sets' vectors read.
  */
 internal class WorksRead(
-    store: SourceStore,
+    private val store: SourceStore,
     encoder: TextEncoder,
     imageEncoder: String?,
     sets: Map<SetKind, Long>,
@@ -42,29 +44,23 @@ internal class WorksRead(
         require(every == null || only == null) { "the facets of every work given to a pass of some works" }
     }
 
-    val ids: List<String> by lazy { only?.distinct() ?: store.items.keys().map { it.id } }
-    val site: Map<String, Map<String, List<String>>> by lazy {
+    val ids: List<String> = only?.distinct() ?: store.items.keys().map { it.id }
+    val site: Map<String, Map<String, List<String>>> =
         every?.site ?: if (only == null) EveryItemFacets.siteOf(store) else store.items.facetsOf(ids)
-    }
-    val corrections: Map<String, List<FacetCorrection>> by lazy {
+    val corrections: Map<String, List<FacetCorrection>> =
         every?.corrections
             ?: if (only == null) store.corrections.allFacets().groupBy { it.itemId }
             else store.corrections.facetsOf(ids)
-    }
-    val complete: Map<String, Set<String>> by lazy {
+    val complete: Map<String, Set<String>> =
         if (only == null) store.corrections.allComplete() else store.corrections.completeOf(ids)
-    }
 
     /**
      * The user's answers and the facets said whole, as the facets' dictionaries read them ([Answers]): of what the pass
      * read.
      */
     val answers: Answers by lazy { Answers(corrections, complete) }
-    val drafts: Map<String, List<LayerDraft>> by lazy {
-        if (only == null) store.drafts.all() else store.drafts.ofItems(ids)
-    }
-    private val inputsRead = lazy { inputs(store, ids, encoder, imageEncoder, sets, only, card) }
-    val inputs: List<InputBlock> by inputsRead
+    val drafts: Map<String, List<LayerDraft>> = if (only == null) store.drafts.all() else store.drafts.ofItems(ids)
+    val inputs: List<InputBlock> = inputs(store, ids, encoder, imageEncoder, sets, only, card)
 
     /** The blocks of the texts among the [inputs]: the title, the description, the notes, the site's lines. */
     private val textBlocks = TextVectors.blocks(store.id, store.schema).values.map { it.first }.toSet()
@@ -75,16 +71,18 @@ internal class WorksRead(
      * encoded yet, is of an input no model ever learnt of, and a model's chances of it are none it can give
      * ([FacetData.judged]).
      */
-    val encoded: BooleanArray by lazy {
+    val encoded: BooleanArray =
         BooleanArray(ids.size).also { out ->
             inputs.filter { it.name in textBlocks }.forEach { block -> block.rows.forEach { out[it] = true } }
         }
-    }
 
     /** The tags under others of every facet of tags, read once for every facet of the pass. */
-    val hierarchies: Map<String, TagHierarchy> by lazy { store.hierarchies() }
+    val hierarchies: Map<String, TagHierarchy> = store.hierarchies()
 
-    /** What the bases of the facets of the pass read alike ([FacetBasis.of]). */
+    /**
+     * What the bases of the facets of the pass read alike ([FacetBasis.of]): of a fitting alone, read at its first need
+     * — the chances of the works never ask for it.
+     */
     val bases: WorkBases by lazy { WorkBases(store, encoder, this) }
 
     /** What the line of each work says, by the source's facet of its entries: read at the first facet that reads it. */
@@ -92,14 +90,13 @@ internal class WorksRead(
 
     /**
      * What the line of each work of the pass says ([CastAsked.casts]): read once for the characters, the secondary
-     * characters and the pairings alike.
+     * characters and the pairings alike — before the facet that reads it is worked out.
      */
-    fun casts(store: SourceStore, asked: CastAsked): List<SaidCast> =
-        saidCasts.getOrPut(asked.entries) { asked.casts(store, ids, site) }
+    fun casts(asked: CastAsked): List<SaidCast> = saidCasts.getOrPut(asked.entries) { asked.casts(store, ids, site) }
 
     /** The inputs on the card freed: the pass is over, and nothing of it reads them after. */
     override fun close() {
-        if (inputsRead.isInitialized()) inputs.forEach { it.onCard?.close() }
+        inputs.forEach { it.onCard?.close() }
     }
 
     /**

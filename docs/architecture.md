@@ -29,6 +29,8 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/pair-logistic` | The works of different sites that may be one work, or one series of works: a logistic model of how alike their layers are, one a kind, fitted on the user's answers on pairs; and the search of the pairs by both at once, on the card when there is one. |
 | `plugins/cast-reading` | The ways the sites' lines of characters and pairings — split by each site's habit into names and pairings, a half structure with no guarantee — are given to the models of the characters and the pairings: the line whole as one vector (as from the first), every name a vector and the mean of them, every name and pairing a feature, the names found in the dictionary of the universes as the site's word on its characters, or all at once; one chosen for each such facet on the page of the models. |
 | `plugins/suggester-bilinear` | The values a work should have — tags, universes, characters, pairings — by one model of every work and every value. |
+| `plugins/suggester-knn` | The values a work should have by its nearest works fitted on, alike by its texts and pictures; the model kept is where every one lies and what it says of the values. |
+| `plugins/suggester-bayes` | The values a work should have by naive Bayes over its other values; the model kept is the counts. |
 | `plugins/source-ao3` | archiveofourown.org, browser tracking and a work's page on request. |
 | `plugins/source-author-today` | author.today, browser tracking only. |
 | `plugins/source-ficbook` | ficbook.net, browser tracking only. |
@@ -222,11 +224,32 @@ the model gives of the facets before it, made in the same pass. A work's charact
 the universes given before them, its pairings pairs of the characters given before them. The
 fitting and the reading follow the same chain, so a facet is judged on what it was fitted on.
 
-ONLY THE MODEL OF EACH FACET IS KEPT, in the model database: its fitted state and the values it
-chooses from. THE CHANCES OF THE WORKS ARE NOT KEPT (user, 2026-10-15): whoever reads works — a
-page, a card, the extension, a filter over the catalogue, the search index, the training of the
-grades — gets them made in memory at the reading, of those works alone, from their vectors and
-values by the models kept, through the chain. Nothing waits for a refit and nothing is written.
+ONLY THE MODEL OF EACH FACET IS KEPT, in the model database: its fitted state, the values it
+chooses from, and the model the works are scored by. THE CHANCES OF THE WORKS ARE NOT KEPT (user,
+2026-10-15): whoever reads works — a page, a card, the extension, a filter over the catalogue, the
+search index, the training of the grades — gets them made in memory at the reading, of those works
+alone, from their vectors and values by the models kept, through the chain. Nothing waits for a
+refit and nothing is written.
+
+EVERY SUGGESTER KEEPS ITS MODEL, AND A WORK IS SCORED BY IT ALONE (user, 2026-11-12):
+`FittedSuggester.model` is made of the task fitted on and kept; `FacetSuggester.scoring` of it and
+of the works' own features is the one way to the chances of any work — of every work after a refit,
+of one work on its page. Nothing scores on the task fitted on, and nothing reads the other works of
+the source to score one: the bilinear model keeps the coordinates of the values; the nearest works
+(`suggester-knn`) keep where every work fitted on lies (256 numbers in half precision) and what it
+says of the values, a work asked scored by its nearest among them; naive Bayes (`suggester-bayes`)
+keeps its counts and what every work added to them. A work the model was fitted on is known by its
+id and is not its own witness. The universes of author.today on the nearest works had a page of one
+work read every work of the site — its inputs, then every facet after them — six times a page.
+
+THE CHAIN READS, THEN COMPUTES WITH THE DATABASE REFUSED (user, 2026-11-12): the works of a pass are
+read as it begins (`WorksRead`: their values, answers, drafts, the tags under others, their
+inputs); of every facet its model, the dictionary's word on the values each work may have and the
+works' lines of characters are read before it — what they are read of is the chances of the facets
+before it — and its chances are made inside `DatabaseRefused.during`, where a connection asked for
+fails at once (`InlineBlobs.acquire`), in the tests as on the user's machine. So are the chances
+of the age rating (`FacetModel.read`, then `FacetModelRead.chances`) and the chances of every work
+after a refit.
 The model of a facet is fitted again in the background, in the queue of the computations, whenever
 anything it learns from changes; a refit tells which works' given values changed by scoring every
 work by the model before and after it.

@@ -70,14 +70,14 @@ internal class FacetRead(
         val values = asked.kept ?: chosenFrom(corrected, answers, drafted)
         val ownContext = TaskContext.of(store, read, asked.modelled, facet.key)
         laps.lap("context", ownContext.keys.size)
-        val ownInputs = inputs(site)
+        val ownInputs = inputs()
         laps.lap("inputs", ownInputs.size)
         // The site's line of characters and pairings as the way chosen reads it: its inputs and its columns in place of
         // the line's own
-        val cast = asked.cast?.let { TaskCast.of(it, ids, read.casts(store, it), ownInputs, ownContext.keysOf()) }
+        val cast = asked.cast?.let { TaskCast.of(it, ids, ownInputs, ownContext.keysOf()) }
         val context = cast?.let { TaskContext.ofKeys(it.context, shared = only == null) } ?: ownContext
         val inputs = cast?.inputs ?: ownInputs
-        if (cast != null) laps.lap("cast: ${asked.cast.reader.id}", inputs.size)
+        if (cast != null) laps.lap("cast: ${asked.cast.asked.reader.id}", inputs.size)
         // An item whose values of the facet are all named: every other value rejected by the user's word
         val allNamed = BooleanArray(ids.size) { facet.key in read.complete[ids[it]].orEmpty() }
         val index = ValueIndex(values)
@@ -158,13 +158,11 @@ internal class FacetRead(
     /**
      * The inputs of the works. A facet the site gives values of has them as its labels: its own line on the site is
      * those values written out, no input of it — as the facet is none of its own context — whether the site gives
-     * values of it told of every work, as the model was fitted, not of the works read.
+     * values of it told of every work, as the model was fitted, not of the works read ([FacetAsked.siteGives]).
      */
-    private fun inputs(site: Map<String, Facets>): List<InputBlock> {
-        val siteGives =
-            if (only == null) site.values.any { facet.key in it } else store.items.valueUses(facet.key).isNotEmpty()
+    private fun inputs(): List<InputBlock> {
         val ownLine =
-            facet.original?.takeIf { siteGives }?.let { TextVectors.blocks(store.id, store.schema)[it]?.first }
+            facet.original?.takeIf { asked.siteGives }?.let { TextVectors.blocks(store.id, store.schema)[it]?.first }
         return read.inputs.filter { it.name != ownLine }
     }
 

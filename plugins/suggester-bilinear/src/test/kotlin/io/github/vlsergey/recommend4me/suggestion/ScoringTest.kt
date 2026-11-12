@@ -19,6 +19,9 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
  * of.
  */
 class ScoringTest {
+    /** The chances of the items of [task] by the model [fitted] made of it: the one way to them. */
+    private fun scored(fitted: FittedSuggester, task: SuggestionTask) =
+        assertNotNull(BilinearSuggester().scoring(fitted.model(task), task))
 
     private val d = 8
     private val m = 50
@@ -90,7 +93,7 @@ class ScoringTest {
     @Test
     fun `the scores of every value, of a shared set and of a few of a row's own are the chances of those values`() {
         val task = task()
-        val scores = assertNotNull(BilinearSuggester().fit(task)).on(task)
+        val scores = scored(assertNotNull(BilinearSuggester().fit(task)), task)
         val rows = IntArray(n) { it }
         val chances = scores.of(rows)
         // Every value: the same chance, made of the score
@@ -122,7 +125,7 @@ class ScoringTest {
         // So many values that the rows of every value are made side by side, a block of them in a buffer each
         val values = 900
         val task = task(Random(11), values)
-        val scores = assertNotNull(BilinearSuggester().fit(task)).on(task)
+        val scores = scored(assertNotNull(BilinearSuggester().fit(task)), task)
         val rows = IntArray(2_000) { (it * 7) % n }
         val shared = IntArray(40) { (it * 11 + 3) % values }.distinct().toIntArray()
         val columns =
@@ -153,7 +156,7 @@ class ScoringTest {
     @Test
     fun `a few rows of a big set and many of a few values alike`() {
         val task = task(Random(9))
-        val scores = assertNotNull(BilinearSuggester().fit(task)).on(task)
+        val scores = scored(assertNotNull(BilinearSuggester().fit(task)), task)
         val rows = intArrayOf(3, 0, 299, 12, 4)
         val chances = scores.of(rows)
         val big = IntArray(m) { m - 1 - it }
@@ -166,7 +169,7 @@ class ScoringTest {
     @Test
     fun `a score at or under the half is no likelier than one half, and the chance never falls as the score grows`() {
         val task = task()
-        val scores = assertNotNull(BilinearSuggester().fit(task)).on(task)
+        val scores = scored(assertNotNull(BilinearSuggester().fit(task)), task)
         assertEquals(0.5f, scores.chance(scores.half))
         var last = 0f
         for (k in -400..400) {
@@ -196,7 +199,7 @@ class ScoringTest {
         val there = task(Random(11), values, cublas, items)
         try {
             val suggester = BilinearSuggester()
-            val bytes = assertNotNull(assertNotNull(suggester.fit(here)).scoring(here))
+            val bytes = assertNotNull(assertNotNull(suggester.fit(here)).model(here))
             val main = assertNotNull(suggester.scoring(bytes, here))
             val card = assertNotNull(suggester.scoring(bytes, there))
             val rows = IntArray(2_000) { (it * 7 + it / 3 * 4_001) % items }

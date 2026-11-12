@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -38,9 +39,10 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
     }
 
     /**
-     * The model a fitting ends with ([fitted]), the one kept before it ([kept]), and whether that one was [current].
+     * The model a fitting ends with, kept ([after], [FittedSuggester.model]), the one kept before it ([before]; null
+     * when there was none of the suggester), and whether that one was [current]: fitted on the same and kept.
      */
-    private class Model(val fitted: FittedSuggester, val kept: FittedSuggester?, val current: Boolean)
+    private class Model(val after: ByteArray, val before: ByteArray?, val current: Boolean)
 
     /**
      * The model of the [k]-th of the [facets] fitted again when what it learns from changed — every setting tried anew
@@ -101,7 +103,7 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         }
         val model =
             if (data.values.isEmpty()) null else modelOf(store, facet, suggester, data, stop, anew, stages, checkpoint)
-        return model?.let { madeOf(store, facet, data, made, it, stages) }.orEmpty()
+        return model?.let { madeOf(store, facet, suggester, data, made, it, stages) }.orEmpty()
     }
 
     /**
@@ -119,19 +121,21 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         checkpoint: () -> Unit,
     ): Model? {
         val stored = store.suggestions.suggester(facet.key)?.takeIf { it.suggester == suggester.id }
+        val before = store.suggestions.scoring(facet.key)?.takeIf { it.suggester == suggester.id }
         val kept = stored?.let { suggester.unpack(it.content, data.task) }
         stages.unpacked = stages.now()
         checkpoint()
         val current = !anew && kept != null && stored.basis == data.basis
-        val fitted =
-            if (current) kept.also { keepValues(store, facet, suggester, data, stored, it) }
+        val after =
+            if (current) keepValues(store, facet, suggester, data, stored, before, kept)
             else refit(store, facet, suggester, data, if (anew) null else kept, stop, stages, checkpoint)
-        return fitted?.let { Model(it, kept, current) }
+        return after?.let { Model(it, before?.bytes, current) }
     }
 
     /**
-     * Of a model kept current: fitted before the values it chooses from, or its scoring, or the values' weights in it,
-     * were kept — kept now, not fitted again.
+     * Of a model kept current: its model as it is kept ([before]); or, fitted before the values it chooses from or its
+     * model as it is now were kept — the model of another suggester's making, the values' weights not in it — made of
+     * the state kept and kept now, not fitted again.
      */
     private fun keepValues(
         store: SourceStore,
@@ -139,12 +143,13 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         suggester: FacetSuggester,
         data: FacetData,
         stored: StoredSuggester,
+        before: KeptScoring?,
         kept: FittedSuggester,
-    ) {
-        val scoring = store.suggestions.scoring(facet.key)
-        if (stored.values != data.values || scoring == null || suggester.weights(scoring.bytes) == null) {
-            store.suggestions.keepValues(facet.key, data.values, kept.scoring(data.task))
+    ): ByteArray {
+        if (stored.values == data.values && before != null && suggester.weights(before.bytes) != null) {
+            return before.bytes
         }
+        return kept.model(data.task).also { store.suggestions.keepValues(facet.key, data.values, it) }
     }
 
     /**
@@ -160,11 +165,12 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         stop: () -> Boolean,
         stages: Stages,
         checkpoint: () -> Unit,
-    ): FittedSuggester? {
+    ): ByteArray? {
         val fitStarted = System.currentTimeMillis()
         val fresh = suggester.fit(data.task, previous, stop) ?: return null
         checkpoint()
         val fit = SuggesterFit(fresh.report, System.currentTimeMillis() - fitStarted, data.ids.size, data.values.size)
+        val model = fresh.model(data.task)
         store.suggestions.saveSuggester(
             facet.key,
             suggester.id,
@@ -172,7 +178,7 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
             data.basis,
             fresh.pack(),
             data.values,
-            fresh.scoring(data.task),
+            model,
             fit,
         )
         log.info(
@@ -184,32 +190,36 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
             stages.now(),
             stages.read,
         )
-        return fresh
+        return model
     }
 
     /**
-     * Every work's chances of the facet by the [model] made into [made]; answers the works whose given values a refit
-     * changed — what the model before the refit gave alone scored again, nothing of it kept.
+     * Every work's chances of the facet by the [model] kept made into [made] — scored by the model as every work is
+     * ([FacetSuggester.scoring]), the database refused; answers the works whose given values a refit changed — what the
+     * model before the refit gave alone scored again, nothing of it kept. None made of a model the suggester cannot
+     * read.
      */
     private fun madeOf(
         store: SourceStore,
         facet: FacetDef,
+        suggester: FacetSuggester,
         data: FacetData,
         made: MadeChances,
         model: Model,
         stages: Stages,
     ): List<String> {
         stages.fitted = stages.now()
-        val after = model.fitted.on(data.task).use { ShownChances.keep(made, facet, data, it, compare = true) }
+        fun shown(bytes: ByteArray, into: MadeChances) =
+            DatabaseRefused.during("the chances of ${store.id}/${facet.key} of every work") {
+                suggester.scoring(bytes, data.task)?.use { ShownChances.keep(into, facet, data, it, compare = true) }
+            }
+        val after = shown(model.after, made) ?: return emptyList()
         val scored = stages.now()
         // What the model before the refit gave alone: scored again, nothing of it kept
         val changedIds =
             if (model.current || !facet.infer) emptyList()
             else {
-                val before =
-                    model.kept?.let { k0 ->
-                        k0.on(data.task).use { ShownChances.keep(MadeChances(), facet, data, it, compare = true) }
-                    }
+                val before = model.before?.let { shown(it, MadeChances()) }
                 data.ids.filter { id -> before == null || before[id].orEmpty() != after[id].orEmpty() }
             }
         logMade(store, facet, data, after, changedIds, stages, scored)

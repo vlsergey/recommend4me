@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import org.springframework.stereotype.Component
@@ -69,25 +70,31 @@ internal class OneFacetModel(
         val suggester = plugins.suggester(store.id, facet)
         val encoder = plugins.textEncoder()
         if (k < 0 || suggester == null || encoder == null) return null
-        val read = passes.worksRead(store, encoder, chain.reading(store, ids, k + 1))
-        val made = chain.chain(store, encoder, read, k)
-        return chain.scored(store, facets[k], suggester, encoder, read, made)
+        return passes.worksRead(store, encoder, ids).use { read ->
+            chain.scored(store, facets[k], suggester, encoder, read, chain.chain(store, encoder, read, k))
+        }
     }
 
-    /** The scores of the value [v] of every work of [ids] among the works [scored], a chunk of them at a time. */
-    private fun chancesOf(scored: FacetChain.Scored, ids: Collection<String>, v: Int): Map<String, Double> {
-        val out = HashMap<String, Double>()
-        val asked = ids.toHashSet()
-        // A work none of whose texts is encoded yet has none ([FacetData.judged])
-        scored.data.ids.indices
-            .filter { scored.data.ids[it] in asked && scored.data.judged[it] }
-            .chunked(CHUNK)
-            .forEach { chunk ->
-                val rows = scored.scores.of(chunk.toIntArray())
-                chunk.forEachIndexed { j, i -> out[scored.data.ids[i]] = rows[j][v].toDouble() }
+    /**
+     * The scores of the value [v] of every work of [ids] among the works [scored], a chunk of them at a time, the
+     * database refused; the scores closed after.
+     */
+    private fun chancesOf(scored: FacetChain.Scored, ids: Collection<String>, v: Int): Map<String, Double> =
+        DatabaseRefused.during("the chances of one value of ${scored.data.ids.size} works") {
+            scored.scores.use { scores ->
+                val out = HashMap<String, Double>()
+                val asked = ids.toHashSet()
+                // A work none of whose texts is encoded yet has none ([FacetData.judged])
+                scored.data.ids.indices
+                    .filter { scored.data.ids[it] in asked && scored.data.judged[it] }
+                    .chunked(CHUNK)
+                    .forEach { chunk ->
+                        val rows = scores.of(chunk.toIntArray())
+                        chunk.forEachIndexed { j, i -> out[scored.data.ids[i]] = rows[j][v].toDouble() }
+                    }
+                out
             }
-        return out
-    }
+        }
 
     /**
      * The model's weight of every value of the [facet] over the works as a whole ([FacetSuggester.weights]): of the

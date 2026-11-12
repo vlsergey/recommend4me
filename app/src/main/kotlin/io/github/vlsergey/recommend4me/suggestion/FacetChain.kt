@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.cast.CastReading
+import io.github.vlsergey.recommend4me.cast.SaidLines
+import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.laps.Laps
@@ -19,6 +21,12 @@ internal typealias MadeChances = HashMap<String, HashMap<String, Map<String, Cha
  * of [facetsOf] — each reading as its context the values the site and the user give of every other facet and the values
  * the model gives of the facets before it, made in the same pass; of every facet what a work is shown with
  * ([ShownChances.keep]). Nothing waits for a refit, nothing is written of a work (user, 2026-10-15).
+ *
+ * EVERY FACET READ, THEN WORKED OUT WITH THE DATABASE REFUSED (user, 2026-11-12): the works of the pass are read as it
+ * begins ([WorksRead]); of every facet its model kept, the dictionary's word on its values ([Vocabulary]) and the
+ * works' lines are read before it — what they are read of is the chances of the facets before it — and its chances are
+ * made of what was read alone ([DatabaseRefused]). A work is scored by the model kept and its own features
+ * ([FacetSuggester.scoring]): no other work of the source read.
  */
 @Component
 internal class FacetChain(
@@ -92,13 +100,13 @@ internal class FacetChain(
         val given = every?.takeIf { ids == null }
         val encoder = plugins.textEncoder()
         return if (encoder == null || ids?.isEmpty() == true) seeded(store, ids, every = given)
-        else
-            passes.worksRead(store, encoder, reading(store, ids, upTo), given, card = true).use {
-                chain(store, encoder, it, upTo, laps)
-            }
+        else passes.worksRead(store, encoder, ids, given, card = true).use { chain(store, encoder, it, upTo, laps) }
     }
 
-    /** The chain over the works of [read]: what the facets read alike read once, for all of them. */
+    /**
+     * The chain over the works of [read]: what the facets read alike read once, for all of them; of every facet what it
+     * is made of read, then its chances made with the database refused.
+     */
     fun chain(store: SourceStore, encoder: TextEncoder, read: WorksRead, upTo: Int, laps: Laps = Laps()): MadeChances {
         val drafts = read.drafts
         laps.lap("drafts", drafts.size)
@@ -108,9 +116,11 @@ internal class FacetChain(
             val suggester = plugins.suggester(store.id, facet.key) ?: return@forEach
             val own = laps.within(facet.key)
             val scored = scored(store, facet, suggester, encoder, read, made, own) ?: return@forEach
-            scored.scores.use { ShownChances.keep(made, facet, scored.data, it, laps = own) }
-            own.lap("kept", scored.data.ids.size)
-            read.given(store, facet.key, made)
+            DatabaseRefused.during(computation(store, facet)) {
+                scored.scores.use { ShownChances.keep(made, facet, scored.data, it, laps = own) }
+                own.lap("kept", scored.data.ids.size)
+                read.given(store, facet.key, made)
+            }
             own.lap("context")
             laps.restart()
         }
@@ -118,27 +128,16 @@ internal class FacetChain(
     }
 
     /**
-     * The works to read for the chances of the works [ids] (every work when null) of the first [upTo] facets of the
-     * chain: every facet's suggester says what it reads ([FacetSuggester.reads]), the works read for one facet the
-     * context of the next.
-     */
-    fun reading(store: SourceStore, ids: Collection<String>?, upTo: Int): Collection<String>? =
-        facetsOf(store).take(upTo).fold(ids) { asked, facet ->
-            val suggester = plugins.suggester(store.id, facet.key)
-            if (asked == null || suggester == null) asked else suggester.reads(asked)
-        }
-
-    /**
      * The chances of a facet's works as the model scores them: the task they are of, its scores, the vocabulary read.
      */
     class Scored(val data: FacetData, val scores: SuggestionScores, val vocabulary: Vocabulary?)
 
     /**
-     * THE FACET'S CHANCES OF THE WORKS OF [read], by the model kept. By its scoring kept apart ([KeptScoring]) where
-     * there is one: the works' own features read, the values those of the scoring — no dictionary, no name of any value
-     * (user, 2026-10-16): a page of twenty works read every character's name and the model whole, and a few of them at
-     * once ran the heap out. Else — of a suggester without one, of a model fitted before scorings were kept, till the
-     * next refresh keeps it — on the whole task. Null when the facet was never fitted.
+     * THE FACET'S CHANCES OF THE WORKS OF [read] BY ITS MODEL KEPT ([FacetSuggester.scoring]): the model, the values
+     * each work may have and the site's examples ([FacetVocabularies.vocabularyOf], light — no name of any value, no
+     * group: the model knows them) and the works' lines read; the task of the works' own features made of them and
+     * scored with the database refused. Null when the facet was never fitted, the model is not of its suggester or of
+     * the works' inputs, or the works have no value to choose from.
      */
     fun scored(
         store: SourceStore,
@@ -149,31 +148,8 @@ internal class FacetChain(
         made: WorkChances,
         laps: Laps = Laps(),
     ): Scored? {
-        val kept = store.suggestions.scoring(facet.key)?.takeIf { it.suggester == suggester.id }
-        val stored =
-            if (kept != null) null else store.suggestions.suggester(facet.key)?.takeIf { it.suggester == suggester.id }
-        return when {
-            kept != null -> byScoring(store, facet, suggester, encoder, read, made, laps, kept)
-            stored != null -> onWholeTask(store, facet, suggester, encoder, read, made, laps, stored)
-            else -> null
-        }
-    }
-
-    /**
-     * The facet's chances of the works of [read] by its scoring [kept]: the works' own features read, the values those
-     * of the scoring. Null when the works have no value to choose from, or the suggester reads no such scoring.
-     */
-    private fun byScoring(
-        store: SourceStore,
-        facet: FacetDef,
-        suggester: FacetSuggester,
-        encoder: TextEncoder,
-        read: WorksRead,
-        made: WorkChances,
-        laps: Laps,
-        kept: KeptScoring,
-    ): Scored? {
-        laps.lap("scoring kept read", kept.bytes.size / KB)
+        val kept = store.suggestions.scoring(facet.key)?.takeIf { it.suggester == suggester.id } ?: return null
+        laps.lap("model kept read", kept.bytes.size / KB)
         val vocabulary =
             vocabularies.vocabularyOf(
                 store,
@@ -185,60 +161,38 @@ internal class FacetChain(
                 light = true,
                 site = read.site,
             )
+        val lines = linesOf(store, facet, vocabulary, read)
+        val siteGives = siteGives(store, facet, read)
         laps.lap("vocabulary")
-        val data =
-            FacetData.load(
-                store,
-                facet,
-                encoder,
-                read,
-                modelled = made,
-                allowed = vocabulary?.allowed,
-                barred = vocabulary?.barred,
-                examples = vocabulary?.examples,
-                kept = kept.values,
-                cast = casts.asked(store, facet, vocabulary),
-                laps = laps,
-            )
-        if (data.values.isEmpty()) return null
-        return suggester
-            .scoring(kept.bytes, data.task)
-            ?.let { Scored(data, it, vocabulary) }
-            .also { laps.lap("scored", data.values.size) }
-    }
-
-    /**
-     * The facet's chances of the works of [read] by its suggester [stored] whole, on the whole task: of a suggester
-     * without a scoring kept, of a model fitted before scorings were kept, till the next refresh keeps it. Null when
-     * the works have no value to choose from, or the suggester cannot unpack it.
-     */
-    private fun onWholeTask(
-        store: SourceStore,
-        facet: FacetDef,
-        suggester: FacetSuggester,
-        encoder: TextEncoder,
-        read: WorksRead,
-        made: WorkChances,
-        laps: Laps,
-        stored: StoredSuggester,
-    ): Scored? {
-        val ids = read.only
-        val vocabulary =
-            vocabularies.vocabularyOf(store, facet, ids, made, read.characters, read.answers, site = read.site)
-        val data = load(store, facet, encoder, vocabulary, made, stored.values, read)
-        val fitted =
-            data
-                .takeIf { it.values.isNotEmpty() }
-                ?.let {
-                    laps.lap("whole task read, no scoring kept")
-                    suggester.unpack(stored.content, it.task)
-                }
-        return fitted?.let { Scored(data, it.on(data.task), vocabulary).also { laps.lap("scored", data.values.size) } }
+        return DatabaseRefused.during(computation(store, facet)) {
+            val data =
+                FacetData.load(
+                    store,
+                    facet,
+                    encoder,
+                    read,
+                    modelled = made,
+                    allowed = vocabulary?.allowed,
+                    barred = vocabulary?.barred,
+                    examples = vocabulary?.examples,
+                    kept = kept.values,
+                    cast = lines,
+                    siteGives = siteGives,
+                    laps = laps,
+                )
+            if (data.values.isEmpty()) null
+            else
+                suggester
+                    .scoring(kept.bytes, data.task)
+                    ?.let { Scored(data, it, vocabulary) }
+                    .also { laps.lap("scored", data.values.size) }
+        }
     }
 
     /**
      * The drafts of the layer of the works [ids] (every work when null) as their chances: 1, marked so, till the model
-     * gives its own.
+     * gives its own; and the chances of the facets worked out by models of their own — what each reads read, its
+     * chances made with the database refused.
      */
     fun seeded(
         store: SourceStore,
@@ -262,20 +216,21 @@ internal class FacetChain(
                 }
         }
         // The facets worked out by models of their own: their chances as theirs, before the chain
-        ownModels
-            .filter { store.schema.facet(it.facet) != null }
-            .forEach { model ->
-                model.chances(store, ids, every).forEach { (id, chances) ->
+        val own = ownModels.filter { store.schema.facet(it.facet) != null }.map { it to it.read(store, ids, every) }
+        own.forEach { (model, read) ->
+            DatabaseRefused.during("the chances of ${store.id}/${model.facet}") {
+                read.chances().forEach { (id, chances) ->
                     made.getOrPut(id) { HashMap() }[model.facet] = FewChances(chances.values.toTypedArray())
                 }
             }
+        }
         return made
     }
 
     /**
-     * What the model of the facet reads — of the works [read] ([WorksRead.only] alone, when given), judged among the
-     * values the model kept chooses from ([valueKeys]) — with the values the model gives of the [context] facets,
-     * [made] before it in the chain.
+     * What the model of the facet learns from — of the works [read] ([WorksRead.only] alone, when given), judged among
+     * the values the model kept chooses from ([valueKeys]) — with the values the model gives of the [context] facets,
+     * [made] before it in the chain: the task a fitting is made of, the names of the values read with it.
      */
     fun load(
         store: SourceStore,
@@ -301,11 +256,27 @@ internal class FacetChain(
             lackWeight = vocabulary?.lackWeight ?: 1.0,
             hintNames = vocabulary?.hintNames.orEmpty(),
             hintAmong = vocabulary?.hintAmong ?: { emptyList() },
-            cast = casts.asked(store, facet, vocabulary),
+            cast = linesOf(store, facet, vocabulary, read),
+            siteGives = siteGives(store, facet, read),
         )
 
+    /** The works' lines of characters and pairings read for the [facet]; null of a facet that reads none. */
+    private fun linesOf(store: SourceStore, facet: FacetDef, vocabulary: Vocabulary?, read: WorksRead): SaidLines? =
+        casts.asked(store, facet, vocabulary)?.let { it.said(read.casts(it)) }
+
+    /**
+     * Whether the site gives values of the [facet], told of every work as the model was fitted: of the works read when
+     * they are every work, else of the source.
+     */
+    private fun siteGives(store: SourceStore, facet: FacetDef, read: WorksRead): Boolean =
+        if (read.only == null) read.site.values.any { facet.key in it }
+        else store.items.valueUses(facet.key).isNotEmpty()
+
     companion object {
-        /** Bytes in a kilobyte: the size of the scoring kept, as the laps tell it. */
+        /** Bytes in a kilobyte: the size of the model kept, as the laps tell it. */
         private const val KB = 1024
+
+        /** The name of the computation of the [facet]'s chances, as a refusal of the database tells it. */
+        fun computation(store: SourceStore, facet: FacetDef) = "the chances of ${store.id}/${facet.key}"
     }
 }

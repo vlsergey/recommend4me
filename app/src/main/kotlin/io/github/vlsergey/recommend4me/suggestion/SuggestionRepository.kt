@@ -22,8 +22,8 @@ class StoredSuggester(
 )
 
 /**
- * A facet's model as a work read is scored by ([FittedSuggester.scoring]): of the [suggester], of the values [values]
- * in their order.
+ * A facet's model as a work read is scored by ([FittedSuggester.model]): of the [suggester], of the values [values] in
+ * their order.
  */
 class KeptScoring(val suggester: String, val values: List<String>, val bytes: ByteArray)
 

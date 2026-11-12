@@ -58,12 +58,22 @@ field. The plan is walked on real works before it is built.
 The core never branches on which plugin, scorer, suggester or model it holds: no `if` on one's id or
 kind, and no flag of a capability the core then checks. **Inversion of control: a plugin or a model
 says itself what it needs, and the core does the same for every one of them.** A word given as data
-goes through one path — `FacetSuggester.reads` names the works a suggester must read, and the core reads
-what it is told, one suggester asking for every work among them or none; `ModelMeta.averages` tells what
-the average work is, and `CatalogueReader.gradedWorks` takes it. A computation that serves one engine
+goes through one path — `FittedSuggester.model` is whatever a suggester needs to score a work later, the
+core keeps those bytes and scores every work by them (`FacetSuggester.scoring`), whatever is in them;
+`ModelMeta.averages` tells what the average work is, and `CatalogueReader.gradedWorks` takes it. A computation that serves one engine
 alone is planned by that engine: it listens to the application's events and puts its work in the queue
 (`Workload.plan`). Branching on data — a null of "every work", an empty list — is not branching on a
 plugin.
+
+## A facet is scored by its model kept, with the database refused
+
+Every suggester keeps its model (`FittedSuggester.model`) and the one way to the chances of any work is
+`FacetSuggester.scoring` of that model and the work's own features: nothing scores on the task fitted
+on, nothing reads the other works of the source to score one. The chain of the facets (`FacetChain`)
+reads everything a facet's chances are made of before it — the works of the pass (`WorksRead`), the model,
+the dictionary's word, the works' lines — and makes them inside `DatabaseRefused.during`: a connection
+asked for there fails at once. A new step of a computation of the facets reads what it needs before it,
+never inside it.
 
 ## A work is a normalized work; a site's item is what a site says of it
 

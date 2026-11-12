@@ -302,17 +302,15 @@ internal constructor(
     }
         .getOrNull()
 
-    override fun scoring(bytes: ByteArray, task: SuggestionTask): SuggestionScores? =
-        Scoring.read(bytes)?.takeIf { it.valueKeys == task.valueKeys && it.design.readsItems(task) }?.on(task)
-
-    /** A work is scored of its own features by the weights kept: no other work read. */
-    override fun reads(asked: Collection<String>): Collection<String> = asked
+    /** A work is scored of its own features by the coordinates of the values kept: no other work read. */
+    override fun scoring(model: ByteArray, task: SuggestionTask): SuggestionScores? =
+        Scoring.read(model)?.takeIf { it.valueKeys == task.valueKeys && it.design.readsItems(task) }?.on(task)
 
     /**
      * Every value's share of the works the model was fitted on, kept with the scoring; none of a scoring kept before it
      * was — till the next fitting.
      */
-    override fun weights(bytes: ByteArray): DoubleArray? = Scoring.read(bytes)?.weights()
+    override fun weights(model: ByteArray): DoubleArray? = Scoring.read(model)?.weights()
 
     /**
      * The model of every fold, fitted with the [rank] and the [lambda] chosen, on the [design] of the task fitted on;
@@ -337,13 +335,11 @@ internal constructor(
         fun nearest(penalty: Double): List<Weights> =
             (nearby + (lambda to folds)).minBy { abs(ln(it.key / penalty)) }.value.takeIf { it.size == FOLDS } ?: folds
 
-        override fun on(task: SuggestionTask): SuggestionScores = scoringOf(task).on(task)
-
         /**
-         * Kept with every value's share of the items of [task] — the task fitted on: what the model tells of the values
-         * over the works as a whole.
+         * The scoring of the values of [task], kept with every value's share of its items — the task fitted on: what
+         * the model tells of the values over the works as a whole.
          */
-        override fun scoring(task: SuggestionTask): ByteArray = scoringOf(task).withShares(task).pack()
+        override fun model(task: SuggestionTask): ByteArray = scoringOf(task).withShares(task).pack()
 
         /**
          * The scoring of the items against the values of [task]: every fold's coordinates of its values — their names
