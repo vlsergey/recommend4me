@@ -150,9 +150,15 @@ internal object WordSearch {
      * The piece of the item's text where the [terms] are found, with the words found marked: where they all stand
      * together, from the weightiest field that has them so — the place that made the item a match — or else from the
      * weightiest field that holds one; null when none is found. The third value: whether the words all stand together
-     * there. The [terms] are of the [language].
+     * there. The [terms] are of the [language]. [stemmed]: the languages the document's texts were stemmed as in the
+     * index ([LuceneIndex.keptLanguages]) — of one alone, every text of it is read as that one, none told again.
      */
-    fun snippet(terms: List<String>, language: String, doc: SearchDocument): Triple<SearchField, Snippet, Boolean>? {
+    fun snippet(
+        terms: List<String>,
+        language: String,
+        doc: SearchDocument,
+        stemmed: List<String>? = null,
+    ): Triple<SearchField, Snippet, Boolean>? {
         val parts = terms.flatMap { words(it, language) }.distinct()
         if (parts.isEmpty()) return null
         val contents =
@@ -165,17 +171,21 @@ internal object WordSearch {
                         ?.let { field to it.joinToString(if (field.list) ", " else "\n\n") }
                 }
         val all = terms.flatMap { LuceneIndex.tokens(it, language) }.distinct()
-        // A text read as it was put in the index: as its own language, or the work's
-        fun marked(content: String, name: String, query: Query) =
-            highlighter(TextLanguages.of(content, doc.language)).highlightWithoutSearcher(name, query, content, 1)
-                as Snippet?
+        // A text read as it was put in the index: as its own language, or the work's — of a document stemmed as one
+        // language, that one; else told once of a field, the words together and apart looked for in it as that one
+        val languages = HashMap<String, String>()
+        fun marked(field: SearchField, content: String, name: String, query: Query) =
+            highlighter(
+                    stemmed?.singleOrNull() ?: languages.getOrPut(field.key) { TextLanguages.of(content, doc.language) }
+                )
+                .highlightWithoutSearcher(name, query, content, 1) as Snippet?
         val together =
             if (all.size <= 1) null
             else
                 contents.firstNotNullOfOrNull { (field, content) ->
                     val name = LuceneIndex.fieldName(field)
                     val near = PhraseQuery.Builder().setSlop(NEAR).apply { all.forEach { add(Term(name, it)) } }.build()
-                    marked(content, name, near)?.let { Triple(field, it, true) }
+                    marked(field, content, name, near)?.let { Triple(field, it, true) }
                 }
         return together
             ?: contents.firstNotNullOfOrNull { (field, content) ->
@@ -184,7 +194,7 @@ internal object WordSearch {
                     BooleanQuery.Builder()
                         .apply { parts.forEach { part -> add(wordQuery(name, part), BooleanClause.Occur.SHOULD) } }
                         .build()
-                marked(content, name, query)?.let { Triple(field, it, all.size <= 1) }
+                marked(field, content, name, query)?.let { Triple(field, it, all.size <= 1) }
             }
     }
 

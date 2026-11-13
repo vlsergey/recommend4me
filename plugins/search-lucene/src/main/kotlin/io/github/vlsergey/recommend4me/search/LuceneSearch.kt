@@ -88,7 +88,7 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         val ranked = scores.entries.sortedByDescending { it.value }.take(MAX_RESULTS).map { it.key }
         log.info("'{}' in {}: {} items in {} ms", line, contentType, ranked.size, System.currentTimeMillis() - started)
         val passages = nearest.mapValues { it.value.passage }
-        val kept = index.keptFingerprints(ranked.map { it.toString() })
+        val kept = index.search { IndexKept.fingerprints(it, ranked.map { k -> k.toString() }) }
         val prints = ranked.mapNotNull { key -> kept[key.toString()]?.let { key to it } }.toMap()
         return SearchResult(q, ranked, State(terms, read, vector, passages), passages, prints)
     }
@@ -106,12 +106,15 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
     ): Map<ItemKey, SearchMatch> {
         val state = result.state as? State
         val documents = state?.let { context.documents(keys) }.orEmpty()
+        val stemmed =
+            if (state == null) emptyMap()
+            else indexes.of(contentType).search { IndexKept.languages(it, keys.map { k -> k.toString() }) }
         val byWords = HashMap<ItemKey, SearchMatch>()
         val byMeaning = HashMap<ItemKey, Pair<SearchField, List<String>>>()
         if (state != null)
             keys.forEach { key ->
                 val doc = documents[key] ?: return@forEach
-                val words = WordSearch.snippet(state.terms, state.language, doc)
+                val words = WordSearch.snippet(state.terms, state.language, doc, stemmed[key.toString()])
                 if (words != null)
                     byWords[key] = SearchMatch(words.first.key, false, words.second.text, words.second.highlights)
                 // The words apart did not make the item a match, its meaning did: the phrase of the passage nearest by

@@ -18,7 +18,6 @@ import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.FieldInfos
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
-import org.apache.lucene.index.LeafReader
 import org.apache.lucene.index.Term
 import org.apache.lucene.index.VectorSimilarityFunction
 import org.apache.lucene.search.DocIdSetIterator
@@ -155,7 +154,9 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
      * hold it older. Each written one made once, for the index and the one being built alike.
      */
     fun update(documents: List<SearchDocument>, removed: Collection<ItemKey>) = lock.withLock {
-        val kept = if (building == null) keptFingerprints(documents.map { it.key.toString() }) else emptyMap()
+        val kept =
+            if (building == null) search { IndexKept.fingerprints(it, documents.map { d -> d.key.toString() }) }
+            else emptyMap()
         val written = documents.mapNotNull { doc ->
             val fingerprint = DocumentPrints.of(doc)
             if (kept[doc.key.toString()] == fingerprint) null else doc.key to documents(doc, fingerprint)
@@ -168,38 +169,6 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             commit(writer)
             searchers.maybeRefresh()
         }
-    }
-
-    /**
-     * The fingerprints the index keeps of the items' documents of [ids], by id, as the searcher of the index after its
-     * last change reads them: of the items' documents alone, a passage keeps none.
-     */
-    fun keptFingerprints(ids: List<String>): Map<String, Long> {
-        val out = HashMap<String, Long>()
-        val searcher = searchers.acquire()
-        try {
-            for (leaf in searcher.indexReader.leaves()) ids.forEach { id ->
-                keptIn(leaf.reader(), id)?.let { out[id] = it }
-            }
-        } finally {
-            searchers.release(searcher)
-        }
-        return out
-    }
-
-    /** The fingerprint the segment [r] keeps of the item's document of [id], null when it has none live. */
-    private fun keptIn(r: LeafReader, id: String): Long? {
-        val docs = r.postings(Term(ID, id)) ?: return null
-        val live = r.liveDocs
-        val stored = r.storedFields()
-        var kept: Long? = null
-        var doc = docs.nextDoc()
-        while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-            if (live == null || live.get(doc))
-                stored.document(doc, KEPT_FIELDS).getField(FINGERPRINT)?.numericValue()?.toLong()?.let { kept = it }
-            doc = docs.nextDoc()
-        }
-        return kept
     }
 
     /** Runs [action] with a searcher of the index as it is now. */
@@ -263,7 +232,6 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         const val FINGERPRINT = "fingerprint"
 
         /** The stored fields an item's fingerprint is read with. */
-        private val KEPT_FIELDS = setOf(ID, FINGERPRINT)
 
         /**
          * The version of how the documents are made — the fields, the stemming, the marks — kept with every commit: an
