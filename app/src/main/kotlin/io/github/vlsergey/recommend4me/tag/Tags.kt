@@ -141,18 +141,19 @@ class Tags(
         val out = HashMap<String, TagStats>()
         scope.tags.stats.siteTags().forEach { r ->
             val t = out.getOrPut(TagRepository.key(r.normalized)) { TagStats(TagRepository.key(r.normalized)) }
-            // A site's tag no work has now is no variant of the tag, as of the counting
-            if (r.name != null)
-                t.variants[r.site] =
-                    TagVariant(
-                        r.site,
-                        r.name,
-                        Uses().apply {
-                            works = r.counts.works
-                            graded = r.counts.graded
-                            liked = r.counts.liked
-                        },
-                    )
+            // A site's tag no work has now is a variant all the same, of no works, named by its key on the site of no
+            // name counted (user, 2026-11-13): a tag keeping its works out has none ever, and a tag shown without the
+            // sites' tags bound to it is a number that tells nothing
+            t.variants[r.site] =
+                TagVariant(
+                    r.site,
+                    r.name ?: r.site.tag,
+                    Uses().apply {
+                        works = r.counts.works
+                        graded = r.counts.graded
+                        liked = r.counts.liked
+                    },
+                )
         }
         scope.tags.stats.counts().forEach { (id, c) ->
             out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) }

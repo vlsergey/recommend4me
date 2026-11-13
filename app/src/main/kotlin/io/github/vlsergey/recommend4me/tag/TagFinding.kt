@@ -114,7 +114,11 @@ class TagFinding(
         val target = meaning.ofText(text)
         if (target.isEmpty()) return emptyList()
         return stats.values
-            .filter { it.key !in found && (it.variants.isNotEmpty() || n.entriesOf(it.key).isNotEmpty()) }
+            // A tag of some work on a site, or of an entry: one whose sites' tags no work has now is offered no text
+            .filter {
+                it.key !in found &&
+                    (it.variants.values.any { v -> v.uses.works > 0 } || n.entriesOf(it.key).isNotEmpty())
+            }
             .map { it to meaning.likeness(target, it.key) }
             .sortedWith(compareByDescending<Pair<TagStats, Double>> { it.second }.thenBy { it.first.key })
             .map { it.first }
