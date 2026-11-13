@@ -58,7 +58,10 @@ class AffPagesTest {
         assertEquals(listOf(Books.Status.FINISHED.key), facets["status"])
         val tags = facets["tag"].orEmpty()
         assertTrue("complete" !in tags && "bdsm" in tags && "mf" in tags, "$tags")
-        assertEquals("M/F - Het", context.facetNames.getValue("tag")["mf"])
+        // Named as other sites name such a tag, told in full by its description
+        assertEquals("M/F", context.facetNames.getValue("tag")["mf"])
+        assertEquals("BDSM", context.facetNames.getValue("tag")["bdsm"])
+        assertEquals("M/F - Het", context.facetDescriptions.getValue("tag")["mf"])
         assertEquals(5.0, context.numbers.getValue(adversary)["parts"])
         assertEquals(431.0, context.numbers.getValue(adversary)["views"])
         assertTrue(context.texts.getValue(adversary)["annotation"].orEmpty().startsWith("Lorem ipsum"))

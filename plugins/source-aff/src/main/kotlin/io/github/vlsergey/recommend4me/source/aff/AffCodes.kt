@@ -20,6 +20,13 @@ internal object AffCodes {
     const val FEMSLASH = "ff"
     const val MANY = "3plus"
 
+    /**
+     * The name of a code: its short name the site tells it by ("M/F - Het" → "M/F", "Angst - Torment" → "Angst"), the
+     * code as written of one the site tells otherwise.
+     */
+    fun nameOf(code: String): String =
+        NAMES[code.lowercase()]?.takeIf { " - " in it }?.substringBefore(" - ")?.trim()?.ifEmpty { null } ?: code
+
     /** The content tags told in full, by their codes in lower case: the titles of the advanced search's filters. */
     val NAMES =
         mapOf(

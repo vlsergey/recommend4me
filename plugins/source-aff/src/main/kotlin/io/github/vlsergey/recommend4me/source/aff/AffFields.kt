@@ -60,7 +60,8 @@ internal class AffFields(private val items: ItemStore) {
 
     /**
      * The work's codes: the status those of it tell, the kinds of relationships the others do, and every other one a
-     * tag of the site, told in full ([AffCodes.NAMES]).
+     * tag of the site — named by its short name ([AffCodes.nameOf]), as other sites name such a tag ("Angst", "BDSM"):
+     * of one name, the tags of every site are one normalized tag; what the site tells of it in full its description.
      */
     fun codes(id: String, written: List<String>) {
         val codes = written.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
@@ -77,8 +78,10 @@ internal class AffFields(private val items: ItemStore) {
             TAG,
             codes
                 .filter { it.lowercase() != AffCodes.WIP && it.lowercase() != AffCodes.COMPLETE }
-                .map { FacetValue(it.lowercase(), AffCodes.NAMES[it.lowercase()] ?: it) },
+                .map { FacetValue(it.lowercase(), AffCodes.nameOf(it)) },
         )
+        val told = keys.mapNotNull { k -> AffCodes.NAMES[k]?.let { k to it } }.toMap()
+        if (told.isNotEmpty()) items.describeFacetValues(TAG, told)
         directions(id, emptyList(), keys)
     }
 
