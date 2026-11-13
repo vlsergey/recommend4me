@@ -5,12 +5,14 @@ import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.api.model.ItemSummary
 import io.github.vlsergey.recommend4me.api.model.LinkedItem
 import io.github.vlsergey.recommend4me.api.model.Prediction
+import io.github.vlsergey.recommend4me.api.model.SearchFit as ApiSearchFit
 import io.github.vlsergey.recommend4me.api.model.SearchMatch
 import io.github.vlsergey.recommend4me.api.model.SiteSaid
 import io.github.vlsergey.recommend4me.api.model.TextRange
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.rating.Rating
+import io.github.vlsergey.recommend4me.search.SearchFit
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.StoredItem
@@ -176,7 +178,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         places: Map<ItemKey, TextPlace> = emptyMap(),
         clusters: WorkClusters = works.of(type),
         /** The user's word on the works for the line searched, when searched. */
-        judged: Map<ItemKey, Boolean> = emptyMap(),
+        judged: Map<ItemKey, SearchFit> = emptyMap(),
         /** Every item of the works of [keys] read already, with the chances of the facets on a card at least. */
         members: MembersRead? = null,
     ): List<ItemSummary> {
@@ -250,7 +252,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         val members: MembersRead,
         val matches: Map<ItemKey, io.github.vlsergey.recommend4me.search.SearchMatch>,
         val places: Map<ItemKey, TextPlace>,
-        val judged: Map<ItemKey, Boolean>,
+        val judged: Map<ItemKey, SearchFit>,
     )
 
     /** The cards of the items [ids] of one source, every table of it read once for them all. */
@@ -337,7 +339,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
                 interest = interest[id]?.interesting,
                 interestChance = predicted[id]?.interest,
                 searchMatch = searchMatch(key),
-                searchRelevant = read.judged[key],
+                searchFit = read.judged[key]?.let { ApiSearchFit.valueOf(it.name) },
                 signals = signals[id]?.takeIf { it.isNotEmpty() },
             )
         }

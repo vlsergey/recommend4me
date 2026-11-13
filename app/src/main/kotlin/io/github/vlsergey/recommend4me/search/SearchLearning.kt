@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(SearchLearning::class.java)
 
 /** A line the user judged works of, as searched now: what was found, with every work's features, and the judgments. */
-class SearchedLine(val found: SearchResult, val judged: Map<ItemKey, Boolean>) {
+class SearchedLine(val found: SearchResult, val judged: Map<ItemKey, SearchFit>) {
     /** The works judged that were found, with their features: what the order is learnt of. */
     fun judgedLine(): JudgedLine =
         JudgedLine(

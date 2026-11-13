@@ -61,6 +61,7 @@ export type HistoryEntry = Schemas["HistoryEntry"];
 export type LinkedItem = Schemas["LinkedItem"];
 export type SearchMatch = Schemas["SearchMatch"];
 export type QueryRanks = Schemas["QueryRanks"];
+export type SearchFit = Schemas["SearchFit"];
 export type SearchQuality = Schemas["SearchQuality"];
 export type SearchQualitySum = Schemas["SearchQualitySum"];
 export type FacetFilter = Schemas["FacetFilter"];

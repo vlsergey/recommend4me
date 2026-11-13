@@ -13,6 +13,7 @@ import {
   type ItemFacet,
   type ItemRef,
   type ItemSummary,
+  type SearchFit,
   type SourceInfo,
 } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -87,7 +88,7 @@ export function WorkScreen({
   onIndex: (index: number | null) => void;
   onRate: (grade: Grade | null) => unknown;
   /** Found by a search: the user's word on whether it answers the line. */
-  onJudge?: (relevant: boolean | null) => Promise<unknown>;
+  onJudge?: (fit: SearchFit | null) => Promise<unknown>;
 }) {
   const { t } = useTranslation("item");
   const queryClient = useQueryClient();
@@ -403,7 +404,7 @@ function LeftPage({
   asked: AskedValue | null;
   onLeave: () => void;
   leadTo: (feature: FeatureContribution) => (() => void) | undefined;
-  onJudge?: (relevant: boolean | null) => Promise<unknown>;
+  onJudge?: (fit: SearchFit | null) => Promise<unknown>;
 }) {
   const { t } = useTranslation("item");
   const ref = { source: d.summary.source, item: d.summary.item };
@@ -445,7 +446,7 @@ function LeftPage({
           {listed.searchMatch && (
             <div className="flex flex-col gap-1">
               <SearchMatchLine match={listed.searchMatch} />
-              {onJudge && <SearchJudge value={listed.searchRelevant} onJudge={onJudge} />}
+              {onJudge && <SearchJudge value={listed.searchFit} onJudge={onJudge} />}
             </div>
           )}
           <SignalBadges source={source} signals={d.summary.signals} />

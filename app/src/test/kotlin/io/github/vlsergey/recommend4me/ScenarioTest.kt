@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.api.model.ItemSort
 import io.github.vlsergey.recommend4me.api.model.ItemView
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
+import io.github.vlsergey.recommend4me.api.model.SearchFit
 import io.github.vlsergey.recommend4me.api.model.SearchJudgment
 import io.github.vlsergey.recommend4me.capture.CaptureController
 import io.github.vlsergey.recommend4me.contenttype.TypesController
@@ -238,16 +239,22 @@ class ScenarioTest {
         )
     }
 
-    /** The user's word on what a search found: one line however typed, taken back when pressed again. */
+    /**
+     * The user's word on what a search found — whole, in part, not at all: one line however typed, taken back when
+     * pressed again.
+     */
     private fun searchJudged() {
-        searchController.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", relevant = true))
-        searchController.judgeSearch("books", SearchJudgment("dragons", "test", "w2", relevant = false))
-        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", relevant = true))
-        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", relevant = null))
+        searchController.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", fit = SearchFit.FITS))
+        searchController.judgeSearch("books", SearchJudgment("dragons", "test", "w2", fit = SearchFit.NOT))
+        searchController.judgeSearch("books", SearchJudgment("dragons", "test", "w4", fit = SearchFit.PARTLY))
+        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", fit = SearchFit.FITS))
+        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", fit = null))
         val quality = searchController.getSearchQuality("books", 10).body!!
         assertEquals(listOf("dragons"), quality.queries.map { it.query })
         assertEquals(1, quality.queries.single().relevant)
+        assertEquals(1, quality.queries.single().partly)
         assertEquals(1, quality.queries.single().irrelevant)
+        assertEquals(1, quality.reranked.partly)
     }
 
     /** Linked, two items are one work: a grade, a mark of interest and a correction of either are of both. */

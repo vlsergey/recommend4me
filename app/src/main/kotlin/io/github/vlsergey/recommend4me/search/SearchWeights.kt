@@ -9,19 +9,20 @@ import kotlin.math.sqrt
 class FeatureWeight(val weight: Double, val mean: Double, val scale: Double)
 
 /**
- * The works the user judged of a line, as a search found them: each one's features, and whether it answers the line.
+ * The works the user judged of a line, as a search found them: each one's features, and how far it answers the line.
  */
-class JudgedLine(val line: String, val works: List<Pair<Map<String, Double>, Boolean>>)
+class JudgedLine(val line: String, val works: List<Pair<Map<String, Double>, SearchFit>>)
 
 /**
  * THE ORDER OF WHAT A SEARCH FINDS, LEARNT FROM THE USER'S WORD (user, 2026-11-13): the works found put in the order of
  * a sum of their features ([SearchResult.features] — how close by meaning, how their words matched, what the reranker
  * said), each weighed as the user's judgments of the lines searched tell. A feature a work lacks is 0 of it.
  *
- * Learnt by pairs within a line ([fit]): of every line, every work judged to answer it against every work judged not
- * to, the first to stand higher — a logistic model of the difference of their features. Only the order within a line is
- * learnt: what a reranker gives one line and another are not on one scale. Every line weighs alike, however many works
- * it has judged; a line with no pair — every work judged one way — teaches nothing of an order.
+ * Learnt by pairs within a line ([fit]): of every line, every work judged to answer it further than another — whole
+ * than in part, in part than not at all ([SearchFit]) — the first to stand higher, a logistic model of the difference
+ * of their features. Only the order within a line is learnt: what a reranker gives one line and another are not on one
+ * scale. Every line weighs alike, however many works it has judged; a line with no pair — every work judged alike —
+ * teaches nothing of an order.
  */
 class SearchWeights(val features: Map<String, FeatureWeight>) {
 
@@ -42,8 +43,8 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
 
     companion object {
         /**
-         * The weights learnt of the [lines] judged; null when no line has a pair — a work judged to answer it and one
-         * judged not to.
+         * The weights learnt of the [lines] judged; null when no line has a pair — two works judged to answer it
+         * unlike.
          */
         fun fit(lines: List<JudgedLine>): SearchWeights? {
             val names = lines.flatMap { l -> l.works.flatMap { it.first.keys } }.toSortedSet().toList()
@@ -68,15 +69,15 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
         }
 
         /**
-         * Of every line, every work judged to answer it less every work judged not to, on the features' own scales,
-         * each pair weighing 1 / the pairs of its line.
+         * Of every line, every work judged to answer it further less every work judged to answer it less, on the
+         * features' own scales, each pair weighing 1 / the pairs of its line.
          */
         private fun pairsOf(lines: List<JudgedLine>, scaled: (Map<String, Double>) -> DoubleArray): List<Above> =
             lines.flatMap { line ->
-                val yes = line.works.filter { it.second }.map { scaled(it.first) }
-                val no = line.works.filter { !it.second }.map { scaled(it.first) }
-                val weight = 1.0 / (yes.size * no.size).coerceAtLeast(1)
-                yes.flatMap { y -> no.map { n -> Above(DoubleArray(y.size) { y[it] - n[it] }, weight) } }
+                val works = line.works.map { scaled(it.first) to it.second.level }
+                val ordered = works.flatMap { (x, lx) -> works.filter { (_, ly) -> lx > ly }.map { (y, _) -> x to y } }
+                val weight = 1.0 / ordered.size.coerceAtLeast(1)
+                ordered.map { (x, y) -> Above(DoubleArray(x.size) { x[it] - y[it] }, weight) }
             }
 
         /**

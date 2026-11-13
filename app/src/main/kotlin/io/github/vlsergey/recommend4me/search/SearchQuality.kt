@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.api.model.SearchQualitySum as ApiSearchQu
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.ZoneOffset
+import kotlin.math.log2
 import org.springframework.stereotype.Component
 
 /**
@@ -44,8 +45,9 @@ class SearchQuality(private val stores: Stores, private val search: Search, priv
                 val plain = search.search(typeId, query, language, rerank = false)?.keys.orEmpty()
                 ApiQueryQuality(
                     query,
-                    line.judged.count { it.value },
-                    line.judged.count { !it.value },
+                    line.judged.count { it.value == SearchFit.FITS },
+                    line.judged.count { it.value == SearchFit.PARTLY },
+                    line.judged.count { it.value == SearchFit.NOT },
                     ranks(learnt, line.judged, top),
                     ranks(line.found.keys, line.judged, top),
                     ranks(plain, line.judged, top),
@@ -64,15 +66,17 @@ class SearchQuality(private val stores: Stores, private val search: Search, priv
         )
     }
 
-    private fun ranks(found: List<ItemKey>, judged: Map<ItemKey, Boolean>, top: Int): ApiQueryRanks {
-        val first = found.indexOfFirst { judged[it] == true }.takeIf { it >= 0 }?.plus(1)
+    private fun ranks(found: List<ItemKey>, judged: Map<ItemKey, SearchFit>, top: Int): ApiQueryRanks {
+        val first = found.indexOfFirst { judged[it] == SearchFit.FITS }.takeIf { it >= 0 }?.plus(1)
         val head = found.take(top)
         return ApiQueryRanks(
-            relevantInTop = head.count { judged[it] == true },
-            irrelevantInTop = head.count { judged[it] == false },
+            relevantInTop = head.count { judged[it] == SearchFit.FITS },
+            partlyInTop = head.count { judged[it] == SearchFit.PARTLY },
+            irrelevantInTop = head.count { judged[it] == SearchFit.NOT },
             unjudgedInTop = head.count { it !in judged },
-            relevantFound = found.count { judged[it] == true },
+            relevantFound = found.count { judged[it] == SearchFit.FITS },
             firstRelevant = first,
+            ndcg = ndcg(found, judged, top),
         )
     }
 
@@ -81,10 +85,27 @@ class SearchQuality(private val stores: Stores, private val search: Search, priv
             meanReciprocalRank =
                 if (ranks.isEmpty()) 0.0
                 else ranks.sumOf { r -> r.firstRelevant?.let { 1.0 / it } ?: 0.0 } / ranks.size,
+            meanNdcg = ranks.mapNotNull { it.ndcg }.takeIf { it.isNotEmpty() }?.average(),
             relevantInTop = ranks.sumOf { it.relevantInTop },
+            partlyInTop = ranks.sumOf { it.partlyInTop },
             irrelevantInTop = ranks.sumOf { it.irrelevantInTop },
             unjudgedInTop = ranks.sumOf { it.unjudgedInTop },
             relevantFound = ranks.sumOf { it.relevantFound },
             relevant = rows.sumOf { it.relevant },
+            partly = rows.sumOf { it.partly },
         )
+
+    companion object {
+        /**
+         * How well the first [top] of the works [judged] are ordered as [found], 0..1: of the works judged, in the
+         * order found — those not judged left out, neither for nor against — the first [top], each bringing its gain
+         * ([SearchFit.gain]) the less the lower it stands, 1 / log2(place + 1), against the same of every work judged
+         * in the best order, those not found among them. Null of a line no work answers at all.
+         */
+        fun ndcg(found: List<ItemKey>, judged: Map<ItemKey, SearchFit>, top: Int): Double? {
+            fun dcg(gains: List<Double>) = gains.take(top).withIndex().sumOf { (n, g) -> g / log2(n + 2.0) }
+            val ideal = dcg(judged.values.map { it.gain }.sortedDescending())
+            return if (ideal <= 0) null else dcg(found.mapNotNull { judged[it]?.gain }) / ideal
+        }
+    }
 }

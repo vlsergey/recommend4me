@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import type { ContentTypeInfo, Grade, ItemSummary } from "@/api/client";
+import type { ContentTypeInfo, Grade, ItemSummary, SearchFit } from "@/api/client";
 import { ago } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import { SearchJudge } from "@/search/SearchJudge";
@@ -24,7 +24,7 @@ export type ItemViewProps = {
   onSelect: () => void;
   onRate: (grade: Grade | null) => unknown;
   /** Found by a search: the user's word on whether it answers the line. */
-  onJudge?: (relevant: boolean | null) => Promise<unknown>;
+  onJudge?: (fit: SearchFit | null) => Promise<unknown>;
 };
 
 const SHOWN_FACET_VALUES = 8;
@@ -67,7 +67,7 @@ export const ItemCard = forwardRef<HTMLElement, ItemViewProps>(function ItemCard
 
         {summary.searchMatch && <SearchMatchLine match={summary.searchMatch} className="line-clamp-3" />}
         {/* Judged by what it was found by: not without it */}
-        {onJudge && summary.searchMatch && <SearchJudge value={summary.searchRelevant} onJudge={onJudge} />}
+        {onJudge && summary.searchMatch && <SearchJudge value={summary.searchFit} onJudge={onJudge} />}
 
         <FacetBadges facets={summary.facets} limit={SHOWN_FACET_VALUES} />
 

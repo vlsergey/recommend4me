@@ -56,7 +56,7 @@ export const ItemRow = forwardRef<HTMLElement, ItemViewProps>(function ItemRow({
           facetLine && <div className="mt-1 hidden truncate text-xs text-muted-foreground/80 sm:block">{facetLine}</div>
         )}
         {/* Judged by what it was found by: not without it */}
-        {onJudge && summary.searchMatch && <SearchJudge value={summary.searchRelevant} onJudge={onJudge} />}
+        {onJudge && summary.searchMatch && <SearchJudge value={summary.searchFit} onJudge={onJudge} />}
       </div>
       <ScoreBadge type={type} summary={summary} />
       <InterestButtons summary={summary} className="shrink-0" />

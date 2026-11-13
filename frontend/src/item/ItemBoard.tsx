@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { InboxIcon, Loader2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, refKey, unwrap, type ContentTypeInfo, type Grade, type ItemSummary, type ItemView } from "@/api/client";
+import { api, ensureOk, refKey, unwrap, type ContentTypeInfo, type Grade, type ItemSummary, type ItemView, type SearchFit } from "@/api/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useShownLate } from "@/lib/useShownLate";
 import { cn } from "@/lib/utils";
@@ -196,13 +196,13 @@ export const ItemBoard = memo(function ItemBoard({ type, view, sort, search, fac
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  /** The user's word on whether a work found by the search answers the line. */
+  /** The user's word on how far a work found by the search answers the line. */
   const judge = search
-    ? async (summary: ItemSummary, relevant: boolean | null) =>
+    ? async (summary: ItemSummary, fit: SearchFit | null) =>
         ensureOk(
           await api.PUT("/api/types/{type}/search/judgments", {
             params: { path: { type: type.id } },
-            body: { query: search, source: summary.source, item: summary.item, relevant: relevant ?? undefined },
+            body: { query: search, source: summary.source, item: summary.item, fit: fit ?? undefined },
           }),
         )
     : undefined;
@@ -261,7 +261,7 @@ export const ItemBoard = memo(function ItemBoard({ type, view, sort, search, fac
                 setOpened(i);
               }}
               onRate={(grade) => onRate(summary, grade)}
-              onJudge={judge && ((relevant) => judge(summary, relevant))}
+              onJudge={judge && ((fit) => judge(summary, fit))}
             />
           );
         })}

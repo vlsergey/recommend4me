@@ -18,10 +18,17 @@ class SearchWeightsTest {
         // each line, one far above the other
         val lines =
             listOf(
-                JudgedLine("a", listOf(work(5.0, 3.0) to true, work(5.2, 0.5) to false, work(4.9, 2.5) to true)),
-                JudgedLine("b", listOf(work(-1.0, 1.5) to true, work(-0.9, 0.1) to false)),
+                JudgedLine(
+                    "a",
+                    listOf(
+                        work(5.0, 3.0) to SearchFit.FITS,
+                        work(5.2, 0.5) to SearchFit.NOT,
+                        work(4.9, 2.5) to SearchFit.FITS,
+                    ),
+                ),
+                JudgedLine("b", listOf(work(-1.0, 1.5) to SearchFit.FITS, work(-0.9, 0.1) to SearchFit.NOT)),
                 // Every work judged one way: no pair, nothing of an order
-                JudgedLine("c", listOf(work(9.0, 9.0) to false)),
+                JudgedLine("c", listOf(work(9.0, 9.0) to SearchFit.NOT)),
             )
         val weights = assertNotNull(SearchWeights.fit(lines))
         val words = weights.features.getValue("words").weight
@@ -42,8 +49,40 @@ class SearchWeightsTest {
     }
 
     @Test
+    fun `a line of works answering it whole and in part teaches the order of them`() {
+        val weights =
+            assertNotNull(
+                SearchWeights.fit(
+                    listOf(
+                        JudgedLine("a", listOf(work(1.0, 3.0) to SearchFit.FITS, work(1.0, 1.0) to SearchFit.PARTLY))
+                    )
+                )
+            )
+        assertTrue(weights.features.getValue("words").weight > 0)
+    }
+
+    @Test
+    fun `the works judged in the order of how far they answer a line, the first ones the most`() {
+        val fits = ItemKey("s", "1")
+        val partly = ItemKey("s", "2")
+        val not = ItemKey("s", "3")
+        val judged = mapOf(fits to SearchFit.FITS, partly to SearchFit.PARTLY, not to SearchFit.NOT)
+        // The best order, and the works not judged left out
+        assertEquals(1.0, SearchQuality.ndcg(listOf(ItemKey("s", "9"), fits, partly, not), judged, 10))
+        val swapped = assertNotNull(SearchQuality.ndcg(listOf(partly, fits, not), judged, 10))
+        val last = assertNotNull(SearchQuality.ndcg(listOf(not, partly, fits), judged, 10))
+        assertTrue(swapped < 1.0 && last < swapped, "swapped $swapped, last $last")
+        // A line nothing answers has none
+        assertNull(SearchQuality.ndcg(listOf(not), mapOf(not to SearchFit.NOT), 10))
+    }
+
+    @Test
     fun `no line with a work judged to answer it and one judged not to teaches no order`() {
         assertNull(SearchWeights.fit(emptyList()))
-        assertNull(SearchWeights.fit(listOf(JudgedLine("a", listOf(work(1.0, 1.0) to true, work(2.0, 0.0) to true)))))
+        assertNull(
+            SearchWeights.fit(
+                listOf(JudgedLine("a", listOf(work(1.0, 1.0) to SearchFit.FITS, work(2.0, 0.0) to SearchFit.FITS)))
+            )
+        )
     }
 }

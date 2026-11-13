@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.api.model.SearchJudgment
 import io.github.vlsergey.recommend4me.api.model.SearchQuality
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetValues
+import io.github.vlsergey.recommend4me.search.SearchFit
 import io.github.vlsergey.recommend4me.search.SearchJudged
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -43,7 +44,12 @@ class SearchController(
     override fun judgeSearch(type: String, searchJudgment: SearchJudgment): ResponseEntity<Unit> {
         val store = stores.type(type) ?: return ResponseEntity.notFound().build()
         val j = searchJudgment
-        store.searchJudgments.judge(j.query, ItemKey(j.source, j.item), j.relevant, Instant.now())
+        store.searchJudgments.judge(
+            j.query,
+            ItemKey(j.source, j.item),
+            j.fit?.let { SearchFit.valueOf(it.name) },
+            Instant.now(),
+        )
         // The order of what a search finds is learnt of the judgments again, in the background
         events.publishEvent(SearchJudged(type))
         return ResponseEntity.noContent().build()

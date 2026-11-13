@@ -24,10 +24,10 @@ class QueryShiftTest {
             MeaningLine(
                 v(1.0, 1.0, 0.3 * n, 0.2),
                 listOf(
-                    listOf(v(1.0, 0.1, 0.1 * n), v(0.2, 0.0, 1.0)) to true,
-                    listOf(v(0.1, 1.0, 0.0, 0.1 * n)) to false,
-                    listOf(v(0.9, 0.0, 0.0, 0.3)) to true,
-                    listOf(v(0.0, 1.0, 0.2)) to false,
+                    listOf(v(1.0, 0.1, 0.1 * n), v(0.2, 0.0, 1.0)) to SearchFit.FITS,
+                    listOf(v(0.1, 1.0, 0.0, 0.1 * n)) to SearchFit.NOT,
+                    listOf(v(0.9, 0.0, 0.0, 0.3)) to SearchFit.FITS,
+                    listOf(v(0.0, 1.0, 0.2)) to SearchFit.NOT,
                 ),
             )
         val shift = assertNotNull(QueryShift.fit(listOf(line(1), line(2), line(3))))
@@ -49,7 +49,12 @@ class QueryShiftTest {
         assertNull(QueryShift.fit(emptyList()))
         assertNull(
             QueryShift.fit(
-                listOf(MeaningLine(v(1.0), listOf(listOf(v(1.0)) to true, emptyList<FloatArray>() to false)))
+                listOf(
+                    MeaningLine(
+                        v(1.0),
+                        listOf(listOf(v(1.0)) to SearchFit.FITS, emptyList<FloatArray>() to SearchFit.NOT),
+                    )
+                )
             )
         )
     }

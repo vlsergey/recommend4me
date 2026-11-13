@@ -1,20 +1,22 @@
 import { useState } from "react";
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, EqualApproximatelyIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { SearchFit } from "@/api/client";
 import { cn } from "@/lib/utils";
 
 /**
- * "Fits the query? ✓ ✗" under a work found by a search: the user's word on whether it answers the line,
- * what the quality of the search is measured by. Pressed again, the word is taken back. Shown as
- * said at once; the list is not read again for it — its order must not move under the finger.
+ * "Fits the query? ✓ ≈ ✗" under a work found by a search: the user's word on how far it answers the line
+ * — whole, in part, not at all — what the search learns of and its quality is measured by. Pressed
+ * again, the word is taken back. Shown as said at once; the list is not read again for it — its order
+ * must not move under the finger.
  */
-export function SearchJudge({ value, onJudge }: { value?: boolean; onJudge: (relevant: boolean | null) => Promise<unknown> }) {
+export function SearchJudge({ value, onJudge }: { value?: SearchFit; onJudge: (fit: SearchFit | null) => Promise<unknown> }) {
   const { t } = useTranslation("search");
-  const [said, setSaid] = useState<boolean | undefined>(value);
-  const press = (relevant: boolean) => (e: React.MouseEvent) => {
+  const [said, setSaid] = useState<SearchFit | undefined>(value);
+  const press = (fit: SearchFit) => (e: React.MouseEvent) => {
     // The card under it opens on a click: not on this one
     e.stopPropagation();
-    const next = said === relevant ? undefined : relevant;
+    const next = said === fit ? undefined : fit;
     setSaid(next);
     onJudge(next ?? null).catch(() => setSaid(said));
   };
@@ -24,16 +26,24 @@ export function SearchJudge({ value, onJudge }: { value?: boolean; onJudge: (rel
       <button
         type="button"
         title={t("SearchJudge.fits")}
-        onClick={press(true)}
-        className={cn("rounded-md p-1 hover:bg-muted", said === true && "bg-yes/15 text-yes")}
+        onClick={press("FITS")}
+        className={cn("rounded-md p-1 hover:bg-muted", said === "FITS" && "bg-yes/15 text-yes")}
       >
         <CheckIcon className="size-3.5" />
       </button>
       <button
         type="button"
+        title={t("SearchJudge.partly")}
+        onClick={press("PARTLY")}
+        className={cn("rounded-md p-1 hover:bg-muted", said === "PARTLY" && "bg-maybe/20 text-maybe")}
+      >
+        <EqualApproximatelyIcon className="size-3.5" />
+      </button>
+      <button
+        type="button"
         title={t("SearchJudge.doesNotFit")}
-        onClick={press(false)}
-        className={cn("rounded-md p-1 hover:bg-muted", said === false && "bg-no/15 text-no")}
+        onClick={press("NOT")}
+        className={cn("rounded-md p-1 hover:bg-muted", said === "NOT" && "bg-no/15 text-no")}
       >
         <XIcon className="size-3.5" />
       </button>

@@ -3627,8 +3627,8 @@ components:
             1 or 0 for what the user said (the mark, or a grade of 4 or 5, or of 1)
         searchMatch:
           $ref: '#/components/schemas/SearchMatch'
-        searchRelevant:
-          type: boolean
+        searchFit:
+          $ref: '#/components/schemas/SearchFit'
           description: The user's word on the work for the line searched (judgeSearch); none when not judged or not searched
         signals:
           type: object
@@ -3694,9 +3694,14 @@ components:
           type: string
         item:
           type: string
-        relevant:
-          type: boolean
-          description: Whether the work answers the line; left out, the word is taken back
+        fit:
+          $ref: '#/components/schemas/SearchFit'
+          description: How far the work answers the line; left out, the word is taken back
+
+    SearchFit:
+      type: string
+      description: How far a work found answers the line searched for, by the user's word - whole, in part, not at all
+      enum: [FITS, PARTLY, NOT]
 
     SearchQuality:
       type: object
@@ -3748,13 +3753,16 @@ components:
 
     QueryQuality:
       type: object
-      required: [query, relevant, irrelevant, learnt, reranked, plain]
+      required: [query, relevant, partly, irrelevant, learnt, reranked, plain]
       properties:
         query:
           type: string
         relevant:
           type: integer
           description: The works judged to answer the line
+        partly:
+          type: integer
+          description: The works judged to answer it in part
         irrelevant:
           type: integer
           description: The works judged not to
@@ -3771,12 +3779,14 @@ components:
     QueryRanks:
       type: object
       description: Where the works judged stand in what a search found
-      required: [relevantInTop, irrelevantInTop, unjudgedInTop, relevantFound]
+      required: [relevantInTop, partlyInTop, irrelevantInTop, unjudgedInTop, relevantFound]
       properties:
         firstRelevant:
           type: integer
           description: The place of the first work judged fitting, from 1; none when none is found
         relevantInTop:
+          type: integer
+        partlyInTop:
           type: integer
         irrelevantInTop:
           type: integer
@@ -3785,16 +3795,31 @@ components:
         relevantFound:
           type: integer
           description: The works judged fitting found at all
+        ndcg:
+          type: number
+          format: double
+          description: >-
+            How well the first ones of the works judged are ordered by how far they answer the line, 0..1: of the works
+            judged in the order found, the first ones, each bringing 3 fitting, 1 fitting in part, 0 not, the less the
+            lower it stands (1 / log2(place + 1)), against the best order of every work judged; the works not judged
+            are left out, neither for nor against. None of a line no work answers at all
 
     SearchQualitySum:
       type: object
-      required: [meanReciprocalRank, relevantInTop, irrelevantInTop, unjudgedInTop, relevantFound, relevant]
+      required:
+        [meanReciprocalRank, relevantInTop, partlyInTop, irrelevantInTop, unjudgedInTop, relevantFound, relevant, partly]
       properties:
         meanReciprocalRank:
           type: number
           format: double
           description: The mean over the lines of 1 / the place of the first work judged fitting, 0 when none is found
+        meanNdcg:
+          type: number
+          format: double
+          description: The mean of the lines' ndcg, of those that have one; none when none has
         relevantInTop:
+          type: integer
+        partlyInTop:
           type: integer
         irrelevantInTop:
           type: integer
@@ -3803,6 +3828,8 @@ components:
         relevantFound:
           type: integer
         relevant:
+          type: integer
+        partly:
           type: integer
 
     ItemQuery:

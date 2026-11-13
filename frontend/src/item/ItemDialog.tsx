@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { sameItem, type Grade, type ItemSummary } from "@/api/client";
+import { sameItem, type Grade, type ItemSummary, type SearchFit } from "@/api/client";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useSource } from "@/contenttype/types";
@@ -18,7 +18,7 @@ type Props = {
   /** The graded work leaves the list, so the next one takes its place under the same index. */
   ratedLeaves: boolean;
   /** Found by a search: the user's word on whether the work answers the line. */
-  onJudge?: (summary: ItemSummary, relevant: boolean | null) => Promise<unknown>;
+  onJudge?: (summary: ItemSummary, fit: SearchFit | null) => Promise<unknown>;
   /** The work asked for is being read: the screen opens at once, its parts outlined till it is there ([WorkOpening]). */
   opening?: boolean;
 };
@@ -121,7 +121,7 @@ export function ItemDialog({ items, index, total, onIndex, onRate, ratedLeaves, 
               total={total}
               onIndex={go}
               onRate={grade}
-              onJudge={onJudge && ((relevant) => onJudge(summary, relevant))}
+              onJudge={onJudge && ((fit) => onJudge(summary, fit))}
             />
           </ErrorBoundary>
         )}

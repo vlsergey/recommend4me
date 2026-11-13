@@ -56,9 +56,19 @@ export function SearchQualityDialog({ type }: { type: string }) {
                 <span className="font-semibold">{t("SearchQualityDialog.plain")}</span>
                 <Sum label={t("SearchQualityDialog.firstRelevant")} q={q} of={(s) => s.meanReciprocalRank.toFixed(2)} />
                 <Sum
+                  label={t("SearchQualityDialog.ndcg", { count: TOP })}
+                  q={q}
+                  of={(s) => (s.meanNdcg === undefined ? "—" : s.meanNdcg.toFixed(2))}
+                />
+                <Sum
                   label={t("SearchQualityDialog.relevantInTop", { count: TOP })}
                   q={q}
                   of={(s) => t("SearchQualityDialog.ofRelevant", { found: s.relevantInTop, all: s.relevant })}
+                />
+                <Sum
+                  label={t("SearchQualityDialog.partlyInTop", { count: TOP })}
+                  q={q}
+                  of={(s) => t("SearchQualityDialog.ofRelevant", { found: s.partlyInTop, all: s.partly })}
                 />
                 <Sum label={t("SearchQualityDialog.irrelevantInTop", { count: TOP })} q={q} of={(s) => String(s.irrelevantInTop)} />
                 <Sum label={t("SearchQualityDialog.unjudgedInTop", { count: TOP })} q={q} of={(s) => String(s.unjudgedInTop)} />
@@ -86,7 +96,7 @@ export function SearchQualityDialog({ type }: { type: string }) {
                     <tr key={row.query} className="border-t">
                       <td className="py-1">{row.query}</td>
                       <td className="py-1 text-right tabular-nums">
-                        {row.relevant}/{row.irrelevant}
+                        {row.relevant}/{row.partly}/{row.irrelevant}
                       </td>
                       <td className="py-1 text-right tabular-nums">
                         <Ranks r={row.learnt} />
@@ -161,12 +171,13 @@ function Weights({ q }: { q: SearchQuality }) {
   );
 }
 
-/** "#3 · ✓4 ✗1": where the first fitting work stands, and the judged ones among the first. */
+/** "#3 · ✓4 ≈1 ✗1": where the first fitting work stands, and the judged ones among the first. */
 function Ranks({ r }: { r: QueryRanks }) {
   const { t } = useTranslation("search");
   return (
     <span title={t("Ranks.hint", { count: TOP, found: r.relevantFound, unjudged: r.unjudgedInTop })}>
-      {r.firstRelevant ? t("Ranks.first", { rank: r.firstRelevant }) : t("Ranks.none")} · ✓{r.relevantInTop} ✗{r.irrelevantInTop}
+      {r.firstRelevant ? t("Ranks.first", { rank: r.firstRelevant }) : t("Ranks.none")} · ✓{r.relevantInTop}
+      {r.partlyInTop > 0 && <> ≈{r.partlyInTop}</>} ✗{r.irrelevantInTop}
     </span>
   );
 }

@@ -6,9 +6,9 @@ import kotlin.math.sqrt
 
 /**
  * A line judged, as its meaning is searched: the vector of the line, and of every work judged the vectors of its
- * passages, of unit length, and whether it answers the line.
+ * passages, of unit length, and how far it answers the line.
  */
-class MeaningLine(val query: FloatArray, val works: List<Pair<List<FloatArray>, Boolean>>)
+class MeaningLine(val query: FloatArray, val works: List<Pair<List<FloatArray>, SearchFit>>)
 
 /**
  * THE CLOSENESS OF A LINE AND A PASSAGE BY MEANING, CORRECTED BY THE USER'S JUDGMENTS (user, 2026-11-13): of the
@@ -17,8 +17,8 @@ class MeaningLine(val query: FloatArray, val works: List<Pair<List<FloatArray>, 
  * moved ([of]): q' = q + b(a·q), searched among the passages as they are, nothing of the index made again.
  *
  * Learnt ([fit]) by pairs within a line, as the order of what is found ([SearchWeights]): every work judged to answer
- * it against every work judged not to, a work as close as its passages are — the soft maximum of their closeness — the
- * first to be the closer; every line alike; [a] and [b] pulled toward none, the encoder's closeness.
+ * it further than another ([SearchFit]), a work as close as its passages are — the soft maximum of their closeness —
+ * the first to be the closer; every line alike; [a] and [b] pulled toward none, the encoder's closeness.
  */
 class QueryShift(val a: FloatArray, val b: FloatArray) {
 
@@ -40,7 +40,7 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
                 lines
                     .filter { it.query.size == dim }
                     .map { l -> Prepared(l.query, l.works.filter { (ps, _) -> ps.isNotEmpty() && ps[0].size == dim }) }
-                    .filter { l -> l.works.any { it.second } && l.works.any { !it.second } }
+                    .filter { l -> l.works.map { it.second }.distinct().size > 1 }
             return if (usable.isEmpty()) null else Descent(usable, dim).run()
         }
 
@@ -51,7 +51,7 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
         }
 
         /** A line ready for the descent: its vector, and its works' passages with whether each answers it. */
-        private class Prepared(val query: FloatArray, val works: List<Pair<List<FloatArray>, Boolean>>)
+        private class Prepared(val query: FloatArray, val works: List<Pair<List<FloatArray>, SearchFit>>)
 
         /**
          * The descent of the loss of the [lines] from a small start — at none the product moves neither vector — along
@@ -70,7 +70,11 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
             private fun start() {
                 lines.forEach { l ->
                     for (i in 0 until dim) a[i] += l.query[i].toDouble()
-                    val (yes, no) = l.works.partition { it.second }
+                    // From the works that answer it furthest away from those that answer it least
+                    val top = l.works.maxOf { it.second.level }
+                    val bottom = l.works.minOf { it.second.level }
+                    val yes = l.works.filter { it.second.level == top }
+                    val no = l.works.filter { it.second.level == bottom }
                     yes.forEach { (ps, _) ->
                         ps.forEach { p -> for (i in 0 until dim) b[i] += p[i].toDouble() / ps.size / yes.size }
                     }
@@ -108,18 +112,17 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
                 var aq = 0.0
                 for (i in 0 until dim) aq += a[i] * q[i]
                 val moved = DoubleArray(dim) { q[it] + b[it] * aq }
-                val scored = l.works.map { (ps, fits) -> soft(moved, ps) to fits }
-                val yes = scored.filter { it.second }
-                val no = scored.filter { !it.second }
-                val weight = 1.0 / (yes.size * no.size) / lines.size
+                val scored = l.works.map { (ps, fit) -> soft(moved, ps) to fit.level }
+                val ordered = scored.flatMap { (y, ly) ->
+                    scored.filter { (_, ln) -> ly > ln }.map { (n, _) -> y to n }
+                }
+                val weight = 1.0 / ordered.size / lines.size
                 // The gradient of the loss by the line's vector moved
                 val g = DoubleArray(dim)
-                yes.forEach { (y, _) ->
-                    no.forEach { (n, _) ->
-                        val margin = (y.score - n.score) / TEMPERATURE
-                        val d = -weight / TEMPERATURE / (1 + exp(margin))
-                        for (i in 0 until dim) g[i] += d * (y.direction[i] - n.direction[i])
-                    }
+                ordered.forEach { (y, n) ->
+                    val margin = (y.score - n.score) / TEMPERATURE
+                    val d = -weight / TEMPERATURE / (1 + exp(margin))
+                    for (i in 0 until dim) g[i] += d * (y.direction[i] - n.direction[i])
                 }
                 var bg = 0.0
                 for (i in 0 until dim) bg += b[i] * g[i]
