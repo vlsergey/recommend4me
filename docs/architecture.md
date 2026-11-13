@@ -266,9 +266,10 @@ every content type — a tag of a site of games and one of a site of books may b
 dictionaries: a normalized tag is an id and the name the user gave it, if any (`normalized_tag`);
 every tag of every site — its source and the site's own key of it — is bound to exactly one
 (`site_tag`, keyed by the two). A work's values of the layer are the ids, written out. A site's tag
-seen first is bound to the normalized tag the sites' tags of its name are bound to, any case —
-"Магия" of ficbook and "магия" of author.today one tag — when there is exactly one such, else to a
-new normalized tag of its own (`TagNormalization`, as the works are captured).
+seen first is bound to the normalized tag the same site's tags of its name are bound to, any case,
+when there is exactly one such, else to a new normalized tag of its own (`TagNormalization`, as the
+works are captured). The tags of different sites mean different things till the user merges them:
+"Angst" of one site and of another are two tags, offered to be merged by their likeness.
 
 A normalized tag the user says keeps its works out of the library (`normalized_tag.keeps_out`, the
 ban button on its page, asked to be confirmed with how many works go) keeps out every work any site

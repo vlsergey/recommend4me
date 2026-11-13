@@ -39,6 +39,8 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
         alpha("h2|The Harbour, a new upload|harbours|Ships in the harbour||")
         beta("h3|The Harbour|harbours|Ships in the harbour")
         alpha("h4|Another harbour|harbours|Boats in another harbour||")
+        // The tags of two sites are two till the user merges them
+        tags.relateTags(TagRelationRequest(tagOf("alpha", "harbours"), tagOf("beta", "harbours"), TagRelation.MERGED))
         corrections.linkItem("alpha", "h1", ItemRef("alpha", "h2"))
         corrections.linkItem("alpha", "h1", ItemRef("beta", "h3"))
         gradesController.rateItem("beta", "h3", RatingRequest(5))

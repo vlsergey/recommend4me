@@ -12,6 +12,8 @@ import io.github.vlsergey.recommend4me.api.model.ItemSort
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.api.model.SiteAuthorKey
 import io.github.vlsergey.recommend4me.api.model.SizeNumber
+import io.github.vlsergey.recommend4me.api.model.TagRelation
+import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.author.AuthorRepository
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.duplicate.LoosePairs
@@ -123,6 +125,8 @@ class TwoSitesTest : TwoSitesTestBase() {
         beta("m2|The Mill|river|A miller and his river")
         beta("m3|The Mill, translated|river|A miller and his river, in another tongue")
         alpha("m4|The Mill Again|river|The miller's son||")
+        // The tags of two sites are two till the user merges them: merged, the works of both share it
+        tags.relateTags(TagRelationRequest(tagOf("alpha", "river"), tagOf("beta", "river"), TagRelation.MERGED))
         val links = stores.type("books")!!.links
         fun key(source: String, id: String) = ItemKey(source, id)
         fun answer(a: ItemKey, b: ItemKey, verdict: io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict) =
