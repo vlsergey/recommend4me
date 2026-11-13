@@ -41,4 +41,5 @@ include(
     "plugins:source-author-today",
     "plugins:source-fanfics-me",
     "plugins:source-ficbook",
+    "plugins:source-molwe",
 )

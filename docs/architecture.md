@@ -36,6 +36,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/source-author-today` | author.today, browser tracking only. |
 | `plugins/source-ficbook` | ficbook.net, browser tracking only. |
 | `plugins/source-fanfics-me` | fanfics.me: the whole catalogue, updates, browser tracking and a work's page on request. |
+| `plugins/source-molwe` | molwe.ru, browser tracking and a work's chapters on request. |
 | `browser-extension` | The Firefox extension of the browser tracking mode. |
 
 The f95zone.to source lives in a private repository of its own, `recommend4me-f95zone`, built
