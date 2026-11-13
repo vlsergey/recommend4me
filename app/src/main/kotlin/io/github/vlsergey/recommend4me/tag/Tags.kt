@@ -165,6 +165,9 @@ class Tags(
                 }
         }
         scope.tags.ids().forEach { id -> out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) } }
+        // The sites of every site's tag bound to it, of works or of none: whether a work has a tag tells nothing of
+        // which sites name it (user, 2026-11-13)
+        out.values.forEach { t -> t.sources = (t.sources + t.variants.keys.map { it.source }).distinct() }
         return out
     }
 

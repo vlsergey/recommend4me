@@ -10,6 +10,7 @@ import { sourceShort, sourceTitle } from "@/i18n/label";
 import { cn } from "@/lib/utils";
 import { followLink, screenHref } from "@/screen/screens";
 import { IgnoreButton, type IgnoredFilter, IgnoredSelect, ignoredParam } from "./IgnoreTag";
+import { KeepOutButton } from "./KeepOutTag";
 import { QUERY_SETTLE_MS, TAGS } from "./tagQueries";
 import { SiteNames, TagNames } from "./TagNames";
 
@@ -20,7 +21,10 @@ const PAGE = 100;
 const SOURCE_FILTERS = ["any", "with", "without"] as const;
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
 
-/** The list of the tags, searched by their names and filtered by their sites and by being ignored, a page at a time. */
+/**
+ * The list of the tags, searched by their names and filtered by their sites and by being ignored, a page at a
+ * time; every row with its marks the user says — keeping its works out, ignored — and the buttons that say them.
+ */
 export function TagList({ selected }: { selected?: string }) {
   const { t } = useTranslation("tag");
   const [input, setInput] = useState("");
@@ -115,6 +119,7 @@ export function TagList({ selected }: { selected?: string }) {
                 {row.works}
               </span>
             </a>
+            <KeepOutButton tag={row} />
             <IgnoreButton tag={row} />
           </li>
         ))}
