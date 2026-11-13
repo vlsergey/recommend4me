@@ -29,6 +29,7 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
 import io.github.vlsergey.recommend4me.rating.RatingRepository
 import io.github.vlsergey.recommend4me.review.ReviewRepository
+import io.github.vlsergey.recommend4me.search.QueryShiftRepository
 import io.github.vlsergey.recommend4me.search.SearchJudgmentRepository
 import io.github.vlsergey.recommend4me.search.SearchScoreRepository
 import io.github.vlsergey.recommend4me.search.SearchWeightRepository
@@ -300,6 +301,7 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))
+    val searchShift = QueryShiftRepository(databases.model(type.id))
     val duplicates = DuplicateRepository(databases.model(type.id))
     val sizes = WorkSizeRepository(databases.model(type.id))
 

@@ -97,9 +97,6 @@ interface SearchContext {
     /** The vector of a search line as a query, by the text encoder; null without one. */
     fun queryVector(line: String): FloatArray?
 
-    /** The vectors of short texts as passages, kept once made. */
-    fun phraseVectors(texts: Collection<String>): Map<String, FloatArray>
-
     /**
      * The documents of the items, read now: their fields alone, no passage — a passage of a text is cut by the
      * encoder's tokens, what a page of matches has no time for; the passage nearest by meaning comes with the result.

@@ -106,8 +106,8 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
 
     /**
      * What to show of every item of [keys]: the piece of its text where the words stand together, or — found by
-     * meaning, its words apart or missing — the phrase of its text nearest by meaning that is nearest to the line, or
-     * else the piece where a word is. The items' documents are read in one go, the phrases' vectors in one batch.
+     * meaning, its words apart or missing — the passage of it nearest by meaning, whole ([MeaningSearch.passageOf]), or
+     * else the piece where a word is. The items' documents are read in one go.
      */
     override fun matches(
         contentType: String,
@@ -121,19 +121,18 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
             if (state == null) emptyMap()
             else indexes.of(contentType).search { IndexKept.languages(it, keys.map { k -> k.toString() }) }
         val byWords = HashMap<ItemKey, SearchMatch>()
-        val byMeaning = HashMap<ItemKey, Pair<SearchField, List<String>>>()
+        val byMeaning = HashMap<ItemKey, SearchMatch>()
         if (state != null)
             keys.forEach { key ->
                 val doc = documents[key] ?: return@forEach
                 val words = WordSearch.snippet(state.terms, state.language, doc, stemmed[key.toString()])
                 if (words != null)
                     byWords[key] = SearchMatch(words.first.key, false, words.second.text, words.second.highlights)
-                // The words apart did not make the item a match, its meaning did: the phrase of the passage nearest by
-                // meaning is shown
-                if (words?.third != true) MeaningSearch.phrasesOf(state.nearest[key], doc)?.let { byMeaning[key] = it }
+                // The words apart did not make the item a match, its meaning did: the passage nearest by meaning is
+                // shown
+                if (words?.third != true) MeaningSearch.passageOf(state.nearest[key], doc)?.let { byMeaning[key] = it }
             }
-        val q = state?.vector
-        return if (q == null) byWords else byWords + MeaningSearch.nearestPhrases(q, byMeaning, context)
+        return byWords + byMeaning
     }
 
     override fun close() = indexes.close()

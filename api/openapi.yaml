@@ -3726,6 +3726,12 @@ components:
           type: string
           format: date-time
           description: When the weights were learnt; none when none are
+        shiftedAt:
+          type: string
+          format: date-time
+          description: >-
+            When the correction of the closeness of a line and a passage by meaning was learnt of the judgments - the
+            line's vector moved before it is searched; none when none is
 
     SearchFeatureWeight:
       type: object

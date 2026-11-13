@@ -69,44 +69,18 @@ internal object MeaningSearch {
     }
 
     /**
-     * The field and the phrases of the [passage] of the work [doc] nearest by meaning; null of a work found by no
-     * passage, or of a passage of no text. A passage of no phrase long enough — a list of tags, of titles — is given as
-     * it is: a work found is never shown without what it was found by.
+     * What the work [doc] was found by, by meaning: the [passage] of it nearest to the line, whole — the text whose
+     * vector was near, not a sentence of it picked apart, which may say less of the line than the whole. Null of a work
+     * found by no passage, or of a passage of no text.
      */
-    fun phrasesOf(passage: SearchPassage?, doc: SearchDocument): Pair<SearchField, List<String>>? {
-        val field = passage?.let { p -> doc.fields.firstOrNull { it.key == p.field } }
+    fun passageOf(passage: SearchPassage?, doc: SearchDocument): SearchMatch? {
         val text = passage?.text(doc)?.trim().orEmpty()
-        val phrases =
-            Phrases.split(text)
-                .filter { it.length >= MIN_PHRASE }
-                .ifEmpty { listOfNotNull(text.takeIf { it.isNotEmpty() }) }
-        return if (field == null || phrases.isEmpty()) null else field to phrases
-    }
-
-    /** Of every work's phrases [byMeaning], the one nearest to the line's vector [q] as its match. */
-    fun nearestPhrases(
-        q: FloatArray,
-        byMeaning: Map<ItemKey, Pair<SearchField, List<String>>>,
-        context: SearchContext,
-    ): Map<ItemKey, SearchMatch> {
-        val vectors = context.phraseVectors(byMeaning.values.flatMap { it.second }.toSet())
-        return byMeaning.mapValues { (_, value) ->
-            val (field, phrases) = value
-            val best = phrases.maxBy { phrase ->
-                vectors[phrase]?.let { v -> q.indices.sumOf { k -> q[k].toDouble() * v[k] } } ?: -1.0
-            }
-            SearchMatch(field.key, true, best.take(MEANING_SNIPPET), emptyList())
-        }
+        return if (passage == null || text.isEmpty() || doc.fields.none { it.key == passage.field }) null
+        else SearchMatch(passage.field, true, text, emptyList())
     }
 
     /** The items nearest by meaning that are asked for; the farther ones are no matches by meaning. */
     private const val NEAREST = 2000
-
-    /** How much of a text nearest by meaning is shown. */
-    private const val MEANING_SNIPPET = 200
-
-    /** Shorter phrases — "Download", a date — say nothing of what an item is about. */
-    private const val MIN_PHRASE = 20
 
     /** The few items above the top percent are not told apart further than this. */
     const val MAX_CLOSENESS = 1.5

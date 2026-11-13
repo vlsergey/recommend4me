@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.search.SearchDocuments.Companion.TITLE
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.Quote
 import io.github.vlsergey.recommend4me.universe.Quotes
@@ -26,17 +25,14 @@ class Search(
     private val stores: Stores,
     private val plugins: Plugins,
     private val textVectors: TextVectors,
-    private val phrases: PhraseVectors,
     private val documents: SearchDocuments,
     private val reranking: SearchReranking,
 ) {
 
-    private fun context(type: TypeStore) =
+    /** What the plugin is given to search with: the line's vector moved by the correction [shift] learnt, if any. */
+    private fun context(shift: QueryShift? = null) =
         object : SearchContext {
-            override fun queryVector(line: String): FloatArray? = textVectors.query(line)
-
-            override fun phraseVectors(texts: Collection<String>): Map<String, FloatArray> =
-                type.sources.firstOrNull()?.let { phrases.of(it, texts) }.orEmpty()
+            override fun queryVector(line: String): FloatArray? = textVectors.query(line)?.let { shift?.of(it) ?: it }
 
             override fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument> =
                 keys
@@ -53,8 +49,9 @@ class Search(
     /**
      * The works matching [line], read as the [language] (ISO 639-1), most relevant first; null without a search plugin.
      * Found by the plugin — by meaning and by words — and then, with a reranker ([rerank]), every one of them read
-     * together with the line ([SearchReranking]); put in the order learnt of the user's judgments ([learnt],
-     * [SearchWeights]) when it is learnt, else in the order of what the reranker said.
+     * together with the line ([SearchReranking]). With what was learnt of the user's judgments ([learnt]) — [with],
+     * else what is kept ([kept]) — searched by meaning with the closeness corrected ([QueryShift]) and put in the order
+     * learnt ([SearchWeights]); of none learnt, in the order of what the reranker said.
      */
     fun search(
         typeId: String,
@@ -62,21 +59,29 @@ class Search(
         language: String,
         rerank: Boolean = true,
         learnt: Boolean = rerank,
+        with: SearchLearnt? = null,
     ): SearchResult? {
         val provider = plugins.search
         val type = stores.type(typeId)
         if (provider == null || type == null) return null
+        val own = if (learnt) with ?: kept(type) else null
         // The index as it is: the works written since are indexed in the background, a request never waits for it
-        val found = provider.search(typeId, line, language, context(type))
+        val found = provider.search(typeId, line, language, context(own?.shift))
         val read = if (rerank) reranking.reranked(type, found) else found
-        return if (learnt) type.searchWeights.read()?.first?.ordered(read) ?: read else read
+        return own?.weights?.ordered(read) ?: read
     }
+
+    /** What is kept learnt of the user's judgments of the [type]: of the text encoder of now, its correction. */
+    fun kept(type: TypeStore): SearchLearnt =
+        SearchLearnt(
+            plugins.textEncoder()?.let { type.searchShift.read(it.id)?.first },
+            type.searchWeights.read()?.first,
+        )
 
     fun matches(typeId: String, result: SearchResult, keys: Collection<ItemKey>): Map<ItemKey, SearchMatch> {
         val provider = plugins.search
         val type = stores.type(typeId)
-        return if (provider == null || type == null) emptyMap()
-        else provider.matches(typeId, result, keys, context(type))
+        return if (provider == null || type == null) emptyMap() else provider.matches(typeId, result, keys, context())
     }
 
     /**

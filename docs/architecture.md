@@ -18,7 +18,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/encoder-bge-m3` | Text encoder: bge-m3, the one used when its files are there. |
 | `plugins/encoder-e5` | Text encoder: multilingual-e5-small, without bge-m3's files. |
 | `plugins/encoder-siglip2` | Picture encoder: SigLIP2 NaFlex. |
-| `plugins/reranker-bge` | Reranker: bge-reranker-v2-m3 reads two texts together: the line searched and every work found. The works found are put in the order of a weighed sum of what they were found by — the plugin's features (`SearchResult.features`) and the reranker's score — the weights learnt in the background from the user's "fits / doesn't fit" (`SearchLearning`, `SearchWeights`); the reranker's order till a line has both. |
+| `plugins/reranker-bge` | Reranker: bge-reranker-v2-m3 reads two texts together: the line searched and every work found. The works found are put in the order of a weighed sum of what they were found by — the plugin's features (`SearchResult.features`) and the reranker's score — the weights learnt in the background from the user's "fits / doesn't fit" (`SearchLearning`, `SearchWeights`); the reranker's order till a line has both. Learnt of them too, the closeness of the line and a passage by meaning: q·p + (q·a)(b·p), the line's vector moved before it is searched (`QueryShift`). |
 | `plugins/scorer-pairwise` | Pairwise logistic ranking (RankNet with a line), C chosen by cross-validation. |
 | `plugins/scorer-knn` | k nearest rated neighbours by cosine — a baseline. |
 | `plugins/scorer-fm` | Pairwise factorization machine: the line and every two features meeting through vectors of rank 8; C chosen by cross-validation. |

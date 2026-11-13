@@ -31,8 +31,6 @@ class LuceneSearchTest {
         object : SearchContext {
             override fun queryVector(line: String): FloatArray? = null
 
-            override fun phraseVectors(texts: Collection<String>): Map<String, FloatArray> = emptyMap()
-
             override fun documents(keys: Collection<ItemKey>) =
                 documents.filter { it.key in keys }.associateBy { it.key }
         }
@@ -58,7 +56,7 @@ class LuceneSearchTest {
 
     @Test
     fun `found by the meaning of a passage of a chapter, which goes with its item`() {
-        val chapter = "Дождь шёл всю ночь. Наутро они встретились у маяка и долго молчали."
+        val chapter = "Дождь шёл всю ночь. Наутро они встретились у маяка. И долго молчали, глядя на море."
         val scene = chapter.indexOf("Наутро")
         val lighthouse = floatArrayOf(1f, 0f, 0f)
         val withChapter =
@@ -100,7 +98,9 @@ class LuceneSearchTest {
             val shown =
                 search.matches("books", found, listOf(ItemKey("test", "4")), byMeaning).getValue(ItemKey("test", "4"))
             assertEquals("part:1", shown.field)
-            assertTrue(shown.byMeaning && shown.text.startsWith("Наутро"), shown.text)
+            // The passage whole, every sentence of it: its vector found the work, not one sentence's
+            assertTrue(shown.byMeaning, shown.text)
+            assertEquals(chapter.substring(scene).trim(), shown.text)
             // Removed, the item's passages go with it
             search.update("books", emptyList(), listOf(ItemKey("test", "4")))
             assertTrue(ItemKey("test", "4") !in search.search("books", "свидание у маяка утром", "ru", byMeaning).keys)

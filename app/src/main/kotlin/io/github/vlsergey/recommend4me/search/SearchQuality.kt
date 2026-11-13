@@ -12,10 +12,12 @@ import org.springframework.stereotype.Component
 
 /**
  * HOW WELL THE SEARCH FINDS WHAT THE USER JUDGED: every line the user said of the works found which answer it and which
- * do not ([SearchJudgmentRepository]) searched again — in the order learnt ([SearchWeights]), in the reranker's, and
- * without the reranker — and where the works judged stand. The order learnt of a line is learnt of the other lines
- * alone, never of its own judgments: how it does on a line it never saw. The works not judged are counted apart,
- * neither fitting nor not: a search that brings up works never seen is not told better or worse by them.
+ * do not ([SearchJudgmentRepository]) searched again — with what is learnt ([QueryShift], [SearchWeights]), in the
+ * reranker's order, and without the reranker — and where the works judged stand. What a line is searched with is learnt
+ * of the other lines alone, never of its own judgments: how it does on a line it never saw — the correction of the
+ * closeness by meaning of the others' vectors, the weights of the order of the others searched with the correction
+ * kept. The works not judged are counted apart, neither fitting nor not: a search that brings up works never seen is
+ * not told better or worse by them.
  */
 @Component
 class SearchQuality(private val stores: Stores, private val search: Search, private val learning: SearchLearning) {
@@ -26,30 +28,39 @@ class SearchQuality(private val stores: Stores, private val search: Search, priv
      */
     fun measure(typeId: String, top: Int, language: String): ApiSearchQuality? {
         val type = stores.type(typeId) ?: return null
-        val lines = learning.lines(type, language)
-        val judged = lines.map { it.judgedLine() }
-        val rows = lines.mapIndexed { n, line ->
-            val others = SearchWeights.fit(judged.filterIndexed { m, _ -> m != n })
-            val learnt = others?.ordered(line.found) ?: line.found
-            val plain = search.search(typeId, line.found.line, language, rerank = false)?.keys.orEmpty()
-            ApiQueryQuality(
-                line.found.line,
-                line.judged.count { it.value },
-                line.judged.count { !it.value },
-                ranks(learnt.keys, line.judged, top),
-                ranks(line.found.keys, line.judged, top),
-                ranks(plain, line.judged, top),
-            )
-        }
-        val kept = type.searchWeights.read()
+        val kept = search.kept(type)
+        val meaning = learning.meaningLines(type)
+        // The order is learnt of the lines searched with the correction kept; the reranker's alone, of none
+        val judged = learning.lines(type, language, kept.shift).associate { it.found.line to it.judgedLine() }
+        val rows =
+            learning.lines(type, language, null).map { line ->
+                val query = line.found.line
+                val others =
+                    SearchLearnt(
+                        QueryShift.fit(meaning.filterKeys { it != query }.values.toList()),
+                        SearchWeights.fit(judged.filterKeys { it != query }.values.toList()),
+                    )
+                val learnt = search.search(typeId, query, language, with = others)?.keys.orEmpty()
+                val plain = search.search(typeId, query, language, rerank = false)?.keys.orEmpty()
+                ApiQueryQuality(
+                    query,
+                    line.judged.count { it.value },
+                    line.judged.count { !it.value },
+                    ranks(learnt, line.judged, top),
+                    ranks(line.found.keys, line.judged, top),
+                    ranks(plain, line.judged, top),
+                )
+            }
+        val weights = type.searchWeights.read()
         return ApiSearchQuality(
             top,
             rows,
             sum(rows.map { it.learnt }, rows),
             sum(rows.map { it.reranked }, rows),
             sum(rows.map { it.plain }, rows),
-            kept?.first?.features?.map { (name, f) -> ApiSearchFeatureWeight(name, f.weight) }.orEmpty(),
-            kept?.second?.atOffset(ZoneOffset.UTC),
+            weights?.first?.features?.map { (name, f) -> ApiSearchFeatureWeight(name, f.weight) }.orEmpty(),
+            weights?.second?.atOffset(ZoneOffset.UTC),
+            kept.shift?.let { learning.shiftedAt(type) }?.atOffset(ZoneOffset.UTC),
         )
     }
 

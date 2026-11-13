@@ -122,15 +122,31 @@ function Sum({ label, q, of }: { label: string; q: SearchQuality; of: (s: Search
 }
 
 /**
- * The weights the order is learnt as now, of every line, and when: of every feature a work is found
- * by, its weight; none while no line has a work marked fitting and one marked not.
+ * What is learnt now, of every line, and when: the correction of the closeness by meaning, and of
+ * every feature a work is found by its weight in the order; none while no line has a work marked
+ * fitting and one marked not.
  */
 function Weights({ q }: { q: SearchQuality }) {
   const { t, i18n } = useTranslation("search");
-  if (q.weights.length === 0) return <div className="text-xs text-muted-foreground">{t("SearchQualityDialog.noWeights")}</div>;
+  const shifted = (
+    <div className="text-xs text-muted-foreground">
+      {q.shiftedAt
+        ? t("SearchQualityDialog.shifted", { at: new Date(q.shiftedAt).toLocaleString(i18n.language) })
+        : t("SearchQualityDialog.notShifted")}
+    </div>
+  );
+  if (q.weights.length === 0)
+    return (
+      <>
+        {shifted}
+        <div className="text-xs text-muted-foreground">{t("SearchQualityDialog.noWeights")}</div>
+      </>
+    );
   const at = q.fittedAt ? new Date(q.fittedAt).toLocaleString(i18n.language) : "";
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+    <>
+      {shifted}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
       <span className="text-muted-foreground">{t("SearchQualityDialog.weights", { at })}</span>
       {[...q.weights]
         .sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
@@ -140,7 +156,8 @@ function Weights({ q }: { q: SearchQuality }) {
             {Math.abs(w.weight).toFixed(2)}
           </span>
         ))}
-    </div>
+      </div>
+    </>
   );
 }
 
