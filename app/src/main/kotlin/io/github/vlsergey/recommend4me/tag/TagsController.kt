@@ -6,6 +6,8 @@ import io.github.vlsergey.recommend4me.api.model.SimilarTagPage
 import io.github.vlsergey.recommend4me.api.model.TagBindingRequest
 import io.github.vlsergey.recommend4me.api.model.TagIgnoredRequest
 import io.github.vlsergey.recommend4me.api.model.TagInfo
+import io.github.vlsergey.recommend4me.api.model.TagKeptOutRequest
+import io.github.vlsergey.recommend4me.api.model.TagKeptOutWorks
 import io.github.vlsergey.recommend4me.api.model.TagNameRequest
 import io.github.vlsergey.recommend4me.api.model.TagPage
 import io.github.vlsergey.recommend4me.api.model.TagRelation as ApiTagRelation
@@ -20,6 +22,7 @@ class TagsController(
     private val tags: Tags,
     private val similar: SimilarTags,
     private val editing: TagEditing,
+    private val keptOut: KeptOutWorks,
     /** The user's languages: of an entry's texts, those of the first that has them are shown. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) : TagsApi {
@@ -93,6 +96,20 @@ class TagsController(
         return editing.name(t, facet, tagNameRequest.tag, tagNameRequest.name)?.let {
             ResponseEntity.ok(it.toApi(languages))
         } ?: ResponseEntity.notFound().build()
+    }
+
+    override fun keepOutTag(tagKeptOutRequest: TagKeptOutRequest): ResponseEntity<TagInfo> {
+        val (t, facet) = scope()
+        return editing.keepOut(t, facet, tagKeptOutRequest.tag, tagKeptOutRequest.keepsOut)?.let {
+            ResponseEntity.ok(it.toApi(languages))
+        } ?: ResponseEntity.notFound().build()
+    }
+
+    override fun keptOutWorks(tag: String): ResponseEntity<TagKeptOutWorks> {
+        val (t, _) = scope()
+        if (t.existing(tag) == null) return ResponseEntity.notFound().build()
+        val count = keptOut.count(t, tag)
+        return ResponseEntity.ok(TagKeptOutWorks(count.works, count.graded))
     }
 
     override fun ignoreTag(tagIgnoredRequest: TagIgnoredRequest): ResponseEntity<TagInfo> {

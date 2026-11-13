@@ -75,6 +75,13 @@ interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore, ItemSeries
 
     fun find(itemId: String): StoredItem?
 
+    /**
+     * The item kept no more, with everything of it — its texts, parts and reviews, the user's grades and answers, what
+     * the models made of it — as when the user removes a work: what the source will not keep. Seen again, it is a work
+     * never seen. Nothing of an item not kept.
+     */
+    fun remove(itemId: String)
+
     fun count(): Int
 
     /** The newest [ItemHead.updatedAt] of the catalogue. */

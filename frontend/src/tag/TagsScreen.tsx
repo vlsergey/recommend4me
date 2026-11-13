@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { followLink, screenHref } from "@/screen/screens";
 import { HierarchyOfferList } from "./HierarchyOfferList";
 import { IgnoreButton } from "./IgnoreTag";
+import { KeepOutButton } from "./KeepOutTag";
 import type { Said } from "./relations";
 import { Similar } from "./SimilarTags";
 import { TagEntry } from "./TagEntry";
@@ -78,7 +79,9 @@ function TagDetails({ tag }: { tag: string }) {
             <h1 className="flex items-center gap-2 text-xl font-semibold">
               {found.name}
               <IgnoreButton tag={found} />
+              <KeepOutButton tag={found} />
               {found.ignored && <span className="text-sm font-normal text-muted-foreground">{t("Ignore.ignored")}</span>}
+              {found.keepsOut && <span className="text-sm font-normal text-destructive">{t("KeepOut.kept")}</span>}
             </h1>
             <p className="text-sm text-muted-foreground">
               {t(ruleKey(found.rule))} · {t("TagDetails.works", { count: found.works })} · {t("TagDetails.graded", { graded: found.graded })} ·{" "}

@@ -130,9 +130,13 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
     fun `a source's settings — a secret never sent back, a default shown, a blank removed, an unknown key refused`() {
         fun beta() =
             settingsApi.getSettings().body!!.single { it.source == "beta" }.propertyValues.associateBy { it.key }
-        assertTrue(
-            settingsApi.getSettings().body!!.none { it.source == "alpha" },
-            "a source without settings is not listed",
+        // A source of no settings of its own has the application's one of a site with tags alone: its tags forbidden to
+        // import, in the standard words
+        val alpha = settingsApi.getSettings().body!!.single { it.source == "alpha" }.propertyValues
+        assertEquals(
+            listOf("standard:setting.keptOutTags"),
+            alpha.map { it.labelKey },
+            "a source of no settings of its own",
         )
         assertEquals(false, beta().getValue("cookie").set)
         assertEquals("5", beta().getValue("delay").value)

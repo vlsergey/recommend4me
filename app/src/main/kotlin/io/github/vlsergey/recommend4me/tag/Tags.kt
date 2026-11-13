@@ -67,6 +67,8 @@ class NamedTag(
     val offers: List<CatalogueOffer> = emptyList(),
     /** The user ignores it: kept with its works, not read by the model of the grades. */
     val ignored: Boolean = false,
+    /** It keeps its works out of the library ([KeptOutWorks]). */
+    val keepsOut: Boolean = false,
 )
 
 /** The entry of a catalogue a tag is bound to, as the catalogue gave it when last asked. */
@@ -194,6 +196,7 @@ class Tags(
             boundEntries(scope),
             TagHierarchy(scope.tags.relations.parents()),
             scope.tags.ignored(),
+            scope.tags.keepOut.tags(),
             languages,
         )
 

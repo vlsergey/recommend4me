@@ -1,11 +1,15 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.ItemRemoval
 import io.github.vlsergey.recommend4me.picture.PicturesListed
 import io.github.vlsergey.recommend4me.settings.Settings
+import io.github.vlsergey.recommend4me.tag.KeptOutWorks
 import java.nio.file.Path
 import java.time.Instant
 import kotlin.concurrent.withLock
 import org.jooq.DSLContext
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 
@@ -15,6 +19,12 @@ class SourceContexts(
     private val stores: Stores,
     private val settings: Settings,
     private val events: ApplicationEventPublisher,
+    /** A work a source keeps no more removed as the user removes one: got when asked for, it reads the sources too. */
+    private val removal: ObjectProvider<ItemRemoval>,
+    /**
+     * The works their tags keep out of the library, of every source alike: got when asked for, it reads the sources.
+     */
+    private val keptOut: ObjectProvider<KeptOutWorks>,
 ) {
 
     fun of(sourceId: String): SourceContext {
@@ -26,7 +36,8 @@ class SourceContexts(
         override val sourceId: String
             get() = store.id
 
-        override val items: ItemStore = Items(store, events)
+        override val items: ItemStore =
+            keptOut.getObject().guard(store, Items(store, events) { removal.getObject().remove(ItemKey(store.id, it)) })
         override val database: DSLContext
             get() = store.sourceDsl
 
@@ -66,7 +77,11 @@ class SourceContexts(
      * The source's writes, one at a time ([SourceStore.writing]); its reads free. Its items' facets, reviews, parts and
      * series are kept by stores of their own.
      */
-    private class Items(private val store: SourceStore, private val events: ApplicationEventPublisher) :
+    private class Items(
+        private val store: SourceStore,
+        private val events: ApplicationEventPublisher,
+        private val removal: (String) -> Unit,
+    ) :
         ItemStore,
         ItemFacetStore by SourceItemFacets(store, events),
         ItemReviewStore by SourceItemReviews(store),
@@ -77,6 +92,8 @@ class SourceContexts(
         override fun upsert(item: ItemHead, now: Instant): Boolean = write { store.items.upsert(item, now) }
 
         override fun find(itemId: String): StoredItem? = store.items.find(itemId)
+
+        override fun remove(itemId: String) = removal(itemId)
 
         override fun count(): Int = store.items.count()
 

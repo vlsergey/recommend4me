@@ -55,6 +55,7 @@ fun NamedTag.toApi(languages: List<String>) =
                 },
         awaitedDescriptions = awaitedDescriptions,
         ignored = ignored,
+        keepsOut = keepsOut,
         catalogueOffers =
             offers.map { o ->
                 ApiCatalogueOffer(o.catalogue, TagRef(o.tag, o.name), ApiTagRelation.valueOf(o.relation.name), o.path)

@@ -4,7 +4,7 @@
 
 | Table | What it holds |
 |---|---|
-| `normalized_tag` | a tag of the user's: its id, the name the user gave it, whether it is ignored |
+| `normalized_tag` | a tag of the user's: its id, the name the user gave it, whether it is ignored, whether it keeps its works out of the library (`keeps_out`: a work any site tags with it, or with a tag under it, is not kept) |
 | `site_tag` | a site's tag bound to a normalized tag, with its name and works as last counted |
 | `tag_stat` | a tag's works, graded and liked among them, and the sources of its sites' tags, as last counted; the name worked out of its entry or its sites' tags (`calculated_name`) and the rule it was worked out by |
 | `tag_vector` | the vectors of every name of a tag by a text encoder's plugin and model |
@@ -107,6 +107,7 @@ erDiagram
         BIGINT id PK
         VARCHAR name "null"
         BOOLEAN ignored
+        BOOLEAN keeps_out
     }
     normalized_tag_distinct {
         BIGINT first_tag PK, FK

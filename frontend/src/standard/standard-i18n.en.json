@@ -97,6 +97,8 @@
   "number.views": "Views",
   "number.words": "Words",
   "part.untitled": "Part {{n}}",
+  "setting.keptOutTags": "Tags forbidden to import",
+  "setting.keptOutTags.hint": "The site's tags, a comma or a line apart — as the site writes them, by code or name, any case. A work with such a tag is not kept; those kept already are removed when the setting is saved, with their grades and answers. Kept in your database alone.",
   "signal.liked": "Liked",
   "signal.liked.value.yes": "yes",
   "signal.read": "Read",

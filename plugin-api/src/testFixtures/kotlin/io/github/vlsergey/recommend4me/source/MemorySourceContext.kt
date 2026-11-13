@@ -48,6 +48,12 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
 
             override fun find(itemId: String) = heads[itemId]
 
+            override fun remove(itemId: String) {
+                listOf(heads, facets, numbers, texts, pictures, reviews, parts).forEach { it.remove(itemId) }
+                seriesPlaces.values.forEach { it.remove(itemId) }
+                signalValues.keys.removeIf { it.first == itemId }
+            }
+
             override fun count() = heads.size
 
             override fun latestUpdate() = heads.values.maxOfOrNull { it.updatedAt }

@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.api.model.TagAboveRequest
 import io.github.vlsergey.recommend4me.api.model.TagBindingRequest
 import io.github.vlsergey.recommend4me.api.model.TagEntryRequest
 import io.github.vlsergey.recommend4me.api.model.TagIgnoredRequest
+import io.github.vlsergey.recommend4me.api.model.TagKeptOutRequest
 import io.github.vlsergey.recommend4me.api.model.TagNameRequest
 import io.github.vlsergey.recommend4me.api.model.TagNameRule
 import io.github.vlsergey.recommend4me.api.model.TagRelation
@@ -19,10 +20,13 @@ import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
+import io.github.vlsergey.recommend4me.settings.SettingsController
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
+import io.github.vlsergey.recommend4me.tag.SiteTagsKeptOut
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.MethodOrderer
@@ -30,6 +34,7 @@ import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
 import org.junit.jupiter.api.assertThrows
+import org.springframework.beans.factory.annotation.Autowired
 
 /**
  * The site's tags as the application's own: described by the site when asked, bound to normalized tags the user merges,
@@ -38,6 +43,8 @@ import org.junit.jupiter.api.assertThrows
 @Order(1)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class SiteTagsTest : SiteTestBase() {
+
+    @Autowired lateinit var settingsController: SettingsController
 
     @Test
     @Order(1)
@@ -525,5 +532,62 @@ class SiteTagsTest : SiteTestBase() {
                 .single { it.facet == "tags" && it.added && it.key != hulls }
                 .key,
         )
+    }
+
+    @Test
+    @Order(3)
+    fun `a tag that keeps its works out removes those kept and keeps out those of it written after, of every site`() {
+        capture("ko1|Kept one|smugglers,ships|A smugglers' tale|")
+        val store = stores.source("site")!!
+        val smugglers =
+            TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef("site", "smugglers")))
+        assertEquals(1, tagsApi.keptOutWorks(smugglers).body!!.works)
+        assertTrue(tagsApi.keepOutTag(TagKeptOutRequest(smugglers, true)).body!!.keepsOut)
+        // Removed in the background, with everything of it
+        val until = System.currentTimeMillis() + WAIT_MS
+        while (store.items.find("ko1") != null && System.currentTimeMillis() < until) Thread.sleep(POLL_MS)
+        assertNull(store.items.find("ko1"))
+        // Written again by the site, not kept — nor anything of it written after its tags
+        capture("ko2|Kept two|smugglers|Smugglers again|")
+        assertNull(store.items.find("ko2"))
+        assertTrue(store.items.texts("ko2").isEmpty())
+        // A work without it is kept; taken back, its works are kept again
+        capture("ko3|Kept three|ships|Ships alone|")
+        assertNotNull(store.items.find("ko3"))
+        tagsApi.keepOutTag(TagKeptOutRequest(smugglers, false))
+        capture("ko2|Kept two|smugglers|Smugglers again|")
+        assertNotNull(store.items.find("ko2"))
+    }
+
+    @Test
+    @Order(4)
+    fun `a site's tags forbidden to import by the user's setting keep out the first work of them, and those kept`() {
+        capture("fb1|Forbidden one|pirates,ships|Pirates ahoy|")
+        val store = stores.source("site")!!
+        // Of the site's own tags, any case, before any normalized tag is bound to them: "corsairs" never seen yet
+        settingsController.updateSourceSettings("site", mapOf(SiteTagsKeptOut.KEY to "Pirates, corsairs"))
+        val until = System.currentTimeMillis() + WAIT_MS
+        while (store.items.find("fb1") != null && System.currentTimeMillis() < until) Thread.sleep(POLL_MS)
+        assertNull(store.items.find("fb1"))
+        capture("fb2|Forbidden two|corsairs|Corsairs ahoy|")
+        assertNull(store.items.find("fb2"))
+        // The setting is the source's, among its settings
+        assertTrue(
+            settingsController
+                .getSettings()
+                .body!!
+                .single { it.source == "site" }
+                .propertyValues
+                .any { it.key == SiteTagsKeptOut.KEY }
+        )
+        settingsController.updateSourceSettings("site", mapOf(SiteTagsKeptOut.KEY to ""))
+        capture("fb2|Forbidden two|corsairs|Corsairs ahoy|")
+        assertNotNull(store.items.find("fb2"))
+    }
+
+    private companion object {
+        /** How long the removal in the background is waited for, and how often it is looked at. */
+        const val WAIT_MS = 30_000L
+        const val POLL_MS = 50L
     }
 }

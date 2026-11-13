@@ -39,6 +39,9 @@ class TagRepository(private val db: DSLContext) {
     /** The vectors of the tags' names. */
     val vectors = TagVectorRepository(db)
 
+    /** The tags that keep their works out of the library. */
+    val keepOut = TagKeepOut(db)
+
     /**
      * The writes of one action of the user on the tags — every one of them, or, failed, none: the repository [block] is
      * given writes in one transaction of the database of the user's word. A write of a repository's own transaction

@@ -11,14 +11,16 @@ private val log = LoggerFactory.getLogger(TagEditing::class.java)
 
 /**
  * THE USER'S WORD ON THE NORMALIZED TAGS: the user merges normalized tags — binds the sites' tags of one to another —
- * takes a site's tag out to a tag of its own, puts tags under others, tells two apart, names a tag, ignores one. The
- * word is written and answered at once; what follows of it is worked out in the background ([TagRenaming.changed]).
+ * takes a site's tag out to a tag of its own, puts tags under others, tells two apart, names a tag, ignores one, says
+ * one keeps its works out of the library. The word is written and answered at once; what follows of it is worked out in
+ * the background ([TagRenaming.changed]).
  */
 @Service
 class TagEditing(
     private val tags: Tags,
     private val renaming: TagRenaming,
     private val events: ApplicationEventPublisher,
+    private val keptOut: KeptOutWorks,
 ) {
 
     /**
@@ -122,6 +124,19 @@ class TagEditing(
         log.info("{}: tag {} {}", scope.id, id, if (ignored) "ignored" else "no longer ignored")
         // The model alone reads it otherwise: the works, their names and the search are as they were
         scope.types.forEach { events.publishEvent(TagsChanged(it)) }
+        return tags.one(scope, facet, tag)
+    }
+
+    /**
+     * Whether [tag] keeps its works out of the library ([KeptOutWorks]): said so, every work of it kept now — of the
+     * tags under it too — is removed in the background, and none is kept again; taken back, a work of it is kept when a
+     * site shows it again.
+     */
+    fun keepOut(scope: TagScope, facet: String, tag: String, keeps: Boolean): NamedTag? {
+        val id = scope.existing(tag) ?: return null
+        scope.tags.keepOut.set(id, keeps)
+        log.info("{}: tag {} {}", scope.id, id, if (keeps) "keeps its works out" else "keeps its works out no more")
+        if (keeps) keptOut.removeKept(scope, tag)
         return tags.one(scope, facet, tag)
     }
 }

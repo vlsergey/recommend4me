@@ -12,6 +12,8 @@ class Naming(
     val entries: Map<Long, List<BoundEntry>>,
     val hierarchy: TagHierarchy,
     val ignored: Set<String>,
+    /** The tags that keep their works out of the library. */
+    val keepingOut: Set<String>,
     private val languages: List<String>,
 ) {
     fun explicitOf(key: String): String? = TagRepository.idOf(key)?.let(explicit::get)
@@ -57,5 +59,6 @@ class Naming(
             awaitedDescriptions = descriptions.awaited,
             offers = offers,
             ignored = t.key in ignored,
+            keepsOut = t.key in keepingOut,
         )
 }

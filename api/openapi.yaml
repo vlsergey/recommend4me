@@ -2237,6 +2237,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/TagInfo'
 
+  /api/tags/kept-out:
+    put:
+      tags: [tags]
+      operationId: keepOutTag
+      summary: |
+        Whether the tag keeps its works out of the library: a work a site tags with it, or with a tag under it, is not
+        kept, of every site alike. Said so, every work of it kept now is removed in the background, with everything of
+        it - its grades and the user's answers too
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagKeptOutRequest'
+      responses:
+        '200':
+          description: The tag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagInfo'
+    get:
+      tags: [tags]
+      operationId: keptOutWorks
+      summary: The works kept now that the tag keeping its works out would remove - asked before it is said
+      parameters:
+        - name: tag
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: How many
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagKeptOutWorks'
+
   /api/tags/entries:
     get:
       tags: [tagCatalogues]
@@ -6663,11 +6702,16 @@ components:
 
     TagInfo:
       type: object
-      required: [key, name, rule, works, graded, liked, variants, names, parents, children, catalogueEntries, descriptions, catalogueOffers, ignored]
+      required: [key, name, rule, works, graded, liked, variants, names, parents, children, catalogueEntries, descriptions, catalogueOffers, ignored, keepsOut]
       properties:
         ignored:
           type: boolean
           description: The user ignores the tag - kept with its works, not read by the model of the grades
+        keepsOut:
+          type: boolean
+          description: >-
+            The tag keeps its works out of the library: a work a site tags with it, or with a tag under it, is not
+            kept - of every site alike, removed at once with everything of it
         key:
           type: string
           description: The normalized tag's id, written out - the value of the works' tags
@@ -6986,6 +7030,25 @@ components:
           type: string
         ignored:
           type: boolean
+
+    TagKeptOutRequest:
+      type: object
+      required: [tag, keepsOut]
+      properties:
+        tag:
+          type: string
+        keepsOut:
+          type: boolean
+
+    TagKeptOutWorks:
+      type: object
+      required: [works, graded]
+      description: The works kept now that the tag keeping its works out would remove, and the graded among them
+      properties:
+        works:
+          type: integer
+        graded:
+          type: integer
 
     TagNameRequest:
       type: object
