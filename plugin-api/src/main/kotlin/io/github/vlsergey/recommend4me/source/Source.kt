@@ -39,6 +39,38 @@ val Source.downloadsPages: Boolean
  * Everything a source learns it writes through the [SourceContext] it is handed: the generic data of its items into the
  * application's tables, anything else into tables of its own ([migrations]) in the same source database. The pages the
  * browser sends it are its [BrowserTracking], how its pictures are downloaded its [SitePictures].
+ *
+ * HOW A SITE IS ADDED — everything a new source needs is told here and by the interfaces it names; no other source is a
+ * pattern to read:
+ * - **Its module**: `plugins/source-<name>`, listed in `settings.gradle.kts`, its build file applying the plugin
+ *   `recommend4me.addon` and `testImplementation(testFixtures(project(":plugin-api")))`. The source is a bean of a
+ *   Spring `@AutoConfiguration` of its own, named in its `META-INF/spring/
+ *   org.springframework.boot.autoconfigure.AutoConfiguration.imports`; the application finds every plugin by them.
+ * - **Its words**: `i18n/<id>.<language>.json` among its resources, every language of
+ *   [I18nKeys.LANGUAGES][io.github.vlsergey.recommend4me.i18n.I18nKeys.LANGUAGES], with every key
+ *   [I18nKeys.requiredKeys][io.github.vlsergey.recommend4me.i18n.I18nKeys.requiredKeys] names — its title and short
+ *   title, its own facets, numbers, texts, settings, its reviews and parts; the test fixture `Translations.problems`
+ *   checks them.
+ * - **Its [schema]**: the content type's standard facets and numbers first — a site's field the standard one means
+ *   (`Books.AUTHOR`, `Books.FANDOM`, `Books.STATUS`, `Books.DIRECTION`, `Books.PAIRINGS`, `Books.PARTS`,
+ *   `StandardNumbers.VIEWS`, `StandardNumbers.LIKES`, `StandardLanguages.LANGUAGE`) declared by its `asFacet`/
+ *   `asNumber`, its values mapped onto the standard's; the site's age rating by `AgeRating.SITE` and `AgeRating.write`.
+ *   The site's own tags are one facet, `Books.TAG.asFacet(…)`: the tags the application normalizes, and the ones the
+ *   user forbids to import are matched against ([SourceContext.items] writes them, the application keeps the work out —
+ *   a source keeps out nothing by content itself, and names no tag to keep out in its code). The kind of a work's
+ *   universe (fan fiction or original) is `UniverseFacets.KIND`, told by the facet [SourceSchema.kindFrom] names; the
+ *   site's line of characters and pairings a text [SourceSchema.universeLine] names, read by its [castHabit].
+ * - **Its [modes]**: [SourceMode.BROWSER] — [capturePatterns], [capture], [itemIdOf] and a [pageDecor], every selector
+ *   of it matching the pages; [SourceMode.PAGE] — [refresh] and [needsRefresh]: the site asked politely, one request at
+ *   a time with a pause between, under a user agent that says what asks, a page gone (404) false, a site asking to wait
+ *   (429) an error; [SourceMode.SCRAPE_ALL] and [SourceMode.UPDATES] — [scrape].
+ * - **Its items**: an id stable, of the site's own number, fit to stand in an address's path (no "/"); written as
+ *   [ItemStore] tells — a page says only what it shows. What a page reads differently raises [parserVersion]: the pages
+ *   kept are read again.
+ * - **Its tests**: the site's pages kept under `src/test/resources/pages`, every prose text of them — descriptions,
+ *   chapters, notes, reviews — replaced by placeholder text (Lorem ipsum) and people's names neutral, scripts gone: the
+ *   markup is the site's, the words are not; read into a `MemorySourceContext`. A test of the words (`Translations`),
+ *   of every page read, and of the [pageDecor] against the pages kept.
  */
 interface Source : BrowserTracking, SitePictures {
     /**

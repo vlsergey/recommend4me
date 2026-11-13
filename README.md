@@ -22,6 +22,7 @@ folder of jars in `plugins/`:
 
 | Plugin | What it does |
 |---|---|
+| `source-aff` | [Adult FanFiction](https://www.adult-fanfiction.org) fan fiction and original writing for adults, browser tracking and a work's chapters on request |
 | `source-ao3` | [Archive of Our Own](https://archiveofourown.org) fan works in every language, browser tracking and a work's page on request |
 | `source-author-today` | [author.today](https://author.today) books, browser tracking only |
 | `source-ficbook` | [ficbook.net](https://ficbook.net) fanfics and originals, browser tracking only |

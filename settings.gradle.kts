@@ -36,6 +36,7 @@ include(
     "plugins:suggester-bilinear",
     "plugins:suggester-bayes",
     "plugins:suggester-knn",
+    "plugins:source-aff",
     "plugins:source-ao3",
     "plugins:source-author-today",
     "plugins:source-fanfics-me",

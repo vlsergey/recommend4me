@@ -31,6 +31,7 @@ neural encoder, every way of turning vectors into scores and the search are plug
 | `plugins/suggester-bilinear` | The values a work should have — tags, universes, characters, pairings — by one model of every work and every value. |
 | `plugins/suggester-knn` | The values a work should have by its nearest works fitted on, alike by its texts and pictures; the model kept is where every one lies and what it says of the values. |
 | `plugins/suggester-bayes` | The values a work should have by naive Bayes over its other values; the model kept is the counts. |
+| `plugins/source-aff` | adult-fanfiction.org, browser tracking and a work's chapters on request. |
 | `plugins/source-ao3` | archiveofourown.org, browser tracking and a work's page on request. |
 | `plugins/source-author-today` | author.today, browser tracking only. |
 | `plugins/source-ficbook` | ficbook.net, browser tracking only. |
@@ -268,6 +269,14 @@ every tag of every site — its source and the site's own key of it — is bound
 seen first is bound to the normalized tag the sites' tags of its name are bound to, any case —
 "Магия" of ficbook and "магия" of author.today one tag — when there is exactly one such, else to a
 new normalized tag of its own (`TagNormalization`, as the works are captured).
+
+A normalized tag the user says keeps its works out of the library (`normalized_tag.keeps_out`, the
+ban button on its page, asked to be confirmed with how many works go) keeps out every work any site
+tags with it or with a tag under it, of every site by one path: the core's store of a source's writes
+(`KeptOutItems`) removes the work the moment its site's tags are written and one of them is bound to
+such a tag, and keeps none of its writes after; the tag said so, the works of it kept already are
+removed in the background (`KeptOutWorks`), with everything of them. Of the sites' own tags alone: a
+tag the user or the model gave a work keeps nothing out.
 
 Tags that mean one thing under other names — "Angst" of Archive of Our Own and "Ангст" of ficbook —
 are merged by the user on the screen of the tags; the application only offers the tags alike by
