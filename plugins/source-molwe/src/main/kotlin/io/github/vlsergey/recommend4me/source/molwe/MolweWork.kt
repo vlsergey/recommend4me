@@ -14,7 +14,6 @@ import io.github.vlsergey.recommend4me.source.molwe.Molwe.Companion.REVIEWS
 import java.time.Instant
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import org.jsoup.nodes.TextNode
 
 /**
  * A work's own pages: its page — its header, its description with the line of its pairings and characters, its tags and
@@ -73,7 +72,7 @@ internal class MolweWork(private val items: ItemStore) {
         lines
             .firstOrNull { it.text().startsWith("Фандом:") }
             ?.let { line ->
-                fields.fandoms(id, line.children().drop(1).flatMap { named(it) }, original)
+                fields.fandoms(id, line.children().drop(1).flatMap { fandomNames(it) }, original)
             } ?: original?.let { fields.kind(id, it) }
         lines
             .firstOrNull { it.text().startsWith("Автор:") }
@@ -81,19 +80,20 @@ internal class MolweWork(private val items: ItemStore) {
                 val authors = line.select("a[href^=/author/]").mapNotNull { MolweCards.author(it) }
                 if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors)
             }
-        lines
-            .firstOrNull { "читател" in it.text() }
-            ?.text()
-            ?.let { line ->
-                items.setNumbers(
-                    id,
-                    listOfNotNull(
-                            PageText.numberBefore(line, "читател")?.let { READERS to it.toDouble() },
-                            PageText.numberBefore(line, "отзыв")?.let { REVIEWS to it.toDouble() },
-                        )
-                        .toMap(),
+        // The line of the counts: a group each, its icon, its number, its caption — "👁 189 читателей"
+        val counts =
+            lines
+                .flatMap { it.children() }
+                .filter { it.childrenSize() == 2 }
+                .associate { group -> group.ownText().trim() to group.child(1).text().let(PageText::number) }
+        items.setNumbers(
+            id,
+            listOfNotNull(
+                    counts[READERS_CAPTION]?.let { READERS to it.toDouble() },
+                    counts[REVIEWS_CAPTION]?.let { REVIEWS to it.toDouble() },
                 )
-            }
+                .toMap(),
+        )
     }
 
     /**
@@ -152,15 +152,16 @@ internal class MolweWork(private val items: ItemStore) {
 
     // --- A chapter's page ---
 
-    /** A chapter's page: its number, title and text, of a work known. False of a page without its text. */
+    /**
+     * A chapter's page: its title, the reader's heading, and its text, of a work known; its place in the work is told
+     * by the work's page alone. False of a page without its text.
+     */
     private fun chapter(doc: Document, id: String, part: String): Boolean {
-        val heading = doc.selectFirst("main h1")?.text()?.trim()?.let { CHAPTER_HEADING.find(it) }
+        val title = doc.selectFirst("[data-no-chrome-toggle] > div > p")?.text()?.trim()?.ifEmpty { null }
         val text =
             doc.select("p[id^=paragraph-]").map { PageText.of(it) }.filter { it.isNotBlank() }.joinToString("\n\n")
         if (items.find(id) == null || text.isBlank()) return false
-        val number = heading?.groupValues?.get(1)?.toIntOrNull()
-        val title = heading?.groupValues?.get(2)?.trim()?.ifEmpty { null }
-        items.saveParts(id, listOf(PartData(part, (number ?: 0) - 1, title, text)))
+        items.saveParts(id, listOf(PartData(part, UNKNOWN_PLACE, title, text)))
         return true
     }
 
@@ -174,11 +175,15 @@ internal class MolweWork(private val items: ItemStore) {
         /** A chapter's page: ".../read/<its id>". */
         private val CHAPTER_ADDRESS = Regex("/read/([0-9a-fA-F-]+)")
 
-        /** A chapter's heading, "Глава 2: Приезд": its number, its title. */
-        private val CHAPTER_HEADING = Regex("^Глава\\s+(\\d+)(?::\\s*(.*))?$")
+        /** The place of a part its page does not tell: a known part keeps its own ([PartData.position]). */
+        private const val UNKNOWN_PLACE = -1
 
         /** A chapter's day, "06.11.2026". */
         private val DAY = Regex("^\\d{2}\\.\\d{2}\\.\\d{4}$")
+
+        /** The captions of the header's counts. */
+        private const val READERS_CAPTION = "читателей"
+        private const val REVIEWS_CAPTION = "отзывов"
 
         private const val CAST = "Пэйринг и персонажи:"
         private const val TAGS = "Метки"
@@ -189,22 +194,13 @@ internal class MolweWork(private val items: ItemStore) {
         private const val NO_PAIRINGS = "Пэйринги не указаны"
 
         /**
-         * The names of a line's value — "A, Мерлин, B": every link one, every text apart by commas another (a fandom
-         * the site has no page of is written without a link).
+         * The fandoms of the header's line, each an element of its own: its link's name, or — a fandom the site has no
+         * page of — its last text, the separator before it a text of its own; the line's own text of a single one of no
+         * element ("Ориджинал").
          */
-        private fun named(value: Element): List<String> {
-            val out = mutableListOf<String>()
-            fun walk(e: Element) {
-                e.childNodes().forEach { n ->
-                    when {
-                        n is Element && n.tagName() == "a" -> out += n.text()
-                        n is Element -> walk(n)
-                        n is TextNode -> out += n.text().split(',')
-                    }
-                }
-            }
-            if (value.tagName() == "a") out += value.text() else walk(value)
-            return out.map { it.trim() }.filter { it.isNotEmpty() }
-        }
+        private fun fandomNames(value: Element): List<String> =
+            if (value.childrenSize() == 0) listOf(value.text())
+            else
+                value.children().map { f -> f.selectFirst("a")?.text() ?: f.textNodes().lastOrNull()?.text().orEmpty() }
     }
 }

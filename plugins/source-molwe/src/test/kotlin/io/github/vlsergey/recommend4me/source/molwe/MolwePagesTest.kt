@@ -55,7 +55,7 @@ class MolwePagesTest {
     }
 
     @Test
-    fun `a row of a list tells its author, characters and pairings, size, tags and reviews too`() {
+    fun `a row of a list tells its author, size, tags and reviews too, its characters and pairings not picked out`() {
         val context = MemorySourceContext()
         val read = capture(context, "https://molwe.ru/fanfics?page=2", "list-rows.html")
         assertEquals(24, read.size)
@@ -65,26 +65,14 @@ class MolwePagesTest {
         assertEquals("Author 4", context.facetNames.getValue("author")["34196"])
         assertEquals(listOf(AgeRating.NC17.key), facets[AgeRating.SITE_KEY])
         assertEquals(listOf("видеоблогеры"), facets["fandom"])
-        val pairings = facets["pairing"].orEmpty()
-        assertEquals(8, pairings.size)
-        assertEquals("дима масленников/ожп (оригинальный женский персонаж)", pairings.first())
-        assertTrue("артём чернец" in pairings, "$pairings")
-        assertEquals(
-            "Дима Масленников / ОЖП (оригинальный женский персонаж), Артём Чернец",
-            context.texts.getValue(id)["pairingsLine"].orEmpty().substringBefore(", Данияр"),
-        )
+        // The names a row runs together by commas are no values: the work's page gives each of its own
+        assertNull(facets["pairing"])
+        assertNull(context.texts[id]?.get("pairingsLine"))
         assertEquals(9, facets["tag"].orEmpty().size)
         assertEquals("Hurt/Comfort", context.facetNames.getValue("tag")["hurt/comfort"])
         assertEquals(68715.0, context.numbers.getValue(id)["words"])
         assertEquals(0.0, context.numbers.getValue(id)["reviews"])
         assertTrue(context.texts.getValue(id)["annotation"].orEmpty().startsWith("Lorem ipsum"))
-        // A name with commas in its brackets is one name
-        assertEquals(
-            listOf("гвендолин \"гвен\" стейси (гвен-паук, девушка-паук, белая вдова)/джек харпер", "джек харпер"),
-            context.facets.getValue("20785")["pairing"].orEmpty().take(2),
-        )
-        // "—": no characters, no pairings
-        assertEquals(emptyList(), context.facets.getValue("20645")["pairing"])
     }
 
     @Test
@@ -160,7 +148,8 @@ class MolwePagesTest {
         context.items.upsert(ItemHead(id, source.itemUrl(id), "Влюбись в меня, если осмелишься"), now)
         assertEquals(listOf(id), capture(context, url, "chapter.html"))
         val part = context.parts.getValue(id).getValue("d20210ed-78e3-43e3-87ec-9213873f915c")
-        assertEquals(1, part.position)
+        // Its place in the work is told by the work's page alone
+        assertEquals(-1, part.position)
         assertEquals("Глава 2", part.title)
         assertTrue(part.content.orEmpty().startsWith("Lorem ipsum"))
         assertEquals(38, part.content.orEmpty().split("\n\n").size)

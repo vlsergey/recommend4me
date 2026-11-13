@@ -70,6 +70,11 @@ val Source.downloadsPages: Boolean
  *   (user, 2026-11-13): no page fetched on its own, the one download [refresh] the user presses for; what the site's
  *   own words mean that the code knows — a legend of its codes — may name what a page shows. What a page reads
  *   differently raises [parserVersion]: the pages kept are read again.
+ * - **No value picked out of a text** (user, 2026-11-13): a value is read of the page's own elements — a link, an
+ *   element of each value, an attribute — never parsed out of a text by its captions, words or separators, of any site;
+ *   a text whose values the site runs together (a description, a note, a line of names joined by commas) is kept whole
+ *   as a text. The choice of tags and marks out of the descriptions is made by the models trained description → tags:
+ *   so no heuristic algorithm of parsing a text is made.
  * - **Its tests**: the site's pages kept under `src/test/resources/pages`, every prose text of them — descriptions,
  *   chapters, notes, reviews — replaced by placeholder text (Lorem ipsum) and people's names neutral, scripts gone: the
  *   markup is the site's, the words are not; read into a `MemorySourceContext`. A test of the words (`Translations`),

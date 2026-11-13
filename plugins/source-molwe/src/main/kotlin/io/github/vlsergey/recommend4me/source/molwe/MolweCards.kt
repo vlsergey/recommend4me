@@ -17,8 +17,9 @@ import org.jsoup.nodes.Element
 /**
  * The cards of the works of a list — the catalogue's, a fandom's, a tag's, an author's, the works like one — in either
  * view of the list the reader chooses. A tile tells a work's badges, its first fandom, its description and its readers;
- * a row tells its author, its characters and pairings, its size, its tags and its reviews too. Each writes what it
- * shows: a fandom of a card is the first of the work's alone, written of a work whose fandoms are not known yet.
+ * a row tells its author, its size, its tags and its reviews too. Each writes what it shows as elements of their own: a
+ * fandom of a card is the first of the work's alone, written of a work whose fandoms are not known yet; the characters
+ * and pairings a row runs together in one text are read of the work's page, nothing picked out of a text.
  */
 internal class MolweCards(private val items: ItemStore) {
 
@@ -59,17 +60,18 @@ internal class MolweCards(private val items: ItemStore) {
         }
     }
 
-    /** What a row of the list tells besides a tile: its author, characters and pairings, tags, size. */
+    /**
+     * What a row of the list tells besides a tile, each of an element of its own: its author, its size, its tags. Its
+     * characters and pairings it writes as one text, its names run together by commas: they are read of the work's
+     * page, each an element of its own there.
+     */
     private fun row(id: String, card: Element) {
         card.select("div:has(> span:containsOwn(Автор:)) > a[href^=/author/]").let { authors ->
             if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors.mapNotNull { author(it) })
         }
-        val labelled = labelled(card)
-        if (labelled.isEmpty()) return
-        val pairings = labelled["Пейринги"]?.let(::entries)
-        val characters = labelled["Персонажи"]?.let(::entries)
-        if (pairings != null && characters != null) fields.cast(id, pairings + characters)
-        PageText.numberBefore(labelled["Размер"], "слов")?.let { items.setNumbers(id, mapOf(WORDS to it.toDouble())) }
+        card.selectFirst("p:containsOwn(Размер:) > b")?.text()?.let(PageText::number)?.let {
+            items.setNumbers(id, mapOf(WORDS to it.toDouble()))
+        }
         card
             .selectFirst("p:containsOwn(Фандом:)")
             ?.parent()
@@ -97,7 +99,7 @@ internal class MolweCards(private val items: ItemStore) {
         /** The link to the work in its card. */
         const val LINK = "a[href^=\"/fanfics/\"], a[href^=\"/originals/\"]"
 
-        /** The labels of a row's lines, "Фандом:", whose values go before the description. */
+        /** The captions of a row's lines of the site's fields, "Фандом:": the lines before its description. */
         private val LABELS = listOf("Фандом", "Персонажи", "Пейринги", "Опубликовано", "Размер")
 
         /** The div of the badges over a cover: spans alone, an age rating first ("16+"). */
@@ -134,40 +136,10 @@ internal class MolweCards(private val items: ItemStore) {
             return if (key == null || name == null) null else FacetValue(key, name)
         }
 
-        /** A row's lines by their labels: "Персонажи: A, B" → "Персонажи" to "A, B". */
-        private fun labelled(card: Element): Map<String, String> =
-            card
-                .select("p")
-                .mapNotNull { p ->
-                    val text = p.text().trim()
-                    LABELS.firstOrNull { text.startsWith("$it:") }?.let { it to text.substringAfter(':').trim() }
-                }
-                .toMap()
-
-        /** A row's description: the paragraph after its labelled lines. */
+        /** A row's description: the paragraph after the lines of its fields. */
         private fun rowDescription(card: Element): Element? =
             card.selectFirst("p:containsOwn(Фандом:)")?.parent()?.children()?.lastOrNull { p ->
                 p.tagName() == "p" && LABELS.none { p.text().startsWith("$it:") }
             }
-
-        /** The entries of a row's line, "A, B (C, D), E": apart by the commas outside brackets; "—" none. */
-        fun entries(line: String): List<String> {
-            if (line.trim() == "—") return emptyList()
-            val out = mutableListOf<String>()
-            val current = StringBuilder()
-            var depth = 0
-            line.forEach { c ->
-                when {
-                    c == '(' -> depth++
-                    c == ')' -> depth = maxOf(0, depth - 1)
-                }
-                if (c == ',' && depth == 0) {
-                    out += current.toString()
-                    current.clear()
-                } else current.append(c)
-            }
-            out += current.toString()
-            return out.map { it.trim() }.filter { it.isNotEmpty() }
-        }
     }
 }
