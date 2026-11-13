@@ -30,7 +30,8 @@ import org.jsoup.nodes.Element
 /**
  * Reads the pages of adult-fanfiction.org and writes what they say: the cards of a list (an archive's latest, a
  * category, a search; an author's works, [AffProfiles]), a work's page — its header and the chapter it shows, every
- * chapter named — and its reviews. A work is written by its card: its page and its reviews add to a work known by one.
+ * chapter named — and its reviews; the site's legend of its codes, where a page shows it ([AffFields.legend]). A work
+ * is written by its card: its page and its reviews add to a work known by one.
  */
 class AffPages(private val context: SourceContext) {
 
@@ -43,6 +44,7 @@ class AffPages(private val context: SourceContext) {
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
         touched += profiles.read(doc, page.url, page.capturedAt)
+        fields.legend(doc)
         val id = Aff().itemIdOf(page.url)
         if (id != null && items.find(id) != null) {
             val path = runCatching { URI(page.url).path }.getOrDefault("")

@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.source.aff.Aff.Companion.PAIRINGS_LINE
 import io.github.vlsergey.recommend4me.source.aff.Aff.Companion.STATUS
 import io.github.vlsergey.recommend4me.source.aff.Aff.Companion.TAG
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
+import org.jsoup.nodes.Document
 
 /**
  * The fields of a work as its card and its page tell them — its archive, its place in the archive's tree of categories,
@@ -83,6 +84,28 @@ internal class AffFields(private val items: ItemStore) {
         val told = keys.mapNotNull { k -> AffCodes.NAMES[k]?.let { k to it } }.toMap()
         if (told.isNotEmpty()) items.describeFacetValues(TAG, told)
         directions(id, emptyList(), keys)
+    }
+
+    /**
+     * THE SITE'S OWN LEGEND OF ITS CODES, on a page that shows it — the filters of its advanced search, every one its
+     * code and its title "Short - what it means": the name and the description of every code it tells, those of no work
+     * kept among them — a code whose works are kept out is named and described all the same. Read of the page the user
+     * opened, nothing asked of the site for it.
+     */
+    fun legend(doc: Document) {
+        val told =
+            doc.select("label.tag-filter-checkbox[title]")
+                .mapNotNull { label ->
+                    val code = label.selectFirst("input[value]")?.attr("value")?.trim()?.lowercase()?.ifEmpty { null }
+                    val title = label.attr("title").trim().ifEmpty { null }
+                    if (code == null || title == null) null else code to title
+                }
+                // The codes of the status are no tags
+                .filter { (code, _) -> code != AffCodes.WIP && code != AffCodes.COMPLETE }
+                .toMap()
+        if (told.isEmpty()) return
+        items.nameFacetValues(TAG, told.mapValues { (code, title) -> AffCodes.shortOf(title) ?: code })
+        items.describeFacetValues(TAG, told)
     }
 
     /**

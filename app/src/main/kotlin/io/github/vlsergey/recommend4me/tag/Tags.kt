@@ -139,15 +139,17 @@ class Tags(
      */
     fun stats(scope: TagScope): Map<String, TagStats> {
         val out = HashMap<String, TagStats>()
-        scope.tags.stats.siteTags().forEach { r ->
+        val siteTags = scope.tags.stats.siteTags()
+        val unnamed = unnamedOf(scope, siteTags)
+        siteTags.forEach { r ->
             val t = out.getOrPut(TagRepository.key(r.normalized)) { TagStats(TagRepository.key(r.normalized)) }
-            // A site's tag no work has now is a variant all the same, of no works, named by its key on the site of no
-            // name counted (user, 2026-11-13): a tag keeping its works out has none ever, and a tag shown without the
-            // sites' tags bound to it is a number that tells nothing
+            // A site's tag no work has now is a variant all the same, of no works (user, 2026-11-13): a tag keeping its
+            // works out has none ever, and a tag shown without the sites' tags bound to it is a number that tells
+            // nothing. Named as its site names it, of its key when the site names it not
             t.variants[r.site] =
                 TagVariant(
                     r.site,
-                    r.name ?: r.site.tag,
+                    r.name ?: unnamed[r.site] ?: r.site.tag,
                     Uses().apply {
                         works = r.counts.works
                         graded = r.counts.graded
@@ -165,6 +167,22 @@ class Tags(
         scope.tags.ids().forEach { id -> out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) } }
         return out
     }
+
+    /**
+     * The names the sites give their tags of no works counted — no name kept with them — read of every site's
+     * dictionary in one go a site.
+     */
+    private fun unnamedOf(scope: TagScope, siteTags: List<SiteTagCount>): Map<SiteTagRef, String> =
+        siteTags
+            .filter { it.name == null }
+            .groupBy({ it.site.source }, { it.site.tag })
+            .flatMap { (source, tags) ->
+                val s = scope.source(source)
+                val facet = s?.let { normalization.siteFacetOf(it, scope.facet) }
+                if (s == null || facet == null) emptyList()
+                else s.items.facetNames(facet, tags).map { (tag, name) -> SiteTagRef(source, tag) to name }
+            }
+            .toMap()
 
     /** The works of the tags [keys]: by a site's tag bound to them, or by the user's word — a read of those alone. */
     fun itemsOf(scope: TagScope, facet: String, keys: Collection<String>): Set<ItemKey> {

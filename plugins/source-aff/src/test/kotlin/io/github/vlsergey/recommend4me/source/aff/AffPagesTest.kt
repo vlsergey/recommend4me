@@ -125,6 +125,27 @@ class AffPagesTest {
     }
 
     @Test
+    fun `the site's legend names and describes every code it tells, one of no work and of no legend kept`() {
+        // The filters of the advanced search as the site writes them: a title "Short - what it means" with the code
+        val filter = { code: String, title: String ->
+            """<div class="tag-filter-item"><label class="tag-filter-checkbox" title="$title">""" +
+                """<input type="checkbox" name="tags[]" value="$code"><span>$code</span></label></div>"""
+        }
+        val html =
+            "<html><body><form>" +
+                filter("Angst", "Angst - Torment, anguish") +
+                filter("Lorem", " Lorem - Ipsum dolor sit amet") +
+                filter("WIP", "WIP - Work in progress") +
+                "</form></body></html>"
+        val context = MemorySourceContext()
+        assertEquals(emptyList(), capture(context, "https://hp.adult-fanfiction.org/advancedsearch.php", html))
+        // A code the code's own legend has not is named and described all the same; the status is no tag
+        assertEquals(mapOf("angst" to "Angst", "lorem" to "Lorem"), context.facetNames.getValue("tag"))
+        assertEquals("Lorem - Ipsum dolor sit amet", context.facetDescriptions.getValue("tag")["lorem"])
+        assertTrue("wip" !in context.facetDescriptions.getValue("tag"))
+    }
+
+    @Test
     fun `the addresses of a work's pages name the work`() {
         assertEquals(adversary, source.itemIdOf("https://hp.adult-fanfiction.org/story.php?no=600100589"))
         assertEquals(adversary, source.itemIdOf("https://hp.adult-fanfiction.org/story.php?no=600100589&chapter=3"))

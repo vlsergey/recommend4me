@@ -24,8 +24,10 @@ internal object AffCodes {
      * The name of a code: its short name the site tells it by ("M/F - Het" → "M/F", "Angst - Torment" → "Angst"), the
      * code as written of one the site tells otherwise.
      */
-    fun nameOf(code: String): String =
-        NAMES[code.lowercase()]?.takeIf { " - " in it }?.substringBefore(" - ")?.trim()?.ifEmpty { null } ?: code
+    fun nameOf(code: String): String = NAMES[code.lowercase()]?.let(::shortOf) ?: code
+
+    /** The short name a code's title tells it by: "Angst - Torment, anguish" → "Angst"; none of a title of no dash. */
+    fun shortOf(title: String): String? = title.takeIf { " - " in it }?.substringBefore(" - ")?.trim()?.ifEmpty { null }
 
     /** The content tags told in full, by their codes in lower case: the titles of the advanced search's filters. */
     val NAMES =
