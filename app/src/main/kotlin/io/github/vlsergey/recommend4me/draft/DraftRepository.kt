@@ -11,18 +11,27 @@ import org.jooq.DSLContext
 class DraftRepository(private val db: DSLContext, private val source: String) {
 
     /**
-     * The drafts of the items [ids]: item to its drafts. By their ids up to a [BATCH] of them; of more, every draft of
-     * the source read once and picked from: a query of a thousand ids walks them all anyway.
+     * The drafts of the items [ids]: item to its drafts. By their ids up to a [BATCH] of them — found by the index of
+     * the item alone (H2 walks every draft of the source by `source = ? AND item_id IN (…)`), the rows of another
+     * source of the same id left out —; of more, every draft of the source read once and picked from.
      */
     fun ofItems(ids: Collection<String>): Map<String, List<LayerDraft>> {
         val asked = ids.toHashSet()
         if (asked.size > BATCH) return all().filterKeys { it in asked }
         val out = HashMap<String, MutableList<LayerDraft>>()
-        db.select(LAYER_DRAFT.ITEM_ID, LAYER_DRAFT.FACET, LAYER_DRAFT.VALUE_KEY, LAYER_DRAFT.SITE_VALUE)
+        db.select(
+                LAYER_DRAFT.SOURCE,
+                LAYER_DRAFT.ITEM_ID,
+                LAYER_DRAFT.FACET,
+                LAYER_DRAFT.VALUE_KEY,
+                LAYER_DRAFT.SITE_VALUE,
+            )
             .from(LAYER_DRAFT)
-            .where(LAYER_DRAFT.SOURCE.eq(source), LAYER_DRAFT.ITEM_ID.`in`(asked))
+            .where(LAYER_DRAFT.ITEM_ID.`in`(asked))
             .fetch {
-                out.getOrPut(it.value1()!!) { ArrayList() } += LayerDraft(it.value2()!!, it.value3()!!, it.value4()!!)
+                if (it.value1() == source)
+                    out.getOrPut(it.value2()!!) { ArrayList() } +=
+                        LayerDraft(it.value3()!!, it.value4()!!, it.value5()!!)
             }
         return out
     }

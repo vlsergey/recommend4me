@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.search
 
+import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -23,15 +24,20 @@ class SearchReranking(
 
     /**
      * Every work found, read against the line by the reranker, in the order of its score; as found without a reranker.
-     * A work read for the line before, its text the same, is not read again ([SearchScoreRepository]): the next page of
-     * a search, the line searched again, read nothing.
+     * A work read for the line before, of the same document and the same passage nearest to the line, is not read again
+     * ([SearchScoreRepository]) — nor its document made: the next page of a search, the line searched again, make and
+     * read nothing. A work's text is known the same by the fingerprint of its document the index keeps
+     * ([SearchResult.prints]) and its passage; of a work the index has none of, by the text itself.
      */
     fun reranked(type: TypeStore, found: SearchResult): SearchResult {
         val reranker = plugins.reranker()
         if (reranker == null || found.keys.size < 2) return found
         val started = System.currentTimeMillis()
+        val printed = found.keys.mapNotNull { key -> printOf(found, key)?.let { key to it } }.toMap()
+        val kept = type.searchScores.of(reranker.id, found.line).filter { (key, s) -> printed[key] == s.textsHash }
         val read =
             found.keys
+                .filter { it !in kept }
                 .groupBy { it.source }
                 .flatMap { (source, list) ->
                     stores
@@ -40,20 +46,19 @@ class SearchReranking(
                         .orEmpty()
                 }
                 .associate { it.key to it.value }
-        val texts = found.keys.associateWith { key -> read[key]?.let { readable(it, found.nearest[key]) }.orEmpty() }
-        val hashes = texts.mapValues { Vectors.keyOf(it.value) }
-        val stored = type.searchScores.of(reranker.id, found.line).filter { (key, s) -> hashes[key] == s.textsHash }
-        val todo = found.keys.filter { it !in stored }
+        val todo = found.keys.filter { it in read }
+        val texts = todo.map { key -> readable(read.getValue(key), found.nearest[key]) }
         val scored =
             if (todo.isEmpty()) emptyMap()
             else {
-                val scores = reranker.rank(found.line, todo.map { texts.getValue(it) })
+                val scores = reranker.rank(found.line, texts)
                 todo.indices
-                    .associate { todo[it] to StoredScore(hashes.getValue(todo[it]), scores[it]) }
+                    .associate { todo[it] to StoredScore(printed[todo[it]] ?: Vectors.keyOf(texts[it]), scores[it]) }
                     .also { type.searchScores.save(reranker.id, found.line, it) }
             }
-        val scores = stored + scored
-        val order = found.keys.sortedByDescending { scores.getValue(it).score }
+        val scores = kept + scored
+        // A work found whose document is gone since is the last
+        val order = found.keys.sortedByDescending { scores[it]?.score ?: Float.NEGATIVE_INFINITY }
         log.info(
             "'{}' in {}: {} works, {} read by {} in {} ms",
             found.line,
@@ -63,8 +68,18 @@ class SearchReranking(
             reranker.id,
             System.currentTimeMillis() - started,
         )
-        return SearchResult(found.line, order, found.state, found.nearest)
+        return SearchResult(found.line, order, found.state, found.nearest, found.prints)
     }
+
+    /**
+     * What the reranker reads of the work [key] known by what it is made of: the fingerprint of its document the index
+     * keeps and the passage of it nearest to the line; null of a work the index keeps none of.
+     */
+    private fun printOf(found: SearchResult, key: ItemKey): Long? =
+        found.prints[key]?.let { print ->
+            val p = found.nearest[key]
+            Vectors.keyOf("$print ${p?.field} ${p?.from} ${p?.to}")
+        }
 
     /**
      * A work as the reranker reads it, as far as it reads: its title; the passage of it nearest to the line — a window

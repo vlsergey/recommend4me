@@ -42,7 +42,10 @@ class Search(
                 keys
                     .groupBy { it.source }
                     .flatMap { (source, list) ->
-                        stores.source(source)?.let { documents.documents(it, list.map { k -> k.id }).entries }.orEmpty()
+                        stores
+                            .source(source)
+                            ?.let { documents.documents(it, list.map { k -> k.id }, passages = false).entries }
+                            .orEmpty()
                     }
                     .associate { it.key to it.value }
         }

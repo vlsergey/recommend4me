@@ -174,7 +174,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
      * The fingerprints the index keeps of the items' documents of [ids], by id, as the searcher of the index after its
      * last change reads them: of the items' documents alone, a passage keeps none.
      */
-    private fun keptFingerprints(ids: List<String>): Map<String, Long> {
+    fun keptFingerprints(ids: List<String>): Map<String, Long> {
         val out = HashMap<String, Long>()
         val searcher = searchers.acquire()
         try {

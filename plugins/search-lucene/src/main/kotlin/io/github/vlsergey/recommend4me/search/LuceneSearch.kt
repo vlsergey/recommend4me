@@ -88,7 +88,9 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         val ranked = scores.entries.sortedByDescending { it.value }.take(MAX_RESULTS).map { it.key }
         log.info("'{}' in {}: {} items in {} ms", line, contentType, ranked.size, System.currentTimeMillis() - started)
         val passages = nearest.mapValues { it.value.passage }
-        return SearchResult(q, ranked, State(terms, read, vector, passages), passages)
+        val kept = index.keptFingerprints(ranked.map { it.toString() })
+        val prints = ranked.mapNotNull { key -> kept[key.toString()]?.let { key to it } }.toMap()
+        return SearchResult(q, ranked, State(terms, read, vector, passages), passages, prints)
     }
 
     /**

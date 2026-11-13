@@ -66,14 +66,17 @@ class SearchPassage(val field: String, val from: Int, val to: Int, val vector: F
 }
 
 /**
- * What a search found: the items, most relevant first, what the provider needs to explain them, and of every item found
- * by meaning the passage of it nearest to the line ([SearchPassage], no vector).
+ * What a search found: the items, most relevant first, what the provider needs to explain them, of every item found by
+ * meaning the passage of it nearest to the line ([SearchPassage], no vector), and of every item the fingerprint of its
+ * document as the index keeps it ([SearchDocument.fingerprint]): what the reranker read of it before is known by it, no
+ * document made again.
  */
 class SearchResult(
     val line: String,
     val keys: List<ItemKey>,
     val state: Any?,
     val nearest: Map<ItemKey, SearchPassage> = emptyMap(),
+    val prints: Map<ItemKey, Long> = emptyMap(),
 )
 
 /**
@@ -91,7 +94,10 @@ interface SearchContext {
     /** The vectors of short texts as passages, kept once made. */
     fun phraseVectors(texts: Collection<String>): Map<String, FloatArray>
 
-    /** The documents of the items, read now. */
+    /**
+     * The documents of the items, read now: their fields alone, no passage — a passage of a text is cut by the
+     * encoder's tokens, what a page of matches has no time for; the passage nearest by meaning comes with the result.
+     */
     fun documents(keys: Collection<ItemKey>): Map<ItemKey, SearchDocument>
 }
 
