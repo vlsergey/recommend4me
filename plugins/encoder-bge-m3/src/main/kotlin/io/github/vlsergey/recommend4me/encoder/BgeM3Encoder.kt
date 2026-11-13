@@ -57,12 +57,41 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         return sums.map { it?.let(::unit) }
     }
 
-    /** A vector for every window of every text, however many windows a text has. */
+    override val windowsId: String = "$ENCODER/$SCENE-$SCENE_STEP"
+
+    /**
+     * A vector for every window of every text, however many windows a text has: of [SCENE] pieces each, its two special
+     * ones among them, every one beginning half a window after the one before — a scene cut at the edge of one stands
+     * whole in the next; the last ending with the text. A text of one window or less is one (user, 2026-11-13: a scene,
+     * not a page of 512 pieces end to end).
+     */
     override fun encodeWindows(texts: List<String>): List<List<FloatArray>> {
-        val (windows, owner) = windowsOf(texts, Int.MAX_VALUE)
+        val windows = ArrayList<LongArray>()
+        val owner = ArrayList<Int>()
+        texts.forEachIndexed { t, text ->
+            if (text.isBlank()) return@forEachIndexed
+            val ids = pieces(text)
+            scenesOf(ids.size).forEach { chunk ->
+                windows += longArrayOf(bos) + LongArray(chunk.count()) { ids[chunk.first + it] } + longArrayOf(eos)
+                owner += t
+            }
+        }
         val vectors = embedIds(windows)
         val out = List(texts.size) { ArrayList<FloatArray>() }
         windows.indices.forEach { w -> out[owner[w]] += vectors[w] }
+        return out
+    }
+
+    /** The places of the pieces of every window [encodeWindows] makes of a text of [size] pieces, in order. */
+    private fun scenesOf(size: Int): List<IntRange> {
+        val out = ArrayList<IntRange>()
+        var from = 0
+        while (from < size) {
+            val to = minOf(from + SCENE_ROOM, size)
+            out += from until to
+            if (to == size) break
+            from += SCENE_STEP
+        }
         return out
     }
 
@@ -70,18 +99,18 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
     override fun windowSpans(text: String): List<IntRange> {
         if (text.isBlank()) return emptyList()
         val spans = tokenizer.encode(text, false, false).charTokenSpans
-        return spans.indices.chunked(ROOM).mapNotNull { chunk ->
+        return scenesOf(spans.size).mapNotNull { chunk ->
             // A piece of no characters of its own (a joined byte) has no span: the window's ends are its pieces that
             // have
             val from = chunk.firstNotNullOfOrNull { spans[it] }?.start ?: return@mapNotNull null
-            val to = chunk.asReversed().firstNotNullOfOrNull { spans[it] }?.end ?: return@mapNotNull null
+            val to = chunk.reversed().firstNotNullOfOrNull { spans[it] }?.end ?: return@mapNotNull null
             from until to
         }
     }
 
     /**
-     * Every window of every text in one list, so windows of different texts share batches, with the text each is of; at
-     * most [limit] windows of a text.
+     * The pages a whole text's vector is the mean of ([encode]): of [WINDOW] pieces end to end, every one of every text
+     * in one list, so those of different texts share batches, with the text each is of; at most [limit] of a text.
      */
     private fun windowsOf(texts: List<String>, limit: Int): Pair<List<LongArray>, List<Int>> {
         val windows = ArrayList<LongArray>()
@@ -150,7 +179,16 @@ class BgeM3Encoder(private val onnx: Onnx) : TextEncoder {
         /** The pieces of the text a window holds besides its two special ones. */
         private const val ROOM = WINDOW - 2
 
-        /** The windows of one text's vector at most: the 8192 pieces bge-m3 reads of one text. */
+        /** The pieces of a window ([encodeWindows]), its two special ones among them: a scene, not a page. */
+        private const val SCENE = 256
+
+        /** The pieces of the text a window holds besides its two special ones. */
+        private const val SCENE_ROOM = SCENE - 2
+
+        /** How far a window begins after the one before: half of it, so each overlaps the next by half. */
+        private const val SCENE_STEP = SCENE_ROOM / 2
+
+        /** The pages of one text's vector at most: the 8192 pieces bge-m3 reads of one text. */
         private const val MAX_WINDOWS = 8192 / WINDOW
 
         /** Windows per run, on the processor and on the card: memory, not meaning. */

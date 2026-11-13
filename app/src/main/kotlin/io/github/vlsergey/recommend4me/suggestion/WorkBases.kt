@@ -24,7 +24,7 @@ internal class WorkBases(
         val ids = read.ids
         val hashes = HashMap<String, MutableList<String>>()
         store.textVectors.hashes(encoder.id).forEach { (k, hash) -> hashes.getOrPut(k.first) { ArrayList() } += hash }
-        val windowCounts = store.parts.windows.windowCounts(encoder.id)
+        val windowCounts = store.parts.windows.windowCounts(encoder.windowsId)
         val site = read.site
         val corrections = read.corrections
         val complete = read.complete

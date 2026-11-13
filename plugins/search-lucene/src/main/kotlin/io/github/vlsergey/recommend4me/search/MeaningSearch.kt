@@ -18,7 +18,7 @@ internal class Nearest(val cosine: Double, val passage: SearchPassage)
 internal object MeaningSearch {
 
     /**
-     * The items nearest to the query's vector [q] by meaning: the [NEAREST] passages nearest — of descriptions, of
+     * The items nearest to the query's vector [q] by meaning: the [PASSAGES] passages nearest — of descriptions, of
      * notes, of chapters — an item by its nearest passage.
      */
     fun nearest(searcher: IndexSearcher, q: FloatArray): Map<ItemKey, Nearest> {
@@ -27,7 +27,7 @@ internal object MeaningSearch {
         val hits =
             try {
                 searcher
-                    .search(KnnFloatVectorQuery(LuceneIndex.VECTOR, LuceneIndex.unit(q), NEAREST), NEAREST)
+                    .search(KnnFloatVectorQuery(LuceneIndex.VECTOR, LuceneIndex.unit(q), PASSAGES), PASSAGES)
                     .scoreDocs
             } catch (e: IllegalArgumentException) {
                 // Vectors of another dimension: an encoder changed and the index is not made again yet
@@ -81,6 +81,12 @@ internal object MeaningSearch {
 
     /** The items nearest by meaning that are asked for; the farther ones are no matches by meaning. */
     private const val NEAREST = 2000
+
+    /**
+     * The passages asked for, of the [NEAREST] items: a passage of a scene, half as long as a page and overlapping the
+     * next by half, four of them stand where one page did — and the nearest are often of one chapter.
+     */
+    private const val PASSAGES = 4 * NEAREST
 
     /** The few items above the top percent are not told apart further than this. */
     const val MAX_CLOSENESS = 1.5

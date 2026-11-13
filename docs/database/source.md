@@ -13,8 +13,8 @@
 | `facet_value_vector` | the vector of a value's name, held against texts to tell whether the value fits them |
 | `item_number` | a work's number: words, chapters, likes… |
 | `item_text` | a work's text by role: the description, the notes… |
-| `text_vector` | the vector of a text, with the hash of the text and the encoder |
-| `text_window` | the vector of every window of a text longer than one window of the encoder |
+| `text_vector` | the vector of a text, with the hash of the text and the encoder; how many windows it has, and what they were made by (`windows_by`: the encoder and its way of cutting a text) |
+| `text_window` | the vector of every window of a text longer than one window of the encoder: a scene of it, overlapping the next by half — what the search finds a piece of a long text by |
 | `phrase_vector` | the vector of a short text — a review, a tag's name, a phrase of the search — by the key of the text |
 | `picture` | a work's picture: the cover first, then the screenshots |
 | `item_picture_vector` | the cover's vector and the mean direction of the screenshots |
@@ -22,7 +22,7 @@
 | `series` | a series of the site — a cycle of works — as its own page, or a list of an author's series, said it last: its page, title, description, status and dates |
 | `series_place` | the number of a work in a series of the site, as the site tells it; that the work is of the series is its facet of the series |
 | `part` | a part of a work's text — a chapter — kept whole, with the hash of its text, its characters and words counted once |
-| `part_vector` | the vector of every window of a part |
+| `part_vector` | the vector of every window of a part, the windows overlapping by half: what the search finds a scene of a chapter by and what the models read of it (`part.encoder`: what they were made by) |
 | `part_paragraph_vector` | the vector of every paragraph of a part — its lines with a letter in them, short ones in a row joined — what the tags are held against to be offered by the text |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
 | `captured_page` | a page kept, gzipped, to be read again when the parser changes |
@@ -181,6 +181,7 @@ erDiagram
         VARCHAR text_hash
         VARBINARY vec
         INTEGER windows "null"
+        VARCHAR windows_by "null"
     }
     text_window {
         VARCHAR item_id PK, FK

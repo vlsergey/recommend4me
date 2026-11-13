@@ -23,14 +23,22 @@ interface TextEncoder {
     fun encode(texts: List<String>, kind: TextKind = TextKind.PASSAGE): List<FloatArray?>
 
     /**
-     * A vector for every window of every text — the pieces the encoder reads whole — so a long text (a chapter) is a
-     * set of vectors rather than their average.
+     * What the windows ([encodeWindows]) are made by: the encoder and the way it cuts a text into them. Every window's
+     * vector is stored with it; windows of another are made again, the vectors of whole texts kept.
+     */
+    val windowsId: String
+        get() = id
+
+    /**
+     * A vector for every window of every text — the pieces of it the encoder reads, of its own size and overlapping as
+     * it chooses — so a long text (a chapter) is a set of vectors rather than their average: what the search finds a
+     * scene by, and what the models read of a chapter.
      */
     fun encodeWindows(texts: List<String>): List<List<FloatArray>>
 
     /**
-     * Where every window [encodeWindows] makes of the text lies in it, in characters, in order: the piece of the text a
-     * window's vector is of — read by a reranker, shown as what was found.
+     * Where every window [encodeWindows] makes of the text lies in it, in characters, in order — overlapping as they
+     * do: the piece of the text a window's vector is of, read by a reranker, shown as what was found.
      */
     fun windowSpans(text: String): List<IntRange>
 }

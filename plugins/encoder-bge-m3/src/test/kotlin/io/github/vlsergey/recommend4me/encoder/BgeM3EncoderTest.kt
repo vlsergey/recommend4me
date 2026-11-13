@@ -50,7 +50,7 @@ class BgeM3EncoderTest {
     }
 
     @Test
-    fun `a long text gives a vector for every window, each where it lies, and empty ones none`() {
+    fun `a long text gives a vector for every window, each where it lies, the next half past it, empty ones none`() {
         assumeTrue(encoder.ready(), "bge-m3 files are not in the models folder")
         val long = (1..400).joinToString(" ") { "Глава $it: герой идёт дальше." }
         val (windows, empty) = encoder.encodeWindows(listOf(long, ""))
@@ -61,6 +61,11 @@ class BgeM3EncoderTest {
         assertEquals(windows.size, spans.size)
         assertEquals(0, spans.first().first)
         assertEquals(long.length, spans.last().last + 1)
+        // Scenes, each overlapping the next (by half its pieces): a scene cut at the edge of one stands whole in the
+        // next
+        spans.zipWithNext().forEach { (a, b) ->
+            assertTrue(b.first > a.first && b.first < a.last, "$a $b")
+        }
         assertNull(encoder.encode(listOf("   ")).single())
     }
 }

@@ -90,13 +90,13 @@ class PartVectors(
         val encoder = plugins.textEncoder() ?: return 0
         var done = 0
         stores.sources.forEach { s ->
-            val todo = s.parts.windows.toEncode(encoder.id, BATCH, reached.windows[s.id])
+            val todo = s.parts.windows.toEncode(encoder.windowsId, BATCH, reached.windows[s.id])
             if (todo.isEmpty()) return@forEach
             reached.windows[s.id] = todo.last().place
             busy = true
             val windows = encoder.encodeWindows(todo.map { it.content })
             todo.forEachIndexed { i, part ->
-                s.parts.windows.saveVectors(part.itemId, part.partId, encoder.id, part.hash, windows[i])
+                s.parts.windows.saveVectors(part.itemId, part.partId, encoder.windowsId, part.hash, windows[i])
             }
             // The works searched by the meaning of their chapters' windows: indexed again with them
             events.publishEvent(TextVectorsChanged(s.id, todo.map { it.itemId }.distinct()))
@@ -133,7 +133,7 @@ class PartVectors(
     fun pending(): Int =
         plugins.textEncoder()?.let { e ->
             stores.sources.sumOf {
-                it.parts.windows.countToEncode(e.id) +
+                it.parts.windows.countToEncode(e.windowsId) +
                     it.parts.paragraphs.countParagraphsToEncode(Paragraphs.keyOf(e.id))
             }
         } ?: 0

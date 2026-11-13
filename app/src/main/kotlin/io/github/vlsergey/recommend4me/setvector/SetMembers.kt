@@ -12,12 +12,15 @@ import org.springframework.stereotype.Component
 @Component
 class SetMembers(private val plugins: Plugins, private val phrases: PhraseVectors) {
 
-    /** The encoder the members of a kind of sets are encoded by. */
+    /**
+     * What the members of a kind of sets are encoded by: the image encoder, the text encoder, and of the chapters its
+     * windows ([io.github.vlsergey.recommend4me.encoder.TextEncoder.windowsId]) — cut otherwise, made again.
+     */
     fun encoderOf(kind: SetKind): String? =
         when (kind) {
             SetKind.SCREENS -> plugins.imageEncoder()?.id
-            SetKind.REVIEWS,
-            SetKind.PARTS -> plugins.textEncoder()?.id
+            SetKind.REVIEWS -> plugins.textEncoder()?.id
+            SetKind.PARTS -> plugins.textEncoder()?.windowsId
         }
 
     /** How many members every item's set of [kind] has now. */

@@ -145,10 +145,12 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
 
         // The texts a work is found by meaning by alone: the title's vector is read by no passage
         private val vectors by lazy { encoder?.let { e -> s.textVectors.ofMany(this.ids, e.id, meaningful) }.orEmpty() }
-        private val windows by lazy { encoder?.let { e -> s.textVectors.windows.windowsOf(this.ids, e.id) }.orEmpty() }
+        private val windows by lazy {
+            encoder?.let { e -> s.textVectors.windows.windowsOf(this.ids, e.id, e.windowsId) }.orEmpty()
+        }
         private val parts by lazy { s.parts.contentsOf(this.ids) }
         private val partWindows by lazy {
-            encoder?.let { e -> s.parts.windows.windowsByParts(this.ids, e.id) }.orEmpty()
+            encoder?.let { e -> s.parts.windows.windowsByParts(this.ids, e.windowsId) }.orEmpty()
         }
 
         /** Of the texts searched by meaning and of the chapters, what their passages are made of, no vector read. */
@@ -221,7 +223,7 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
                 put(p.partId)
                 put(p.title)
                 put(p.hash)
-                put(if (encoder != null && p.encoder == encoder.id) p.encodedHash else null)
+                put(if (encoder != null && p.encoder == encoder.windowsId) p.encodedHash else null)
             }
             return Vectors.keyOf(text.toString())
         }

@@ -273,11 +273,11 @@ class Explanations(
     ): Map<String, Double> {
         val encoder = plugins.textEncoder()?.takeIf { model.layout.offsetOf(SetKind.PARTS.key) != null }
         val embedding = encoder?.let { e ->
-            type.embeddings.find(SetKind.PARTS)?.takeIf { it.encoder == e.id }?.embedding
+            type.embeddings.find(SetKind.PARTS)?.takeIf { it.encoder == e.windowsId }?.embedding
         }
         val byPart =
             if (embedding == null) emptyMap()
-            else type.source(key.source)!!.parts.windows.windowsByPart(key.id, encoder.id)
+            else type.source(key.source)!!.parts.windows.windowsByPart(key.id, encoder.windowsId)
         if (embedding == null || byPart.isEmpty()) return emptyMap()
         val parts = byPart.keys.toList()
         val windows = parts.flatMap { byPart.getValue(it) }

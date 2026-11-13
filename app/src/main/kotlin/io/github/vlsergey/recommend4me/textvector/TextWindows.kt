@@ -32,7 +32,7 @@ class TextWindows(
         val windows = if (long.isEmpty()) emptyList() else encoder.encodeWindows(long.map { texts[it].third })
         val of = long.withIndex().associate { (k, i) -> i to windows[k] }
         texts.forEachIndexed { i, (id, key, _) ->
-            store.textVectors.windows.saveWindows(id, key, counts[i], of[i].orEmpty())
+            store.textVectors.windows.saveWindows(id, key, counts[i], encoder.windowsId, of[i].orEmpty())
         }
     }
 
@@ -53,7 +53,8 @@ class TextWindows(
         val started = System.currentTimeMillis()
         var last: Pair<String, String>? = null
         while (!cancelled()) {
-            val todo = store.textVectors.windows.withoutWindows(encoder.id, keys + TITLE, BATCH, last)
+            val todo =
+                store.textVectors.windows.withoutWindows(encoder.id, encoder.windowsId, keys + TITLE, BATCH, last)
             if (todo.isEmpty()) break
             last = todo.last()
             val ids = todo.map { it.first }.distinct()
