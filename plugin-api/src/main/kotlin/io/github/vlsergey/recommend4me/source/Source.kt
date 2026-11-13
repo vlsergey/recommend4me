@@ -62,12 +62,14 @@ val Source.downloadsPages: Boolean
  *   names; the site's line of characters and pairings a text [SourceSchema.universeLine] names, read by its
  *   [castHabit].
  * - **Its [modes]**: [SourceMode.BROWSER] — [capturePatterns], [capture], [itemIdOf] and a [pageDecor], every selector
- *   of it matching the pages; [SourceMode.PAGE] — [refresh] and [needsRefresh]: the site asked politely, one request at
- *   a time with a pause between, under a user agent that says what asks, a page gone (404) false, a site asking to wait
- *   (429) an error; [SourceMode.SCRAPE_ALL] and [SourceMode.UPDATES] — [scrape].
+ *   of it matching the pages; [SourceMode.PAGE] — [refresh], on the user's press alone: the site asked politely, one
+ *   request at a time with a pause between, under a user agent that says what asks, a page gone (404) false, a site
+ *   asking to wait (429) an error; [SourceMode.SCRAPE_ALL] and [SourceMode.UPDATES] — [scrape].
  * - **Its items**: an id stable, of the site's own number, fit to stand in an address's path (no "/"); written as
- *   [ItemStore] tells — a page says only what it shows. What a page reads differently raises [parserVersion]: the pages
- *   kept are read again.
+ *   [ItemStore] tells — a page says only what it shows. WHAT THE SCREEN DOES NOT SHOW IS NOT WRITTEN, NOR DOWNLOADED
+ *   (user, 2026-11-13): no page fetched on its own, the one download [refresh] the user presses for; what the site's
+ *   own words mean that the code knows — a legend of its codes — may name what a page shows. What a page reads
+ *   differently raises [parserVersion]: the pages kept are read again.
  * - **Its tests**: the site's pages kept under `src/test/resources/pages`, every prose text of them — descriptions,
  *   chapters, notes, reviews — replaced by placeholder text (Lorem ipsum) and people's names neutral, scripts gone: the
  *   markup is the site's, the words are not; read into a `MemorySourceContext`. A test of the words (`Translations`),

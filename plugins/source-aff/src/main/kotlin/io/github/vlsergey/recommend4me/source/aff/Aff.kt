@@ -31,7 +31,8 @@ import java.time.Instant
  * adult-fanfiction.org — AFF, the Adult FanFiction archive: fan fiction and original writing for adults, in archives of
  * their own (a subdomain each: hp, anime, tv…). Read in the browser and seen by the extension — the cards of every
  * list, a work's chapter with its header, its reviews — and a work's chapters downloaded by the application itself when
- * the user asks for it (or grades a work known only by its card): one work's pages, never a crawl of the catalogue.
+ * the user presses for it: one work's pages, never a crawl of the catalogue, never on its own. What the screen does not
+ * show is not written.
  *
  * A work is known by its card: what it is about, its tags, its days are on the card alone, the work's own page shows
  * its chapters.
@@ -117,8 +118,9 @@ class Aff : Source {
                     FacetDecor(UniverseFacets.SECONDARY_CHARACTERS, after = HEADER),
                     FacetDecor(UniverseFacets.PAIRINGS, after = HEADER),
                 ),
-            // A work's card in every list — an archive's, a category's, a search, an author's works
-            cards = CardDecor(AffPages.CARD, "a.story-title"),
+            // A work's card in every list — an archive's, a category's, a search — and on an author's page, of another
+            // markup
+            cards = CardDecor("${AffPages.CARD}, ${AffProfiles.CARD}", "a.story-title, ${AffProfiles.LINK}"),
             // "Next »" is the last link of the pagination; on the last page a number is
             nextPage = "div.pagination > a.pagination-btn:last-child",
         )
@@ -183,10 +185,6 @@ class Aff : Source {
             lastRequest = Instant.now()
         }
     }
-
-    /** A work known by its card alone — no chapter of it — is downloaded once it is graded. */
-    override fun needsRefresh(itemId: String, context: SourceContext): Boolean =
-        context.items.find(itemId) != null && context.items.parts(itemId).isEmpty()
 
     companion object {
         const val ID = "aff"

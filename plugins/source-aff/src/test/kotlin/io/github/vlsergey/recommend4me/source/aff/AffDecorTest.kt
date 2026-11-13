@@ -25,6 +25,21 @@ class AffDecorTest {
     }
 
     @Test
+    fun `every card of an author's page links to its work`() {
+        val html = page("profile.html")
+        val url = "https://members.adult-fanfiction.org/profile.php?id=1296995621&tab=stories-written&a=games"
+        val captured = source.capture(CapturedPage(url, html, Instant.now()), MemorySourceContext())
+        val cards = decor.cards!!
+        val linked =
+            Jsoup.parse(html, url)
+                .select(cards.selector)
+                .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
+                .mapNotNull(source::itemIdOf)
+        assertEquals(6, captured.size)
+        assertEquals(captured, linked)
+    }
+
+    @Test
     fun `every card of a list links to its work, and the list to its next page`() {
         val html = page("list.html")
         val url = "https://hp.adult-fanfiction.org/"

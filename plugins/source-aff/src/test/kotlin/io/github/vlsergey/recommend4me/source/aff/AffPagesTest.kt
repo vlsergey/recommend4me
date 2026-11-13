@@ -58,7 +58,7 @@ class AffPagesTest {
         assertEquals(listOf(Books.Status.FINISHED.key), facets["status"])
         val tags = facets["tag"].orEmpty()
         assertTrue("complete" !in tags && "bdsm" in tags && "mf" in tags, "$tags")
-        // Named as other sites name such a tag, told in full by its description
+        // Named by the short name the site tells a code by, told in full by its description
         assertEquals("M/F", context.facetNames.getValue("tag")["mf"])
         assertEquals("BDSM", context.facetNames.getValue("tag")["bdsm"])
         assertEquals("M/F - Het", context.facetDescriptions.getValue("tag")["mf"])
@@ -99,6 +99,29 @@ class AffPagesTest {
         val first = reviews.first { it.author == "Reader 1" }
         assertEquals(Instant.parse("2023-04-20T00:00:00Z"), first.postedAt)
         assertTrue(first.content.startsWith("Lorem ipsum"))
+    }
+
+    @Test
+    fun `an author's page gives the works they wrote, its cards of another markup`() {
+        val context = MemorySourceContext()
+        val url = "https://members.adult-fanfiction.org/profile.php?id=1296995621&tab=stories-written&a=games"
+        val read = capture(context, url, page("profile.html"))
+        assertEquals(6, read.size)
+        val raider = "games-600091826"
+        assertEquals(raider, read.first())
+        assertEquals("BDSM Raider", context.heads.getValue(raider).title)
+        assertEquals(Instant.parse("2026-03-12T00:00:00Z"), context.heads.getValue(raider).updatedAt)
+        val facets = context.facets.getValue(raider)
+        assertEquals(listOf("1296995621"), facets["author"])
+        assertEquals("CrossroadsMk2", context.facetNames.getValue("author")["1296995621"])
+        assertEquals(listOf("games"), facets["archive"])
+        assertEquals(listOf(Books.Status.FINISHED.key), facets["status"])
+        assertTrue("bdsm" in facets["tag"].orEmpty())
+        // Its category by its last node alone: not written, the archive's card tells the whole of it
+        assertNull(facets["category"])
+        assertEquals(3.0, context.numbers.getValue(raider)["parts"])
+        assertEquals(22372.0, context.numbers.getValue(raider)["views"])
+        assertTrue(context.texts.getValue(raider)["annotation"].orEmpty().startsWith("Lorem ipsum"))
     }
 
     @Test
