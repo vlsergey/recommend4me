@@ -80,7 +80,10 @@ class Aff : Source {
             kindFrom = ARCHIVE,
         )
 
-    override val parserVersion = 1
+    /**
+     * 2: a work's page reads its place in the archive's tree too — its fandom of it — as a card of the archive does.
+     */
+    override val parserVersion = 2
 
     override val capturePatterns =
         listOf(

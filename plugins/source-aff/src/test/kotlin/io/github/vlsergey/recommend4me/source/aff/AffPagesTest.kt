@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.source.aff
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
@@ -83,6 +84,19 @@ class AffPagesTest {
         assertTrue(parts.getValue("2").content.orEmpty().startsWith("Lorem ipsum"))
         assertNull(parts.getValue("3").content)
         assertEquals(listOf(AgeRating.NC17.key), context.facets.getValue(adversary)[AgeRating.SITE_KEY])
+    }
+
+    @Test
+    fun `a work's page tells its place in the archive's tree, its fandom of it, as a card of the archive does`() {
+        val context = MemorySourceContext()
+        // Known by a card that tells no whole category: an author's
+        context.items.upsert(ItemHead(adversary, source.itemUrl(adversary), "Adversary"), now)
+        assertEquals(listOf(adversary), capture(context, source.itemUrl(adversary), page("story.html")))
+        val facets = context.facets.getValue(adversary)
+        assertEquals(listOf("harry potter » het - male/female » hermione/voldemort"), facets["category"])
+        assertEquals(listOf("Harry Potter"), facets["fandom"])
+        assertEquals(listOf("hermione/voldemort"), facets["pairing"])
+        assertEquals(listOf(Books.Direction.HET.key), facets["direction"])
     }
 
     @Test

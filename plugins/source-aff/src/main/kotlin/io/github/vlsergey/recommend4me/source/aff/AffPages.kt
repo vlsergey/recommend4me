@@ -112,8 +112,8 @@ class AffPages(private val context: SourceContext) {
     // --- A work's page ---
 
     /**
-     * A work's page: its header — its title, author, rating and statistics — every chapter its menu names and the text
-     * of the one it shows. False of a page without the header.
+     * A work's page: its header — its title, author, rating, statistics and place in the archive's tree — every chapter
+     * its menu names and the text of the one it shows. False of a page without the header.
      */
     private fun work(doc: Document, id: String, now: Instant): Boolean {
         val header = doc.selectFirst("div.story-header-two-column")
@@ -128,6 +128,11 @@ class AffPages(private val context: SourceContext) {
             }
         stats["Rating"]?.let { fields.rating(id, it) }
         numbers(id, stats)
+        // Its place in the archive's tree, "AtS/BtVS Crossovers › FemmeSlash - Female/Female": the fandom, the kind of
+        // its relationships and its pairing read out of it, as of a card
+        header.selectFirst("div.story-header-category > span:not(.material-symbols-outlined)")?.let {
+            fields.located(id, it.text().split('›'))
+        }
         chapters(doc, id)
         return true
     }
