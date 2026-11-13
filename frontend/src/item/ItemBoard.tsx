@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { InboxIcon, Loader2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -46,9 +46,11 @@ type Props = {
  * THE LIST OF THE WORKS, a page at a time. A change of what it lists keeps the list before till the new
  * one comes, MARKED AS THE OLD ONE while it waits — the usual way of a list read anew (React's stale
  * content, TanStack's placeholder data): dimmed, still to open and grade, a thin bar running over it,
- * busy to a screen reader; nothing marked for a list back in a moment ([useShownLate]).
+ * busy to a screen reader; nothing marked for a list back in a moment ([useShownLate]). Drawn anew only when
+ * what it is given changes: the screen around it is drawn every time the loads are read, every second while
+ * they run, and a tablet drew the whole list each time.
  */
-export function ItemBoard({ type, view, sort, search, facets, sources, ranges, layout, onState }: Props) {
+export const ItemBoard = memo(function ItemBoard({ type, view, sort, search, facets, sources, ranges, layout, onState }: Props) {
   const { t } = useTranslation("item");
   const [selected, setSelected] = useState(0);
   const [opened, setOpened] = useState<number | null>(null);
@@ -281,7 +283,7 @@ export function ItemBoard({ type, view, sort, search, facets, sources, ranges, l
       />
     </>
   );
-}
+});
 
 /**
  * The thin bar running over the list while its new list is asked for: under the sticky header, so it is

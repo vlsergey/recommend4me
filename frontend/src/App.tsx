@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { KeyboardIcon, LayoutGridIcon, ListIcon, Loader2Icon, RefreshCcwIcon, SearchIcon, SettingsIcon, TelescopeIcon } from "lucide-react";
+import { KeyboardIcon, LayoutGridIcon, ListIcon, Loader2Icon, RefreshCcwIcon, SettingsIcon, TelescopeIcon } from "lucide-react";
 import type { ContentTypeInfo, ItemView } from "@/api/client";
 import { CaptureDialog } from "@/capture/CaptureDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { pluginNamespacesOf, useTypes } from "@/contenttype/types";
@@ -28,6 +27,7 @@ import { DuplicatesScreen } from "@/duplicate/DuplicatesScreen";
 import { ModelsScreen } from "@/model/ModelsScreen";
 import { useModel } from "@/model/useModel";
 import { SettingsDialog } from "@/settings/SettingsDialog";
+import { SearchLine } from "@/search/SearchLine";
 import { SearchQualityDialog } from "@/search/SearchQualityDialog";
 import { SourceFilter } from "@/source/SourceFilter";
 import { WorkProgress } from "@/status/WorkProgress";
@@ -44,12 +44,6 @@ const VIEWS: ItemView[] = ["UNRATED", "RATED", "ALL"];
 
 /** The hotkeys, every one by its keys' words and what it does. */
 const HOTKEYS = ["search", "choose", "open", "grade", "neighbours", "site", "close"] as const;
-
-/**
- * The pause in the typing after which the line is searched: the user's choice of a second — the
- * 300 ms usual for suggestions searched every few words cost a reranking each.
- */
-const SEARCH_SETTLE_MS = 1000;
 
 /**
  * The content types, the one of the works shown named by the address ("/books"); "/" is the type
@@ -107,9 +101,8 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
   const [hiddenSources, setHiddenSources] = usePref<string[]>(`hiddenSources:${type.id}`, []);
   const [storedRanges, setRanges] = usePref<NumberRanges>(`ranges:${type.id}`, {});
   const ranges = useMemo(() => validRanges(type, storedRanges), [type, storedRanges]);
-  const [searchInput, setSearchInput] = useState("");
-  // A word still being put together by an input method (Chinese, Japanese, a phone's keyboard): not searched till it is done
-  const [composing, setComposing] = useState(false);
+  // The line searched, told by the line of the search once the typing pauses ([SearchLine]): what is typed is the
+  // line's own, a letter not drawing the whole screen anew
   const [search, setSearch] = useState("");
   // What the list tells of itself: its number, and whether a new list is being asked for — by the search or another change
   const [listed, setListed] = useState<ListState>({ pending: false, searching: false });
@@ -137,22 +130,6 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
     return hidden.length === 0 ? [] : type.sources.filter((s) => !hiddenSources.includes(s.id)).map((s) => s.id);
   }, [type, hiddenSources]);
 
-  // The line searched once the typing has paused for SEARCH_SETTLE_MS — at once on Enter: a line
-  // searched is a second or two of the reranker reading every work found, and every half-typed word
-  // was one ("s", "spa", "space" — each read whole). A line cleared is no search: the list back at once.
-  // Nothing while an input method puts a word together: the pause counts from the word done. A search
-  // given up for a newer one is cancelled ([ItemBoard]), not left to run
-  useEffect(() => {
-    if (composing) return;
-    const line = searchInput.trim();
-    if (!line) {
-      setSearch("");
-      return;
-    }
-    const t = setTimeout(() => setSearch(line), SEARCH_SETTLE_MS);
-    return () => clearTimeout(t);
-  }, [searchInput, composing]);
-
   // After a retraining the list is NOT re-sorted under the cursor; a button offers it instead
   const model = useModel(type.id);
   const shownTrainedAt = useRef<string | undefined>(undefined);
@@ -170,18 +147,6 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
   };
 
   const onListState = useCallback((state: ListState) => setListed(state), []);
-
-  // "/" jumps to the search from anywhere but a text field
-  const searchRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "/" || (e.target as HTMLElement).closest("input, textarea, select, [role=dialog]")) return;
-      e.preventDefault();
-      searchRef.current?.focus();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   const notLoggedIn = jobs.data?.some((j) => j.loggedIn === false);
   if (stopped) return <Stopped />;
@@ -284,37 +249,7 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
             </TabsList>
           </Tabs>
 
-          <div className="relative w-full sm:w-96">
-            {/* Where the search was typed, its wait: the line searched, its works not come yet */}
-            {listed.searching ? (
-              <Loader2Icon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 animate-spin text-muted-foreground" aria-hidden />
-            ) : (
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            )}
-            <Input
-              ref={searchRef}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onCompositionStart={() => setComposing(true)}
-              onCompositionEnd={() => setComposing(false)}
-              onKeyDown={(e) => {
-                // The keys of an input method's word are its own: Enter chooses the word, Escape drops it
-                if (e.nativeEvent.isComposing) return;
-                if (e.key === "Escape") {
-                  setSearchInput("");
-                  e.currentTarget.blur();
-                }
-                // Enter: the line as typed, not waiting for the pause
-                if (e.key === "Enter") setSearch(searchInput.trim());
-              }}
-              placeholder={t("App.searchPlaceholder")}
-              className="pr-8 pl-8"
-              type="search"
-            />
-            <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border px-1 font-mono text-[10px] text-muted-foreground pointer-fine:block">
-              /
-            </kbd>
-          </div>
+          <SearchLine searching={listed.searching} onSearch={setSearch} />
           <SearchQualityDialog type={type.id} />
 
           <SortMenu type={type} value={sort} searching={search !== ""} onChange={setSort} />
