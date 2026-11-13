@@ -240,6 +240,18 @@ distributions {
     }
 }
 
+// The archives of the distribution — 3 GB each, the CUDA libraries in them — made only when one is asked for by name
+// (the CI's `build distZip`, the release): `build` packs neither, minutes of a build at home spent on archives no one
+// opens; `installDist` lays the same out as folders
+val archivesAsked = gradle.startParameter.taskNames.map { it.substringAfterLast(':') }.toSet()
+
+listOf("distZip", "distTar").forEach { name ->
+    tasks.named(name) {
+        val asked = name in archivesAsked
+        onlyIf("asked for by name") { asked }
+    }
+}
+
 tasks.named<JavaExec>("run") {
     dependsOn(pluginDists)
     workingDir = rootDir

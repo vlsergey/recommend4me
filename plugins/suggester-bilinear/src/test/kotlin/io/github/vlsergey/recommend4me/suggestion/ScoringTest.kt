@@ -27,6 +27,9 @@ class ScoringTest {
     private val m = 50
     private val n = 300
 
+    /** The rows a task of many is fitted on: the fit of more of them is not what a test of the scoring checks. */
+    private val fitRows = 2_000
+
     private fun FloatArray.normalized(): FloatArray {
         val l = kotlin.math.sqrt(sumOf { (it * it).toDouble() }).toFloat()
         return FloatArray(size) { this[it] / l }
@@ -199,7 +202,10 @@ class ScoringTest {
         val there = task(Random(11), values, cublas, items)
         try {
             val suggester = BilinearSuggester()
-            val bytes = assertNotNull(assertNotNull(suggester.fit(here)).model(here))
+            // Fitted on the first rows alone — the same values, the same seed: what is checked is the scoring of a
+            // block of many rows, not the fit, whose time grows with them
+            val fitted = task(Random(11), values, n = minOf(items, fitRows))
+            val bytes = assertNotNull(assertNotNull(suggester.fit(fitted)).model(fitted))
             val main = assertNotNull(suggester.scoring(bytes, here))
             val card = assertNotNull(suggester.scoring(bytes, there))
             val rows = IntArray(2_000) { (it * 7 + it / 3 * 4_001) % items }
