@@ -27,6 +27,7 @@ folder of jars in `plugins/`:
 | `source-author-today` | [author.today](https://author.today) books, browser tracking only |
 | `source-ficbook` | [ficbook.net](https://ficbook.net) fanfics and originals, browser tracking only |
 | `source-fanfics-me` | [fanfics.me](https://fanfics.me) fanfics and originals: the whole catalogue by the site's search, updates, browser tracking and a work's page on request |
+| `source-ffn` | [FanFiction.Net](https://www.fanfiction.net) fan fiction in many languages, browser tracking only |
 | `source-molwe` | [Molwe](https://molwe.ru) fanfics and originals, browser tracking and a work's chapters on request |
 | `encoder-bge-m3` | texts → vectors by bge-m3 (any language, one space, 1024 numbers); the one used when its files are there |
 | `encoder-e5` | texts → vectors by multilingual-e5-small: the one used without bge-m3's files |
