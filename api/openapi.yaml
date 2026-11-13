@@ -6082,6 +6082,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DuplicateValue'
+        single:
+          type: boolean
+          description: A work has one value of it at most (FacetDef.single) - the status, the kind - two works compared by whether it is the same
         computed:
           type: boolean
           description: |

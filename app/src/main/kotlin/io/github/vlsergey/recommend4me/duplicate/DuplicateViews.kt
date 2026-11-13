@@ -224,6 +224,7 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
                         }
                         .sortedBy { it.name },
                 allowed = (def.key in allowed).takeIf { it },
+                single = def.single.takeIf { it },
             )
         }
     }

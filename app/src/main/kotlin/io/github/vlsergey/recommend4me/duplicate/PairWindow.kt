@@ -79,6 +79,7 @@ class PairWindow(
                     labelKey = (facets.firstOrNull { it.facet == family } ?: facets.first()).labelKey,
                     propertyValues = values.map { DuplicateValue(it.name, it.nameKey) }.sortedBy { it.name },
                     computed = true,
+                    single = facets.any { it.single == true }.takeIf { it },
                 )
         }
         return compared.filter { it.key !in layer.keys } + computed

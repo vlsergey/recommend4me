@@ -31,6 +31,8 @@ object Books {
             role = FacetRole.STATUS,
             filter = true,
             onCard = true,
+            // A work is finished, in progress or frozen: one of them, as a site says it
+            single = true,
         )
 
     /**

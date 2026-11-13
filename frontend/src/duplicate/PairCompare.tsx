@@ -8,7 +8,7 @@ import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
-import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sameTextVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
+import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sameTextVerdict, sameValueVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
@@ -100,15 +100,17 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
         key,
         // Of the universes of no work, the site's fandoms alone: named as they are
         name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
-        // Of the values a work may have one of, whether they meet; of one value each — a status, a kind —, whether it
-        // is the same, a share of no sense; of the values as the works' screens give them (the window of one pair),
-        // how many they share; of any other, how alike by the layers of the pair
+        // Of the values a work may have one of, whether they meet; of a facet of one value — a status, a kind —,
+        // whether it is the same; of the values as the works' screens give them (the window of one pair), how many
+        // they share; of any other, how alike by the layers of the pair
         verdict:
           left?.allowed || right?.allowed
             ? allowedVerdict(left?.values ?? [], right?.values ?? [])
-            : compared && !left?.computed && !right?.computed && !(left?.values.length === 1 && right?.values.length === 1)
-              ? facetVerdict(compared.value)
-              : valuesVerdict(left?.values ?? [], right?.values ?? []),
+            : left?.single || right?.single
+              ? sameValueVerdict(left?.values ?? [], right?.values ?? [])
+              : compared && !left?.computed && !right?.computed
+                ? facetVerdict(compared.value)
+                : valuesVerdict(left?.values ?? [], right?.values ?? []),
         left: valuesOf(left, key === UNIVERSE ? a.fandoms : []),
         right: valuesOf(right, key === UNIVERSE ? b.fandoms : []),
         lines: "line-clamp-2",

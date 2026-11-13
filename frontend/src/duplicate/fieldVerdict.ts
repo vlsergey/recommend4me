@@ -95,9 +95,15 @@ export function valuesVerdict(first: DuplicateValue[], second: DuplicateValue[])
   const all = new Set([...a, ...b]).size;
   const tone = common === all ? "alike" : common === 0 ? "apart" : "partly";
   const shown = tone === "alike" ? "✓" : tone === "apart" ? "≠" : `${common}/${all}`;
-  // Of one value each, the same or not: a share says nothing more
-  if (a.size === 1 && b.size === 1) return { tone, shown, hint: "PairGrid.sameValueHint" };
   return { tone, shown, hint: "PairGrid.valuesHint", value: `${common}/${all}` };
+}
+
+/** A facet of one value at most ([DuplicateWorkFacet.single] — the status, the kind): the same "✓", another "≠". */
+export function sameValueVerdict(first: DuplicateValue[], second: DuplicateValue[]): FieldVerdict {
+  if (first.length === 0 || second.length === 0) return NOTHING;
+  const of = (v: DuplicateValue) => v.nameKey ?? v.name;
+  const same = first.some((v) => second.some((w) => of(v) === of(w)));
+  return { tone: same ? "alike" : "apart", shown: same ? "✓" : "≠", hint: "PairGrid.sameValueHint" };
 }
 
 export function sameTextVerdict(first: string | undefined, second: string | undefined): FieldVerdict {
