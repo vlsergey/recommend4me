@@ -26,21 +26,21 @@ import io.github.vlsergey.recommend4me.tag.TagRenaming
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.tag.TagsController
-import java.io.File
 import java.net.InetSocketAddress
 import java.util.Collections
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.TestInfo
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 
 /**
- * THE TWO SITES OF THE TESTS of one content type ([TwoSitesPlugins]): one application for every test of them —
- * [TwoSitesTest], [TwoSitesTagsTest], [TwoSitesSourcesTest] — over one data folder, as one class of tests had it, and
- * what they share: the host of the pictures, the controllers they ask, the pages they capture, a wait for the
- * background.
+ * THE TWO SITES OF THE TESTS of one content type ([TwoSitesPlugins]): an application for every class of them —
+ * [TwoSitesTest], [TwoSitesTagsTest], [TwoSitesSourcesTest] — over its own data folder ([TestDataFolder]), and what
+ * they share: the host of the pictures, the controllers they ask, the pages they capture, a wait for the background.
+ * Every test stands alone: it captures the works it reads, of ids of its own.
  */
-@SpringBootTest(properties = ["recommend4me.data-dir=build/test-data/two-sites"])
+@SpringBootTest
 @Import(TwoSitesPlugins::class)
 abstract class TwoSitesTestBase {
 
@@ -59,16 +59,15 @@ abstract class TwoSitesTestBase {
         private var started = false
 
         /**
-         * The data folder emptied and the host of the pictures started, once: the application of the tests is one, kept
-         * between their classes, its files open in it and the host its pictures are read from in it. The host stops
-         * with the tests.
+         * The class's own data folder emptied ([TestDataFolder]), and the host of the pictures started, once in a
+         * process: every application of the process reads its pictures from it. The host stops with the tests.
          */
         @JvmStatic
         @BeforeAll
         @Synchronized
-        fun start() {
+        fun start(info: TestInfo) {
+            TestDataFolder.clean(info.testClass.get())
             if (started) return
-            File("build/test-data/two-sites").deleteRecursively()
             server.createContext("/") { exchange ->
                 pictureHits += exchange.requestURI.path
                 if (exchange.requestURI.path == "/cover.png") {

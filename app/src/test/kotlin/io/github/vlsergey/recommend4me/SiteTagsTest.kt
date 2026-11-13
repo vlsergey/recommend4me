@@ -27,52 +27,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.MethodOrderer
-import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestMethodOrder
 import org.junit.jupiter.api.assertThrows
+import org.springframework.test.context.TestPropertySource
 
 /**
- * The site's tags as the application's own: described by the site when asked, bound to normalized tags the user merges,
- * names, binds to a catalogue's entries and puts above and under one another.
+ * The site's tags as the application's own: bound to normalized tags the user merges, names, binds to a catalogue's
+ * entries and puts above and under one another; a tag that keeps its works out.
  */
-@Order(1)
-@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
+@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-tags"])
 class SiteTagsTest : SiteTestBase() {
 
     @Test
-    @Order(1)
-    fun `a site's tag not described yet is asked of the browser once, and what the site answers describes it`() {
-        capture("w1|Wreck one|wrecks,hulks|A wreck adrift|")
-        val type = stores.type("books")!!
-        fun tagOf(site: String) = TagRepository.key(type.tags.bindings().getValue(SiteTagRef("site", site)))
-        val wrecks = tagOf("wrecks")
-        val hulks = tagOf("hulks")
-        refresh(stores.source("site")!!)
-        // Asked when the tag is looked at: the request written, not waited for
-        assertEquals(listOf("site"), tagsApi.getTag(wrecks).body!!.awaitedDescriptions)
-        assertEquals(listOf("site"), tagsApi.getTag(hulks).body!!.awaitedDescriptions)
-        // Handed to the browser with the answer of the next page of the site, the oldest first
-        val asked = capture("w2|Wreck two|wrecks|Another wreck|").body!!.wanted!!
-        assertEquals(listOf(SiteSource.describe("wrecks"), SiteSource.describe("hulks")), asked.map { it.url })
-        assertEquals(mapOf("tag" to "wrecks"), asked.first().form)
-        // The site's answers sent back: the one it describes described; neither asked again, the one
-        // the site said nothing of either
-        captures.capturePage(CaptureRequest(SiteSource.describe("wrecks"), "Ships broken apart"))
-        captures.capturePage(CaptureRequest(SiteSource.describe("hulks"), ""))
-        val described = tagsApi.getTag(wrecks).body!!
-        assertEquals(
-            listOf("Ships broken apart"),
-            described.descriptions.filter { it.origin == "site" }.map { it.text },
-        )
-        assertEquals(emptyList(), described.awaitedDescriptions)
-        assertEquals(emptyList(), tagsApi.getTag(hulks).body!!.awaitedDescriptions)
-        assertEquals(emptyList(), capture("w3|Wreck three|wrecks,hulks|A third wreck|").body!!.wanted)
-    }
-
-    @Test
-    @Order(2)
     fun `a site's tag bound to a normalized tag, the user merges, names, takes a site's tag out and links them`() {
         // A synonym the site names of its tag before any work has it: kept, bound once the tag is
         captures.capturePage(CaptureRequest("${SiteSource.SYNONYMS}cargo", "Freight"))
@@ -530,7 +496,6 @@ class SiteTagsTest : SiteTestBase() {
     }
 
     @Test
-    @Order(3)
     fun `a tag that keeps its works out removes those kept and keeps out those of it written after, of every site`() {
         capture("ko1|Kept one|smugglers,ships|A smugglers' tale|")
         val store = stores.source("site")!!

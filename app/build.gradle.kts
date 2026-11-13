@@ -273,4 +273,10 @@ tasks.withType<Test>().configureEach {
     // of chunks keeps to, one used block after it, breaks one of them (FreeSpaceBitSet.allocate, 2.4.240)
     // while the chunk is put in that free space all the same
     jvmArgs("-da:org.h2...")
+    // Every class of tests of the whole application its own application over its own data folder (TestDataFolder),
+    // every test of it standing alone: the classes run in processes side by side, each of them a Spring context
+    maxParallelForks = TEST_PROCESSES
 }
+
+/** The processes the tests of the module run in side by side: four applications of 2 GB, beside the other modules'. */
+val TEST_PROCESSES = 4

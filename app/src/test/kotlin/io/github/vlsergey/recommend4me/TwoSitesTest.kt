@@ -34,11 +34,13 @@ import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.context.i18n.LocaleContextHolder
+import org.springframework.test.context.TestPropertySource
 
 /**
  * Two sites of one content type: what spans sources — a work on both sites and its authors, what each site says of it,
  * the duplicates, a search.
  */
+@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/two-sites"])
 class TwoSitesTest : TwoSitesTestBase() {
 
     @Test

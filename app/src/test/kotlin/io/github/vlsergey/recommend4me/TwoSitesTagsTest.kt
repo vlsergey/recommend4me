@@ -15,11 +15,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.springframework.test.context.TestPropertySource
 
 /**
  * The tags of two sites: one named by the text itself, counted once of a work of several items, merged across the
  * sites, put above and under one another; a universe or a pairing the dictionary has not, refused.
  */
+@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/two-sites-tags"])
 class TwoSitesTagsTest : TwoSitesTestBase() {
 
     @Test

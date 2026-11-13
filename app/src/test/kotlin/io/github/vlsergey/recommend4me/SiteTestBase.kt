@@ -36,40 +36,29 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseEntriesController
 import io.github.vlsergey.recommend4me.universe.UniversesController
 import io.github.vlsergey.recommend4me.workload.inBackground
-import java.io.File
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.TestInfo
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 
 /**
- * THE SITE OF THE TESTS as the application's interface sees it, its plugins [SitePlugins]: one application for every
- * test of it over one data folder, and what they share — the controllers they ask, the pages they capture, the
- * background made to run at once.
- *
- * ONE RUN IN ONE ORDER, as when they were one class: a test finds what those before it left — a work's model learns of
- * every work the tests before captured — so the classes run in their order ([SiteTagsTest], [SiteUniversesTest],
- * [SiteTest]: `junit-platform.properties`) and so do the tests of each.
+ * THE SITE OF THE TESTS as the application's interface sees it, its plugins [SitePlugins]: an application for every
+ * class of tests over its own data folder ([TestDataFolder]), and what they share — the controllers they ask, the pages
+ * they capture, the background made to run at once. Every test stands alone, in any order: it captures the works it
+ * reads, of ids of its own, the [catalogue] among them when it needs a model.
  */
-@SpringBootTest(properties = ["recommend4me.data-dir=build/test-data/site"])
+@SpringBootTest
 @Import(SitePlugins::class)
 abstract class SiteTestBase {
 
     companion object {
-        private var cleaned = false
+        /** The works of a kind of the [catalogue], and of them those told in other words. */
+        const val WORKS_OF_A_KIND = 20
+        const val TOLD_OTHERWISE = 12
 
-        /**
-         * Every run from an empty data folder, emptied once: the application of the tests is one, kept between their
-         * classes, its files open in it.
-         */
-        @JvmStatic
-        @BeforeAll
-        @Synchronized
-        fun clean() {
-            if (cleaned) return
-            File("build/test-data/site").deleteRecursively()
-            cleaned = true
-        }
+        /** Every class from its own data folder, empty ([TestDataFolder]). */
+        @JvmStatic @BeforeAll fun clean(info: TestInfo) = TestDataFolder.clean(info.testClass.get())
     }
 
     @Autowired lateinit var captures: CaptureController
@@ -122,11 +111,14 @@ abstract class SiteTestBase {
     }
 
     /**
-     * Forty works of two kinds, one of the first kind the site gave a dragons' tag by mistake, and one of the first
-     * kind it gave nothing.
+     * [WORKS_OF_A_KIND] works of each of two kinds, [TOLD_OTHERWISE] more of each told in other words, one more of the
+     * first kind the site gave a tag of the other by mistake, and one of the first kind it gave nothing — the works
+     * told otherwise so many that the one tagged by mistake, the nearest to it by its words, is not all it is judged
+     * by. The same works however often made: a test that needs a model makes it, whatever another test of its class
+     * made before.
      */
     protected fun catalogue() {
-        repeat(20) { k ->
+        repeat(WORKS_OF_A_KIND) { k ->
             // As on a site: some works with one tag of their two, some untagged, some without pairings
             fun tags(one: String, two: String) =
                 when {
@@ -172,6 +164,10 @@ abstract class SiteTestBase {
                     "|${pairing("Knight/Princess", "Pilot/Captain")}"
             )
         }
+        repeat(TOLD_OTHERWISE) { k ->
+            capture("sp$k|Pilots $k|space|Pilots fly starships in orbit near planets $k|Pilot/Captain")
+            capture("dk$k|Knights $k|dragons|A knight guards the princess in the castle $k|Knight/Princess")
+        }
         capture(
             "w1|Wrong tag|space,ships,magic" +
                 "|Starships cross the galaxy, pilots fight in orbit near distant planets|Pilot/Captain"
@@ -191,6 +187,13 @@ abstract class SiteTestBase {
         refresh(store)
         inBackground { suggestions.refresh(store) }
     }
+
+    /** The facets of the work [id]. */
+    protected fun facetsOf(id: String) = items.getItem("site", id).body!!.allFacets
+
+    /** The value [key] of the [facet] of the work [id]; none when the work has it not. */
+    protected fun valueOf(id: String, facet: String, key: String) =
+        facetsOf(id).find { it.facet == facet }?.propertyValues?.find { it.key == key }
 
     /** The key of the normalized tag the site's tag [site] is bound to. */
     protected fun tag(site: String) =

@@ -33,33 +33,31 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
-import java.io.File
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.springframework.test.context.TestPropertySource
 
 /**
  * The whole application with a source of its own: a page captured from the browser becomes an item, a grade is kept, a
  * correction shows, the list filters and sorts.
  */
-@SpringBootTest(properties = ["recommend4me.data-dir=build/test-data/scenario"])
+@SpringBootTest
+@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/scenario"])
 class ScenarioTest {
 
     companion object {
-        /** Every run from an empty data folder: what an earlier run left is no part of the scenario. */
-        @JvmStatic
-        @BeforeAll
-        fun clean() {
-            File("build/test-data/scenario").deleteRecursively()
-        }
+        /** Every run from an empty data folder of its own ([TestDataFolder]). */
+        @JvmStatic @BeforeAll fun clean(info: TestInfo) = TestDataFolder.clean(info.testClass.get())
     }
 
     @TestConfiguration
