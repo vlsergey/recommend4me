@@ -37,8 +37,7 @@ import java.time.Instant
 /**
  * archiveofourown.org — the Archive of Our Own: fan works in every language. Read in the browser and seen by the
  * extension — the cards of every list, a work's header, its chapters, the comments shown — and a work's whole page
- * downloaded by the application itself when the user asks for it (or grades a work known only by its card): one
- * request, never a crawl of the catalogue.
+ * downloaded by the application itself when the user presses for it alone: one request, never a crawl of the catalogue.
  *
  * The site's tags are its word: the fandoms, the relationships and the characters wrangled by its volunteers, which the
  * application works the universes, characters and pairings out from.
@@ -226,10 +225,6 @@ class Ao3 : Source {
             lastRequest = Instant.now()
         }
     }
-
-    /** A work known by its card alone — no chapter of it — is downloaded once it is graded. */
-    override fun needsRefresh(itemId: String, context: SourceContext): Boolean =
-        context.items.find(itemId) != null && context.items.parts(itemId).isEmpty()
 
     companion object {
         const val ID = "ao3"

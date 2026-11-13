@@ -155,11 +155,12 @@ class TwoSitesPlugins {
             throw JobCancelled()
         }
 
-        override fun needsRefresh(itemId: String, context: SourceContext) = itemId.startsWith("b")
-
         override fun refresh(itemId: String, context: SourceContext): Boolean {
             refreshed += itemId
-            context.items.setTexts(itemId, mapOf("annotation" to "The whole page of $itemId, loaded once graded"))
+            context.items.setTexts(
+                itemId,
+                mapOf("annotation" to "The whole page of $itemId, loaded on the user's press"),
+            )
             return true
         }
 

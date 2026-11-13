@@ -18,7 +18,7 @@ import org.junit.jupiter.api.assertThrows
 import org.springframework.core.io.FileSystemResource
 
 /**
- * What a site the application scrapes itself has — jobs, settings, the page of a graded work loaded at once — and the
+ * What a site the application scrapes itself has — jobs, settings, nothing asked of the site for a grade — and the
  * sources' own work: kept pages read again, the marks of reviews and pictures, the pictures downloaded, the model.
  */
 class TwoSitesSourcesTest : TwoSitesTestBase() {
@@ -62,18 +62,12 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
     }
 
     @Test
-    fun `the page of a work graded is loaded at once, when the site has more of it`() {
+    fun `a work graded asks the site for nothing — its page is loaded on the user's press alone`() {
         beta("b5|Deep|depth|Short")
         gradesController.rateItem("beta", "b5", RatingRequest(5))
-        assertTrue(waitFor { "b5" in Beta.refreshed })
-        assertTrue(waitFor { items.getItem("beta", "b5").body!!.texts.any { "loaded once graded" in it.content } })
-        // A work the site has no more of is not asked for
-        beta("x5|Shallow|depth|Short")
-        gradesController.rateItem("beta", "x5", RatingRequest(3))
         Thread.sleep(500)
-        assertTrue("x5" !in Beta.refreshed)
+        assertTrue("b5" !in Beta.refreshed)
         gradesController.unrateItem("beta", "b5", null)
-        gradesController.unrateItem("beta", "x5", null)
     }
 
     @Test

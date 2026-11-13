@@ -174,10 +174,6 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
         return true
     }
 
-    /** A work known by its card alone — no chapter of it — is downloaded once it is graded. */
-    override fun needsRefresh(itemId: String, context: SourceContext): Boolean =
-        context.items.find(itemId) != null && context.items.parts(itemId).isEmpty()
-
     private val client = FanficsMeClient()
 
     companion object {

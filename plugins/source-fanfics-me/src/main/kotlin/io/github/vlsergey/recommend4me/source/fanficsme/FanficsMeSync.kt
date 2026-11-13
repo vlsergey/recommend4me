@@ -19,8 +19,8 @@ private val log = LoggerFactory.getLogger(FanficsMeSync::class.java)
  * UPDATES — from the first page down until the works updated before the last time, then what the site's genres and
  * warnings mean and what the fandoms not described yet are of. SCRAPE_ALL — every page of the search from where the
  * last run stopped, the updates that came out meanwhile, then what the genres, the warnings, the fandoms and the events
- * of every fandom of the works mean. A work's own page — its text, its comments — is read only when the user asks for
- * it, or grades a work known by its card alone ([FanficsMe.refresh]).
+ * of every fandom of the works mean. A work's own page — its text, its comments — is read only when the user presses
+ * for it ([FanficsMe.refresh]).
  */
 class FanficsMeSync(private val context: SourceContext, private val client: FanficsMeClient) {
     private val pages = FanficsMePages(context)

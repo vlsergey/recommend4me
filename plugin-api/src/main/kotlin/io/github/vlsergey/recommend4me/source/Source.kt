@@ -168,13 +168,10 @@ interface Source : BrowserTracking, SitePictures {
         throw UnsupportedOperationException("$id does not scrape")
 
     /**
-     * Downloads the item's page again now — the button of a single item, or a work the user has just graded whose
-     * details are missing. Returns false when the source cannot.
+     * Downloads the item's page again now — on the user's press of the button of a single item alone: never on its own,
+     * a grade given or a page seen asks the site for nothing (user, 2026-11-13). Returns false when the source cannot.
      */
     fun refresh(itemId: String, context: SourceContext): Boolean = false
-
-    /** Whether [refresh] would bring something the item lacks: the details of its current version. */
-    fun needsRefresh(itemId: String, context: SourceContext): Boolean = false
 
     /**
      * How far the whole catalogue is loaded ([SourceMode.SCRAPE_ALL]): what it is doing and how much of it is done,
