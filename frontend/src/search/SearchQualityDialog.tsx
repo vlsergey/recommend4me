@@ -10,11 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 const TOP = 10;
 
 /**
- * "Search quality": every line the user judged works for, searched again — in the order learnt of
+ * "Search quality": every line the user judged snippets for, searched again — in the order learnt of
  * the other lines' marks alone, in the reranker's, and without the reranker — and where the works
- * judged stand: the first fitting one, the fitting and the not fitting among the first ones; and
- * the weights the order is learnt as, of every line. Asked for when opened: each line is searched
- * twice.
+ * shown with a snippet judged stand: the first fitting one, the fitting and the not fitting among the
+ * first ones; how the closeness by meaning, the corrected and the encoder's own, orders each line's
+ * snippets judged; and the weights the order is learnt as, of every line. Asked for when opened:
+ * each line is searched three times.
  */
 export function SearchQualityDialog({ type }: { type: string }) {
   const { t } = useTranslation("search");
@@ -78,6 +79,7 @@ export function SearchQualityDialog({ type }: { type: string }) {
                   of={(s) => t("SearchQualityDialog.ofRelevant", { found: s.relevantFound, all: s.relevant })}
                 />
               </div>
+              <SnippetOrder learnt={q.snippetsLearnt} plain={q.snippetsPlain} />
               <Weights q={q} />
               <table className="w-full text-xs">
                 <thead className="text-muted-foreground">
@@ -89,6 +91,9 @@ export function SearchQualityDialog({ type }: { type: string }) {
                     </th>
                     <th className="py-1 text-right font-normal">{t("SearchQualityDialog.reranked")}</th>
                     <th className="py-1 text-right font-normal">{t("SearchQualityDialog.plain")}</th>
+                    <th className="py-1 text-right font-normal" title={t("SearchQualityDialog.snippetsHint")}>
+                      {t("SearchQualityDialog.snippets")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -107,6 +112,9 @@ export function SearchQualityDialog({ type }: { type: string }) {
                       <td className="py-1 text-right tabular-nums">
                         <Ranks r={row.plain} />
                       </td>
+                      <td className="py-1 text-right tabular-nums">
+                        {share(row.snippetsLearnt)} / {share(row.snippetsPlain)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -116,6 +124,23 @@ export function SearchQualityDialog({ type }: { type: string }) {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** A share of 0..1 as two digits; a dash of none. */
+const share = (x?: number) => (x === undefined ? "—" : x.toFixed(2));
+
+/**
+ * How the closeness by meaning orders the snippets judged of every line, the mean of the lines: as
+ * corrected by what the other lines taught, and as the encoder has it — what the correction is for.
+ */
+function SnippetOrder({ learnt, plain }: { learnt?: number; plain?: number }) {
+  const { t } = useTranslation("search");
+  return (
+    <div className="text-xs" title={t("SearchQualityDialog.snippetsHint")}>
+      <span className="text-muted-foreground">{t("SearchQualityDialog.snippetOrder")}</span>{" "}
+      <span className="tabular-nums">{t("SearchQualityDialog.snippetOrderOf", { learnt: share(learnt), plain: share(plain) })}</span>
+    </div>
   );
 }
 
@@ -133,8 +158,8 @@ function Sum({ label, q, of }: { label: string; q: SearchQuality; of: (s: Search
 
 /**
  * What is learnt now, of every line, and when: the correction of the closeness by meaning, and of
- * every feature a work is found by its weight in the order; none while no line has a work marked
- * fitting and one marked not.
+ * every feature a work is found by its weight in the order; none while no line has a snippet marked
+ * fitting further than another.
  */
 function Weights({ q }: { q: SearchQuality }) {
   const { t, i18n } = useTranslation("search");

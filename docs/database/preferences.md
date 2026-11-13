@@ -5,7 +5,7 @@
 | Table | What it holds |
 |---|---|
 | `catalogue_entity_rename` | the name the user gives an entity of a catalogue — a universe, a character of Wikidata — shown in its place everywhere |
-| `search_judgment` | the user's word on how far a work found by a line searched answers it: `FITS`, `PARTLY`, `NOT` — what the search learns of and its quality is measured by |
+| `search_judgment` | the user's word on how far a snippet a search showed of a work found by a line answers it — `FITS`, `PARTLY`, `NOT` — of the snippet, never of the work whole: its field and its text as shown; what the search learns of and its quality is measured by |
 
 The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
@@ -21,7 +21,10 @@ erDiagram
         VARCHAR query PK
         VARCHAR source PK
         VARCHAR item_id PK
-        TIMESTAMPTZ judged_at
+        VARCHAR field PK
+        BIGINT snippet_hash PK
+        VARCHAR snippet
         VARCHAR fit
+        TIMESTAMPTZ judged_at
     }
 ```

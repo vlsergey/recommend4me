@@ -6,7 +6,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The closeness by meaning corrected by the user's judgments: a line's vector moved toward what was judged to fit. */
+/**
+ * The closeness by meaning corrected by the user's judgments of snippets: a line's vector moved toward the snippets
+ * judged to fit.
+ */
 class QueryShiftTest {
 
     private val dim = 8
@@ -18,16 +21,17 @@ class QueryShiftTest {
 
     @Test
     fun `a line as close to what fits as to what does not is moved toward what fits`() {
-        // The encoder puts the line between the two kinds of passages: what fits lies along the first dimension,
-        // what does not along the second; every line a little apart along the third and the fourth
+        // The encoder puts the line between the two kinds of snippets: what fits lies along the first dimension, what
+        // does not along the second; every line a little apart along the third and the fourth
         fun line(n: Int) =
-            MeaningLine(
+            SnippetLine(
                 v(1.0, 1.0, 0.3 * n, 0.2),
                 listOf(
-                    listOf(v(1.0, 0.1, 0.1 * n), v(0.2, 0.0, 1.0)) to SearchFit.FITS,
-                    listOf(v(0.1, 1.0, 0.0, 0.1 * n)) to SearchFit.NOT,
-                    listOf(v(0.9, 0.0, 0.0, 0.3)) to SearchFit.FITS,
-                    listOf(v(0.0, 1.0, 0.2)) to SearchFit.NOT,
+                    v(1.0, 0.1, 0.1 * n) to SearchFit.FITS,
+                    v(0.1, 1.0, 0.0, 0.1 * n) to SearchFit.NOT,
+                    v(0.9, 0.0, 0.0, 0.3) to SearchFit.FITS,
+                    v(0.6, 0.5, 0.1) to SearchFit.PARTLY,
+                    v(0.0, 1.0, 0.2) to SearchFit.NOT,
                 ),
             )
         val shift = assertNotNull(QueryShift.fit(listOf(line(1), line(2), line(3))))
@@ -45,16 +49,24 @@ class QueryShiftTest {
     }
 
     @Test
-    fun `no line with a work judged to fit and one judged not to, each with a passage, teaches no correction`() {
+    fun `two snippets of one work judged apart move the line apart between them, as two of two works would`() {
+        // What the user said of each snippet is all the correction is learnt of: whose work it is tells nothing
+        val line =
+            SnippetLine(v(1.0, 1.0), listOf(v(1.0, 0.0, 0.2) to SearchFit.FITS, v(0.0, 1.0, 0.2) to SearchFit.NOT))
+        val moved = assertNotNull(QueryShift.fit(listOf(line))).of(v(1.0, 1.0))
+        assertTrue(dot(moved, v(1.0, 0.0, 0.2)) > dot(moved, v(0.0, 1.0, 0.2)))
+    }
+
+    @Test
+    fun `no line with a snippet judged to answer it further than another teaches no correction`() {
         assertNull(QueryShift.fit(emptyList()))
         assertNull(
+            QueryShift.fit(listOf(SnippetLine(v(1.0), listOf(v(1.0) to SearchFit.FITS, v(0.5) to SearchFit.FITS))))
+        )
+        // Nor a snippet of a vector of another encoder
+        assertNull(
             QueryShift.fit(
-                listOf(
-                    MeaningLine(
-                        v(1.0),
-                        listOf(listOf(v(1.0)) to SearchFit.FITS, emptyList<FloatArray>() to SearchFit.NOT),
-                    )
-                )
+                listOf(SnippetLine(v(1.0), listOf(v(1.0) to SearchFit.FITS, FloatArray(3) to SearchFit.NOT)))
             )
         )
     }

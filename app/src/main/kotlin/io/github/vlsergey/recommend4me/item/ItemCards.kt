@@ -177,7 +177,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
         matches: Map<ItemKey, io.github.vlsergey.recommend4me.search.SearchMatch> = emptyMap(),
         places: Map<ItemKey, TextPlace> = emptyMap(),
         clusters: WorkClusters = works.of(type),
-        /** The user's word on the works for the line searched, when searched. */
+        /** The user's word on the snippet each work of [keys] is shown with for the line searched, when searched. */
         judged: Map<ItemKey, SearchFit> = emptyMap(),
         /** Every item of the works of [keys] read already, with the chances of the facets on a card at least. */
         members: MembersRead? = null,
@@ -349,6 +349,7 @@ class ItemCards(private val stores: Stores, private val works: Works, private va
             read.matches[key]?.let { m ->
                 val place = read.places[key] ?: TextPlace()
                 SearchMatch(
+                    field = m.field,
                     byMeaning = m.byMeaning,
                     text = m.text,
                     highlights = m.highlights.map { (s, e) -> TextRange(s, e) },

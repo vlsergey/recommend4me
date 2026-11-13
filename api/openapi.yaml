@@ -106,10 +106,12 @@ paths:
     put:
       tags: [search]
       operationId: judgeSearch
-      summary: The user's word on whether a work found answers the line searched
+      summary: The user's word on whether the snippet a work found is shown with answers the line searched
       description: |
-        What the quality of the search is measured by (getSearchQuality); never learnt from by the
-        model of the grades. The line is one query however typed: trimmed, in lower case.
+        Of the snippet shown (SearchMatch: its field and text), never of the work whole: another snippet
+        of the same work is judged apart. What the search learns of and its quality is measured by
+        (getSearchQuality); never learnt from by the model of the grades. The line is one query however
+        typed: trimmed, in lower case.
       parameters:
         - $ref: '#/components/parameters/Type'
       requestBody:
@@ -3668,7 +3670,7 @@ components:
           $ref: '#/components/schemas/SearchMatch'
         searchFit:
           $ref: '#/components/schemas/SearchFit'
-          description: The user's word on the work for the line searched (judgeSearch); none when not judged or not searched
+          description: The user's word on the snippet the work is shown with for the line searched (judgeSearch); none when that snippet is not judged or not searched
         signals:
           type: object
           description: The user's own actions on the site (liked, on a shelf)
@@ -3682,11 +3684,14 @@ components:
 
     SearchMatch:
       type: object
-      required: [byMeaning, text, highlights]
+      required: [field, byMeaning, text, highlights]
       description: |
         Where it was found: a field by the key of its label (labelKey), or a chapter - by its title as
         the data has it (title), or by its number when it has none (part, 1-based)
       properties:
+        field:
+          type: string
+          description: The field of the work's document it is of, as the search names it; with the text, what a judgment is of (judgeSearch)
         labelKey:
           type: string
         title:
@@ -3725,7 +3730,7 @@ components:
 
     SearchJudgment:
       type: object
-      required: [query, source, item]
+      required: [query, source, item, field, text]
       properties:
         query:
           type: string
@@ -3733,9 +3738,15 @@ components:
           type: string
         item:
           type: string
+        field:
+          type: string
+          description: The field of the snippet shown (SearchMatch.field)
+        text:
+          type: string
+          description: The text of the snippet shown (SearchMatch.text)
         fit:
           $ref: '#/components/schemas/SearchFit'
-          description: How far the work answers the line; left out, the word is taken back
+          description: How far the snippet answers the line; left out, the word is taken back
 
     SearchFit:
       type: string
@@ -3776,6 +3787,14 @@ components:
           description: >-
             When the correction of the closeness of a line and a passage by meaning was learnt of the judgments - the
             line's vector moved before it is searched; none when none is
+        snippetsLearnt:
+          type: number
+          format: double
+          description: The mean over the lines of how well the corrected closeness orders their snippets judged (QueryQuality.snippetsLearnt); none when no line has one
+        snippetsPlain:
+          type: number
+          format: double
+          description: The same of the encoder's own closeness (QueryQuality.snippetsPlain)
 
     SearchFeatureWeight:
       type: object
@@ -3798,13 +3817,13 @@ components:
           type: string
         relevant:
           type: integer
-          description: The works judged to answer the line
+          description: The snippets judged to answer the line
         partly:
           type: integer
-          description: The works judged to answer it in part
+          description: The snippets judged to answer it in part
         irrelevant:
           type: integer
-          description: The works judged not to
+          description: The snippets judged not to
         learnt:
           description: >-
             In the order learnt of the other lines' judgments alone, not this one's: how the order learnt does on a line
@@ -3814,10 +3833,22 @@ components:
           $ref: '#/components/schemas/QueryRanks'
         plain:
           $ref: '#/components/schemas/QueryRanks'
+        snippetsLearnt:
+          type: number
+          format: double
+          description: >-
+            How well the closeness by meaning, corrected as learnt of the other lines' snippets alone, orders this line's
+            snippets judged, 0..1 (ndcg of every one of them); none of a line no snippet answers
+        snippetsPlain:
+          type: number
+          format: double
+          description: The same of the encoder's own closeness
 
     QueryRanks:
       type: object
-      description: Where the works judged stand in what a search found
+      description: >-
+        Where the works stand in what a search found that are shown with a snippet judged; a work shown with another
+        snippet than the one judged is not judged
       required: [relevantInTop, partlyInTop, irrelevantInTop, unjudgedInTop, relevantFound]
       properties:
         firstRelevant:

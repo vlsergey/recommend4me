@@ -85,6 +85,21 @@ class Search(
     }
 
     /**
+     * Of the works [found] that have a snippet [judged], the user's word on the snippet each is shown with now
+     * ([SearchSnippet.judgedShown]): a work shown with another snippet than the one judged is not judged. The snippets
+     * of those works alone made.
+     */
+    fun judgedShown(
+        typeId: String,
+        found: SearchResult,
+        judged: Map<ItemKey, Map<SearchSnippet, SearchFit>>,
+    ): Map<ItemKey, SearchFit> =
+        SearchSnippet.judgedShown(
+            judged,
+            matches(typeId, found, found.keys.filter { it in judged }).mapValues { SearchSnippet.of(it.value) },
+        )
+
+    /**
      * Where in the work every match is, by the key of the field it was found in ([SearchMatch.field]): the title, a
      * facet, a text by the keys of their labels; a chapter by its title, or by its number among the chapters read when
      * it has none — the chapters of the matched items read in one go per source.

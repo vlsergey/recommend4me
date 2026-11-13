@@ -238,21 +238,25 @@ class ScenarioTest {
     }
 
     /**
-     * The user's word on what a search found — whole, in part, not at all: one line however typed, taken back when
-     * pressed again.
+     * The user's word on a snippet a search showed — whole, in part, not at all — never on the work whole: two snippets
+     * of one work judged apart; one line however typed, a word taken back when pressed again.
      */
     private fun searchJudged() {
-        searchController.judgeSearch("books", SearchJudgment("  Dragons ", "test", "w1", fit = SearchFit.FITS))
-        searchController.judgeSearch("books", SearchJudgment("dragons", "test", "w2", fit = SearchFit.NOT))
-        searchController.judgeSearch("books", SearchJudgment("dragons", "test", "w4", fit = SearchFit.PARTLY))
-        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", fit = SearchFit.FITS))
-        searchController.judgeSearch("books", SearchJudgment("knights", "test", "w3", fit = null))
+        fun judge(query: String, item: String, fit: SearchFit?, text: String = "A snippet of $item") =
+            searchController.judgeSearch(
+                "books",
+                SearchJudgment(query, "test", item, field = "annotation", text = text, fit = fit),
+            )
+        judge("  Dragons ", "w1", SearchFit.FITS)
+        judge("dragons", "w1", SearchFit.NOT, text = "Another snippet of w1")
+        judge("dragons", "w2", SearchFit.NOT)
+        judge("dragons", "w4", SearchFit.PARTLY)
+        judge("knights", "w3", SearchFit.FITS)
+        judge("knights", "w3", null)
         val quality = searchController.getSearchQuality("books", 10).body!!
         assertEquals(listOf("dragons"), quality.queries.map { it.query })
-        assertEquals(1, quality.queries.single().relevant)
-        assertEquals(1, quality.queries.single().partly)
-        assertEquals(1, quality.queries.single().irrelevant)
-        assertEquals(1, quality.reranked.partly)
+        val line = quality.queries.single()
+        assertEquals(Triple(1, 1, 2), Triple(line.relevant, line.partly, line.irrelevant))
     }
 
     /** Linked, two items are one work: a grade, a mark of interest and a correction of either are of both. */

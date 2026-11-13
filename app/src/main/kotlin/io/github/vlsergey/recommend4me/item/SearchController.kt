@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetValues
 import io.github.vlsergey.recommend4me.search.SearchFit
 import io.github.vlsergey.recommend4me.search.SearchJudged
+import io.github.vlsergey.recommend4me.search.SearchSnippet
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -47,6 +48,7 @@ class SearchController(
         store.searchJudgments.judge(
             j.query,
             ItemKey(j.source, j.item),
+            SearchSnippet(j.field, j.text),
             j.fit?.let { SearchFit.valueOf(it.name) },
             Instant.now(),
         )

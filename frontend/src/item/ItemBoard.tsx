@@ -196,15 +196,21 @@ export const ItemBoard = memo(function ItemBoard({ type, view, sort, search, fac
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  /** The user's word on how far a work found by the search answers the line. */
+  /**
+   * The user's word on how far the snippet a work found by the search is shown with answers the line: of
+   * that snippet, never of the work whole — another snippet of it is judged apart.
+   */
   const judge = search
-    ? async (summary: ItemSummary, fit: SearchFit | null) =>
+    ? async (summary: ItemSummary, fit: SearchFit | null) => {
+        const match = summary.searchMatch;
+        if (!match) return;
         ensureOk(
           await api.PUT("/api/types/{type}/search/judgments", {
             params: { path: { type: type.id } },
-            body: { query: search, source: summary.source, item: summary.item, fit: fit ?? undefined },
+            body: { query: search, source: summary.source, item: summary.item, field: match.field, text: match.text, fit: fit ?? undefined },
           }),
-        )
+        );
+      }
     : undefined;
 
   if (list.isLoading) {

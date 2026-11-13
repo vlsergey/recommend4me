@@ -5,10 +5,11 @@ import type { SearchFit } from "@/api/client";
 import { cn } from "@/lib/utils";
 
 /**
- * "Fits the query? ✓ ≈ ✗" under a work found by a search: the user's word on how far it answers the line
- * — whole, in part, not at all — what the search learns of and its quality is measured by. Pressed
- * again, the word is taken back. Shown as said at once; the list is not read again for it — its order
- * must not move under the finger.
+ * "Fits the query? ✓ ≈ ✗" under the snippet a work found by a search is shown with: the user's word on
+ * how far that snippet answers the line — whole, in part, not at all — never on the work whole, another
+ * snippet of it judged apart; what the search learns of and its quality is measured by. Pressed again,
+ * the word is taken back. Shown as said at once; the list is not read again for it — its order must not
+ * move under the finger.
  */
 export function SearchJudge({ value, onJudge }: { value?: SearchFit; onJudge: (fit: SearchFit | null) => Promise<unknown> }) {
   const { t } = useTranslation("search");

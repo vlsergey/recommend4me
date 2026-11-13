@@ -1,14 +1,13 @@
 package io.github.vlsergey.recommend4me.search
 
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.sqrt
 
 /**
- * A line judged, as its meaning is searched: the vector of the line, and of every work judged the vectors of its
- * passages, of unit length, and how far it answers the line.
+ * A line judged, as its meaning is searched: the vector of the line, and of every snippet judged for it
+ * ([SearchSnippet]) its vector, of unit length, and how far it answers the line.
  */
-class MeaningLine(val query: FloatArray, val works: List<Pair<List<FloatArray>, SearchFit>>)
+class SnippetLine(val query: FloatArray, val snippets: List<Pair<FloatArray, SearchFit>>)
 
 /**
  * THE CLOSENESS OF A LINE AND A PASSAGE BY MEANING, CORRECTED BY THE USER'S JUDGMENTS (user, 2026-11-13): of the
@@ -16,9 +15,9 @@ class MeaningLine(val query: FloatArray, val works: List<Pair<List<FloatArray>, 
  * vectors of weights of the dimensions, [a] of the line's side and [b] of the passage's. The same as the line's vector
  * moved ([of]): q' = q + b(a·q), searched among the passages as they are, nothing of the index made again.
  *
- * Learnt ([fit]) by pairs within a line, as the order of what is found ([SearchWeights]): every work judged to answer
- * it further than another ([SearchFit]), a work as close as its passages are — the soft maximum of their closeness —
- * the first to be the closer; every line alike; [a] and [b] pulled toward none, the encoder's closeness.
+ * Learnt ([fit]) of the snippets judged, by pairs within a line (user, 2026-11-13: the word is on the snippet, not the
+ * work): every snippet judged to answer it further than another ([SearchFit]) the closer to it; every line alike; [a]
+ * and [b] pulled toward none, the encoder's closeness.
  */
 class QueryShift(val a: FloatArray, val b: FloatArray) {
 
@@ -31,16 +30,16 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
 
     companion object {
         /**
-         * The correction learnt of the [lines] judged, of vectors of one dimension; null when no line has a work judged
-         * to answer it and one judged not to, each with a passage.
+         * The correction learnt of the [lines] judged, of vectors of one dimension; null when no line has a snippet
+         * judged to answer it further than another.
          */
-        fun fit(lines: List<MeaningLine>): QueryShift? {
+        fun fit(lines: List<SnippetLine>): QueryShift? {
             val dim = lines.firstOrNull()?.query?.size ?: return null
             val usable =
                 lines
                     .filter { it.query.size == dim }
-                    .map { l -> Prepared(l.query, l.works.filter { (ps, _) -> ps.isNotEmpty() && ps[0].size == dim }) }
-                    .filter { l -> l.works.map { it.second }.distinct().size > 1 }
+                    .map { l -> SnippetLine(l.query, l.snippets.filter { (p, _) -> p.size == dim }) }
+                    .filter { l -> l.snippets.map { it.second }.distinct().size > 1 }
             return if (usable.isEmpty()) null else Descent(usable, dim).run()
         }
 
@@ -50,14 +49,11 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
             return s
         }
 
-        /** A line ready for the descent: its vector, and its works' passages with whether each answers it. */
-        private class Prepared(val query: FloatArray, val works: List<Pair<List<FloatArray>, SearchFit>>)
-
         /**
          * The descent of the loss of the [lines] from a small start — at none the product moves neither vector — along
-         * the mean direction of the lines and of the passages of the works that answer them less those that do not.
+         * the mean direction of the lines and of the snippets that answer them less those that do not.
          */
-        private class Descent(val lines: List<Prepared>, val dim: Int) {
+        private class Descent(val lines: List<SnippetLine>, val dim: Int) {
             val a = DoubleArray(dim)
             val b = DoubleArray(dim)
 
@@ -70,17 +66,13 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
             private fun start() {
                 lines.forEach { l ->
                     for (i in 0 until dim) a[i] += l.query[i].toDouble()
-                    // From the works that answer it furthest away from those that answer it least
-                    val top = l.works.maxOf { it.second.level }
-                    val bottom = l.works.minOf { it.second.level }
-                    val yes = l.works.filter { it.second.level == top }
-                    val no = l.works.filter { it.second.level == bottom }
-                    yes.forEach { (ps, _) ->
-                        ps.forEach { p -> for (i in 0 until dim) b[i] += p[i].toDouble() / ps.size / yes.size }
-                    }
-                    no.forEach { (ps, _) ->
-                        ps.forEach { p -> for (i in 0 until dim) b[i] -= p[i].toDouble() / ps.size / no.size }
-                    }
+                    // From the snippets that answer it furthest away from those that answer it least
+                    val top = l.snippets.maxOf { it.second.level }
+                    val bottom = l.snippets.minOf { it.second.level }
+                    val yes = l.snippets.filter { it.second.level == top }
+                    val no = l.snippets.filter { it.second.level == bottom }
+                    yes.forEach { (p, _) -> for (i in 0 until dim) b[i] += p[i].toDouble() / yes.size }
+                    no.forEach { (p, _) -> for (i in 0 until dim) b[i] -= p[i].toDouble() / no.size }
                 }
                 scaleTo(a, START)
                 scaleTo(b, START)
@@ -104,25 +96,28 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
 
             /**
              * The gradient of the line [l]'s loss, 1 / the lines of it, added to [ga] and [gb]: through the line's
-             * vector moved, q' = q + b(a·q), of every work its closeness τ·log Σ exp(q'·p / τ) and its direction, the
-             * passages' mean weighed by their softmax.
+             * vector moved, q' = q + b(a·q), of every pair of its snippets judged apart the logistic loss of their
+             * closeness q'·p told apart.
              */
-            private fun lineGradient(l: Prepared, ga: DoubleArray, gb: DoubleArray) {
+            private fun lineGradient(l: SnippetLine, ga: DoubleArray, gb: DoubleArray) {
                 val q = l.query
                 var aq = 0.0
                 for (i in 0 until dim) aq += a[i] * q[i]
                 val moved = DoubleArray(dim) { q[it] + b[it] * aq }
-                val scored = l.works.map { (ps, fit) -> soft(moved, ps) to fit.level }
-                val ordered = scored.flatMap { (y, ly) ->
-                    scored.filter { (_, ln) -> ly > ln }.map { (n, _) -> y to n }
-                }
+                val scored =
+                    l.snippets.map { (p, fit) ->
+                        var x = 0.0
+                        for (i in 0 until dim) x += moved[i] * p[i]
+                        Scored(x, p, fit.level)
+                    }
+                val ordered = scored.flatMap { y -> scored.filter { n -> y.level > n.level }.map { n -> y to n } }
                 val weight = 1.0 / ordered.size / lines.size
                 // The gradient of the loss by the line's vector moved
                 val g = DoubleArray(dim)
                 ordered.forEach { (y, n) ->
                     val margin = (y.score - n.score) / TEMPERATURE
                     val d = -weight / TEMPERATURE / (1 + exp(margin))
-                    for (i in 0 until dim) g[i] += d * (y.direction[i] - n.direction[i])
+                    for (i in 0 until dim) g[i] += d * (y.vector[i] - n.vector[i])
                 }
                 var bg = 0.0
                 for (i in 0 until dim) bg += b[i] * g[i]
@@ -131,29 +126,12 @@ class QueryShift(val a: FloatArray, val b: FloatArray) {
                     gb[i] += aq * g[i]
                 }
             }
-
-            /**
-             * A work's closeness to the line's vector [moved] by its passages [ps], softly their best, and its
-             * direction.
-             */
-            private fun soft(moved: DoubleArray, ps: List<FloatArray>): Soft {
-                val s = ps.map { p ->
-                    var x = 0.0
-                    for (i in 0 until dim) x += moved[i] * p[i]
-                    x / TEMPERATURE
-                }
-                val top = s.max()
-                val e = s.map { exp(it - top) }
-                val total = e.sum()
-                val direction = DoubleArray(dim)
-                ps.forEachIndexed { k, p -> for (i in 0 until dim) direction[i] += e[k] / total * p[i] }
-                return Soft(TEMPERATURE * (top + ln(total)), direction)
-            }
         }
 
-        private class Soft(val score: Double, val direction: DoubleArray)
+        /** A snippet's closeness to the line's vector moved, its vector and how far it answers the line. */
+        private class Scored(val score: Double, val vector: FloatArray, val level: Int)
 
-        /** How sharp a work's best passage is told from its others, and the closeness of two works apart. */
+        /** How sharp the closeness of two snippets is told apart. */
         private const val TEMPERATURE = 0.05
 
         /** The length of each of the two vectors the descent starts from: a correction of a hundredth or so. */

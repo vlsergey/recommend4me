@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.search.Search
+import io.github.vlsergey.recommend4me.search.SearchSnippet
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -167,7 +168,12 @@ class ItemList(
         val sorted = sorted(viewed, order, relevance)
         val pageKeys = sorted.drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE)).map { it.key }
         val matches = found?.let { search.matches(typeId, it, pageKeys) }.orEmpty()
-        val judged = found?.let { type.searchJudgments.of(it.line) }.orEmpty()
+        // The user's word on the snippet every work is shown with: of another snippet of it, none
+        val judged =
+            found
+                ?.let { type.searchJudgments.of(it.line) }
+                ?.let { SearchSnippet.judgedShown(it, matches.mapValues { (_, m) -> SearchSnippet.of(m) }) }
+                .orEmpty()
         return ItemPage(
             total = sorted.size,
             items = cards.cards(type, pageKeys, matches, search.places(matches), clusters, judged),
