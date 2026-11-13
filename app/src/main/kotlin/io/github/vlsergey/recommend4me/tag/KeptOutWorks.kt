@@ -20,12 +20,12 @@ class KeptOutCount(val works: Int, val graded: Int)
 
 /**
  * WORKS KEPT OUT OF THE LIBRARY BY THEIR TAGS (user, 2026-11-13), by the user's word alone, never by the code: a
- * normalized tag the user says keeps its works out ([TagKeepOut.set]) — and every tag under it — of every site, and a
- * site's own tags the user's setting of the site forbids to import ([SiteTagsKeptOut]). One path for every site: the
- * moment any site writes a work's tags — a page read in the browser, a work downloaded, a catalogue crawled — and one
- * of them is such, the work is removed with everything of it ([ItemRemoval]), and the site's other writes of it are not
- * kept ([keepsOut]). Said so, every work of them kept now is removed in the background ([removeKept],
- * [removeForbidden]). Of the sites' own tags alone: a tag the user or the model gave a work keeps nothing out.
+ * normalized tag the user says keeps its works out ([TagKeepOut.set]) — and every tag under it — of every site, the
+ * normalized tags filtered globally. One path for every site: the moment any site writes a work's tags — a page read in
+ * the browser, a work downloaded, a catalogue crawled — and one of them is bound to such a tag, the work is removed
+ * with everything of it ([ItemRemoval]), and the site's other writes of it are not kept ([keepsOut]). Said so, every
+ * work of it kept now is removed in the background ([removeKept]). Of the sites' own tags alone: a tag the user or the
+ * model gave a work keeps nothing out.
  */
 @Component
 class KeptOutWorks(
@@ -33,7 +33,6 @@ class KeptOutWorks(
     /** Got when asked for: the removal reads the sources, and the sources' writes ask this. */
     private val removal: ObjectProvider<ItemRemoval>,
     private val workload: Workload,
-    private val forbidden: SiteTagsKeptOut,
 ) {
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "kept-out").apply { isDaemon = true } }
 
@@ -46,17 +45,9 @@ class KeptOutWorks(
         val scope = normalization.scope()
         val own = scope?.let { normalization.siteFacetOf(store, it.facet) }
         if (scope == null || own != facet || values.isEmpty()) return false
-        val site = forbidden.of(store.id)
         val out = keptOut(scope)
         val siteTags = if (out.isEmpty()) emptySet() else scope.tags.keepOut.siteTags(store.id, out)
-        return values.any { it.key in siteTags || forbidden.forbids(site, it) }
-    }
-
-    /** Whether the source [sourceId] has tags of its own: its setting of the tags forbidden to import is there. */
-    fun hasTags(sourceId: String): Boolean {
-        val scope = normalization.scope()
-        val store = scope?.source(sourceId)
-        return store != null && normalization.siteFacetOf(store, scope.facet) != null
+        return values.any { it.key in siteTags }
     }
 
     /** The writes of the source [store] [items], the works their tags keep out not kept ([KeptOutItems]). */
@@ -98,17 +89,6 @@ class KeptOutWorks(
      * what the models made of the works going with them.
      */
     fun removeKept(scope: TagScope, tag: String) = removed("tag $tag", "tagKeptOut") { keptOfTag(scope, tag) }
-
-    /** Every work of the source [sourceId] kept now that its setting of the tags forbidden to import names removed. */
-    fun removeForbidden(sourceId: String) =
-        removed("the tags of $sourceId forbidden", "tagsForbidden") {
-            val scope = normalization.scope()
-            val store = scope?.source(sourceId)
-            val facet = store?.let { normalization.siteFacetOf(it, scope.facet) }
-            val keys = if (facet == null) emptySet() else forbidden.keysOf(store, facet, forbidden.of(sourceId))
-            if (store == null || keys.isEmpty()) emptyMap()
-            else mapOf(store to store.items.itemsWith(facet!!, keys).values.flatten().toSet())
-        }
 
     /**
      * The works [kept] finds removed in the background, in the queue of the computations — what the models made of them

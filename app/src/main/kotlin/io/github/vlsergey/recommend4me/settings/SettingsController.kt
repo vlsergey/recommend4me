@@ -7,25 +7,16 @@ import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.Source
-import io.github.vlsergey.recommend4me.tag.KeptOutWorks
-import io.github.vlsergey.recommend4me.tag.SiteTagsKeptOut
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
-/**
- * The settings the sources declare, editable in the interface; a secret is never sent back. And the application's own
- * of every source with tags: the tags of the site forbidden to import ([SiteTagsKeptOut]).
- */
+/** The settings the sources declare, editable in the interface; a secret is never sent back. */
 @RestController
-class SettingsController(
-    private val plugins: Plugins,
-    private val settings: Settings,
-    private val keptOut: KeptOutWorks,
-) : SettingsApi {
+class SettingsController(private val plugins: Plugins, private val settings: Settings) : SettingsApi {
 
     override fun getSettings(): ResponseEntity<List<SourceSettings>> =
-        ResponseEntity.ok(plugins.sources.filter { it.settings.isNotEmpty() || keptOut.hasTags(it.id) }.map(::of))
+        ResponseEntity.ok(plugins.sources.filter { it.settings.isNotEmpty() }.map(::of))
 
     override fun updateSourceSettings(
         source: String,
@@ -34,7 +25,7 @@ class SettingsController(
         val s = plugins.source(source) ?: return ResponseEntity.notFound().build()
         val store = settings.of(source)
         requestBody.forEach { (key, value) ->
-            if (s.settings.none { it.key == key } && !(key == SiteTagsKeptOut.KEY && keptOut.hasTags(source))) {
+            if (s.settings.none { it.key == key }) {
                 throw Refusal.NO_SETTING.refuse(
                     HttpStatus.BAD_REQUEST,
                     "The source $source has no setting '$key'",
@@ -43,8 +34,6 @@ class SettingsController(
             }
             store.set(key, value.trim().takeIf { it.isNotEmpty() })
         }
-        // The works of the tags now forbidden go, in the background
-        if (SiteTagsKeptOut.KEY in requestBody) keptOut.removeForbidden(source)
         return ResponseEntity.ok(of(s))
     }
 
@@ -64,22 +53,7 @@ class SettingsController(
                         value = if (def.secret) null else value ?: def.default,
                         hintKey = if (def.hint) I18nKeys.qualified(source.id, I18nKeys.settingHint(def.key)) else null,
                     )
-                } + listOfNotNull(forbiddenTags(source)),
-        )
-    }
-
-    /** The application's setting of the source's tags forbidden to import, of a source with tags. */
-    private fun forbiddenTags(source: Source): SettingValue? {
-        if (!keptOut.hasTags(source.id)) return null
-        val value = settings.of(source.id).get(SiteTagsKeptOut.KEY)
-        return SettingValue(
-            key = SiteTagsKeptOut.KEY,
-            labelKey = I18nKeys.qualified(I18nKeys.STANDARD, I18nKeys.setting(SiteTagsKeptOut.KEY)),
-            kind = SettingValue.Kind.TEXT,
-            secret = false,
-            set = value != null,
-            value = value,
-            hintKey = I18nKeys.qualified(I18nKeys.STANDARD, I18nKeys.settingHint(SiteTagsKeptOut.KEY)),
+                },
         )
     }
 }

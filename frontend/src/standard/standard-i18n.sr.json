@@ -97,8 +97,6 @@
   "number.views": "Pregledi",
   "number.words": "Reči",
   "part.untitled": "Deo {{n}}",
-  "setting.keptOutTags": "Oznake zabranjene za uvoz",
-  "setting.keptOutTags.hint": "Oznake sajta odvojene zarezom ili novim redom — kako ih sajt piše, kodom ili nazivom, bez obzira na velika slova. Delo sa takvom oznakom se ne čuva; već sačuvana se uklanjaju pri čuvanju podešavanja, zajedno sa ocenama i odgovorima. Čuva se samo u vašoj bazi.",
   "signal.liked": "Svidelo mi se",
   "signal.liked.value.yes": "da",
   "signal.read": "Pročitano",

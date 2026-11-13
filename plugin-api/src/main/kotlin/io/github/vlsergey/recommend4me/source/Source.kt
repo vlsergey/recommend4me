@@ -55,11 +55,12 @@ val Source.downloadsPages: Boolean
  *   (`Books.AUTHOR`, `Books.FANDOM`, `Books.STATUS`, `Books.DIRECTION`, `Books.PAIRINGS`, `Books.PARTS`,
  *   `StandardNumbers.VIEWS`, `StandardNumbers.LIKES`, `StandardLanguages.LANGUAGE`) declared by its `asFacet`/
  *   `asNumber`, its values mapped onto the standard's; the site's age rating by `AgeRating.SITE` and `AgeRating.write`.
- *   The site's own tags are one facet, `Books.TAG.asFacet(…)`: the tags the application normalizes, and the ones the
- *   user forbids to import are matched against ([SourceContext.items] writes them, the application keeps the work out —
- *   a source keeps out nothing by content itself, and names no tag to keep out in its code). The kind of a work's
- *   universe (fan fiction or original) is `UniverseFacets.KIND`, told by the facet [SourceSchema.kindFrom] names; the
- *   site's line of characters and pairings a text [SourceSchema.universeLine] names, read by its [castHabit].
+ *   The site's own tags are one facet, `Books.TAG.asFacet(…)`: the tags bound to the application's normalized tags —
+ *   and by the normalized tags the user forbids to import, the application keeps a work out as [SourceContext.items]
+ *   writes its tags; a source keeps out nothing by content itself, and names no tag to keep out in its code. The kind
+ *   of a work's universe (fan fiction or original) is `UniverseFacets.KIND`, told by the facet [SourceSchema.kindFrom]
+ *   names; the site's line of characters and pairings a text [SourceSchema.universeLine] names, read by its
+ *   [castHabit].
  * - **Its [modes]**: [SourceMode.BROWSER] — [capturePatterns], [capture], [itemIdOf] and a [pageDecor], every selector
  *   of it matching the pages; [SourceMode.PAGE] — [refresh] and [needsRefresh]: the site asked politely, one request at
  *   a time with a pause between, under a user agent that says what asks, a page gone (404) false, a site asking to wait

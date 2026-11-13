@@ -20,9 +20,7 @@ import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
-import io.github.vlsergey.recommend4me.settings.SettingsController
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
-import io.github.vlsergey.recommend4me.tag.SiteTagsKeptOut
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.assertEquals
@@ -34,7 +32,6 @@ import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
 import org.junit.jupiter.api.assertThrows
-import org.springframework.beans.factory.annotation.Autowired
 
 /**
  * The site's tags as the application's own: described by the site when asked, bound to normalized tags the user merges,
@@ -43,8 +40,6 @@ import org.springframework.beans.factory.annotation.Autowired
 @Order(1)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class SiteTagsTest : SiteTestBase() {
-
-    @Autowired lateinit var settingsController: SettingsController
 
     @Test
     @Order(1)
@@ -557,32 +552,6 @@ class SiteTagsTest : SiteTestBase() {
         tagsApi.keepOutTag(TagKeptOutRequest(smugglers, false))
         capture("ko2|Kept two|smugglers|Smugglers again|")
         assertNotNull(store.items.find("ko2"))
-    }
-
-    @Test
-    @Order(4)
-    fun `a site's tags forbidden to import by the user's setting keep out the first work of them, and those kept`() {
-        capture("fb1|Forbidden one|pirates,ships|Pirates ahoy|")
-        val store = stores.source("site")!!
-        // Of the site's own tags, any case, before any normalized tag is bound to them: "corsairs" never seen yet
-        settingsController.updateSourceSettings("site", mapOf(SiteTagsKeptOut.KEY to "Pirates, corsairs"))
-        val until = System.currentTimeMillis() + WAIT_MS
-        while (store.items.find("fb1") != null && System.currentTimeMillis() < until) Thread.sleep(POLL_MS)
-        assertNull(store.items.find("fb1"))
-        capture("fb2|Forbidden two|corsairs|Corsairs ahoy|")
-        assertNull(store.items.find("fb2"))
-        // The setting is the source's, among its settings
-        assertTrue(
-            settingsController
-                .getSettings()
-                .body!!
-                .single { it.source == "site" }
-                .propertyValues
-                .any { it.key == SiteTagsKeptOut.KEY }
-        )
-        settingsController.updateSourceSettings("site", mapOf(SiteTagsKeptOut.KEY to ""))
-        capture("fb2|Forbidden two|corsairs|Corsairs ahoy|")
-        assertNotNull(store.items.find("fb2"))
     }
 
     private companion object {
