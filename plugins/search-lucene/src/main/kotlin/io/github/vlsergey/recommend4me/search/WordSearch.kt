@@ -25,13 +25,14 @@ import org.apache.lucene.search.uhighlight.UnifiedHighlighter
 internal object WordSearch {
 
     /**
-     * Every item matching the [terms] by words, with its score. An item matches when it has all the words, anywhere in
-     * it — of a long query all but a few ([required]): one word of two is a coincidence ("Stolen Memories" for "stolen
-     * clothes"), and such an item is left to the search by meaning. Its score: for every term found — in any of its
-     * forms, or a name typed in part — the weight of the best field it is found in, averaged over the terms, and of
-     * several terms only [APART] of that; plus [TOGETHER] times the weight of the best field where they all stand
-     * together — within [NEAR] words of each other, in any order; plus [NAME_BONUS] when the whole [line] stands as a
-     * phrase in a naming field — or, a single word typed in part, begins a word of it.
+     * Every item matching the [terms] by words, with the parts of its score, by their names ([queries]); its score
+     * their sum. An item matches when it has all the words, anywhere in it — of a long query all but a few
+     * ([required]): one word of two is a coincidence ("Stolen Memories" for "stolen clothes"), and such an item is left
+     * to the search by meaning. Its score: for every term found — in any of its forms, or a name typed in part — the
+     * weight of the best field it is found in, averaged over the terms, and of several terms only [APART] of that; plus
+     * [TOGETHER] times the weight of the best field where they all stand together — within [NEAR] words of each other,
+     * in any order; plus [NAME_BONUS] when the whole [line] stands as a phrase in a naming field — or, a single word
+     * typed in part, begins a word of it.
      */
     fun byWords(
         searcher: IndexSearcher,
@@ -39,27 +40,37 @@ internal object WordSearch {
         line: String,
         terms: List<String>,
         language: String,
-    ): Map<ItemKey, Double> {
-        val query =
-            if (fields.text.isEmpty()) null
-            else query(fields, line, terms, language).takeIf { it.clauses().isNotEmpty() }
-        return query?.let { q ->
-            val hits = searcher.search(q, searcher.indexReader.maxDoc().coerceAtLeast(1))
-            val stored = searcher.storedFields()
-            hits.scoreDocs.associate { hit ->
-                ItemKey.parse(stored.document(hit.doc).get(LuceneIndex.ID)) to hit.score.toDouble()
+    ): Map<ItemKey, Map<String, Double>> {
+        if (fields.text.isEmpty()) return emptyMap()
+        val out = HashMap<ItemKey, HashMap<String, Double>>()
+        val stored = searcher.storedFields()
+        queries(fields, line, terms, language).forEach { (part, q) ->
+            searcher.search(q, searcher.indexReader.maxDoc().coerceAtLeast(1)).scoreDocs.forEach { hit ->
+                val key = ItemKey.parse(stored.document(hit.doc).get(LuceneIndex.ID))
+                out.getOrPut(key) { HashMap() }[part] = hit.score.toDouble()
             }
-        } ?: emptyMap()
+        }
+        return out
     }
 
-    /** The query of [byWords]: the terms apart, the words together, the whole line in a naming field. */
-    private fun query(fields: LuceneIndex.Fields, line: String, terms: List<String>, language: String): BooleanQuery {
-        val query = BooleanQuery.Builder()
+    /**
+     * The queries of [byWords], each a part of what an item is found by — its score of one, a feature of it
+     * ([io.github.vlsergey.recommend4me.search.SearchResult.features]): the terms apart ([APART_PART]), the words
+     * together ([TOGETHER_PART]), the whole line in a naming field ([NAME_PART]). Their sum is the item's score by
+     * words.
+     */
+    private fun queries(
+        fields: LuceneIndex.Fields,
+        line: String,
+        terms: List<String>,
+        language: String,
+    ): Map<String, Query> {
+        val out = LinkedHashMap<String, Query>()
         val termQueries = terms.mapNotNull { termQuery(fields, it, language) }
         if (termQueries.isNotEmpty()) {
             val byWords = BooleanQuery.Builder().setMinimumNumberShouldMatch(required(termQueries.size))
             termQueries.forEach { byWords.add(BoostQuery(it, 1f / termQueries.size), BooleanClause.Occur.SHOULD) }
-            query.add(BoostQuery(byWords.build(), if (termQueries.size > 1) APART else 1f), BooleanClause.Occur.SHOULD)
+            out[APART_PART] = BoostQuery(byWords.build(), if (termQueries.size > 1) APART else 1f)
         }
         val all = terms.flatMap { LuceneIndex.tokens(it, language) }.distinct()
         if (all.size > 1) {
@@ -69,7 +80,7 @@ internal object WordSearch {
                         PhraseQuery.Builder().setSlop(NEAR).apply { all.forEach { add(Term(field.name, it)) } }.build()
                     BoostQuery(ConstantScoreQuery(near), field.weight)
                 }
-            query.add(BoostQuery(DisjunctionMaxQuery(together, 0f), TOGETHER), BooleanClause.Occur.SHOULD)
+            out[TOGETHER_PART] = BoostQuery(DisjunctionMaxQuery(together, 0f), TOGETHER)
         }
         val words = words(line, language)
         val naming = fields.text.filter { it.naming }
@@ -80,9 +91,9 @@ internal object WordSearch {
                     else PhraseQuery(field.name, *words.map { it.token }.toTypedArray())
                 ConstantScoreQuery(name)
             }
-            query.add(BoostQuery(DisjunctionMaxQuery(inName, 0f), NAME_BONUS), BooleanClause.Occur.SHOULD)
+            out[NAME_PART] = BoostQuery(DisjunctionMaxQuery(inName, 0f), NAME_BONUS)
         }
-        return query.build()
+        return out
     }
 
     /**
@@ -209,6 +220,11 @@ internal object WordSearch {
 
     /** A word of the query left as typed finds the words it begins from this length on. */
     private const val MIN_PREFIX = 3
+
+    /** The parts of an item's score by words, its features by them: the terms apart, together, the line in a name. */
+    const val APART_PART = "words"
+    const val TOGETHER_PART = "together"
+    const val NAME_PART = "name"
 
     /** How far apart, in words, the words of a query still stand together. */
     private const val NEAR = 6

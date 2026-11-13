@@ -66,6 +66,7 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         val started = System.currentTimeMillis()
         val index = indexes.of(contentType)
         val scores = HashMap<ItemKey, Double>()
+        val features = HashMap<ItemKey, HashMap<String, Double>>()
 
         val vector = context.queryVector(q)
         // The function words of English and of the line's language
@@ -78,10 +79,13 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
             val semantic = MeaningSearch.closeness(nearest, index.items(searcher))
             semantic.forEach { (key, closeness) ->
                 if (closeness >= SEMANTIC_FLOOR) scores[key] = SEMANTIC_WEIGHT * closeness
+                features.getOrPut(key) { HashMap() }[MEANING] = closeness
             }
-            WordSearch.byWords(searcher, fields, q, terms, read).forEach { (key, score) ->
+            WordSearch.byWords(searcher, fields, q, terms, read).forEach { (key, parts) ->
                 // An item found by words still keeps its meaning score, so the two add up
-                scores[key] = (scores[key] ?: (SEMANTIC_WEIGHT * (semantic[key] ?: 0.0))) + WORD_WEIGHT * score
+                scores[key] =
+                    (scores[key] ?: (SEMANTIC_WEIGHT * (semantic[key] ?: 0.0))) + WORD_WEIGHT * parts.values.sum()
+                features.getOrPut(key) { HashMap() } += parts
             }
             nearest
         }
@@ -90,7 +94,14 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         val passages = nearest.mapValues { it.value.passage }
         val kept = index.search { IndexKept.fingerprints(it, ranked.map { k -> k.toString() }) }
         val prints = ranked.mapNotNull { key -> kept[key.toString()]?.let { key to it } }.toMap()
-        return SearchResult(q, ranked, State(terms, read, vector, passages), passages, prints)
+        return SearchResult(
+            q,
+            ranked,
+            State(terms, read, vector, passages),
+            passages,
+            prints,
+            ranked.associateWith { features[it].orEmpty() },
+        )
     }
 
     /**
@@ -133,6 +144,9 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         /** Closer than this to the top percent than to the zero of the scale, or it is not a match by meaning. */
         private const val SEMANTIC_FLOOR = 0.5
         private const val SEMANTIC_WEIGHT = 1.0
+
+        /** The feature of an item found by meaning: how close it is to the line ([MeaningSearch.closeness]). */
+        const val MEANING = "meaning"
         private const val WORD_WEIGHT = 0.6
     }
 }

@@ -3700,7 +3700,7 @@ components:
 
     SearchQuality:
       type: object
-      required: [top, queries, reranked, plain]
+      required: [top, queries, learnt, reranked, plain, weights]
       properties:
         top:
           type: integer
@@ -3708,14 +3708,41 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/QueryQuality'
+        learnt:
+          $ref: '#/components/schemas/SearchQualitySum'
         reranked:
           $ref: '#/components/schemas/SearchQualitySum'
         plain:
           $ref: '#/components/schemas/SearchQualitySum'
+        weights:
+          type: array
+          description: >-
+            The weights the order of what a search finds is made by, learnt from every line judged: of every feature
+            a work is found by, its weight on the feature's own scale; none while no line has a work judged to answer
+            it and one judged not to
+          items:
+            $ref: '#/components/schemas/SearchFeatureWeight'
+        fittedAt:
+          type: string
+          format: date-time
+          description: When the weights were learnt; none when none are
+
+    SearchFeatureWeight:
+      type: object
+      required: [feature, weight]
+      properties:
+        feature:
+          type: string
+          description: >-
+            What a work is found by, as the search plugin names it ("meaning", "words", "together", "name") and the
+            reranker's ("reranker")
+        weight:
+          type: number
+          format: double
 
     QueryQuality:
       type: object
-      required: [query, relevant, irrelevant, reranked, plain]
+      required: [query, relevant, irrelevant, learnt, reranked, plain]
       properties:
         query:
           type: string
@@ -3725,6 +3752,11 @@ components:
         irrelevant:
           type: integer
           description: The works judged not to
+        learnt:
+          description: >-
+            In the order learnt of the other lines' judgments alone, not this one's: how the order learnt does on a line
+            it never saw; as the reranker's while the other lines teach none
+          $ref: '#/components/schemas/QueryRanks'
         reranked:
           $ref: '#/components/schemas/QueryRanks'
         plain:

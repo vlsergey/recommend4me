@@ -68,7 +68,12 @@ class SearchReranking(
             reranker.id,
             System.currentTimeMillis() - started,
         )
-        return SearchResult(found.line, order, found.state, found.nearest, found.prints)
+        // What the reranker said of a work is a feature of it the order is learnt of ([SearchWeights])
+        val features =
+            found.keys.associateWith { key ->
+                found.features[key].orEmpty() + scores[key]?.let { mapOf(RERANKER to it.score.toDouble()) }.orEmpty()
+            }
+        return SearchResult(found.line, order, found.state, found.nearest, found.prints, features)
     }
 
     /**
@@ -98,5 +103,10 @@ class SearchReranking(
                 .sortedByDescending { it.weight }
         return (listOfNotNull(title?.let { it.name + ": " + it.text }, piece) + rest.map { it.name + ": " + it.text })
             .joinToString("\n")
+    }
+
+    companion object {
+        /** The feature of a work found: what the reranker said of it against the line. */
+        const val RERANKER = "reranker"
     }
 }

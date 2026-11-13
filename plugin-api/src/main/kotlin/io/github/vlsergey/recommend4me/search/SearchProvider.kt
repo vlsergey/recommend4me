@@ -77,6 +77,12 @@ class SearchResult(
     val state: Any?,
     val nearest: Map<ItemKey, SearchPassage> = emptyMap(),
     val prints: Map<ItemKey, Long> = emptyMap(),
+    /**
+     * Of every item, what the provider found it by, as numbers of its own naming — how close by meaning, how its words
+     * matched: the features the application weighs the items found by, the weights learnt from the user's word on what
+     * answers a line and what does not. An item lacking one has 0 of it.
+     */
+    val features: Map<ItemKey, Map<String, Double>> = emptyMap(),
 )
 
 /**

@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.api.model.SearchJudgment
 import io.github.vlsergey.recommend4me.api.model.SearchQuality
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetValues
+import io.github.vlsergey.recommend4me.search.SearchJudged
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -17,6 +18,7 @@ import io.github.vlsergey.recommend4me.tag.TagFinding
 import io.github.vlsergey.recommend4me.tag.Tags
 import java.time.Instant
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.i18n.LocaleContextHolder
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
@@ -31,6 +33,7 @@ class SearchController(
     private val searchQuality: io.github.vlsergey.recommend4me.search.SearchQuality,
     private val tags: Tags,
     private val tagFinding: TagFinding,
+    private val events: ApplicationEventPublisher,
     /** The user's languages: of an entry of a catalogue, its label and description in the first that has them. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) : SearchApi {
@@ -41,6 +44,8 @@ class SearchController(
         val store = stores.type(type) ?: return ResponseEntity.notFound().build()
         val j = searchJudgment
         store.searchJudgments.judge(j.query, ItemKey(j.source, j.item), j.relevant, Instant.now())
+        // The order of what a search finds is learnt of the judgments again, in the background
+        events.publishEvent(SearchJudged(type))
         return ResponseEntity.noContent().build()
     }
 

@@ -31,6 +31,7 @@ import io.github.vlsergey.recommend4me.rating.RatingRepository
 import io.github.vlsergey.recommend4me.review.ReviewRepository
 import io.github.vlsergey.recommend4me.search.SearchJudgmentRepository
 import io.github.vlsergey.recommend4me.search.SearchScoreRepository
+import io.github.vlsergey.recommend4me.search.SearchWeightRepository
 import io.github.vlsergey.recommend4me.series.SeriesGroups
 import io.github.vlsergey.recommend4me.series.SiteSeriesRepository
 import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
@@ -298,6 +299,7 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val embeddings = SetEmbeddingRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
+    val searchWeights = SearchWeightRepository(databases.model(type.id))
     val duplicates = DuplicateRepository(databases.model(type.id))
     val sizes = WorkSizeRepository(databases.model(type.id))
 

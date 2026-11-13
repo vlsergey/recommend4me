@@ -53,15 +53,23 @@ class Search(
     /**
      * The works matching [line], read as the [language] (ISO 639-1), most relevant first; null without a search plugin.
      * Found by the plugin — by meaning and by words — and then, with a reranker ([rerank]), every one of them read
-     * together with the line and put in the order of what it says ([SearchReranking]).
+     * together with the line ([SearchReranking]); put in the order learnt of the user's judgments ([learnt],
+     * [SearchWeights]) when it is learnt, else in the order of what the reranker said.
      */
-    fun search(typeId: String, line: String, language: String, rerank: Boolean = true): SearchResult? {
+    fun search(
+        typeId: String,
+        line: String,
+        language: String,
+        rerank: Boolean = true,
+        learnt: Boolean = rerank,
+    ): SearchResult? {
         val provider = plugins.search
         val type = stores.type(typeId)
         if (provider == null || type == null) return null
         // The index as it is: the works written since are indexed in the background, a request never waits for it
         val found = provider.search(typeId, line, language, context(type))
-        return if (rerank) reranking.reranked(type, found) else found
+        val read = if (rerank) reranking.reranked(type, found) else found
+        return if (learnt) type.searchWeights.read()?.first?.ordered(read) ?: read else read
     }
 
     fun matches(typeId: String, result: SearchResult, keys: Collection<ItemKey>): Map<ItemKey, SearchMatch> {
