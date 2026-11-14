@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.source.aff
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import java.time.Instant
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.jsoup.Jsoup
@@ -12,6 +13,9 @@ class AffDecorTest {
 
     private val source = Aff()
     private val decor = source.pageDecor
+    private val database = AffDatabase()
+
+    @AfterTest fun close() = database.close()
 
     private fun page(name: String) = javaClass.getResource("/pages/$name")!!.readText()
 
@@ -28,7 +32,7 @@ class AffDecorTest {
     fun `every card of an author's page links to its work`() {
         val html = page("profile.html")
         val url = "https://members.adult-fanfiction.org/profile.php?id=1296995621&tab=stories-written&a=games"
-        val captured = source.capture(CapturedPage(url, html, Instant.now()), MemorySourceContext())
+        val captured = source.capture(CapturedPage(url, html, Instant.now()), database.of(MemorySourceContext()))
         val cards = decor.cards!!
         val linked =
             Jsoup.parse(html, url)
@@ -43,7 +47,7 @@ class AffDecorTest {
     fun `every card of a list links to its work, and the list to its next page`() {
         val html = page("list.html")
         val url = "https://hp.adult-fanfiction.org/"
-        val captured = source.capture(CapturedPage(url, html, Instant.now()), MemorySourceContext())
+        val captured = source.capture(CapturedPage(url, html, Instant.now()), database.of(MemorySourceContext()))
         val doc = Jsoup.parse(html, url)
         val cards = decor.cards!!
         val linked =

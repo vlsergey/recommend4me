@@ -40,7 +40,7 @@ internal class AffFields(private val items: ItemStore) {
      * ([fandomKey]): the page of a fandom is its archive's.
      */
     fun located(id: String, written: List<String>) {
-        val nodes = written.map { it.trim().trimStart('+', '-').trim() }.filter { it.isNotEmpty() }
+        val nodes = written.map(::nodeName).filter { it.isNotEmpty() }
         if (nodes.isEmpty()) return
         val path = nodes.joinToString(" » ")
         items.setFacet(id, CATEGORY, listOf(FacetValue(path.lowercase(), path)))
@@ -128,6 +128,9 @@ internal class AffFields(private val items: ItemStore) {
     }
 
     companion object {
+        /** A node of an archive's tree by its name: without the marks the site sorts its nodes by ("+", "-"). */
+        fun nodeName(written: String) = written.trim().trimStart('+', '-').trim()
+
         /** A fandom's key: its archive and its name in the archive's tree, "hp/Harry Potter". */
         fun fandomKey(archive: String, name: String) = "$archive/$name"
 

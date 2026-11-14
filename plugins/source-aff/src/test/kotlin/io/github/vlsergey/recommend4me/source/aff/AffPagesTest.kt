@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -20,6 +21,9 @@ class AffPagesTest {
 
     private val source = Aff()
     private val now = Instant.parse("2026-11-13T10:00:00Z")
+    private val database = AffDatabase()
+
+    @AfterTest fun close() = database.close()
 
     /** A work of five chapters in the first page of the Harry Potter archive. */
     private val adversary = "hp-600100589"
@@ -28,7 +32,7 @@ class AffPagesTest {
 
     private fun capture(context: MemorySourceContext, url: String, html: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, html, now), context)
+        return source.capture(CapturedPage(url, html, now), database.of(context))
     }
 
     private fun list(context: MemorySourceContext, html: String = page("list.html")) =
@@ -50,9 +54,6 @@ class AffPagesTest {
         assertEquals(listOf(UniverseFacets.FANFICTION), facets[UniverseFacets.KIND])
         assertEquals(listOf("hp/Harry Potter"), facets["fandom"])
         assertEquals("Harry Potter", context.facetNames.getValue("fandom")["hp/Harry Potter"])
-        // A fandom's page is its archive's; a key of no archive has none
-        assertEquals("https://hp.adult-fanfiction.org/", source.valueUrl("fandom", "hp/Harry Potter", "Harry Potter"))
-        assertNull(source.valueUrl("fandom", "Harry Potter", "Harry Potter"))
         assertEquals(listOf("harry potter » het - male/female » hermione/voldemort"), facets["category"])
         assertEquals(listOf("hermione/voldemort"), facets["pairing"])
         assertEquals("Pairing: Hermione/Voldemort", context.texts.getValue(adversary)["pairingsLine"])
@@ -173,4 +174,41 @@ class AffPagesTest {
         assertNull(source.itemIdOf("https://www.adult-fanfiction.org/"))
         assertTrue(source.capturePatterns.none { it.matches("https://www.adult-fanfiction.org/") })
     }
+
+    @Test
+    fun `a fandom's page is its category's a page linked, else its archive's`() {
+        val context = MemorySourceContext()
+        val fandom = "hp/Harry Potter"
+        // Before the application is up no category is known
+        assertEquals("https://hp.adult-fanfiction.org/", source.valueUrl("fandom", fandom, "Harry Potter"))
+        source.start(database.of(context))
+        assertEquals("https://hp.adult-fanfiction.org/", source.valueUrl("fandom", fandom, "Harry Potter"))
+        // The archive's grid of its categories
+        list(context)
+        assertEquals("https://hp.adult-fanfiction.org/index.php?cat=3", source.valueUrl("fandom", fandom, ""))
+        // A category's breadcrumbs and its subcategories, of a name every fandom has: of two pages, none chosen
+        capture(context, "https://hp.adult-fanfiction.org/index.php?cat=4", category(4, "Harry Potter AU/AR", 51))
+        assertEquals(
+            "https://hp.adult-fanfiction.org/index.php?cat=4",
+            source.valueUrl("fandom", "hp/Harry Potter AU/AR", ""),
+        )
+        capture(context, "https://hp.adult-fanfiction.org/index.php?cat=3", category(3, "Harry Potter", 47))
+        assertEquals("https://hp.adult-fanfiction.org/", source.valueUrl("fandom", "hp/General", "General"))
+        // Of another archive, never linked; a key of no archive has no page
+        assertEquals("https://tv.adult-fanfiction.org/", source.valueUrl("fandom", "tv/Harry Potter", ""))
+        assertNull(source.valueUrl("fandom", "Harry Potter", "Harry Potter"))
+    }
+
+    /** A category's page as the site makes it: its breadcrumbs, and the grid of its one subcategory "General". */
+    private fun category(cat: Int, name: String, general: Int) =
+        """
+        <div class="breadcrumb">
+          <a href="index.php">Home</a> <span class="breadcrumb-separator">&raquo;</span>
+          <a href="index.php?cat=$cat">$name</a>
+        </div>
+        <div class="categories-grid">
+          <div class="category-card"><a href="index.php?cat=$general"> General <span class="category-count">(25)</span></a></div>
+        </div>
+        """
+            .trimIndent()
 }

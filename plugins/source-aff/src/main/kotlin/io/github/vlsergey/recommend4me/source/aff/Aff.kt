@@ -84,8 +84,10 @@ class Aff : Source {
      * 2: a work's page reads its place in the archive's tree too — its fandom of it — as a card of the archive does.
      *
      * 3: a fandom is known by its archive and its name, "hp/Harry Potter" — its page is its archive's.
+     *
+     * 4: the pages of the categories a page links are kept — a fandom's page is its category's ([AffCategories]).
      */
-    override val parserVersion = 3
+    override val parserVersion = 4
 
     override val capturePatterns =
         listOf(
@@ -101,19 +103,28 @@ class Aff : Source {
     /** A chapter's page, by its number in the work. */
     override fun partUrl(itemId: String, partId: String) = "${itemUrl(itemId)}&chapter=$partId"
 
+    /** The plugin's own table of the categories ([AffCategories]). */
+    override val migrations = listOf("classpath:db/aff")
+
+    /** The categories' pages kept, of the source's database: known once the application is up ([start]). */
+    @Volatile private var categories: AffCategories? = null
+
+    override fun start(context: SourceContext) {
+        categories = AffCategories(context.database)
+    }
+
     /**
-     * An author's page, the list of an archive's works, and a fandom's page: its archive's — an archive is a fandom's
-     * ("hp", "naruto") or a few fandoms', listed on it.
+     * An author's page, the list of an archive's works, and a fandom's page: its category's in its archive, where a
+     * page linked it ([AffCategories]), else its archive's — an archive is a fandom's ("hp", "naruto") or a few
+     * fandoms', listed on it.
      */
     override fun valueUrl(facet: String, key: String, name: String) =
         when (facet) {
             AUTHOR -> "https://members.$DOMAIN/profile.php?id=$key"
-            ARCHIVE -> archiveUrl(key)
-            FANDOM -> AffFields.archiveOfFandom(key)?.let(::archiveUrl)
+            ARCHIVE -> AffCategories.archivePage(key)
+            FANDOM -> AffCategories.fandomPage(key, categories)
             else -> null
         }
-
-    private fun archiveUrl(archive: String) = "https://$archive.$DOMAIN/"
 
     override fun itemIdOf(url: String): String? =
         ITEM_ADDRESS.find(url)?.groupValues?.let { (_, archive, number) -> idOf(archive, number) }
