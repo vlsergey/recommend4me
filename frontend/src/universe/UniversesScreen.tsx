@@ -42,7 +42,7 @@ export function UniversesScreen({ type, selected }: { type: ContentTypeInfo; sel
   return (
     <div className="mx-auto grid max-w-[1800px] grid-cols-[minmax(0,1fr)] gap-4 px-4 py-4 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]">
       <div className={cn("flex flex-col gap-4", selected && "hidden lg:flex")}>
-        <UniverseList universes={universes.data} loading={universes.isFetching} error={universes.error?.message} selected={selected} />
+        <UniverseList type={type} universes={universes.data} loading={universes.isFetching} error={universes.error?.message} selected={selected} />
       </div>
       {selected ? (
         <UniverseCard key={selected} type={type} value={selected} dictionary={universes.data} />
@@ -63,11 +63,13 @@ export function UniversesScreen({ type, selected }: { type: ContentTypeInfo; sel
 
 /** The list of the universes, of the most works first, searched by any of their names and filtered. */
 function UniverseList({
+  type,
   universes,
   loading,
   error,
   selected,
 }: {
+  type: ContentTypeInfo;
   universes?: UniverseInfo[];
   loading: boolean;
   error?: string;
@@ -78,6 +80,10 @@ function UniverseList({
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
   const [filters, setFilters] = usePref<Filters>("universes.filters", { entries: "any", characters: "any" });
+  // Of every site with a fandom of a universe: whatever by default, kept in the browser by the type
+  const [has, setHas] = usePref<Record<string, Has>>(`universes.has.${type.id}`, {});
+  const sites = type.sources.map((s) => s.id).filter((id) => universes?.some((u) => u.sites.some((s) => s.source === id)));
+  const of = (site: string): Has => has[site] ?? "any";
   useEffect(() => {
     const timer = setTimeout(() => {
       setQuery(input.trim().toLocaleLowerCase());
@@ -87,14 +93,22 @@ function UniverseList({
   }, [input]);
   const named = (u: UniverseInfo) =>
     query === "" || [u.name, ...u.sites.map((s) => s.name), ...u.entries.map((e) => e.name)].some((n) => n.toLocaleLowerCase().includes(query));
-  const shown = (universes ?? []).filter((u) => named(u) && lets(filters.entries, u.entries.length > 0) && lets(filters.characters, u.characters));
-  const filter = (key: keyof Filters, label: string) => (
-    <div className="flex items-center gap-1.5 text-sm">
-      <span className="text-muted-foreground">{label}</span>
+  const shown = (universes ?? []).filter(
+    (u) =>
+      named(u) &&
+      lets(filters.entries, u.entries.length > 0) &&
+      lets(filters.characters, u.characters) &&
+      sites.every((site) => lets(of(site), u.sites.some((s) => s.source === site))),
+  );
+  const filter = (key: string, label: string, value: Has, onChange: (has: Has) => void, title?: string) => (
+    <div key={key} className="flex items-center gap-1.5 text-sm">
+      <span className="text-muted-foreground" title={title}>
+        {label}
+      </span>
       <Tabs
-        value={filters[key]}
+        value={value}
         onValueChange={(v) => {
-          setFilters({ ...filters, [key]: v as Has });
+          onChange(v as Has);
           setLimit(PAGE);
         }}
       >
@@ -122,9 +136,14 @@ function UniverseList({
         <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t("UniverseList.search")} className="pl-8" type="search" />
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {filter("entries", t("UniverseList.withEntries"))}
-        {filter("characters", t("UniverseList.withCharacters"))}
+        {filter("entries", t("UniverseList.withEntries"), filters.entries, (v) => setFilters({ ...filters, entries: v }))}
+        {filter("characters", t("UniverseList.withCharacters"), filters.characters, (v) => setFilters({ ...filters, characters: v }))}
       </div>
+      {sites.length > 1 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {sites.map((site) => filter(site, sourceShort(site), of(site), (v) => setHas({ ...has, [site]: v }), sourceTitle(site)))}
+        </div>
+      )}
       {error && <p className="text-destructive">{t("UniverseList.loadFailed", { error })}</p>}
       {universes && shown.length === 0 && <p className="text-muted-foreground">{t("UniverseList.empty")}</p>}
       <ul className="flex flex-col divide-y rounded-lg border">
