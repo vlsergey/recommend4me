@@ -32,7 +32,10 @@ class FfnDecorTest {
                 "author.html" to "https://www.fanfiction.net/u/16441913/",
             )
             .forEach { (name, url) ->
-                val captured = source.capture(CapturedPage(url, page(name), Instant.now()), MemorySourceContext())
+                val captured =
+                    FfnDatabase().use {
+                        source.capture(CapturedPage(url, page(name), Instant.now()), it.of(MemorySourceContext()))
+                    }
                 val doc = Jsoup.parse(page(name), url)
                 val cards = decor.cards!!
                 val linked =

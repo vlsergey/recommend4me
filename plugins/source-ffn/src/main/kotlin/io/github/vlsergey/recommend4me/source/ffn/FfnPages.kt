@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.source.ReviewData
 import io.github.vlsergey.recommend4me.source.ffn.Ffn.Companion.ANNOTATION
 import io.github.vlsergey.recommend4me.source.ffn.Ffn.Companion.AUTHOR
 import java.time.Instant
+import org.jooq.DSLContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -20,9 +21,9 @@ import org.jsoup.nodes.TextNode
  * search, an author's works and favourites — a work's page with its header, every chapter named and the text of the one
  * it shows, and its reviews.
  */
-internal class FfnPages(private val items: ItemStore) {
+internal class FfnPages(private val items: ItemStore, db: DSLContext) {
 
-    private val fields = FfnFields(items)
+    private val fields = FfnFields(items, FfnFandoms(db))
 
     fun read(page: CapturedPage): List<String> {
         val doc = Jsoup.parse(page.html, page.url)
@@ -41,11 +42,14 @@ internal class FfnPages(private val items: ItemStore) {
 
     private fun cards(doc: Document, url: String, now: Instant): List<String> {
         val context = ListContext.of(doc, url)
-        return doc.select(CARD).mapNotNull { card(it, context, now) }
+        // The path of the fandom whose archive the list is, and of every fandom a section's list names
+        val archive = FfnFandoms.ofArchive(url, context.fandoms.singleOrNull())
+        fields.learn(archive + FfnFandoms.ofSection(doc, url))
+        return doc.select(CARD).mapNotNull { card(it, context, archive, now) }
     }
 
-    /** The work of a card, written; its id. None of a card that names no work. */
-    private fun card(card: Element, context: ListContext, now: Instant): String? {
+    /** The work of a card, written; its id. None of a card that names no work. [archive]: the list's fandom's path. */
+    private fun card(card: Element, context: ListContext, archive: Map<String, String>, now: Instant): String? {
         val link = card.selectFirst(LINK)
         val id = link?.let { Ffn.workIdOf(it.absUrl("href")) }
         val title = link?.text()?.trim()?.ifEmpty { null }
@@ -53,7 +57,7 @@ internal class FfnPages(private val items: ItemStore) {
         val meta = card.selectFirst("div.xgray")
         items.upsert(ItemHead(id, Ffn.workUrl(id), title, updatedAt = meta?.let(::updated)), now)
         context.category?.let { fields.category(id, it) }
-        if (context.fandoms.isNotEmpty()) fields.fandoms(id, context.fandoms)
+        if (context.fandoms.isNotEmpty()) fields.fandoms(id, context.fandoms, archive)
         meta?.let { fields.line(id, FfnLine.of(it.text())) }
         val author = card.selectFirst("a[href^=/u/]")?.let(::author) ?: context.author
         author?.let { items.setFacet(id, AUTHOR, listOf(it)) }
@@ -96,7 +100,9 @@ internal class FfnPages(private val items: ItemStore) {
             fields.fandoms(id, crossover.text().trim().removeSuffix(" Crossover").split(" + "))
         } else if (links.size >= 2) {
             fields.category(id, links.first()!!.text().trim())
-            fields.fandoms(id, listOf(links.last()!!.text().trim()))
+            val fandom = FfnFandoms.ofLink(links.last()!!)
+            fields.learn(fandom)
+            fields.fandoms(id, listOf(links.last()!!.text().trim()), fandom)
         }
     }
 

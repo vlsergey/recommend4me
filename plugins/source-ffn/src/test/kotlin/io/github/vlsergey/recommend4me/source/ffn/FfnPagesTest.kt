@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -14,19 +15,27 @@ import kotlin.test.assertTrue
 /**
  * The pages of the site read. Their prose — summaries, chapters, reviews — is Lorem ipsum in the pages kept for the
  * tests, the authors' and reviewers' names neutral, every list shortened: the structure is the site's, the words are
- * not.
+ * not. The plugin's own table of the fandoms in a database of memory, the application's in a memory context.
  */
 class FfnPagesTest {
 
     private val source = Ffn()
     private val now = Instant.parse("2026-11-13T10:00:00Z")
 
+    private val database = FfnDatabase()
+
+    @AfterTest fun close() = database.close()
+
     private fun page(name: String) = javaClass.getResource("/pages/$name")!!.readText()
 
-    private fun capture(context: MemorySourceContext, url: String, name: String): List<String> {
+    /** The page [html] at [url] read into the memory [context], the fandoms kept in the database of memory. */
+    private fun read(context: MemorySourceContext, url: String, html: String): List<String> {
         assertTrue(source.capturePatterns.any { it.matches(url) }, "$url is wanted")
-        return source.capture(CapturedPage(url, page(name), now), context)
+        return source.capture(CapturedPage(url, html, now), database.of(context))
     }
+
+    private fun capture(context: MemorySourceContext, url: String, name: String): List<String> =
+        read(context, url, page(name))
 
     @Test
     fun `the cards of a fandom's list give the works, their fandom of the list's own line`() {
@@ -42,7 +51,7 @@ class FfnPagesTest {
         val facets = context.facets.getValue(id)
         assertEquals(listOf("16441913"), facets["author"])
         assertEquals(listOf("Books"), facets["category"])
-        assertEquals(listOf("Harry Potter"), facets["fandom"])
+        assertEquals(listOf("book/Harry-Potter"), facets["fandom"])
         assertEquals(listOf(UniverseFacets.FANFICTION), facets[UniverseFacets.KIND])
         assertEquals(listOf(AgeRating.G.key), facets[AgeRating.SITE_KEY])
         assertEquals(listOf("en"), facets["language"])
@@ -76,7 +85,8 @@ class FfnPagesTest {
         val facets = context.facets.getValue(id)
         assertEquals(listOf("2996195"), facets["author"])
         assertEquals(listOf("Books"), facets["category"])
-        assertEquals(listOf("Harry Potter"), facets["fandom"])
+        // By the link over the header: its archive's path
+        assertEquals(listOf("book/Harry-Potter"), facets["fandom"])
         assertEquals(listOf(AgeRating.PG13.key), facets[AgeRating.SITE_KEY])
         assertEquals(listOf("suspense", "romance"), facets["tag"])
         assertEquals(listOf("hermione g./sirius b.", "harry p./luna l."), facets["pairing"])
@@ -136,6 +146,56 @@ class FfnPagesTest {
     }
 
     @Test
+    fun `a fandom is known by its archive's path as the pages link it, a name alone by the one path kept of it`() {
+        // A fandom's archive: the list's fandom by the archive's path, its page the plugin's of it
+        val context = MemorySourceContext()
+        capture(context, "https://www.fanfiction.net/book/Harry-Potter/?&srt=1&r=10", "list.html")
+        assertEquals(listOf("book/Harry-Potter"), context.facets.getValue("14580148")["fandom"])
+        assertEquals("Harry Potter", context.facetNames.getValue("fandom")["book/Harry-Potter"])
+        assertEquals(
+            "https://www.fanfiction.net/book/Harry-Potter/",
+            source.valueUrl("fandom", "book/Harry-Potter", ""),
+        )
+        // A search's card names its fandom alone: by its name while no page linked it
+        val card = { id: String, fandom: String ->
+            """<div class="z-list"><a class="stitle" href="/s/$id/1/Lorem">Lorem</a><div class="z-indent">Lorem.""" +
+                """<div class="z-padtop2 xgray">$fandom - Rated: T - English - Humor - Words: 1,000</div></div></div>"""
+        }
+        val search = { ids: List<Pair<String, String>> ->
+            read(
+                context,
+                "https://www.fanfiction.net/search/?keywords=lorem&ready=1&type=story",
+                "<html><body>${ids.joinToString("") { (id, fandom) -> card(id, fandom) }}</body></html>",
+            )
+        }
+        search(listOf("1" to "Lorem Ipsum Dolor"))
+        assertEquals(listOf("Lorem Ipsum Dolor"), context.facets.getValue("1")["fandom"])
+        // A section's list: every fandom by its link's title, the name the link may cut; one name of two sections. A
+        // work named of a fandom alone given its path once it is kept
+        val section = { name: String, path: String ->
+            """<div><a href="/$path/" title="$name">${name.take(5)}</a></div>"""
+        }
+        val anime =
+            """<html><body><div id="list_output">""" +
+                section("Lorem Ipsum Dolor", "anime/Lorem-Ipsum-Dolor") +
+                section("Sit Amet", "anime/Sit-Amet") +
+                """<div><a href="/crossovers/anime/">Crossovers</a></div></div></body></html>"""
+        read(context, "https://www.fanfiction.net/anime/?l=l", anime)
+        assertEquals(listOf("anime/Lorem-Ipsum-Dolor"), context.facets.getValue("1")["fandom"])
+        read(
+            context,
+            "https://www.fanfiction.net/game/",
+            """<html><body><div id="list_output">${section("Sit Amet", "game/Sit-Amet")}</div></body></html>""",
+        )
+        // The one path of the name, else the name
+        search(listOf("2" to "Lorem Ipsum Dolor", "3" to "Sit Amet", "4" to "Consectetur"))
+        assertEquals(listOf("anime/Lorem-Ipsum-Dolor"), context.facets.getValue("2")["fandom"])
+        assertEquals(listOf("Sit Amet"), context.facets.getValue("3")["fandom"])
+        assertEquals(listOf("Consectetur"), context.facets.getValue("4")["fandom"])
+        assertNull(source.valueUrl("fandom", "Consectetur", "Consectetur"))
+    }
+
+    @Test
     fun `a card of a search keeps its summary whole, the words found marked bold among them`() {
         val html =
             """<html><body><div class="z-list"><a class="stitle" href="/s/14430178/1/Lorem">Lorem</a>""" +
@@ -144,8 +204,7 @@ class FfnPagesTest {
                 """Chapters: 1 - Words: 6,018 - Complete</div></div></div></body></html>"""
         val context = MemorySourceContext()
         val url = "https://www.fanfiction.net/search/?keywords=sit&ready=1&type=story"
-        assertTrue(source.capturePatterns.any { it.matches(url) })
-        assertEquals(listOf("14430178"), source.capture(CapturedPage(url, html, now), context))
+        assertEquals(listOf("14430178"), read(context, url, html))
         assertEquals("Lorem ipsum dolor sit amet.", context.texts.getValue("14430178")["annotation"])
     }
 

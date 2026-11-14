@@ -33,6 +33,9 @@ class Ffn : Source {
     override val homepage = HOME
     override val modes = setOf(SourceMode.BROWSER)
 
+    /** The plugin's own table: the fandoms of the site with their sections ([FfnFandoms]). */
+    override val migrations = listOf("classpath:db/ffn")
+
     override val schema =
         SourceSchema(
             facets =
@@ -70,8 +73,11 @@ class Ffn : Source {
             kindFrom = FANDOM,
         )
 
-    /** 2: a card's summary read whole, the words a search marked bold in it among its words. */
-    override val parserVersion = 2
+    /**
+     * 2: a card's summary read whole, the words a search marked bold in it among its words. 3: a fandom is known by its
+     * archive's path, "anime/Naruto", as the pages link it ([FfnFandoms]).
+     */
+    override val parserVersion = 3
 
     /** A work's pages and reviews, an author's page, the lists of the sections, the crossovers and the search. */
     override val capturePatterns =
@@ -92,6 +98,8 @@ class Ffn : Source {
     override fun valueUrl(facet: String, key: String, name: String) =
         when (facet) {
             AUTHOR -> "$HOME/u/$key/"
+            // A fandom by its archive's path ([FfnFandoms]); one known by its name alone has no page told
+            FANDOM -> if ('/' in key) "$HOME/$key/" else null
             else -> null
         }
 
@@ -113,7 +121,8 @@ class Ffn : Source {
             nextPage = "#content_wrapper_inner > center > a:last-child",
         )
 
-    override fun capture(page: CapturedPage, context: SourceContext): List<String> = FfnPages(context.items).read(page)
+    override fun capture(page: CapturedPage, context: SourceContext): List<String> =
+        FfnPages(context.items, context.database).read(page)
 
     companion object {
         const val ID = "ffn"

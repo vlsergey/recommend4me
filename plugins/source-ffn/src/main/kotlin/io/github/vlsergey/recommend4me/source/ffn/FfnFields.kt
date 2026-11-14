@@ -20,7 +20,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.util.Locale
 
 /** The fields of a work as its page and its cards tell them alike, written to the work's item. */
-internal class FfnFields(private val items: ItemStore) {
+internal class FfnFields(private val items: ItemStore, private val directory: FfnFandoms) {
 
     /**
      * What the site's line of a work tells ([FfnLine]): its rating, language, genres as its tags, characters and
@@ -42,12 +42,32 @@ internal class FfnFields(private val items: ItemStore) {
         )
     }
 
-    /** The work's fandoms by their names; every work of the site is fan fiction. */
-    fun fandoms(id: String, names: List<String>) {
+    /**
+     * The work's fandoms by their names, each of its archive's path — the one the page links ([known]), else the one
+     * kept of its name ([FfnFandoms.keysOf]); every work of the site is fan fiction.
+     */
+    fun fandoms(id: String, names: List<String>, known: Map<String, String> = emptyMap()) {
         val fandoms = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (fandoms.isEmpty()) return
-        items.setFacet(id, FANDOM, fandoms.map { FacetValue(it, it) })
+        items.setFacet(id, FANDOM, directory.keysOf(fandoms, known).zip(fandoms) { key, name -> FacetValue(key, name) })
         items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(UniverseFacets.FANFICTION)))
+    }
+
+    /**
+     * The fandoms [paths] tells — name to its archive's path — kept ([FfnFandoms.learn]); of one newly kept, the works
+     * a page named it of alone, by its name, given its path now, as a page naming it alone would give it from now on:
+     * whatever order the pages are read in.
+     */
+    fun learn(paths: Map<String, String>) {
+        val fresh = directory.learn(paths)
+        if (fresh.isEmpty()) return
+        val named = ArrayList<Pair<String, List<String>>>()
+        items.forEachFacet(FANDOM) { id, keys -> if (keys.any { it in fresh }) named += id to keys }
+        named.forEach { (id, keys) ->
+            val now = directory.keysOf(keys)
+            if (now != keys)
+                items.setFacet(id, FANDOM, now.zip(keys) { key, was -> FacetValue(key, was.takeIf { key != was }) })
+        }
     }
 
     /** The site's section the work's fandom is in: "Books", "Anime/Manga". */
