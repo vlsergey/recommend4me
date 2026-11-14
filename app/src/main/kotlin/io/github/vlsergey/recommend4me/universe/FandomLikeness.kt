@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.universe
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.exp
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -60,67 +59,9 @@ class FandomLikeness(val weights: FloatArray) {
             return right / pairs.sumOf { it.weight }
         }
 
-        /** The weights learnt of the [pairs], of vectors of one length; null of none. */
-        fun fit(pairs: List<NamePair>): FandomLikeness? {
-            val dim = pairs.firstOrNull()?.anchor?.size ?: return null
-            val w = DoubleArray(dim) { 1.0 }
-            val adam = Adam(dim)
-            val total = pairs.sumOf { it.weight }
-            repeat(STEPS) {
-                val grad = DoubleArray(dim) { L2 * (w[it] - 1) }
-                pairs.forEach { p -> addGradient(w, p, p.weight / total, grad) }
-                adam.step(w, grad)
-                for (k in 0 until dim) if (w[k] < 0) w[k] = 0.0
-            }
-            return FandomLikeness(FloatArray(dim) { w[it].toFloat() })
-        }
-
-        /**
-         * The gradient of the loss of the pair [p] — log(1 + e^(−(cos(a, near) − cos(a, far)) / [TEMPERATURE])) — along
-         * the weights [w], times [scale], added to [grad]. Of the weighed cosine A / √(B C), A = Σ w a y, B = Σ w a², C
-         * = Σ w y²: ∂/∂w = a y / √(BC) − A / (2 √(BC)) (a² / B + y² / C).
-         */
-        private fun addGradient(w: DoubleArray, p: NamePair, scale: Double, grad: DoubleArray) {
-            val a = p.anchor
-            var b = 0.0
-            for (k in w.indices) b += w[k] * a[k] * a[k]
-            val near = Weighed(w, a, p.near, b)
-            val far = Weighed(w, a, p.far, b)
-            val margin = (near.cosine - far.cosine) / TEMPERATURE
-            // d/dm log(1 + e^(−m)) = −σ(−m)
-            val g = -scale / (1 + exp(margin)) / TEMPERATURE
-            near.addTo(grad, g, w)
-            far.addTo(grad, -g, w)
-        }
-
-        /** The weighed cosine of [a] and [y], with what its gradient is made of. */
-        private class Weighed(
-            w: DoubleArray,
-            private val a: FloatArray,
-            private val y: FloatArray,
-            private val b: Double,
-        ) {
-            private var ay = 0.0
-            private var c = 0.0
-
-            init {
-                for (k in w.indices) {
-                    ay += w[k] * a[k] * y[k]
-                    c += w[k] * y[k] * y[k]
-                }
-            }
-
-            private val root = sqrt(b * c).coerceAtLeast(LEAST)
-            val cosine = ay / root
-
-            /** [g] times the gradient of the cosine along the weights, added to [grad]. */
-            fun addTo(grad: DoubleArray, g: Double, w: DoubleArray) {
-                val half = ay / (2 * root)
-                for (k in w.indices) {
-                    grad[k] += g * (a[k] * y[k] / root - half * (a[k] * a[k] / b + y[k] * y[k] / c))
-                }
-            }
-        }
+        /** The weights learnt of the [pairs], of vectors of one length ([FandomLikenessDescent]); null of none. */
+        fun fit(pairs: List<NamePair>): FandomLikeness? =
+            if (pairs.isEmpty()) null else FandomLikeness(FandomLikenessDescent(pairs).run())
 
         private fun cosine(w: FloatArray, a: FloatArray, y: FloatArray): Double {
             var ay = 0.0
@@ -156,13 +97,9 @@ class FandomLikeness(val weights: FloatArray) {
                 val kin = related[u].orEmpty()
                 val apart = different[u].orEmpty()
                 val made = ArrayList<Triple<FloatArray, FloatArray, FloatArray>>()
-                // Of a universe of many names and many kin — a franchise — a few of each drawn: every universe weighs
-                // alike all the same, and the pairs stay few enough to learn of in seconds
-                drawn(own.indices.toList(), ANCHORS, draw).forEach { i ->
-                    val anchor = own[i]
-                    val all = own.filterIndexed { j, _ -> j != i } + kin.flatMap { names[it].orEmpty() }
-                    if (all.isEmpty()) return@forEach
-                    val near = drawn(all, NEAR, draw)
+                own.forEachIndexed { i, anchor ->
+                    val near = own.filterIndexed { j, _ -> j != i } + kin.flatMap { names[it].orEmpty() }
+                    if (near.isEmpty()) return@forEachIndexed
                     val far =
                         apart.flatMap { names[it].orEmpty() } +
                             List(random) { universes[draw.nextInt(universes.size)] }
@@ -175,51 +112,8 @@ class FandomLikeness(val weights: FloatArray) {
             return out
         }
 
-        /** [n] of the [items] drawn of [draw], all of them when no more. */
-        private fun <T> drawn(items: List<T>, n: Int, draw: Random): List<T> =
-            if (items.size <= n) items else items.shuffled(draw).take(n)
-
-        /** Adam, of the gradients of the weights: steps of about [RATE] whatever their scale. */
-        private class Adam(dim: Int) {
-            private val m = DoubleArray(dim)
-            private val v = DoubleArray(dim)
-            private var t = 0
-
-            fun step(w: DoubleArray, grad: DoubleArray) {
-                t++
-                for (k in w.indices) {
-                    m[k] = BETA1 * m[k] + (1 - BETA1) * grad[k]
-                    v[k] = BETA2 * v[k] + (1 - BETA2) * grad[k] * grad[k]
-                    val mh = m[k] / (1 - Math.pow(BETA1, t.toDouble()))
-                    val vh = v[k] / (1 - Math.pow(BETA2, t.toDouble()))
-                    w[k] -= RATE * mh / (sqrt(vh) + EPSILON)
-                }
-            }
-        }
-
-        /** The steps of the descent. */
-        private const val STEPS = 100
-
-        /** How far a step of Adam goes. */
-        private const val RATE = 0.02
-        private const val BETA1 = 0.9
-        private const val BETA2 = 0.999
-        private const val EPSILON = 1e-8
-
-        /** The pull of the weights toward 1, the encoder's likeness: a few hundred universes tell no dimension sure. */
-        private const val L2 = 0.01
-
-        /** The scale of the cosines' difference: the cosines of two names differ by tenths. */
-        private const val TEMPERATURE = 0.1
-
         /** How many other universes a name of one is set below a name of its own: drawn at random. */
         const val RANDOM_FAR = 4
-
-        /** The names of a universe a pair is made of at most: drawn of them. */
-        private const val ANCHORS = 3
-
-        /** The names of a universe and its kin a name is set nearer to at most: drawn of them. */
-        private const val NEAR = 2
 
         /** The least length of a product of two weighed lengths divided by. */
         private const val LEAST = 1e-12

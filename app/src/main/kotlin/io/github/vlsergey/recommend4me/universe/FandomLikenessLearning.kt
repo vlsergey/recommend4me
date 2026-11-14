@@ -53,7 +53,9 @@ class FandomLikenessLearning(
         fun pairsOf(anchors: Set<Long>) =
             FandomLikeness.pairs(byUniverse.filterKeys { it in anchors }, related, different, byUniverse)
         val all = pairsOf(byUniverse.keys)
+        val paired = System.currentTimeMillis()
         val likeness = FandomLikeness.fit(all) ?: return
+        val fitted = System.currentTimeMillis()
         // Of every part of the universes held out, the order of its pairs by the likeness learnt without them
         val heldOut =
             (0 until FOLDS).map { fold ->
@@ -68,13 +70,17 @@ class FandomLikenessLearning(
         compared(dictionary, vectors)
         log.info(
             "The likeness of the fandoms' names learnt of {} pairs of {} universes with names, {} said different: " +
-                "held out, {} of the pairs in the user's order, of the encoder's own likeness {}; in {} ms",
+                "held out, {} of the pairs in the user's order, of the encoder's own likeness {}; " +
+                "in {} ms: the pairs {}, learnt of all {}, of the parts held out in turn {}",
             all.size,
             byUniverse.size,
             different.size,
             "%.3f".format(fit.heldOut),
             "%.3f".format(fit.asEncoded),
             System.currentTimeMillis() - started,
+            paired - started,
+            fitted - paired,
+            System.currentTimeMillis() - fitted,
         )
     }
 
