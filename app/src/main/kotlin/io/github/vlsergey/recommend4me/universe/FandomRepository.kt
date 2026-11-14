@@ -92,6 +92,12 @@ class FandomRepository(private val db: DSLContext) {
         db.deleteFrom(FANDOM).where(FANDOM.ID.eq(from)).execute()
     }
 
+    /** The fandom [id] gone, with whatever entries of a catalogue it had; its sites' fandoms are let go of before. */
+    fun drop(id: Long) {
+        db.deleteFrom(FANDOM_ENTRY).where(FANDOM_ENTRY.FANDOM.eq(id)).execute()
+        db.deleteFrom(FANDOM).where(FANDOM.ID.eq(id)).execute()
+    }
+
     companion object {
         /** A normalized fandom as a value of the works' universes: its id written out. */
         fun value(id: Long): String = id.toString()

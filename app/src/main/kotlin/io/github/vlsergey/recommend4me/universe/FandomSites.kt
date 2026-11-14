@@ -37,6 +37,13 @@ class FandomSites(private val db: DSLContext) {
             .execute()
     }
 
+    /** [site] bound to no normalized fandom any more. */
+    fun unbind(site: SiteFandomRef) {
+        db.deleteFrom(FANDOM_SITE)
+            .where(FANDOM_SITE.SOURCE.eq(site.source), FANDOM_SITE.SITE_KEY.eq(site.key))
+            .execute()
+    }
+
     private companion object {
         /** The widest key of a site's fandom kept: the width of its column. */
         const val KEY_WIDTH = 500
