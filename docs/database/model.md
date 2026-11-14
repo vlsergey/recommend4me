@@ -10,6 +10,7 @@
 | `held_out_explained` | what a model that had not seen a graded work says of it — score, where the grade stands, what moves it — worked out in the queue once the work is opened, gone with every training and every word on the work |
 | `set_embedding` | the directions the sets of the works are embedded by |
 | `manner_words` | the words a manner of a text is measured by: the most frequent words of the works' texts, each with the mean and the spread of its share, and of how many texts |
+| `group_manner` | the manner of every normalized author and every normalized series: the mean of the manners of their works that have a text, with the hash of what it was made of — the words, the works and the texts of their items |
 | `mark_likeness` | how every work is alike what the user marked |
 | `mark_likeness_strength` | every work's strength of likeness to every mark |
 | `mark_likeness_axes` | a work's four axes of likeness to the marks |
@@ -67,6 +68,14 @@ erDiagram
         INTEGER value_count "null"
         CLOB value_keys "null"
         BLOB scoring "null"
+    }
+    group_manner {
+        VARCHAR kind PK
+        VARCHAR group_key PK
+        BIGINT words_id
+        VARCHAR made_of
+        INTEGER works
+        VARBINARY vec
     }
     held_out {
         VARCHAR source PK

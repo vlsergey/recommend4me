@@ -17,6 +17,9 @@ class TypeLinkRepositoryTest {
 
     @TempDir lateinit var folder: Path
 
+    /** How many times the repositories told of works put together or apart. */
+    private var regroupings = 0
+
     @Test
     fun `a link makes one work, a word on two works is a word on every item of them`() {
         Database("dictionaries", folder.resolve("dictionaries"), "dictionaries").use { dictionaries ->
@@ -25,11 +28,14 @@ class TypeLinkRepositoryTest {
                     WorkRepository(dictionaries.dsl),
                     WorkPairJournal(dictionaries.dsl),
                     listOf("a", "b"),
-                    series = SeriesGroups(dictionaries.dsl),
+                    series = SeriesGroups(dictionaries.dsl) { regroupings++ },
+                    regrouped = { regroupings++ },
                 )
             val now = Instant.now()
             links.link(ItemKey("a", "3"), ItemKey("a", "1"), now)
             links.link(ItemKey("a", "1"), ItemKey("b", "2"), now)
+            // Every two works merged told: what is made of the groups of the works is made again
+            assertEquals(2, regroupings)
             links.distinct(ItemKey("a", "1"), ItemKey("b", "7"), now)
             links.relate(ItemKey("a", "1"), ItemKey("b", "8"), "TRANSLATION", now)
             assertEquals(
@@ -88,7 +94,8 @@ class TypeLinkRepositoryTest {
                     WorkRepository(dictionaries.dsl),
                     WorkPairJournal(dictionaries.dsl),
                     listOf("a", "b", "c"),
-                    series = SeriesGroups(dictionaries.dsl),
+                    series = SeriesGroups(dictionaries.dsl) { regroupings++ },
+                    regrouped = { regroupings++ },
                 )
             val now = Instant.now()
             fun said(x: ItemKey, y: ItemKey) =
@@ -126,7 +133,8 @@ class TypeLinkRepositoryTest {
                     WorkRepository(dictionaries.dsl),
                     WorkPairJournal(dictionaries.dsl),
                     listOf("a", "b", "c", "d"),
-                    series = SeriesGroups(dictionaries.dsl),
+                    series = SeriesGroups(dictionaries.dsl) { regroupings++ },
+                    regrouped = { regroupings++ },
                 )
             val now = Instant.now()
             val a = ItemKey("a", "1")

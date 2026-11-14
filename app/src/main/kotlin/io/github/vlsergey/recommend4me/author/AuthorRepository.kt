@@ -16,7 +16,11 @@ data class SiteAuthorRef(val source: String, val author: String)
  * by the likeness of a name — the pairs the user told apart or said are partly one, and the entries of the catalogues
  * the user bound them to.
  */
-class AuthorRepository(private val db: DSLContext) {
+class AuthorRepository(
+    private val db: DSLContext,
+    /** Told of every merge of two authors and every author of a site taken out of one. */
+    private val regrouped: () -> Unit,
+) {
 
     /** The entries of the catalogues the authors are bound to. */
     val entries = AuthorEntryRepository(db)
@@ -83,75 +87,80 @@ class AuthorRepository(private val db: DSLContext) {
      * said apart or partly one moved to [into] — none of [into] with itself — its entries of the catalogues besides
      * those of [into], bound when they were, and [from] gone.
      */
-    fun merge(from: Long, into: Long, now: Instant) = db.transaction { c ->
-        val tx = DSL.using(c)
-        tx.update(SITE_AUTHOR)
-            .set(SITE_AUTHOR.NORMALIZED, into)
-            .set(SITE_AUTHOR.BOUND_AT, now)
-            .where(SITE_AUTHOR.NORMALIZED.eq(from))
-            .execute()
-        val d = NORMALIZED_AUTHOR_DISTINCT
-        tx.select(d.FIRST_AUTHOR, d.OTHER_AUTHOR, d.PARTLY)
-            .from(d)
-            .where(d.FIRST_AUTHOR.eq(from).or(d.OTHER_AUTHOR.eq(from)))
-            .fetch()
-            .forEach { r ->
-                val other = if (r.value1() == from) r.value2()!! else r.value1()!!
-                if (other != into) {
-                    val (first, second) = pair(other, into)
-                    tx.insertInto(d)
-                        .set(d.FIRST_AUTHOR, first)
-                        .set(d.OTHER_AUTHOR, second)
-                        .set(d.PARTLY, r.value3())
-                        .set(d.SAID_AT, now)
-                        .onDuplicateKeyIgnore()
-                        .execute()
-                }
-            }
-        tx.deleteFrom(d).where(d.FIRST_AUTHOR.eq(from).or(d.OTHER_AUTHOR.eq(from))).execute()
-        tx.deleteFrom(d).where(d.FIRST_AUTHOR.eq(into), d.OTHER_AUTHOR.eq(into)).execute()
-        val e = NORMALIZED_AUTHOR_ENTRY
-        tx.selectFrom(e).where(e.AUTHOR.eq(from)).fetch().forEach {
-            tx.insertInto(e)
-                .set(e.AUTHOR, into)
-                .set(e.CATALOGUE, it.catalogue)
-                .set(e.ENTRY, it.entry)
-                .set(e.BOUND_AT, it.boundAt)
-                .onDuplicateKeyIgnore()
+    fun merge(from: Long, into: Long, now: Instant) {
+        db.transaction { c ->
+            val tx = DSL.using(c)
+            tx.update(SITE_AUTHOR)
+                .set(SITE_AUTHOR.NORMALIZED, into)
+                .set(SITE_AUTHOR.BOUND_AT, now)
+                .where(SITE_AUTHOR.NORMALIZED.eq(from))
                 .execute()
+            val d = NORMALIZED_AUTHOR_DISTINCT
+            tx.select(d.FIRST_AUTHOR, d.OTHER_AUTHOR, d.PARTLY)
+                .from(d)
+                .where(d.FIRST_AUTHOR.eq(from).or(d.OTHER_AUTHOR.eq(from)))
+                .fetch()
+                .forEach { r ->
+                    val other = if (r.value1() == from) r.value2()!! else r.value1()!!
+                    if (other != into) {
+                        val (first, second) = pair(other, into)
+                        tx.insertInto(d)
+                            .set(d.FIRST_AUTHOR, first)
+                            .set(d.OTHER_AUTHOR, second)
+                            .set(d.PARTLY, r.value3())
+                            .set(d.SAID_AT, now)
+                            .onDuplicateKeyIgnore()
+                            .execute()
+                    }
+                }
+            tx.deleteFrom(d).where(d.FIRST_AUTHOR.eq(from).or(d.OTHER_AUTHOR.eq(from))).execute()
+            tx.deleteFrom(d).where(d.FIRST_AUTHOR.eq(into), d.OTHER_AUTHOR.eq(into)).execute()
+            val e = NORMALIZED_AUTHOR_ENTRY
+            tx.selectFrom(e).where(e.AUTHOR.eq(from)).fetch().forEach {
+                tx.insertInto(e)
+                    .set(e.AUTHOR, into)
+                    .set(e.CATALOGUE, it.catalogue)
+                    .set(e.ENTRY, it.entry)
+                    .set(e.BOUND_AT, it.boundAt)
+                    .onDuplicateKeyIgnore()
+                    .execute()
+            }
+            tx.deleteFrom(NORMALIZED_AUTHOR).where(NORMALIZED_AUTHOR.ID.eq(from)).execute()
         }
-        tx.deleteFrom(NORMALIZED_AUTHOR).where(NORMALIZED_AUTHOR.ID.eq(from)).execute()
+        regrouped()
     }
 
     /**
      * The author of a site taken out of the normalized author [from], to one of their own, and the two told apart: not
      * offered as one again; the new id.
      */
-    fun takeOut(site: SiteAuthorRef, from: Long, now: Instant): Long = db.transactionResult { c ->
-        val tx = DSL.using(c)
-        val id =
-            tx.insertInto(NORMALIZED_AUTHOR)
-                .defaultValues()
-                .returningResult(NORMALIZED_AUTHOR.ID)
-                .fetchOne()!!
-                .value1()!!
-        tx.update(SITE_AUTHOR)
-            .set(SITE_AUTHOR.NORMALIZED, id)
-            .set(SITE_AUTHOR.BOUND_AT, now)
-            .where(
-                SITE_AUTHOR.SOURCE.eq(site.source),
-                SITE_AUTHOR.AUTHOR.eq(site.author),
-                SITE_AUTHOR.NORMALIZED.eq(from),
-            )
-            .execute()
-        val (first, second) = pair(id, from)
-        tx.insertInto(NORMALIZED_AUTHOR_DISTINCT)
-            .set(NORMALIZED_AUTHOR_DISTINCT.FIRST_AUTHOR, first)
-            .set(NORMALIZED_AUTHOR_DISTINCT.OTHER_AUTHOR, second)
-            .set(NORMALIZED_AUTHOR_DISTINCT.SAID_AT, now)
-            .execute()
-        id
-    }
+    fun takeOut(site: SiteAuthorRef, from: Long, now: Instant): Long =
+        db.transactionResult { c ->
+                val tx = DSL.using(c)
+                val id =
+                    tx.insertInto(NORMALIZED_AUTHOR)
+                        .defaultValues()
+                        .returningResult(NORMALIZED_AUTHOR.ID)
+                        .fetchOne()!!
+                        .value1()!!
+                tx.update(SITE_AUTHOR)
+                    .set(SITE_AUTHOR.NORMALIZED, id)
+                    .set(SITE_AUTHOR.BOUND_AT, now)
+                    .where(
+                        SITE_AUTHOR.SOURCE.eq(site.source),
+                        SITE_AUTHOR.AUTHOR.eq(site.author),
+                        SITE_AUTHOR.NORMALIZED.eq(from),
+                    )
+                    .execute()
+                val (first, second) = pair(id, from)
+                tx.insertInto(NORMALIZED_AUTHOR_DISTINCT)
+                    .set(NORMALIZED_AUTHOR_DISTINCT.FIRST_AUTHOR, first)
+                    .set(NORMALIZED_AUTHOR_DISTINCT.OTHER_AUTHOR, second)
+                    .set(NORMALIZED_AUTHOR_DISTINCT.SAID_AT, now)
+                    .execute()
+                id
+            }
+            .also { regrouped() }
 
     /** The two told apart — or, [partly], a part of the works of one the other's — in place of the word said before. */
     fun tell(a: Long, b: Long, partly: Boolean, now: Instant) {

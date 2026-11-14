@@ -33,7 +33,8 @@ class SeriesStart(private val databases: Databases) {
                 .fetch { WorkRelations.pair(it.value1()!!, it.value2()!!) to TypeLinkRepository.SERIES }
                 .toMap()
         if (words.isEmpty()) return
-        val groups = SeriesGroups(db)
+        // A step of the start, before anything is made of the groups: no one to tell
+        val groups = SeriesGroups(db, regrouped = {})
         val now = Instant.now()
         val chains = WorkRelations.chains(words, TypeLinkRepository.SERIES)
         chains.forEach { chain ->

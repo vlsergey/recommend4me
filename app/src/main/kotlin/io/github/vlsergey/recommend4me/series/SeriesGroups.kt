@@ -10,7 +10,11 @@ import org.jooq.impl.DSL
  * THE WORKS THE USER SAID TO BE ONE SERIES, in the dictionaries: groups of normalized works, a work in one at most. A
  * group of fewer than two works is none: it goes.
  */
-class SeriesGroups(private val db: DSLContext) {
+class SeriesGroups(
+    private val db: DSLContext,
+    /** Told of every work put in a group or out of it. */
+    private val regrouped: () -> Unit,
+) {
 
     /** Every group: its id to its works. */
     fun all(): Map<Long, Set<Long>> =
@@ -50,8 +54,13 @@ class SeriesGroups(private val db: DSLContext) {
      * The works [x] and [y] said to be one series: of a work in a group, the other put in it; of both in two, the
      * second's group joined to the first's; of neither, a group of the two made.
      */
-    fun together(x: Long, y: Long, now: Instant) = db.transaction { c ->
-        val tx = DSL.using(c)
+    fun together(x: Long, y: Long, now: Instant) {
+        db.transaction { c -> joined(DSL.using(c), x, y, now) }
+        regrouped()
+    }
+
+    /** [together] within the transaction [tx]. */
+    private fun joined(tx: DSLContext, x: Long, y: Long, now: Instant) {
         val groups = groupsIn(tx, listOf(x, y))
         val gx = groups[x]
         val gy = groups[y]
@@ -79,10 +88,13 @@ class SeriesGroups(private val db: DSLContext) {
     }
 
     /** The [works] out of their groups: the user's word of them taken back. */
-    fun leave(works: Collection<Long>) = db.transaction { c ->
-        val tx = DSL.using(c)
-        tx.deleteFrom(SERIES_GROUP_WORK).where(SERIES_GROUP_WORK.WORK.`in`(works.distinct())).execute()
-        dropSmall(tx)
+    fun leave(works: Collection<Long>) {
+        db.transaction { c ->
+            val tx = DSL.using(c)
+            tx.deleteFrom(SERIES_GROUP_WORK).where(SERIES_GROUP_WORK.WORK.`in`(works.distinct())).execute()
+            dropSmall(tx)
+        }
+        regrouped()
     }
 
     /** Whether the two works are of one group. */

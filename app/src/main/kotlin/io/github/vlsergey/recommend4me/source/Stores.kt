@@ -18,6 +18,7 @@ import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemRepository
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
+import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerWordsRepository
 import io.github.vlsergey.recommend4me.mark.MarkRepository
@@ -54,6 +55,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseRepository
 import io.github.vlsergey.recommend4me.work.TypeWorks
 import io.github.vlsergey.recommend4me.work.WorkPairJournal
 import io.github.vlsergey.recommend4me.work.WorkRepository
+import io.github.vlsergey.recommend4me.work.WorksRegrouped
 import java.nio.file.Path
 import java.util.concurrent.locks.ReentrantLock
 import org.springframework.beans.factory.annotation.Value
@@ -247,7 +249,7 @@ class SourceStore(
     val tags = TagRepository(databases.dictionaries.dsl)
 
     /** The normalized authors: the authors of every site bound to them. */
-    val authors = AuthorRepository(databases.dictionaries.dsl)
+    val authors = AuthorRepository(databases.dictionaries.dsl) { events.publishEvent(WorksRegrouped(contentType.id)) }
 
     /**
      * The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the
@@ -275,15 +277,24 @@ class SourceStore(
 }
 
 /** Everything of one content type: its sources, the links across them, what is learnt. */
-class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases: Databases, languages: List<String>) {
+class TypeStore(
+    val type: ContentType,
+    val sources: List<SourceStore>,
+    databases: Databases,
+    languages: List<String>,
+    events: ApplicationEventPublisher,
+) {
     val id: String
         get() = type.id
+
+    /** Told of the user's every word that puts works, series or authors together or apart. */
+    private val regrouped = { events.publishEvent(WorksRegrouped(type.id)) }
 
     /** The normalized works of the type's items. */
     val works = TypeWorks(WorkRepository(databases.dictionaries.dsl), sources.map { it.id })
 
     /** The works the user said to be one series. */
-    val seriesGroups = SeriesGroups(databases.dictionaries.dsl)
+    val seriesGroups = SeriesGroups(databases.dictionaries.dsl, regrouped)
 
     val links =
         TypeLinkRepository(
@@ -292,12 +303,13 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
             sources.map { it.id },
             sources.flatMapTo(HashSet()) { it.singleFacets },
             seriesGroups,
+            regrouped,
         )
     val universes =
         UniverseRepository(databases.dictionaries.dsl, languages, CatalogueRenameRepository(databases.preferences.dsl))
     val searchJudgments = SearchJudgmentRepository(databases.preferences.dsl, sources.map { it.id })
     val tags = TagRepository(databases.dictionaries.dsl)
-    val authors = AuthorRepository(databases.dictionaries.dsl)
+    val authors = AuthorRepository(databases.dictionaries.dsl, regrouped)
 
     val models = ModelRepository(databases.model(type.id))
     val predictions = PredictionRepository(databases.model(type.id))
@@ -306,6 +318,9 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
 
     /** The words the manners of the type's texts are measured by. */
     val mannerWords = MannerWordsRepository(databases.model(type.id))
+
+    /** The manners of the type's normalized authors and series. */
+    val groupManners = GroupMannerRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))
@@ -333,7 +348,7 @@ class Stores(
         }
 
     val types: List<TypeStore> =
-        plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases, languages) }
+        plugins.types.map { t -> TypeStore(t, sources.filter { it.type == t.id }, databases, languages, events) }
 
     fun source(id: String): SourceStore? = sources.firstOrNull { it.id == id }
 

@@ -1,11 +1,15 @@
 package io.github.vlsergey.recommend4me.manner
 
+import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.part.PartMark
 import io.github.vlsergey.recommend4me.part.PartsSaved
+import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
+import io.github.vlsergey.recommend4me.work.Works
+import io.github.vlsergey.recommend4me.work.WorksRegrouped
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
@@ -26,15 +30,18 @@ private val log = LoggerFactory.getLogger(Manners::class.java)
 data class MannersChanged(val type: String, val items: Int)
 
 /**
- * THE MANNER OF EVERY ITEM WITH A TEXT, made in the queue of the computations after the chapters read go quiet, and on
- * start: the words of the content type ([MannerWords]) fitted on every text of it — again whenever the number of the
- * items with a text changes, every manner then made again by them, as the directions of the sets are ([SetDirections]
- * [io.github.vlsergey.recommend4me.setvector.SetDirections]) —, else the manner of every item whose texts changed made
- * by the words kept. Two passes over every text to fit: the words chosen of the first, the shares of the second.
+ * THE MANNER OF EVERY ITEM WITH A TEXT, AND OF EVERY NORMALIZED AUTHOR AND SERIES ([MannerGroups]), made in the queue
+ * of the computations after the chapters read, the items written or the user's word on what is one work, series or
+ * author go quiet, and on start: the words of the content type ([MannerWords]) fitted on every text of it — again
+ * whenever the number of the items with a text changes, every manner then made again by them, as the directions of the
+ * sets are ([SetDirections] [io.github.vlsergey.recommend4me.setvector.SetDirections]) —, else the manner of every item
+ * whose texts changed made by the words kept. Two passes over every text to fit: the words chosen of the first, the
+ * shares of the second.
  */
 @Service
 class Manners(
     private val stores: Stores,
+    private val works: Works,
     private val workload: Workload,
     private val events: ApplicationEventPublisher,
 ) {
@@ -57,14 +64,17 @@ class Manners(
                 else -> 0
             }
         val gone = texts.entries.sumOf { (s, own) -> (s.manner.made().keys - own.keys).also(s.manner::remove).size }
-        if (made + gone > 0) {
-            events.publishEvent(MannersChanged(type.id, made + gone))
+        val groups = MannerGroups.refresh(type, works.of(type), TypeSeries.read(type))
+        if (made + gone + groups > 0) {
+            events.publishEvent(MannersChanged(type.id, made + gone + groups))
             log.info(
-                "{}: the manners of {} items made{}, of {} taken away, of {} items with a text, in {} ms",
+                "{}: the manners of {} items made{}, of {} taken away, of {} authors and series made or taken away, " +
+                    "of {} items with a text, in {} ms",
                 type.id,
                 made,
                 if (fitting) " by words fitted again" else "",
                 gone,
+                groups,
                 count,
                 System.currentTimeMillis() - started,
             )
@@ -124,6 +134,14 @@ class Manners(
     fun start() = stores.types.forEach { schedule(it, START_DELAY_SECONDS, "start") }
 
     @EventListener fun partsSaved(event: PartsSaved) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
+
+    /** An item's authors or series may have changed: the manners of the authors and the series with them. */
+    @EventListener fun itemsChanged(event: ItemsChanged) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
+
+    @EventListener
+    fun regrouped(event: WorksRegrouped) {
+        stores.type(event.type)?.let { schedule(it, QUIET_SECONDS, "regrouped") }
+    }
 
     private fun schedule(type: TypeStore, delaySeconds: Long, reason: String) {
         val work = Work(MAKING, type = type.id)

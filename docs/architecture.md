@@ -188,11 +188,16 @@ made again; else the manner of an item whose chapters changed is made again by t
 in the queue, after the chapters read go quiet (`Manners`). A word is a run of letters and no
 more: no forms of a word, no grammar.
 
-The model reads three blocks of it (`TypeManners`): the work's own (`manner:work`, the mean of
-its items'), its normalized authors' (`manner:author`, of every author the mean of the manners of
-all their works) and its normalized series' (`manner:series`). The authors' and the series' are
-made of the kept manners of the items whenever the works are read, never kept: a work of no text
-of its own has them all the same, and a new work read or an author bound changes them at once.
+The manner of every normalized author — the mean of the manners of all their works that have a
+text, a work's own the mean of its items' — and of every normalized series is kept too
+(`group_manner`, `MannerGroups`), with the hash of what it was made of: the words, the works and
+the texts of their items. It is made again in the same computation when that changes — a text
+read, an item written (its authors, its series), the user's word that puts works, series or
+authors together or apart (`WorksRegrouped`, told by the repositories of the dictionaries).
+
+The model reads three blocks of it (`TypeManners`): the work's own (`manner:work`), its normalized
+authors' kept ones (`manner:author`, of several the mean) and its normalized series' kept one
+(`manner:series`). A work of no text of its own has its authors' and its series' all the same.
 
 ## Tags worked out
 

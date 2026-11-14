@@ -74,8 +74,8 @@ class Averages(
  * average work is made of is kept ([averages]); a work's vectors otherwise are read when it is scored, a chunk at a
  * time ([vectorsOfMany]), and let go.
  *
- * THE MANNERS OF THE WORKS ([TypeManners]) — its own, its authors', its series' — are made of the kept manners of every
- * item as the catalogue is read, and handed to every work's vectors with them.
+ * THE MANNERS OF THE WORKS ([TypeManners]) — its own, its authors', its series', each kept — are read with the
+ * catalogue and handed to every work's vectors with them.
  *
  * OF THE GRADED WORKS ALONE ([CatalogueReader.gradedWorks]): the rows of the grades are all a fitting reads, what the
  * average work is told by the model kept.
@@ -158,7 +158,9 @@ class CatalogueReader(
         }
         // The manners of every work, its own, its authors' and its series', of the manners kept of every item
         val manners = TypeManners.read(type, clusters, series)
-        manners.forEachWork { _, blocks -> blocks.forEach { (block, v) -> reading.spreads.add(block, v) } }
+        manners.forEachWork(items.map { it.key }.filter { clusters.representative(it) == it }) { _, blocks ->
+            blocks.forEach { (block, v) -> reading.spreads.add(block, v) }
+        }
         manners.with(reading.vectors, kept).forEach { (key, own) -> reading.vectors[key] = HashMap(own) }
         val read = System.currentTimeMillis()
         val graded = items.map { it.key }.toSet().let { keys -> ratings.map { it.key }.filter { it in keys }.toSet() }

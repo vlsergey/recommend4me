@@ -1,7 +1,10 @@
 package io.github.vlsergey.recommend4me
 
+import io.github.vlsergey.recommend4me.author.SiteAuthorRef
 import io.github.vlsergey.recommend4me.contenttype.Books
+import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.manner.MannerGroup
 import io.github.vlsergey.recommend4me.manner.Manners
 import io.github.vlsergey.recommend4me.manner.TypeManners
 import io.github.vlsergey.recommend4me.series.TypeSeries
@@ -10,7 +13,7 @@ import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
-import kotlin.test.assertContentEquals
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
@@ -37,6 +40,16 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
             context.items.saveParts(id, texts.mapIndexed { k, t -> PartData("p$k", k, "Chapter $k", t) })
     }
 
+    /** The two manners alike within the digits of half precision, in which they are kept. */
+    private fun assertNear(expected: FloatArray, actual: FloatArray?) {
+        assertNotNull(actual)
+        assertEquals(expected.size, actual.size)
+        expected.indices.forEach { assertEquals(expected[it], actual[it], HALF * (1 + abs(expected[it])), "at $it") }
+    }
+
+    private fun mean(vararg vectors: FloatArray) =
+        FloatArray(vectors[0].size) { k -> vectors.map { it[k] }.average().toFloat() }
+
     private fun read(): TypeManners {
         val type = stores.type("books")!!
         return TypeManners.read(type, works.of(type), TypeSeries.read(type))
@@ -59,15 +72,20 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
         val own = assertNotNull(one[TypeManners.WORK])
         assertNotEquals(own.toList(), two.getValue(TypeManners.WORK).toList())
         // The author's: the mean of both their texts, the same of every work of theirs
-        val ann = FloatArray(own.size) { (own[it] + two.getValue(TypeManners.WORK)[it]) / 2 }
-        assertContentEquals(ann, one[TypeManners.AUTHOR])
+        val ann = mean(own, two.getValue(TypeManners.WORK))
+        assertNear(ann, one[TypeManners.AUTHOR])
+        // Kept of the normalized author
+        val annId = type.authors.of(SiteAuthorRef("alpha", "ann"))!!
+        val bobId = type.authors.of(SiteAuthorRef("alpha", "bob"))!!
+        assertEquals(setOf("$annId", "$bobId"), type.groupManners.made(MannerGroup.AUTHOR).keys)
+        assertNear(ann, type.groupManners.all(MannerGroup.AUTHOR, words.id)["$annId"])
         val none = all.blocks(ItemKey("alpha", "m3"))
         assertNull(none[TypeManners.WORK], "a work of no text has no manner of its own")
-        assertContentEquals(ann, none[TypeManners.AUTHOR])
+        assertNear(ann, none[TypeManners.AUTHOR])
         assertNotEquals(ann.toList(), all.blocks(ItemKey("alpha", "m4")).getValue(TypeManners.AUTHOR).toList())
         // A request reads the same of the works asked for alone
         val asked = TypeManners.of(type, works.of(type), listOf(ItemKey("alpha", "m3")))
-        assertContentEquals(ann, asked.blocks(ItemKey("alpha", "m3"))[TypeManners.AUTHOR])
+        assertNear(ann, asked.blocks(ItemKey("alpha", "m3"))[TypeManners.AUTHOR])
 
         // A text changed: its manner made again by the words kept, the others' as they were
         val m4 = type.source("alpha")!!.manner.made().getValue("m4")
@@ -85,5 +103,31 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
         assertEquals(4, refitted.texts)
         assertNotEquals(words.id, refitted.id)
         assertEquals(setOf(refitted.id), type.source("alpha")!!.manner.made().values.map { it.wordsId }.toSet())
+
+        // Two works said to be one series: the series' manner kept, the mean of theirs; a work of no series none
+        val now = Instant.now()
+        type.links.relate(ItemKey("alpha", "m1"), ItemKey("alpha", "m4"), TypeLinkRepository.SERIES, now)
+        manners.refresh(type)
+        val series = read()
+        val first = series.blocks(ItemKey("alpha", "m1")).getValue(TypeManners.WORK)
+        val fourth = series.blocks(ItemKey("alpha", "m4")).getValue(TypeManners.WORK)
+        assertNear(mean(first, fourth), series.blocks(ItemKey("alpha", "m1"))[TypeManners.SERIES])
+        assertNear(mean(first, fourth), series.blocks(ItemKey("alpha", "m4"))[TypeManners.SERIES])
+        assertNull(series.blocks(ItemKey("alpha", "m2"))[TypeManners.SERIES])
+        assertEquals(1, type.groupManners.made(MannerGroup.SERIES).size)
+
+        // Two authors merged: one manner of all their works, the other's gone
+        type.authors.merge(maxOf(annId, bobId), minOf(annId, bobId), now)
+        manners.refresh(type)
+        val merged = read()
+        val texts =
+            listOf("m1", "m2", "m4", "m5").map { merged.blocks(ItemKey("alpha", it)).getValue(TypeManners.WORK) }
+        assertNear(mean(*texts.toTypedArray()), merged.blocks(ItemKey("alpha", "m3"))[TypeManners.AUTHOR])
+        assertEquals(setOf("${minOf(annId, bobId)}"), type.groupManners.made(MannerGroup.AUTHOR).keys)
+    }
+
+    private companion object {
+        /** The relative error of a number kept in half precision. */
+        const val HALF = 2e-3f
     }
 }
