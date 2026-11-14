@@ -36,7 +36,8 @@ internal class AffFields(private val items: ItemStore) {
      * its category, and read out of it — the node of the kind of its relationships ([SECTIONS]) parts the fandom before
      * it from the pairing after it. The fandom is the node right before that one, or the last of a place of none: what
      * the nodes before it are, the archive's groups ("+G to L", "DC Verse Comics"), say no more of it. The marks the
-     * site sorts its nodes by ("+", "-") are not of their names.
+     * site sorts its nodes by ("+", "-") are not of their names. The fandom is known by its archive and its name
+     * ([fandomKey]): the page of a fandom is its archive's.
      */
     fun located(id: String, written: List<String>) {
         val nodes = written.map { it.trim().trimStart('+', '-').trim() }.filter { it.isNotEmpty() }
@@ -45,7 +46,7 @@ internal class AffFields(private val items: ItemStore) {
         items.setFacet(id, CATEGORY, listOf(FacetValue(path.lowercase(), path)))
         val section = nodes.indexOfFirst { it.lowercase() in SECTIONS }
         val fandom = if (section < 0) nodes.last() else nodes.getOrNull(section - 1)
-        fandom?.let { items.setFacet(id, FANDOM, listOf(FacetValue(it, it))) }
+        fandom?.let { items.setFacet(id, FANDOM, listOf(FacetValue(fandomKey(Aff.archiveOf(id), it), it))) }
         val pairings = if (section < 0) emptyList() else nodes.drop(section + 1).filter { '/' in it }
         if (pairings.isNotEmpty()) {
             items.setFacet(id, PAIRING, pairings.map(::pairing).distinctBy { it.key })
@@ -127,6 +128,15 @@ internal class AffFields(private val items: ItemStore) {
     }
 
     companion object {
+        /** A fandom's key: its archive and its name in the archive's tree, "hp/Harry Potter". */
+        fun fandomKey(archive: String, name: String) = "$archive/$name"
+
+        /** The archive of a fandom's key; null of a key of no archive, of a parser before it ("Harry Potter"). */
+        fun archiveOfFandom(key: String): String? = key.substringBefore('/', "").takeIf { ARCHIVE_NAME.matches(it) }
+
+        /** An archive's name: its subdomain. */
+        private val ARCHIVE_NAME = Regex("[a-z0-9]+")
+
         /**
          * The nodes of the archives' trees that tell the kind of a work's relationships, or a section of its fandom of
          * no kind (null): what parts the fandom before them from the pairing after them.

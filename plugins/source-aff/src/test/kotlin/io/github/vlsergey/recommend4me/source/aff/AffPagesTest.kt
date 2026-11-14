@@ -48,7 +48,11 @@ class AffPagesTest {
         assertEquals(listOf("1296842027"), facets["author"])
         assertEquals(listOf("hp"), facets["archive"])
         assertEquals(listOf(UniverseFacets.FANFICTION), facets[UniverseFacets.KIND])
-        assertEquals(listOf("Harry Potter"), facets["fandom"])
+        assertEquals(listOf("hp/Harry Potter"), facets["fandom"])
+        assertEquals("Harry Potter", context.facetNames.getValue("fandom")["hp/Harry Potter"])
+        // A fandom's page is its archive's; a key of no archive has none
+        assertEquals("https://hp.adult-fanfiction.org/", source.valueUrl("fandom", "hp/Harry Potter", "Harry Potter"))
+        assertNull(source.valueUrl("fandom", "Harry Potter", "Harry Potter"))
         assertEquals(listOf("harry potter » het - male/female » hermione/voldemort"), facets["category"])
         assertEquals(listOf("hermione/voldemort"), facets["pairing"])
         assertEquals("Pairing: Hermione/Voldemort", context.texts.getValue(adversary)["pairingsLine"])
@@ -94,7 +98,7 @@ class AffPagesTest {
         assertEquals(listOf(adversary), capture(context, source.itemUrl(adversary), page("story.html")))
         val facets = context.facets.getValue(adversary)
         assertEquals(listOf("harry potter » het - male/female » hermione/voldemort"), facets["category"])
-        assertEquals(listOf("Harry Potter"), facets["fandom"])
+        assertEquals(listOf("hp/Harry Potter"), facets["fandom"])
         assertEquals(listOf("hermione/voldemort"), facets["pairing"])
         assertEquals(listOf(Books.Direction.HET.key), facets["direction"])
     }

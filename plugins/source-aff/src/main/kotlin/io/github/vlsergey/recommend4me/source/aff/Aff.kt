@@ -82,8 +82,10 @@ class Aff : Source {
 
     /**
      * 2: a work's page reads its place in the archive's tree too — its fandom of it — as a card of the archive does.
+     *
+     * 3: a fandom is known by its archive and its name, "hp/Harry Potter" — its page is its archive's.
      */
-    override val parserVersion = 2
+    override val parserVersion = 3
 
     override val capturePatterns =
         listOf(
@@ -99,13 +101,19 @@ class Aff : Source {
     /** A chapter's page, by its number in the work. */
     override fun partUrl(itemId: String, partId: String) = "${itemUrl(itemId)}&chapter=$partId"
 
-    /** An author's page, and the list of an archive's works. */
+    /**
+     * An author's page, the list of an archive's works, and a fandom's page: its archive's — an archive is a fandom's
+     * ("hp", "naruto") or a few fandoms', listed on it.
+     */
     override fun valueUrl(facet: String, key: String, name: String) =
         when (facet) {
             AUTHOR -> "https://members.$DOMAIN/profile.php?id=$key"
-            ARCHIVE -> "https://$key.$DOMAIN/"
+            ARCHIVE -> archiveUrl(key)
+            FANDOM -> AffFields.archiveOfFandom(key)?.let(::archiveUrl)
             else -> null
         }
+
+    private fun archiveUrl(archive: String) = "https://$archive.$DOMAIN/"
 
     override fun itemIdOf(url: String): String? =
         ITEM_ADDRESS.find(url)?.groupValues?.let { (_, archive, number) -> idOf(archive, number) }
@@ -196,6 +204,9 @@ class Aff : Source {
 
         /** A work's id: its archive and its number there, "hp-600100589". */
         fun idOf(archive: String, number: String) = "$archive-$number"
+
+        /** The archive of a work's id: its subdomain. */
+        fun archiveOf(itemId: String): String = parts(itemId).first
 
         /** The archive and the number of a work's id. */
         private fun parts(itemId: String): Pair<String, String> =
