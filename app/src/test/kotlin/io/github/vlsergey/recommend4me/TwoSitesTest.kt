@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
 import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOffer
 import io.github.vlsergey.recommend4me.api.model.AuthorSaid
+import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
@@ -241,6 +242,14 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertEquals(kept.facets.keys, worked.facets.keys)
         kept.facets.forEach { (k, v) -> assertEquals(v, worked.facets.getValue(k), 1e-3f, k) }
         assertEquals(kept.sameAuthor, worked.sameAuthor)
+        // The pairs chosen by a title wholly alike, and by the authors: those alone, the two of "The Mill" among them
+        fun chosen(authors: Boolean, title: Boolean) =
+            duplicates.getDuplicates("books", true, 0, 200, DuplicateSort.CHANCE, null, authors, title).body!!.pairs
+        val sameTitle = chosen(authors = false, title = true)
+        assertTrue(sameTitle.all { it.first.title.trim().equals(it.second.title.trim(), ignoreCase = true) })
+        assertTrue(sameTitle.any { setOf(it.first.item, it.second.item) == setOf("m1", "m2") }, "$sameTitle")
+        assertTrue(sameTitle.size < chosen(authors = false, title = false).size)
+        assertTrue(chosen(authors = true, title = false).all { it.sameAuthor })
         assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
     }
 

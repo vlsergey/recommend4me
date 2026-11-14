@@ -31,8 +31,11 @@ class DuplicatesController(
         limit: Int,
         sort: DuplicateSort,
         answers: List<DuplicateVerdict>?,
+        sameAuthors: Boolean,
+        sameTitle: Boolean,
     ): ResponseEntity<DuplicatePage> {
-        val choice = PairChoice(open, answers.orEmpty().map { DuplicateAnswer.valueOf(it.name) }.toSet(), sort)
+        val said = answers.orEmpty().map { DuplicateAnswer.valueOf(it.name) }.toSet()
+        val choice = PairChoice(open, said, sort, sameAuthors, sameTitle)
         val page = pages.page(type, choice, offset, limit) ?: return ResponseEntity.notFound().build()
         // A search or a fitting planned or running: what there is, the page asks again
         return ResponseEntity.status(if (page.pending) HttpStatus.ACCEPTED else HttpStatus.OK).body(page)

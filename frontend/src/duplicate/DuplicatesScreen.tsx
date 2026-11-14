@@ -54,6 +54,12 @@ const SHOWN = [
   ...[...VERDICTS, ...RELATED].map((v) => ({ shown: v.verdict as Shown, word: `PairRow.${v.word}` as const })),
 ];
 
+/** What the two works of a pair may be chosen by as wholly alike, each a checkbox kept in the browser: the authors, the title. */
+const WHOLLY = [
+  { key: "duplicates.sameAuthors", word: "DuplicatesScreen.sameAuthors", hint: "DuplicatesScreen.sameAuthorsHint" },
+  { key: "duplicates.sameTitle", word: "DuplicatesScreen.sameTitle", hint: "DuplicatesScreen.sameTitleHint" },
+] as const;
+
 /** The pair's two works as the server names them. */
 const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.first.item }, second: { source: p.second.source, item: p.second.item } });
 
@@ -68,7 +74,8 @@ const refs = (p: DuplicatePair) => ({ first: { source: p.first.source, item: p.f
  * offered again. The answers of one work and different works teach the model of the chances, fitted
  * again a few seconds after them. The pairs shown are chosen by their answer — none, or any of the words,
  * each a checkbox kept in the browser: the pairs said different alone, by the chance of one series, say —
- * a word changed or taken back where it stands; every word said and taken back in the journal, the newest undone there ([PairJournal]). The pairs are looked for in
+ * a word changed or taken back where it stands; of them, if chosen, only those of the same authors — the same normalized ones,
+ * every one — or of the same title, two checkboxes kept so too; every word said and taken back in the journal, the newest undone there ([PairJournal]). The pairs are looked for in
  * the background, on the first start and when asked anew here.
  */
 export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
@@ -81,6 +88,12 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const [chosen, setChosen] = usePref<Shown[]>("duplicates.shown", ["NONE"]);
   const open = chosen.includes("NONE");
   const answers = chosen.filter((c): c is Verdict => c !== "NONE");
+  const [sameAuthors, setSameAuthors] = usePref<boolean>(WHOLLY[0].key, false);
+  const [sameTitle, setSameTitle] = usePref<boolean>(WHOLLY[1].key, false);
+  const wholly = [
+    { ...WHOLLY[0], on: sameAuthors, set: setSameAuthors },
+    { ...WHOLLY[1], on: sameTitle, set: setSameTitle },
+  ];
   const queryClient = useQueryClient();
   // The search, a work of the queue: its state read again while it is to come, the pairs read once it has ended —
   // never while it runs (user, 2026-11-07)
@@ -89,7 +102,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   /** When the last word was kept ([settle]): a list read that began before it may not have it. */
   const wordKept = useRef(0);
   const list = useQuery({
-    queryKey: [...duplicatesKey(type.id), open, answers, limit, sort],
+    queryKey: [...duplicatesKey(type.id), open, answers, sameAuthors, sameTitle, limit, sort],
     enabled: tab !== "journal",
     queryFn: async ({ signal }): Promise<DuplicatePage> => {
       // A list read while a word was being kept may hold the pair as it was, the row answered on brought back:
@@ -97,7 +110,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
       // runs (user, 2026-11-07)
       for (;;) {
         const began = performance.now();
-        const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { open, answers, offset: 0, limit, sort } }, signal });
+        const result = await api.GET("/api/types/{type}/duplicates", { params: { path: { type: type.id }, query: { open, answers, sameAuthors, sameTitle, offset: 0, limit, sort } }, signal });
         if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
         if (wordKept.current < began) return result.data;
       }
@@ -268,6 +281,22 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
               {t(word)}
             </label>
           ))}
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l pl-3">
+            {wholly.map(({ key, word, hint, on, set }) => (
+              <label key={key} className="flex items-center gap-1" title={t(hint)}>
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => {
+                    set(!on);
+                    setLimit(PAGE);
+                  }}
+                  className="size-3.5"
+                />
+                {t(word)}
+              </label>
+            ))}
+          </span>
         </div>
       )}
       {tab === "journal" ? (
@@ -277,7 +306,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
           {list.isLoading && <p className="text-sm text-muted-foreground">{t("DuplicatesScreen.loading")}</p>}
           {list.isError && <p className="text-sm text-destructive">{t("DuplicatesScreen.failed", { error: list.error.message })}</p>}
           {data && shown.length === 0 && !searching && (
-            <p className="text-sm text-muted-foreground">{t(!data.searchedAt ? "DuplicatesScreen.neverSearched" : chosen.length === 1 && open ? "DuplicatesScreen.none" : "DuplicatesScreen.noneChosen")}</p>
+            <p className="text-sm text-muted-foreground">{t(!data.searchedAt ? "DuplicatesScreen.neverSearched" : chosen.length === 1 && open && !sameAuthors && !sameTitle ? "DuplicatesScreen.none" : "DuplicatesScreen.noneChosen")}</p>
           )}
           {shown.length > 0 && (
             <ul className={cn("flex flex-col gap-2", (calm.locked || answeringAll) && "pointer-events-none")} aria-busy={calm.locked || answeringAll}>

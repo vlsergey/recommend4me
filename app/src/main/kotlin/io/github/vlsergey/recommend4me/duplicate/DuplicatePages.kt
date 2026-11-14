@@ -20,12 +20,15 @@ internal const val MAX_PAGE = 200
 
 /**
  * Which pairs a page holds and in what order: by their answer — [open], those not answered on; those answered with the
- * words [answers] — by the [sort].
+ * words [answers] —, of them only those of the same authors ([sameAuthors]) or of the same title ([sameTitle]) when
+ * asked ([WholeMatch]), by the [sort].
  */
 class PairChoice(
     val open: Boolean,
     val answers: Set<DuplicateAnswer> = emptySet(),
     val sort: DuplicateSort = DuplicateSort.FORMULA,
+    val sameAuthors: Boolean = false,
+    val sameTitle: Boolean = false,
 ) {
     /** Whether a pair of the [answer] (none: not answered on) is among the chosen. */
     fun holds(answer: DuplicateAnswer?): Boolean = if (answer == null) open else answer in answers
@@ -75,10 +78,9 @@ class DuplicatePages(
         val boundary = boundaryOf(sort, chances, kept, said)
         val ranking = Ranking(sort, chances, worthOf(type, sort), words, boundary)
         val byPair = kept.associateBy { it.pair }
-        val open = if (choice.holds(null)) kept.filter { it.pair !in said } else emptyList()
-        val rows =
-            open.map { ranking.ranked(it.pair, it) } +
-                said.filterValues(choice::holds).keys.map { ranking.ranked(it, byPair[it]) }
+        val open = if (choice.holds(null)) kept.filter { it.pair !in said }.map { it.pair } else emptyList()
+        val chosen = wholly(type, choice, open + said.filterValues(choice::holds).keys)
+        val rows = chosen.map { ranking.ranked(it, byPair[it]) }
         val sorted =
             rows.sortedWith(
                 compareByDescending<Ranked> { it.priority }
@@ -94,6 +96,18 @@ class DuplicatePages(
             works = search?.works,
             learnt = chances?.learnt == true,
         )
+    }
+
+    /** Of the [pairs], those whose works are alike wholly as the [choice] asks: all of them, of no such asking. */
+    private fun wholly(
+        type: TypeStore,
+        choice: PairChoice,
+        pairs: List<Pair<ItemKey, ItemKey>>,
+    ): List<Pair<ItemKey, ItemKey>> {
+        if (!choice.sameAuthors && !choice.sameTitle) return pairs
+        val match =
+            WholeMatch(type, pairs.flatMap { listOf(it.first, it.second) }, choice.sameAuthors, choice.sameTitle)
+        return pairs.filter { (!choice.sameAuthors || match.authors(it)) && (!choice.sameTitle || match.title(it)) }
     }
 
     /**

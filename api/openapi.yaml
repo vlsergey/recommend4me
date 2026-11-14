@@ -607,6 +607,18 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/DuplicateVerdict'
+        - name: sameAuthors
+          in: query
+          description: Of the pairs chosen, only those whose works have the same normalized authors, every one - authors marked as partly one not counted; a work of no normalized author has none alike
+          schema:
+            type: boolean
+            default: false
+        - name: sameTitle
+          in: query
+          description: Of the pairs chosen, only those whose works have the same title as the pair shows them (the user's over the site's), apart from the case and the spaces around
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: The pairs
