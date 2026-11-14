@@ -57,9 +57,10 @@ internal class FfnPages(private val items: ItemStore) {
         meta?.let { fields.line(id, FfnLine.of(it.text())) }
         val author = card.selectFirst("a[href^=/u/]")?.let(::author) ?: context.author
         author?.let { items.setFacet(id, AUTHOR, listOf(it)) }
+        // The summary whole, the words a search found in it marked bold by the site among them; the line of the site's
+        // template under it apart
         card.selectFirst("div.z-indent")?.let { summary ->
-            val own = summary.textNodes().joinToString(" ") { it.text() }.trim()
-            items.setTexts(id, mapOf(ANNOTATION to own))
+            items.setTexts(id, mapOf(ANNOTATION to PageText.of(summary, "div.z-padtop2").trim()))
         }
         card.selectFirst("img.cimage")?.let { items.setPictures(id, cover(it.attr("src"))) }
         return id

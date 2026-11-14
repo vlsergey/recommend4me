@@ -136,6 +136,20 @@ class FfnPagesTest {
     }
 
     @Test
+    fun `a card of a search keeps its summary whole, the words found marked bold among them`() {
+        val html =
+            """<html><body><div class="z-list"><a class="stitle" href="/s/14430178/1/Lorem">Lorem</a>""" +
+                """ by <a href="/u/1/Author">Author 1</a><div class="z-indent z-padtop">Lorem ipsum dolor """ +
+                """<b>sit</b> amet.<div class="z-padtop2 xgray">Lorem - Rated: T - English - Humor - """ +
+                """Chapters: 1 - Words: 6,018 - Complete</div></div></div></body></html>"""
+        val context = MemorySourceContext()
+        val url = "https://www.fanfiction.net/search/?keywords=sit&ready=1&type=story"
+        assertTrue(source.capturePatterns.any { it.matches(url) })
+        assertEquals(listOf("14430178"), source.capture(CapturedPage(url, html, now), context))
+        assertEquals("Lorem ipsum dolor sit amet.", context.texts.getValue("14430178")["annotation"])
+    }
+
+    @Test
     fun `the line of the site's template is read by its captions and order`() {
         val line =
             FfnLine.of(

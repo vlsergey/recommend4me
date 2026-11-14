@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.S
 import io.github.vlsergey.recommend4me.item.ItemKey
 import java.time.Instant
 import org.jooq.DSLContext
+import org.jooq.Record5
 import org.jooq.impl.DSL
 
 /**
@@ -104,20 +105,31 @@ class WorkRepository(private val db: DSLContext) {
      * The normalized works of [sources] of several items, with their items in the order the work is shown by them:
      * those with a value it is shown by first ([SITE_WORK.SHOWN_FIRST], a finished book's), then the one that says the
      * most of it ([SITE_WORK.FULLNESS]), those alike by their keys.
+     *
+     * The works of several items read first, by themselves, not as a subquery of the second read: H2 makes such a
+     * subquery again for every row whenever anything was written to the database since it last made it — while the
+     * background writes, a read of a second grew to one of a minute and more, and the extension's panel waited for it.
      */
     fun groups(sources: Collection<String>): Map<Long, List<ItemKey>> {
         val several =
-            DSL.select(SITE_WORK.NORMALIZED).from(SITE_WORK).groupBy(SITE_WORK.NORMALIZED).having(DSL.count().gt(1))
-        return db.select(SITE_WORK.NORMALIZED, SITE_WORK.SOURCE, SITE_WORK.ITEM)
-            .from(SITE_WORK)
-            .where(SITE_WORK.NORMALIZED.`in`(several), SITE_WORK.SOURCE.`in`(sources))
-            .orderBy(
-                SITE_WORK.SHOWN_FIRST.desc().nullsLast(),
-                SITE_WORK.FULLNESS.desc().nullsLast(),
+            db.select(SITE_WORK.NORMALIZED)
+                .from(SITE_WORK)
+                .groupBy(SITE_WORK.NORMALIZED)
+                .having(DSL.count().gt(1))
+                .fetchSet { it.value1()!! }
+        if (several.isEmpty()) return emptyMap()
+        return db.select(
+                SITE_WORK.NORMALIZED,
                 SITE_WORK.SOURCE,
                 SITE_WORK.ITEM,
+                SITE_WORK.SHOWN_FIRST,
+                SITE_WORK.FULLNESS,
             )
+            .from(SITE_WORK)
+            .where(SITE_WORK.SOURCE.`in`(sources))
             .fetch()
+            .filter { it.value1() in several }
+            .sortedWith(SHOWN_ORDER)
             .groupBy({ it.value1()!! }, { ItemKey(it.value2()!!, it.value3()!!) })
     }
 
@@ -168,5 +180,17 @@ class WorkRepository(private val db: DSLContext) {
     private companion object {
         /** The items read by one query at most: a list of keys in a query, not a meaning. */
         const val BATCH = 1000
+
+        /**
+         * The order a work is shown by its items, of the rows (work, source, item, shown first, fullness): shown first,
+         * then the fullest, those alike by their keys; an item never measured last.
+         */
+        val SHOWN_ORDER: Comparator<Record5<Long?, String?, String?, Boolean?, Long?>> =
+            compareBy<Record5<Long?, String?, String?, Boolean?, Long?>, Boolean?>(nullsLast(reverseOrder())) {
+                    it.value4()
+                }
+                .thenBy(nullsLast(reverseOrder())) { it.value5() }
+                .thenBy { it.value2() }
+                .thenBy { it.value3() }
     }
 }

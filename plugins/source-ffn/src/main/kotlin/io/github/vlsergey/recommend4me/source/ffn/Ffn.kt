@@ -70,7 +70,8 @@ class Ffn : Source {
             kindFrom = FANDOM,
         )
 
-    override val parserVersion = 1
+    /** 2: a card's summary read whole, the words a search marked bold in it among its words. */
+    override val parserVersion = 2
 
     /** A work's pages and reviews, an author's page, the lists of the sections, the crossovers and the search. */
     override val capturePatterns =
