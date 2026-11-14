@@ -52,8 +52,11 @@ const UNIVERSE = "universe";
 /** The normalized authors, compared apart: the row of the authors tells them. */
 const AUTHOR = "author";
 
+/** The facet of the characters: named apart from the site's own line of them ([PairGrid]). */
+const CHARACTERS = "characters";
+
 /** The facets of what a work is of, made of the site's own line of its characters and pairings: the line stands after them. */
-const OF_THE_LINE = [UNIVERSE, "characters", "pairings"];
+const OF_THE_LINE = [UNIVERSE, CHARACTERS, "pairings"];
 
 /** A row of the grid: its field, how alike the two are of it, the two values, folded or not. */
 interface Row {
@@ -87,8 +90,9 @@ export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; o
     const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
     return {
       key,
-      // Of the universes of no work, the site's fandoms alone: named as they are
-      name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
+      // Of the universes of no work, the site's fandoms alone: named as they are; the characters, the normalized ones,
+      // told from the site's line of them
+      name: key === CHARACTERS ? t("PairGrid.characters") : labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
       // Of the values a work may have one of, whether they meet; of a facet of one value — a status, a kind —,
       // whether it is the same; of the values as the works' screens give them (the window of one pair), how many
       // they share; of any other, how alike by the layers of the pair

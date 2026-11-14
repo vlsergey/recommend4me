@@ -32,12 +32,14 @@ internal object CardSearch {
         card.lock.withLock {
             val kernels = kernels(card) ?: error("the kernels of the search were not made")
             CardRoom(card).use { room ->
-                val weights = room.floatsOf(models.flatMap { it.flat().asList() }.toFloatArray())
                 val sites = search.sites.map { s -> SiteOnCard(s, Inverted(s, search.familyOf.size), room) }
                 val likeliest = Likeliest(search, models.size)
                 for (a in sites.indices) for (b in sites.indices) {
                     if (!search.compared(a, b)) continue
                     CardRoom(card).use { own ->
+                        // The weights of the models as the two sites are scored: their sites' weight in the constant
+                        val between = models.map { it.between(search.sites[a].source, search.sites[b].source) }
+                        val weights = own.floatsOf(between.flatMap { it.flat().asList() }.toFloatArray())
                         Facing(search, a, b, sites[a], sites[b], models.size, weights, own)
                             .offer(kernels, card, likeliest)
                     }

@@ -12,7 +12,9 @@ internal object ProcessorSearch {
     fun search(search: PairSearch, models: List<Logistic.Laid>): List<FoundPair> {
         val likeliest = Likeliest(search, models.size)
         for (a in search.sites.indices) for (b in search.sites.indices) {
-            if (search.compared(a, b)) Against(search, a, b, models, likeliest).offer()
+            if (!search.compared(a, b)) continue
+            val between = models.map { it.between(search.sites[a].source, search.sites[b].source) }
+            Against(search, a, b, between, likeliest).offer()
         }
         return likeliest.found()
     }

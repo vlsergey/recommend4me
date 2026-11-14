@@ -86,6 +86,10 @@ class SearchTest {
                     Logistic.facet("characters") to 2.0,
                     Logistic.has(Logistic.facet("characters")) to 0.3,
                     Logistic.facet("tags") to 0.8,
+                    // One site's works with each other unlikely, two sites' likelier: the sites' weight in the scores
+                    Logistic.sites("a", "a") to -1.5,
+                    Logistic.sites("a", "b") to 0.9,
+                    Logistic.sites("b", "c") to 0.4,
                 )
             ),
             Logistic(null),

@@ -100,6 +100,8 @@ class PairSearch(
             size = size(x, i, y, j),
             facets = families.indices.filter { both and (1L shl it) != 0L }.associate { families[it] to facets[it] },
             sameAuthor = y.authors[j].any { it in x.kin[i] },
+            site = x.source,
+            otherSite = y.source,
         )
     }
 

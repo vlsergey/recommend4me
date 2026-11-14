@@ -5,8 +5,9 @@ import kotlin.math.exp
 /**
  * THE CHANCE A PAIR IS OF A KIND, by the user's answers: a logistic model of how alike each layer of the two is
  * ([PairLayers]) — the titles, the descriptions, the size, and every facet the sites share apart (the universes, the
- * characters, the tags, the status...) — whether both have the layer at all, and whether the dictionary of authors
- * gives them one author, fully or in part, fitted on the pairs the user said are of the kind and those said not to be
+ * characters, the tags, the status...) — whether both have the layer at all, whether the dictionary of authors gives
+ * them one author, fully or in part, and the two sites they are of, a word of a dictionary ([sites]: a site and itself,
+ * or two sites, each two its own weight), fitted on the pairs the user said are of the kind and those said not to be
  * ([fit]): which facet tells it, and how much, is learnt. [weights] by the name of the feature ([TITLE], [facet]...);
  * null — the model before any answer ([LogisticPairModel.prior]): the mean of the layers both have stands for the
  * chance, the facets' mean one layer of them. The chance of a learnt model is its score as the answers tell it
@@ -59,11 +60,14 @@ internal class Logistic(
             author = weights?.get(SAME_AUTHOR) ?: 0.0,
             facet = DoubleArray(families.size) { weights?.get(facet(families[it])) ?: 0.0 },
             faceted = DoubleArray(families.size) { weights?.get(has(facet(families[it]))) ?: 0.0 },
+            ofSites = weights.orEmpty().filterKeys { it.startsWith(SITES) },
         )
 
     /**
      * A model's weights by the places of the facets: what a pair is scored by in a search — of a learnt model the
-     * logit, as the chance orders the pairs, else ([mean]) the mean of the layers both have.
+     * logit, as the chance orders the pairs, else ([mean]) the mean of the layers both have. The weights of the two
+     * sites ([ofSites], by [sites]) are of every pair of the two alike: a search of two sites takes them into its
+     * constant ([between]).
      */
     class Laid(
         val mean: Boolean,
@@ -76,7 +80,25 @@ internal class Logistic(
         val author: Double,
         val facet: DoubleArray,
         val faceted: DoubleArray,
+        private val ofSites: Map<String, Double> = emptyMap(),
     ) {
+        /**
+         * The model as the works of the [site] against those of the [other] are scored: their weight in the constant.
+         */
+        fun between(site: String, other: String): Laid =
+            Laid(
+                mean,
+                constant + (ofSites[sites(site, other)] ?: 0.0),
+                title,
+                description,
+                described,
+                size,
+                sized,
+                author,
+                facet,
+                faceted,
+            )
+
         /** The facets both have: the bits of [both]; of the f-th, how alike they are [valued] (f). */
         fun score(
             t: Float,
@@ -162,14 +184,27 @@ internal class Logistic(
         /** The feature of whether both have the layer: "<layer>?". */
         fun has(feature: String) = "$feature?"
 
+        /** The beginning of the features of the sites. */
+        private const val SITES = "sites:"
+
+        /**
+         * The feature of the two sites a pair is of, whichever is the first: "sites:<site>|<site>", in their order — a
+         * site and itself, or two.
+         */
+        fun sites(site: String, other: String) = SITES + listOf(site, other).sorted().joinToString("|")
+
         private const val STEPS = 50
 
-        /** The features of a pair by their names: the constant, every layer both have and that they have it. */
+        /**
+         * The features of a pair by their names: the constant, every layer both have and that they have it, its two
+         * sites.
+         */
         fun features(layers: PairLayers): Map<String, Double> {
             val out = HashMap<String, Double>()
             out[CONSTANT] = 1.0
             out[TITLE] = layers.title.toDouble()
             if (layers.sameAuthor) out[SAME_AUTHOR] = 1.0
+            out[sites(layers.site, layers.otherSite)] = 1.0
             layers.description?.let {
                 out[DESCRIPTION] = it.toDouble()
                 out[has(DESCRIPTION)] = 1.0

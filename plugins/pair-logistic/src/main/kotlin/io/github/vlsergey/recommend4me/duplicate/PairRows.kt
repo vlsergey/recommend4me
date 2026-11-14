@@ -8,15 +8,16 @@ import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.facet
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.has
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.sigmoid
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.sites
 import java.util.stream.IntStream
 import kotlin.math.abs
 import kotlin.math.min
 
 /**
  * THE PAIRS AS NEWTON'S STEPS OF THE LOGISTIC MODEL READ THEM: of every pair the places of the features it has (by
- * [names]: the constant, every layer both have and that they have it) and their values, laid out in flat arrays — the
- * i-th pair's from [start] (i) to [start] (i + 1) — made once of the layers, no map made of a pair, and the steps of
- * the weights taken on them ([step]).
+ * [names]: the constant, every layer both have and that they have it, its two sites) and their values, laid out in flat
+ * arrays — the i-th pair's from [start] (i) to [start] (i + 1) — made once of the layers, no map made of a pair, and
+ * the steps of the weights taken on them ([step]).
  */
 internal class PairRows
 private constructor(
@@ -114,14 +115,20 @@ private constructor(
         /** The features before the facets', by their places. */
         private val HEAD = listOf(CONSTANT, TITLE, DESCRIPTION, has(DESCRIPTION), SIZE, has(SIZE), SAME_AUTHOR)
 
-        /** The features of the [pairs]: every one any pair has, the facets by their names in order. */
+        /**
+         * The features of the [pairs]: every one any pair has, the facets by their names in order, then the sites by
+         * theirs.
+         */
         fun of(pairs: List<PairLayers>): PairRows {
             val families = pairs.flatMapTo(HashSet()) { it.facets.keys }.sorted()
             val familyAt = families.withIndex().associate { it.value to it.index }
-            val names = HEAD + families.flatMap { listOf(facet(it), has(facet(it))) }
+            val siteNames = pairs.mapTo(HashSet()) { sites(it.site, it.otherSite) }.sorted()
+            val siteAt = siteNames.withIndex().associate { it.value to HEAD.size + 2 * families.size + it.index }
+            val names = HEAD + families.flatMap { listOf(facet(it), has(facet(it))) } + siteNames
             val start = IntArray(pairs.size + 1)
             pairs.forEachIndexed { i, c ->
-                var n = 2 + 2 * c.facets.size
+                // The constant, the title, the sites
+                var n = 3 + 2 * c.facets.size
                 if (c.description != null) n += 2
                 if (c.size != null) n += 2
                 if (c.sameAuthor) n++
@@ -153,6 +160,7 @@ private constructor(
                     put(k, v)
                     put(k + 1, 1f)
                 }
+                put(siteAt.getValue(sites(c.site, c.otherSite)), 1f)
             }
             return PairRows(names, start, places, values)
         }

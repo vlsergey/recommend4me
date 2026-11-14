@@ -14,7 +14,9 @@ class LogisticTest {
         size: Float? = null,
         facets: Map<String, Float> = emptyMap(),
         sameAuthor: Boolean = false,
-    ) = PairLayers(title, description, size, facets, sameAuthor)
+        site: String = SITE,
+        otherSite: String = OTHER_SITE,
+    ) = PairLayers(title, description, size, facets, sameAuthor, site, otherSite)
 
     private fun FittedPairModel.chance(title: Float, description: Float?, facets: Map<String, Float> = emptyMap()) =
         chance(pair(title, description, facets = facets))
@@ -70,6 +72,31 @@ class LogisticTest {
     }
 
     @Test
+    fun `the two sites of a pair are a word of a dictionary, each two weighed apart`() {
+        // Of the pairs alike as much, those of two sites said one work, those of one site not
+        val two = (0 until 20).map { pair(0.7f, 0.7f) }
+        val one = (0 until 20).map { pair(0.7f, 0.7f, otherSite = SITE) }
+        val rest =
+            (100 until 1100).map {
+                pair(0.3f + (it % 5) * 0.1f, 0.3f, otherSite = if (it % 2 == 0) SITE else OTHER_SITE)
+            }
+        val model = fitted(two, rest, one)
+        assertTrue(model.chance(pair(0.7f, 0.7f)) > model.chance(pair(0.7f, 0.7f, otherSite = SITE)))
+        // Whichever site is the first, the same word
+        assertEquals(
+            model.chance(pair(0.7f, 0.7f)),
+            model.chance(pair(0.7f, 0.7f, site = OTHER_SITE, otherSite = SITE)),
+            1e-12,
+        )
+        val w = model.weights!!
+        assertTrue(w.getValue(Logistic.sites(SITE, OTHER_SITE)) > w.getValue(Logistic.sites(SITE, SITE)), "$w")
+        // The search scores two sites' pairs by their weight in its constant, as the chance does
+        val laid = model.laid(emptyList())
+        val z = laid.between(OTHER_SITE, SITE).score(0.7f, 0.7f, true, 0f, false, 0L, { 0f }, false)
+        assertEquals(model.chance(pair(0.7f, 0.7f)), model.calibration.chance(z), 1e-9)
+    }
+
+    @Test
     fun `a pair said not of the kind lowers the chance of its like`() {
         val yes = (0 until 10).map { pair(0.9f, 0.9f) }
         val no = (10 until 20).map { pair(0.9f, 0.3f) }
@@ -86,8 +113,9 @@ class LogisticTest {
         val model = fitted(yes, rest)
         val laid = model.laid(listOf("characters", "status"))
         val valued = arrayOf(floatArrayOf(0.8f, 0.1f), floatArrayOf(0f, 0f))
-        val near = laid.score(0.5f, 0.9f, true, 0f, false, 1L, { f -> valued[f][0] }, false)
-        val far = laid.score(0.5f, 0.3f, true, 0f, false, 1L, { f -> valued[f][1] }, false)
+        val between = laid.between(SITE, OTHER_SITE)
+        val near = between.score(0.5f, 0.9f, true, 0f, false, 1L, { f -> valued[f][0] }, false)
+        val far = between.score(0.5f, 0.3f, true, 0f, false, 1L, { f -> valued[f][1] }, false)
         assertTrue(near > far)
         assertEquals(model.chance(0.5f, 0.9f, mapOf("characters" to 0.8f)), model.calibration.chance(near), 1e-9)
         val read = LogisticPairModel().unpack(model.pack())!!
@@ -110,7 +138,7 @@ class LogisticTest {
         val said = like.indices.map { if (it < 200) it % 2 == 0 else null } + unlike.map { null }
         val model = Logistic.fit(like + unlike, said)!!
         // The model's own sigmoid of the score: the 200 like ones unanswered taken as not, it is below a half
-        val laid = model.laid(emptyList())
+        val laid = model.laid(emptyList()).between(SITE, OTHER_SITE)
         val z = laid.score(0.5f, 0.9f, true, 0f, false, 0L, { 0f }, false)
         assertTrue(Logistic.sigmoid(z) < 0.5, "the model's own sigmoid ${Logistic.sigmoid(z)}")
         // The answers say a half
@@ -126,5 +154,11 @@ class LogisticTest {
         val c = Calibration.fit(z, yes)
         assertEquals(0.1, c.chance(0.0), 0.02)
         assertEquals(0.9, c.chance(2.0), 0.02)
+    }
+
+    private companion object {
+        /** The sites of the pairs of a test, unless it says other. */
+        const val SITE = "ficbook"
+        const val OTHER_SITE = "ao3"
     }
 }

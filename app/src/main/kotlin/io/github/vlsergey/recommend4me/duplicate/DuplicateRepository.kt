@@ -33,7 +33,7 @@ class DuplicateCandidate(
 
     /** How alike the two are, as a model of pairs reads it. */
     val layers: PairLayers
-        get() = PairLayers(title, description, size, facets, sameAuthor)
+        get() = PairLayers(title, description, size, facets, sameAuthor, first.source, second.source)
 
     companion object {
         /** Of [foundFor], the bit of the first work, and of the second. */

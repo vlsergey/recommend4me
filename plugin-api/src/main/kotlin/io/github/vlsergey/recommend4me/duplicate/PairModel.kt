@@ -6,8 +6,9 @@ import io.github.vlsergey.recommend4me.matrix.Cublas
  * How alike two works are, of two sites or of one, layer by layer — what a model of pairs reads: the cosines of the
  * vectors of their titles and of their descriptions (none of a work without one), how near their sizes are — of every
  * number both have, the smaller over the larger, their mean (none when they share none) —, of every facet the sites
- * share both have the cosine of their values weighed by rarity ([facets], by the facet), and whether the dictionary of
- * authors gives them one author, fully or in part.
+ * share both have the cosine of their values weighed by rarity ([facets], by the facet), whether the dictionary of
+ * authors gives them one author, fully or in part, and the sites they are of ([site] the first's, [otherSite] the
+ * second's: a site and itself, or two sites).
  */
 class PairLayers(
     val title: Float,
@@ -15,6 +16,8 @@ class PairLayers(
     val size: Float?,
     val facets: Map<String, Float>,
     val sameAuthor: Boolean,
+    val site: String,
+    val otherSite: String,
 )
 
 /** A model of pairs fitted: how likely a pair of [PairLayers] is of its kind — one work, one series. */
