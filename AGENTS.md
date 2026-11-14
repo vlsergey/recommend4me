@@ -94,12 +94,13 @@ own; "one work" merges two. A translation and a part stay two works, related.
 - **New data about a work** goes on the normalized work, never on an item, and travels in
   `WorkMembership.merge` and `takeOut`.
 
-## An area that reads itself again lets the user choose how often
+## The interface follows its rules: `docs/ui.md`
 
-Every part of the web interface that reads its data again by itself has, in its heading, the choice
-of how often — `components/RefreshSelect.tsx` with `lib/useRefresh.ts` (off, 1 s … 1 min). The
-choice is kept in the browser's localStorage under the area's own key (`<area>.refresh`), and the
-query reads `refetchInterval: every || false`. A new area that reads itself again gets one too.
+How the web interface and the extension behave when their data changes and when the user presses is
+written in `docs/ui.md`: a list read again shown calmly (`useCalmUpdates`), a locked list's buttons
+disabled, a button busy only with its own work, an answer kept and then shown, the choice of how often an
+area reads itself again, layout by CSS alone. **Read it before any change of a screen**, and keep it current:
+a new rule of the interface the owner gives is written there.
 
 ## A request never waits for a computation
 
@@ -109,12 +110,6 @@ user's machine. A request writes what it was told, plans the work that follows (
 answers with what there is — what the works made and kept, with a mark that more is coming (202,
 `pending`), the interface asking again till it is there. A test standing for the background runs it
 in `inBackground` (the thread of a Spring test is bound to a request).
-
-## A button shows only its own work
-
-A button is busy (spinner, disabled) only while its own press is at work — `AsyncButton` in the web
-interface, `act` with its `about` mark in the extension. Never by the state of a query: a list read
-anew in the background is not the button's work.
 
 ## The speed of a computation before its last digits
 
