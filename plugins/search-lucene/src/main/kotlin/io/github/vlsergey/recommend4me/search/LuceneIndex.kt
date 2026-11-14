@@ -149,11 +149,31 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
     }
 
     /**
-     * The [documents] written, those [removed] taken out. A document of the fingerprint the index keeps is not written
-     * again — a chance or an answer that changed nothing it is made of — save while a rebuild is under way, which may
-     * hold it older. Each written one made once, for the index and the one being built alike.
+     * The items of [fingerprints] brought into the index, those [removed] taken out: the documents made ([documents])
+     * of those whose fingerprint is not the one the index keeps alone — a chance or an answer that changed nothing a
+     * document is made of makes none —, every one while a rebuild is under way, which may hold them older. The
+     * fingerprints read and the documents made out of the lock: a search meanwhile reads the index as it is. How many
+     * documents were written.
      */
-    fun update(documents: List<SearchDocument>, removed: Collection<ItemKey>) = lock.withLock {
+    fun update(
+        fingerprints: Map<ItemKey, Long>,
+        documents: (Collection<ItemKey>) -> List<SearchDocument>,
+        removed: Collection<ItemKey>,
+    ): Int {
+        val rebuilding = lock.withLock { building != null }
+        val kept =
+            if (rebuilding) emptyMap()
+            else search { IndexKept.fingerprints(it, fingerprints.keys.map { k -> k.toString() }) }
+        val changed = fingerprints.filter { (key, print) -> kept[key.toString()] != print }.keys
+        return write(if (changed.isEmpty()) emptyList() else documents(changed), removed)
+    }
+
+    /**
+     * The [documents] written, those [removed] taken out. A document of the fingerprint the index keeps is not written
+     * again, save while a rebuild is under way. Each written one made once, for the index and the one being built
+     * alike. How many were written.
+     */
+    private fun write(documents: List<SearchDocument>, removed: Collection<ItemKey>): Int = lock.withLock {
         val kept =
             if (building == null) search { IndexKept.fingerprints(it, documents.map { d -> d.key.toString() }) }
             else emptyMap()
@@ -169,6 +189,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
             commit(writer)
             searchers.maybeRefresh()
         }
+        written.size
     }
 
     /** Runs [action] with a searcher of the index as it is now. */

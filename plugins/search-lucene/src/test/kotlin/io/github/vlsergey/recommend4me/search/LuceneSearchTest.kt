@@ -102,7 +102,7 @@ class LuceneSearchTest {
             assertTrue(shown.byMeaning, shown.text)
             assertEquals(chapter.substring(scene).trim(), shown.text)
             // Removed, the item's passages go with it
-            search.update("books", emptyList(), listOf(ItemKey("test", "4")))
+            search.update("books", emptyMap(), { emptyList() }, listOf(ItemKey("test", "4")))
             assertTrue(ItemKey("test", "4") !in search.search("books", "свидание у маяка утром", "ru", byMeaning).keys)
         }
     }
@@ -200,13 +200,19 @@ class LuceneSearchTest {
     fun `an update is found without a rebuild`() {
         LuceneSearch(Files.createTempDirectory("search")).use { search ->
             search.rebuild("books", documents.take(1).asSequence())
-            search.update(
-                "books",
-                listOf(doc("9", "Lighthouse Keeper", "Nobody", "A quiet game about a lighthouse.")),
-                emptyList(),
-            )
+            val added = doc("9", "Lighthouse Keeper", "Nobody", "A quiet game about a lighthouse.")
+            val asked = mutableListOf<Collection<ItemKey>>()
+            val made = { keys: Collection<ItemKey> ->
+                asked += keys
+                listOf(added).filter { it.key in keys }
+            }
+            val prints = mapOf(added.key to DocumentPrints.of(added))
+            assertEquals(1, search.update("books", prints, made, emptyList()))
             assertEquals(listOf("9"), search.search("books", "lighthouse", "en", context).keys.map { it.id })
-            search.update("books", emptyList(), listOf(ItemKey("test", "9")))
+            // Of the same fingerprint again, no document is made: nothing it is made of changed
+            assertEquals(0, search.update("books", prints, made, emptyList()))
+            assertEquals(listOf(listOf(added.key)), asked.map { it.toList() })
+            search.update("books", emptyMap(), { emptyList() }, listOf(ItemKey("test", "9")))
             assertTrue(search.search("books", "lighthouse", "en", context).keys.isEmpty())
         }
     }

@@ -44,6 +44,7 @@ class SearchIndex(
         Thread(r, "search-update").apply { isDaemon = true }
     }
     private val updates = ConcurrentHashMap<String, ScheduledFuture<*>>()
+    private val sources = SourceCatchUp(documents)
 
     @EventListener fun itemsChanged(event: ItemsChanged) = queue(event.source, event.ids)
 
@@ -130,17 +131,23 @@ class SearchIndex(
         if (keys.isEmpty()) return
         // The works taken here are this update's own: another update is of others
         workload.run(updating(type.id), reasons, joinAlike = false) {
-            // A chunk at a time: the chapters and the vectors of thousands of works — a refit's, a new encoder's — are
-            // not held at once
-            keys
-                .groupBy { it.source }
-                .forEach { (source, list) ->
-                    list.chunked(CHUNK).forEach { chunk ->
-                        val docs: Map<ItemKey, SearchDocument> =
-                            stores.source(source)?.let { documents.documents(it, chunk.map { k -> k.id }) }.orEmpty()
-                        provider.update(type.id, docs.values.toList(), chunk.filter { it !in docs })
+            val started = System.currentTimeMillis()
+            val written =
+                keys
+                    .groupBy { it.source }
+                    .entries
+                    .sumOf { (source, list) ->
+                        val s = stores.source(source)
+                        if (s == null) provider.update(type.id, emptyMap(), { emptyList() }, list)
+                        else sources.written(provider, type.id, s, list)
                     }
-                }
+            log.info(
+                "{}: the search index caught up with {} works written, {} documents made again, in {} ms",
+                type.id,
+                keys.size,
+                written,
+                System.currentTimeMillis() - started,
+            )
         }
     }
 
@@ -156,8 +163,5 @@ class SearchIndex(
          * times as it grows.
          */
         const val UPDATE_QUIET_MS = 2000L
-
-        /** The works indexed again at a time: memory, not meaning. */
-        const val CHUNK = 500
     }
 }

@@ -43,9 +43,12 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         )
     }
 
-    override fun update(contentType: String, documents: List<SearchDocument>, removed: Collection<ItemKey>) {
-        indexes.of(contentType).update(documents, removed)
-    }
+    override fun update(
+        contentType: String,
+        fingerprints: Map<ItemKey, Long>,
+        documents: (Collection<ItemKey>) -> List<SearchDocument>,
+        removed: Collection<ItemKey>,
+    ): Int = indexes.of(contentType).update(fingerprints, documents, removed)
 
     /**
      * What [matches] needs of a search: the line's words, the language it is read as, its vector and the passage of

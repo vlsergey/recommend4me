@@ -188,7 +188,18 @@ interface SearchProvider : NameCounting {
         documents: (Collection<ItemKey>) -> Sequence<SearchDocument>,
     ) = rebuild(contentType, documents(fingerprints.keys))
 
-    fun update(contentType: String, documents: List<SearchDocument>, removed: Collection<ItemKey>)
+    /**
+     * The items written since brought into the index: [fingerprints] tells what each one's document is made of now
+     * ([SearchDocument.fingerprint]), [documents] makes the documents of the items asked for — of a provider that keeps
+     * the fingerprints, of those whose fingerprint is not the one kept alone: a chance that moved nothing a document is
+     * made of makes none —, [removed] taken out. How many documents were written.
+     */
+    fun update(
+        contentType: String,
+        fingerprints: Map<ItemKey, Long>,
+        documents: (Collection<ItemKey>) -> List<SearchDocument>,
+        removed: Collection<ItemKey>,
+    ): Int
 
     /**
      * The items matching [line], read as a text of the [language] (ISO 639-1) — the interface's, the one it is typed

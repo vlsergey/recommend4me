@@ -62,6 +62,20 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
     }
 
     /**
+     * What the documents of the items [ids] of a source are made of ([SearchDocument.fingerprint]), their chapters and
+     * vectors not read, with the values the model gives them: the documents of those whose fingerprint changed are made
+     * of the same ([documents]).
+     */
+    fun printsOf(s: SourceStore, ids: List<String>, hierarchies: Map<String, TagHierarchy>): SourcePrints {
+        val made = suggestions.chances(s, ids)
+        val read = Read(s, ids, true, made, hierarchies)
+        return SourcePrints(read.heads.map { (id, head) -> ItemKey(s.id, id) to read.printOf(id, head) }.toMap(), made)
+    }
+
+    /** What the documents of some items of a source are made of ([prints]) and the values the model gives them. */
+    class SourcePrints(val prints: Map<ItemKey, Long>, val chances: WorkChances)
+
+    /**
      * What the documents of every item of a type are made of ([prints]) and the values the model gives the works of
      * every source ([chances]) they were made with.
      */
