@@ -69,6 +69,53 @@ class SearchWeightsTest {
         assertTrue(words > 0 && words >= (words + meaning) / 4 - 1e-9, "words $words, meaning $meaning")
         // A work of more of the line's words stands higher than one of none, by meaning alike
         assertTrue(weights.score(mapOf("meaning" to 0.5, "words" to 3.0)) > weights.score(mapOf("meaning" to 0.5)))
+        // Every feature judged against: none of them nought, the weights summing to how many they are all the same
+        val against =
+            assertNotNull(
+                SearchWeights.fit(
+                    listOf(
+                        JudgedLine(
+                            "b",
+                            listOf(
+                                mapOf("meaning" to 0.1, "words" to 0.0) to SearchFit.FITS,
+                                mapOf("meaning" to 0.9, "words" to 3.0) to SearchFit.NOT,
+                            ),
+                        )
+                    )
+                )
+            )
+        val all = against.features.values.map { it.weight }
+        assertEquals(2.0, all.sum(), 1e-9)
+        assertTrue(all.all { it >= 0.5 - 1e-9 }, "$all")
+    }
+
+    @Test
+    fun `the first of every way of finding stands at the top, whatever the weights`() {
+        val weights =
+            SearchWeights(mapOf("meaning" to FeatureWeight(10.0, 0.0, 1.0), "words" to FeatureWeight(0.01, 0.0, 1.0)))
+        val keys = (1..5).map { ItemKey("s", "$it") }
+        val found =
+            SearchResult(
+                "enf",
+                keys,
+                null,
+                features =
+                    mapOf(
+                        keys[0] to mapOf("meaning" to 0.9),
+                        keys[1] to mapOf("meaning" to 0.8),
+                        keys[2] to mapOf("meaning" to 0.7),
+                        keys[3] to mapOf("meaning" to 0.1, "words" to 1.0),
+                        keys[4] to mapOf("meaning" to 0.1, "words" to 5.0),
+                        // A way of finding no weight was learnt of: its first at the top too
+                    ) + mapOf(ItemKey("s", "6") to mapOf("name" to 2.0)),
+            )
+        val withName = SearchResult(found.line, keys + ItemKey("s", "6"), null, features = found.features)
+        val order = weights.ordered(withName).keys
+        // The first by meaning, by words, by the name, in the order of the weights; then the rest by the weights
+        assertEquals(
+            listOf(keys[0], keys[4], ItemKey("s", "6"), keys[1], keys[2], keys[3]),
+            order,
+        )
     }
 
     @Test

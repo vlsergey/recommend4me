@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.search
 
+import io.github.vlsergey.recommend4me.item.ItemKey
 import kotlin.math.exp
 import kotlin.math.sqrt
 
@@ -27,8 +28,9 @@ class JudgedLine(val line: String, val works: List<Pair<Map<String, Double>, Sea
  * NO FEATURE EVER WEIGHS NOUGHT, NOR AGAINST (user, 2026-11-14): every feature is of a work answering the line more —
  * closer by meaning, more of its words, a higher reranker's score —, and a few lines judged must not shut one out. Of
  * three lines the words weighed −0.97 and the meaning nought: a work of the line's own rare word in its title went to
- * the bottom of all. So every weight is at least half its equal share of them all: of n features, w = u + Σu / n with
- * every u ≥ 0 ([descend]) — the least a weight may be is 1 / 2n of their sum, what the judgments say only above it.
+ * the bottom of all. So the weights of n features sum to n, and every one is at least half its equal share, 1/2
+ * ([descend]): the judgments say how the rest, n/2, is shared, never that a way of finding counts for nothing — nor
+ * that all of them do, the sum itself let go to nought (as the first try let it, 2026-11-14).
  */
 class SearchWeights(val features: Map<String, FeatureWeight>) {
 
@@ -36,16 +38,39 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
     fun score(features: Map<String, Double>): Double =
         this.features.entries.sumOf { (name, f) -> f.weight * ((features[name] ?: 0.0) - f.mean) / f.scale }
 
-    /** What was [found], in the order the weights make: of works weighed alike, the order found. */
-    fun ordered(found: SearchResult): SearchResult =
-        SearchResult(
+    /**
+     * What was [found], in the order the weights make — of works weighed alike, the order found —, the first of every
+     * way of finding first of all ([leaders]).
+     */
+    fun ordered(found: SearchResult): SearchResult {
+        val byScore = found.keys.sortedByDescending { score(found.features[it].orEmpty()) }
+        val leaders = leaders(found).toSet()
+        return SearchResult(
             found.line,
-            found.keys.sortedByDescending { score(found.features[it].orEmpty()) },
+            byScore.filter { it in leaders } + byScore.filter { it !in leaders },
             found.state,
             found.nearest,
             found.prints,
             found.features,
         )
+    }
+
+    /**
+     * THE FIRST OF EVERY WAY OF FINDING (user, 2026-11-14): of every feature any work found has — its closeness by
+     * meaning, its words, the line in its name, the reranker's score — the work of the most of it. Whatever the
+     * weights, every way the search finds by shows its best at the top: the works of the line's own word in their
+     * titles are seen however much the meaning weighs.
+     */
+    private fun leaders(found: SearchResult): List<ItemKey> =
+        found.keys
+            .flatMap { found.features[it].orEmpty().keys }
+            .distinct()
+            .mapNotNull { feature ->
+                found.keys
+                    .filter { feature in found.features[it].orEmpty() }
+                    .maxByOrNull { found.features.getValue(it).getValue(feature) }
+            }
+            .distinct()
 
     companion object {
         /**
@@ -88,15 +113,14 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
 
         /**
          * The weights of the logistic model of the [pairs], the first of each above the second, by gradient descent:
-         * the mean loss over the lines with [L2] of the weights. The weights are w = u + Σu / n of u ≥ 0 — each at
-         * least half its equal share —, the descent going along u and every u below nought put back to it.
+         * the mean loss over the lines with [L2] of the weights. The weights are w = 1/2 + v, v ≥ 0 summing to n/2 — of
+         * n features, each at least half its equal share, all of them summing to n —: every step of v put back on that
+         * simplex ([onSimplex]).
          */
         private fun descend(pairs: List<Above>, size: Int): DoubleArray {
-            val u = DoubleArray(size) { 1.0 }
-            fun weights(): DoubleArray {
-                val share = u.sum() / size
-                return DoubleArray(size) { u[it] + share }
-            }
+            val free = size * FREE_SHARE
+            var v = DoubleArray(size) { FREE_SHARE }
+            fun weights() = DoubleArray(size) { 1 - FREE_SHARE + v[it] }
             val total = pairs.sumOf { it.weight }
             repeat(STEPS) {
                 val w = weights()
@@ -108,11 +132,25 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
                     val g = -p.weight / total / (1 + exp(dot))
                     for (j in 0 until size) grad[j] += g * p.difference[j]
                 }
-                // Along u: every u moves its own weight and, by Σu / n, every weight alike
-                val shared = grad.sum() / size
-                for (j in 0 until size) u[j] = (u[j] - RATE * (grad[j] + shared)).coerceAtLeast(0.0)
+                v = onSimplex(DoubleArray(size) { v[it] - RATE * grad[it] }, free)
             }
             return weights()
+        }
+
+        /**
+         * The point nearest to [y] of every v ≥ 0 summing to [sum] (Duchi, Shalev-Shwartz, Singer, Chandra, 2008): y
+         * less the one θ that leaves the sum, below nought put at it.
+         */
+        private fun onSimplex(y: DoubleArray, sum: Double): DoubleArray {
+            val sorted = y.sortedDescending()
+            var running = 0.0
+            var theta = 0.0
+            sorted.forEachIndexed { k, x ->
+                running += x
+                val t = (running - sum) / (k + 1)
+                if (x - t > 0) theta = t
+            }
+            return DoubleArray(y.size) { (y[it] - theta).coerceAtLeast(0.0) }
         }
 
         /**
@@ -127,7 +165,10 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
         /** How far a step goes along the gradient. */
         private const val RATE = 0.5
 
-        /** The pull of the weights toward none: a few lines judged tell no feature's weight sure. */
+        /** The pull of the weights toward alike: a few lines judged tell no feature's weight sure. */
         private const val L2 = 0.05
+
+        /** The share of a feature's weight the judgments may move: half; the other half every feature keeps. */
+        private const val FREE_SHARE = 0.5
     }
 }
