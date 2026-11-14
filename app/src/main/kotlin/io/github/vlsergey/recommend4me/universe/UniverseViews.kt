@@ -170,10 +170,10 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
      * The universes alike [value], the likest first, at most [limit]: of the meaning of the names of their sites'
      * fandoms — a name as the search encodes short texts, kept by its source ([FandomVectors]), a universe alike by the
      * best cosine of a name of each — alike the text [query] instead when one is given; a universe bound to an entry
-     * this one is bound to, alike wholly. Each with what the user said it is to this one, and what its sites say its
-     * fandoms are of. Null of no such universe.
+     * this one is bound to, alike wholly. Only those the [filter] lets, by what the user said each is to this one; each
+     * with that word, and what its sites say its fandoms are of. Null of no such universe.
      */
-    fun similar(value: String, query: String?, limit: Int): List<SimilarUniverse>? {
+    fun similar(value: String, query: String?, filter: SimilarFilter, limit: Int): List<SimilarUniverse>? {
         val r = Reading()
         val id = FandomRepository.idOf(value)?.takeIf { it in r.dictionary.fandoms } ?: return null
         val vectors = vectorsOf(r)
@@ -191,7 +191,7 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
         val relation = relationTo(r.universes.fandoms, r.dictionary, id)
         val alike =
             r.dictionary.fandoms.keys
-                .filter { it != id }
+                .filter { it != id && filter.lets(relation(it)) }
                 .map { other ->
                     val shared = asked == null && r.dictionary.entriesOf(other).any { it in own }
                     val likeness =
@@ -200,7 +200,7 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
                     other to likeness
                 }
                 .sortedWith(compareByDescending<Pair<Long, Double>> { it.second }.thenBy { it.first })
-                .take(limit.coerceIn(1, MAX_SIMILAR))
+                .take(limit.coerceAtLeast(1))
         val said = r.descriptions(alike.flatMap { r.dictionary.sitesOf(it.first) })
         return alike.map { (other, likeness) ->
             val sites = r.sitesOf(other, said)
@@ -245,10 +245,5 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
                 else -> UniverseRelation.NONE
             }
         }
-    }
-
-    private companion object {
-        /** The most universes offered as alike at once. */
-        const val MAX_SIMILAR = 200
     }
 }

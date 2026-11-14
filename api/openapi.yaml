@@ -1751,8 +1751,21 @@ paths:
           description: A text the universes are to be alike by meaning, in place of the universe's names
           schema:
             type: string
+        - name: hierarchy
+          in: query
+          description: |
+            Only those in the universe's hierarchy (true) - under or above it, directly or through others - or only
+            those not in it (false); either when not given
+          schema:
+            type: boolean
+        - name: different
+          in: query
+          description: Only those the user said are a different universe (true), or only those not said so (false); either when not given
+          schema:
+            type: boolean
         - name: limit
           in: query
+          description: How many of the likest; more of them read by a larger one
           schema:
             type: integer
             default: 30

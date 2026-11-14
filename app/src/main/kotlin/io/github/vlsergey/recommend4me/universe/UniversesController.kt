@@ -62,10 +62,13 @@ class UniversesController(
     override fun listSimilarUniverses(
         universe: String,
         query: String?,
+        hierarchy: Boolean?,
+        different: Boolean?,
         limit: Int,
     ): ResponseEntity<List<SimilarUniverse>> {
         stores.withUniverses()
-        return ResponseEntity.ok(views.similar(universe, query, limit) ?: throw noSuchUniverse(universe))
+        val similar = views.similar(universe, query, SimilarFilter(hierarchy, different), limit)
+        return ResponseEntity.ok(similar ?: throw noSuchUniverse(universe))
     }
 
     /** The universe [value] as it is now; 404 of no such universe. */
