@@ -20,7 +20,11 @@ import org.springframework.stereotype.Component
  * one ([similar]). Every part read once for the asking ([Reading]).
  */
 @Component
-class UniverseViews(private val stores: Stores, private val phrases: PhraseVectors) {
+class UniverseViews(
+    private val stores: Stores,
+    private val phrases: PhraseVectors,
+    private val nameVectors: FandomNameVectors,
+) {
 
     /** What one asking reads: the dictionary, and of every source with fandoms its fandoms' names and works. */
     private inner class Reading {
@@ -168,15 +172,19 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
 
     /**
      * The universes alike [value], the likest first, at most [limit]: of the meaning of the names of their sites'
-     * fandoms — a name as the search encodes short texts, kept by its source ([FandomVectors]), a universe alike by the
-     * best cosine of a name of each — alike the text [query] instead when one is given; a universe bound to an entry
-     * this one is bound to, alike wholly. Only those the [filter] lets, by what the user said each is to this one; each
-     * with that word, and what its sites say its fandoms are of. Null of no such universe.
+     * fandoms — a name as the search encodes short texts, kept by its source ([FandomNameVectors]), a universe alike by
+     * the best cosine of a name of each, the cosine as the user's word on the universes taught it ([FandomLikeness]) —
+     * alike the text [query] instead when one is given; a universe bound to an entry this one is bound to, alike
+     * wholly. Only those the [filter] lets, by what the user said each is to this one; each with that word, and what
+     * its sites say its fandoms are of. Null of no such universe.
      */
     fun similar(value: String, query: String?, filter: SimilarFilter, limit: Int): List<SimilarUniverse>? {
         val r = Reading()
         val id = FandomRepository.idOf(value)?.takeIf { it in r.dictionary.fandoms } ?: return null
-        val vectors = vectorsOf(r)
+        // The likeness of the names as the user's word on the universes taught it, the encoder's own of no word
+        val learnt = stores.withUniverses().first().fandomLikeness.find()
+        val ready = { v: FloatArray -> learnt?.of(v) ?: v }
+        val vectors = nameVectors.of(r.sites.map { it.store to it.names }).mapValues { ready(it.value) }
         val asked = query?.trim()?.takeIf { it.isNotEmpty() }
         val target =
             if (asked == null) r.dictionary.sitesOf(id).mapNotNull { vectors[it] }
@@ -185,6 +193,7 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
                     .firstOrNull()
                     ?.let { phrases.of(it.store, listOf(asked))[asked] }
                     ?.let(TagVectors::unit)
+                    ?.let(ready)
                     ?.let(::listOf)
                     .orEmpty()
         val own = r.dictionary.entriesOf(id).toSet()
@@ -213,19 +222,6 @@ class UniverseViews(private val stores: Stores, private val phrases: PhraseVecto
                 relation = relation(other),
             )
         }
-    }
-
-    /** The vector of every site's fandom's name its source keeps, of unit length; none of a name not encoded yet. */
-    private fun vectorsOf(r: Reading): Map<SiteFandomRef, FloatArray> {
-        val out = HashMap<SiteFandomRef, FloatArray>()
-        r.sites.forEach { s ->
-            val written = s.names.mapValues { it.value.trim() }.filterValues { it.isNotEmpty() }
-            val kept = phrases.cached(s.store, written.values)
-            written.forEach { (key, name) ->
-                kept[name]?.let(TagVectors::unit)?.let { out[SiteFandomRef(s.store.id, key)] = it }
-            }
-        }
-        return out
     }
 
     /** What the user said every other universe is to [id]. */

@@ -383,7 +383,12 @@ under the one it leaves (a part of a franchise) — puts one under another — a
 child is of the parent too — tells two apart, names one. The screen of the universes offers the
 universes alike one by the meaning of their sites' fandoms' names (the names encoded as the search
 encodes short texts, kept by their sources, made in the background: `FandomVectors`) and those bound
-to the same entry; it merges nothing by itself. Every site's fandom on it, on the card and among the
+to the same entry; it merges nothing by itself. The likeness of two names is learnt of the user's
+word on the universes (`FandomLikeness`, `fandom_likeness`): a weight of every dimension of the
+names' vectors, so that two names of one universe — the sites' fandoms the user bound together —
+and of a universe and one under or above it are nearer than a name of another, the names of two
+universes said different the farthest; learnt again in the queue after every word, and told how
+right it is on the universes held out of it beside the encoder's own. Every site's fandom on it, on the card and among the
 alike, stands with what its site says it is of — the source's `facet_value_description` of the
 fandom: ficbook's heading of a fandom's page, "Rowling Joanne «Harry Potter» / Серия книг, 1997 -
 2007"; fanfics.me's line under a fandom's name, on its pages and in the rating of the fandoms. A

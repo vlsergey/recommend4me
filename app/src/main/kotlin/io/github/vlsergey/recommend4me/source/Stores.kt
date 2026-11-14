@@ -48,6 +48,7 @@ import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tagtext.TagTextAnswerRepository
 import io.github.vlsergey.recommend4me.textvector.TextVectorRepository
+import io.github.vlsergey.recommend4me.universe.FandomLikenessRepository
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacetDefs
 import io.github.vlsergey.recommend4me.universe.UniverseNames
@@ -321,6 +322,9 @@ class TypeStore(
 
     /** The manners of the type's normalized authors and series. */
     val groupManners = GroupMannerRepository(databases.model(type.id))
+
+    /** The likeness of the names of the sites' fandoms learnt of the user's word on the universes. */
+    val fandomLikeness = FandomLikenessRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))

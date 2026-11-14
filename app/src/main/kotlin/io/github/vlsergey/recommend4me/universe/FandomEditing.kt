@@ -150,5 +150,6 @@ class FandomEditing(
     private fun changed(renamed: List<Long>) {
         if (renamed.isNotEmpty()) normalization.rename(renamed.filter { dictionary().fandoms.exists(it) })
         sources().forEach { events.publishEvent(ItemsChanged(it.id, emptyList())) }
+        events.publishEvent(UniversesRelated)
     }
 }
