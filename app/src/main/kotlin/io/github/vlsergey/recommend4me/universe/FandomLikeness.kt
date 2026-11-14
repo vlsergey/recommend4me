@@ -156,9 +156,13 @@ class FandomLikeness(val weights: FloatArray) {
                 val kin = related[u].orEmpty()
                 val apart = different[u].orEmpty()
                 val made = ArrayList<Triple<FloatArray, FloatArray, FloatArray>>()
-                own.forEachIndexed { i, anchor ->
-                    val near = own.filterIndexed { j, _ -> j != i } + kin.flatMap { names[it].orEmpty() }
-                    if (near.isEmpty()) return@forEachIndexed
+                // Of a universe of many names and many kin — a franchise — a few of each drawn: every universe weighs
+                // alike all the same, and the pairs stay few enough to learn of in seconds
+                drawn(own.indices.toList(), ANCHORS, draw).forEach { i ->
+                    val anchor = own[i]
+                    val all = own.filterIndexed { j, _ -> j != i } + kin.flatMap { names[it].orEmpty() }
+                    if (all.isEmpty()) return@forEach
+                    val near = drawn(all, NEAR, draw)
                     val far =
                         apart.flatMap { names[it].orEmpty() } +
                             List(random) { universes[draw.nextInt(universes.size)] }
@@ -170,6 +174,10 @@ class FandomLikeness(val weights: FloatArray) {
             }
             return out
         }
+
+        /** [n] of the [items] drawn of [draw], all of them when no more. */
+        private fun <T> drawn(items: List<T>, n: Int, draw: Random): List<T> =
+            if (items.size <= n) items else items.shuffled(draw).take(n)
 
         /** Adam, of the gradients of the weights: steps of about [RATE] whatever their scale. */
         private class Adam(dim: Int) {
@@ -206,6 +214,12 @@ class FandomLikeness(val weights: FloatArray) {
 
         /** How many other universes a name of one is set below a name of its own: drawn at random. */
         const val RANDOM_FAR = 4
+
+        /** The names of a universe a pair is made of at most: drawn of them. */
+        private const val ANCHORS = 3
+
+        /** The names of a universe and its kin a name is set nearer to at most: drawn of them. */
+        private const val NEAR = 2
 
         /** The least length of a product of two weighed lengths divided by. */
         private const val LEAST = 1e-12
