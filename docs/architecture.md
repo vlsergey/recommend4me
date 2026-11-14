@@ -388,7 +388,13 @@ word on the universes (`FandomLikeness`, `fandom_likeness`): a weight of every d
 names' vectors, so that two names of one universe — the sites' fandoms the user bound together —
 and of a universe and one under or above it are nearer than a name of another, the names of two
 universes said different the farthest; learnt again in the queue after every word, and told how
-right it is on the universes held out of it beside the encoder's own. Every site's fandom on it, on the card and among the
+right it is on the universes held out of it beside the encoder's own. A site's description of its
+fandom is a synonym of the name: one more name of the universe. The names' and the descriptions'
+vectors are read as they are kept — half precision, into one block off the heap (`FandomRows`) —,
+the pairs laid out flat by their anchor (`NamePairs`), and the learning runs on the card by kernels
+of its own (`FandomLikenessOnCard`, `likeness.cu`): sent once, every step there, the weights alone
+brought back — 2.3 million pairs, 100 steps, in a tenth of a second; on the processor where there is
+no card (`FandomLikenessDescent`), alike within the last digits. Every site's fandom on it, on the card and among the
 alike, stands with what its site says it is of — the source's `facet_value_description` of the
 fandom: ficbook's heading of a fandom's page, "Rowling Joanne «Harry Potter» / Серия книг, 1997 -
 2007"; fanfics.me's line under a fandom's name, on its pages and in the rating of the fandoms. A

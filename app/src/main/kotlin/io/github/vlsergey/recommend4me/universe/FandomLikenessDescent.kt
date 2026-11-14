@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
-import java.util.IdentityHashMap
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import java.util.stream.IntStream
 import kotlin.math.exp
 import kotlin.math.pow
@@ -22,55 +22,21 @@ private val log = LoggerFactory.getLogger(FandomLikenessDescent::class.java)
  * candidate, Σ (number) y once a candidate and times a once an anchor; those of a² and y² a number a name, added once a
  * name. The anchors cut among the processors, each part its own sums, added after.
  *
- * On the processor, in its threads: the vectors in single precision, as the encoder gives them, the sums and the
- * weights in double.
+ * On the processor, in its threads, where there is no card ([FandomLikenessOnCard]): the vectors in single precision,
+ * the sums and the weights in double.
  */
-internal class FandomLikenessDescent(pairs: List<NamePair>) {
-    private val names = ArrayList<FloatArray>()
-    private val dim = pairs.first().anchor.size
+internal class FandomLikenessDescent(pairs: NamePairs, rows: HalfMatrix) {
+    private val dim = rows.cols
 
-    /** Every anchor's name, and where its candidates and its pairs start in [candidates] and the pairs' arrays. */
-    private val anchors: IntArray
-    private val candidateStart: IntArray
-    private val pairStart: IntArray
-
-    /** The names every anchor is set nearer or farther than, an anchor's together: name indices. */
-    private val candidates: IntArray
-
-    /** Of every pair, its near and far candidate — places in [candidates] — and its weight, an anchor's together. */
-    private val near: IntArray
-    private val far: IntArray
-    private val weight: DoubleArray
-
-    init {
-        val index = IdentityHashMap<FloatArray, Int>()
-        fun of(v: FloatArray) = index.getOrPut(v) { names.size.also { names += v } }
-        val total = pairs.sumOf { it.weight }
-        val byAnchor = pairs.groupBy { of(it.anchor) }
-        anchors = byAnchor.keys.toIntArray()
-        candidateStart = IntArray(anchors.size + 1)
-        pairStart = IntArray(anchors.size + 1)
-        val cand = ArrayList<Int>()
-        near = IntArray(pairs.size)
-        far = IntArray(pairs.size)
-        weight = DoubleArray(pairs.size)
-        var p = 0
-        anchors.forEachIndexed { i, a ->
-            candidateStart[i] = cand.size
-            pairStart[i] = p
-            val slot = HashMap<Int, Int>()
-            fun place(v: FloatArray) = slot.getOrPut(of(v)) { cand.size.also { cand += of(v) } }
-            byAnchor.getValue(a).forEach { pair ->
-                near[p] = place(pair.near)
-                far[p] = place(pair.far)
-                weight[p] = pair.weight / total
-                p++
-            }
-        }
-        candidateStart[anchors.size] = cand.size
-        pairStart[anchors.size] = p
-        candidates = cand.toIntArray()
-    }
+    /** Every row of the names, single precision for the processor's sums: read once. */
+    private val names: List<FloatArray> = List(rows.rows) { i -> FloatArray(dim).also { rows.take(i, it) } }
+    private val anchors = pairs.anchors
+    private val candidateStart = pairs.candidateStart
+    private val candidates = pairs.candidates
+    private val pairStart = pairs.pairStart
+    private val near = pairs.near
+    private val far = pairs.far
+    private val weight = pairs.weight
 
     /** How long each part of the steps took, summed over them: nanoseconds. */
     private var weighing = 0L
@@ -115,6 +81,31 @@ internal class FandomLikenessDescent(pairs: List<NamePair>) {
             stepped / NANOS,
         )
         return FloatArray(dim) { w[it].toFloat() }
+    }
+
+    /** The share of the pairs the weights [w] put in the user's order: of each, the near the closer. */
+    fun ordered(w: FloatArray): Double {
+        val c = DoubleArray(names.size)
+        val weighed = names.map { y -> FloatArray(dim) { w[it] * y[it] } }
+        names.indices.forEach { j -> c[j] = (0 until dim).sumOf { (weighed[j][it] * names[j][it]).toDouble() } }
+        return IntStream.range(0, anchors.size)
+            .parallel()
+            .mapToDouble { i ->
+                val wa = weighed[anchors[i]]
+                val from = candidateStart[i]
+                val cosine =
+                    DoubleArray(candidateStart[i + 1] - from) { j ->
+                        val name = candidates[from + j]
+                        val y = names[name]
+                        var s = 0.0
+                        for (k in 0 until dim) s += wa[k] * y[k]
+                        s / sqrt((c[anchors[i]] * c[name]).coerceAtLeast(LEAST))
+                    }
+                (pairStart[i] until pairStart[i + 1]).sumOf { p ->
+                    if (cosine[near[p] - from] > cosine[far[p] - from]) weight[p].toDouble() else 0.0
+                }
+            }
+            .sum()
     }
 
     /** The gradient of the mean loss of the pairs along the weights [w]. */
@@ -222,29 +213,29 @@ internal class FandomLikenessDescent(pairs: List<NamePair>) {
         }
     }
 
-    private companion object {
+    companion object {
         /** The steps of the descent. */
-        const val STEPS = 100
+        internal const val STEPS = 100
 
         /** How far a step of Adam goes. */
-        const val RATE = 0.02
-        const val BETA1 = 0.9
-        const val BETA2 = 0.999
-        const val EPSILON = 1e-8
+        internal const val RATE = 0.02
+        internal const val BETA1 = 0.9
+        internal const val BETA2 = 0.999
+        internal const val EPSILON = 1e-8
 
         /** The pull of the weights toward 1, the encoder's likeness: a few hundred universes tell no dimension sure. */
-        const val L2 = 0.01
+        internal const val L2 = 0.01
 
         /** The scale of the cosines' difference: the cosines of two names differ by tenths. */
-        const val TEMPERATURE = 0.1
+        internal const val TEMPERATURE = 0.1
 
         /** The parts of the anchors a processor takes in turn: of uneven anchors, none waits for one long part. */
-        const val PARTS_A_PROCESSOR = 4
+        private const val PARTS_A_PROCESSOR = 4
 
         /** Nanoseconds to a millisecond. */
-        const val NANOS = 1_000_000L
+        private const val NANOS = 1_000_000L
 
         /** The least weighed square length of a name divided by. */
-        const val LEAST = 1e-12
+        private const val LEAST = 1e-12
     }
 }

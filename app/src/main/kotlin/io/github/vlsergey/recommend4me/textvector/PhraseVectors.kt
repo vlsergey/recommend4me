@@ -41,6 +41,17 @@ class PhraseVectors(private val plugins: Plugins) {
         return keyed.mapNotNull { (key, text) -> vectors[key]?.let { text to it } }.toMap()
     }
 
+    /**
+     * [cached] as kept — half precision, two bytes a number — for a reader that keeps them so: copied as they are,
+     * never made single precision on the way.
+     */
+    fun cachedHalves(store: SourceStore, texts: Collection<String>): Map<String, ByteArray> {
+        val encoder = encoder() ?: return emptyMap()
+        val keyed = texts.distinct().associateBy(Vectors::keyOf)
+        val vectors = store.textVectors.phrases.halves(keyed.keys, encoder.id)
+        return keyed.mapNotNull { (key, text) -> vectors[key]?.let { text to it } }.toMap()
+    }
+
     /** The texts that have no vector kept yet, nothing read of those that have; none without an encoder. */
     fun missing(store: SourceStore, texts: Collection<String>, encoder: TextEncoder? = encoder()): List<String> {
         encoder ?: return emptyList()

@@ -17,14 +17,21 @@ class PhraseVectorRepository(private val db: DSLContext, private val writing: Re
      * The stored vectors by [encoder] of the texts whose keys are given. Of many, the encoder's whole in one streamed
      * pass, those asked for kept: a thousand keys at a time each read the table through in H2.
      */
-    fun phrases(keys: Collection<Long>, encoder: String): Map<Long, FloatArray> {
+    fun phrases(keys: Collection<Long>, encoder: String): Map<Long, FloatArray> =
+        halves(keys, encoder).mapValues { Vectors.fromHalf(it.value) }
+
+    /**
+     * [phrases] as they are kept: half precision, two bytes a number, little-endian — what a reader that keeps them so
+     * ([io.github.vlsergey.recommend4me.matrix.HalfMatrix]) copies as they are.
+     */
+    fun halves(keys: Collection<Long>, encoder: String): Map<Long, ByteArray> {
         val asked = keys.toHashSet()
-        val out = HashMap<Long, FloatArray>()
+        val out = HashMap<Long, ByteArray>()
         if (asked.size <= TextVectorRepository.BATCH)
             db.select(PHRASE_VECTOR.TEXT_KEY, PHRASE_VECTOR.VEC)
                 .from(PHRASE_VECTOR)
                 .where(PHRASE_VECTOR.TEXT_KEY.`in`(asked), PHRASE_VECTOR.ENCODER.eq(encoder))
-                .fetch { out[it.value1()!!] = Vectors.fromHalf(it.value2()!!) }
+                .fetch { out[it.value1()!!] = it.value2()!! }
         else
             db.select(PHRASE_VECTOR.TEXT_KEY, PHRASE_VECTOR.VEC)
                 .from(PHRASE_VECTOR)
@@ -34,7 +41,7 @@ class PhraseVectorRepository(private val db: DSLContext, private val writing: Re
                 .use { cursor ->
                     cursor.forEach { r ->
                         val key = r.value1()!!
-                        if (key in asked) out[key] = Vectors.fromHalf(r.value2()!!)
+                        if (key in asked) out[key] = r.value2()!!
                     }
                 }
         return out
