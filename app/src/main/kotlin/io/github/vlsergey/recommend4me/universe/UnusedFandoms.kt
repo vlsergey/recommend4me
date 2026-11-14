@@ -14,8 +14,9 @@ private val log = LoggerFactory.getLogger(UnusedFandoms::class.java)
  * A SITE'S FANDOM NO WORK OF ITS SITE HAS ANY MORE (user, 2026-11-14) — a key the site's pages gave up for another, a
  * part of a name a line was cut at wrong:
  * - goes with its universe when the two are one to one: the universe of no other site's fandom and of no entry of a
- *   catalogue (Wikidata). Never a universe the user said anything of: named it, put it under or above another, told it
- *   apart, read its characters, answered a work with it;
+ *   catalogue (Wikidata) — two keys of one site of one name, both of no works, one fandom seen ("Mandy" and
+ *   "book/Mandy"). Never a universe the user said anything of: named it, put it under or above another, told it apart,
+ *   read its characters, answered a work with it;
  * - goes alone, its universe staying, when the universe has another fandom of the same site of the same name that works
  *   have: the one the works have now ("Supergirl" and "tv/Supergirl" of fanfiction.net — two of one seen).
  *
@@ -46,25 +47,27 @@ class UnusedFandoms(private val stores: Stores) {
         val seen = Seen.of(sources, bindings.keys)
         val byUniverse = bindings.entries.groupBy({ it.value }, { it.key })
         val kept = said(fandoms) + answered(sources) + fandoms.entries.all().keys
-        val alone =
-            byUniverse
-                .mapNotNull { (id, refs) -> refs.singleOrNull()?.let { id to it } }
-                .filter { (id, ref) -> ref in seen.unused && id !in kept }
+        val alone = byUniverse.filter { (id, refs) ->
+            id !in kept && refs.all { it in seen.unused } && seen.oneFandom(refs)
+        }
         val twins = byUniverse.values.flatMap { refs -> refs.filter { seen.twin(it, refs) } }
         if (alone.isEmpty() && twins.isEmpty()) return 0
         fandoms.transaction { f ->
-            alone.forEach { (id, ref) ->
-                f.sites.unbind(ref)
+            alone.forEach { (id, refs) ->
+                refs.forEach(f.sites::unbind)
                 f.drop(id)
             }
             twins.forEach(f.sites::unbind)
         }
         log.info("Sites' fandoms no work has gone with their universes: {}; gone alone, of a twin: {}", alone, twins)
-        return alone.size + twins.size
+        return alone.values.sumOf { it.size } + twins.size
     }
 
     /** Of the sites' fandoms, those no work has, and the name each is shown by, alike of any case. */
     private class Seen(val unused: Set<SiteFandomRef>, val names: Map<SiteFandomRef, String>) {
+        /** Whether [refs] are one fandom seen: of one site, of one name. */
+        fun oneFandom(refs: List<SiteFandomRef>): Boolean = refs.map { it.source to names[it] }.distinct().size == 1
+
         /** Whether [ref], of no works, has a fandom of its site of its name among [refs] that works have. */
         fun twin(ref: SiteFandomRef, refs: List<SiteFandomRef>): Boolean =
             ref in unused && refs.any { it !in unused && it.source == ref.source && names[it] == names[ref] }

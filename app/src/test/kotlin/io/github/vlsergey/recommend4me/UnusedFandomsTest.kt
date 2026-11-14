@@ -29,6 +29,8 @@ class UnusedFandomsTest : SiteTestBase() {
         capture("f3|Dolor|magic|Dolor||x3|shared-too:Adipiscing")
         capture("f4|Sit|magic|Sit||x4|named:Sit Amet")
         capture("f5|Amet|magic|Amet||x5|twin:Elit")
+        capture("f6|Elit|magic|Elit||x6|pair:Sed Do")
+        capture("f6|Elit|magic|Elit||x6|section/pair:Sed Do")
         val fandoms = stores.type("books")!!.universes.fandoms
         fun universeOf(key: String) = fandoms.sites.fandomOf(SiteFandomRef("site", key))
         val alone = universeOf("alone")!!
@@ -42,13 +44,20 @@ class UnusedFandomsTest : SiteTestBase() {
         capture("f1|Lorem|magic|Lorem||x1|other:Consectetur")
         capture("f2|Ipsum|magic|Ipsum||x2|other:Consectetur")
         capture("f4|Sit|magic|Sit||x4|other:Consectetur")
+        capture("f6|Elit|magic|Elit||x6|other:Consectetur")
         // A work's fandom given another key of the same name: of the same universe, the old key's twin
         capture("f5|Amet|magic|Amet||x5|section/twin:Elit")
         val twin = universeOf("twin")!!
+        val pair = universeOf("pair")!!
+        assertEquals(pair, universeOf("section/pair"))
         assertEquals(twin, universeOf("section/twin"))
 
-        assertEquals(2, unused.letGo())
+        assertEquals(4, unused.letGo())
         assertNull(universeOf("alone"))
+        // Two keys of one name of no works, the universe's only: one fandom, gone with it
+        assertNull(universeOf("pair"))
+        assertNull(universeOf("section/pair"))
+        assertTrue(universes.listUniverses().body!!.none { it.value == pair.toString() })
         // The twin of no works gone alone, the universe staying with the key the work has
         assertNull(universeOf("twin"))
         assertEquals(twin, universeOf("section/twin"))
