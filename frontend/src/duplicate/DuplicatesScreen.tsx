@@ -45,6 +45,9 @@ const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE"
 /** The sorts whose order says nothing of the work, or is a chance shown already: no priority shown. */
 const NO_PRIORITY: DuplicateSort[] = ["SERIES", "UNCERTAIN", "UNCERTAIN_SERIES"];
 
+/** The sorts of the pairs asked whether they are two works of one series. */
+const SERIES_SORTS: DuplicateSort[] = ["SERIES", "UNCERTAIN_SERIES"];
+
 /** The answer of a pair the list is chosen by: a word, or none ("NONE"). */
 type Shown = Verdict | "NONE";
 
@@ -379,7 +382,8 @@ function PairRow({
           </AsyncButton>
         </div>
       </div>
-      <PairGrid pair={p} />
+      {/* Of the pairs asked whether they are of one series, the site no colour ([PairGrid]) */}
+      <PairGrid pair={p} ofSeries={SERIES_SORTS.includes(sort)} />
     </li>
   );
 }

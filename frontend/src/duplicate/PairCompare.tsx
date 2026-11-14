@@ -8,7 +8,7 @@ import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
-import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sameTextVerdict, sameValueVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
+import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, lineVerdict, sameTextVerdict, sameValueVerdict, siteVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
@@ -52,6 +52,9 @@ const UNIVERSE = "universe";
 /** The normalized authors, compared apart: the row of the authors tells them. */
 const AUTHOR = "author";
 
+/** The facets of what a work is of, made of the site's own line of its characters and pairings: the line stands after them. */
+const OF_THE_LINE = [UNIVERSE, "characters", "pairings"];
+
 /** A row of the grid: its field, how alike the two are of it, the two values, folded or not. */
 interface Row {
   key: string;
@@ -64,18 +67,62 @@ interface Row {
 }
 
 /**
- * THE TWO WORKS FIELD BY FIELD: a row a field — the title, the authors, every facet either has, the size,
- * the description — the first work's on the left, the second's on the right, and between them the field's
+ * THE TWO WORKS FIELD BY FIELD: a row a field — the site, the title, the authors, every facet either has, the
+ * site's own line of the characters and pairings after the facets of them, the size, the description — the
+ * first work's on the left, the second's on the right, and between them the field's
  * name and how alike the two are, in its colour ([FieldVerdict]), on one line: read across, the left, the
  * verdict, the right. The fields of one work alone — nothing to compare — stand below the rest, under a line
  * of their own: told, not in the way of what is compared. On a narrow screen the name and the verdict stand
- * over the row, the two under them side by side.
+ * over the row, the two under them side by side. Of a pair asked whether it is of one series ([ofSeries]), the
+ * site says nothing: no colour of it.
  */
-export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
+export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; ofSeries?: boolean }) {
   const { t } = useTranslation("duplicate");
   const a = p.first;
   const b = p.second;
+  const facets = facetKeys(p).map((key): Row => {
+    const left = a.facets.find((f) => f.key === key);
+    const right = b.facets.find((f) => f.key === key);
+    const compared = p.facets?.find((f) => f.key === key);
+    const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
+    return {
+      key,
+      // Of the universes of no work, the site's fandoms alone: named as they are
+      name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
+      // Of the values a work may have one of, whether they meet; of a facet of one value — a status, a kind —,
+      // whether it is the same; of the values as the works' screens give them (the window of one pair), how many
+      // they share; of any other, how alike by the layers of the pair
+      verdict:
+        left?.allowed || right?.allowed
+          ? allowedVerdict(left?.values ?? [], right?.values ?? [])
+          : left?.single || right?.single
+            ? sameValueVerdict(left?.values ?? [], right?.values ?? [])
+            : compared && !left?.computed && !right?.computed
+              ? facetVerdict(compared.value)
+              : valuesVerdict(left?.values ?? [], right?.values ?? []),
+      left: valuesOf(left, key === UNIVERSE ? a.fandoms : []),
+      right: valuesOf(right, key === UNIVERSE ? b.fandoms : []),
+      lines: "line-clamp-2",
+    };
+  });
+  // The site's line of the characters and pairings, after the facets made of it
+  const lineAt = facets.reduce((at, r, i) => (OF_THE_LINE.includes(r.key) ? i + 1 : at), 0);
+  facets.splice(lineAt, 0, {
+    key: "universeLine",
+    name: t("PairGrid.universeLine"),
+    verdict: lineVerdict(a.universeLine, b.universeLine),
+    left: a.universeLine,
+    right: b.universeLine,
+    lines: "line-clamp-2",
+  });
   const rows: Row[] = [
+    {
+      key: "site",
+      name: t("PairGrid.site"),
+      verdict: siteVerdict(a.source, b.source, ofSeries),
+      left: <span title={sourceTitle(a.source)}>{sourceShort(a.source)}</span>,
+      right: <span title={sourceTitle(b.source)}>{sourceShort(b.source)}</span>,
+    },
     {
       key: "title",
       name: t("PairGrid.title"),
@@ -91,31 +138,7 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
       left: a.authors.length > 0 ? a.authors.join(", ") : null,
       right: b.authors.length > 0 ? b.authors.join(", ") : null,
     },
-    ...facetKeys(p).map((key): Row => {
-      const left = a.facets.find((f) => f.key === key);
-      const right = b.facets.find((f) => f.key === key);
-      const compared = p.facets?.find((f) => f.key === key);
-      const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
-      return {
-        key,
-        // Of the universes of no work, the site's fandoms alone: named as they are
-        name: labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
-        // Of the values a work may have one of, whether they meet; of a facet of one value — a status, a kind —,
-        // whether it is the same; of the values as the works' screens give them (the window of one pair), how many
-        // they share; of any other, how alike by the layers of the pair
-        verdict:
-          left?.allowed || right?.allowed
-            ? allowedVerdict(left?.values ?? [], right?.values ?? [])
-            : left?.single || right?.single
-              ? sameValueVerdict(left?.values ?? [], right?.values ?? [])
-              : compared && !left?.computed && !right?.computed
-                ? facetVerdict(compared.value)
-                : valuesVerdict(left?.values ?? [], right?.values ?? []),
-        left: valuesOf(left, key === UNIVERSE ? a.fandoms : []),
-        right: valuesOf(right, key === UNIVERSE ? b.fandoms : []),
-        lines: "line-clamp-2",
-      };
-    }),
+    ...facets,
     {
       key: "size",
       name: t("PairGrid.size"),
@@ -127,13 +150,14 @@ export function PairGrid({ pair: p }: { pair: DuplicatePair }) {
       key: "description",
       name: t("PairGrid.description"),
       verdict: p.description != null ? textVerdict(p.description) : sameTextVerdict(a.description, b.description),
-      left: described(a),
-      right: described(b),
+      left: a.description,
+      right: b.description,
       lines: "line-clamp-4",
     },
   ];
+  // A field neither work has, no row
   const both = rows.filter((r) => r.left != null && r.right != null);
-  const one = rows.filter((r) => r.left == null || r.right == null);
+  const one = rows.filter((r) => (r.left == null) !== (r.right == null));
   return (
     <div className="flex flex-col divide-y rounded-md border">
       {both.map(row)}
@@ -172,18 +196,6 @@ function SiteNames({ names }: { names: string[] }) {
     <span className="italic" title={t("PairGrid.siteFandomsHint")}>
       {names.join(", ")}
     </span>
-  );
-}
-
-/** A work's description, the site's own line of its characters and pairings after it; none of a work with neither. */
-function described(w: DuplicateWork): ReactNode {
-  if (!w.description && !w.universeLine) return null;
-  return (
-    <>
-      {w.description}
-      {w.description && w.universeLine && "\n"}
-      {w.universeLine && <span className="text-foreground/80">{w.universeLine}</span>}
-    </>
   );
 }
 
@@ -248,14 +260,11 @@ function Middle({ name, verdict }: { name: string; verdict: FieldVerdict }) {
   );
 }
 
-/** A work's head: its site, its title opening the work, its page on the site. */
+/** A work's head: its title opening the work, its page on the site; the site a row of its own. */
 function WorkHead({ work: w }: { work: DuplicateWork }) {
   const { t } = useTranslation("duplicate");
   return (
     <div className="flex items-baseline gap-2">
-      <span className="shrink-0 text-xs text-muted-foreground" title={sourceTitle(w.source)}>
-        {sourceShort(w.source)}
-      </span>
       <a href={itemHref({ source: w.source, item: w.item })} className="min-w-0 font-semibold text-foreground underline-offset-2 hover:underline">
         {w.title}
       </a>

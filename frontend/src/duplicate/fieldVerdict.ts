@@ -28,6 +28,11 @@ export interface FieldVerdict {
     | "PairGrid.authorKinPartlyHint"
     | "PairGrid.authorKinApartHint"
     | "PairGrid.noAuthorHint"
+    | "PairGrid.sameSiteHint"
+    | "PairGrid.otherSiteHint"
+    | "PairGrid.seriesSiteHint"
+    | "PairGrid.sameLineHint"
+    | "PairGrid.otherLineHint"
     | "PairGrid.notComparedHint";
   value?: string;
   /** More values of the hint, by their names. */
@@ -110,6 +115,27 @@ export function sameTextVerdict(first: string | undefined, second: string | unde
   if (!first || !second) return NOTHING;
   const same = first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
   return same ? { tone: "alike", shown: "✓", hint: "PairGrid.sameTextHint" } : { tone: "none", shown: "—", hint: "PairGrid.notMeasuredHint" };
+}
+
+/**
+ * The site's own line of the characters and pairings: the same word for word "✓"; else not compared itself — the
+ * characters and the pairings made of it are, in their rows.
+ */
+export function lineVerdict(first: string | undefined, second: string | undefined): FieldVerdict {
+  if (!first || !second) return NOTHING;
+  const same = first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
+  return same ? { tone: "alike", shown: "✓", hint: "PairGrid.sameLineHint" } : { tone: "none", shown: "—", hint: "PairGrid.otherLineHint" };
+}
+
+/**
+ * The sites of the two: of one work, one site is a doubt — a site seldom has a work twice —, partly; two sites,
+ * alike. Of two works asked whether they are of one series ([ofSeries]) the site tells nothing: no colour.
+ */
+export function siteVerdict(first: string, second: string, ofSeries: boolean): FieldVerdict {
+  const same = first === second;
+  const shown = same ? "=" : "≠";
+  if (ofSeries) return { tone: "none", shown, hint: "PairGrid.seriesSiteHint" };
+  return same ? { tone: "partly", shown, hint: "PairGrid.sameSiteHint" } : { tone: "alike", shown, hint: "PairGrid.otherSiteHint" };
 }
 
 /** Of two sizes, the smaller over the larger, by the words of both, else by their characters; none of no number of both. */
