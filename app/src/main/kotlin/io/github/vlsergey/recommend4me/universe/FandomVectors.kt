@@ -14,19 +14,25 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(FandomVectors::class.java)
 
 /**
- * THE VECTORS OF THE NAMES OF THE SITES' FANDOMS, MADE IN THE BACKGROUND: every name not encoded yet by the text
- * encoder in use, kept by its source as any short text ([PhraseVectors]) — what the universes alike one are told by
- * ([UniverseViews.similar]), which reads only what is kept. Made after the works change, once they have paused, and a
- * while after the start.
+ * THE VECTORS OF THE NAMES OF THE SITES' FANDOMS AND OF THEIR DESCRIPTIONS, MADE IN THE BACKGROUND: every one not
+ * encoded yet by the text encoder in use, kept by its source as any short text ([PhraseVectors]) — what the universes
+ * alike one are told by ([UniverseViews.similar]), which reads only what is kept. Made after the works change, once
+ * they have paused, and a while after the start.
  */
 @Component
-class FandomVectors(private val stores: Stores, private val phrases: PhraseVectors, private val workload: Workload) {
+class FandomVectors(
+    private val stores: Stores,
+    private val phrases: PhraseVectors,
+    private val workload: Workload,
+    private val events: ApplicationEventPublisher,
+) {
     private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "fandom-vectors").apply { isDaemon = true }
     }
@@ -56,20 +62,25 @@ class FandomVectors(private val stores: Stores, private val phrases: PhraseVecto
     @Suppress("TooGenericExceptionCaught")
     private fun fillInBackground() {
         try {
-            workload.run(VECTORS) { fill() }
+            if (workload.run(VECTORS) { fill() } > 0) events.publishEvent(FandomVectorsMade)
         } catch (e: Exception) {
             log.warn("The vectors of the fandoms' names were not made: {}", e.message, e)
         }
     }
 
-    /** Every name of a site's fandom not encoded yet encoded and kept; how many. */
+    /**
+     * Every name of a site's fandom and every description its site gives of one — a synonym of the name
+     * ([SiteFandomVectors]) — not encoded yet encoded and kept; how many.
+     */
     fun fill(): Int =
         sites().sumOf { (s, facet) ->
+            val names = s.items.facetNames(facet)
+            val said = s.items.facetDescriptions(facet, names.keys).values
             val missing =
-                phrases.missing(s, s.items.facetNames(facet).values.map { it.trim() }.filter { it.isNotEmpty() })
+                phrases.missing(s, (names.values + said).map { it.trim() }.filter { it.isNotEmpty() }.distinct())
             if (missing.isNotEmpty()) {
                 phrases.of(s, missing)
-                log.info("{}: the names of {} fandoms encoded", s.id, missing.size)
+                log.info("{}: the names and descriptions of fandoms encoded: {}", s.id, missing.size)
             }
             missing.size
         }

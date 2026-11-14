@@ -24,7 +24,7 @@ private val log = LoggerFactory.getLogger(FandomLikenessLearning::class.java)
 @Service
 class FandomLikenessLearning(
     private val stores: Stores,
-    private val names: FandomNameVectors,
+    private val fandoms: SiteFandomVectors,
     private val workload: Workload,
 ) {
     private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
@@ -38,10 +38,11 @@ class FandomLikenessLearning(
         val type = stores.withUniverses().firstOrNull() ?: return
         val started = System.currentTimeMillis()
         val dictionary = type.universes.dictionary()
-        val vectors = names.all()
+        val vectors = fandoms.all()
+        // A name's description a synonym of it: one more name of the universe
         val byUniverse =
             dictionary.fandoms.keys
-                .associateWith { id -> distinctNames(dictionary.sitesOf(id).mapNotNull { vectors[it] }) }
+                .associateWith { id -> distinctNames(dictionary.sitesOf(id).flatMap { vectors[it]?.all.orEmpty() }) }
                 .filterValues { it.isNotEmpty() }
         val related = byUniverse.keys.associateWith { dictionary.parentsOf(it) + dictionary.childrenOf(it) }
         val different = HashMap<Long, MutableSet<Long>>()
@@ -64,6 +65,7 @@ class FandomLikenessLearning(
         val count = heldOut.sumOf { it.first.size }.coerceAtLeast(1)
         val fit = FandomLikenessFit(all.size, right / count, asEncoded / count)
         type.fandomLikeness.keep(likeness, fit, Instant.now())
+        compared(dictionary, vectors)
         log.info(
             "The likeness of the fandoms' names learnt of {} pairs of {} universes with names, {} said different: " +
                 "held out, {} of the pairs in the user's order, of the encoder's own likeness {}; in {} ms",
@@ -76,12 +78,39 @@ class FandomLikenessLearning(
         )
     }
 
+    /**
+     * How the universes are found of the [vectors] of their sites' fandoms by the encoder's likeness, told in the log:
+     * by their names alone, the descriptions synonyms of the names — the way in use —, and the descriptions added to
+     * the names.
+     */
+    private fun compared(dictionary: FandomDictionary, vectors: Map<SiteFandomRef, FandomVectorsOf>) {
+        val universes = dictionary.fandoms.keys.associateWith { dictionary.sitesOf(it) }
+        val ways =
+            listOf(
+                "names alone" to vectors.mapValues { listOf(it.value.name) },
+                "descriptions as synonyms" to vectors.mapValues { it.value.all },
+                "descriptions added" to vectors.mapValues { listOf(FandomRetrieval.added(it.value)) },
+            )
+        val found = ways.map { (name, of) -> name to FandomRetrieval.of(universes, of) }
+        log.info(
+            "The universes found of their sites' fandoms by the encoder's likeness, {} of the fandoms described: {}",
+            vectors.values.count { it.description != null },
+            found.joinToString("; ") { (name, f) ->
+                "$name ${f?.let { "first %.3f, 1/rank %.3f".format(it.first, it.reciprocal) } ?: "none asked"}"
+            },
+        )
+    }
+
     // --- In the background ---
 
     @EventListener(ApplicationReadyEvent::class) fun start() = schedule(START_DELAY_SECONDS, "start")
 
     @EventListener
     fun related(@Suppress("UNUSED_PARAMETER") event: UniversesRelated) = schedule(QUIET_SECONDS, "universes")
+
+    /** New names or descriptions of the sites' fandoms encoded: more to learn of. */
+    @EventListener
+    fun encoded(@Suppress("UNUSED_PARAMETER") event: FandomVectorsMade) = schedule(QUIET_SECONDS, "fandomVectors")
 
     private fun schedule(delaySeconds: Long, reason: String) {
         if (stores.withUniverses().isEmpty()) return
