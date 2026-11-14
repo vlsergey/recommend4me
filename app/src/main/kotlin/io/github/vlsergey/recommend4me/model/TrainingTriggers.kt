@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.interest.InterestChanged
+import io.github.vlsergey.recommend4me.manner.MannersChanged
 import io.github.vlsergey.recommend4me.mark.MarksChanged
 import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -61,6 +62,10 @@ class TrainingTriggers(
         log.info("{}: {} items have new set vectors: retraining", event.type, event.items)
         recommendations.scheduleRetrain(event.type, "setVectors", byUser = false)
     }
+
+    /** The manners of the works' texts were made again: inputs of the works. */
+    @EventListener
+    fun mannersChanged(event: MannersChanged) = recommendations.scheduleRetrain(event.type, "manner", byUser = false)
 
     /** A model that could not be read, or none, is trained on start where there are grades. */
     @EventListener(ApplicationReadyEvent::class)

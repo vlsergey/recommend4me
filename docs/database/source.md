@@ -25,6 +25,7 @@
 | `part_vector` | the vector of every window of a part, the windows overlapping by half: what the search finds a scene of a chapter by and what the models read of it (`part.encoder`: what they were made by) |
 | `part_paragraph_vector` | the vector of every paragraph of a part — its lines with a letter in them, short ones in a row joined — what the tags are held against to be offered by the text |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
+| `item_manner` | the manner of a work's text: the share in it of every word its content type measures a manner by, standardised, and the hash of the texts it was made of |
 | `captured_page` | a page kept, gzipped, to be read again when the parser changes |
 | `wanted_page` | a request of the site the source wants the browser to make for it — what a tag means — asked once, done when the answer came |
 
@@ -74,6 +75,12 @@ erDiagram
         VARCHAR facet PK
         VARCHAR value_key PK
         INTEGER position
+    }
+    item_manner {
+        VARCHAR item_id PK, FK
+        BIGINT words_id
+        VARCHAR text_hash
+        VARBINARY vec
     }
     item_number {
         VARCHAR item_id PK, FK
@@ -196,6 +203,7 @@ erDiagram
         TIMESTAMPTZ fetched_at "null"
     }
     item ||--o{ item_facet : "item_id"
+    item ||--o{ item_manner : "item_id"
     item ||--o{ item_number : "item_id"
     item ||--o{ item_picture_vector : "item_id"
     item ||--o{ item_text : "item_id"

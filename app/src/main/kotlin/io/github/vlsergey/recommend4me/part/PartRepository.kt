@@ -33,6 +33,9 @@ class PartRepository(private val db: DSLContext) {
     /** What every part is made of, its text not read. */
     val marks = PartMarks(db)
 
+    /** The texts of the parts of every item, an item at a time. */
+    val texts = ItemTexts(db)
+
     /**
      * Stores parts, a known one updated; a part named without its text keeps the text it had, and a part whose text
      * changed is encoded again.

@@ -18,6 +18,8 @@ import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemRepository
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
+import io.github.vlsergey.recommend4me.manner.MannerRepository
+import io.github.vlsergey.recommend4me.manner.MannerWordsRepository
 import io.github.vlsergey.recommend4me.mark.MarkRepository
 import io.github.vlsergey.recommend4me.model.HeldOutRepository
 import io.github.vlsergey.recommend4me.model.ModelRepository
@@ -123,6 +125,9 @@ class SourceStore(
     val series = SiteSeriesRepository(dbs.source.dsl)
     val textVectors = TextVectorRepository(dbs.source.dsl)
     val setVectors = SetVectorRepository(dbs.source.dsl)
+
+    /** The manner of every item's text, by the words of its content type ([io.github.vlsergey.recommend4me.manner]). */
+    val manner = MannerRepository(dbs.source.dsl)
     val pages = CapturedPageRepository(dbs.source.dsl)
 
     /** The requests of the site the source wants the browser to make for it. */
@@ -298,6 +303,9 @@ class TypeStore(val type: ContentType, val sources: List<SourceStore>, databases
     val predictions = PredictionRepository(databases.model(type.id))
     val heldOut = HeldOutRepository(databases.model(type.id))
     val embeddings = SetEmbeddingRepository(databases.model(type.id))
+
+    /** The words the manners of the type's texts are measured by. */
+    val mannerWords = MannerWordsRepository(databases.model(type.id))
     val likeness = MarkLikenessRepository(databases.model(type.id))
     val searchScores = SearchScoreRepository(databases.model(type.id))
     val searchWeights = SearchWeightRepository(databases.model(type.id))

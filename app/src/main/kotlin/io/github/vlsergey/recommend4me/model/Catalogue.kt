@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
+import io.github.vlsergey.recommend4me.manner.TypeManners
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.series.TypeSeries
@@ -72,6 +73,9 @@ class Averages(
  * them, and any asked for — a few hundred of 27 718 games, each a few thousand numbers. Of every work only what the
  * average work is made of is kept ([averages]); a work's vectors otherwise are read when it is scored, a chunk at a
  * time ([vectorsOfMany]), and let go.
+ *
+ * THE MANNERS OF THE WORKS ([TypeManners]) — its own, its authors', its series' — are made of the kept manners of every
+ * item as the catalogue is read, and handed to every work's vectors with them.
  *
  * OF THE GRADED WORKS ALONE ([CatalogueReader.gradedWorks]): the rows of the grades are all a fitting reads, what the
  * average work is told by the model kept.
@@ -152,6 +156,10 @@ class CatalogueReader(
             reading.read(s, laps)
             log.info("{}/{}: catalogue read in ms: {}", type.id, s.id, laps)
         }
+        // The manners of every work, its own, its authors' and its series', of the manners kept of every item
+        val manners = TypeManners.read(type, clusters, series)
+        manners.forEachWork { _, blocks -> blocks.forEach { (block, v) -> reading.spreads.add(block, v) } }
+        manners.with(reading.vectors, kept).forEach { (key, own) -> reading.vectors[key] = HashMap(own) }
         val read = System.currentTimeMillis()
         val graded = items.map { it.key }.toSet().let { keys -> ratings.map { it.key }.filter { it in keys }.toSet() }
         val likeness =
@@ -164,7 +172,7 @@ class CatalogueReader(
             )
         val made = System.currentTimeMillis()
         val averages = Averages(reading.spreads.spreads(), numbers)
-        return catalogue(type, items, ratings, reading.vectors, likeness, interest, averages).also {
+        return catalogue(type, items, ratings, reading.vectors, likeness, interest, averages, manners).also {
             log.info(
                 "{}: catalogue of {} works read of {} items in {} ms, the vectors of {} kept, likeness in {} ms",
                 type.id,
@@ -197,7 +205,7 @@ class CatalogueReader(
         val series = TypeSeries.read(type)
         val items =
             type.sources.flatMap { s -> of[s.id]?.let { readItems(s, type.sources.size > 1, series, it) }.orEmpty() }
-        val vectors = vectorsOfMany(type, wanted.toList())
+        val vectors = TypeManners.of(type, clusters, wanted).with(vectorsOfMany(type, wanted.toList()), wanted)
         val keys = items.map { it.key }.toSet()
         val likeness = likenesses.asMade(type, ratings.map { it.key }.filter { it in keys }.toSet())
         log.info(
@@ -221,6 +229,8 @@ class CatalogueReader(
         likeness: TypeLikeness,
         interest: Map<ItemKey, InterestMark>,
         averages: Averages,
+        /** The manners of every work, when read; else those of the works read later read with them. */
+        manners: TypeManners? = null,
     ): Catalogue {
         val clusters = works.of(type)
         val vectors = HashMap(read)
@@ -247,7 +257,9 @@ class CatalogueReader(
             clusters,
             interest.filterKeys { it in keys },
             averages = averages,
-            read = { wanted -> vectorsOfMany(type, wanted) },
+            read = { wanted ->
+                (manners ?: TypeManners.of(type, clusters, wanted)).with(vectorsOfMany(type, wanted), wanted)
+            },
         )
     }
 
@@ -368,7 +380,8 @@ class CatalogueReader(
         members: List<ItemKey> = works.of(type).members(key),
     ): Map<String, FloatArray> {
         val read = vectorsOfMany(type, members)
-        return WorkFeatures.vectors(members.mapNotNull { read[it] })
+        return WorkFeatures.vectors(members.mapNotNull { read[it] }) +
+            TypeManners.of(type, works.of(type), members).blocks(key)
     }
 
     /**

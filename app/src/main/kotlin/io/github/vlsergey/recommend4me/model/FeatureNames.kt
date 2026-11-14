@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.model
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.likeness.MarkLikeness
+import io.github.vlsergey.recommend4me.manner.TypeManners
 import io.github.vlsergey.recommend4me.picture.PictureRepository
 import io.github.vlsergey.recommend4me.setvector.SetKind
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -22,6 +23,8 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
  *     prev:<grade>                  the grade of an earlier version of the same item
  *     source:<id>                    where the work comes from, when a type has several sources
  *     text:…, img:…, set:…, marks:…  vector blocks
+ *     manner:work, manner:author,    the manner of the work's text, of its authors', of its series'
+ *     manner:series
  */
 object FeatureNames {
 
@@ -126,6 +129,9 @@ object FeatureNames {
             SetKind.SCREENS.key to model("screensOneByOne"),
             SetKind.REVIEWS.key to model("reviewsOneByOne"),
             SetKind.PARTS.key to model("textFragments"),
+            TypeManners.WORK to model("mannerWork"),
+            TypeManners.AUTHOR to model("mannerAuthor"),
+            TypeManners.SERIES to model("mannerSeries"),
             MarkLikeness.PICTURES to model("likePictures"),
             MarkLikeness.REVIEWS to model("likeReviews"),
         )

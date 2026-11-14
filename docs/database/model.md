@@ -9,6 +9,7 @@
 | `held_out` | the prediction of every graded work by a model that had not seen it |
 | `held_out_explained` | what a model that had not seen a graded work says of it — score, where the grade stands, what moves it — worked out in the queue once the work is opened, gone with every training and every word on the work |
 | `set_embedding` | the directions the sets of the works are embedded by |
+| `manner_words` | the words a manner of a text is measured by: the most frequent words of the works' texts, each with the mean and the spread of its share, and of how many texts |
 | `mark_likeness` | how every work is alike what the user marked |
 | `mark_likeness_strength` | every work's strength of likeness to every mark |
 | `mark_likeness_axes` | a work's four axes of likeness to the marks |
@@ -85,6 +86,12 @@ erDiagram
         VARCHAR facet PK
         VARCHAR value_key PK
         VARCHAR site_value PK
+    }
+    manner_words {
+        BIGINT id PK
+        INTEGER texts
+        TIMESTAMPTZ fitted_at
+        BLOB content
     }
     mark_likeness {
         VARCHAR mark_kind PK

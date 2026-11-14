@@ -175,6 +175,25 @@ For every content type:
 
 Scorers implement `Scorer`; anything that maps a row of features to a number fits.
 
+### The manner of a text
+
+How a work is written, apart from what it is about, is read by the frequencies of its words
+(`manner`): of every content type the 1000 words most frequent in the texts of its works — every
+text weighing alike, a word mostly written with a capital (a name) left out — with the mean and
+the spread of each one's share over the texts (`MannerWords`, kept in the model database). The
+manner of an item is the share of every one of them in the text of its chapters, standardised: a
+vector of a number a word, kept with the hash of the texts it was made of (`item_manner`). The
+words are fitted again whenever the number of the items with a text changes, every manner then
+made again; else the manner of an item whose chapters changed is made again by the words kept —
+in the queue, after the chapters read go quiet (`Manners`). A word is a run of letters and no
+more: no forms of a word, no grammar.
+
+The model reads three blocks of it (`TypeManners`): the work's own (`manner:work`, the mean of
+its items'), its normalized authors' (`manner:author`, of every author the mean of the manners of
+all their works) and its normalized series' (`manner:series`). The authors' and the series' are
+made of the kept manners of the items whenever the works are read, never kept: a work of no text
+of its own has them all the same, and a new work read or an author bound changes them at once.
+
 ## Tags worked out
 
 Authors tag their works carelessly or not at all, and write their pairings and characters as
