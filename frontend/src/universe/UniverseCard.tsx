@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownToLineIcon, ArrowLeftIcon, ChevronRightIcon, ExternalLinkIcon, Loader2Icon, PencilIcon, RefreshCwIcon, Undo2Icon, UnlinkIcon, UsersIcon, XIcon } from "lucide-react";
+import { ArrowDownToLineIcon, ArrowLeftIcon, ChevronRightIcon, ExternalLinkIcon, LibraryIcon, Loader2Icon, PencilIcon, RefreshCwIcon, Undo2Icon, UnlinkIcon, UsersIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, unwrap, type ContentTypeInfo, type UniverseEntryInfo, type UniverseInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -132,7 +132,16 @@ function Header({ type, universe: u }: { type: ContentTypeInfo; universe: Univer
       {u.ownName && u.calculatedName && <p className="text-xs text-muted-foreground">{t("UniverseCard.sitesName", { name: u.calculatedName })}</p>}
       {u.description && <p className="text-muted-foreground">{u.description}</p>}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground">{t("UniverseCard.works", { count: u.works })}</span>
+        {/* Its works in the list of the works: the filter of the universes set to it alone */}
+        <a
+          href={screenHref({ kind: "works", type: type.id, universe: u.value })}
+          onClick={(e) => followLink(e, { kind: "works", type: type.id, universe: u.value })}
+          className="inline-flex items-center gap-1 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          title={t("UniverseCard.worksHint")}
+        >
+          <LibraryIcon className="size-3.5" />
+          {t("UniverseCard.works", { count: u.works })}
+        </a>
         <AsyncButton
           size="sm"
           variant={u.characters ? "secondary" : "outline"}

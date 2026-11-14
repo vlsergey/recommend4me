@@ -184,6 +184,7 @@
   "UniverseCard.unbindHint": "Odveži univerzum od unosa Vikipodataka; unos koji više nije vezan ni za jedan odlazi sa svojim likovima",
   "UniverseCard.untie": "Ukloni vezu",
   "UniverseCard.wikidataPage": "Stranica u Vikipodacima",
+  "UniverseCard.worksHint": "Otvori ova dela u spisku dela: filter univerzuma samo na ovaj, ostali filteri kao što su bili",
   "UniverseCard.works_few": "{{count, number}} dela",
   "UniverseCard.works_one": "{{count, number}} delo",
   "UniverseCard.works_other": "{{count, number}} dela",

@@ -42,6 +42,9 @@ import { PairingsScreen } from "@/pairing/PairingsScreen";
 
 const VIEWS: ItemView[] = ["UNRATED", "RATED", "ALL"];
 
+/** The filter facet of the universes: a universe's works asked for set it. */
+const UNIVERSE = "universe";
+
 /** The hotkeys, every one by its keys' words and what it does. */
 const HOTKEYS = ["search", "choose", "open", "grade", "neighbours", "site", "close"] as const;
 
@@ -98,6 +101,14 @@ function TypeScreen({ type, types, screen }: { type: ContentTypeInfo; types: Con
   const [layout, setLayout] = usePref<Layout>("layout", "grid");
   const [storedFacets, setFacets] = usePref<FacetSelection>(`hidden:${type.id}`, NOTHING_HIDDEN);
   const facets = useMemo(() => validSelection(storedFacets), [storedFacets]);
+  // The works of a universe asked for (its card's link): the filter of the universes set to it alone — the works of none hidden too —, the rest of the filters kept
+  const asked = screen.kind === "works" ? screen.universe : undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per address asking: the filters it changes are not a reason to set them again
+  useEffect(() => {
+    if (!asked) return;
+    setFacets({ ...facets, [UNIVERSE]: { shown: [asked], withoutHidden: true } });
+    replaceScreen({ kind: "works", type: type.id });
+  }, [asked]);
   const [hiddenSources, setHiddenSources] = usePref<string[]>(`hiddenSources:${type.id}`, []);
   const [storedRanges, setRanges] = usePref<NumberRanges>(`ranges:${type.id}`, {});
   const ranges = useMemo(() => validRanges(type, storedRanges), [type, storedRanges]);

@@ -188,6 +188,7 @@
   "UniverseCard.unbindHint": "Отвязать вселенную от записи Викиданных; запись, не привязанная больше ни к одной, уходит со своими персонажами",
   "UniverseCard.untie": "Убрать связь",
   "UniverseCard.wikidataPage": "Страница в Викиданных",
+  "UniverseCard.worksHint": "Открыть эти работы в списке работ: фильтр по вселенной — только эта, остальные фильтры как были",
   "UniverseCard.works_few": "{{count, number}} работы",
   "UniverseCard.works_many": "{{count, number}} работ",
   "UniverseCard.works_one": "{{count, number}} работа",

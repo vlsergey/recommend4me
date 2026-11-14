@@ -9,9 +9,9 @@ import org.springframework.web.server.ResponseStatusException
 
 /**
  * THE SCREENS OF THE INTERFACE ARE ADDRESSES of their own — the works of a content type at "/books", the universes at
- * "/universes", the pairings at "/pairings", the tags of every site at "/tags", one of them below — so a screen is a
- * link, opened in a tab of its own and kept in the history. Each is the same page; the interface shows the screen its
- * address names.
+ * "/universes", the pairings at "/pairings", the tags of every site at "/tags", one of them below; the works of a type
+ * of one universe at "/books/universe/<id>" — so a screen is a link, opened in a tab of its own and kept in the
+ * history. Each is the same page; the interface shows the screen its address names.
  */
 @Controller
 class Screens(private val stores: Stores) {
@@ -35,7 +35,7 @@ class Screens(private val stores: Stores) {
     fun screen(): String = PAGE
 
     /** The works of a type: of a known one only — "/favicon.ico" and the like are files. */
-    @GetMapping("/{type:[a-z][a-z0-9-]*}")
+    @GetMapping("/{type:[a-z][a-z0-9-]*}", "/{type:[a-z][a-z0-9-]*}/universe/{universe}")
     fun works(@PathVariable type: String): String {
         if (stores.type(type) == null) throw ResponseStatusException(HttpStatus.NOT_FOUND, "There is no type '$type'")
         return PAGE
