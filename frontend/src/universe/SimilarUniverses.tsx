@@ -132,9 +132,11 @@ export function SimilarUniverses({ type, universe: u }: { type: ContentTypeInfo;
         <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t("SimilarUniverses.query")} className="pl-8" type="search" />
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-2">
-        {filter("hierarchy", t("SimilarUniverses.inHierarchy"), t("SimilarUniverses.inHierarchyHint"))}
+        {filter("hierarchy", t("SimilarUniverses.inHierarchy"), t("SimilarUniverses.inHierarchyHint", { name: u.name }))}
         {filter("different", t("SimilarUniverses.different"), t("SimilarUniverses.differentHint"))}
       </div>
+      {/* The words of a row are of the row's universe, said against this one by its name */}
+      {rows.length > 0 && <p className="text-xs text-muted-foreground">{t("SimilarUniverses.rowsAre", { name: u.name })}</p>}
       {similar.isError && <p className="text-destructive">{t("SimilarUniverses.loadFailed", { error: similar.error.message })}</p>}
       {/* Locked while the rows move to a list read anew: a press never lands on the row that moved under it */}
       <ul className={cn("flex flex-col divide-y rounded-lg border", calm.locked && "pointer-events-none")} aria-busy={calm.locked}>
@@ -171,7 +173,7 @@ export function SimilarUniverses({ type, universe: u }: { type: ContentTypeInfo;
                     aria-pressed={relation === word}
                     disabled={calm.locked}
                     onClick={() => relate(s, word)}
-                    title={t(`SimilarUniverses.wordHint.${word}`)}
+                    title={t(`SimilarUniverses.wordHint.${word}`, { name: u.name })}
                   >
                     {t(`SimilarUniverses.word.${word}`)}
                   </AsyncButton>
