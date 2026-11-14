@@ -33,7 +33,8 @@ class SearchWeightsTest {
         val weights = assertNotNull(SearchWeights.fit(lines))
         val words = weights.features.getValue("words").weight
         val reranker = weights.features.getValue("reranker").weight
-        assertTrue(words > 0.5 && words > 3 * kotlin.math.abs(reranker), "words $words, reranker $reranker")
+        // The reranker the least a weight may be: half its equal share, a quarter of the two, never nought
+        assertTrue(reranker > 0 && words >= 3 * reranker - 1e-9, "words $words, reranker $reranker")
 
         // A line never judged put in the order: the works its words found first, whatever the reranker said
         val found =
@@ -46,6 +47,28 @@ class SearchWeightsTest {
         assertEquals(listOf(ItemKey("s", "2"), ItemKey("s", "1")), weights.ordered(found).keys)
         // A feature a work lacks is 0 of it
         assertTrue(weights.score(mapOf("words" to 2.0)) > weights.score(emptyMap()))
+    }
+
+    @Test
+    fun `no feature weighs nought nor against, whatever the lines judged say`() {
+        // The works found by the line's words judged not to answer it, those found by meaning alone judged to
+        val lines =
+            listOf(
+                JudgedLine(
+                    "a",
+                    listOf(
+                        mapOf("meaning" to 0.9, "words" to 0.0) to SearchFit.FITS,
+                        mapOf("meaning" to 0.2, "words" to 3.0) to SearchFit.NOT,
+                        mapOf("meaning" to 0.8, "words" to 0.0) to SearchFit.FITS,
+                    ),
+                )
+            )
+        val weights = assertNotNull(SearchWeights.fit(lines))
+        val words = weights.features.getValue("words").weight
+        val meaning = weights.features.getValue("meaning").weight
+        assertTrue(words > 0 && words >= (words + meaning) / 4 - 1e-9, "words $words, meaning $meaning")
+        // A work of more of the line's words stands higher than one of none, by meaning alike
+        assertTrue(weights.score(mapOf("meaning" to 0.5, "words" to 3.0)) > weights.score(mapOf("meaning" to 0.5)))
     }
 
     @Test

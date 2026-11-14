@@ -23,6 +23,12 @@ class JudgedLine(val line: String, val works: List<Pair<Map<String, Double>, Sea
  * of their features. Only the order within a line is learnt: what a reranker gives one line and another are not on one
  * scale. Every line weighs alike, however many works it has judged; a line with no pair — every work judged alike —
  * teaches nothing of an order.
+ *
+ * NO FEATURE EVER WEIGHS NOUGHT, NOR AGAINST (user, 2026-11-14): every feature is of a work answering the line more —
+ * closer by meaning, more of its words, a higher reranker's score —, and a few lines judged must not shut one out. Of
+ * three lines the words weighed −0.97 and the meaning nought: a work of the line's own rare word in its title went to
+ * the bottom of all. So every weight is at least half its equal share of them all: of n features, w = u + Σu / n with
+ * every u ≥ 0 ([descend]) — the least a weight may be is 1 / 2n of their sum, what the judgments say only above it.
  */
 class SearchWeights(val features: Map<String, FeatureWeight>) {
 
@@ -81,13 +87,19 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
             }
 
         /**
-         * The weights of the logistic model of the [pairs], the first of each above the second, by gradient descent
-         * from none: the mean loss over the lines with [L2] of the weights.
+         * The weights of the logistic model of the [pairs], the first of each above the second, by gradient descent:
+         * the mean loss over the lines with [L2] of the weights. The weights are w = u + Σu / n of u ≥ 0 — each at
+         * least half its equal share —, the descent going along u and every u below nought put back to it.
          */
         private fun descend(pairs: List<Above>, size: Int): DoubleArray {
-            val w = DoubleArray(size)
+            val u = DoubleArray(size) { 1.0 }
+            fun weights(): DoubleArray {
+                val share = u.sum() / size
+                return DoubleArray(size) { u[it] + share }
+            }
             val total = pairs.sumOf { it.weight }
             repeat(STEPS) {
+                val w = weights()
                 val grad = DoubleArray(size) { L2 * w[it] }
                 pairs.forEach { p ->
                     var dot = 0.0
@@ -96,9 +108,11 @@ class SearchWeights(val features: Map<String, FeatureWeight>) {
                     val g = -p.weight / total / (1 + exp(dot))
                     for (j in 0 until size) grad[j] += g * p.difference[j]
                 }
-                for (j in 0 until size) w[j] -= RATE * grad[j]
+                // Along u: every u moves its own weight and, by Σu / n, every weight alike
+                val shared = grad.sum() / size
+                for (j in 0 until size) u[j] = (u[j] - RATE * (grad[j] + shared)).coerceAtLeast(0.0)
             }
-            return w
+            return weights()
         }
 
         /**
