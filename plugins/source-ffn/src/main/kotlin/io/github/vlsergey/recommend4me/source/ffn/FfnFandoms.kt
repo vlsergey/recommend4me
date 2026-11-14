@@ -27,9 +27,15 @@ internal class FfnFandoms(private val db: DSLContext) {
 
     /**
      * The keys of the fandoms [names] — the path of each a page linked ([known]), else the one path its name is kept
-     * with; the name itself of one never linked, or of two sections and none chosen by the page.
+     * with, else of the paths of its name the one the work has already ([had]: a page linked it before — "Supergirl" of
+     * tv and of comics, the work's archive told which); the name itself of one never linked, or of two sections and
+     * none chosen.
      */
-    fun keysOf(names: List<String>, known: Map<String, String> = emptyMap()): List<String> {
+    fun keysOf(
+        names: List<String>,
+        known: Map<String, String> = emptyMap(),
+        had: Collection<String> = emptyList(),
+    ): List<String> {
         val unknown = names.filter { it !in known }
         val kept =
             if (unknown.isEmpty()) emptyMap()
@@ -39,7 +45,9 @@ internal class FfnFandoms(private val db: DSLContext) {
                     .where(NAME.`in`(unknown))
                     .fetch()
                     .groupBy({ it.value1()!! }, { it.value2()!! })
-        return names.map { name -> known[name] ?: kept[name]?.singleOrNull() ?: name }
+        return names.map { name ->
+            known[name] ?: kept[name]?.let { paths -> paths.singleOrNull() ?: paths.singleOrNull { it in had } } ?: name
+        }
     }
 
     /**

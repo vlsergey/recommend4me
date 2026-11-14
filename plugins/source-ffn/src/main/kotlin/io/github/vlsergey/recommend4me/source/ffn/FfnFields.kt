@@ -50,7 +50,12 @@ internal class FfnFields(private val items: ItemStore, private val directory: Ff
     fun fandoms(id: String, names: List<String>, known: Map<String, String> = emptyMap()) {
         val fandoms = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (fandoms.isEmpty()) return
-        items.setFacet(id, FANDOM, directory.keysOf(fandoms, known).zip(fandoms) { key, name -> FacetValue(key, name) })
+        val had = items.facets(id)[FANDOM].orEmpty()
+        items.setFacet(
+            id,
+            FANDOM,
+            directory.keysOf(fandoms, known, had).zip(fandoms) { key, name -> FacetValue(key, name) },
+        )
         items.setFacet(id, UniverseFacets.KIND, listOf(FacetValue(UniverseFacets.FANFICTION)))
     }
 

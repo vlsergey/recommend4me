@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.source.ffn
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.time.Instant
@@ -192,6 +193,10 @@ class FfnPagesTest {
         assertEquals(listOf("anime/Lorem-Ipsum-Dolor"), context.facets.getValue("2")["fandom"])
         assertEquals(listOf("Sit Amet"), context.facets.getValue("3")["fandom"])
         assertEquals(listOf("Consectetur"), context.facets.getValue("4")["fandom"])
+        // A work its archive told of one section keeps it when a page names the fandom of two alone
+        context.items.setFacet("3", "fandom", listOf(FacetValue("game/Sit-Amet", "Sit Amet")))
+        search(listOf("3" to "Sit Amet"))
+        assertEquals(listOf("game/Sit-Amet"), context.facets.getValue("3")["fandom"])
         assertNull(source.valueUrl("fandom", "Consectetur", "Consectetur"))
     }
 

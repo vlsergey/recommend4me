@@ -11,11 +11,15 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(UnusedFandoms::class.java)
 
 /**
- * A SITE'S FANDOM NO WORK OF ITS SITE HAS ANY MORE GOES WITH ITS UNIVERSE, WHEN THE TWO ARE ONE TO ONE (user,
- * 2026-11-14): the universe of no other site's fandom and of no entry of a catalogue (Wikidata) — a key the site's
- * pages gave up for another, a part of a name a line was cut at wrong. A site's fandom of a universe with others stays,
- * works or none. Never a universe the user said anything of: named it, put it under or above another, told it apart,
- * read its characters, answered a work with it.
+ * A SITE'S FANDOM NO WORK OF ITS SITE HAS ANY MORE (user, 2026-11-14) — a key the site's pages gave up for another, a
+ * part of a name a line was cut at wrong:
+ * - goes with its universe when the two are one to one: the universe of no other site's fandom and of no entry of a
+ *   catalogue (Wikidata). Never a universe the user said anything of: named it, put it under or above another, told it
+ *   apart, read its characters, answered a work with it;
+ * - goes alone, its universe staying, when the universe has another fandom of the same site of the same name that works
+ *   have: the one the works have now ("Supergirl" and "tv/Supergirl" of fanfiction.net — two of one seen).
+ *
+ * A site's fandom of no works in a universe with others of other names stays.
  */
 @Component
 class UnusedFandoms(private val stores: Stores) {
@@ -33,39 +37,56 @@ class UnusedFandoms(private val stores: Stores) {
         }
     }
 
-    /** Every unused site's fandom one to one with its universe gone with it; how many. */
+    /** Every unused site's fandom let go of — with its universe, or alone; how many. */
     fun letGo(): Int = stores.withUniverses().firstOrNull()?.universes?.fandoms?.let(::letGo) ?: 0
 
     private fun letGo(fandoms: FandomRepository): Int {
         val sources = stores.withUniverses().flatMap { it.sources }
-        val used =
-            sources.flatMapTo(HashSet()) { s ->
-                UniverseFacet.fandomFacet(s.schema)
-                    ?.let { f -> s.items.valueUses(f).keys.map { SiteFandomRef(s.id, it) } }
-                    .orEmpty()
-            }
-        val said = said(fandoms) + answered(sources)
-        val withEntries = fandoms.entries.all().keys
+        val bindings = fandoms.sites.bindings()
+        val seen = Seen.of(sources, bindings.keys)
+        val byUniverse = bindings.entries.groupBy({ it.value }, { it.key })
+        val kept = said(fandoms) + answered(sources) + fandoms.entries.all().keys
         val alone =
-            fandoms.sites
-                .bindings()
-                .entries
-                .groupBy({ it.value }, { it.key })
+            byUniverse
                 .mapNotNull { (id, refs) -> refs.singleOrNull()?.let { id to it } }
-                .filter { (id, ref) -> ref !in used && id !in withEntries && id !in said }
-        if (alone.isEmpty()) return 0
+                .filter { (id, ref) -> ref in seen.unused && id !in kept }
+        val twins = byUniverse.values.flatMap { refs -> refs.filter { seen.twin(it, refs) } }
+        if (alone.isEmpty() && twins.isEmpty()) return 0
         fandoms.transaction { f ->
             alone.forEach { (id, ref) ->
                 f.sites.unbind(ref)
                 f.drop(id)
             }
+            twins.forEach(f.sites::unbind)
         }
-        log.info(
-            "{} sites' fandoms no work has, one to one with their universes, gone with them: {}",
-            alone.size,
-            alone,
-        )
-        return alone.size
+        log.info("Sites' fandoms no work has gone with their universes: {}; gone alone, of a twin: {}", alone, twins)
+        return alone.size + twins.size
+    }
+
+    /** Of the sites' fandoms, those no work has, and the name each is shown by, alike of any case. */
+    private class Seen(val unused: Set<SiteFandomRef>, val names: Map<SiteFandomRef, String>) {
+        /** Whether [ref], of no works, has a fandom of its site of its name among [refs] that works have. */
+        fun twin(ref: SiteFandomRef, refs: List<SiteFandomRef>): Boolean =
+            ref in unused && refs.any { it !in unused && it.source == ref.source && names[it] == names[ref] }
+
+        companion object {
+            fun of(sources: List<SourceStore>, refs: Collection<SiteFandomRef>): Seen {
+                val unused = HashSet<SiteFandomRef>()
+                val names = HashMap<SiteFandomRef, String>()
+                sources.forEach { s ->
+                    val facet = UniverseFacet.fandomFacet(s.schema) ?: return@forEach
+                    val uses = s.items.valueUses(facet)
+                    val named = s.items.facetNames(facet)
+                    refs
+                        .filter { it.source == s.id }
+                        .forEach { ref ->
+                            if ((uses[ref.key] ?: 0) == 0) unused += ref
+                            names[ref] = (named[ref.key] ?: ref.key).trim().lowercase()
+                        }
+                }
+                return Seen(unused, names)
+            }
+        }
     }
 
     /** The universes the user named, put under or above another, told apart, or read the characters of. */
