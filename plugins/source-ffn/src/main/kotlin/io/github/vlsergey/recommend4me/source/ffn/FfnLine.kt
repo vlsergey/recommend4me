@@ -8,8 +8,13 @@ package io.github.vlsergey.recommend4me.source.ffn
  * characters the one field of no caption left — after the genres on a work's page, after the days on a card.
  */
 internal class FfnLine(
-    /** The fandoms the line names: a crossover's two, or the one a card of an author's page leads with. */
+    /** The one fandom a card of an author's page leads with; none of a crossover's line. */
     val fandoms: List<String>,
+    /**
+     * A crossover's two fandoms as the line writes them, "A & B" — split where the names allow
+     * ([FfnFandoms.crossover]): a name may have " & " in it.
+     */
+    val crossover: String?,
     /** The rating as the site writes it: "K", "K+", "T", "M". */
     val rating: String?,
     val language: String?,
@@ -63,7 +68,8 @@ internal class FfnLine(
             val free = after.drop(1).filter { CAPTIONED.matchEntire(it) == null && it != COMPLETE }
             val genres = free.firstOrNull()?.let(::genresOf)
             return FfnLine(
-                fandoms = fandomsOf(before),
+                fandoms = if (before.firstOrNull() == CROSSOVER) emptyList() else before,
+                crossover = if (before.firstOrNull() == CROSSOVER) before.drop(1).joinToString(" - ") else null,
                 rating = fields.getOrNull(rated)?.removePrefix(RATED)?.trim()?.removePrefix("Fiction")?.trim(),
                 language = if (rated < 0) null else after.firstOrNull(),
                 genres = genres.orEmpty(),
@@ -75,10 +81,6 @@ internal class FfnLine(
                 complete = COMPLETE in after || captioned["Status"] == COMPLETE,
             )
         }
-
-        /** "Crossover - A & B": the two; "A": the one. */
-        private fun fandomsOf(before: List<String>): List<String> =
-            if (before.firstOrNull() == CROSSOVER) before.drop(1).flatMap { it.split(" & ") } else before
 
         /** The genres of the field, "Romance/Hurt/Comfort"; null of a field that is not of genres alone. */
         private fun genresOf(field: String): List<String>? {

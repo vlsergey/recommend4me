@@ -196,6 +196,35 @@ class FfnPagesTest {
     }
 
     @Test
+    fun `a crossover's line is split where the fandoms kept allow, a name with an ampersand in it whole`() {
+        val context = MemorySourceContext()
+        val card = { id: String, fandoms: String ->
+            """<div class="z-list"><a class="stitle" href="/s/$id/1/Lorem">Lorem</a><div class="z-indent">Lorem.""" +
+                """<div class="z-padtop2 xgray">Crossover - $fandoms - Rated: T - English - Words: 1,000</div></div></div>"""
+        }
+        val search = { id: String, fandoms: String ->
+            read(
+                context,
+                "https://www.fanfiction.net/search/?keywords=lorem",
+                "<html><body>${card(id, fandoms)}</body></html>",
+            )
+        }
+        // One place to split at: the two
+        search("1", "Lorem & Ipsum")
+        assertEquals(listOf("Lorem", "Ipsum"), context.facets.getValue("1")["fandom"])
+        // Two places, no fandom kept to choose one: no fandom guessed
+        search("2", "Lorem & Ipsum: Dolor & Sit")
+        assertNull(context.facets.getValue("2")["fandom"])
+        // The fandoms kept choose the place
+        val sections =
+            """<html><body><div id="list_output"><div><a href="/tv/Lorem/" title="Lorem">Lorem</a></div>""" +
+                """<div><a href="/tv/Ipsum-Dolor-Sit/" title="Ipsum: Dolor &amp; Sit">Ipsum</a></div></div></body></html>"""
+        read(context, "https://www.fanfiction.net/tv/", sections)
+        search("2", "Lorem & Ipsum: Dolor & Sit")
+        assertEquals(listOf("tv/Lorem", "tv/Ipsum-Dolor-Sit"), context.facets.getValue("2")["fandom"])
+    }
+
+    @Test
     fun `a card of a search keeps its summary whole, the words found marked bold among them`() {
         val html =
             """<html><body><div class="z-list"><a class="stitle" href="/s/14430178/1/Lorem">Lorem</a>""" +

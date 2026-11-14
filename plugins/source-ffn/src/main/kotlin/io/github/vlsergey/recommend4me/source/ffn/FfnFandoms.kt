@@ -42,7 +42,26 @@ internal class FfnFandoms(private val db: DSLContext) {
         return names.map { name -> known[name] ?: kept[name]?.singleOrNull() ?: name }
     }
 
+    /**
+     * The two fandoms of a crossover's line, "A & B": split at its one " & ", else at the one place both sides are
+     * fandoms kept — "Young Justice & Miraculous: Tales of Ladybug & Cat Noir"; null where the names kept choose no one
+     * place: no fandom guessed.
+     */
+    fun crossover(text: String): List<String>? {
+        val splits =
+            Regex(Regex.escape(AND)).findAll(text).map {
+                listOf(text.take(it.range.first), text.drop(it.range.last + 1))
+            }
+        val all = splits.toList()
+        if (all.size <= 1) return all.singleOrNull()
+        val known = db.select(NAME).from(TABLE).where(NAME.`in`(all.flatten().toSet())).fetchSet { it.value1() }
+        return all.singleOrNull { split -> split.all { it in known } }
+    }
+
     companion object {
+        /** What a crossover's line writes between its two fandoms. */
+        private const val AND = " & "
+
         private val TABLE = DSL.table("FFN_FANDOM")
         private val NAME = DSL.field("NAME", String::class.java)
         private val PATH = DSL.field("PATH", String::class.java)

@@ -75,9 +75,10 @@ class Ffn : Source {
 
     /**
      * 2: a card's summary read whole, the words a search marked bold in it among its words. 3: a fandom is known by its
-     * archive's path, "anime/Naruto", as the pages link it ([FfnFandoms]).
+     * archive's path, "anime/Naruto", as the pages link it ([FfnFandoms]). 4: a crossover's line split where the
+     * fandoms kept allow ([FfnFandoms.crossover]).
      */
-    override val parserVersion = 3
+    override val parserVersion = 4
 
     /** A work's pages and reviews, an author's page, the lists of the sections, the crossovers and the search. */
     override val capturePatterns =

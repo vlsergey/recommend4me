@@ -28,6 +28,7 @@ internal class FfnFields(private val items: ItemStore, private val directory: Ff
      */
     fun line(id: String, line: FfnLine) {
         if (line.fandoms.isNotEmpty()) fandoms(id, line.fandoms)
+        line.crossover?.let(directory::crossover)?.let { fandoms(id, it) }
         line.rating?.let { r -> RATINGS[r]?.let { AgeRating.write(items, id, listOf(it)) } }
         line.language?.let { items.setFacet(id, LANGUAGE, listOf(FacetValue(languageCode(it), it))) }
         items.setFacet(id, TAG, line.genres.map { FacetValue(it.lowercase(), it) })
