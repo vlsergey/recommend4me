@@ -126,6 +126,9 @@ class Aff : Source {
             else -> null
         }
 
+    /** An author of the site by their own page, "https://members.adult-fanfiction.org/profile.php?id=123". */
+    override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
+
     override fun itemIdOf(url: String): String? =
         ITEM_ADDRESS.find(url)?.groupValues?.let { (_, archive, number) -> idOf(archive, number) }
 
@@ -209,6 +212,10 @@ class Aff : Source {
     }
 
     companion object {
+        /** An author's own page: their key. */
+        private val AUTHOR_PAGE =
+            Regex("^https?://members\\.adult-fanfiction\\.org/profile\\.php\\?(?:[^#]*&)?id=(\\d+)")
+
         const val ID = "aff"
         const val DOMAIN = "adult-fanfiction.org"
         const val HOME = "https://www.$DOMAIN"

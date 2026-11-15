@@ -55,4 +55,11 @@ class FfnDecorTest {
     fun `the words of the source are complete`() {
         assertEquals(emptyList(), Translations.problems(source))
     }
+
+    @Test
+    fun `an author's own page tells the author`() {
+        assertEquals("123", source.authorOf("https://www.fanfiction.net/u/123/Lorem"))
+        assertEquals("123", source.authorOf("https://m.fanfiction.net/u/123"))
+        assertEquals(null, source.authorOf("https://www.fanfiction.net/s/1/1/"))
+    }
 }

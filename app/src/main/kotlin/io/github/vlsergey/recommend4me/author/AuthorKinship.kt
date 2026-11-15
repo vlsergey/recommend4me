@@ -78,7 +78,7 @@ object AuthorKinship {
         private val chances: PairChances?,
         private val clusters: WorkClusters,
     ) {
-        private val told = type.authors.told()
+        private val told = type.authors.distinct.told()
         private val entries = type.authors.entries.all()
 
         /** How close the authors [a] and [b] are: of their works but those they wrote together, which tell nothing. */

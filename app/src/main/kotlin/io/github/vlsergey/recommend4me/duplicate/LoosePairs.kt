@@ -49,7 +49,7 @@ internal object LoosePairs {
         val familyAt = families.withIndex().associate { it.value to it.index }
         val familyOf = IntArray(places.size) { familyAt.getValue(names[it]!!.substringBefore(':')) }
         val sizeKeys = sides.flatMap { it.sizes.keys }.distinct().sorted()
-        val kin = AuthorKin(type.authors.told())
+        val kin = AuthorKin(type.authors.distinct.told())
         val search =
             PairSearch(
                 sides.map { it.works(rarity, familyOf, sizeKeys, kin) },

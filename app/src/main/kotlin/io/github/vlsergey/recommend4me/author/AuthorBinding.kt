@@ -18,10 +18,11 @@ internal fun authorFacetOf(s: SourceStore): String? = s.schema.facets.firstOrNul
 
 /**
  * Every author of every site bound to a normalized author ([AuthorRepository]), at first one of their own — never by
- * the likeness of a name: as the works naming them come, and at the start whatever was not bound yet.
+ * the likeness of a name: as the works naming them come, and at the start whatever was not bound yet; one another
+ * site's author lists as a place of theirs merged with them ([AuthorPlaces]).
  */
 @Component
-class AuthorBinding(private val stores: Stores) {
+class AuthorBinding(private val stores: Stores, private val places: AuthorPlaces) {
 
     /** The [keys] of the source not bound yet bound; one at a time: two at once would bind one author twice. */
     @Synchronized
@@ -30,6 +31,8 @@ class AuthorBinding(private val stores: Stores) {
         if (fresh.isEmpty()) return
         s.authors.bindNew(s.id, fresh, Instant.now())
         log.info("{}: {} authors bound to normalized authors of their own", s.id, fresh.size)
+        // An author another site's author lists as a place of theirs, known at last
+        places.merge(s.authors)
     }
 
     /** The authors of the works [event] names bound at once, before anything reads the works. */
@@ -58,9 +61,9 @@ class AuthorBinding(private val stores: Stores) {
         }
     }
 
-    private companion object {
+    companion object {
         /** Among the listeners of changed items: after the works are bound (-200), before the rest reads them. */
-        const val AFTER_WORKS = -100
+        private const val AFTER_WORKS = -100
 
         /** Among the steps of the start: before every step that reads the authors. */
         const val BEFORE_READERS = -10

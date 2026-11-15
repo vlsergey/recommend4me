@@ -67,4 +67,10 @@ class Ao3DecorTest {
                 .mapNotNull(source::itemIdOf)
         assertEquals(captured, linked)
     }
+
+    @Test
+    fun `an author's own page tells the author`() {
+        assertEquals("Lorem", source.authorOf("https://archiveofourown.org/users/Lorem/pseuds/Ipsum"))
+        assertEquals(null, source.authorOf("https://archiveofourown.org/works/1"))
+    }
 }

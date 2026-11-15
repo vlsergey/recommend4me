@@ -60,4 +60,10 @@ class MolweDecorTest {
             .mapNotNull { it.selectFirst(cards.link)?.absUrl("href") }
             .mapNotNull(source::itemIdOf)
     }
+
+    @Test
+    fun `an author's own page tells the author`() {
+        assertEquals("123", source.authorOf("https://molwe.ru/author/123"))
+        assertEquals(null, source.authorOf("https://molwe.ru/author/123x"))
+    }
 }

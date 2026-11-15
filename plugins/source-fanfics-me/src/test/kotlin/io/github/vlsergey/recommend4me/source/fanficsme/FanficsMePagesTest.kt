@@ -275,4 +275,20 @@ class FanficsMePagesTest {
             source.pictureAddresses("https://fanfics.me/images/fanart/2026/10/25/1792907630596_200_300.jpg"),
         )
     }
+
+    @Test
+    fun `a member's page gives the places on the web it lists, its contacts none`() {
+        val context = MemorySourceContext()
+        capture(context, "https://fanfics.me/user502152", "user.html")
+        assertEquals(
+            mapOf("502152" to listOf("https://ficbook.net/authors/1000001", "https://author.today/u/lorem")),
+            context.authorPlaces,
+        )
+        // Of another page of the member, nothing
+        val other = MemorySourceContext()
+        capture(other, "https://fanfics.me/user502152/series", "user.html")
+        assertTrue(other.authorPlaces.isEmpty())
+        assertEquals("502152", source.authorOf("https://fanfics.me/user502152"))
+        assertEquals(null, source.authorOf("https://fanfics.me/user502152x"))
+    }
 }

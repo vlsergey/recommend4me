@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.source
 
+import io.github.vlsergey.recommend4me.author.AuthorPlaces
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemRemoval
 import io.github.vlsergey.recommend4me.picture.PicturesListed
@@ -25,6 +26,8 @@ class SourceContexts(
      * The works their tags keep out of the library, of every source alike: got when asked for, it reads the sources.
      */
     private val keptOut: ObjectProvider<KeptOutWorks>,
+    /** The places on the web the authors' pages list: got when asked for, it reads the sources too. */
+    private val authorPlaces: ObjectProvider<AuthorPlaces>,
 ) {
 
     fun of(sourceId: String): SourceContext {
@@ -54,6 +57,9 @@ class SourceContexts(
 
         override fun keepPage(url: String, html: String, itemId: String?) =
             store.writing.withLock { store.pages.keep(url, html, itemId, Instant.now(), store.source.parserVersion) }
+
+        override fun authorPlaces(author: String, urls: List<String>) =
+            authorPlaces.getObject().said(store.id, author, urls)
 
         override fun gradedItems(): Set<String> = store.ratings.gradedItems()
 

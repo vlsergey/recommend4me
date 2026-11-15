@@ -125,6 +125,14 @@ interface Source : BrowserTracking, SitePictures {
     fun valueUrl(facet: String, key: String, name: String): String? = null
 
     /**
+     * The author of the site whose own page [url] is — the key of the value of the source's facet of the authors that
+     * names them — or null when the address is no author's page of this site. Asked of every source of an address
+     * another site's author lists as a place of theirs ([SourceContext.authorPlaces]): the author there is the same
+     * person.
+     */
+    fun authorOf(url: String): String? = null
+
+    /**
      * The item a page of the site is about — a work's page, a chapter of it, its reviews — or null when the address is
      * not one item's. The extension shows the item's panel on such a page, and a card linking to it gets the item's
      * prediction.

@@ -33,6 +33,7 @@ export type AuthorKind = Schemas["AuthorKind"];
 export type AuthorOffer = Schemas["AuthorOffer"];
 export type AuthorSaid = Schemas["AuthorSaid"];
 export type AuthorSide = Schemas["AuthorSide"];
+export type AuthorMergedBy = Schemas["AuthorMergedBy"];
 export type AuthorWork = Schemas["AuthorWork"];
 export type FoundAuthorEntry = Schemas["FoundAuthorEntry"];
 export type DuplicateWork = Schemas["DuplicateWork"];

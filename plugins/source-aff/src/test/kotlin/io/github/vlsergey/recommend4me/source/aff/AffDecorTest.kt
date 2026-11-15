@@ -60,4 +60,10 @@ class AffDecorTest {
             doc.select(decor.nextPage!!).map { it.absUrl("href") }.distinct(),
         )
     }
+
+    @Test
+    fun `an author's own page tells the author`() {
+        assertEquals("1296842027", source.authorOf("https://members.adult-fanfiction.org/profile.php?id=1296842027"))
+        assertEquals(null, source.authorOf("https://hp.adult-fanfiction.org/story.php?no=600100589"))
+    }
 }

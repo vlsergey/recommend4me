@@ -109,6 +109,9 @@ class TwoSitesPlugins {
         override fun valueUrl(facet: String, key: String, name: String) =
             if (facet == Books.AUTHOR.key) "https://beta.example/author/$key" else null
 
+        override fun authorOf(url: String): String? =
+            Regex("^https://beta\\.example/author/([^/?#]+)").find(url)?.groupValues?.get(1)
+
         override val settings = listOf(SettingDef("cookie", secret = true), SettingDef("delay", default = "5"))
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {

@@ -122,6 +122,9 @@ class Ficbook : Source {
             else -> null
         }
 
+    /** An author of the site by their own page, "https://ficbook.net/authors/2492122". */
+    override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
+
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
     override val pageDecor =
@@ -161,6 +164,9 @@ class Ficbook : Source {
         }
 
     companion object {
+        /** An author's own page: their key. */
+        private val AUTHOR_PAGE = Regex("^https?://(?:www\\.)?ficbook\\.net/authors/([^/?#]+)")
+
         const val ID = "ficbook"
         const val BASE = "https://ficbook.net"
 

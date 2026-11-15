@@ -105,6 +105,9 @@ class Ffn : Source {
             else -> null
         }
 
+    /** An author of the site by their own page, "https://www.fanfiction.net/u/123/Name". */
+    override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
+
     override fun itemIdOf(url: String): String? = workIdOf(url)
 
     override val pageDecor =
@@ -127,6 +130,9 @@ class Ffn : Source {
         FfnPages(context.items, context.database).read(page)
 
     companion object {
+        /** An author's own page: their key. */
+        private val AUTHOR_PAGE = Regex("^https?://(?:www\\.|m\\.)?fanfiction\\.net/u/(\\d+)(?:[/?#]|$)")
+
         const val ID = "ffn"
         const val HOME = "https://www.fanfiction.net"
 

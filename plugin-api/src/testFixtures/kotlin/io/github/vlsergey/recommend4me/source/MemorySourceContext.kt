@@ -28,6 +28,8 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
     val seriesPlaces = HashMap<String, MutableMap<String, Int>>()
     val signalValues = HashMap<Pair<String, String>, String>()
     val settingValues = HashMap<String, String>()
+    /** The places on the web every author's page listed last: the author's key to the addresses. */
+    val authorPlaces = HashMap<String, List<String>>()
     val pages = LinkedHashMap<String, String>()
 
     override val items: ItemStore =
@@ -164,6 +166,10 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
 
     override fun keepPage(url: String, html: String, itemId: String?) {
         pages[url] = html
+    }
+
+    override fun authorPlaces(author: String, urls: List<String>) {
+        authorPlaces[author] = urls
     }
 
     override fun gradedItems(): Set<String> = emptySet()

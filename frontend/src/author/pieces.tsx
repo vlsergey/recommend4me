@@ -65,7 +65,7 @@ export function AuthorHead({ author, onOpen }: { author: AuthorSide; onOpen: (id
 }
 
 /** A name of an author on a site: a link to their page there, when the site has one. */
-function SiteName({ name, url, className }: { name: string; url?: string; className?: string }) {
+export function SiteName({ name, url, className }: { name: string; url?: string; className?: string }) {
   const { t } = useTranslation("author");
   if (!url) return <span className={className}>{name}</span>;
   return (

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.author
 
+import io.github.vlsergey.recommend4me.api.model.AuthorMergedBy
 import io.github.vlsergey.recommend4me.api.model.AuthorSide
 import io.github.vlsergey.recommend4me.api.model.AuthorWork
 import io.github.vlsergey.recommend4me.api.model.SiteAuthor
@@ -61,24 +62,51 @@ class AuthorSides(
     fun firstOf(texts: Map<String, String>): String? = languages.firstNotNullOfOrNull { texts[it] }
 
     /**
-     * The authors of the sites of the normalized authors [ids]: their names and how many works each has, of every
-     * source in one go.
+     * The authors of the sites of the normalized authors [ids]: their names, how many works each has and why each is
+     * with the others — the user merged them, or the page of which author of a site listed them — of every source in
+     * one go.
      */
     fun sites(type: TypeStore, ids: Collection<Long>): Map<Long, List<SiteAuthor>> {
-        val refs = type.authors.sitesOf(ids)
-        val inSources = refs.values.flatten().groupBy { it.source }
-        val shown = HashMap<SiteAuthorRef, SiteAuthor>()
-        inSources.forEach { (source, own) ->
-            val s = type.source(source) ?: return@forEach
-            val facet = authorFacetOf(s) ?: return@forEach
-            val names = s.names(facet, own.map { it.author })
-            val uses = s.items.valueUses(facet)
-            own.forEach {
-                val name = names[it.author] ?: it.author
-                shown[it] =
-                    SiteAuthor(source, it.author, name, uses[it.author] ?: 0, s.source.valueUrl(facet, it.author, name))
+        val bound = type.authors.boundOf(ids)
+        val owners = bound.values.flatten().mapNotNull { (it.mergedBy as? MergedBy.Place)?.owner }
+        val shown = shown(type, bound.values.flatten().map { it.ref } + owners)
+        return bound.mapValues { (_, list) ->
+            list.mapNotNull { b ->
+                shown[b.ref]?.copy(
+                    mergedBy =
+                        when (val by = b.mergedBy) {
+                            null -> null
+                            MergedBy.User -> AuthorMergedBy(AuthorMergedBy.By.USER)
+                            is MergedBy.Place -> AuthorMergedBy(AuthorMergedBy.By.PLACE, shown[by.owner])
+                        }
+                )
             }
         }
-        return refs.mapValues { (_, list) -> list.mapNotNull { shown[it] } }
+    }
+
+    /** The authors of the sites [refs] by their names and how many works each has, of every source in one go. */
+    private fun shown(type: TypeStore, refs: Collection<SiteAuthorRef>): Map<SiteAuthorRef, SiteAuthor> {
+        val shown = HashMap<SiteAuthorRef, SiteAuthor>()
+        refs
+            .distinct()
+            .groupBy { it.source }
+            .forEach { (source, own) ->
+                val s = type.source(source) ?: return@forEach
+                val facet = authorFacetOf(s) ?: return@forEach
+                val names = s.names(facet, own.map { it.author })
+                val uses = s.items.valueUses(facet)
+                own.forEach {
+                    val name = names[it.author] ?: it.author
+                    shown[it] =
+                        SiteAuthor(
+                            source,
+                            it.author,
+                            name,
+                            uses[it.author] ?: 0,
+                            s.source.valueUrl(facet, it.author, name),
+                        )
+                }
+            }
+        return shown
     }
 }

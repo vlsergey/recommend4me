@@ -44,7 +44,7 @@ class DuplicateViews(private val sizes: WorkSizes) {
     ): List<DuplicatePair> {
         val labels = familyLabels(type)
         val described = describe(type, rows.flatMap { listOf(it.pair.first, it.pair.second) })
-        val kin = AuthorKin(type.authors.told())
+        val kin = AuthorKin(type.authors.distinct.told())
         return rows.mapNotNull { r ->
             val first = described[r.pair.first] ?: return@mapNotNull null
             val second = described[r.pair.second] ?: return@mapNotNull null

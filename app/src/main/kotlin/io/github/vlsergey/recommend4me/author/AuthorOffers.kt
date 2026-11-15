@@ -95,7 +95,7 @@ class AuthorOffers(
     fun offers(typeId: String, said: AuthorSaid, author: Long?, offset: Int, limit: Int): AuthorOfferPage? {
         val type = stores.type(typeId) ?: return null
         val evidence =
-            Evidence(AuthorLibrary.of(type), workPairs(type), type.authors.told(), type.authors.entries.all())
+            Evidence(AuthorLibrary.of(type), workPairs(type), type.authors.distinct.told(), type.authors.entries.all())
         val rows = rowsOf(evidence, said).filter { author == null || it.first == author || it.second == author }
         val page =
             rows

@@ -11,6 +11,20 @@ import org.jooq.impl.DSL
 /** An author of a site: the source and the site's own key of them. */
 data class SiteAuthorRef(val source: String, val author: String)
 
+/** Why an author of a site is with the others of their normalized author, merged into it. */
+sealed interface MergedBy {
+    /** The user merged them. */
+    data object User : MergedBy
+
+    /** The page of the author of a site [owner] lists theirs as a place of theirs ([AuthorPlaces]). */
+    data class Place(val owner: SiteAuthorRef) : MergedBy
+}
+
+/**
+ * An author of a site of a normalized author, and why they are with the others of it; null of the one it was made of.
+ */
+data class SiteAuthorBound(val ref: SiteAuthorRef, val mergedBy: MergedBy?)
+
 /**
  * The normalized authors, in the dictionaries: every author of every site bound to one, at first of their own — never
  * by the likeness of a name — the pairs the user told apart or said are partly one, and the entries of the catalogues
@@ -24,6 +38,12 @@ class AuthorRepository(
 
     /** The entries of the catalogues the authors are bound to. */
     val entries = AuthorEntryRepository(db)
+
+    /** The places on the web the authors' pages list as theirs. */
+    val places = AuthorPlaceRepository(db)
+
+    /** The pairs told apart or said to be partly one. */
+    val distinct = AuthorDistinctions(db)
 
     /** The authors of the [source] and the normalized authors they are bound to: the site's key to the id. */
     fun bindingsOf(source: String): Map<String, Long> =
@@ -51,6 +71,28 @@ class AuthorRepository(
                     .fetch { it.value1()!! to SiteAuthorRef(it.value2()!!, it.value3()!!) }
             }
             .groupBy({ it.first }, { it.second })
+
+    /** Every author of every site of the normalized authors [ids], with why each is with the others. */
+    fun boundOf(ids: Collection<Long>): Map<Long, List<SiteAuthorBound>> {
+        val a = SITE_AUTHOR
+        return ids.distinct()
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(a.NORMALIZED, a.SOURCE, a.AUTHOR, a.MERGED_BY, a.MERGED_BY_SOURCE, a.MERGED_BY_AUTHOR)
+                    .from(a)
+                    .where(a.NORMALIZED.`in`(chunk))
+                    .fetch { r ->
+                        val by =
+                            when (r.value4()) {
+                                USER -> MergedBy.User
+                                PLACE -> MergedBy.Place(SiteAuthorRef(r.value5()!!, r.value6()!!))
+                                else -> null
+                            }
+                        r.value1()!! to SiteAuthorBound(SiteAuthorRef(r.value2()!!, r.value3()!!), by)
+                    }
+            }
+            .groupBy({ it.first }, { it.second })
+    }
 
     /** Every normalized author of several authors of the sites, with them. */
     fun merged(): Map<Long, List<SiteAuthorRef>> {
@@ -83,13 +125,21 @@ class AuthorRepository(
     }
 
     /**
-     * The normalized author [from] merged into [into]: every author of the sites of it bound to [into], the pairs of it
+     * The normalized author [from] merged into [into], [by] the user or by a place an author's page lists: every author
+     * of the sites of it bound to [into] — each not merged into it before marked as merged [by] it — the pairs of it
      * said apart or partly one moved to [into] — none of [into] with itself — its entries of the catalogues besides
      * those of [into], bound when they were, and [from] gone.
      */
-    fun merge(from: Long, into: Long, now: Instant) {
+    fun merge(from: Long, into: Long, now: Instant, by: MergedBy = MergedBy.User) {
         db.transaction { c ->
             val tx = DSL.using(c)
+            val place = (by as? MergedBy.Place)?.owner
+            tx.update(SITE_AUTHOR)
+                .set(SITE_AUTHOR.MERGED_BY, if (place == null) USER else PLACE)
+                .set(SITE_AUTHOR.MERGED_BY_SOURCE, place?.source)
+                .set(SITE_AUTHOR.MERGED_BY_AUTHOR, place?.author)
+                .where(SITE_AUTHOR.NORMALIZED.eq(from), SITE_AUTHOR.MERGED_BY.isNull)
+                .execute()
             tx.update(SITE_AUTHOR)
                 .set(SITE_AUTHOR.NORMALIZED, into)
                 .set(SITE_AUTHOR.BOUND_AT, now)
@@ -146,6 +196,9 @@ class AuthorRepository(
                 tx.update(SITE_AUTHOR)
                     .set(SITE_AUTHOR.NORMALIZED, id)
                     .set(SITE_AUTHOR.BOUND_AT, now)
+                    .setNull(SITE_AUTHOR.MERGED_BY)
+                    .setNull(SITE_AUTHOR.MERGED_BY_SOURCE)
+                    .setNull(SITE_AUTHOR.MERGED_BY_AUTHOR)
                     .where(
                         SITE_AUTHOR.SOURCE.eq(site.source),
                         SITE_AUTHOR.AUTHOR.eq(site.author),
@@ -162,36 +215,6 @@ class AuthorRepository(
             }
             .also { regrouped() }
 
-    /** The two told apart — or, [partly], a part of the works of one the other's — in place of the word said before. */
-    fun tell(a: Long, b: Long, partly: Boolean, now: Instant) {
-        val (first, second) = pair(a, b)
-        val d = NORMALIZED_AUTHOR_DISTINCT
-        db.insertInto(d)
-            .set(d.FIRST_AUTHOR, first)
-            .set(d.OTHER_AUTHOR, second)
-            .set(d.PARTLY, partly)
-            .set(d.SAID_AT, now)
-            .onDuplicateKeyUpdate()
-            .set(d.PARTLY, partly)
-            .set(d.SAID_AT, now)
-            .execute()
-    }
-
-    /** The word said of the two taken back. */
-    fun takeBack(a: Long, b: Long) {
-        val (first, second) = pair(a, b)
-        val d = NORMALIZED_AUTHOR_DISTINCT
-        db.deleteFrom(d).where(d.FIRST_AUTHOR.eq(first), d.OTHER_AUTHOR.eq(second)).execute()
-    }
-
-    /** Every pair told apart or said to be partly one, the smaller id first, with whether it is the latter. */
-    fun told(): Map<Pair<Long, Long>, Boolean> {
-        val d = NORMALIZED_AUTHOR_DISTINCT
-        return db.select(d.FIRST_AUTHOR, d.OTHER_AUTHOR, d.PARTLY)
-            .from(d)
-            .fetchMap({ it.value1()!! to it.value2()!! }, { it.value3()!! })
-    }
-
     fun exists(id: Long): Boolean = db.fetchExists(NORMALIZED_AUTHOR, NORMALIZED_AUTHOR.ID.eq(id))
 
     companion object {
@@ -202,5 +225,9 @@ class AuthorRepository(
         fun key(id: Long): String = id.toString()
 
         fun pair(a: Long, b: Long): Pair<Long, Long> = if (a <= b) a to b else b to a
+
+        /** The marks of why an author of a site was merged into their normalized author: the user's word, a place. */
+        private const val USER = "USER"
+        private const val PLACE = "PLACE"
     }
 }

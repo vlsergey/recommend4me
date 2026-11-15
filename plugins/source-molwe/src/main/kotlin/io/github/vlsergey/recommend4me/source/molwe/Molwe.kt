@@ -97,6 +97,9 @@ class Molwe : Source {
             else -> null
         }
 
+    /** An author of the site by their own page, "https://molwe.ru/author/123". */
+    override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
+
     override fun itemIdOf(url: String): String? = workIdOf(url)
 
     override val pageDecor =
@@ -183,6 +186,9 @@ class Molwe : Source {
     }
 
     companion object {
+        /** An author's own page: their key. */
+        private val AUTHOR_PAGE = Regex("^https?://(?:www\\.)?molwe\\.ru/author/(\\d+)(?:[/?#]|$)")
+
         const val ID = "molwe"
         const val HOME = "https://molwe.ru"
 

@@ -73,4 +73,10 @@ class FicbookDecorTest {
                 .mapNotNull(source::itemIdOf)
         assertTrue(linked.containsAll(captured), "$linked hold $captured")
     }
+
+    @Test
+    fun `an author's own page tells the author`() {
+        assertEquals("1000001", source.authorOf("https://ficbook.net/authors/1000001"))
+        assertEquals(null, source.authorOf("https://ficbook.net/readfic/1"))
+    }
 }

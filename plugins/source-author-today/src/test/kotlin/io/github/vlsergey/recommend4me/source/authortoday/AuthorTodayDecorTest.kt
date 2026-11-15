@@ -92,4 +92,11 @@ class AuthorTodayDecorTest {
             next,
         )
     }
+
+    @Test
+    fun `an author's own page tells the author`() {
+        assertEquals("lorem", source.authorOf("https://author.today/u/lorem"))
+        assertEquals("lorem", source.authorOf("https://author.today/u/lorem/works"))
+        assertEquals(null, source.authorOf("https://author.today/work/1"))
+    }
 }

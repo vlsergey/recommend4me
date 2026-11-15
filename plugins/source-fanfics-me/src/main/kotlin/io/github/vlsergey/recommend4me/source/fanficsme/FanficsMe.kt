@@ -95,9 +95,9 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
 
     /**
      * 2: the series' own pages and the lists of them, the number of a work in its series. 3: what a fandom is of, of
-     * its pages and the rating of the fandoms.
+     * its pages and the rating of the fandoms. 4: the places on the web a member's page lists as theirs.
      */
-    override val parserVersion = 3
+    override val parserVersion = 4
 
     override val capturePatterns =
         listOf(
@@ -121,6 +121,9 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
             FANDOM -> "$BASE/fandom$key"
             else -> null
         }
+
+    /** An author of the site by their own page, "https://fanfics.me/user502152". */
+    override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
 
     /** A fandom by its own page, whose head says what it is of. */
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
@@ -177,6 +180,9 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
     private val client = FanficsMeClient()
 
     companion object {
+        /** An author's own page: their key. */
+        private val AUTHOR_PAGE = Regex("^https?://(?:www\\.)?fanfics\\.me/user(\\d+)(?:[/?#]|$)")
+
         const val ID = "fanfics.me"
         const val BASE = "https://fanfics.me"
 

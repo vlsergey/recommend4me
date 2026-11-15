@@ -34,9 +34,12 @@ internal fun clean(text: String): String = text.replace(' ', ' ').trim()
  * character's, an author's), a work's header with its table of contents and the notes of its author, the text in the
  * reader — a chapter or the whole — the comments ([FanficsMeComments]), and what the site's genres, warnings and events
  * mean, by its help and the encyclopedia of a fandom ([FanficsMeTagMeanings]); what the fandoms are of, by the head of
- * a fandom's pages and the rating of the fandoms ([FanficsMeFandoms]).
+ * a fandom's pages and the rating of the fandoms ([FanficsMeFandoms]); the places on the web a member's page lists
+ * ([FanficsMeProfiles]).
  */
 class FanficsMePages(context: SourceContext) {
+
+    private val profiles = FanficsMeProfiles(context)
 
     private val items = context.items
     private val fields = FanficsMeFields(items)
@@ -51,6 +54,7 @@ class FanficsMePages(context: SourceContext) {
         val query = uri?.rawQuery.orEmpty()
         val doc = Jsoup.parse(page.html, page.url)
         meaningsOf(doc, path, query)
+        profiles.read(doc, path)
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
         // A series' own page, and a list of series: after the cards, whose works they list

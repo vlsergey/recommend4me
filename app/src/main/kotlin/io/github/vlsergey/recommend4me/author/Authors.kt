@@ -123,9 +123,9 @@ class Authors(
             val now = Instant.now()
             when (verdict) {
                 AuthorAnswer.Verdict.SAME -> authors.merge(maxOf(a, b), minOf(a, b), now)
-                AuthorAnswer.Verdict.DIFFERENT -> authors.tell(a, b, false, now)
-                AuthorAnswer.Verdict.PARTIAL -> authors.tell(a, b, true, now)
-                AuthorAnswer.Verdict.NONE -> authors.takeBack(a, b)
+                AuthorAnswer.Verdict.DIFFERENT -> authors.distinct.tell(a, b, false, now)
+                AuthorAnswer.Verdict.PARTIAL -> authors.distinct.tell(a, b, true, now)
+                AuthorAnswer.Verdict.NONE -> authors.distinct.takeBack(a, b)
             }
         }
         return true

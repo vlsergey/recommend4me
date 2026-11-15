@@ -6051,6 +6051,22 @@ components:
         url:
           type: string
           description: Their own page on the site, else the site's search of the works by them; none when the site has neither
+        mergedBy:
+          $ref: '#/components/schemas/AuthorMergedBy'
+
+    AuthorMergedBy:
+      type: object
+      description: >-
+        Why an author of a site is with the others of their normalized author; none of the one it was made of
+      required: [by]
+      properties:
+        by:
+          type: string
+          enum: [USER, PLACE]
+          description: USER — the user merged them; PLACE — an author's page listed theirs as a place of theirs
+        owner:
+          $ref: '#/components/schemas/SiteAuthor'
+          description: Of PLACE, the author of a site whose page listed it
 
     AuthorWork:
       type: object

@@ -414,7 +414,7 @@ class TwoSitesTest : TwoSitesTestBase() {
             204,
             authors.answerAuthors(AuthorAnswer(betaAnna, betaAnn, AuthorAnswer.Verdict.DIFFERENT)).statusCode.value(),
         )
-        assertEquals(true, stores.type("books")!!.authors.told()[AuthorRepository.pair(ann, namesake)]?.not())
+        assertEquals(true, stores.type("books")!!.authors.distinct.told()[AuthorRepository.pair(ann, namesake)]?.not())
         authors.answerAuthors(AuthorAnswer(betaAnna, betaAnn, AuthorAnswer.Verdict.NONE))
         // Of two who are one by now: one writer needs nothing, different is refused
         assertEquals(

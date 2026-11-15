@@ -2,13 +2,13 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLinkIcon, Link2Icon, SearchIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, ensureOk, unwrap, type AuthorSide, type ContentTypeInfo, type FoundAuthorEntry } from "@/api/client";
+import { api, ensureOk, unwrap, type AuthorSide, type ContentTypeInfo, type FoundAuthorEntry, type AuthorMergedBy as MergedByInfo } from "@/api/client";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { sourceShort, sourceTitle } from "@/i18n/label";
 import { Offers } from "./AuthorOffers";
-import { authorName, authorsKey, WorkLink } from "./pieces";
+import { authorName, authorsKey, SiteName, WorkLink } from "./pieces";
 
 /**
  * THE CARD OF AN AUTHOR, over whatever list it was opened from: the accounts on the sites, the entries
@@ -75,11 +75,33 @@ function Sites({ type, author }: { type: ContentTypeInfo; author: AuthorSide }) 
             <span className="text-xs text-muted-foreground tabular-nums" title={t("Accounts.worksHint")}>
               {s.works}
             </span>
+            {s.mergedBy && <MergedBy by={s.mergedBy} />}
             {author.sites.length > 1 && <AsyncButton size="icon-xs" variant="ghost" icon={<XIcon />} title={t("Card.takeOutHint")} onClick={() => takeOut(s.source, s.author)} />}
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+/**
+ * Why an account is with the others of the author: the user merged them, or the page of another account of theirs
+ * lists it among their places on the web — that account named, a link to its page.
+ */
+function MergedBy({ by }: { by: MergedByInfo }) {
+  const { t } = useTranslation("author");
+  const owner = by.owner;
+  if (by.by === "USER" || !owner) {
+    return (
+      <span className="text-xs text-muted-foreground" title={t("Card.mergedByUserHint")}>
+        {t("Card.mergedByUser")}
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs text-muted-foreground" title={t("Card.mergedByPlaceHint", { site: sourceTitle(owner.source) })}>
+      {t("Card.mergedByPlace", { site: sourceShort(owner.source) })} <SiteName name={owner.name} url={owner.url} className="text-foreground" />
+    </span>
   );
 }
 

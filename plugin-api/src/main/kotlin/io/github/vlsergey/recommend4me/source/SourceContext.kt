@@ -28,6 +28,14 @@ interface SourceContext {
      */
     fun keepPage(url: String, html: String, itemId: String?)
 
+    /**
+     * The places on the web an author's own page on the site lists as theirs — "Места в сети" of fanfics.me: the
+     * addresses of their pages on other sites, as the page shows them — in place of those it listed before; an empty
+     * list of a page showing none. [author] is the key of the value of the source's facet of the authors. An address
+     * that is an author's page of another source ([Source.authorOf]) makes the two one author.
+     */
+    fun authorPlaces(author: String, urls: List<String>)
+
     /** The items the user has graded, any version: a scrape reads their pages first. */
     fun gradedItems(): Set<String>
 
