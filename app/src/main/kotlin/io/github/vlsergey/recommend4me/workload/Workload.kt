@@ -1,9 +1,9 @@
 package io.github.vlsergey.recommend4me.workload
 
+import jakarta.annotation.PreDestroy
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CancellationException
-import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -30,8 +30,17 @@ data class Work(
  */
 class HeavyWork(val work: Work, val since: Instant, val reasons: Map<String, Int>, val asked: Boolean = false)
 
-/** A work planned for later: when it is due (it may be put off by newer changes), since when it is planned, and why. */
-class PlannedWork(val work: Work, val due: Instant, val since: Instant, val reasons: Map<String, Int>)
+/**
+ * A work planned for later: when it is due (it may be put off by newer changes), since when it is planned, why, and
+ * whether the user asked for it.
+ */
+class PlannedWork(
+    val work: Work,
+    val due: Instant,
+    val since: Instant,
+    val reasons: Map<String, Int>,
+    val asked: Boolean = false,
+)
 
 /**
  * A work done: when it began and ended, why it ran, whether it failed — or was [givenUp]: newer data came while it ran,
@@ -63,9 +72,13 @@ class FinishedWork(
  * Reentrant: a work asking for another inside it goes on. Taken before any lock of its own — a lock held while waiting
  * here would hold up whoever runs.
  *
- * AND WHAT IS PLANNED, AND WHY: the background works scheduled after the changes that ask for them ([plan]) — a grade,
- * an answer, a tag — are told here with their reasons, which go with them once they begin ([take]). Of the works
- * nothing is kept but what they are, their times and their reasons, and nothing outlives the process.
+ * A work of the background waiting longer than [Turns.AGING] goes as one the user asked for: a stream of the user's
+ * works never keeps the background waiting for ever.
+ *
+ * AND WHAT IS PLANNED, AND WHY — THE ONE WAY THE BACKGROUND IS SCHEDULED: the works after the changes that ask for them
+ * ([plan]) — a grade, an answer, a tag — are planned here with their reasons and what they do, begun here when due
+ * ([Plans]); planned again before they begin, they are done once. Of the works nothing is kept but what they are, their
+ * times and their reasons, and nothing outlives the process.
  *
  * AND WHAT IS DONE ([WorksDone]): the last works, with how long each took, and of every kind of work how long its last
  * run took: what a work to come is expected to take ([expected]).
@@ -74,14 +87,15 @@ class FinishedWork(
 class Workload {
     /** Whose turn it is: the works waiting their turn and the thread holding it. */
     private val turns = Turns()
-    private val planned = ConcurrentHashMap<Work, PlannedWork>()
+    private val plans = Plans(turns)
     private val done = WorksDone()
 
     @Volatile private var current: HeavyWork? = null
 
     /**
-     * Runs [body] once every work asked for before it is done; answers what it answers. The reasons of the work planned
-     * alike, if any, go with it.
+     * Runs [body] once every work asked for before it is done; answers what it answers. Its [reasons]; when null, those
+     * of the work planned alike, if any — which it is then, no longer planned. Inside another work it is a part of that
+     * one: a work planned alike stays planned, made of changes the running one may have read before.
      *
      * ALIKE WORKS ARE ONE: asked while a work alike still waits its turn, it is not queued a second time — the caller
      * waits for that one and answers what it answers, its reasons added to it; it begins on the data as they are then,
@@ -94,7 +108,7 @@ class Workload {
      */
     fun <T> run(
         work: Work,
-        reasons: Map<String, Int> = take(work),
+        reasons: Map<String, Int>? = null,
         joinAlike: Boolean = true,
         asked: Boolean = false,
         body: () -> T,
@@ -102,7 +116,7 @@ class Workload {
         Requests.refuseWaiting(work)
         // A work asking for another inside it goes on: the turn is its own
         if (turns.heldHere()) return body()
-        val (entry, own) = turns.enter(work, reasons, joinAlike, asked)
+        val (entry, own) = turns.enter(work, reasons ?: plans.take(work), joinAlike, asked)
         return if (own) runOwn(entry, body) else entry.answer()
     }
 
@@ -152,18 +166,21 @@ class Workload {
     fun finished(): List<FinishedWork> = done.list()
 
     /**
-     * The [work] planned for [due] — later than planned before, if put off; when null, as planned before — for one more
-     * [reason].
+     * The [work] planned for [due] — later than planned before, if put off; when null, as planned before, else at once
+     * — for one more [reason], [count] times; ahead of the background when the user [asked] for it. When its turn
+     * comes, [body] runs, and [after] of what it answers once the turn is given back: what is told of it — an event
+     * whose listeners may do works of their own — is told out of the queue. Planned again before it begins, the newer
+     * [body] is the one run. A failure of either is told in the log.
      */
-    fun plan(work: Work, due: Instant?, reason: String) {
-        planned.compute(work) { _, old ->
-            val reasons = old?.reasons.orEmpty().toMutableMap().apply { merge(reason, 1, Int::plus) }
-            PlannedWork(work, due ?: old?.due ?: Instant.now(), old?.since ?: Instant.now(), reasons)
-        }
-    }
-
-    /** The work begins: no longer planned; the reasons it was planned for, none if it was not. */
-    fun take(work: Work): Map<String, Int> = planned.remove(work)?.reasons.orEmpty()
+    fun <T> plan(
+        work: Work,
+        due: Instant?,
+        reason: String,
+        count: Int = 1,
+        asked: Boolean = false,
+        after: (T) -> Unit = {},
+        body: () -> T,
+    ) = plans.plan(work, due, mapOf(reason to count), asked) { entry -> after(runOwn(entry, body)) }
 
     /** The work running now, none when idle. */
     fun running(): HeavyWork? = current
@@ -172,10 +189,12 @@ class Workload {
     fun waiting(): List<HeavyWork> = turns.waiting()
 
     /** Whether the [work] is to be done: planned, waiting its turn or running now — what it makes is not made yet. */
-    fun due(work: Work): Boolean = planned.containsKey(work) || turns.waits(work) || current?.work == work
+    fun due(work: Work): Boolean = plans.has(work) || turns.waits(work) || current?.work == work
 
     /** The works planned, the soonest due first. */
-    fun planned(): List<PlannedWork> = planned.values.sortedBy { it.due }
+    fun planned(): List<PlannedWork> = plans.list()
+
+    @PreDestroy fun shutdown() = plans.shutdown()
 
     private companion object {
         /** A wait worth telling in the log. */

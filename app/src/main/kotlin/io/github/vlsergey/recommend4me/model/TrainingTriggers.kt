@@ -35,12 +35,15 @@ class TrainingTriggers(
     fun gradesChanged(event: GradesChanged) {
         settings.set(Recommendations.gradesChangedAt(event.type), System.currentTimeMillis().toString())
         heldOuts.forget(event.source, event.itemId)
-        recommendations.scheduleRetrain(event.type, "grade")
+        // The user waits to see a grade learnt (user, 2026-11-07)
+        recommendations.scheduleRetrain(event.type, "grade", asked = true)
     }
 
     @EventListener fun marksChanged(event: MarksChanged) = recommendations.scheduleRetrain(event.type, "mark")
 
-    @EventListener fun interestChanged(event: InterestChanged) = recommendations.scheduleRetrain(event.type, "interest")
+    /** The user's mark of interest, as a grade: the user waits to see it learnt. */
+    @EventListener
+    fun interestChanged(event: InterestChanged) = recommendations.scheduleRetrain(event.type, "interest", asked = true)
 
     /** Tags merged, or put above and under others: the works' tags, features of the works, changed. */
     @EventListener fun tagsChanged(event: TagsChanged) = recommendations.scheduleRetrain(event.type, "tags")
@@ -72,7 +75,7 @@ class TrainingTriggers(
     fun trainIfMissing() {
         stores.types.forEach { t ->
             if (kept.load(t) == null && t.sources.any { it.ratings.count() > 0 }) {
-                recommendations.scheduleRetrain(t.id, "noModel")
+                recommendations.scheduleRetrain(t.id, "noModel", asked = true)
             }
         }
     }

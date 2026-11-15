@@ -9,9 +9,8 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
@@ -51,7 +50,11 @@ class HeldOutModels(
     private val json: JsonMapper,
     private val workload: Workload,
 ) {
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "held-out").apply { isDaemon = true } }
+    /**
+     * Of every work whose page waits for what the model that had not seen it says, when the page last asked: no data,
+     * the pages' waiting alone, gone as the work begins.
+     */
+    private val askedAt = ConcurrentHashMap<ItemKey, Long>()
 
     /**
      * What the model that had not seen the graded work says of it. None for a work the user has not graded, or when
@@ -92,29 +95,25 @@ class HeldOutModels(
      * The model that had not seen the graded work fitted in the queue of the computations — ahead of the background's
      * works: a page the user opened asked for it — and what it says kept ([HeldOutRepository.keepExplained]); the
      * request that asked does not wait for it. Asked again before it is worked out, it is worked out once.
+     *
+     * The page asks every second while it waits ([askedAt]); a page that stopped asking — closed, or the user went on —
+     * by the time the work's turn comes leaves it undone, ahead of the background for nobody: the next opening of the
+     * page plans it again.
      */
     private fun planHeldOut(type: TypeStore, key: ItemKey) {
+        askedAt[key] = System.currentTimeMillis()
         val work = Work("heldOut", source = key.source, item = key.id)
-        workload.plan(work, Instant.now(), "page")
-        worker.execute {
-            // The boundary of the worker's thread: whatever a fitting throws is logged, the next one still runs
-            @Suppress("TooGenericExceptionCaught")
-            try {
-                if (type.heldOut.explained(key) != null) {
-                    workload.take(work)
-                    return@execute
-                }
-                workload.run(work, asked = true) {
-                    val h = fitHeldOut(key)
-                    type.heldOut.keepExplained(
-                        key,
-                        h?.score,
-                        h?.gradePlace,
-                        h?.let { json.writeValueAsString(it.explanation) },
-                    )
-                }
-            } catch (e: Exception) {
-                log.warn("{}: what a model that had not seen the work says of it was not worked out", key, e)
+        if (workload.due(work)) return
+        workload.plan(work, Instant.now(), "page", asked = true) {
+            val asked = askedAt.remove(key) ?: 0L
+            if (System.currentTimeMillis() - asked <= ASKED_LATELY_MS && type.heldOut.explained(key) == null) {
+                val h = fitHeldOut(key)
+                type.heldOut.keepExplained(
+                    key,
+                    h?.score,
+                    h?.gradePlace,
+                    h?.let { json.writeValueAsString(it.explanation) },
+                )
             }
         }
     }
@@ -208,8 +207,11 @@ class HeldOutModels(
         )
     }
 
-    @PreDestroy
-    fun shutdown() {
-        worker.shutdownNow()
+    private companion object {
+        /**
+         * How lately a page asked for the work for it to be still waiting: it asks every second; a page in a window not
+         * shown asks no more.
+         */
+        const val ASKED_LATELY_MS = 30_000L
     }
 }

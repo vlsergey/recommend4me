@@ -5,10 +5,8 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -45,9 +43,6 @@ class FacetComparisons(
     private val workload: Workload,
 ) {
     private val comparisons = ConcurrentHashMap<String, FacetComparison>()
-    private val executor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "facet-comparison").apply { isDaemon = true }
-    }
 
     fun of(store: SourceStore, facet: String): FacetComparison? = comparisons[keyOf(store, facet)]
 
@@ -55,14 +50,8 @@ class FacetComparisons(
         comparisons.compute(keyOf(store, facet)) { _, running ->
             if (running != null && running.finishedAt == null) return@compute running
             FacetComparison(Instant.now(), plugins.suggesters.map { MethodMeasure(it.id) }).also { c ->
-                executor.submit {
-                    workload.run(
-                        Work("methodsCompared", source = store.id, facet = facet),
-                        mapOf("asked" to 1),
-                        asked = true,
-                    ) {
-                        run(store, facet, c)
-                    }
+                workload.plan(Work("methodsCompared", source = store.id, facet = facet), null, "asked", asked = true) {
+                    run(store, facet, c)
                 }
             }
         }!!
@@ -136,10 +125,5 @@ class FacetComparisons(
             measure.millis,
             measure.report?.loss,
         )
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        executor.shutdownNow()
     }
 }

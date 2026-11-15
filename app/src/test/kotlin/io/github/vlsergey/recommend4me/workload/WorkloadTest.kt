@@ -24,9 +24,10 @@ class WorkloadTest {
     fun `a planned work begins with the reasons it was planned for, and is planned no longer`() {
         val workload = Workload()
         val train = Work("train", type = "books")
-        workload.plan(train, Instant.now().plusSeconds(3), "grade")
-        workload.plan(train, null, "grade")
-        workload.plan(train, null, "answer")
+        val runs = AtomicInteger()
+        workload.plan(train, Instant.now().plusSeconds(60), "grade") { runs.incrementAndGet() }
+        workload.plan(train, null, "grade") { runs.incrementAndGet() }
+        workload.plan(train, null, "answer") { runs.incrementAndGet() }
         assertEquals(1, workload.planned().size)
         workload.run(train) {
             assertEquals(mapOf("grade" to 2, "answer" to 1), workload.running()!!.reasons)
@@ -34,6 +35,70 @@ class WorkloadTest {
         assertTrue(workload.planned().isEmpty())
         assertNull(workload.running())
         assertEquals(mapOf("grade" to 2, "answer" to 1), workload.finished().single().reasons)
+        // Run by its caller, the plan is not run again
+        Thread.sleep(50)
+        assertEquals(0, runs.get())
+    }
+
+    @Test
+    fun `a work planned again and again before it is due runs once, the newer body, then what it told`() {
+        val workload = Workload()
+        val sizes = Work("workSizes", type = "books")
+        val ran = java.util.Collections.synchronizedList(ArrayList<String>())
+        val told = CountDownLatch(1)
+        repeat(3) { i ->
+            workload.plan(
+                sizes,
+                Instant.now().plusMillis(100),
+                "items",
+                after = { what: String ->
+                    ran += "told $what"
+                    told.countDown()
+                },
+            ) {
+                ran += "body $i"
+                "body $i"
+            }
+        }
+        assertTrue(told.await(5, TimeUnit.SECONDS))
+        assertEquals(listOf("body 2", "told body 2"), ran)
+        assertEquals(mapOf("items" to 3), workload.finished().single().reasons)
+    }
+
+    @Test
+    fun `a work planned while one alike waits its turn is that one, not run twice`() {
+        val workload = Workload()
+        val release = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val blocker = thread {
+            workload.run(Work("train", type = "t"), emptyMap()) {
+                started.countDown()
+                release.await()
+            }
+        }
+        started.await()
+        val vectors = Work("tagVectors")
+        val runs = AtomicInteger()
+        workload.plan(vectors, null, "start") { runs.incrementAndGet() }
+        while (workload.waiting().isEmpty()) Thread.sleep(5)
+        workload.plan(vectors, null, "tags") { runs.incrementAndGet() }
+        assertTrue(workload.planned().isEmpty())
+        assertEquals(mapOf("start" to 1, "tags" to 1), workload.waiting().single().reasons)
+        release.countDown()
+        blocker.join()
+        while (workload.due(vectors)) Thread.sleep(5)
+        assertEquals(1, runs.get())
+    }
+
+    @Test
+    fun `a failure of a planned work is told, the next planned runs all the same`() {
+        val workload = Workload()
+        val done = CountDownLatch(1)
+        workload.plan(Work("bad"), null, "start") { error("no") }
+        workload.plan(Work("good"), Instant.now().plusMillis(50), "start") { done.countDown() }
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+        while (workload.finished().size < 2) Thread.sleep(5)
+        assertEquals(listOf(true, false), workload.finished().map { it.failed })
     }
 
     @Test
@@ -231,6 +296,15 @@ class WorkloadTest {
         } finally {
             callers.shutdownNow()
         }
+    }
+
+    @Test
+    fun `a work of the background waiting longer than the aging goes as one the user asked for`() {
+        val now = Instant.now()
+        val old = Waiter(Work("textVectors"), now.minus(Turns.AGING).minusSeconds(1), emptyMap(), true, false)
+        val asked = Waiter(Work("train"), now.minusSeconds(1), emptyMap(), true, true)
+        val young = Waiter(Work("tagVectors"), now.minusSeconds(2), emptyMap(), true, false)
+        assertEquals(listOf(old, asked, young), listOf(young, asked, old).sortedWith(Turns.order(now)))
     }
 
     @Test

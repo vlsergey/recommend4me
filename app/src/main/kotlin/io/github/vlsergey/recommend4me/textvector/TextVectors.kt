@@ -10,10 +10,8 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -49,54 +47,43 @@ class TextVectors(
 ) {
     private val whole = ConcurrentHashMap<String, AtomicBoolean>()
     private val queued = ConcurrentHashMap<String, MutableSet<String>>()
-    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "text-vectors").apply { isDaemon = true }
-    }
-    private val scheduled = AtomicBoolean(false)
+
+    /** The sources whose every text is to be gone through, as on start, by their planned work. */
+    private val wholeAsked: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     @Volatile private var running = false
 
     fun running(): Boolean = running
 
+    /** The items written encoded a few seconds after the last write, a work of their source in the queue. */
     @EventListener
     fun itemsChanged(event: ItemsChanged) {
         queued.computeIfAbsent(event.source) { ConcurrentHashMap.newKeySet() } += event.ids
-        if (scheduled.compareAndSet(false, true)) worker.schedule(::drain, DELAY_SECONDS, TimeUnit.SECONDS)
+        planned(event.source, Instant.now().plusSeconds(DELAY_SECONDS), "items", event.ids.size)
     }
 
-    // The worker's loop: a source that fails any way is told in the log and leaves the others to be encoded
-    @Suppress("TooGenericExceptionCaught")
-    private fun drain() {
-        scheduled.set(false)
-        queued.keys.forEach { source ->
-            val ids = queued[source] ?: return@forEach
-            val batch = ids.toList()
-            ids.removeAll(batch.toSet())
-            val store = stores.source(source) ?: return@forEach
-            try {
-                refresh(store, "items", only = batch)
-            } catch (e: Exception) {
-                log.warn("{}: texts of {} items were not encoded: {}", source, batch.size, e.message)
-            }
-        }
-    }
-
+    /** Every source gone through on start, each a work of the queue; a source that fails is told in the log. */
     @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
-    // The worker's pass on start: a source that fails any way is told in the log and leaves the others to be encoded
-    @Suppress("TooGenericExceptionCaught")
-    fun start() {
-        worker.execute {
-            stores.sources.forEach { s ->
-                try {
-                    refresh(s, "start")
-                    windows.fillWindows(s)
-                } catch (e: Exception) {
-                    log.error("{}: text vectors were not refreshed on start", s.id, e)
-                }
-            }
+    fun start() =
+        stores.sources.forEach { s ->
+            wholeAsked += s.id
+            planned(s.id, null, "start", 1)
         }
-    }
+
+    /**
+     * The work of the [source] planned for [due] for the [reason]: of what it finds asked when it begins, every text of
+     * the source and its windows, else the items queued — planned again and again, it does all that was asked.
+     */
+    private fun planned(source: String, due: Instant?, reason: String, count: Int) =
+        workload.plan(Work(WHAT, source = source), due, reason, count) {
+            val store = stores.source(source) ?: return@plan
+            val batch = queued[source]?.let { ids -> ids.toList().also { ids.removeAll(it.toSet()) } }.orEmpty()
+            if (wholeAsked.remove(source)) {
+                refreshed(store, null, { _, _ -> }, { false })
+                windows.fillWindows(store)
+            } else if (batch.isNotEmpty()) refreshed(store, batch, { _, _ -> }, { false })
+        }
 
     /**
      * Encodes every text of the source whose text is new or changed, and drops the vectors of texts that are gone; with
@@ -111,7 +98,7 @@ class TextVectors(
         cancelled: () -> Boolean = { false },
     ): Int =
         workload.run(
-            Work("textVectors", source = store.id, item = only?.singleOrNull()),
+            Work(WHAT, source = store.id, item = only?.singleOrNull()),
             mapOf(reason to (only?.size ?: 1)),
             // A batch of ids is its own: another batch of the source is not this one
             joinAlike = only == null || only.size == 1,
@@ -193,16 +180,18 @@ class TextVectors(
         }
     }
 
-    /** The vector of a search line as a query; null without a text encoder. */
+    /**
+     * The vector of a search line as a query; null without a text encoder. THE ONE COMPUTATION ON THE THREAD OF A
+     * REQUEST ([io.github.vlsergey.recommend4me.workload.Requests]): the search of the line asked for is the answer
+     * itself, there is nothing to answer before it; one short line through the encoder, milliseconds, out of the queue.
+     */
     fun query(line: String): FloatArray? =
         plugins.textEncoder()?.encode(listOf(line), io.github.vlsergey.recommend4me.encoder.TextKind.QUERY)?.first()
 
-    @PreDestroy
-    fun shutdown() {
-        worker.shutdownNow()
-    }
-
     companion object {
+        /** The encoding of the texts of a source, as the queue of the works tells it. */
+        private const val WHAT = "textVectors"
+
         /** The key the title of an item is kept under among its texts' vectors. */
         const val TITLE = "title"
 

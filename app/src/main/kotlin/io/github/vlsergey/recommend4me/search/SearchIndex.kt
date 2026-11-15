@@ -10,13 +10,9 @@ import io.github.vlsergey.recommend4me.suggestion.FacetChancesChanged
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -39,11 +35,6 @@ class SearchIndex(
 ) {
     private val pending = ConcurrentHashMap<String, MutableSet<ItemKey>>()
     private val built = ConcurrentHashMap<String, CountDownLatch>()
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "search-index").apply { isDaemon = true } }
-    private val updater = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "search-update").apply { isDaemon = true }
-    }
-    private val updates = ConcurrentHashMap<String, ScheduledFuture<*>>()
     private val sources = SourceCatchUp(documents)
 
     @EventListener fun itemsChanged(event: ItemsChanged) = queue(event.source, event.ids)
@@ -55,63 +46,47 @@ class SearchIndex(
     /** The user's answer on a work's value: the work is found by what the user said it has. */
     @EventListener fun answered(event: FacetAnswered) = queue(event.source, listOf(event.itemId))
 
-    /** The items written are indexed again in the background, shortly after the last of a quick series of writes. */
+    /**
+     * The items written are indexed again in the background, in the queue of the computations, shortly after the last
+     * of a quick series of writes; a failure told in the log, the next write plans the update again.
+     */
     private fun queue(source: String, ids: Collection<String>) {
         val type = stores.typeOf(source).id
         pending.computeIfAbsent(type) { ConcurrentHashMap.newKeySet() } += ids.map { ItemKey(source, it) }
-        updates.compute(type) { _, old ->
-            old?.cancel(false)
-            workload.plan(updating(type), Instant.now().plusMillis(UPDATE_QUIET_MS), "items")
-            updater.schedule({ update(type) }, UPDATE_QUIET_MS, TimeUnit.MILLISECONDS)
-        }
-    }
-
-    /** The items written since they were indexed, of the type [type], indexed: a task of the background. */
-    // The updater's loop: whatever fails is told in the log, and the next write plans the update again
-    @Suppress("TooGenericExceptionCaught")
-    private fun update(type: String) {
-        try {
+        workload.plan(Work("searchUpdate", type = type), Instant.now().plusMillis(UPDATE_QUIET_MS), "items") {
             stores.type(type)?.let(::catchUp)
-        } catch (e: Exception) {
-            log.error("{}: the search index was not updated", type, e)
         }
     }
 
-    private fun updating(type: String) = Work("searchUpdate", type = type)
-
+    /**
+     * The index of every type made on start, in the queue of the computations, each a work of its own, and what was
+     * written meanwhile caught up with; a type whose index fails is told in the log, the others made all the same.
+     */
     @EventListener(ApplicationReadyEvent::class)
-    // The worker's pass on start: a type whose index fails any way is told in the log, the others made all the same
-    @Suppress("TooGenericExceptionCaught")
     fun build() {
         if (plugins.search == null) return
         // The scores of another reranker are of another model: read again as asked for
         plugins.reranker()?.let { r -> stores.types.forEach { it.searchScores.keepOnly(r.id) } }
         stores.types.forEach { built[it.id] = CountDownLatch(1) }
-        worker.execute {
-            stores.types.forEach { type ->
-                try {
-                    made(type, mapOf("start" to 1))
-                } catch (e: Exception) {
-                    log.error("{}: the search index was not made", type.id, e)
-                }
+        stores.types.forEach { type ->
+            workload.plan(Work("searchIndex", type = type.id), null, "start") {
+                made(type)
                 // What was written while the index was made
                 catchUp(type)
             }
         }
     }
 
-    /** The index of the start made, in the queue of the computations, unless it is made already. */
-    private fun made(type: TypeStore, reasons: Map<String, Int>) {
+    /** The index of the start made, unless it is made already. */
+    private fun made(type: TypeStore) {
         val provider = plugins.search ?: return
         val latch = built[type.id] ?: return
         try {
-            workload.run(Work("searchIndex", type = type.id), reasons) {
-                // Kept between the runs: the documents of the works whose fingerprint changed since alone made and
-                // written again, of the same values of the model their fingerprints were made of
-                if (latch.count > 0) {
-                    val prints = documents.printsOf(type)
-                    provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys, prints.chances) }
-                }
+            // Kept between the runs: the documents of the works whose fingerprint changed since alone made and written
+            // again, of the same values of the model their fingerprints were made of
+            if (latch.count > 0) {
+                val prints = documents.printsOf(type)
+                provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys, prints.chances) }
             }
         } finally {
             latch.countDown()
@@ -126,35 +101,25 @@ class SearchIndex(
         val provider = plugins.search
         val building = built[type.id]?.let { it.count > 0 } == true
         if (provider == null || building) return
-        val reasons = workload.take(updating(type.id))
         val keys = pending[type.id]?.let { set -> set.toList().also { set.removeAll(it.toSet()) } }.orEmpty()
         if (keys.isEmpty()) return
-        // The works taken here are this update's own: another update is of others
-        workload.run(updating(type.id), reasons, joinAlike = false) {
-            val started = System.currentTimeMillis()
-            val written =
-                keys
-                    .groupBy { it.source }
-                    .entries
-                    .sumOf { (source, list) ->
-                        val s = stores.source(source)
-                        if (s == null) provider.update(type.id, emptyMap(), { emptyList() }, list)
-                        else sources.written(provider, type.id, s, list)
-                    }
-            log.info(
-                "{}: the search index caught up with {} works written, {} documents made again, in {} ms",
-                type.id,
-                keys.size,
-                written,
-                System.currentTimeMillis() - started,
-            )
-        }
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        worker.shutdownNow()
-        updater.shutdownNow()
+        val started = System.currentTimeMillis()
+        val written =
+            keys
+                .groupBy { it.source }
+                .entries
+                .sumOf { (source, list) ->
+                    val s = stores.source(source)
+                    if (s == null) provider.update(type.id, emptyMap(), { emptyList() }, list)
+                    else sources.written(provider, type.id, s, list)
+                }
+        log.info(
+            "{}: the search index caught up with {} works written, {} documents made again, in {} ms",
+            type.id,
+            keys.size,
+            written,
+            System.currentTimeMillis() - started,
+        )
     }
 
     private companion object {

@@ -7,8 +7,6 @@ import io.github.vlsergey.recommend4me.source.ItemStore
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
-import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
@@ -34,7 +32,8 @@ class KeptOutWorks(
     private val removal: ObjectProvider<ItemRemoval>,
     private val workload: Workload,
 ) {
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "kept-out").apply { isDaemon = true } }
+    /** The tags whose works are to be removed, in the queue of the computations; guarded by itself. */
+    private val tags = LinkedHashSet<String>()
 
     /**
      * Whether the values of the [facet] the source [store] just wrote keep their work out: the facet the source's tags
@@ -88,27 +87,20 @@ class KeptOutWorks(
      * Every work kept now that the tag [tag] keeps out removed, in the background — in the queue of the computations,
      * what the models made of the works going with them.
      */
-    fun removeKept(scope: TagScope, tag: String) = removed("tag $tag", "tagKeptOut") { keptOfTag(scope, tag) }
-
-    /**
-     * The works [kept] finds removed in the background, in the queue of the computations — what the models made of them
-     * going with them — for the [reason]; [what] in the log.
-     */
-    private fun removed(what: String, reason: String, kept: () -> Map<SourceStore, Set<String>>) {
-        worker.execute {
-            // The worker's task: whatever fails is told in the log, and the word said again removes what is left
-            @Suppress("TooGenericExceptionCaught")
-            try {
-                workload.run(Work("worksKeptOut"), mapOf(reason to 1)) {
-                    val found = kept()
+    fun removeKept(scope: TagScope, tag: String) {
+        synchronized(tags) { tags += tag }
+        // A failure is told in the log by the queue, and the word said again removes what is left
+        workload.plan(REMOVING, null, "tagKeptOut") {
+            synchronized(tags) { tags.toList().also { tags.clear() } }
+                .forEach { t ->
+                    val found = keptOfTag(scope, t)
                     found.forEach { (s, ids) -> ids.forEach { removal.getObject().remove(ItemKey(s.id, it)) } }
-                    log.info("{} keep their works out: {} works removed", what, found.values.sumOf { it.size })
+                    log.info("The tag {} keeps its works out: {} works removed", t, found.values.sumOf { it.size })
                 }
-            } catch (e: Exception) {
-                log.error("the works of {} were not removed", what, e)
-            }
         }
     }
 
-    @PreDestroy fun shutdown() = worker.shutdownNow()
+    private companion object {
+        val REMOVING = Work("worksKeptOut")
+    }
 }

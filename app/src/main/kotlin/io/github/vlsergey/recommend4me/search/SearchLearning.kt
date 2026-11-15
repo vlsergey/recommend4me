@@ -9,12 +9,7 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -54,11 +49,6 @@ class SearchLearning(
     /** The user's languages: the lines judged are searched again as the first. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) {
-    private val timer = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "search-learning").apply { isDaemon = true }
-    }
-    private val planned = ConcurrentHashMap<String, ScheduledFuture<*>>()
-
     @EventListener fun judged(event: SearchJudged) = plan(event.type, "searchJudged")
 
     /** On a start: the weights of every type with judgments learnt again — the reranker may be another. */
@@ -66,26 +56,10 @@ class SearchLearning(
     fun start() = stores.types.filter { it.searchJudgments.all().isNotEmpty() }.forEach { plan(it.id, "start") }
 
     /** The weights of the [type] learnt shortly after the last of a quick series of judgments. */
-    private fun plan(type: String, reason: String) {
-        planned.compute(type) { _, old ->
-            old?.cancel(false)
-            workload.plan(work(type), Instant.now().plusMillis(QUIET_MS), reason)
-            timer.schedule({ learn(type) }, QUIET_MS, TimeUnit.MILLISECONDS)
+    private fun plan(type: String, reason: String) =
+        workload.plan(Work("searchWeights", type = type), Instant.now().plusMillis(QUIET_MS), reason) {
+            stores.type(type)?.let(::learnt)
         }
-    }
-
-    private fun work(type: String) = Work("searchWeights", type = type)
-
-    // The timer's task: whatever fails is told in the log, and the next judgment plans the learning again
-    @Suppress("TooGenericExceptionCaught")
-    private fun learn(type: String) {
-        try {
-            val store = stores.type(type) ?: return
-            workload.run(work(type)) { learnt(store) }
-        } catch (e: Exception) {
-            log.error("{}: the order of the search was not learnt", type, e)
-        }
-    }
 
     /**
      * The correction of the closeness by meaning and the weights of the order of the [type] learnt of every line judged
@@ -155,8 +129,6 @@ class SearchLearning(
     fun shiftedAt(type: TypeStore): Instant? = plugins.textEncoder()?.let { type.searchShift.read(it.id)?.second }
 
     private fun length(v: FloatArray) = kotlin.math.sqrt(v.sumOf { it.toDouble() * it })
-
-    @PreDestroy fun shutdown() = timer.shutdownNow()
 
     private companion object {
         /** The quiet after the last judgment before the order is learnt again: the user judges a page in a row. */

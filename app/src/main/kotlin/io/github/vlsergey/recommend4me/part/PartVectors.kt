@@ -7,16 +7,11 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
-
-private val log = LoggerFactory.getLogger(PartVectors::class.java)
 
 /**
  * The text of every part of every work read, encoded window by window in the background: a vector for every few hundred
@@ -32,46 +27,29 @@ class PartVectors(
     private val workload: Workload,
 ) {
 
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "part-vectors").apply { isDaemon = true } }
-    private val wake = Object()
-
     @Volatile private var stopping = false
 
     @Volatile private var busy = false
 
     fun running(): Boolean = busy
 
-    @EventListener(PartsSaved::class) fun partsSaved() = synchronized(wake) { wake.notifyAll() }
+    @EventListener(PartsSaved::class) fun partsSaved() = plan("parts")
 
-    @Order(START_ORDER)
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() {
-        worker.execute {
-            while (!stopping) {
-                if (pending() > 0) encodeWaiting()
-                busy = false
-                try {
-                    synchronized(wake) { wake.wait(TimeUnit.MINUTES.toMillis(WAKE_MINUTES)) }
-                } catch (_: InterruptedException) {
-                    return@execute
-                }
-            }
-        }
-    }
+    @Order(START_ORDER) @EventListener(ApplicationReadyEvent::class) fun start() = plan("start")
 
-    /** Every part waiting encoded in one work of the queue of the computations, not a batch apart. */
-    // The worker's loop: whatever fails is told in the log, and the parts are looked for again on the next wake
-    @Suppress("TooGenericExceptionCaught")
-    private fun encodeWaiting() {
-        try {
-            workload.run(Work("partVectors"), mapOf("parts" to 1)) {
+    /**
+     * Every part waiting encoded in one work of the queue of the computations, not a batch apart, planned at once for
+     * the [reason]; a part left unencoded — the work failed — is looked for again on the next part saved, or the start.
+     */
+    private fun plan(reason: String) =
+        workload.plan(ENCODING, null, reason) {
+            try {
                 val reached = Reached()
                 while (!stopping && encodeSome(reached) > 0) continue
+            } finally {
+                busy = false
             }
-        } catch (e: Exception) {
-            log.error("parts were not encoded", e)
         }
-    }
 
     /**
      * Of one run, the last part of every source given to encode, of its windows and of its paragraphs: the next batch
@@ -143,10 +121,11 @@ class PartVectors(
     @PreDestroy
     fun shutdown() {
         stopping = true
-        worker.shutdownNow()
     }
 
     companion object {
+        private val ENCODING = Work("partVectors")
+
         /** Parts per encoder call: a chapter is tens of windows already. */
         private const val BATCH = 8
 
@@ -155,8 +134,5 @@ class PartVectors(
 
         /** Its step of the start: after the texts' vectors begin (3), before the sets' vectors (6). */
         private const val START_ORDER = 5
-
-        /** The longest sleep of the worker between two looks for parts to encode: a part saved wakes it at once. */
-        private const val WAKE_MINUTES = 10L
     }
 }

@@ -6,12 +6,8 @@ import io.github.vlsergey.recommend4me.item.SynonymsSet
 import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -40,11 +36,6 @@ class TagRenaming(
     /** The languages a tag's entry is asked in, the user's first. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) {
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "tag-names").apply { isDaemon = true }
-    }
-    private val pending = ConcurrentHashMap<String, ScheduledFuture<*>>()
-
     /** Every tag counted now and what is shown of it kept. */
     fun rename(scope: TagScope, facet: String) = workload.run(NAMING) { renamed(scope, facet) }
 
@@ -91,27 +82,15 @@ class TagRenaming(
     /**
      * The sites' new tags bound, and the names worked out again, shortly after the last of a quick series of changes.
      */
-    fun schedule(reason: String) {
-        pending.compute(RENAMING) { _, old ->
-            old?.cancel(false)
-            workload.plan(NAMING, Instant.now().plusSeconds(RENAME_DELAY_SECONDS), reason)
-            scheduler.schedule({ bindAndRename() }, RENAME_DELAY_SECONDS, TimeUnit.SECONDS)
+    fun schedule(reason: String) =
+        // Planned till it begins: the offers read meanwhile are told to be worked out anew. A failure is told in the
+        // log, and the next change plans it again
+        workload.plan(NAMING, Instant.now().plusSeconds(RENAME_DELAY_SECONDS), reason) {
+            tags.scope()?.let { scope ->
+                normalization.bindNew()
+                renamed(scope, scope.facet)
+            }
         }
-    }
-
-    /** The sites' new tags bound and the names worked out: a task of the background, which logs what fails. */
-    // The background's loop: whatever fails is told in the log, and the next change plans it again
-    @Suppress("TooGenericExceptionCaught")
-    private fun bindAndRename() {
-        try {
-            val scope = tags.scope() ?: return
-            normalization.bindNew()
-            // Planned till it begins: the offers read meanwhile are told to be worked out anew
-            workload.run(NAMING) { renamed(scope, scope.facet) }
-        } catch (e: Exception) {
-            log.warn("The tags were not bound and named: {}", e.message, e)
-        }
-    }
 
     @EventListener(GradesChanged::class) fun gradesChanged() = schedule("grade")
 
@@ -131,19 +110,12 @@ class TagRenaming(
         // The answers of a merge a stop or a failure left unmoved: moved before anything reads them
         moveMergedAnswers(scope, scope.facet)
         schedule("start")
-        // The bindings made before what their entries are a kind of was read: read once, in the background
-        scheduler.execute { above.readAboveOfBound(scope) }
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
+        // The bindings made before what their entries are a kind of was read: read once, in the background — of the
+        // catalogues' sites, not a computation, out of the queue
+        thread(isDaemon = true, name = "tags-above") { above.readAboveOfBound(scope) }
     }
 
     private companion object {
-        /** The one renaming waited for, of every type's tags. */
-        const val RENAMING = "tags"
-
         /** The names of the tags worked out and their works counted, as the queue of the works tells it. */
         val NAMING = Work("tagsNamed")
 

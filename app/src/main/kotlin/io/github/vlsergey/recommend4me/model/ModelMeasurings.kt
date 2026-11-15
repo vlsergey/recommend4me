@@ -1,13 +1,10 @@
 package io.github.vlsergey.recommend4me.model
 
-import jakarta.annotation.PreDestroy
+import io.github.vlsergey.recommend4me.workload.Work
+import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-
-private val log = LoggerFactory.getLogger(ModelMeasurings::class.java)
 
 /**
  * A measuring of a model asked for: under way until [finishedAt]; its [result], none when there were too few grades or
@@ -21,54 +18,39 @@ class Measuring<T : Any>(val startedAt: Instant) {
 /**
  * THE MEASURINGS OF A MODEL ASKED FOR — what every part of the input is worth ([InputMeasures.worth]), whether weighing
  * the parts would rank better ([InputMeasures.weighing]) — IN THE BACKGROUND: each takes from a dozen trainings to
- * hundreds, in the queue of the computations, and the request that asks does not wait for them
+ * hundreds, planned in the queue of the computations, and the request that asks does not wait for them
  * ([io.github.vlsergey.recommend4me.workload.Requests]). Nothing is kept but the measuring of every type last started,
  * while the application runs: it is a measuring, not data. A measuring under way is not started again.
  */
 @Component
-class ModelMeasurings(private val measures: InputMeasures) {
+class ModelMeasurings(private val measures: InputMeasures, private val workload: Workload) {
     private val worth = ConcurrentHashMap<String, Measuring<ModelWorth>>()
     private val weighing = ConcurrentHashMap<String, Measuring<Weighing>>()
-    private val executor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "model-measuring").apply { isDaemon = true }
-    }
 
     fun worthOf(typeId: String): Measuring<ModelWorth>? = worth[typeId]
 
     fun weighingOf(typeId: String): Measuring<Weighing>? = weighing[typeId]
 
     fun measureWorth(typeId: String): Measuring<ModelWorth> =
-        start(worth, typeId, "part worth") { measures.worth(typeId) }
+        start(worth, Work("worth", type = typeId)) { measures.worth(typeId) }
 
     fun measureWeighing(typeId: String, cautious: Boolean): Measuring<Weighing> =
-        start(weighing, typeId, "weighing") { measures.weighing(typeId, cautious) }
+        start(weighing, Work("weighing", type = typeId)) { measures.weighing(typeId, cautious) }
 
-    private fun <T : Any> start(
-        of: ConcurrentHashMap<String, Measuring<T>>,
-        typeId: String,
-        what: String,
-        body: () -> T?,
-    ): Measuring<T> =
-        of.compute(typeId) { _, running ->
+    /**
+     * The measuring [work] of [body] planned at once, the user's; its failure told by the queue, the measuring ended.
+     */
+    private fun <T : Any> start(of: ConcurrentHashMap<String, Measuring<T>>, work: Work, body: () -> T?): Measuring<T> =
+        of.compute(work.type!!) { _, running ->
             if (running != null && running.finishedAt == null) return@compute running
             Measuring<T>(Instant.now()).also { m ->
-                executor.submit {
-                    // The boundary of the measurings' thread: whatever a measuring throws is logged and ends it,
-                    // the next measuring asked for still runs
-                    @Suppress("TooGenericExceptionCaught")
+                workload.plan(work, null, "asked", asked = true) {
                     try {
                         m.result = body()
-                    } catch (e: Exception) {
-                        log.warn("{}: the {} could not be measured", typeId, what, e)
                     } finally {
                         m.finishedAt = Instant.now()
                     }
                 }
             }
         }!!
-
-    @PreDestroy
-    fun shutdown() {
-        executor.shutdownNow()
-    }
 }

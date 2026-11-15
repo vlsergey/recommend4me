@@ -12,12 +12,7 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.tag.TagsChanged
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -43,10 +38,6 @@ class ItemSize(val words: SizeNumber?, val chars: SizeNumber?)
  */
 @Service
 class WorkSizes(private val stores: Stores, private val workload: Workload) {
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "work-sizes").apply { isDaemon = true }
-    }
-    private val pending = ConcurrentHashMap<String, ScheduledFuture<*>>()
 
     /**
      * The sizes of the items [ids] of the source, of their [numbers] with the user's word over them: what the site
@@ -163,29 +154,7 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
 
     private fun schedule(type: TypeStore, delaySeconds: Long, reason: String) {
         if (!type.hasSizes()) return
-        val work = Work(FITTING, type = type.id)
-        workload.plan(work, Instant.now().plusSeconds(delaySeconds), reason)
-        val next =
-            scheduler.schedule(
-                {
-                    // The boundary of the scheduler's thread: whatever a fitting throws is logged here, or the
-                    // future it was put in would keep it unseen
-                    @Suppress("TooGenericExceptionCaught")
-                    try {
-                        workload.run(work) { fit(type) }
-                    } catch (e: Exception) {
-                        log.warn("{}: the words to a character were not worked out: {}", type.id, e.message, e)
-                    }
-                },
-                delaySeconds,
-                TimeUnit.SECONDS,
-            )
-        pending.put(type.id, next)?.cancel(false)
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
+        workload.plan(Work(FITTING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { fit(type) }
     }
 
     companion object {

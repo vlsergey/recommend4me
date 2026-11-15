@@ -11,11 +11,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -50,16 +46,11 @@ class LayerDrafts(
     private val workload: Workload,
 ) {
 
-    /** The drafts of whole sources made again: in the background, in the queue of the computations, after a quiet. */
-    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "layer-drafts").apply { isDaemon = true }
-    }
-
-    /** The sources to be drafted again whole; guarded by itself. */
+    /**
+     * The sources to be drafted again whole — in the background, in the queue of the computations, after a quiet;
+     * guarded by itself.
+     */
     private val redrafted = LinkedHashSet<String>()
-
-    /** Their drafting, put off by every asking till the askings are quiet; guarded by [redrafted]. */
-    private var redrafting: ScheduledFuture<*>? = null
 
     /**
      * After the sites' tags are bound ([TagNormalization][io.github.vlsergey.recommend4me.tag.TagNormalization]),
@@ -98,44 +89,35 @@ class LayerDrafts(
      * once — the works whose drafts changed then read again.
      */
     private fun redraftLater(source: String, reason: String) {
-        synchronized(redrafted) {
-            redrafted += source
-            workload.plan(DRAFTING, Instant.now().plusSeconds(QUIET_SECONDS), reason)
-            redrafting?.cancel(false)
-            redrafting = worker.schedule(::redraftPlanned, QUIET_SECONDS, TimeUnit.SECONDS)
-        }
+        synchronized(redrafted) { redrafted += source }
+        workload.plan(DRAFTING, Instant.now().plusSeconds(QUIET_SECONDS), reason, after = ::told) { redrafted() }
     }
 
     /**
      * Every work of the sources planned drafted again now, in the queue of the computations: what the background does
      * after the quiet.
      */
+    fun redraftPlanned() = told(workload.run(DRAFTING) { redrafted() })
+
+    /** Every work of the sources planned drafted again; of each, the works whose drafts changed. */
     @Suppress("TooGenericExceptionCaught")
-    fun redraftPlanned() {
-        val sources = synchronized(redrafted) { redrafted.toList().also { redrafted.clear() } }
-        val changed =
-            try {
-                workload.run(DRAFTING) {
-                    sources.mapNotNull { source ->
-                        val store = stores.source(source)?.takeIf(::drafts) ?: return@mapNotNull null
-                        try {
-                            source to redraftWhole(store)
-                        } catch (e: Exception) {
-                            // A BOUNDARY: a source's drafting runs its plugin's code (Source.draft), which may fail
-                            // in any way; the failure is logged and the other sources drafted
-                            log.error("{}: the drafts of the works were not made", source, e)
-                            null
-                        }
-                    }
+    private fun redrafted(): List<Pair<String, List<String>>> =
+        synchronized(redrafted) { redrafted.toList().also { redrafted.clear() } }
+            .mapNotNull { source ->
+                val store = stores.source(source)?.takeIf(::drafts) ?: return@mapNotNull null
+                try {
+                    source to redraftWhole(store)
+                } catch (e: Exception) {
+                    // A BOUNDARY: a source's drafting runs its plugin's code (Source.draft), which may fail in any
+                    // way; the failure is logged and the other sources drafted
+                    log.error("{}: the drafts of the works were not made", source, e)
+                    null
                 }
-            } catch (e: Exception) {
-                // A BOUNDARY: this runs on the background thread, where nothing would hear of a failure of the queue
-                // or of a work alike joined; it is logged
-                log.error("The drafts of {} were not made", sources, e)
-                return
             }
-        // Told once out of the queue: whatever reads the works again plans its own work
-        changed.forEach { (source, ids) -> if (ids.isNotEmpty()) events.publishEvent(ItemsChanged(source, ids)) }
+
+    /** Told once out of the queue — whatever reads the works again plans its own work — the works [changed]. */
+    private fun told(changed: List<Pair<String, List<String>>>) = changed.forEach { (source, ids) ->
+        if (ids.isNotEmpty()) events.publishEvent(ItemsChanged(source, ids))
     }
 
     /**
@@ -227,11 +209,6 @@ class LayerDrafts(
                     }
                 }
         return (drafts + universes).distinct()
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        worker.shutdownNow()
     }
 
     companion object {

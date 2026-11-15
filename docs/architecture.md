@@ -277,9 +277,11 @@ before it — and its chances are made inside `DatabaseRefused.during`, where a 
 fails at once (`InlineBlobs.acquire`), in the tests as on the user's machine. So are the chances
 of the age rating (`FacetModel.read`, then `FacetModelRead.chances`) and the chances of every work
 after a refit.
-The model of a facet is fitted again in the background, in the queue of the computations, whenever
-anything it learns from changes; a refit tells which works' given values changed by scoring every
-work by the model before and after it.
+The models of a source's facets are fitted again in the background, in the queue of the computations,
+whenever anything they learn from changes: one work of the queue, whole — every work of the source
+read once for the pass, its inputs on the card, every facet down the chain fitted, nothing else
+computing while the pass holds them; a refit tells which works' given values changed by scoring
+every work by the model before and after it.
 
 Of a work's chances those shown are made — of the values it has, rejected, given as examples, more
 likely than not, and the few likeliest others offered — not every character of a work's universes.

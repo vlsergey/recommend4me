@@ -13,12 +13,7 @@ import io.github.vlsergey.recommend4me.suggestion.FacetModelRead
 import io.github.vlsergey.recommend4me.tag.TagsChanged
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -39,10 +34,6 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
     override val facet: String = AgeRating.KEY
 
     private val models = AgeRatingRepository(databases.dictionaries.dsl)
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "age-rating").apply { isDaemon = true }
-    }
-    private val pending = AtomicReference<ScheduledFuture<*>?>()
 
     private val keys = AgeRating.VALUES.map { it.key }
 
@@ -94,25 +85,8 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
 
     @EventListener(TagsChanged::class) fun tagsChanged() = schedule(QUIET_SECONDS, "tags")
 
-    private fun schedule(delaySeconds: Long, reason: String) {
-        workload.plan(FITTING, Instant.now().plusSeconds(delaySeconds), reason)
-        val next =
-            scheduler.schedule(
-                {
-                    // The boundary of the scheduler's thread: whatever a fitting throws is logged here, or the
-                    // future it was put in would keep it unseen
-                    @Suppress("TooGenericExceptionCaught")
-                    try {
-                        workload.run(FITTING) { fit() }
-                    } catch (e: Exception) {
-                        log.warn("The model of the age rating was not fitted: {}", e.message, e)
-                    }
-                },
-                delaySeconds,
-                TimeUnit.SECONDS,
-            )
-        pending.getAndSet(next)?.cancel(false)
-    }
+    private fun schedule(delaySeconds: Long, reason: String) =
+        workload.plan(FITTING, Instant.now().plusSeconds(delaySeconds), reason) { fit() }
 
     /** The model fitted on every work of every source whose rating is known to lie between two steps, and kept. */
     fun fit() {
@@ -132,11 +106,6 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
             model?.let { "%.4f".format(AgeRatingModel.loss(it, examples)) },
             System.currentTimeMillis() - started,
         )
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
     }
 
     companion object {

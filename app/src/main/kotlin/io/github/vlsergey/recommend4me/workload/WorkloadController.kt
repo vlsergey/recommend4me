@@ -50,7 +50,8 @@ class WorkloadController(private val workload: Workload, private val stores: Sto
             .copy(ended = ended.atOffset(ZoneOffset.UTC), failed = failed, givenUp = givenUp)
 
     private fun PlannedWork.toApi() =
-        queued(work, QueuedWork.State.PLANNED, since, reasons).copy(due = due.atOffset(ZoneOffset.UTC))
+        queued(work, QueuedWork.State.PLANNED, since, reasons)
+            .copy(due = due.atOffset(ZoneOffset.UTC), asked = asked.takeIf { it })
 
     private fun HeavyWork.toApi(state: QueuedWork.State) =
         queued(work, state, since, reasons).copy(asked = asked.takeIf { it })

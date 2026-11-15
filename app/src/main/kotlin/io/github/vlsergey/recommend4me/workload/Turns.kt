@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.workload
 
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
@@ -8,8 +9,8 @@ import kotlin.concurrent.withLock
 
 /**
  * WHOSE TURN IT IS, of the works of the [Workload]: the works waiting their turn, in the order they are asked — those
- * the user asked for first ([ORDER]) — and the thread holding the turn. A work alike one still waiting joins it instead
- * of waiting a second time.
+ * the user asked for first, and a work of the background waiting longer than [AGING] counted among them ([order]) — and
+ * the thread holding the turn. A work alike one still waiting joins it instead of waiting a second time.
  */
 internal class Turns {
     /**
@@ -32,16 +33,29 @@ internal class Turns {
      */
     fun enter(work: Work, reasons: Map<String, Int>, joinAlike: Boolean, asked: Boolean): Pair<Waiter, Boolean> =
         lock.withLock {
-            val alike = if (joinAlike) waiting.firstOrNull { it.joinable && it.work == work } else null
-            if (alike != null) {
-                alike.reasons = merged(alike.reasons, reasons)
-                if (asked && !alike.asked) {
-                    alike.asked = true
-                    turn.signalAll()
-                }
-                alike to false
-            } else Waiter(work, Instant.now(), reasons, joinAlike, asked).also { waiting += it } to true
+            val alike = if (joinAlike) joinedTo(work, reasons, asked) else null
+            alike?.let { it to false }
+                ?: (Waiter(work, Instant.now(), reasons, joinAlike, asked).also { waiting += it } to true)
         }
+
+    /**
+     * Whether a work alike the [work] waits its turn, not begun: then the [work] is that one — its [reasons] added to
+     * it, put ahead when [asked] — and need not be done again: it reads the data as they are when it begins.
+     */
+    fun joined(work: Work, reasons: Map<String, Int>, asked: Boolean): Boolean = lock.withLock {
+        joinedTo(work, reasons, asked) != null
+    }
+
+    /** The work alike the [work] still waiting, joined by it as [joined] tells; none. Under [lock]. */
+    private fun joinedTo(work: Work, reasons: Map<String, Int>, asked: Boolean): Waiter? {
+        val alike = waiting.firstOrNull { it.joinable && it.work == work } ?: return null
+        alike.reasons = merged(alike.reasons, reasons)
+        if (asked && !alike.asked) {
+            alike.asked = true
+            turn.signalAll()
+        }
+        return alike
+    }
 
     /**
      * Waits till it is the turn of [entry], the caller's own, and takes it. A wait given up — the thread interrupted —
@@ -74,23 +88,41 @@ internal class Turns {
         turn.signalAll()
     }
 
-    /** The works waiting their turn, in the order they will run: those the user asked for first. */
+    /**
+     * The works waiting their turn, in the order they will run: those the user asked for and those waiting longer than
+     * [AGING] first.
+     */
     fun waiting(): List<HeavyWork> = lock.withLock {
-        waiting.sortedWith(ORDER).map { HeavyWork(it.work, it.since, it.reasons, it.asked) }
+        waiting.sortedWith(order(Instant.now())).map { HeavyWork(it.work, it.since, it.reasons, it.asked) }
     }
 
     /** Whether the [work] waits its turn. */
     fun waits(work: Work): Boolean = lock.withLock { waiting.any { it.work == work } }
 
-    /** Whose turn comes next: of the works the user asked for the longest waiting, else of the rest. Under [lock]. */
-    private fun next(): Waiter? = waiting.minWithOrNull(ORDER)
+    /**
+     * Whose turn comes next: of the works the user asked for and those waiting too long the longest waiting, else of
+     * the rest. Under [lock].
+     */
+    private fun next(): Waiter? = waiting.minWithOrNull(order(Instant.now()))
 
-    private fun merged(a: Map<String, Int>, b: Map<String, Int>): Map<String, Int> =
-        a.toMutableMap().apply { b.forEach { (k, n) -> merge(k, n, Int::plus) } }
+    companion object {
+        /**
+         * How long a work of the background waits before it goes as one the user asked for (user, 2026-11-15): the
+         * trainings the user's answers asked for, one after another while the user marks, kept the works of the
+         * background waiting for 14 minutes — the texts of a work just read, its page waiting on them, among them.
+         */
+        val AGING: Duration = Duration.ofMinutes(2)
 
-    private companion object {
-        /** The order of the turns: the works the user asked for first, each kind the longest waiting first. */
-        val ORDER: Comparator<Waiter> = compareBy<Waiter> { !it.asked }.thenBy { it.since }
+        /**
+         * The order of the turns at [now]: the works the user asked for and those of the background waiting longer than
+         * [AGING] first, each kind the longest waiting first.
+         */
+        fun order(now: Instant): Comparator<Waiter> =
+            compareBy<Waiter> { !it.asked && Duration.between(it.since, now) <= AGING }.thenBy { it.since }
+
+        /** The reasons [a] and [b] together, each counted as many times as both tell it. */
+        fun merged(a: Map<String, Int>, b: Map<String, Int>): Map<String, Int> =
+            a.toMutableMap().apply { b.forEach { (k, n) -> merge(k, n, Int::plus) } }
     }
 }
 

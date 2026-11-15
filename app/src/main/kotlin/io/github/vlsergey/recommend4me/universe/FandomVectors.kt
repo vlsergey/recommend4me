@@ -6,12 +6,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -33,22 +28,25 @@ class FandomVectors(
     private val workload: Workload,
     private val events: ApplicationEventPublisher,
 ) {
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "fandom-vectors").apply { isDaemon = true }
-    }
-    private val pending = AtomicReference<ScheduledFuture<*>?>()
-
     @EventListener(ApplicationReadyEvent::class) fun start() = schedule(START_DELAY_SECONDS, "start")
 
     /** Works came or changed: their sites' fandoms bound ([FandomNormalization]), maybe new ones. */
     @EventListener(ItemsChanged::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")
 
-    /** The vectors made after the quiet; the [reason], a key the interface words, told in the queue of the works. */
+    /**
+     * The vectors made after the quiet, in the queue of the works; the [reason], a key the interface words, told there.
+     * Those made told out of the queue; a failure told in the log, and the next change plans it again.
+     */
     private fun schedule(delaySeconds: Long, reason: String) {
         if (sites().isEmpty()) return
-        workload.plan(VECTORS, Instant.now().plusSeconds(delaySeconds), reason)
-        val next = scheduler.schedule({ fillInBackground() }, delaySeconds, TimeUnit.SECONDS)
-        pending.getAndSet(next)?.cancel(false)
+        workload.plan(
+            VECTORS,
+            Instant.now().plusSeconds(delaySeconds),
+            reason,
+            after = { made: Int -> if (made > 0) events.publishEvent(FandomVectorsMade) },
+        ) {
+            fill()
+        }
     }
 
     private fun sites(): List<Pair<SourceStore, String>> =
@@ -56,17 +54,6 @@ class FandomVectors(
             .filter { it.type.universes }
             .flatMap { it.sources }
             .mapNotNull { s -> UniverseFacet.fandomFacet(s.schema)?.let { s to it } }
-
-    /** The vectors made in the queue of the works: a task of the background, which logs what fails. */
-    // The background's loop: whatever fails is told in the log, and the next change plans it again
-    @Suppress("TooGenericExceptionCaught")
-    private fun fillInBackground() {
-        try {
-            if (workload.run(VECTORS) { fill() } > 0) events.publishEvent(FandomVectorsMade)
-        } catch (e: Exception) {
-            log.warn("The vectors of the fandoms' names were not made: {}", e.message, e)
-        }
-    }
 
     /**
      * Every name of a site's fandom and every description its site gives of one — a synonym of the name
@@ -84,11 +71,6 @@ class FandomVectors(
             }
             missing.size
         }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
-    }
 
     private companion object {
         /** After the start: the sources read, the encoder loaded. */

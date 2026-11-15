@@ -9,10 +9,7 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkEvents
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -56,18 +53,11 @@ class Duplicates(
     /** The card, when the launch asks for it: the search made there. */
     private val cards: ObjectProvider<CardSource>,
 ) {
-    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "duplicates").apply { isDaemon = true }
-    }
-
-    /** The types whose search is planned or running. */
-    private val searching: MutableSet<String> = ConcurrentHashMap.newKeySet()
-
     /**
      * Whether a search of the type is planned or running: the pairs are to come. A fitting after an answer is not told:
      * nothing is read for an answer.
      */
-    fun isSearching(type: TypeStore) = type.id in searching
+    fun isSearching(type: TypeStore) = workload.due(searching(type))
 
     /**
      * The plugin of pairs [id] made the type's, and the pairs looked for anew by it, its models fitted with them: the
@@ -91,22 +81,13 @@ class Duplicates(
      * ([asked]); false when one is planned or running already.
      */
     fun plan(type: TypeStore, reason: String, asked: Boolean = false): Boolean {
-        if (!searching.add(type.id)) return false
-        val work = Work("duplicates", type = type.id)
-        workload.plan(work, Instant.now(), reason)
-        worker.execute {
-            // The boundary of the worker's thread: whatever the search throws is logged, the type let go of
-            @Suppress("TooGenericExceptionCaught")
-            try {
-                workload.run(work, asked = asked) { search(type) }
-            } catch (e: Exception) {
-                log.warn("{}: the duplicates were not looked for: {}", type.id, e.message, e)
-            } finally {
-                searching -= type.id
-            }
-        }
+        val work = searching(type)
+        if (workload.due(work)) return false
+        workload.plan(work, Instant.now(), reason, asked = asked) { search(type) }
         return true
     }
+
+    private fun searching(type: TypeStore) = Work("duplicates", type = type.id)
 
     /**
      * The search of the type ([TypeSearch]) by the models as the last fitting left them — of one work, and of one
@@ -199,11 +180,6 @@ class Duplicates(
         if (type.links.word(a, b, now) == TypeLinkRepository.SAME) type.links.unlink(a, b, now)
         else type.links.takeBack(a, b, now)
         fitting.afterAnswer(type)
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        worker.shutdownNow()
     }
 
     companion object {

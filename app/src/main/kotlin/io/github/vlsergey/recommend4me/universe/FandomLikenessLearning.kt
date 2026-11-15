@@ -5,11 +5,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -31,12 +27,6 @@ class FandomLikenessLearning(
     private val workload: Workload,
     private val cards: ObjectProvider<CardSource>,
 ) {
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "fandom-likeness").apply { isDaemon = true }
-    }
-
-    @Volatile private var pending: ScheduledFuture<*>? = null
-
     /** The kernels of the likeness and the card they were compiled for: compiled once a card. */
     @Volatile private var compiled: FandomLikeness.OnCard? = null
 
@@ -146,30 +136,7 @@ class FandomLikenessLearning(
 
     private fun schedule(delaySeconds: Long, reason: String) {
         if (stores.withUniverses().isEmpty()) return
-        val work = Work(LEARNING)
-        workload.plan(work, Instant.now().plusSeconds(delaySeconds), reason)
-        val next =
-            scheduler.schedule(
-                {
-                    // The boundary of the scheduler's thread: whatever the learning throws is logged here, or the
-                    // future it was put in would keep it unseen
-                    @Suppress("TooGenericExceptionCaught")
-                    try {
-                        workload.run(work) { learn() }
-                    } catch (e: Exception) {
-                        log.warn("The likeness of the fandoms' names was not learnt: {}", e.message, e)
-                    }
-                },
-                delaySeconds,
-                TimeUnit.SECONDS,
-            )
-        pending?.cancel(false)
-        pending = next
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
+        workload.plan(Work(LEARNING), Instant.now().plusSeconds(delaySeconds), reason) { learn() }
     }
 
     companion object {

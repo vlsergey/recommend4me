@@ -8,12 +8,8 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
@@ -47,9 +43,6 @@ class Recommendations(
 
     /** How long the last training of every type took, ms: how long a stream of background changes is let to settle. */
     private val lastTraining = ConcurrentHashMap<String, Long>()
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "model-training").apply { isDaemon = true }
-    }
 
     /**
      * Training is running now. One planned after a change, or waiting its turn in the queue of the computations, is
@@ -62,40 +55,37 @@ class Recommendations(
      * after the last of a quick series of them. A change the background work makes — the suggester's chances of every
      * facet of every source, the reranker's likeness chunk after chunk, the pictures — comes in long streams: learnt
      * after a minute of quiet, or twice the last training, never later than [MAX_WAIT_MS] after the first of the
-     * stream; a training the user waits for is never put off by it. The [reason] — a key the interface words — is told
-     * in the queue of the works ([Workload.plan]) till the training begins.
+     * stream; a training of the user's change is never put off by it. The [reason] — a key the interface words — is
+     * told in the queue of the works ([Workload.plan]) till the training begins.
+     *
+     * [asked]: the user waits for this training — a grade, the mark of interest, the button (user, 2026-11-07) — and it
+     * goes ahead of the background's works. A change of the user's the user does not wait to see learnt — an answer, a
+     * tag, a mark on a picture — is learnt in its turn among the background's (user, 2026-11-15): the trainings after
+     * every answer, one after another while the user marks, kept the background waiting for 14 minutes.
      */
-    fun scheduleRetrain(type: String, reason: String, byUser: Boolean = true, quietMs: Long = USER_QUIET_MS) {
+    fun scheduleRetrain(
+        type: String,
+        reason: String,
+        byUser: Boolean = true,
+        asked: Boolean = false,
+        quietMs: Long = USER_QUIET_MS,
+    ) {
         val now = System.currentTimeMillis()
+        val work = trainingWork(type)
         pending.compute(type) { _, old ->
-            val waiting = old?.takeIf { !it.future.isDone }
-            if (!byUser && waiting?.byUser == true) {
-                workload.plan(trainingWork(type), Instant.ofEpochMilli(waiting.due), reason)
-                return@compute waiting
-            }
-            waiting?.future?.cancel(false)
-            val first = waiting?.firstAt ?: now
+            val waiting = old?.takeIf { workload.due(work) }
             val due =
-                if (byUser) now + quietMs
-                else minOf(now + maxOf(MACHINE_QUIET_MS, 2 * (lastTraining[type] ?: 0L)), first + MAX_WAIT_MS)
-            workload.plan(trainingWork(type), Instant.ofEpochMilli(due), reason)
-            val future =
-                scheduler.schedule(
-                    {
-                        // The boundary of the scheduler's thread: whatever a training throws is logged here, or the
-                        // future it was put in would keep it unseen
-                        @Suppress("TooGenericExceptionCaught")
-                        try {
-                            // A training a change of the user's asked for waits ahead of the background's works
-                            retrainAndScore(type, asked = byUser)
-                        } catch (e: Exception) {
-                            log.error("{}: background training failed", type, e)
-                        }
-                    },
-                    (due - now).coerceAtLeast(0),
-                    TimeUnit.MILLISECONDS,
-                )
-            PendingTraining(future, first, due, byUser)
+                when {
+                    !byUser && waiting?.byUser == true -> waiting.due
+                    byUser -> now + quietMs
+                    else ->
+                        minOf(
+                            now + maxOf(MACHINE_QUIET_MS, 2 * (lastTraining[type] ?: 0L)),
+                            (waiting?.firstAt ?: now) + MAX_WAIT_MS,
+                        )
+                }
+            workload.plan(work, Instant.ofEpochMilli(due), reason, asked = asked) { retrainAndScore(type, asked) }
+            if (!byUser && waiting?.byUser == true) waiting else PendingTraining(waiting?.firstAt ?: now, due, byUser)
         }
     }
 
@@ -103,10 +93,10 @@ class Recommendations(
      * The training the user asked for — by the button, or by choosing a scorer — planned to begin at once, after the
      * works before it; the request that asked does not wait for it ([Requests]).
      */
-    fun trainSoon(type: String) = scheduleRetrain(type, "asked", quietMs = 0)
+    fun trainSoon(type: String) = scheduleRetrain(type, "asked", asked = true, quietMs = 0)
 
-    /** A training scheduled: since the first change it waits on, when it is due, and whether the user waits for it. */
-    private class PendingTraining(val future: ScheduledFuture<*>, val firstAt: Long, val due: Long, val byUser: Boolean)
+    /** A training scheduled: since the first change it waits on, when it is due, and whether it is of the user's. */
+    private class PendingTraining(val firstAt: Long, val due: Long, val byUser: Boolean)
 
     fun retrainAndScore(typeId: String, asked: Boolean = false): ModelSummary =
         workload.run(trainingWork(typeId), asked = asked) {
@@ -195,11 +185,6 @@ class Recommendations(
         settings.set("scorer.$typeId", scorerId)
         trainSoon(typeId)
         return true
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
     }
 
     companion object {

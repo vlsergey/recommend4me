@@ -12,14 +12,9 @@ import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -106,10 +101,6 @@ class TextTags(
     private val workload: Workload,
 ) {
     private val models = TagTextModelRepository(databases.dictionaries.dsl)
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "tag-text-model").apply { isDaemon = true }
-    }
-    private val pending = AtomicReference<ScheduledFuture<*>?>()
 
     /** The tags offered by the text of the item; null when its source has no tags. */
     fun of(store: SourceStore, itemId: String): TextTagList? {
@@ -323,26 +314,8 @@ class TextTags(
     }
 
     /** An answer kept ([TagTextAnswered]): the model fitted anew once the answers pause. */
-    @Suppress("TooGenericExceptionCaught")
     @EventListener(TagTextAnswered::class)
-    fun answered() {
-        workload.plan(FITTING, Instant.now().plusSeconds(QUIET_SECONDS), REASON)
-        val next =
-            scheduler.schedule(
-                {
-                    try {
-                        workload.run(FITTING) { fit() }
-                    } catch (e: Exception) {
-                        // A BOUNDARY: this runs on the scheduler's thread, where nothing would hear of a failure of
-                        // the queue or of the fitting; it is logged
-                        log.warn("The model of the tags' closeness to the texts was not fitted: {}", e.message, e)
-                    }
-                },
-                QUIET_SECONDS,
-                TimeUnit.SECONDS,
-            )
-        pending.getAndSet(next)?.cancel(false)
-    }
+    fun answered() = workload.plan(FITTING, Instant.now().plusSeconds(QUIET_SECONDS), REASON) { fit() }
 
     /** The model fitted of every source's answers and kept; none while there are not answers of both kinds. */
     fun fit() {
@@ -356,11 +329,6 @@ class TextTags(
                 "slope %.2f, intercept %.2f, %d tags' own biases".format(it.slope, it.intercept, it.bias.size)
             } ?: "none, not answers of both kinds",
         )
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
     }
 
     private companion object {

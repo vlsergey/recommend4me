@@ -12,12 +12,7 @@ import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.work.WorksRegrouped
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -45,11 +40,6 @@ class Manners(
     private val workload: Workload,
     private val events: ApplicationEventPublisher,
 ) {
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "manners").apply { isDaemon = true }
-    }
-    private val pending = ConcurrentHashMap<String, ScheduledFuture<*>>()
-
     /** Of every item of every source of the [type], its manner made again where its texts or the words changed. */
     fun refresh(type: TypeStore) {
         val started = System.currentTimeMillis()
@@ -143,31 +133,8 @@ class Manners(
         stores.type(event.type)?.let { schedule(it, QUIET_SECONDS, "regrouped") }
     }
 
-    private fun schedule(type: TypeStore, delaySeconds: Long, reason: String) {
-        val work = Work(MAKING, type = type.id)
-        workload.plan(work, Instant.now().plusSeconds(delaySeconds), reason)
-        val next =
-            scheduler.schedule(
-                {
-                    // The boundary of the scheduler's thread: whatever the making throws is logged here, or the future
-                    // it was put in would keep it unseen
-                    @Suppress("TooGenericExceptionCaught")
-                    try {
-                        workload.run(work) { refresh(type) }
-                    } catch (e: Exception) {
-                        log.warn("{}: the manners were not made: {}", type.id, e.message, e)
-                    }
-                },
-                delaySeconds,
-                TimeUnit.SECONDS,
-            )
-        pending.put(type.id, next)?.cancel(false)
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
-    }
+    private fun schedule(type: TypeStore, delaySeconds: Long, reason: String) =
+        workload.plan(Work(MAKING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { refresh(type) }
 
     companion object {
         const val MAKING = "manners"

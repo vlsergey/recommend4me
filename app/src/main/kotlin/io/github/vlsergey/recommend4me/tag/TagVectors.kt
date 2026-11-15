@@ -7,12 +7,7 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.sqrt
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -39,11 +34,6 @@ class TagVectors(
     private val phrases: PhraseVectors,
     private val workload: Workload,
 ) {
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "tag-vectors").apply { isDaemon = true }
-    }
-    private val pending = AtomicReference<ScheduledFuture<*>?>()
-
     @EventListener(ApplicationReadyEvent::class) fun start() = schedule(START_DELAY_SECONDS, "start")
 
     @EventListener(TagsChanged::class) fun tagsChanged() = schedule(QUIET_SECONDS, "tags")
@@ -57,23 +47,12 @@ class TagVectors(
      */
     @EventListener(SynonymsSet::class) fun synonymsSet() = schedule(QUIET_SECONDS, "synonyms")
 
-    /** The vectors made after the quiet; the [reason], a key the interface words, told in the queue of the works. */
-    private fun schedule(delaySeconds: Long, reason: String) {
-        workload.plan(VECTORS, Instant.now().plusSeconds(delaySeconds), reason)
-        val next = scheduler.schedule({ fillInBackground() }, delaySeconds, TimeUnit.SECONDS)
-        pending.getAndSet(next)?.cancel(false)
-    }
-
-    /** The vectors made in the queue of the works: a task of the background, which logs what fails. */
-    // The background's loop: whatever fails is told in the log, and the next change plans it again
-    @Suppress("TooGenericExceptionCaught")
-    private fun fillInBackground() {
-        try {
-            workload.run(VECTORS) { fill() }
-        } catch (e: Exception) {
-            log.warn("The vectors of the tags were not made: {}", e.message, e)
-        }
-    }
+    /**
+     * The vectors made after the quiet, in the queue of the works; the [reason], a key the interface words, told there.
+     * A failure is told in the log, and the next change plans it again.
+     */
+    private fun schedule(delaySeconds: Long, reason: String) =
+        workload.plan(VECTORS, Instant.now().plusSeconds(delaySeconds), reason) { fill() }
 
     /** Makes the vector of every tag that has none by the encoder in use; how many were made. */
     fun fill(): Int =
@@ -102,11 +81,6 @@ class TagVectors(
             System.currentTimeMillis() - started,
         )
         return missing.size
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        scheduler.shutdownNow()
     }
 
     companion object {

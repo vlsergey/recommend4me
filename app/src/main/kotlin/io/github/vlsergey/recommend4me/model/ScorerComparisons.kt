@@ -3,10 +3,8 @@ package io.github.vlsergey.recommend4me.model
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -51,9 +49,6 @@ class ScorerComparisons(
     private val workload: Workload,
 ) {
     private val comparisons = ConcurrentHashMap<String, ScorerComparison>()
-    private val executor = Executors.newSingleThreadExecutor { r ->
-        Thread(r, "scorer-comparison").apply { isDaemon = true }
-    }
 
     /** The comparison last started of the type's model of grades — of its model of [interest]. */
     fun of(typeId: String, interest: Boolean = false): ScorerComparison? = comparisons[keyOf(typeId, interest)]
@@ -62,14 +57,13 @@ class ScorerComparisons(
         comparisons.compute(keyOf(typeId, interest)) { _, running ->
             if (running != null && running.finishedAt == null) return@compute running
             ScorerComparison(Instant.now(), plugins.scorers.map { ScorerMeasure(it.id) }).also { c ->
-                executor.submit {
-                    workload.run(
-                        Work(if (interest) "interestScorersCompared" else "scorersCompared", type = typeId),
-                        mapOf("asked" to 1),
-                        asked = true,
-                    ) {
-                        run(typeId, interest, c)
-                    }
+                workload.plan(
+                    Work(if (interest) "interestScorersCompared" else "scorersCompared", type = typeId),
+                    null,
+                    "asked",
+                    asked = true,
+                ) {
+                    run(typeId, interest, c)
                 }
             }
         }!!
@@ -130,10 +124,5 @@ class ScorerComparisons(
         } finally {
             comparison.finishedAt = Instant.now()
         }
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        executor.shutdownNow()
     }
 }

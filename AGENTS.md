@@ -109,7 +109,17 @@ A request of the browser never waits for the queue of the computations, nor runs
 user's machine. A request writes what it was told, plans the work that follows (`Workload.plan`) and
 answers with what there is — what the works made and kept, with a mark that more is coming (202,
 `pending`), the interface asking again till it is there. A test standing for the background runs it
-in `inBackground` (the thread of a Spring test is bound to a request).
+in `inBackground` (the thread of a Spring test is bound to a request). The one computation of a
+request is the vector of the line searched for (`TextVectors.query`): the search is the answer, one
+short line through the encoder.
+
+**`Workload.plan` is the one way the background is scheduled**: a work, when it is due, why, and what
+it does — no executor or timer of a component's own. Planned again before it begins, a work is done
+once; planned while one alike waits its turn, it is that one. A work the user waits for on the screen
+(`asked`: a grade, a press) goes ahead of the background; a change of the user's the user does not
+wait to see learnt (an answer, a tag) does not. A work of the background waiting longer than two
+minutes goes as an asked one (`Turns.AGING`). What is not a computation — reading the sites' pages
+and pictures — stays out of the queue.
 
 ## The speed of a computation before its last digits
 

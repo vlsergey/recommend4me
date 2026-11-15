@@ -3,12 +3,7 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -26,15 +21,8 @@ class PairFitting(
     private val models: PairModels,
     private val answers: PairAnswers,
 ) {
-    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "pair-models").apply { isDaemon = true }
-    }
-
-    /** The types whose models are to be fitted again, put off by every answer till they are quiet, or being fitted. */
-    private val fitting = ConcurrentHashMap<String, ScheduledFuture<*>>()
-
     /** Whether the models of the type are to be fitted again, or being fitted: of the page of models. */
-    fun isFitting(type: TypeStore) = fitting.containsKey(type.id)
+    fun isFitting(type: TypeStore) = workload.due(work(type))
 
     /** The models fitted again a few seconds after the last answer. */
     fun afterAnswer(type: TypeStore) = later(type, QUIET_SECONDS, "answer")
@@ -43,28 +31,10 @@ class PairFitting(
     fun now(type: TypeStore) = later(type, 0, "asked")
 
     /** The models fitted again [quiet] seconds from now, unless asked again meanwhile — then from that asking. */
-    private fun later(type: TypeStore, quiet: Long, reason: String) {
-        val work = Work("duplicatesModel", type = type.id)
-        workload.plan(work, Instant.now().plusSeconds(quiet), reason)
-        fitting.compute(type.id) { _, before ->
-            before?.cancel(false)
-            worker.schedule(
-                {
-                    // The boundary of the worker's thread: whatever the fitting throws is logged, the type let go of
-                    @Suppress("TooGenericExceptionCaught")
-                    try {
-                        workload.run(work, asked = true) { fitAnew(type) }
-                    } catch (e: Exception) {
-                        log.warn("{}: the model of the duplicates was not fitted: {}", type.id, e.message, e)
-                    } finally {
-                        fitting.remove(type.id)
-                    }
-                },
-                quiet,
-                TimeUnit.SECONDS,
-            )
-        }
-    }
+    private fun later(type: TypeStore, quiet: Long, reason: String) =
+        workload.plan(work(type), Instant.now().plusSeconds(quiet), reason, asked = true) { fitAnew(type) }
+
+    private fun work(type: TypeStore) = Work("duplicatesModel", type = type.id)
 
     /**
      * The models fitted anew on the pairs kept as they are, and kept, with when and how long: none without a plugin.
@@ -93,11 +63,6 @@ class PairFitting(
             said.values.count { it == DuplicateAnswer.DIFFERENT },
             System.currentTimeMillis() - started,
         )
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        worker.shutdownNow()
     }
 
     private companion object {

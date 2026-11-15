@@ -7,11 +7,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
-import jakarta.annotation.PreDestroy
 import java.time.Instant
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -38,15 +34,8 @@ class CastNames(
     private val workload: Workload,
     private val events: ApplicationEventPublisher,
 ) {
-    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "cast-names").apply { isDaemon = true }
-    }
-
     /** Of every source, its works to encode the casts of; null of every work. Guarded by itself. */
     private val queued = HashMap<String, MutableSet<String>?>()
-
-    /** The encoding planned, put off by every change till they are quiet; guarded by [queued]. */
-    private var pending: ScheduledFuture<*>? = null
 
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
@@ -69,29 +58,22 @@ class CastNames(
     private fun encodes(store: SourceStore): Boolean =
         WorkCasts.facetOf(store) != null && plugins.castReaders.isNotEmpty()
 
-    private fun schedule(source: String, delaySeconds: Long, reason: String) {
-        workload.plan(work(source), Instant.now().plusSeconds(delaySeconds), reason)
-        synchronized(queued) {
-            pending?.cancel(false)
-            pending = worker.schedule(::drain, delaySeconds, TimeUnit.SECONDS)
-        }
-    }
-
-    // The worker's loop: a source that fails any way is told in the log and leaves the others to be encoded
-    @Suppress("TooGenericExceptionCaught")
-    private fun drain() {
-        val taken = synchronized(queued) { HashMap(queued).also { queued.clear() } }
-        taken.forEach { (source, ids) ->
-            val store = stores.source(source) ?: return@forEach
-            try {
-                val encoded = workload.run(work(source)) { encode(store, ids) }
-                // Told out of the queue: whatever reads the works again plans its own work
+    /**
+     * The works of the [source] queued encoded after [delaySeconds] of quiet; whatever reads them again told out of the
+     * queue, it plans its own work.
+     */
+    private fun schedule(source: String, delaySeconds: Long, reason: String) =
+        workload.plan(
+            work(source),
+            Instant.now().plusSeconds(delaySeconds),
+            reason,
+            after = { encoded: List<String> ->
                 if (encoded.isNotEmpty()) events.publishEvent(CastNamesEncoded(source, encoded))
-            } catch (e: Exception) {
-                log.warn("{}: the names of the casts were not encoded: {}", source, e.message, e)
-            }
+            },
+        ) {
+            val (queuedHere, ids) = synchronized(queued) { (source in queued) to queued.remove(source) }
+            stores.source(source)?.takeIf { queuedHere }?.let { encode(it, ids) }.orEmpty()
         }
-    }
 
     /**
      * The texts of the casts of the works [ids] (every work of the [store] when null) not encoded yet, encoded now; the
@@ -123,11 +105,6 @@ class CastNames(
         }
         val fresh = missing.toHashSet()
         return texts.filterValues { list -> list.any { it in fresh } }.keys.toList()
-    }
-
-    @PreDestroy
-    fun shutdown() {
-        worker.shutdownNow()
     }
 
     private companion object {
