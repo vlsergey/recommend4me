@@ -323,7 +323,7 @@ class TwoSitesTest : TwoSitesTestBase() {
 
     /** The offers of two authors to be one, of those [said] so. */
     private fun offers(said: AuthorSaid = AuthorSaid.OFFERED) =
-        authors.getAuthorOffers("books", said, null, 0, 50).body!!.offers
+        authors.getAuthorOffers("books", said, null, null, null, 0, 50).body!!.offers
 
     /** The offer of the authors [a] and [b] to be one; none when they are not offered. */
     private fun of(a: Long, b: Long) = offers().firstOrNull { setOf(it.first.id, it.second.id) == setOf(a, b) }
@@ -374,7 +374,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertEquals(listOf(ann to annaB), offers(AuthorSaid.PARTIAL).map { it.first.id to it.second.id })
         assertEquals(
             AuthorOffer.Said.PARTIAL,
-            authors.getAuthorOffers("books", AuthorSaid.ALL, annaB, 0, 50).body!!.offers.single().said,
+            authors.getAuthorOffers("books", AuthorSaid.ALL, annaB, null, null, 0, 50).body!!.offers.single().said,
         )
         authors.answerAuthors(AuthorAnswer(alphaAnn, betaAnna, AuthorAnswer.Verdict.NONE))
     }

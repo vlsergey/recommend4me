@@ -11,8 +11,12 @@ data class OfferFilter(
 ) {
     /** Whether the two [authors] are shown, each with the sites they have works on by [sitesOf]. */
     fun lets(authors: Pair<Long, Long>, sitesOf: (Long) -> Set<String>): Boolean {
-        if (author != null && authors.first != author && authors.second != author) return false
-        if (onSite.isEmpty() && offSite.isEmpty()) return true
+        val ofAuthor = author == null || authors.first == author || authors.second == author
+        return ofAuthor && (onSite.isEmpty() && offSite.isEmpty() || onSites(authors, sitesOf))
+    }
+
+    /** Whether the two [authors] have works on every site of [onSite] and on none of [offSite]. */
+    private fun onSites(authors: Pair<Long, Long>, sitesOf: (Long) -> Set<String>): Boolean {
         val sites = sitesOf(authors.first) + sitesOf(authors.second)
         return sites.containsAll(onSite) && offSite.none { it in sites }
     }
