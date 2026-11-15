@@ -56,6 +56,33 @@ internal class EnsembleOnCard(
         if (!aOnCard) onCard.gA.download(gA, 0, 0, k * slots.sizes[0])
     }
 
+    /**
+     * The held-out loss of the models in the first [k] slots, of their points in the main memory ([points], every
+     * slot's, A there too), into [into], and of the values no item outside a model's fold has ([Problem.unseenOutside]
+     * of [p]) into [unseen] besides — as [Bilinear.heldOutLoss] makes it: the items' and the values' coordinates made
+     * of them here, then every pair of the items of each fold at once ([PairsOnCard.heldOut]), where the processor went
+     * through them one by one — of the tags of 75 707 works and 9871 values, a minute and more on one thread.
+     */
+    fun heldOut(p: Problem, k: Int, points: Array<Pieces>, into: List<Bilinear.Held>, unseen: List<Bilinear.Held>) {
+        val m = p.m
+        val fresh = HashMap<Int, BooleanArray>()
+        val unseenOf = IntArray(k * m)
+        for (slot in 0 until k) {
+            val fold = heldOut[slotModel[slot]]
+            val of = fresh.getOrPut(fold) { p.unseenOutside(fold) }
+            for (v in 0 until m) if (of[v]) unseenOf[slot * m + v] = 1
+        }
+        slots.send(k, points, withA = false)
+        products.coordinates(k * r, aOnCard = false, keep = true)
+        pairs.coordinates(k, onCard.aT)
+        val sums = pairs.heldOut(k, slotModel, heldOut, unseenOf, onCard.uT)
+        for (slot in 0 until k) {
+            val at = slot * PairsOnCard.HELD_SUMS
+            into[slotModel[slot]].add(sums, at)
+            unseen[slotModel[slot]].add(sums, at + PairsOnCard.HELD_SUMS / 2)
+        }
+    }
+
     /** The card waited for, the time since [at] told to [into]: the time now. */
     private inline fun timed(at: Long, into: (Long) -> Unit): Long {
         onCard.cublas.synchronize()

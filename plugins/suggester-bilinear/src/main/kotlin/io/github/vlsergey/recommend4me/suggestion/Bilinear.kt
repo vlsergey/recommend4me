@@ -309,6 +309,15 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
             weights += w * w
         }
 
+        /** The sums of many pairs added at once: Σ w, Σ w l, Σ w l², Σ w², four of [sums] from [at]. */
+        fun add(sums: DoubleArray, at: Int) {
+            var q = at
+            weight += sums[q++]
+            loss += sums[q++]
+            squares += sums[q++]
+            weights += sums[q]
+        }
+
         /** The standard error of [mean]: the weighted spread over the effective number of pairs. */
         val error: Double
             get() {

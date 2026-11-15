@@ -64,6 +64,10 @@ private constructor(
     /** Of every model, its three sums: the loss, the slopes of the common bias and of the example. */
     private val sums = room.bytes(count.toLong() * SUMS * Double.SIZE_BYTES)
 
+    /** Of every model, the values no item outside its fold has, and the sums of its held-out loss ([heldOut]). */
+    private val unseenOf = room.bytes(count.toLong() * p.m * Int.SIZE_BYTES)
+    private val heldSums = room.bytes(count.toLong() * HELD_SUMS * Double.SIZE_BYTES)
+
     // Of every item, the weight of a value it merely lacks, and which of the arrays of values it may have is its
     // own, as a mask of a bit a value (-1: any) — every array once, however many items share it
     private val lack = room.floatsOf(p.pairs.lack)
@@ -203,6 +207,57 @@ private constructor(
             duh!!.zero(0, k.toLong() * r * h)
             namesOf(k)
         }
+    }
+
+    /**
+     * The held-out loss of the first [k] slots, the model in each by [slotModel], its held-out fold of [heldOut]: of
+     * the items' coordinates [uT] and the values' made before ([coordinates]), the biases and the pair's own weights of
+     * the slots, the pairs of the items of the fold, as [Bilinear.heldOutLoss] takes them — [HELD_SUMS] sums a slot, of
+     * every pair and of the values of [unseen] (of every slot, 1 of a value no item outside its fold has).
+     */
+    fun heldOut(
+        k: Int,
+        slotModel: IntArray,
+        heldOut: IntArray,
+        unseen: IntArray,
+        uT: Cublas.DeviceFloats,
+    ): DoubleArray {
+        for (slot in 0 until k) {
+            scalesHost[slot] = 1f
+            heldOutHost[slot] = heldOut[slotModel[slot]]
+        }
+        scales.upload(scalesHost, 0, 0, k)
+        heldOutOf.upload(heldOutHost)
+        unseenOf.upload(unseen)
+        kernels.launch("params_of", k.toLong(), k, scales, pair, Bilinear.PAIR, params)
+        heldSums.zero()
+        kernels.launch(
+            if (r == KNOWN_RANK) "held_items_16" else "held_items",
+            blocksOf(n) * k * CudaKernels.BLOCK,
+            k,
+            n,
+            m,
+            r,
+            uT,
+            vT,
+            bias,
+            params,
+            heldOutOf,
+            lack,
+            group,
+            masks,
+            words,
+            foldOf,
+            firstEntry,
+            entryValue,
+            entryWeight,
+            entryLabel,
+            entryExample,
+            order,
+            unseenOf,
+            heldSums,
+        )
+        return heldSums.doubles(k * HELD_SUMS)
     }
 
     /**
@@ -461,6 +516,11 @@ private constructor(
     companion object {
         private const val SUMS = 3
 
+        /**
+         * The sums of a model's held-out loss ([heldOut]): Σ w, Σ w l, Σ w l², Σ w² of every pair, then of the unseen.
+         */
+        const val HELD_SUMS = 8
+
         /** The threads of a warp, which `listed_items` gives an item. */
         private const val WARP = 32
 
@@ -483,6 +543,8 @@ private constructor(
             listOf(
                 "pairs_items",
                 "pairs_items_16",
+                "held_items",
+                "held_items_16",
                 "pairs_values",
                 "pairs_values_16",
                 "listed_items",

@@ -72,9 +72,9 @@ object Lbfgs {
          */
         fun step(first: Boolean): Boolean {
             val gNorm = norm(g)
-            if (gNorm == 0f) return true
-            val d = direction(gNorm)
-            val fNext = searchAlong(d)
+            // Of a gradient nought, or a value or a gradient no float holds, no step: the search ends where it is
+            val fNext = if (gNorm == 0f || !gNorm.isFinite() || !fx.isFinite()) null else searchAlong(direction(gNorm))
+            if (fNext == null) return true
             remember()
             val fell = fx - fNext
             next.copyInto(x)
@@ -117,16 +117,18 @@ object Lbfgs {
 
         /**
          * The step along [d] searched back from the full one until the value falls enough (Armijo): the point in
-         * [next], its gradient in [gNext], its value answered.
+         * [next], its gradient in [gNext], its value answered. A value no float holds (NaN, infinite) is no fall: the
+         * step tried shorter; none when even the shortest is of such a value — the search ends where it is.
          */
-        private fun searchAlong(d: FloatArray): Float {
+        private fun searchAlong(d: FloatArray): Float? {
             var t = 1f
             var fNext: Float
             while (true) {
                 for (i in 0 until n) next[i] = x[i] + t * d[i]
                 fNext = f(next, gNext)
+                if (fNext <= fx + ARMIJO * t * slope) break
                 // A step too short to move the point by what a float can tell is the last one tried
-                if (fNext <= fx + ARMIJO * t * slope || t < RESOLUTION) break
+                if (t < RESOLUTION) return fNext.takeIf { it.isFinite() }
                 t *= BACKTRACK
             }
             return fNext
@@ -299,12 +301,14 @@ internal class Search<V>(private val space: Space<V>, private val size: Int, pri
             started = true
             fx = loss
             grad.read(g)
-            if (!direction()) done = true
+            if (!loss.isFinite() || !direction()) done = true
             return
         }
-        // A step too short to move the point by what a float can tell is the last one tried
-        if (!(loss <= fx + Lbfgs.SUFFICIENT * t * slope || t < Lbfgs.FLOAT_RESOLUTION)) {
-            t *= Lbfgs.BACKTRACK
+        // A step too short to move the point by what a float can tell is the last one tried; a value no float holds
+        // is no fall, and of the shortest step it ends the search where it is
+        val sufficient = loss <= fx + Lbfgs.SUFFICIENT * t * slope
+        if (!sufficient && (t >= Lbfgs.FLOAT_RESOLUTION || !loss.isFinite())) {
+            if (t >= Lbfgs.FLOAT_RESOLUTION) t *= Lbfgs.BACKTRACK else done = true
             return
         }
         // The step taken and the change of the gradient, into the ring's next place: only a step of
@@ -335,7 +339,7 @@ internal class Search<V>(private val space: Space<V>, private val size: Int, pri
      */
     private fun direction(): Boolean {
         val gNorm = sqrt(space.dot(g, g, size))
-        if (gNorm == 0f) return false
+        if (gNorm == 0f || !gNorm.isFinite()) return false
         space.copy(g, d, size)
         for (r in remembered - 1 downTo 0) {
             val k = (oldest + r) % Lbfgs.MEMORY

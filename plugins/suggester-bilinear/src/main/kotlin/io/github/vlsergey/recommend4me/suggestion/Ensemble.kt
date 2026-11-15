@@ -394,13 +394,24 @@ internal class Ensemble(
      * [Bilinear.heldOutLoss] takes them — of the weights [fitted] ([Bilinear]'s layout), into [into] and, of the values
      * no item outside the fold has, [unseen].
      */
-    fun heldOut(fitted: List<FloatArray>, into: List<Bilinear.Held>, unseen: List<Bilinear.Held>) = onTheCard {
+    fun heldOut(
+        fitted: List<FloatArray>,
+        into: List<Bilinear.Held>,
+        unseen: List<Bilinear.Held>,
+        /** Of the pairs on the card, there; false: on the processor, of the same coordinates — the measure of it. */
+        pairsThere: Boolean = true,
+    ) = onTheCard {
         Blas.wide {
             active = count
             for (model in 0 until count) {
                 slotModel[model] = model
                 modelSlot[model] = model
                 points[model].write(Floats.of(layout.ordered(fitted[model])))
+            }
+            val card = stepOnCard?.takeIf { pairsThere }
+            if (card != null) {
+                card.heldOut(p, count, points, into, unseen)
+                return@wide
             }
             val kr = count * r
             products.coordinates(kr, aOnCard = false)

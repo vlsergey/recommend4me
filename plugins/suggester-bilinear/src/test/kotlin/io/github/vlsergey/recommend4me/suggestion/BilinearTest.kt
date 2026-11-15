@@ -188,6 +188,64 @@ class BilinearTest {
         compareTogether(sparse, cublas, rank = 16, sixteenBits = true)
     }
 
+    @Test
+    fun `the held-out loss of every model on the card is the processor's`() {
+        val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
+        assumeTrue(dir != null, "no CUDA libraries")
+        val cublas = Cublas.open(dir!!)
+        assumeTrue(cublas != null, "no cuBLAS to run on")
+        heldOutTogether(task(), cublas, rank = 3)
+        heldOutTogether(task(), cublas, rank = 16)
+        heldOutTogether(sparseTask(), cublas, rank = 3)
+        heldOutTogether(sparseTask(), cublas, rank = 16)
+    }
+
+    @Test fun `the held-out loss of every model in one product is the one it has alone`() = heldOutTogether(task())
+
+    /**
+     * Of models at random points, the held-out loss [Ensemble.heldOut] makes — on the [card] when given — against its
+     * measure: on the card, the processor's of the same coordinates (the items' features' products in brain floating
+     * point there, which the card's pairs and the processor's read alike); without one, the one each makes alone
+     * ([Bilinear.heldOutLoss]). The same pairs weighed alike, the losses the same but for the order of the sums.
+     */
+    private fun heldOutTogether(task: SuggestionTask, card: Cublas? = null, rank: Int = 3) {
+        val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
+        val lambdas = floatArrayOf(0.1f, 0.01f, 0.001f, 0.01f, 0.1f)
+        val folds = intArrayOf(0, 1, 2, 3, 4)
+        val alone = Bilinear(problem, rank)
+        val random = Random(23)
+        val thetas = List(lambdas.size) { FloatArray(alone.size) { (random.nextGaussian() * 0.3).toFloat() } }
+        fun helds() = List(lambdas.size) { Bilinear.Held() }
+        val together = helds()
+        val unseenTogether = helds()
+        val measure = helds()
+        val unseenMeasure = helds()
+        Ensemble(problem, rank, lambdas, folds, card).use { ensemble ->
+            ensemble.heldOut(thetas, together, unseenTogether)
+            if (card != null) {
+                assertTrue(ensemble.pairsOnCardUsed, "the pairs not on the card")
+                ensemble.heldOut(thetas, measure, unseenMeasure, pairsThere = false)
+            }
+        }
+        if (card == null)
+            thetas.forEachIndexed { k, theta -> alone.heldOutLoss(theta, folds[k], measure[k], unseenMeasure[k]) }
+        for (k in thetas.indices) {
+            listOf("every pair" to (measure[k] to together[k]), "the unseen" to (unseenMeasure[k] to unseenTogether[k]))
+                .forEach { (what, held) ->
+                    val (a, b) = held
+                    assertTrue(
+                        abs(a.weight - b.weight) <= 1e-4 * a.weight,
+                        "model $k, $what: weight ${a.weight}, ${b.weight}",
+                    )
+                    if (a.weight > 0)
+                        assertTrue(
+                            abs(a.mean - b.mean) <= 1e-4 * a.mean,
+                            "model $k, $what: loss ${a.mean} measured, ${b.mean} together",
+                        )
+                }
+        }
+    }
+
     private fun compareTogether(
         task: SuggestionTask,
         card: Cublas? = null,

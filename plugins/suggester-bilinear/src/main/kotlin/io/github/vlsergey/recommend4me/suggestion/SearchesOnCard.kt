@@ -106,24 +106,7 @@ internal class SearchesOnCard(
      * remembered — of positive curvature alone — and the next direction made.
      */
     fun answer(k: Int, slotModel: IntArray, losses: FloatArray, slotsOnCard: SlotsOnCard) {
-        val taken = ArrayList<Taken>()
-        for (slot in 0 until k) {
-            val q = slotModel[slot]
-            val loss = losses[slot]
-            evaluations[q]++
-            if (!begun[q]) {
-                begun[q] = true
-                fx[q] = loss
-                taken += Taken(q, slot, -1)
-            } else if (!(loss <= fx[q] + Lbfgs.SUFFICIENT * t[q] * slope[q] || t[q] < Lbfgs.FLOAT_RESOLUTION)) {
-                t[q] *= Lbfgs.BACKTRACK
-            } else {
-                taken += Taken(q, slot, (oldest[q] + remembered[q]) % memory)
-                fell[q] = fx[q] - loss
-                fx[q] = loss
-                step[q]++
-            }
-        }
+        val taken = (0 until k).mapNotNull { slot -> takenOf(slotModel[slot], slot, losses[slot]) }
         if (taken.isEmpty()) return
         val got = remembered(taken, slotsOnCard)
         val directed = ArrayList<Int>()
@@ -141,9 +124,41 @@ internal class SearchesOnCard(
                 done[q] =
                     (step[q] > 1 && abs(fell[q]) <= Lbfgs.FLOAT_RESOLUTION * max(1f, abs(fx[q]))) || step[q] >= maxSteps
             }
-            if (!done[q]) if (gNorm[q] == 0f) done[q] = true else directed += q
+            if (!done[q]) if (gNorm[q] == 0f || !gNorm[q].isFinite()) done[q] = true else directed += q
         }
         if (directed.isNotEmpty()) directions(directed)
+    }
+
+    /**
+     * What the [loss] at the point of the model [q] in [slot] makes of its search: the step taken — its first point, or
+     * one the value falls enough at, or the shortest — or none: the step tried shorter, or the search ended where it is
+     * by a value no float holds, which is no fall.
+     */
+    private fun takenOf(q: Int, slot: Int, loss: Float): Taken? {
+        evaluations[q]++
+        val sufficient = loss <= fx[q] + Lbfgs.SUFFICIENT * t[q] * slope[q]
+        return when {
+            !begun[q] -> {
+                begun[q] = true
+                fx[q] = loss
+                done[q] = !loss.isFinite()
+                Taken(q, slot, -1).takeIf { loss.isFinite() }
+            }
+            !sufficient && t[q] >= Lbfgs.FLOAT_RESOLUTION -> {
+                t[q] *= Lbfgs.BACKTRACK
+                null
+            }
+            !sufficient && !loss.isFinite() -> {
+                done[q] = true
+                null
+            }
+            else -> {
+                fell[q] = fx[q] - loss
+                fx[q] = loss
+                step[q]++
+                Taken(q, slot, (oldest[q] + remembered[q]) % memory)
+            }
+        }
     }
 
     /** A model whose step was taken: its slot, its place of the ring (−1: its search begins). */

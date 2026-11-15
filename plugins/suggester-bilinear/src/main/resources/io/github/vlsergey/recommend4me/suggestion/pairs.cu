@@ -35,6 +35,9 @@ __device__ __forceinline__ float slope_of(float z, float y, float w, float scale
 
 #define BLOCK 256
 
+// The sums of a model's held-out loss (held_items): of every pair and of the unseen values, four each
+#define HELD_SUMS 8
+
 // The rank the application fits with, compiled as known: a model's numbers in registers. Any other up
 // to MAX_RANK, held in local memory
 #define MAX_RANK 64
@@ -209,6 +212,128 @@ __device__ void pairs_items_of(
 
 extern "C" __global__ void pairs_items(PAIRS_ITEMS_PARAMETERS) { pairs_items_of<0>(PAIRS_ITEMS_ARGUMENTS); }
 extern "C" __global__ void pairs_items_16(PAIRS_ITEMS_PARAMETERS) { pairs_items_of<16>(PAIRS_ITEMS_ARGUMENTS); }
+
+// The block's eight sums added into sums[0..7]
+__device__ void block_sums8(const double* own, double* sums) {
+    __shared__ double s[HELD_SUMS][BLOCK];
+    int t = threadIdx.x;
+    for (int q = 0; q < HELD_SUMS; q++) s[q][t] = own[q];
+    __syncthreads();
+    for (int half = BLOCK / 2; half > 0; half >>= 1) {
+        if (t < half)
+            for (int q = 0; q < HELD_SUMS; q++) s[q][t] += s[q][t + half];
+        __syncthreads();
+    }
+    if (t == 0)
+        for (int q = 0; q < HELD_SUMS; q++) atomicAdd(sums + q, s[q][0]);
+}
+
+// THE HELD-OUT LOSS, of the items' side: what Ensemble.heldOut works out on the processor, of every model
+// at once — a thread an item of the model's held-out fold, a block the items of one model, the values a
+// chunk at a time as the pairs' side reads them, the same pairs (the item's own entries, the values it
+// merely lacks). Of every pair its loss l = softplus(z) − y z and its weight w, summed as Bilinear.Held
+// keeps them — Σ w, Σ w l, Σ w l², Σ w² — of every pair, and apart of the values no item outside the
+// fold has (unseen, a number a value of every slot, 1 of such a value): eight sums a model. No slope: nothing is learnt
+template <int R>
+__device__ void held_items_of(
+    int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut,
+    const float* lack, const int* group, const unsigned int* masks, int words, const int* foldOf,
+    const long long* firstEntry, const int* entryValue, const float* entryWeight, const float* entryLabel, const float* entryExample,
+    const int* order, const int* unseen, double* sums
+) {
+    if (R > 0) r = R;
+    const int C = CHUNK(R);
+    __shared__ __align__(16) float vs[4096];
+    __shared__ float bs[CHUNK(R)];
+    __shared__ unsigned char fs[CHUNK(R)];
+    int tiles = (n + BLOCK - 1) / BLOCK;
+    int slot = blockIdx.x / tiles;
+    if (slot >= k) return;
+    int at = (blockIdx.x % tiles) * BLOCK + threadIdx.x;
+    int i = at < n ? order[at] : n;
+    Model mo = model_of(params, heldOut, slot);
+    const float* u = uT + (size_t) slot * r * n;
+    const float* v = vT + (size_t) slot * r * m;
+    const float* b = bias + (size_t) slot * m;
+    const int* fresh = unseen + (size_t) slot * m;
+    bool on = i < n && foldOf[i] == mo.heldOut;
+    float w = on ? lack[i] : 0.0f;
+    int g = on ? group[i] : -1;
+    long long e = on ? firstEntry[i] : 0, end = on ? firstEntry[i + 1] : 0;
+    on = on && (w > 0.0f || e < end);
+    float a[R > 0 ? R : MAX_RANK];
+    for (int q = 0; q < r; q++) a[q] = on ? u[(size_t) q * n + i] : 0.0f;
+    double own[HELD_SUMS];
+    for (int q = 0; q < HELD_SUMS; q++) own[q] = 0.0;
+    int next = e < end ? entryValue[e] : m;
+    for (int from = 0; from < m; from += C) {
+        int many = min(C, m - from);
+        __syncthreads();
+        for (int t = threadIdx.x; t < many * r; t += BLOCK) {
+            int q = t / many, jj = t % many;
+            vs[jj * r + q] = v[(size_t) q * m + from + jj];
+        }
+        for (int t = threadIdx.x; t < many; t += BLOCK) {
+            bs[t] = b[from + t] + mo.common;
+            fs[t] = fresh[from + t];
+        }
+        __syncthreads();
+        if (!on) continue;
+        // The sums of a chunk in single precision, then added in double
+        float chunk[HELD_SUMS];
+        for (int q = 0; q < HELD_SUMS; q++) chunk[q] = 0.0f;
+        unsigned word = 0;
+        for (int jj = 0; jj < many; jj++) {
+            int j = from + jj;
+            if (jj == 0 || (j & 31) == 0) {
+                if (g >= 0) word = masks[(size_t) g * words + (j >> 5)];
+                bool idle = next >= j + 32 && (w <= 0.0f || (g >= 0 && word == 0u));
+                if (__all_sync(__activemask(), idle)) {
+                    jj += 31 - (j & 31);
+                    continue;
+                }
+            }
+            float z, y, we;
+            float vj[R > 0 ? R : MAX_RANK];
+            if (j == next) {
+                we = entryWeight[e];
+                y = entryLabel[e];
+                float ex = entryExample[e];
+                e++;
+                next = e < end ? entryValue[e] : m;
+                if (we <= 0.0f) continue;
+                row_of_block<R>(vs + jj * r, r, vj);
+                z = bs[jj] + mo.example * ex;
+            } else if (w > 0.0f && (g < 0 || ((word >> (j & 31)) & 1u))) {
+                we = w;
+                y = 0.0f;
+                row_of_block<R>(vs + jj * r, r, vj);
+                z = bs[jj];
+            } else continue;
+            for (int q = 0; q < r; q++) z += a[q] * vj[q];
+            float l = fmaxf(z, 0.0f) + softplus_of(__expf(-fabsf(z))) - y * z;
+            float wl = we * l;
+            chunk[0] += we;
+            chunk[1] += wl;
+            chunk[2] += wl * l;
+            chunk[3] += we * we;
+            if (fs[jj]) {
+                chunk[4] += we;
+                chunk[5] += wl;
+                chunk[6] += wl * l;
+                chunk[7] += we * we;
+            }
+        }
+        for (int q = 0; q < HELD_SUMS; q++) own[q] += chunk[q];
+    }
+    block_sums8(own, sums + (size_t) HELD_SUMS * slot);
+}
+
+#define HELD_ITEMS_PARAMETERS int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut, const float* lack, const int* group, const unsigned int* masks, int words, const int* foldOf, const long long* firstEntry, const int* entryValue, const float* entryWeight, const float* entryLabel, const float* entryExample, const int* order, const int* unseen, double* sums
+#define HELD_ITEMS_ARGUMENTS k, n, m, r, uT, vT, bias, params, heldOut, lack, group, masks, words, foldOf, firstEntry, entryValue, entryWeight, entryLabel, entryExample, order, unseen, sums
+
+extern "C" __global__ void held_items(HELD_ITEMS_PARAMETERS) { held_items_of<0>(HELD_ITEMS_ARGUMENTS); }
+extern "C" __global__ void held_items_16(HELD_ITEMS_PARAMETERS) { held_items_of<16>(HELD_ITEMS_ARGUMENTS); }
 
 // THE VALUES' SIDE: a thread a value of a model, a block the values of one model. Of every item — the
 // items a chunk at a time, their coordinates and what they weigh held by the block — the same pairs as
