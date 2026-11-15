@@ -78,6 +78,8 @@
   "Rest.more_one": "Ostala dela: {{count, number}}",
   "Rest.more_other": "Ostala dela: {{count, number}}",
   "SiteName.page": "Stranica autora na sajtu",
+  "SiteName.unnamed": "profil",
+  "SiteName.unnamedHint": "Ime ovog naloga se još nije pojavilo na stranicama sajta (ključ {{key}}): otvorite profil sa ekstenzijom i ime će se pojaviti",
   "WorkLink.onSite": "Otvori delo na sajtu",
   "WorkLink.othersHint": "Ostali autori dela",
   "AuthorsScreen.sites": "Profil na sajtu bar jednog od dvojice:",

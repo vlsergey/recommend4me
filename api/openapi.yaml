@@ -6051,7 +6051,7 @@ components:
 
     SiteAuthor:
       type: object
-      required: [source, author, name, works]
+      required: [source, author, name, named, works]
       properties:
         source:
           type: string
@@ -6060,6 +6060,12 @@ components:
           description: The site's own key of them
         name:
           type: string
+          description: Their name as the site's pages told it; their key of a site's author no page named yet
+        named:
+          type: boolean
+          description: >-
+            Whether a page of the site told their name: an author another site's author lists as a place of theirs is
+            known before any page of theirs is seen
         works:
           type: integer
         url:

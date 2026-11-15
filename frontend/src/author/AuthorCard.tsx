@@ -71,7 +71,7 @@ function Sites({ type, author }: { type: ContentTypeInfo; author: AuthorSide }) 
             <span className="text-xs text-muted-foreground" title={sourceTitle(s.source)}>
               {sourceShort(s.source)}
             </span>
-            <span>{s.name}</span>
+            <SiteName name={s.name} named={s.named} url={s.url} />
             <span className="text-xs text-muted-foreground tabular-nums" title={t("Accounts.worksHint")}>
               {s.works}
             </span>
@@ -100,7 +100,7 @@ function MergedBy({ by }: { by: MergedByInfo }) {
   }
   return (
     <span className="text-xs text-muted-foreground" title={t("Card.mergedByPlaceHint", { site: sourceTitle(owner.source) })}>
-      {t("Card.mergedByPlace", { site: sourceShort(owner.source) })} <SiteName name={owner.name} url={owner.url} className="text-foreground" />
+      {t("Card.mergedByPlace", { site: sourceShort(owner.source) })} <SiteName name={owner.name} named={owner.named} url={owner.url} className="text-foreground" />
     </span>
   );
 }
@@ -121,7 +121,7 @@ function Entries({ type, author }: { type: ContentTypeInfo; author: AuthorSide }
     await queryClient.invalidateQueries({ queryKey: authorsKey(type.id) });
   };
   const isBound = (f: FoundAuthorEntry) => author.entries.some((b) => b.catalogue === f.catalogue && b.entry === f.entry);
-  const names = [...new Set(author.sites.map((s) => s.name))];
+  const names = [...new Set(author.sites.filter((s) => s.named).map((s) => s.name))];
   return (
     <section className="flex flex-col gap-1.5">
       <h2 className="font-semibold">{t("Entry.title")}</h2>

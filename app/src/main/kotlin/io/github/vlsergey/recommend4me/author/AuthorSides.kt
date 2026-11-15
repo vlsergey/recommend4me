@@ -84,7 +84,10 @@ class AuthorSides(
         }
     }
 
-    /** The authors of the sites [refs] by their names and how many works each has, of every source in one go. */
+    /**
+     * The authors of the sites [refs] by their names — their keys, of one no page named yet — and how many works each
+     * has, of every source in one go.
+     */
     private fun shown(type: TypeStore, refs: Collection<SiteAuthorRef>): Map<SiteAuthorRef, SiteAuthor> {
         val shown = HashMap<SiteAuthorRef, SiteAuthor>()
         refs
@@ -102,6 +105,7 @@ class AuthorSides(
                             source,
                             it.author,
                             name,
+                            names[it.author] != null,
                             uses[it.author] ?: 0,
                             s.source.valueUrl(facet, it.author, name),
                         )

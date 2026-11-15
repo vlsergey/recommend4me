@@ -7,11 +7,14 @@ import { cn } from "@/lib/utils";
 
 export const authorsKey = (type: string) => ["authors", type];
 
-/** The name an author goes by: their entry's label, else theirs on the site with the most of their works. */
+/**
+ * The name an author goes by: their entry's label, else theirs on the site with the most of their works — of the
+ * accounts a site's page named, a key never the name while one is.
+ */
 export function authorName(a: AuthorSide): string {
   const entry = a.entries.find((e) => e.label)?.label;
   if (entry) return entry;
-  return [...a.sites].sort((x, y) => y.works - x.works)[0]?.name ?? String(a.id);
+  return [...a.sites].sort((x, y) => Number(y.named) - Number(x.named) || y.works - x.works)[0]?.name ?? String(a.id);
 }
 
 /** The entries of the catalogues an author is bound to, each a link to its page. */
@@ -38,7 +41,7 @@ export function Accounts({ author }: { author: AuthorSide }) {
     <span className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
       {author.sites.map((s) => (
         <span key={`${s.source}/${s.author}`} title={sourceTitle(s.source)}>
-          {sourceShort(s.source)} <SiteName name={s.name} url={s.url} className="text-foreground" />{" "}
+          {sourceShort(s.source)} <SiteName name={s.name} named={s.named} url={s.url} className="text-foreground" />{" "}
           <span className="tabular-nums" title={t("Accounts.worksHint")}>
             {s.works}
           </span>
@@ -65,12 +68,14 @@ export function AuthorHead({ author, onOpen }: { author: AuthorSide; onOpen: (id
 }
 
 /** A name of an author on a site: a link to their page there, when the site has one. */
-export function SiteName({ name, url, className }: { name: string; url?: string; className?: string }) {
+export function SiteName({ name, named = true, url, className }: { name: string; named?: boolean; url?: string; className?: string }) {
   const { t } = useTranslation("author");
-  if (!url) return <span className={className}>{name}</span>;
+  // An account no page of its site named yet: its key says nothing, its page is what there is
+  const shown = named || !url ? name : t("SiteName.unnamed");
+  if (!url) return <span className={className}>{shown}</span>;
   return (
-    <a href={url} target="_blank" rel="noreferrer" title={t("SiteName.page")} className={cn(className, "underline-offset-2 hover:underline")}>
-      {name}
+    <a href={url} target="_blank" rel="noreferrer" title={named ? t("SiteName.page") : t("SiteName.unnamedHint", { key: name })} className={cn(className, "underline-offset-2 hover:underline")}>
+      {shown}
     </a>
   );
 }

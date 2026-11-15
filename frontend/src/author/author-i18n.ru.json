@@ -85,6 +85,8 @@
   "Rest.more_one": "Остальные работы: {{count, number}}",
   "Rest.more_other": "Остальные работы: {{count, number}}",
   "SiteName.page": "Страница автора на сайте",
+  "SiteName.unnamed": "профиль",
+  "SiteName.unnamedHint": "Имя этого аккаунта ещё не встречалось на страницах сайта (ключ {{key}}): откройте профиль с расширением, и имя появится",
   "WorkLink.onSite": "Открыть работу на сайте",
   "WorkLink.othersHint": "Другие авторы работы",
   "AuthorsScreen.sites": "Профиль на сайте хотя бы у одного из двух:",

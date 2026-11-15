@@ -71,6 +71,8 @@
   "Rest.more_one": "The other works: {{count, number}}",
   "Rest.more_other": "The other works: {{count, number}}",
   "SiteName.page": "The author's page on the site",
+  "SiteName.unnamed": "profile",
+  "SiteName.unnamedHint": "No page of the site has named this account yet (key {{key}}): open the profile with the extension and the name appears",
   "WorkLink.onSite": "Open the work on its site",
   "WorkLink.othersHint": "The work's other authors",
   "AuthorsScreen.sites": "A profile on the site of either of the two:",
