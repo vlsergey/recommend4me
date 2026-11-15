@@ -87,16 +87,17 @@ class AuthorOffers(
     }
 
     /**
-     * A page of the pairs of authors of the type — of the [author] alone, when asked — by what was [said] of them:
-     * those that may be one, the two bound to one entry first, then the most works matching, then the most expected to
-     * — none hidden: of a chance however small — those told apart, those partly one, or all of them. Read for the
-     * request and let go. Null of no such type.
+     * A page of the pairs of authors of the type the [filter] lets — of an author, of the sites they have works on — by
+     * what was [said] of them: those that may be one, the two bound to one entry first, then the most works matching,
+     * then the most expected to — none hidden: of a chance however small — those told apart, those partly one, or all
+     * of them. Read for the request and let go. Null of no such type.
      */
-    fun offers(typeId: String, said: AuthorSaid, author: Long?, offset: Int, limit: Int): AuthorOfferPage? {
+    fun offers(typeId: String, said: AuthorSaid, filter: OfferFilter, offset: Int, limit: Int): AuthorOfferPage? {
         val type = stores.type(typeId) ?: return null
         val evidence =
             Evidence(AuthorLibrary.of(type), workPairs(type), type.authors.distinct.told(), type.authors.entries.all())
-        val rows = rowsOf(evidence, said).filter { author == null || it.first == author || it.second == author }
+        val sitesOf = evidence.library.sitesOf
+        val rows = rowsOf(evidence, said).filter { filter.lets(it) { id -> sitesOf[id].orEmpty() } }
         val page =
             rows
                 .sortedWith(

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, PercentIcon, SplitIcon, Undo2Icon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, ensureOk, unwrap, type AuthorOffer, type AuthorSaid, type AuthorWork, type ContentTypeInfo } from "@/api/client";
@@ -17,6 +17,18 @@ const PAGE = 30;
 const PAIRS_SHOWN = 5;
 
 type Verdict = "SAME" | "DIFFERENT" | "PARTIAL" | "NONE";
+
+/** Of a site, whether one of the two authors of a pair has an account with works there: it does not matter, yes, no. */
+export type Has = "any" | "yes" | "no";
+
+/** The sites a filter of [has] asks for — one of the two has an account there — and those it refuses — neither has. */
+const sitesOf = (has: Record<string, Has>, which: Has) => {
+  const out = Object.entries(has)
+    .filter(([, h]) => h === which)
+    .map(([site]) => site)
+    .sort();
+  return out.length > 0 ? out : undefined;
+};
 
 /** The author of a site an answer names a side by: theirs whatever the normalized authors merged since the row was read. */
 const accountOf = ({ sites: [site] }: AuthorOffer["first"]) => ({ source: site.source, author: site.author });
@@ -36,7 +48,8 @@ const sameRow = (a: AuthorOffer, b: AuthorOffer) =>
 const noneWord = { OFFERED: "Offers.none", DIFFERENT: "Offers.noneDifferent", PARTIAL: "Offers.nonePartial", ALL: "Offers.noneOfAuthor" } as const;
 
 /**
- * The pairs of authors by what was [said] of them, of one [author] when given. On a tab of the screen
+ * The pairs of authors by what was [said] of them, of one [author] when given, of the sites [has] lets. A filter
+ * changed starts the list again from its first page, the rows shown calmly. On a tab of the screen
  * a row answered on leaves at once, nothing read again for it. In an author's card, where the pair
  * stays with its word, the answer reads every list of the authors again; [onMerged] is told of a merge:
  * the author the card is of may be no more.
@@ -45,6 +58,7 @@ export function Offers({
   type,
   said,
   author,
+  has = {},
   every,
   onOpen,
   onMerged,
@@ -52,6 +66,7 @@ export function Offers({
   type: ContentTypeInfo;
   said: AuthorSaid;
   author?: number;
+  has?: Record<string, Has>;
   every: number;
   onOpen: (id: number) => void;
   onMerged?: () => void;
@@ -59,9 +74,20 @@ export function Offers({
   const { t } = useTranslation("author");
   const queryClient = useQueryClient();
   const [limit, setLimit] = useState(PAGE);
+  const onSite = sitesOf(has, "yes");
+  const offSite = sitesOf(has, "no");
+  // Another filter: from the first page again
+  const filtered = JSON.stringify([onSite, offSite]);
+  const [filteredBefore, setFilteredBefore] = useState(filtered);
+  if (filteredBefore !== filtered) {
+    setFilteredBefore(filtered);
+    setLimit(PAGE);
+  }
   const list = useQuery({
-    queryKey: [...authorsKey(type.id), "offers", said, author, limit],
-    queryFn: async () => unwrap(await api.GET("/api/types/{type}/authors/offers", { params: { path: { type: type.id }, query: { said, author, offset: 0, limit } } })),
+    queryKey: [...authorsKey(type.id), "offers", said, author, onSite, offSite, limit],
+    queryFn: async () =>
+      unwrap(await api.GET("/api/types/{type}/authors/offers", { params: { path: { type: type.id }, query: { said, author, onSite, offSite, offset: 0, limit } } })),
+    placeholderData: keepPreviousData,
     refetchInterval: every || false,
   });
   const data = list.data;

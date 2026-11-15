@@ -32,11 +32,14 @@ class AuthorsController(private val authors: Authors, private val offers: Author
         type: String,
         said: AuthorSaid,
         author: Long?,
+        onSite: List<String>?,
+        offSite: List<String>?,
         offset: Int,
         limit: Int,
     ): ResponseEntity<AuthorOfferPage> =
-        offers.offers(type, said, author, offset, limit)?.let { ResponseEntity.ok(it) }
-            ?: ResponseEntity.notFound().build()
+        offers
+            .offers(type, said, OfferFilter(author, onSite.orEmpty().toSet(), offSite.orEmpty().toSet()), offset, limit)
+            ?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun answerAuthors(authorAnswer: AuthorAnswer): ResponseEntity<Unit> {
         val first = SiteAuthorRef(authorAnswer.first.source, authorAnswer.first.author)

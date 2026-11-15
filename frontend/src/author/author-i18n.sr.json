@@ -79,5 +79,10 @@
   "Rest.more_other": "Ostala dela: {{count, number}}",
   "SiteName.page": "Stranica autora na sajtu",
   "WorkLink.onSite": "Otvori delo na sajtu",
-  "WorkLink.othersHint": "Ostali autori dela"
+  "WorkLink.othersHint": "Ostali autori dela",
+  "AuthorsScreen.sites": "Profil na sajtu bar jednog od dvojice:",
+  "AuthorsScreen.siteHint": "{{site}}: da li bar jedan od dva autora ima profil sa delima na ovom sajtu",
+  "AuthorsScreen.has.any": "svejedno",
+  "AuthorsScreen.has.yes": "da",
+  "AuthorsScreen.has.no": "ne"
 }

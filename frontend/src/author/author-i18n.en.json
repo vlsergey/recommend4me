@@ -72,5 +72,10 @@
   "Rest.more_other": "The other works: {{count, number}}",
   "SiteName.page": "The author's page on the site",
   "WorkLink.onSite": "Open the work on its site",
-  "WorkLink.othersHint": "The work's other authors"
+  "WorkLink.othersHint": "The work's other authors",
+  "AuthorsScreen.sites": "A profile on the site of either of the two:",
+  "AuthorsScreen.siteHint": "{{site}}: whether either of the two authors has a profile with works on this site",
+  "AuthorsScreen.has.any": "any",
+  "AuthorsScreen.has.yes": "yes",
+  "AuthorsScreen.has.no": "no"
 }

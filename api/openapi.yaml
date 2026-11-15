@@ -741,6 +741,20 @@ paths:
           schema:
             type: integer
             format: int64
+        - name: onSite
+          in: query
+          description: Only the pairs of whom one author at least has an account with works on every one of these sites
+          schema:
+            type: array
+            items:
+              type: string
+        - name: offSite
+          in: query
+          description: Only the pairs of whom neither author has an account with works on any of these sites
+          schema:
+            type: array
+            items:
+              type: string
         - name: offset
           in: query
           schema:

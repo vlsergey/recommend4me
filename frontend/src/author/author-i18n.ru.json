@@ -86,5 +86,10 @@
   "Rest.more_other": "Остальные работы: {{count, number}}",
   "SiteName.page": "Страница автора на сайте",
   "WorkLink.onSite": "Открыть работу на сайте",
-  "WorkLink.othersHint": "Другие авторы работы"
+  "WorkLink.othersHint": "Другие авторы работы",
+  "AuthorsScreen.sites": "Профиль на сайте хотя бы у одного из двух:",
+  "AuthorsScreen.siteHint": "{{site}}: есть ли хотя бы у одного из двух авторов профиль с работами на этом сайте",
+  "AuthorsScreen.has.any": "не важно",
+  "AuthorsScreen.has.yes": "да",
+  "AuthorsScreen.has.no": "нет"
 }

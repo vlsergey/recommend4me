@@ -7,9 +7,11 @@ import { RefreshSelect } from "@/components/RefreshSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { sourceShort, sourceTitle } from "@/i18n/label";
+import { usePref } from "@/lib/usePref";
 import { useRefresh } from "@/lib/useRefresh";
 import { AuthorCard } from "./AuthorCard";
-import { Offers } from "./AuthorOffers";
+import { type Has, Offers } from "./AuthorOffers";
 import { Accounts, authorName, authorsKey, EntryLinks } from "./pieces";
 
 /** How many authors a page shows, and how many more each "more" adds. */
@@ -26,6 +28,8 @@ type Shown = "offers" | "all" | "partial" | "different";
 
 const KINDS: AuthorKind[] = ["ALL", "MERGED", "CATALOGUED"];
 
+const HAS: Has[] = ["any", "yes", "no"];
+
 /**
  * THE SCREEN OF THE NORMALIZED AUTHORS of a content type: the authors of the sites, each at first a
  * writer of their own, merged by the user on the evidence of their works, never of their names. The
@@ -39,6 +43,9 @@ export function AuthorsScreen({ type }: { type: ContentTypeInfo }) {
   const [shown, setShown] = useState<Shown>("offers");
   const [every, setEvery] = useRefresh("authors.refresh", EVERY_MS);
   const [opened, setOpened] = useState<number | null>(null);
+  // Of every site of authors: whether one of the two of a pair has an account there, kept for the type
+  const [has, setHas] = usePref<Record<string, Has>>(`authors.has.${type.id}`, {});
+  const sites = type.sources.filter((s) => s.facets.some((f) => f.role === "AUTHOR")).map((s) => s.id);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4">
       <header className="flex flex-col gap-1">
@@ -58,10 +65,31 @@ export function AuthorsScreen({ type }: { type: ContentTypeInfo }) {
         </Tabs>
         <RefreshSelect every={every} onChange={setEvery} className="ml-auto" />
       </div>
+      {shown !== "all" && sites.length > 1 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <span className="text-muted-foreground">{t("AuthorsScreen.sites")}</span>
+          {sites.map((site) => (
+            <div key={site} className="flex items-center gap-1.5">
+              <span className="text-muted-foreground" title={t("AuthorsScreen.siteHint", { site: sourceTitle(site) })}>
+                {sourceShort(site)}
+              </span>
+              <Tabs value={has[site] ?? "any"} onValueChange={(v) => setHas({ ...has, [site]: v as Has })}>
+                <TabsList>
+                  {HAS.map((h) => (
+                    <TabsTrigger key={h} value={h}>
+                      {t(`AuthorsScreen.has.${h}`)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          ))}
+        </div>
+      )}
       {shown === "all" ? (
         <AllAuthors type={type} every={every} onOpen={setOpened} />
       ) : (
-        <Offers key={shown} type={type} said={shown === "offers" ? "OFFERED" : shown === "partial" ? "PARTIAL" : "DIFFERENT"} every={every} onOpen={setOpened} />
+        <Offers key={shown} type={type} said={shown === "offers" ? "OFFERED" : shown === "partial" ? "PARTIAL" : "DIFFERENT"} has={has} every={every} onOpen={setOpened} />
       )}
       {opened !== null && <AuthorCard key={opened} type={type} id={opened} onOpen={setOpened} onClose={() => setOpened(null)} />}
     </div>

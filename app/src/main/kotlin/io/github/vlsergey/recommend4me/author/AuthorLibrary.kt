@@ -5,7 +5,7 @@ import io.github.vlsergey.recommend4me.source.TypeStore
 
 /**
  * The works and the authors of a type, read for one request: of every work its authors on its site by their keys, each
- * with the normalized author bound to it; its normalized authors; of every author their works.
+ * with the normalized author bound to it; its normalized authors; of every author their works and the sites of them.
  */
 internal class AuthorLibrary(val writersOf: Map<ItemKey, Map<String, Long>>) {
     val authorsOf: Map<ItemKey, Set<Long>> = writersOf.mapValues { it.value.values.toSet() }
@@ -13,6 +13,13 @@ internal class AuthorLibrary(val writersOf: Map<ItemKey, Map<String, Long>>) {
         HashMap<Long, MutableList<ItemKey>>().also { out ->
             authorsOf.forEach { (work, authors) -> authors.forEach { out.getOrPut(it) { ArrayList() } += work } }
         }
+
+    /** Of every author the sites they have works on. */
+    val sitesOf: Map<Long, Set<String>> by lazy {
+        HashMap<Long, MutableSet<String>>().also { out ->
+            authorsOf.forEach { (work, authors) -> authors.forEach { out.getOrPut(it) { HashSet() } += work.source } }
+        }
+    }
 
     companion object {
         /** The library of the type, every source's works read in one pass. */
