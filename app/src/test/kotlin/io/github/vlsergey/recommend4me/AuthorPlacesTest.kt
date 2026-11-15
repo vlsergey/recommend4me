@@ -14,7 +14,8 @@ import org.springframework.test.context.TestPropertySource
 
 /**
  * An author's page listing their page on another site as a place of theirs makes the two one author, marked as merged
- * by it — once the other is known — and never two the user told apart; a merge of the user's is marked as theirs.
+ * by it — at once, a work of the other known or not — and never two the user told apart; a merge of the user's is
+ * marked as theirs.
  */
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/author-places"])
 class AuthorPlacesTest : TwoSitesTestBase() {
@@ -29,11 +30,14 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         contexts
             .of("alpha")
             .authorPlaces("ann", listOf("https://beta.example/author/bea", "https://elsewhere.example/ann"))
-        assertEquals(1, authors.getAuthor("books", ann).body!!.sites.size)
-        // A work of hers on beta: she is known there, and one with Ann
+        // One with Ann at once, of no work known on beta
+        assertEquals(ann, dictionary.bindingsOf("beta")["bea"])
+        assertEquals(0, authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works)
+        // A work of hers on beta: still one with Ann
         beta("q2|Ipsum|hay|Sit amet consectetur")
         stores.source("beta")!!.items.setFacet("q2", Books.AUTHOR.key, listOf(FacetValue("bea", "Bea")))
-        assertTrue(waitFor { dictionary.bindingsOf("beta")["bea"] == ann })
+        assertTrue(waitFor { authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works == 1 })
+        assertEquals(ann, dictionary.bindingsOf("beta")["bea"])
         val card = authors.getAuthor("books", ann).body!!
         assertNull(card.sites.single { it.source == "alpha" }.mergedBy)
         val bea = card.sites.single { it.source == "beta" }.mergedBy!!

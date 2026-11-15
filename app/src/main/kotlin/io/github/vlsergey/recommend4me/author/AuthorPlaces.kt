@@ -15,19 +15,27 @@ private val log = LoggerFactory.getLogger(AuthorPlaces::class.java)
  * on other sites, in the author's own word. An address every source is asked of ([Source.authorOf]
  * [io.github.vlsergey.recommend4me.source.Source.authorOf]) is an author of another site: the two are one person,
  * merged as the user would merge them, marked as merged by the place of whose page ([MergedBy.Place]) — never two the
- * user told apart or said are partly one, and the user's ✕ taking one out tells them apart. An author not known yet, of
- * no work seen, is merged once a work names them.
+ * user told apart or said are partly one, and the user's ✕ taking one out tells them apart. The two are bound at once,
+ * a work of either known or not (user, 2026-11-15): the author there is the one the page says.
  */
 @Component
-class AuthorPlaces(private val stores: Stores) {
+class AuthorPlaces(private val stores: Stores, private val binding: AuthorBinding) {
 
     /** The places the page of [author] of [source] lists now, kept; whatever they make one, merged. */
     fun said(source: String, author: String, urls: List<String>) {
         val authors = stores.source(source)?.authors ?: return
         val owner = SiteAuthorRef(source, author)
-        authors.places.set(owner, urls.distinct().associateWith { placeOf(owner, it) }, Instant.now())
+        val places = urls.distinct().associateWith { placeOf(owner, it) }
+        authors.places.set(owner, places, Instant.now())
+        bind(listOf(owner) + places.values.filterNotNull())
         merge(authors)
     }
+
+    /** The authors of the sites [refs] not bound yet bound, each to a normalized author of their own. */
+    private fun bind(refs: Collection<SiteAuthorRef>) =
+        refs.groupBy({ it.source }, { it.author }).forEach { (source, keys) ->
+            stores.source(source)?.let { binding.bind(it, keys) }
+        }
 
     /** The author of another source than [owner]'s the address [url] is the page of; null of none. */
     private fun placeOf(owner: SiteAuthorRef, url: String): SiteAuthorRef? =
@@ -46,10 +54,13 @@ class AuthorPlaces(private val stores: Stores) {
     fun start() {
         try {
             val authors = stores.types.firstOrNull()?.authors ?: return
-            authors.places.all().forEach { p ->
+            val places = authors.places.all()
+            val read = places.map { p ->
                 val now = placeOf(p.owner, p.url)
                 if (now != p.place) authors.places.resolve(p.owner, p.url, now)
+                p.copy(place = now)
             }
+            bind(read.flatMap { listOfNotNull(it.owner, it.place) })
             merge(authors)
         } catch (e: Exception) {
             log.error("The places of the authors were not read", e)
@@ -62,7 +73,7 @@ class AuthorPlaces(private val stores: Stores) {
      * one author twice.
      */
     @Synchronized
-    fun merge(authors: AuthorRepository) {
+    private fun merge(authors: AuthorRepository) {
         val places = authors.places.all().filter { it.place != null }
         if (places.isEmpty()) return
         var told = authors.distinct.told()

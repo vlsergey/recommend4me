@@ -18,21 +18,19 @@ internal fun authorFacetOf(s: SourceStore): String? = s.schema.facets.firstOrNul
 
 /**
  * Every author of every site bound to a normalized author ([AuthorRepository]), at first one of their own — never by
- * the likeness of a name: as the works naming them come, and at the start whatever was not bound yet; one another
- * site's author lists as a place of theirs merged with them ([AuthorPlaces]).
+ * the likeness of a name: as the works naming them come, as another site's author lists theirs as a place of theirs
+ * ([AuthorPlaces]) — of no work known yet — and at the start whatever was not bound yet.
  */
 @Component
-class AuthorBinding(private val stores: Stores, private val places: AuthorPlaces) {
+class AuthorBinding(private val stores: Stores) {
 
     /** The [keys] of the source not bound yet bound; one at a time: two at once would bind one author twice. */
     @Synchronized
-    private fun bind(s: SourceStore, keys: Collection<String>) {
+    fun bind(s: SourceStore, keys: Collection<String>) {
         val fresh = keys - s.authors.bindingsOf(s.id).keys
         if (fresh.isEmpty()) return
         s.authors.bindNew(s.id, fresh, Instant.now())
         log.info("{}: {} authors bound to normalized authors of their own", s.id, fresh.size)
-        // An author another site's author lists as a place of theirs, known at last
-        places.merge(s.authors)
     }
 
     /** The authors of the works [event] names bound at once, before anything reads the works. */
