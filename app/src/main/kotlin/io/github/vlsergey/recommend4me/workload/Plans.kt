@@ -86,14 +86,16 @@ internal class Plans(private val turns: Turns) {
 
     /**
      * The [plan] due: put among the works waiting their turn — or joined to a work alike waiting — and run on a thread
-     * of its own once its turn comes. Nothing of a plan planned again or taken meanwhile.
+     * of its own once its turn comes. Nothing of a plan planned again or taken meanwhile. Gone from the plans and among
+     * the waiting at once: never told neither planned nor waiting between.
      */
     private fun begin(plan: Plan) {
-        synchronized(planned) {
-            if (planned[plan.work] !== plan) return
-            planned.remove(plan.work)
-        }
-        val (entry, own) = turns.enter(plan.work, plan.reasons, joinAlike = true, asked = plan.asked)
+        val (entry, own) =
+            synchronized(planned) {
+                if (planned[plan.work] !== plan) return
+                planned.remove(plan.work)
+                turns.enter(plan.work, plan.reasons, joinAlike = true, asked = plan.asked)
+            }
         if (own) runners.execute { run(plan, entry) }
     }
 

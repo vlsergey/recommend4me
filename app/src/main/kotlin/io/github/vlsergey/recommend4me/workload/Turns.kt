@@ -21,6 +21,9 @@ internal class Turns {
     private val turn = lock.newCondition()
     private var holder: Thread? = null
 
+    /** The work holding the turn: taken from the waiting at once, under [lock]. */
+    private var held: Waiter? = null
+
     /** The works waiting their turn, in the order they are asked; guarded by [lock]. Whose turn comes: [next]. */
     private val waiting = ArrayList<Waiter>()
 
@@ -68,6 +71,7 @@ internal class Turns {
                 try {
                     while (holder != null || next() !== entry) turn.await()
                     holder = Thread.currentThread()
+                    held = entry
                 } finally {
                     waiting -= entry
                     // Gone from the waiting — its turn taken, or given up: whose turn it is now is asked anew
@@ -85,6 +89,7 @@ internal class Turns {
     /** The turn given back by the work that held it: whose turn it is now is asked anew. */
     fun release() = lock.withLock {
         holder = null
+        held = null
         turn.signalAll()
     }
 
@@ -96,8 +101,8 @@ internal class Turns {
         waiting.sortedWith(order(Instant.now())).map { HeavyWork(it.work, it.since, it.reasons, it.asked) }
     }
 
-    /** Whether the [work] waits its turn. */
-    fun waits(work: Work): Boolean = lock.withLock { waiting.any { it.work == work } }
+    /** Whether the [work] waits its turn, or holds it. */
+    fun waits(work: Work): Boolean = lock.withLock { held?.work == work || waiting.any { it.work == work } }
 
     /**
      * Whose turn comes next: of the works the user asked for and those waiting too long the longest waiting, else of
