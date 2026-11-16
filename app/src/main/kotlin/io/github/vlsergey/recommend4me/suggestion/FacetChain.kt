@@ -161,25 +161,10 @@ internal class FacetChain(
                 light = true,
                 site = read.site,
             )
-        val lines = linesOf(store, facet, vocabulary, read)
-        val siteGives = siteGives(store, facet, read)
+        val ofKept = keptTask(store, facet, encoder, vocabulary, made, read, laps)
         laps.lap("vocabulary")
         return DatabaseRefused.during(computation(store, facet)) {
-            val data =
-                FacetData.load(
-                    store,
-                    facet,
-                    encoder,
-                    read,
-                    modelled = made,
-                    allowed = vocabulary?.allowed,
-                    barred = vocabulary?.barred,
-                    examples = vocabulary?.examples,
-                    kept = kept.values,
-                    cast = lines,
-                    siteGives = siteGives,
-                    laps = laps,
-                )
+            val data = ofKept(kept.values)
             if (data.values.isEmpty()) null
             else
                 suggester
@@ -259,6 +244,41 @@ internal class FacetChain(
             cast = linesOf(store, facet, vocabulary, read),
             siteGives = siteGives(store, facet, read),
         )
+
+    /**
+     * THE TASK OF A SCORING KEPT, of the values it chooses from given ([FacetData.load] of `kept`): the works [read],
+     * the values each may have and the site's examples of the [vocabulary], the values of the facets before [made].
+     * What it is read with besides the works — the works' lines, whether the site gives values — read here, with the
+     * database; the task made by the function answered, with the database refused.
+     */
+    fun keptTask(
+        store: SourceStore,
+        facet: FacetDef,
+        encoder: TextEncoder,
+        vocabulary: Vocabulary?,
+        made: WorkChances,
+        read: WorksRead,
+        laps: Laps = Laps(),
+    ): (List<String>) -> FacetData {
+        val lines = linesOf(store, facet, vocabulary, read)
+        val siteGives = siteGives(store, facet, read)
+        return { kept ->
+            FacetData.load(
+                store,
+                facet,
+                encoder,
+                read,
+                modelled = made,
+                allowed = vocabulary?.allowed,
+                barred = vocabulary?.barred,
+                examples = vocabulary?.examples,
+                kept = kept,
+                cast = lines,
+                siteGives = siteGives,
+                laps = laps,
+            )
+        }
+    }
 
     /** The works' lines of characters and pairings read for the [facet]; null of a facet that reads none. */
     private fun linesOf(store: SourceStore, facet: FacetDef, vocabulary: Vocabulary?, read: WorksRead): SaidLines? =

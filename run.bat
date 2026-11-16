@@ -31,5 +31,9 @@ if not exist "%DATA%" mkdir "%DATA%"
 rem A death leaves something behind: the crash file and the heap at the moment it ran out.
 rem ZGC, not G1: G1 crashed four times (30.10–4.11.2026) with an access violation in a GC thread
 rem scanning a request's virtual thread in Recommendations.explain, compiled on the stack
-set JAVA_OPTS=-Drecommend4me.plugin-dirs="%PLUGINS%" -Drecommend4me.gpu=%GPU% -XX:+UseZGC -XX:ErrorFile="%DATA%\hs_err_pid%%p.log" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath="%DATA%"
+rem The log of the collector and of the stops at safepoints, gc.log beside the application's own, ten files of
+rem 50 MB in turn: whether a stall of every request at once (16.11.2026, a minute and a half) is the collector's —
+rem an allocation stall, a long stop — or not
+set GCLOG=-Xlog:gc*,safepoint:file="%DATA%\gc.log":time,uptime,level,tags:filecount=10,filesize=50m
+set JAVA_OPTS=-Drecommend4me.plugin-dirs="%PLUGINS%" -Drecommend4me.gpu=%GPU% -XX:+UseZGC %GCLOG% -XX:ErrorFile="%DATA%\hs_err_pid%%p.log" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath="%DATA%"
 call build\run\bin\recommend4me.bat %*
