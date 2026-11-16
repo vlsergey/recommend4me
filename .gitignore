@@ -7,7 +7,7 @@ frontend/dist/
 frontend/src/api/schema.d.ts
 browser-extension/dist/
 
-# Local state: databases, pictures, logs — they live in the data folder, never here
+# Local state: databases, pictures, logs — they live in the data folder (data/ of run.bat), never in git
 *.db
 *.db-wal
 *.db-shm

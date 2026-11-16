@@ -89,8 +89,9 @@ the site shows only to a reader logged in.
 
 The tables of every database, as diagrams: [docs/database](database/README.md).
 
-H2, one file per level of data, under the data folder (`%LOCALAPPDATA%\recommend4me` on
-Windows, `~/.local/share/recommend4me` elsewhere; `recommend4me.data-dir`):
+H2, one file per level of data, under the data folder (`recommend4me.data-dir`: `data` of the
+repository when run from it by `run.bat` or `:app:run`, else `%LOCALAPPDATA%\recommend4me` on
+Windows, `~/.local/share/recommend4me` elsewhere):
 
 ```
 app.mv.db                          settings

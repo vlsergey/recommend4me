@@ -1,6 +1,6 @@
 # The application started after the computer starts, no logon needed: a task of the Task Scheduler
 # running run.bat as the user who registers it — without its password kept (S4U), in the background,
-# no window; the log is in %LOCALAPPDATA%\recommend4me\app.log, the application stopped by "Exit" of
+# no window; the log is in data\app.log beside run.bat, the application stopped by "Exit" of
 # its menu. A minute after the start, for the network (Tailscale) to come up first; restarted up to
 # three times a minute apart when it fails to start.
 #

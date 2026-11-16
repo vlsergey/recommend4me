@@ -64,6 +64,9 @@ tasks.withType<Test>().configureEach {
     // the runner's six hours are up; every test's start and end in the log, the one that hung named
     systemProperty("junit.jupiter.execution.timeout.default", "10 m")
     systemProperty("junit.jupiter.execution.timeout.thread.mode.default", "SEPARATE_THREAD")
+    // The data folder of this checkout's runs (run.bat, :app:run): the tests take the machine's encoders and CUDA
+    // libraries from it — never its data, every test keeping its own
+    systemProperty("recommend4me.local-data-dir", rootDir.resolve("data").absolutePath)
     testLogging {
         events("started", "passed", "skipped", "failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

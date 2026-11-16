@@ -218,11 +218,12 @@ private class CudaLibraries(private val dir: Path) {
 }
 
 /**
- * The models folder of a run without Spring — the tests: `recommend4me.models-dir`, or the one in the default data
- * folder.
+ * The models folder of a run without Spring — the tests: `recommend4me.models-dir`, or the one in the checkout's data
+ * folder (`recommend4me.local-data-dir`, given by the build), or in the default data folder.
  */
 fun defaultModelsDir(): java.nio.file.Path =
     System.getProperty("recommend4me.models-dir")?.let { java.nio.file.Path.of(it) }
+        ?: System.getProperty("recommend4me.local-data-dir")?.let { java.nio.file.Path.of(it, "models") }
         ?: java.nio.file.Path.of(
             System.getenv("LOCALAPPDATA") ?: (System.getProperty("user.home") + "/.local/share"),
             "recommend4me",

@@ -2,7 +2,7 @@
 # cublasLt64_12, cufft64_11, cudnn64_9 and the parts of cuDNN) and NVRTC, which compiles the
 # fittings' own kernels for the card at their start (nvrtc64_120_0), taken from NVIDIA's own wheels on
 # PyPI rather than from the CUDA toolkit and cuDNN installers: a wheel is a zip, its DLLs are all
-# that is needed, and nothing is installed system-wide. They go into the data folder, where
+# that is needed, and nothing is installed system-wide. They go into the data folder of run.bat (data\cuda), where
 # the application looks for them when started with recommend4me.gpu=true.
 #
 #   powershell -ExecutionPolicy Bypass -File tools\fetch-cuda.ps1
@@ -13,7 +13,7 @@
 # About 1.6 GB of downloads. cuBLAS 12.9 and cuDNN 9 are new enough for Blackwell (RTX 50xx).
 param([string[]]$Only)
 $ErrorActionPreference = 'Stop'
-$target = Join-Path $env:LOCALAPPDATA 'recommend4me\cuda'
+$target = Join-Path $PSScriptRoot '..\data\cuda'
 $work = Join-Path $env:TEMP 'recommend4me-cuda-wheels'
 New-Item -ItemType Directory -Force $target, $work | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem

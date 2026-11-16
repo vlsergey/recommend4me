@@ -261,6 +261,8 @@ tasks.named<JavaExec>("run") {
             (project.findProperty("pluginDirs") as String?).orEmpty().split(';').filter { it.isNotBlank() }
     systemProperty("recommend4me.plugin-dirs", dirs.joinToString(File.pathSeparator))
     systemProperty("recommend4me.extension-dir", extensionDir.asFile.absolutePath)
+    // The data folder of the checkout, as run.bat's: data/, ignored by git
+    systemProperty("recommend4me.data-dir", rootDir.resolve("data").absolutePath)
 }
 
 tasks.withType<Test>().configureEach {

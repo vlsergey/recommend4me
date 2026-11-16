@@ -13,7 +13,8 @@ and puts everything not graded yet in that order, on a 0..10 scale of your own.
 | 5 | give me more |
 
 Everything is local: the databases, the pictures, the neural encoders and the model live on your
-machine, in `%LOCALAPPDATA%\recommend4me` (`~/.local/share/recommend4me` elsewhere).
+machine: run from this repository (`run.bat`, `./gradlew :app:run`), in its `data` folder, ignored by git;
+otherwise in `%LOCALAPPDATA%\recommend4me` (`~/.local/share/recommend4me` elsewhere).
 
 ## Plugins
 
@@ -89,31 +90,31 @@ The encoders' files go into the `models` folder of the data folder (not into git
 bge-m3 (1.1 GB, in half precision; fast on a card, slow on the CPU):
 
 ```bash
-curl -L -o "$LOCALAPPDATA/recommend4me/models/bge-m3-fp16.onnx" https://huggingface.co/Xenova/bge-m3/resolve/main/onnx/model_fp16.onnx
+curl -L -o "data/models/bge-m3-fp16.onnx" https://huggingface.co/Xenova/bge-m3/resolve/main/onnx/model_fp16.onnx
 ```
 
 ```bash
-curl -L -o "$LOCALAPPDATA/recommend4me/models/bge-m3-tokenizer.json" https://huggingface.co/Xenova/bge-m3/resolve/main/tokenizer.json
+curl -L -o "data/models/bge-m3-tokenizer.json" https://huggingface.co/Xenova/bge-m3/resolve/main/tokenizer.json
 ```
 
 Without it, multilingual-e5-small (small and fast, weaker by far):
 
 ```bash
-curl -L -o "$LOCALAPPDATA/recommend4me/models/e5-small.onnx" https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/model.onnx
+curl -L -o "data/models/e5-small.onnx" https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/model.onnx
 ```
 
 ```bash
-curl -L -o "$LOCALAPPDATA/recommend4me/models/e5-small-tokenizer.json" https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/tokenizer.json
+curl -L -o "data/models/e5-small-tokenizer.json" https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/tokenizer.json
 ```
 
 The reranker (1.1 GB, in half precision; fast on a card, slow on the CPU):
 
 ```bash
-curl -L -o "$LOCALAPPDATA/recommend4me/models/bge-reranker-v2-m3-fp16.onnx" https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX/resolve/main/onnx/model_fp16.onnx
+curl -L -o "data/models/bge-reranker-v2-m3-fp16.onnx" https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX/resolve/main/onnx/model_fp16.onnx
 ```
 
 ```bash
-curl -L -o "$LOCALAPPDATA/recommend4me/models/bge-reranker-v2-m3-tokenizer.json" https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX/resolve/main/tokenizer.json
+curl -L -o "data/models/bge-reranker-v2-m3-tokenizer.json" https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX/resolve/main/tokenizer.json
 ```
 
 SigLIP2 is exported by [`plugins/encoder-siglip2/tools/export_siglip2_naflex.py`](plugins/encoder-siglip2/tools/export_siglip2_naflex.py).

@@ -11,7 +11,8 @@ class CudaKernelsTest {
 
     @Test
     fun `a kernel of one's own is compiled, launched and reads and writes the card's memory`() {
-        val dir = Path.of(System.getenv("LOCALAPPDATA") ?: "", "recommend4me", "cuda")
+        // Those of the checkout's data folder (the build's recommend4me.local-data-dir)
+        val dir = Path.of(System.getProperty("recommend4me.local-data-dir") ?: "data", "cuda")
         assumeTrue(Files.exists(dir.resolve("nvrtc64_120_0.dll")), "no CUDA libraries with NVRTC")
         // Loaded before cuBLAS, which needs them, as the application's ONNX Runtime loads them: by full path
         listOf("cudart64_12.dll", "cublasLt64_12.dll").forEach {
