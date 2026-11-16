@@ -44,9 +44,12 @@ class Captures(private val stores: Stores, private val contexts: SourceContexts)
 
     private fun tracking(): List<SourceStore> = stores.sources.filter { SourceMode.BROWSER in it.source.modes }
 
-    /** The addresses every source wants, by source. */
-    fun patterns(): Map<String, List<String>> =
-        tracking().associate { s -> s.id to s.source.capturePatterns.map { it.pattern } }
+    /**
+     * The addresses every source wants, and the blocks of its pages filled late
+     * ([Source.lateBlocks][io.github.vlsergey.recommend4me.source.Source.lateBlocks]), by source.
+     */
+    fun patterns(): Map<String, Pair<List<String>, List<String>>> =
+        tracking().associate { s -> s.id to (s.source.capturePatterns.map { it.pattern } to s.source.lateBlocks) }
 
     // A source's parser is a plugin reading a site's page: it may fail any way, and the page is kept all the same
     @Suppress("TooGenericExceptionCaught")

@@ -16,7 +16,10 @@
  * not call the application, the extension may.
  */
 
-/** The wanted addresses, as regular expressions, and when they were asked for. */
+/**
+ * The wanted addresses, as regular expressions, each with the blocks its source's pages fill late
+ * (lateBlocks), and when they were asked for.
+ */
 let patterns = [];
 let patternsAt = 0;
 const PATTERNS_TTL = 10 * 60 * 1000;
@@ -25,14 +28,19 @@ const PATTERNS_TTL = 10 * 60 * 1000;
 const recent = [];
 const RECENT = 20;
 
-/** Whether a source of the application wants the page. */
+/**
+ * The blocks filled late of the source of the application that wants the page (an empty list of a
+ * source with none); null — no source wants it.
+ */
 async function wanted(url) {
   const { server } = await loadSettings();
   if (Date.now() - patternsAt > PATTERNS_TTL) {
     try {
       const response = await fetch(`${server}/api/capture/patterns`);
       if (response.ok) {
-        patterns = (await response.json()).flatMap((p) => p.patterns.map((re) => new RegExp(`^(?:${re})$`)));
+        patterns = (await response.json()).flatMap((p) =>
+          p.patterns.map((re) => ({ re: new RegExp(`^(?:${re})$`), late: p.lateBlocks ?? [] })),
+        );
         patternsAt = Date.now();
       }
     } catch {
@@ -41,7 +49,7 @@ async function wanted(url) {
       patternsAt = Date.now() - PATTERNS_TTL + 30 * 1000;
     }
   }
-  return patterns.some((re) => re.test(url));
+  return patterns.find((p) => p.re.test(url))?.late ?? null;
 }
 
 // watchPage and pageHtml — what is put into a wanted page — are in watch.js, shared with the
@@ -74,11 +82,13 @@ const PAGE_SCRIPTS = [
 
 async function inject(tabId, url) {
   const { enabled, decorate } = await loadSettings();
-  if (!(enabled || decorate) || !(await wanted(url))) return;
+  if (!(enabled || decorate)) return;
+  const late = await wanted(url);
+  if (!late) return;
   if (enabled) {
     try {
       await browser.scripting.executeScript({ target: { tabId }, files: ["watch.js"] });
-      await browser.scripting.executeScript({ target: { tabId }, func: () => watchPage() });
+      await browser.scripting.executeScript({ target: { tabId }, func: (blocks) => watchPage(blocks), args: [late] });
     } catch (e) {
       console.warn("recommend4me: cannot watch", url, e);
     }

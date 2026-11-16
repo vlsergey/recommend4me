@@ -29,6 +29,13 @@ class AuthorTodayDecorTest {
         assertNull(source.itemIdOf("https://author.today/review/913603"))
     }
 
+    /** The block of comments the browser waits for is on a work's page, empty till the site loads it. */
+    @Test
+    fun `the blocks filled late are on a work's page`() {
+        val doc = Jsoup.parse(page("work-661269.html"))
+        source.lateBlocks.forEach { assertEquals(0, doc.selectFirst(it)!!.childrenSize(), it) }
+    }
+
     @Test
     fun `a work's page shows its tags, its cover and the place of the panel`() {
         val html = page("work-216859.html")

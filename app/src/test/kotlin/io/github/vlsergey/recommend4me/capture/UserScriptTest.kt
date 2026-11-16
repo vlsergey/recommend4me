@@ -29,9 +29,7 @@ class UserScriptTest {
         assertTrue("// @downloadURL  https://pc.example.ts.net/userscript/recommend4me.user.js" in script)
         assertTrue("const R4M_SERVER = \"https://pc.example.ts.net\";" in script)
         // page.js and its parts run on demand, watch.js and the stand-in of the background script beside it
-        assertTrue(
-            "function runPage() {" in script && "function watchPage()" in script && "GM.xmlHttpRequest" in script
-        )
+        assertTrue("function runPage() {" in script && "function watchPage(" in script && "GM.xmlHttpRequest" in script)
         // Every part of page.js inside runPage(), in their order, page.js last
         val run = script.indexOf("function runPage() {")
         val at =

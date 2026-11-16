@@ -74,6 +74,9 @@ class AuthorToday : Source {
             )
         )
 
+    /** The block of a work's comments, loaded after the page: whether they are closed is read of it. */
+    override val lateBlocks = listOf("#commentsAsync")
+
     /**
      * 2: whether a work is fan fiction, by its genres. 3: the standard statuses; the shelf of the finished as the
      * standard "read". 4: the shelf as the standard one. 5: the pages that failed when several pages of one work were

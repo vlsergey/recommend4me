@@ -38,7 +38,9 @@ class CaptureController(
     }
 
     override fun getCapturePatterns(): ResponseEntity<List<CapturePatterns>> =
-        ResponseEntity.ok(captures.patterns().map { (source, patterns) -> CapturePatterns(source, patterns) })
+        ResponseEntity.ok(
+            captures.patterns().map { (source, wanted) -> CapturePatterns(source, wanted.first, wanted.second) }
+        )
 
     override fun capturePage(captureRequest: CaptureRequest): ResponseEntity<CaptureResult> {
         val captured = captures.capture(captureRequest.url, captureRequest.html)

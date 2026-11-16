@@ -5265,13 +5265,20 @@ components:
 
     CapturePatterns:
       type: object
-      required: [source, patterns]
+      required: [source, patterns, lateBlocks]
       properties:
         source:
           type: string
         patterns:
           type: array
           description: Regular expressions over the whole address
+          items:
+            type: string
+        lateBlocks:
+          type: array
+          description: |
+            CSS selectors of the blocks of a wanted page the site fills only after the page has loaded: the page is
+            sent again once one of them is filled, however little it grew by it
           items:
             type: string
 

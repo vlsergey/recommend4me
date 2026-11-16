@@ -116,11 +116,15 @@ const browser = {
   },
 };
 
-/** Whether a source of the application wants the page: the addresses asked for every address the page goes to. */
+/**
+ * The blocks filled late (lateBlocks) of the source that wants the page; null — none wants it. The
+ * addresses are asked for every address the page goes to.
+ */
 async function wanted(url) {
   const answer = await request("GET", "/api/capture/patterns");
-  if (!answer.ok) return false;
-  return answer.data.some((p) => p.patterns.some((re) => new RegExp(`^(?:${re})$`).test(url)));
+  if (!answer.ok) return null;
+  const source = answer.data.find((p) => p.patterns.some((re) => new RegExp(`^(?:${re})$`).test(url)));
+  return source ? (source.lateBlocks ?? []) : null;
 }
 
 /** page.css, once: marked apart from page.js's own elements, which it clears on every drawing. */
@@ -134,10 +138,11 @@ function addStyle() {
 
 /** A wanted page is sent as it grows, and the work is shown on it. */
 async function start() {
-  if (!(await wanted(location.href))) return;
+  const late = await wanted(location.href);
+  if (!late) return;
   addStyle();
   window.__recommend4meWatching = false;
-  watchPage();
+  watchPage(late);
   runPage();
 }
 

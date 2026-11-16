@@ -10,6 +10,13 @@ interface BrowserTracking {
         get() = emptyList()
 
     /**
+     * The blocks of a wanted page — CSS selectors — the site fills only after the page has loaded (author.today's
+     * comments): the browser sends the page again once one of them is filled, however little the page grew by it.
+     */
+    val lateBlocks: List<String>
+        get() = emptyList()
+
+    /**
      * Raised when the source reads its pages differently: every kept page ([SourceContext.keepPage]) is handed to
      * [capture] again on the next start.
      */
