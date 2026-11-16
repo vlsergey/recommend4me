@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.source.NumberJoin
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -30,6 +31,32 @@ class WorkFeaturesTest {
         assertEquals(Instant.ofEpochSecond(20), work.updatedAt)
         assertEquals(setOf("tag:x", "tag:y", "source:alpha", "source:beta"), work.categorical)
         assertEquals(mapOf("words" to 15f, "only" to 3f), work.numeric)
+    }
+
+    /** A yes or no every site says: 1 where all say yes, 0 where all say no, 0.5 where they differ, however many. */
+    @Test
+    fun `a number joined by agreement is the items' one value, else the middle`() {
+        val joins = mapOf("closed" to NumberJoin.AGREEMENT)
+        fun work(vararg values: Float) =
+            WorkFeatures.item(
+                    a,
+                    values.mapIndexed { i, v ->
+                        CatalogueItem(
+                            if (i == 0) a else ItemKey("s$i", "$i"),
+                            "",
+                            Instant.EPOCH,
+                            emptySet(),
+                            mapOf("closed" to v),
+                        )
+                    },
+                    joins,
+                )
+                .numeric
+                .getValue("closed")
+        assertEquals(1f, work(1f, 1f, 1f))
+        assertEquals(0f, work(0f, 0f))
+        assertEquals(0.5f, work(1f, 1f, 0f))
+        assertEquals(0.5f, work(0f, 1f))
     }
 
     @Test

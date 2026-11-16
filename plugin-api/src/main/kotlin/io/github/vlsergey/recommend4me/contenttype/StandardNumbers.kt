@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.contenttype
 
+import io.github.vlsergey.recommend4me.source.NumberJoin
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.NumberScale
 
@@ -19,4 +20,11 @@ object StandardNumbers {
 
     /** How long the work's text is, in characters, the spaces counted. */
     val CHARS = StandardNumber("chars", NumberScale.LOG, sortable = true, role = NumberRole.SIZE)
+
+    /**
+     * Whether the author closed the work's comments to the public — author.today's "комментировать это произведение
+     * только своим друзьям": 1 or 0 of an item; of a work, 1 where every site that can close them has them closed, 0
+     * where none, 0.5 where some ([NumberJoin.AGREEMENT]). An item whose site did not show it has none.
+     */
+    val COMMENTS_CLOSED = StandardNumber("commentsClosed", NumberScale.LINEAR, join = NumberJoin.AGREEMENT)
 }

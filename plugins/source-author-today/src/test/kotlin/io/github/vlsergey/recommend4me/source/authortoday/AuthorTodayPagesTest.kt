@@ -152,6 +152,48 @@ class AuthorTodayPagesTest {
         assertEquals("yes", context.signalValues["661269" to "read"])
     }
 
+    /**
+     * The block of comments the site loads after the page: closed to all but the author's friends — 1, open — 0; not
+     * loaded yet, or a guest's — nothing, whatever was read before staying.
+     */
+    @Test
+    fun `a work's block of comments tells whether they are closed`() {
+        val context = MemorySourceContext()
+        val url = "https://author.today/work/661269"
+        fun withComments(inner: String) =
+            Jsoup.parse(page("work-661269.html")).also { it.selectFirst("#commentsAsync")!!.html(inner) }.outerHtml()
+        fun closed() = context.numbers.getValue("661269")["commentsClosed"]
+
+        capture(context, url, page("work-661269.html"))
+        assertNull(closed())
+        capture(
+            context,
+            url,
+            withComments("<div id=\"root-reply-placeholder\"><comment-form-v1></comment-form-v1></div>"),
+        )
+        assertEquals(0.0, closed())
+        capture(
+            context,
+            url,
+            withComments(
+                "<div class=\"tag-box mb-lg\"><p> Лорем Ипсум разрешила комментировать это произведение только своим " +
+                    "друзьям. </p></div>"
+            ),
+        )
+        assertEquals(1.0, closed())
+        capture(
+            context,
+            url,
+            withComments(
+                "<div class=\"alert alert-success mb-lg\"><p>Только зарегистрированные пользователи могут оставлять " +
+                    "комментарии.</p></div>"
+            ),
+        )
+        assertEquals(1.0, closed())
+        capture(context, url, page("work-661269.html"))
+        assertEquals(1.0, closed())
+    }
+
     @Test
     fun `a work's page without the block of tags or the tab of texts leaves them as they were`() {
         val context = MemorySourceContext()

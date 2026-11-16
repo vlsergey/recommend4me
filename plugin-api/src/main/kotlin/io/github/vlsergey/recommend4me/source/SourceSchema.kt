@@ -182,6 +182,18 @@ enum class TextRole {
     NOTES,
 }
 
+/** How the numbers several items of one work have are one number of the work. */
+enum class NumberJoin {
+    /** Their mean: the views, the likes, the size of each site. */
+    MEAN,
+
+    /**
+     * The value they all have, when they agree; when they do not, the middle of the least and the greatest — of a yes
+     * (1) or no (0) every site that can say it says, 1 where all say yes, 0 where all say no, 0.5 where some do.
+     */
+    AGREEMENT,
+}
+
 /** How the model reads a number. */
 enum class NumberScale {
     /** A count spread over orders of magnitude — views, likes: its logarithm. */
@@ -204,6 +216,8 @@ class NumberDef(
     val filterable: Boolean = false,
     /** The standard number of the content type this one is ([StandardNumber.asNumber]); null — the source's own. */
     val standard: StandardNumber? = null,
+    /** How the numbers of the items of one work are one ([shared] by the sites, or of one site's several items). */
+    val join: NumberJoin = NumberJoin.MEAN,
 )
 
 /**

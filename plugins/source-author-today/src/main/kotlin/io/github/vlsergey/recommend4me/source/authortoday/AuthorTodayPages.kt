@@ -12,6 +12,7 @@ import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.BASE
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.CHARS
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.COMMENTS
+import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.COMMENTS_CLOSED
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.LIKES
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.NOTES
 import io.github.vlsergey.recommend4me.source.authortoday.AuthorToday.Companion.REVIEWS
@@ -159,7 +160,7 @@ class AuthorTodayPages(context: SourceContext) {
 
     /**
      * The numbers of the work its page shows: its size and views on its [panel], the likes of its like button ([like])
-     * or of the panel, the comments, the reviews and the awards.
+     * or of the panel, the comments, the reviews and the awards; whether its comments are closed ([commentsClosed]).
      */
     private fun workNumbers(doc: Document, block: WorkBlock, panel: Element, id: String, like: MatchResult?) {
         items.setNumbers(
@@ -179,6 +180,7 @@ class AuthorTodayPages(context: SourceContext) {
                         .firstNotNullOfOrNull { PageText.number(it.text()) }
                         ?.let { REVIEWS to it.toDouble() },
                     panel.selectFirst(".btn-reward")?.text()?.let(PageText::number)?.let { AWARDS to it.toDouble() },
+                    commentsClosed(doc)?.let { COMMENTS_CLOSED to it },
                 )
                 .toMap(),
         )
@@ -235,6 +237,23 @@ class AuthorTodayPages(context: SourceContext) {
                 "name: 'like-button', params: \\{targetId: \\d+, likeCount: (\\d+), type: 'Work', " +
                     "disabled: \\w+, voteId: ([^}\\s]+)\\s*}"
             )
+
+        /** The site's line of a work whose author lets only their friends comment on it, of either gender. */
+        private val FRIENDS_ONLY = Regex("^.+ разрешила? комментировать это произведение только своим друзьям\\.$")
+
+        /**
+         * Whether the work's comments are closed to the public: 1 — the block of comments says its author lets only
+         * their friends comment on it; 0 — it has the form of a comment; nothing — the block is not loaded yet (the
+         * site loads it after the page) or says neither, a guest's "only the registered may comment" among them.
+         */
+        private fun commentsClosed(doc: Document): Double? {
+            val block = doc.selectFirst("#commentsAsync") ?: return null
+            return when {
+                block.select(".tag-box p").any { FRIENDS_ONLY.matches(it.text().trim()) } -> 1.0
+                block.selectFirst("comment-form-v1") != null -> 0.0
+                else -> null
+            }
+        }
 
         internal fun instant(value: String): Instant? = runCatching {
             Instant.parse(value.let { if (it.endsWith("Z")) it else "${it}Z" })

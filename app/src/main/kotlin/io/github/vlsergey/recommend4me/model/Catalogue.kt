@@ -241,9 +241,10 @@ class CatalogueReader(
         val linked = clusters.linkedWorks().filter { it.first() in itemOf }
         // The sets of every work of several items read at once, not a reading a work
         val sets = setVectors.ofWorks(type, linked)
+        val joins = WorkFeatures.joins(type.sources.map { it.source })
         linked.forEachIndexed { w, members ->
             val name = members.first()
-            merged[name] = WorkFeatures.item(name, members.mapNotNull(itemOf::get))
+            merged[name] = WorkFeatures.item(name, members.mapNotNull(itemOf::get), joins)
             val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + sets[w]
             members.forEach(vectors::remove)
             vectors[name] = joined
@@ -368,7 +369,8 @@ class CatalogueReader(
         val members = (read?.members ?: works.of(type).members(key)).sortedBy { it.toString() }
         if (members.size == 1) return item(type, key, read?.chances?.get(key))
         val own = members.mapNotNull { item(type, it, read?.chances?.get(it)) }
-        return own.takeIf { it.isNotEmpty() }?.let { WorkFeatures.item(it.first().key, it) }
+        return own.takeIf { it.isNotEmpty() }
+            ?.let { WorkFeatures.item(it.first().key, it, WorkFeatures.joins(type.sources.map { s -> s.source })) }
     }
 
     /**

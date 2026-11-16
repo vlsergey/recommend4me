@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.contenttype
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberDef
+import io.github.vlsergey.recommend4me.source.NumberJoin
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SignalDef
@@ -134,6 +135,7 @@ class StandardNumber(
     val sortable: Boolean = false,
     val filterable: Boolean = false,
     val role: NumberRole? = null,
+    val join: NumberJoin = NumberJoin.MEAN,
 ) {
     /** The source's number [key] as this one: its scale and use are the standard's. */
     fun asNumber(key: String = this.key) =
@@ -145,6 +147,7 @@ class StandardNumber(
             role = role,
             filterable = filterable,
             standard = this,
+            join = join,
         )
 }
 

@@ -53,6 +53,7 @@ class AuthorToday : Source {
                     NumberDef(COMMENTS, NumberScale.LOG),
                     NumberDef(REVIEWS, NumberScale.LOG),
                     NumberDef(AWARDS, NumberScale.LOG),
+                    StandardNumbers.COMMENTS_CLOSED.asNumber(COMMENTS_CLOSED),
                 ),
             texts =
                 listOf(
@@ -78,9 +79,10 @@ class AuthorToday : Source {
      * standard "read". 4: the shelf as the standard one. 5: the pages that failed when several pages of one work were
      * read at once read again. 6: the alternative history as a kind of its own, the erotic fan fiction as fan fiction.
      * 7: the age ratings a card lets the work have, by its "18+". 8: of a work without it, G to R. 9: the genres the
-     * site's tags. 10: the series' own pages and an author's list of them, the number of a work in its series.
+     * site's tags. 10: the series' own pages and an author's list of them, the number of a work in its series. 11:
+     * whether a work's comments are closed to the public, by its block of comments.
      */
-    override val parserVersion = 10
+    override val parserVersion = 11
 
     /** The genres kept before as a facet of their own moved among the site's tags. */
     override val migrations = listOf("classpath:db/author.today")
@@ -167,6 +169,7 @@ class AuthorToday : Source {
         const val COMMENTS = "comments"
         const val REVIEWS = "reviews"
         const val AWARDS = "awards"
+        const val COMMENTS_CLOSED = "commentsClosed"
 
         const val ANNOTATION = "annotation"
         const val NOTES = "notes"

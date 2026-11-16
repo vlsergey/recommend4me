@@ -95,6 +95,7 @@
   "model.source": "Source",
   "model.textFragments": "Text by fragments",
   "number.chars": "Characters",
+  "number.commentsClosed": "Comments closed",
   "number.likes": "Likes",
   "number.parts": "Chapters",
   "number.views": "Views",
