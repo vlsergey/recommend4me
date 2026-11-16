@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.contenttype
 
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.NumberScale
+import io.github.vlsergey.recommend4me.source.ValueJoin
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 
 /**
@@ -16,7 +17,8 @@ object Books {
 
     /**
      * Whether the whole of the work is written: of a site that tells only that, finished or in progress. Of a work
-     * several sites have, the page of a site that has it finished is the one it is shown with (user, 2026-11-12).
+     * several sites have, the page of a site that has it finished is the one it is shown with (user, 2026-11-12); the
+     * model reads the greatest status any of them tells, finished before in progress before frozen (user, 2026-11-16).
      */
     object Status {
         val FINISHED = StandardValue("finished", "Завершено", shownFirst = true)
@@ -33,6 +35,7 @@ object Books {
             onCard = true,
             // A work is finished, in progress or frozen: one of them, as a site says it
             single = true,
+            join = ValueJoin.FIRST_LISTED,
         )
 
     /**

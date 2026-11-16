@@ -15,11 +15,14 @@ object StandardNumbers {
     /** How many times the work was opened: a site's views, its hits. */
     val VIEWS = StandardNumber("views", NumberScale.LOG, sortable = true, role = NumberRole.REACH)
 
-    /** How long the work's text is, in words. */
-    val WORDS = StandardNumber("words", NumberScale.LOG, sortable = true, role = NumberRole.SIZE)
+    /** How long the work's text is, in words; of a work, the greatest its items tell ([NumberJoin.MAX]). */
+    val WORDS = StandardNumber("words", NumberScale.LOG, sortable = true, role = NumberRole.SIZE, join = NumberJoin.MAX)
 
-    /** How long the work's text is, in characters, the spaces counted. */
-    val CHARS = StandardNumber("chars", NumberScale.LOG, sortable = true, role = NumberRole.SIZE)
+    /**
+     * How long the work's text is, in characters, the spaces counted; of a work, the greatest its items tell
+     * ([NumberJoin.MAX]).
+     */
+    val CHARS = StandardNumber("chars", NumberScale.LOG, sortable = true, role = NumberRole.SIZE, join = NumberJoin.MAX)
 
     /**
      * Whether the author closed the work's comments to the public — author.today's "комментировать это произведение

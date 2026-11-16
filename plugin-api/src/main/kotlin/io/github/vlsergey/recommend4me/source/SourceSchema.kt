@@ -184,14 +184,30 @@ enum class TextRole {
 
 /** How the numbers several items of one work have are one number of the work. */
 enum class NumberJoin {
-    /** Their mean: the views, the likes, the size of each site. */
+    /** Their mean: the views, the likes of each site. */
     MEAN,
+
+    /** The greatest of them: the size of the work, the fullest of its items telling it (user, 2026-11-16). */
+    MAX,
 
     /**
      * The value they all have, when they agree; when they do not, the middle of the least and the greatest — of a yes
      * (1) or no (0) every site that can say it says, 1 where all say yes, 0 where all say no, 0.5 where some do.
      */
     AGREEMENT,
+}
+
+/** How the values of a facet several items of one work have are the work's, as the model reads it. */
+enum class ValueJoin {
+    /** Every value any of them has: the tags, the characters. */
+    ALL,
+
+    /**
+     * Of the values listed ([io.github.vlsergey.recommend4me.contenttype.StandardFacet.values]) the one listed first
+     * among those they have, the rest left out: the status, finished before in progress before frozen. A value not
+     * listed is kept as it is.
+     */
+    FIRST_LISTED,
 }
 
 /** How the model reads a number. */

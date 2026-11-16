@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.source.NumberJoin
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.SignalDef
+import io.github.vlsergey.recommend4me.source.ValueJoin
 
 /**
  * A FACET EVERY SOURCE OF A CONTENT TYPE FILLS ALIKE — the author, the status, the tags: one facet for the model, the
@@ -53,6 +54,8 @@ class StandardFacet(
     val ordered: Boolean = false,
     /** A work always has one value of it ([FacetDef.required]). */
     val required: Boolean = false,
+    /** How the values the items of one work have are the work's, as the model reads it. */
+    val join: ValueJoin = ValueJoin.ALL,
 ) {
     /**
      * The keys of the values of the scale from [from] to [to], both in; every one of a missing end. Of an [ordered]

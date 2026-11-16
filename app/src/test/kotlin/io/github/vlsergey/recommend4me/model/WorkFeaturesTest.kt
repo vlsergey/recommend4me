@@ -36,7 +36,7 @@ class WorkFeaturesTest {
     /** A yes or no every site says: 1 where all say yes, 0 where all say no, 0.5 where they differ, however many. */
     @Test
     fun `a number joined by agreement is the items' one value, else the middle`() {
-        val joins = mapOf("closed" to NumberJoin.AGREEMENT)
+        val joins = WorkFeatures.Joins(mapOf("closed" to NumberJoin.AGREEMENT))
         fun work(vararg values: Float) =
             WorkFeatures.item(
                     a,
@@ -57,6 +57,63 @@ class WorkFeaturesTest {
         assertEquals(0f, work(0f, 0f))
         assertEquals(0.5f, work(1f, 1f, 0f))
         assertEquals(0.5f, work(0f, 1f))
+    }
+
+    /** The size of a work is the greatest any of its items tells; a number of no join the mean still. */
+    @Test
+    fun `a number joined by its greatest is the greatest the items have`() {
+        val joins = WorkFeatures.Joins(mapOf("num:words" to NumberJoin.MAX))
+        val work =
+            WorkFeatures.item(
+                a,
+                listOf(
+                    CatalogueItem(a, "", Instant.EPOCH, emptySet(), mapOf("num:words" to 7f, "num:likes" to 2f)),
+                    CatalogueItem(b, "", Instant.EPOCH, emptySet(), mapOf("num:words" to 9f, "num:likes" to 4f)),
+                ),
+                joins,
+            )
+        assertEquals(mapOf("num:words" to 9f, "num:likes" to 3f), work.numeric)
+    }
+
+    /**
+     * The status of a work is the greatest any of its items tells — finished before in progress before frozen; the
+     * values of another facet all kept.
+     */
+    @Test
+    fun `of a facet joined by the value listed first that one alone is kept`() {
+        val joins = WorkFeatures.Joins(firstListed = mapOf("status" to listOf("finished", "in-progress", "frozen")))
+        fun work(vararg statuses: String) =
+            WorkFeatures.item(
+                    a,
+                    statuses.mapIndexed { i, status ->
+                        CatalogueItem(
+                            if (i == 0) a else ItemKey("s$i", "$i"),
+                            "",
+                            Instant.EPOCH,
+                            setOf(FeatureNames.facet("status", status), FeatureNames.facet("tag", "t$i")),
+                            emptyMap(),
+                        )
+                    },
+                    joins,
+                )
+                .categorical
+                .filter { it.startsWith("facet:status:") }
+                .toSet()
+        assertEquals(setOf("facet:status:finished"), work("frozen", "finished", "in-progress"))
+        assertEquals(setOf("facet:status:in-progress"), work("frozen", "in-progress"))
+        assertEquals(setOf("facet:status:frozen"), work("frozen"))
+        assertEquals(
+            setOf("facet:tag:t0", "facet:tag:t1"),
+            WorkFeatures.item(
+                    a,
+                    listOf(
+                        CatalogueItem(a, "", Instant.EPOCH, setOf("facet:tag:t0"), emptyMap()),
+                        CatalogueItem(b, "", Instant.EPOCH, setOf("facet:tag:t1"), emptyMap()),
+                    ),
+                    joins,
+                )
+                .categorical,
+        )
     }
 
     @Test
