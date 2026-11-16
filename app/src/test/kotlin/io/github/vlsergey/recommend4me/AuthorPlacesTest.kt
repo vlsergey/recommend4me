@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me
 import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
 import io.github.vlsergey.recommend4me.api.model.AuthorMergedBy
 import io.github.vlsergey.recommend4me.api.model.SiteAuthorKey
+import io.github.vlsergey.recommend4me.author.AuthorBinding
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.FacetValue
 import kotlin.test.assertEquals
@@ -10,6 +11,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
 
 /**
@@ -19,6 +21,7 @@ import org.springframework.test.context.TestPropertySource
  */
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/author-places"])
 class AuthorPlacesTest : TwoSitesTestBase() {
+    @Autowired lateinit var binding: AuthorBinding
 
     @Test
     fun `a place an author's page lists merges the author there, marked by it, never one taken out`() {
@@ -59,5 +62,13 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         )
         val merged = authors.getAuthor("books", dictionary.bindingsOf("alpha")["ann"]!!).body!!
         assertEquals(listOf(null, AuthorMergedBy.By.USER), merged.sites.sortedBy { it.source }.map { it.mergedBy?.by })
+    }
+
+    @Test
+    fun `an author named twice, as the place of two, is bound once`() {
+        // At the start the places of every author are read: one listed by two is named twice, not bound yet — it was
+        // bound twice, the start failed on ficbook's (2026-11-16)
+        binding.bind(stores.source("beta")!!, listOf("twice", "twice"))
+        assertTrue(stores.type("books")!!.authors.bindingsOf("beta").containsKey("twice"))
     }
 }

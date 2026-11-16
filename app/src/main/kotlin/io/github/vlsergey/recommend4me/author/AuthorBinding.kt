@@ -24,10 +24,13 @@ internal fun authorFacetOf(s: SourceStore): String? = s.schema.facets.firstOrNul
 @Component
 class AuthorBinding(private val stores: Stores) {
 
-    /** The [keys] of the source not bound yet bound; one at a time: two at once would bind one author twice. */
+    /**
+     * The [keys] of the source not bound yet bound — a key named twice once; one at a time: two at once would bind one
+     * author twice.
+     */
     @Synchronized
     fun bind(s: SourceStore, keys: Collection<String>) {
-        val fresh = keys - s.authors.bindingsOf(s.id).keys
+        val fresh = keys.toSet() - s.authors.bindingsOf(s.id).keys
         if (fresh.isEmpty()) return
         s.authors.bindNew(s.id, fresh, Instant.now())
         log.info("{}: {} authors bound to normalized authors of their own", s.id, fresh.size)
