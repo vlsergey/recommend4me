@@ -40,6 +40,20 @@ class InputBlock(val name: String, val vectors: HalfMatrix, val rows: IntArray, 
     val card: CardRows?
         get() = onCard?.takeIf { it.open }
 
+    /**
+     * The block of the items [rows] of a task of [itemCount] items — the item `rows[j]` the item `j` of it — in main
+     * memory alone: a portion of a task read whole ([TaskPortions.of]).
+     */
+    fun ofItems(rows: IntArray, itemCount: Int): InputBlock {
+        val slots = slots(itemCount)
+        val kept = rows.indices.filter { slots[rows[it]] >= 0 }
+        return InputBlock(
+            name,
+            vectors.gather(IntArray(kept.size) { slots[rows[kept[it]]] }),
+            kept.toIntArray(),
+        )
+    }
+
     companion object {
         /** A block of every item of [vectors] whose row is [present], the rest left out, in half precision. */
         fun of(name: String, vectors: Matrix, present: BooleanArray): InputBlock {
@@ -206,6 +220,34 @@ class SuggestionTask(
     val itemCount: Int
         get() = assigned.size
 
+    /**
+     * The task of its items [rows] alone, in their order, of the same values and context: a portion of it
+     * ([TaskPortions.of]); none of [rows] the value side of it, of no item.
+     */
+    fun ofItems(rows: IntArray): SuggestionTask {
+        fun <T> pick(list: List<T>) = rows.map { list[it] }
+        return SuggestionTask(
+            itemIds = pick(itemIds),
+            inputs = inputs.map { it.ofItems(rows, itemCount) },
+            values = values,
+            valueKeys = valueKeys,
+            assigned = pick(assigned),
+            confirmed = pick(confirmed),
+            rejected = pick(rejected),
+            context = pick(context),
+            contextKeys = contextKeys,
+            allowed = pick(allowed),
+            groupings = groupings,
+            lackWeight = lackWeight,
+            examples = pick(examples),
+            hints = hints,
+            hintTexts = hintTexts,
+            drafts = pick(drafts),
+            draftWeight = draftWeight,
+            barred = pick(barred),
+        )
+    }
+
     val valueCount: Int
         get() = values.rows
 
@@ -267,28 +309,37 @@ interface FacetSuggester {
     val id: String
 
     /**
-     * Learns from every item of [task]; null when there is nothing to learn from — no item has a value, or every item
-     * has all. [previous]: the state fitted last on the facet, unpacked against [task], to go on from — a few answers
-     * or works more move the fitted state a little, and the fitting is a short walk from it rather than a search from
-     * scratch; null: from scratch.
+     * LEARNS FROM EVERY ITEM OF THE FACET, A PORTION AT A TIME ([portions]: of [TaskPortions.MOST] items at most each,
+     * walked as often as the fitting needs — no fitting holds every item of a source at once, of a million works (user,
+     * 2026-11-17)). What it keeps across the portions is its own: counts, a set of works it reads as neighbours, the
+     * steps of a descent over the portions as batches. Null when there is nothing to learn from — no item has a value,
+     * or every item has all. [previous]: the state fitted last on the facet, unpacked against the value side of
+     * [portions] ([TaskPortions.values]), to go on from — a few answers or works more move the fitted state a little,
+     * and the fitting is a short walk from it rather than a search from scratch; null: from scratch.
      *
      * [stop]: asked between the steps of the fitting; once it says yes the fitting is given up with a
      * [java.util.concurrent.CancellationException] — newer data came, and it is fitted on that.
      */
-    fun fit(task: SuggestionTask, previous: FittedSuggester? = null, stop: () -> Boolean = { false }): FittedSuggester?
+    fun fit(
+        portions: TaskPortions,
+        previous: FittedSuggester? = null,
+        stop: () -> Boolean = { false },
+    ): FittedSuggester?
 
     /**
      * A state kept by [FittedSuggester.pack], to go on from in the next fitting, or to make its [FittedSuggester.model]
-     * of the task fitted on; null when it does not fit tasks of [task]'s shape — it is fitted again.
+     * of the values fitted on; [task]: the value side of the facet ([TaskPortions.values]), no item; null when it does
+     * not fit tasks of [task]'s shape — it is fitted again.
      */
     fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester?
 
     /**
-     * THE CHANCES OF THE ITEMS OF [task] BY THE [model] KEPT ([FittedSuggester.model]) — the one way to them: their
-     * inputs, their context and examples are read, nothing else; its values are the values the model was made of, in
-     * its order, without their names, groups or texts — the model knows what each is. An item the model was fitted on
-     * is known by its id: it is not its own witness. Null when the bytes are not of this suggester's making, or not of
-     * the task's values or inputs: the facet has no chances till it is fitted again.
+     * THE CHANCES OF THE ITEMS OF [task] — A PORTION ([TaskPortions.MOST] items at most) — BY THE [model] KEPT
+     * ([FittedSuggester.model]) — the one way to them: their inputs, their context and examples are read, nothing else;
+     * its values are the values the model was made of, in its order, without their names, groups or texts — the model
+     * knows what each is. An item the model was fitted on is known by its id: it is not its own witness. Null when the
+     * bytes are not of this suggester's making, or not of the task's values or inputs: the facet has no chances till it
+     * is fitted again.
      */
     fun scoring(model: ByteArray, task: SuggestionTask): SuggestionScores?
 
@@ -310,11 +361,12 @@ interface FittedSuggester {
         get() = null
 
     /**
-     * THE MODEL THE ITEMS ARE SCORED BY ([FacetSuggester.scoring]), made of the [task] fitted on: what every value of
-     * it is to the scoring — its coordinates, its bias, its counts — worked out once of the task's names, groups and
-     * texts, with what carries an item's own features to it, and whatever of the task's works the scoring of another
-     * work reads — their counts, their vectors and values as neighbours. Kept by the application: a page of one work
-     * reads no dictionary, no names of every value and no other work.
+     * THE MODEL THE ITEMS ARE SCORED BY ([FacetSuggester.scoring]), made of what was fitted and of the value side
+     * [task] ([TaskPortions.values], no item): what every value is to the scoring — its coordinates, its bias, its
+     * counts — worked out once of the values' names, groups and texts, with what carries an item's own features to it,
+     * and whatever of the works fitted on the scoring of another work reads — their counts, a bounded set of them as
+     * neighbours —, kept by the fitting as it walked the portions. Kept by the application: a page of one work reads no
+     * dictionary, no names of every value and no other work.
      */
     fun model(task: SuggestionTask): ByteArray
 
@@ -331,11 +383,11 @@ interface FittedSuggester {
 
 /**
  * OF EVERY VALUE THE USER ANSWERED ON OF AN ITEM — the [SuggestionTask.confirmed] and the [SuggestionTask.rejected] of
- * the task fitted on — the score the model of the fold that held the item out gave it: the scale the scoring of the
- * model kept gives ([SuggestionScores.scores]), not its chance. Three arrays of one length: the item, the value — in
- * the task's order — and the score. A pair no fold held out is not among them.
+ * the portions fitted on — the score a model that had not seen the item's answers gave it: the scale the scoring of the
+ * model kept gives ([SuggestionScores.scores]), not its chance. Three arrays of one length: the item by its id, the
+ * value — in the order of the value side's values — and the score. A pair no model held out is not among them.
  */
-class HeldOutScores(val items: IntArray, val values: IntArray, val scores: FloatArray) {
+class HeldOutScores(val items: List<String>, val values: IntArray, val scores: FloatArray) {
     init {
         require(items.size == values.size && values.size == scores.size) {
             "${items.size} items, ${values.size} values, ${scores.size} scores"
