@@ -271,8 +271,12 @@ so a value the site gave it that nothing else supports comes out unlikely, and a
 work does not move its own chances. The penalty is chosen by the held-out loss — the strongest
 penalty within one standard error of the least. No fitting holds more than a portion of ten
 thousand works: the model descends a portion at a time (Adam, every penalty's every fold in one
-product), walking the portions a few times — from scratch once to see them, three to six to
-descend, once to score them by the model kept; gone on from the state fitted last, twice and once.
+product), walking the portions a few times — from scratch once to see them (the input blocks are
+the portions' own: the value side has no work and tells none), three to six to descend, once to
+score them by the model kept; gone on from the state fitted last, twice and once, unless the works
+have a block its layout does not know. The steps are by the works: a facet of a few works, every
+step its whole gradient, takes up to three times as many as one of a portion of ten thousand —
+six hundred leave a few works' optimum unreached.
 
 An input block holds the rows of the works that have it alone (`InputBlock`: the vectors and the
 work of each row), as the products read them — of the 75 630 works of fanfics.me the notes are of

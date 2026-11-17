@@ -10,10 +10,11 @@ private val log = LoggerFactory.getLogger(PortionFitting::class.java)
 
 /**
  * ONE FITTING OF THE BILINEAR MODEL ([BilinearSuggester]) OVER THE PORTIONS OF A FACET'S ITEMS, as its walks go: from
- * scratch a walk to see the items ([Survey]) — gone on from the [last] state its layout's scales kept, no such walk —;
- * the walks of the descent of every penalty's every fold together ([Descent]); the penalty chosen by the held-out
- * losses of the descent's last walk; a last walk to score every item by the model kept ([ScoredPortions]). Of the
- * products on the [card] when there is one; [stop] asked between the steps.
+ * scratch a walk to see the items ([Survey]) — gone on from the [last] state its layout's blocks and scales kept, no
+ * such walk, unless the items have a block it does not know ([UnknownBlock]) —; the walks of the descent of every
+ * penalty's every fold together ([Descent]); the penalty chosen by the held-out losses of the descent's last walk; a
+ * last walk to score every item by the model kept ([ScoredPortions]). Of the products on the [card] when there is one;
+ * [stop] asked between the steps.
  */
 internal class PortionFitting(
     private val portions: TaskPortions,
@@ -37,16 +38,23 @@ internal class PortionFitting(
     /** The state fitted; null when no item fitted on has a value of the facet. */
     fun fitted(): FittedBilinear? {
         // The layout's scales are of every item: seen in a walk of their own, unless the last state's layout knows
-        // every input
-        val known = last?.design?.over(values)
-        val survey = if (known == null) Survey.of(portions, stop) else null
-        val design = known ?: survey!!.design
-        val plan =
-            if (survey != null) Plan.fromScratch(survey.portions)
-            else Plan.goneOn((portions.items + TaskPortions.MOST - 1) / TaskPortions.MOST)
-        walks = (if (survey == null) 0 else 1) + plan.walks + 1
-        val descended = if (survey?.assigned == 0) null else descended(design, survey, penaltiesTried(), plan)
-        return descended?.let { kept(design, it) }
+        // every block of the items — seen as the descent's first walk reads them: the value side has no item, and
+        // tells no block. Its blocks and their scales kept, the typical lengths moving little with a few works more
+        val known = last?.design?.let { Design.of(values, it.blocks) }
+        if (known != null)
+            try {
+                val plan = Plan.goneOn((portions.items + TaskPortions.MOST - 1) / TaskPortions.MOST, portions.items)
+                walks = plan.walks + 1
+                return descended(known, null, penaltiesTried(), plan)?.let { kept(known, it) }
+            } catch (e: UnknownBlock) {
+                log.info("{}: the items seen anew", e.message)
+                walks = 1
+            }
+        val survey = Survey.of(portions, stop)
+        val plan = Plan.fromScratch(survey.portions, portions.items)
+        walks += 1 + plan.walks + 1
+        val descended = if (survey.assigned == 0) null else descended(survey.design, survey, penaltiesTried(), plan)
+        return descended?.let { kept(survey.design, it) }
     }
 
     /**
@@ -109,7 +117,8 @@ internal class PortionFitting(
                 IntArray(count) { it % folds },
                 card,
                 plan,
-                stop,
+                layoutCarried = survey == null,
+                stop = stop,
             )
         val held = List(lambdas.size) { Bilinear.Held() }
         val unseen = List(lambdas.size) { Bilinear.Held() }

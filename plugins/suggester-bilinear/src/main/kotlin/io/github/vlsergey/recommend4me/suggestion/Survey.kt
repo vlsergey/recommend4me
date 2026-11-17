@@ -7,10 +7,10 @@ import kotlin.math.ln
 
 /**
  * WHAT A WALK OVER EVERY ITEM OF A FACET TELLS BEFORE THE DESCENT ([Descent]) FROM SCRATCH, a portion at a time: the
- * layout of the features ([design]) — the typical length of every input block's vectors is of every item, not of a
- * portion's; the values [used] — some pair of which weighs anything: their own coordinates start small and random, the
- * rest at nought; the base rate of the pairs — the common bias starts at its logit ([common]); how many [portions], and
- * how many items have any value of the facet ([assigned]).
+ * layout of the features ([design]) — every input block some portion's items have, the typical length of its vectors of
+ * every item, not of a portion's; the values [used] — some pair of which weighs anything: their own coordinates start
+ * small and random, the rest at nought; the base rate of the pairs — the common bias starts at its logit ([common]);
+ * how many [portions], and how many items have any value of the facet ([assigned]).
  */
 internal class Survey
 private constructor(
@@ -22,6 +22,8 @@ private constructor(
 ) {
     /** What the walk sums as it goes: kept of no portion but these numbers. */
     private class Sums(m: Int) {
+        /** Every block some portion has, by its name, of its length: in the order the portions first showed them. */
+        val dims = LinkedHashMap<String, Int>()
         val count = HashMap<String, Long>()
         val lengths = HashMap<String, Double>()
         val used = BooleanArray(m)
@@ -35,6 +37,7 @@ private constructor(
         fun add(portion: SuggestionTask) {
             portions++
             portion.inputs.forEach { b ->
+                dims.putIfAbsent(b.name, b.dim)
                 count.merge(b.name, b.rows.size.toLong(), Long::plus)
                 lengths.merge(b.name, BlockScale.lengths(b.vectors), Double::plus)
             }
@@ -77,9 +80,10 @@ private constructor(
                 sums.weight += hint.among.size
                 sums.positive += 1
             }
+            // The blocks of the items, as the portions hold them: the value side has no item, and need not tell them
             val blocks =
-                values.inputs.mapNotNull { b ->
-                    BlockScale.of(b.name, b.dim, sums.count[b.name] ?: 0L, sums.lengths[b.name] ?: 0.0)
+                sums.dims.mapNotNull { (name, dim) ->
+                    BlockScale.of(name, dim, sums.count[name] ?: 0L, sums.lengths[name] ?: 0.0)
                 }
             val rate = if (sums.weight > 0) (sums.positive / sums.weight).coerceIn(EDGE, 1 - EDGE) else 1.0 / 2
             return Survey(

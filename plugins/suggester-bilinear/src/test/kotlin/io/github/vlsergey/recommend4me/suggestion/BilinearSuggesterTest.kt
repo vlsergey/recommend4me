@@ -21,8 +21,8 @@ class BilinearSuggesterTest {
     private fun scored(fitted: FittedSuggester, task: SuggestionTask) =
         assertNotNull(BilinearSuggester().scoring(fitted.model(task.valueSide()), task))
 
-    /** The value side of [task], of no item: what a model is made of beside what was fitted. */
-    private fun SuggestionTask.valueSide() = ofItems(IntArray(0))
+    /** The items of [task] in one portion, as the application hands them over ([Cut]). */
+    private fun whole(task: SuggestionTask): TaskPortions = Cut(task, TaskPortions.MOST)
 
     private val d = 8
 
@@ -64,7 +64,7 @@ class BilinearSuggesterTest {
     @Test
     fun `a value goes with the texts that point its way, every item judged by a model that did not learn from it`() {
         val task = task(300, wrong = 5)
-        val fitted = assertNotNull(BilinearSuggester().fit(TaskPortions.of(task)))
+        val fitted = assertNotNull(BilinearSuggester().fit(whole(task)))
         val chances = scored(fitted, task).of(IntArray(task.itemCount) { it })
         var right = 0
         var all = 0
@@ -118,7 +118,7 @@ class BilinearSuggesterTest {
                 allowed = List(n) { IntArray(shares.size) { it } },
             )
         val suggester = BilinearSuggester()
-        val fitted = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val fitted = assertNotNull(suggester.fit(whole(task)))
         val weights = assertNotNull(suggester.weights(fitted.model(task.valueSide())))
         assertEquals(values, weights.size)
         assertTrue(weights.take(shares.size).all { it > 0 && it < 1 }, weights.toList().toString())
@@ -132,7 +132,7 @@ class BilinearSuggesterTest {
     fun `the scoring kept apart gives the items read later the chances of the whole task, without the values' names`() {
         val task = task(120, wrong = 5)
         val suggester = BilinearSuggester()
-        val fitted = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val fitted = assertNotNull(suggester.fit(whole(task)))
         val kept = assertNotNull(fitted.model(task.valueSide()))
         // Some items alone, as a page reads them: their texts, the values by their keys, no names
         val rows = intArrayOf(3, 5, 40, 77)
@@ -219,7 +219,7 @@ class BilinearSuggesterTest {
                 lackWeight = 1.0 / 14,
                 examples = examples,
             )
-        val fitted = assertNotNull(BilinearSuggester().fit(TaskPortions.of(task)))
+        val fitted = assertNotNull(BilinearSuggester().fit(whole(task)))
         val lost = scored(fitted, task).of(intArrayOf(n - 1)).single()
         assertTrue(
             lost[0] > 0.5f && lost[1] > 0.5f && lost[2] < 0.5f && lost[3] < 0.5f,
@@ -284,7 +284,7 @@ class BilinearSuggesterTest {
                 lackWeight = 1.0 / 14,
                 examples = examples,
             )
-        val fitted = assertNotNull(BilinearSuggester().fit(TaskPortions.of(task)))
+        val fitted = assertNotNull(BilinearSuggester().fit(whole(task)))
         val lost = scored(fitted, task).of(intArrayOf(n - 1)).single()
         assertTrue(
             lost[3] > 0.5f && lost[2] > 0.5f && lost[0] < 0.5f && lost[1] < 0.5f,
@@ -347,7 +347,7 @@ class BilinearSuggesterTest {
     fun `kept and read again, the model judges the same`() {
         val task = task(120)
         val suggester = BilinearSuggester()
-        val fitted = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val fitted = assertNotNull(suggester.fit(whole(task)))
         val again = assertNotNull(suggester.unpack(fitted.pack(), task))
         val rows = IntArray(task.itemCount) { it }
         val a = scored(fitted, task).of(rows)
@@ -359,11 +359,11 @@ class BilinearSuggesterTest {
     fun `gone on from the last state with more items, the model judges as one fitted from scratch`() {
         val small = task(240)
         val suggester = BilinearSuggester()
-        val last = assertNotNull(suggester.fit(TaskPortions.of(small)))
+        val last = assertNotNull(suggester.fit(whole(small)))
         // Sixty items more, the same values: the refit starts where the last one stopped
         val task = task(300)
-        val again = assertNotNull(suggester.fit(TaskPortions.of(task), last))
-        val scratch = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val again = assertNotNull(suggester.fit(whole(task), last))
+        val scratch = assertNotNull(suggester.fit(whole(task)))
         val rows = IntArray(task.itemCount) { it }
         val a = scored(again, task).of(rows)
         val b = scored(scratch, task).of(rows)
@@ -377,6 +377,32 @@ class BilinearSuggesterTest {
             }
         }
         assertTrue(agree >= all * 0.95, "$agree of $all pairs agree")
+    }
+
+    @Test
+    fun `a block of the items the last state does not know, the refit sees them anew and reads it`() {
+        val small = task(240)
+        val suggester = BilinearSuggester()
+        val last = assertNotNull(suggester.fit(whole(small)))
+        // The items gain a block of input: its scale is of the items, seen in a walk of its own
+        val task = task(300)
+        val notes = task.inputs.single().let { InputBlock("text:notes", it.vectors, it.rows) }
+        val gained =
+            SuggestionTask(
+                task.itemIds,
+                task.inputs + notes,
+                task.values,
+                task.valueKeys,
+                task.assigned,
+                task.confirmed,
+                task.rejected,
+                task.context,
+                task.contextKeys,
+            )
+        val portions = Cut(gained, PORTION)
+        val again = assertNotNull(suggester.fit(portions, last)) as FittedBilinear
+        assertEquals(listOf("text:annotation", "text:notes"), again.design.blocks.map { it.name })
+        assertTrue(portions.walks > WALKS_GONE_ON, "${portions.walks} walks, the items seen anew")
     }
 
     /**
@@ -468,20 +494,20 @@ class BilinearSuggesterTest {
                 task.context,
                 task.contextKeys,
             )
-        assertEquals(null, BilinearSuggester().fit(TaskPortions.of(empty)))
+        assertEquals(null, BilinearSuggester().fit(whole(empty)))
     }
 
     @Test
     fun `told to stop, the fitting is given up`() {
         val task = task(120)
-        assertFailsWith<CancellationException> { BilinearSuggester().fit(TaskPortions.of(task), stop = { true }) }
+        assertFailsWith<CancellationException> { BilinearSuggester().fit(whole(task), stop = { true }) }
     }
 
     @Test
     fun `a task cut into several portions fits to a model that judges as one fitted of a single portion`() {
         val task = task(400, wrong = 5)
         val suggester = BilinearSuggester()
-        val whole = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val whole = assertNotNull(suggester.fit(whole(task)))
         val cut = assertNotNull(suggester.fit(Cut(task, PORTION)))
         assertAlike(scored(whole, task), scored(cut, task), task, "a portion and portions of $PORTION")
     }
@@ -539,7 +565,7 @@ class BilinearSuggesterTest {
      */
     private class Cut(private val task: SuggestionTask, private val size: Int, private val watched: Boolean = false) :
         TaskPortions {
-        override val values: SuggestionTask = task.ofItems(IntArray(0))
+        override val values: SuggestionTask = task.valueSide()
         override val items: Int = task.itemCount
 
         var walks = 0
@@ -581,6 +607,34 @@ class BilinearSuggesterTest {
     }
 
     private companion object {
+        /**
+         * The value side of the task, of no item: what a model is made of beside what was fitted. As the application
+         * hands it over: of no input block — the blocks are the portions' items'.
+         */
+        fun SuggestionTask.valueSide(): SuggestionTask =
+            ofItems(IntArray(0)).let { side ->
+                SuggestionTask(
+                    side.itemIds,
+                    emptyList(),
+                    side.values,
+                    side.valueKeys,
+                    side.assigned,
+                    side.confirmed,
+                    side.rejected,
+                    side.context,
+                    side.contextKeys,
+                    side.allowed,
+                    side.groupings,
+                    side.lackWeight,
+                    side.examples,
+                    side.hints,
+                    side.hintTexts,
+                    side.drafts,
+                    side.draftWeight,
+                    side.barred,
+                )
+            }
+
         /** The items of a portion of the tests cut into several. */
         const val PORTION = 70
 

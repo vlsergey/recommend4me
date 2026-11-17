@@ -29,6 +29,11 @@ internal class Descent(
     private val folds: IntArray,
     private val card: Cublas?,
     private val plan: Plan,
+    /**
+     * Whether the [design] is the last state's, carried to the facet without a walk over the items: a portion of a
+     * block it does not know then ends the descent ([UnknownBlock]).
+     */
+    private val layoutCarried: Boolean = false,
     private val stop: () -> Boolean,
 ) {
     private val values = portions.values
@@ -73,6 +78,7 @@ internal class Descent(
                 if (stop()) throw CancellationException("the fitting is given up")
                 val n = portion.itemCount
                 if (n == 0) return@forEach
+                if (layoutCarried && walk == 0) knowsBlocks(portion)
                 // The steps of the walk shared among its portions by their items, every portion one at least
                 owed += plan.stepsPerWalk.toDouble() * n / portions.items
                 val steps = maxOf(1, owed.roundToInt())
@@ -95,6 +101,12 @@ internal class Descent(
                 offset += n
             }
         }
+    }
+
+    /** The [portion]'s blocks known to the layout carried: else the descent ends ([UnknownBlock]). */
+    private fun knowsBlocks(portion: SuggestionTask) {
+        val unknown = design.unknownBlocks(portion)
+        if (unknown.isNotEmpty()) throw UnknownBlock(unknown)
     }
 
     /** The values no item outside the [fold] has, of the items the walks passed. */
@@ -138,6 +150,12 @@ internal class Descent(
 }
 
 /**
+ * A portion's items have an input block the layout carried from the last state does not know ([Descent]): its scale is
+ * of the items, seen in a walk of their own.
+ */
+internal class UnknownBlock(names: List<String>) : IllegalStateException("blocks the last layout does not know: $names")
+
+/**
  * HOW FAR A DESCENT GOES ([Descent]): how many [walks] over the portions, how many steps a walk — shared among the
  * portions by their items —, and the rate of every step: from its [rate] at the start down to a hundredth of it at the
  * end along half a cosine — the far moves first, the noise of the portions against the whole quieted at the end.
@@ -163,9 +181,20 @@ internal class Plan(val walks: Int, val stepsPerWalk: Int, private val rate: Flo
         private const val STEPS = 600
 
         /**
+         * THE STEPS BY THE ITEMS: a step's time is as its items', and the steps of a facet of fewer items than a
+         * portion's — its every step of every item, the whole's own gradient — as many as the time of [STEPS] of a
+         * whole portion holds, [MOST_STEPS] at most. Six hundred steps leave the few items' optimum unreached — the
+         * site's 67 works of the tests' tags: the loss of a fold 1% above the optimum of a search of it whole (L-BFGS),
+         * the chance of a work of none of its examples a tenth or two off; three times as many come down to it, the
+         * chances within their third digit, the gradient flatter than the search's at its end.
+         */
+        private const val ITEM_STEPS = STEPS.toLong() * TaskPortions.MOST
+        private const val MOST_STEPS = 3 * STEPS
+
+        /**
          * The walks of a descent from scratch: a source of many portions — every walk reading every work of it anew —
-         * walks them fewer times, each a step of each portion; of a few, as many as [STEPS] asks, [MOST_WALKS] at most,
-         * the steps of a walk shared among them.
+         * walks them fewer times, each a step of each portion; of a few, as many as its steps ask, [MOST_WALKS] at
+         * most, the steps of a walk shared among them.
          */
         private const val LEAST_WALKS = 3
         private const val MOST_WALKS = 6
@@ -179,16 +208,22 @@ internal class Plan(val walks: Int, val stepsPerWalk: Int, private val rate: Flo
          * more move the optimum a little.
          */
         private const val ON_WALKS = 2
-        private const val ON_STEPS = STEPS / 3
-        private const val ON_RATE = RATE / 3
+        private const val ON_SHARE = 3
+        private const val ON_RATE = RATE / ON_SHARE
 
-        /** The plan from scratch of a facet of [portions] portions. */
-        fun fromScratch(portions: Int): Plan {
-            val walks = ((STEPS + portions - 1) / maxOf(1, portions)).coerceIn(LEAST_WALKS, MOST_WALKS)
-            return Plan(walks, maxOf(portions, (STEPS + walks - 1) / walks), RATE)
+        /** The steps from scratch of a facet of [items] items ([ITEM_STEPS]). */
+        private fun stepsOf(items: Int): Int =
+            (ITEM_STEPS / maxOf(1, items)).coerceIn(STEPS.toLong(), MOST_STEPS.toLong()).toInt()
+
+        /** The plan from scratch of a facet of [items] items in [portions] portions. */
+        fun fromScratch(portions: Int, items: Int): Plan {
+            val steps = stepsOf(items)
+            val walks = ((steps + portions - 1) / maxOf(1, portions)).coerceIn(LEAST_WALKS, MOST_WALKS)
+            return Plan(walks, maxOf(portions, (steps + walks - 1) / walks), RATE)
         }
 
-        /** The plan gone on from the state fitted last, of a facet of [portions] portions. */
-        fun goneOn(portions: Int): Plan = Plan(ON_WALKS, maxOf(portions, ON_STEPS / ON_WALKS), ON_RATE)
+        /** The plan gone on from the state fitted last, of a facet of [items] items in [portions] portions. */
+        fun goneOn(portions: Int, items: Int): Plan =
+            Plan(ON_WALKS, maxOf(portions, stepsOf(items) / ON_SHARE / ON_WALKS), ON_RATE)
     }
 }

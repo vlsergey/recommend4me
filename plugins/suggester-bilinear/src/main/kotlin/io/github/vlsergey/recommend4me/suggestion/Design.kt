@@ -103,14 +103,11 @@ class Design(
     fun reads(task: SuggestionTask): Boolean = task.values.cols == nameDim && readsItems(task)
 
     /**
-     * The layout of the value side [task] — its context, its values' names and groups — with the scales of the blocks
-     * of this one: a refit's, the typical lengths of the vectors moving little with a few works more, no item read.
-     * Null when an input of the task is no block of this layout of the same length: its scale is of the items.
+     * The input blocks of the items of [task] that are no block of this layout of the same length, by their names: the
+     * scale of such a block is of the items, and a layout of them all is made anew.
      */
-    fun over(task: SuggestionTask): Design? {
-        val known = task.inputs.map { input -> blocks.find { it.name == input.name && it.dim == input.dim } }
-        return if (known.any { it == null }) null else of(task, known.map { it!! })
-    }
+    fun unknownBlocks(task: SuggestionTask): List<String> =
+        task.inputs.filter { input -> blocks.none { it.name == input.name && it.dim == input.dim } }.map { it.name }
 
     /**
      * Whether the items of [task] are read by this layout: every block it knows of the length it knows — whatever its
