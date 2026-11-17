@@ -329,7 +329,9 @@ of the works' own features is the one way to the chances of any work — of ever
 of one work on its page. Nothing scores on the task fitted on, and nothing reads the other works of
 the source to score one: the bilinear model keeps the coordinates of the values; the nearest works
 (`suggester-knn`) keep where every work fitted on lies (256 numbers in half precision) and what it
-says of the values, a work asked scored by its nearest among them; naive Bayes (`suggester-bayes`)
+says of the values, a work asked scored by its nearest among them — the works chosen by their ids in
+one walk, which sees every input block the portions have (the value side tells none), and placed in
+a second, each projected of every block, nought of one it lacks; naive Bayes (`suggester-bayes`)
 keeps its counts and what every work added to them. A work the model was fitted on is known by its
 id and is not its own witness. The universes of author.today on the nearest works had a page of one
 work read every work of the site — its inputs, then every facet after them — six times a page.

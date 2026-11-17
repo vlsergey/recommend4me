@@ -5,16 +5,15 @@ import java.util.IdentityHashMap
 import java.util.PriorityQueue
 
 /**
- * THE WORKS THE MODEL READS AS NEIGHBOURS, [room] at most of every work of the portions, gathered over one walk
- * ([offer] of every portion): every work that says anything of the values (a pair), those the user answered on first,
- * then the rest in an order of their ids alone — a sample the same at every walk, whatever the portions and whatever
- * else the source holds. Held as they are offered: never more than [room] works, a work falling out once [room] better
- * ones came. Of every work kept, where it lies ([Neighbours.DIMENSIONS] numbers), what it says of the values, its fold
- * and the values the user answered on of it.
- *
- * [layout]: the name and the width of every block of input, as every work is projected of them.
+ * THE WORKS THE MODEL READS AS NEIGHBOURS, [room] at most of every work of the portions, chosen over one walk ([offer]
+ * of every portion) by their ids alone: every work that says anything of the values (a pair), those the user answered
+ * on first, then the rest in an order of their ids — a sample the same at every walk, whatever the portions and
+ * whatever else the source holds. Held as they are offered: never more than [room] works, a work falling out once
+ * [room] better ones came. Of every work kept, what it says of the values, its fold and the values the user answered on
+ * of it; where it lies is not known before every portion has shown its blocks of input, and is placed in a walk of its
+ * own ([Reference.place]).
  */
-internal class ReferenceSet(private val room: Int, private val m: Int, private val layout: List<Pair<String, Int>>) {
+internal class ReferenceSet(private val room: Int, private val m: Int) {
     /** The works kept, the one to fall out first at the head. */
     private val kept = PriorityQueue<Entry>(room.coerceAtLeast(1)) { a, b -> BETTER.compare(b.rank, a.rank) }
 
@@ -27,47 +26,28 @@ internal class ReferenceSet(private val room: Int, private val m: Int, private v
 
     /** The works of a [portion] whose [pairs] say anything, kept as long as they are among the best [room]. */
     fun offer(portion: SuggestionTask, pairs: SuggestionPairs) {
-        val came = ArrayList<Entry>()
         for (i in 0 until portion.itemCount) {
             val asked = portion.confirmed[i] + portion.rejected[i]
             if (asked.isNotEmpty()) answered++
-            if (pairs.count[i] > 0) admitted(portion.itemIds[i], i, asked, pairs)?.let(came::add)
+            if (pairs.count[i] > 0) admit(portion.itemIds[i], i, asked, pairs)
         }
-        place(portion, came.filter { !it.out })
     }
 
     /**
      * The work [id] of the row [i] of a portion, its values [asked] of the user and its [pairs], kept when it is among
-     * the best [room] of those offered so far — the worst kept falling out — else null.
+     * the best [room] of those offered so far — the worst kept falling out.
      */
-    private fun admitted(id: String, i: Int, asked: IntArray, pairs: SuggestionPairs): Entry? {
+    private fun admit(id: String, i: Int, asked: IntArray, pairs: SuggestionPairs) {
         val rank = Rank(asked.isNotEmpty(), mixed(id.hashCode()), id)
         val worst = kept.peek()
-        if (kept.size >= room && (worst == null || BETTER.compare(rank, worst.rank) >= 0)) return null
-        val entry = Entry(rank, i, pairs.foldOf[i], asked, pairs.lack[i], pairs.may[i]?.let(mays::take), pairs)
-        kept += entry
-        if (kept.size > room) kept.poll().also { it.out = true }.may?.let(mays::give)
-        return entry
+        if (kept.size >= room && (worst == null || BETTER.compare(rank, worst.rank) >= 0)) return
+        kept += Entry(rank, i, pairs.foldOf[i], asked, pairs.lack[i], pairs.may[i]?.let(mays::take), pairs)
+        if (kept.size > room) kept.poll().may?.let(mays::give)
     }
 
-    /** Where every work of [entries] of the [portion] lies: its own inputs alone projected. */
-    private fun place(portion: SuggestionTask, entries: List<Entry>) {
-        if (entries.isEmpty()) return
-        val few = portion.ofItems(IntArray(entries.size) { entries[it].row })
-        val y =
-            requireNotNull(Neighbours.project(few.inputs, few.itemCount, layout)) {
-                "A portion of other blocks of input than the facet's: ${few.inputs.map { it.name to it.dim }}"
-            }
-        entries.forEachIndexed { r, e ->
-            e.vector = FloatArray(Neighbours.DIMENSIONS).also { y.take(it, 0, r * Neighbours.DIMENSIONS, it.size) }
-        }
-    }
-
-    /** The works kept, the best first. */
-    fun gathered(): Reference {
+    /** The works kept, the best first, of the [layout] of the blocks of input; where each lies not placed yet. */
+    fun gathered(layout: List<Pair<String, Int>>): Reference {
         val entries = kept.sortedWith { a, b -> BETTER.compare(a.rank, b.rank) }
-        val vectors = Floats((entries.size * Neighbours.DIMENSIONS).coerceAtLeast(1))
-        entries.forEachIndexed { r, e -> vectors.put(e.vector, 0, r * Neighbours.DIMENSIONS, Neighbours.DIMENSIONS) }
         // One array of each content already: told apart by identity
         val shared = entries.mapNotNull { it.may }.distinct()
         val mayOf = IdentityHashMap<IntArray, Int>().also { at -> shared.forEach { at[it] = at.size } }
@@ -83,7 +63,7 @@ internal class ReferenceSet(private val room: Int, private val m: Int, private v
             )
         return Reference(
             entries.map { it.rank.id },
-            vectors,
+            layout,
             labels,
             IntArray(entries.size) { entries[it].fold },
             entries.map { it.asked },
@@ -97,7 +77,7 @@ internal class ReferenceSet(private val room: Int, private val m: Int, private v
     /** A work kept: of the row [row] of the portion it came in, its pairs copied out of [pairs]. */
     private class Entry(
         val rank: Rank,
-        val row: Int,
+        row: Int,
         val fold: Int,
         val asked: IntArray,
         val lack: Float,
@@ -107,10 +87,6 @@ internal class ReferenceSet(private val room: Int, private val m: Int, private v
         val own: IntArray = pairs.own[row]
         val ownWeight: FloatArray = pairs.ownWeight[row]
         val ownLabel: FloatArray = pairs.ownLabel[row]
-        lateinit var vector: FloatArray
-
-        /** Whether it fell out of the works kept. */
-        var out = false
     }
 
     /**
@@ -163,13 +139,14 @@ internal class ReferenceSet(private val room: Int, private val m: Int, private v
 }
 
 /**
- * THE WORKS GATHERED AS NEIGHBOURS ([ReferenceSet]), the best first: their [ids], where each lies ([vectors],
- * [Neighbours.DIMENSIONS] numbers each), what each says of the values ([labels]), the fold of each ([folds]) and the
- * values the user answered on of each ([asked]); [leftOut]: how many works the user answered on are not among them.
+ * THE WORKS GATHERED AS NEIGHBOURS ([ReferenceSet]), the best first: their [ids], what each says of the values
+ * ([labels]), the fold of each ([folds]) and the values the user answered on of each ([asked]); [leftOut]: how many
+ * works the user answered on are not among them. Where each lies ([vectors], [Neighbours.DIMENSIONS] numbers each) is
+ * placed a portion at a time ([place]), every work projected of the [layout] of every block some portion has.
  */
 internal class Reference(
     val ids: List<String>,
-    val vectors: Floats,
+    val layout: List<Pair<String, Int>>,
     val labels: Labels,
     val folds: IntArray,
     val asked: List<IntArray>,
@@ -177,4 +154,28 @@ internal class Reference(
 ) {
     val size: Int
         get() = ids.size
+
+    val vectors = Floats((size * Neighbours.DIMENSIONS).coerceAtLeast(1))
+
+    /** The row of every work gathered, by its id. */
+    private val rowOf = ids.withIndex().associate { (r, id) -> id to r }
+
+    /**
+     * Where every work gathered among those of the [portion] lies: its own inputs alone projected of the [layout], a
+     * block it lacks nought.
+     */
+    fun place(portion: SuggestionTask) {
+        val rows = (0 until portion.itemCount).filter { portion.itemIds[it] in rowOf }
+        if (rows.isEmpty()) return
+        val few = portion.ofItems(rows.toIntArray())
+        val y =
+            requireNotNull(Neighbours.project(few.inputs, few.itemCount, layout)) {
+                "A block of input of another width than the first portion's: ${few.inputs.map { it.name to it.dim }}"
+            }
+        val vector = FloatArray(Neighbours.DIMENSIONS)
+        for (r in 0 until few.itemCount) {
+            y.take(vector, 0, r * Neighbours.DIMENSIONS, vector.size)
+            vectors.put(vector, 0, rowOf.getValue(few.itemIds[r]) * Neighbours.DIMENSIONS, vector.size)
+        }
+    }
 }

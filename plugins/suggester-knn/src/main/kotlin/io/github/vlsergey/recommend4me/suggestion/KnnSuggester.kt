@@ -20,14 +20,16 @@ private val log = LoggerFactory.getLogger(KnnSuggester::class.java)
  * pictures tell by likeness alone.
  *
  * THE NEIGHBOURS ARE A BOUNDED SET OF THE WORKS ([ReferenceSet]): [room] at most ([TaskPortions.MOST]) of the works
- * fitted on, those the user answered on first, the rest a sample by their ids — gathered in one walk of the portions,
- * the share of every value summed over every work in the same walk ([FoldSums]). k is chosen by the held-out loss of
- * the five folds ([SuggestionPairs]) among the works gathered, the neighbours of a held-out work taken from the other
- * folds; the one-standard-error rule preferring the more. THE MODEL KEPT IS THE WORKS GATHERED ([KnnModel]): where each
- * lies and what it says of the values — a work asked later is scored by its nearest among them, of its own inputs
- * alone. What the user answered on is handed over held out one work at a time ([FittedSuggester.heldOut]): by the k
- * chosen, of the other works gathered alone; of a source of more works answered on than the set holds, those left out
- * in a second walk.
+ * fitted on, those the user answered on first, the rest a sample by their ids — chosen in a first walk of the portions,
+ * the share of every value summed over every work in the same walk ([FoldSums]), every block of input some portion has
+ * seen in it too: the blocks are the portions' own, the value side tells none, and portions may differ in them. A
+ * second walk places the works chosen, each projected of every block seen, nought of a block it lacks. k is chosen by
+ * the held-out loss of the five folds ([SuggestionPairs]) among the works gathered, the neighbours of a held-out work
+ * taken from the other folds; the one-standard-error rule preferring the more. THE MODEL KEPT IS THE WORKS GATHERED
+ * ([KnnModel]): where each lies, what it says of the values and the blocks it was projected of — a work asked later is
+ * scored by its nearest among them, of its own inputs alone. What the user answered on is handed over held out one work
+ * at a time ([FittedSuggester.heldOut]): by the k chosen, of the other works gathered alone; of a source of more works
+ * answered on than the set holds, those left out in a third walk.
  */
 class KnnSuggester internal constructor(private val onnx: Onnx?, private val room: Int = TaskPortions.MOST) :
     FacetSuggester {
@@ -42,22 +44,33 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
     }
 
     /**
-     * One walk of the [portions]: the works gathered as neighbours and the sums of the pairs of every value over every
-     * work, by fold.
+     * Two walks of the [portions]. The first: every block of input some portion has (the value side has no work and
+     * tells none: a portion's blocks are those its works have), the works gathered as neighbours, chosen by their ids,
+     * and the sums of the pairs of every value over every work, by fold. The second: where every work gathered lies,
+     * projected of every block the first saw.
      */
     internal fun gather(portions: TaskPortions, stop: () -> Boolean): Gathered {
         val side = portions.values
-        val reference = ReferenceSet(room, side.valueCount, side.inputs.map { it.name to it.dim })
+        val set = ReferenceSet(room, side.valueCount)
+        val blocks = LinkedHashMap<String, Int>()
         val sums = FoldSums(side.valueCount)
         var valued = false
         portions.forEach { portion ->
             stopIf(stop)
+            portion.inputs.forEach { blocks.putIfAbsent(it.name, it.dim) }
             val pairs = SuggestionPairs(portion)
             sums.add(pairs)
-            reference.offer(portion, pairs)
+            set.offer(portion, pairs)
             valued = valued || portion.assigned.any { it.isNotEmpty() }
         }
-        return Gathered(reference.gathered(), sums.folds(), valued)
+        val reference = set.gathered(blocks.toList())
+        if (valued && reference.size > 0) {
+            portions.forEach { portion ->
+                stopIf(stop)
+                reference.place(portion)
+            }
+        }
+        return Gathered(reference, sums.folds(), valued)
     }
 
     /** Every k tried on the works [gathered], the one chosen, fitted. */
@@ -78,7 +91,7 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
                 "chosen k={} in {} ms",
             portions.items,
             side.valueCount,
-            side.inputs.size,
+            ref.layout.size,
             ref.size,
             if (near.onCard) "on the card" else "on the processor",
             searched,
@@ -97,8 +110,7 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
         val held = Answered()
         answeredGathered(gathered, near, chosen.k, held)
         if (ref.leftOut > 0) answeredLeftOut(portions, gathered, chosen.k, held, stop)
-        val layout = side.inputs.map { it.name to it.dim }
-        val model = KnnModel(chosen.k, layout, ref.ids, ref.vectors, ref.labels, gathered.total.share())
+        val model = KnnModel(chosen.k, ref.layout, ref.ids, ref.vectors, ref.labels, gathered.total.share())
         return Fitted(side.valueKeys, model, report, held.scores())
     }
 
@@ -136,8 +148,8 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
 
     /**
      * LEAVE ONE OUT, of the works the user answered on left out of those gathered, in a walk of the [portions] of its
-     * own: of every value answered, its chance by the [k] nearest of the works gathered, drawn towards the value's
-     * share among every other work.
+     * own — the works gathered placed only once the second walk ended: of every value answered, its chance by the [k]
+     * nearest of the works gathered, drawn towards the value's share among every other work.
      */
     private fun answeredLeftOut(
         portions: TaskPortions,
@@ -148,7 +160,6 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
     ) {
         val ref = gathered.reference
         val known = ref.ids.toHashSet()
-        val layout = portions.values.inputs.map { it.name to it.dim }
         portions.forEach { portion ->
             stopIf(stop)
             val rows =
@@ -158,7 +169,8 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
                 }
             if (rows.isEmpty()) return@forEach
             val few = portion.ofItems(rows.toIntArray())
-            val y = requireNotNull(Neighbours.project(few.inputs, few.itemCount, layout)) { "Other blocks of input" }
+            val y =
+                requireNotNull(Neighbours.project(few.inputs, few.itemCount, ref.layout)) { "Other blocks of input" }
             val near = Neighbours.among(y, few.itemCount, ref.vectors, ref.size, IntArray(few.itemCount) { -1 }, onnx)
             val own = Labels.of(SuggestionPairs(few))
             for (r in 0 until few.itemCount) {
@@ -188,7 +200,7 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
     override fun weights(model: ByteArray): DoubleArray? = KnnModel.read(model)?.share
 
     /**
-     * What one walk gathered: the works as neighbours ([reference]), the sums of the pairs of every value of the works
+     * What the walks gathered: the works as neighbours ([reference]), the sums of the pairs of every value of the works
      * of every fold ([folds]) and of every work ([total]), whether any work has a value ([valued]).
      */
     internal class Gathered(val reference: Reference, val folds: List<Labels.Sums>, val valued: Boolean) {
@@ -242,8 +254,12 @@ class KnnSuggester internal constructor(private val onnx: Onnx?, private val roo
     }
 
     companion object {
-        /** The format of the state packed: the keys of the values and the model. */
-        private const val FORMAT = 2
+        /**
+         * The format of the state packed: the keys of the values and the model. 3: the blocks of input are the
+         * portions' — a state of 2 was fitted on the blocks of the value side, in the application none, and is fitted
+         * again.
+         */
+        private const val FORMAT = 3
         private const val K = "k"
 
         /** Gives the fitting up once [stop] says so: newer data came, and it is fitted on that. */
