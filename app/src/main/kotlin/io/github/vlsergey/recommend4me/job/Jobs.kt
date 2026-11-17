@@ -119,7 +119,7 @@ class Jobs(
             try {
                 val store = stores.source(sourceId) ?: return
                 textVectors.refresh(store, "crawl", cancelled = { cancelRequested })
-                recommendations.retrainAndScore(store.type)
+                recommendations.retrain(store.type)
             } catch (e: Exception) {
                 log.warn("{}: checkpoint failed: {}", sourceId, e.message)
             }
@@ -190,12 +190,12 @@ class Jobs(
             }
             run.checkCancelled()
             run.phase("scoring")
-            recommendations.retrainAndScore(store.type)
+            recommendations.retrain(store.type)
             run.update { it.copy(state = JobState.DONE, finishedAt = Instant.now()) }
         } catch (_: JobCancelled) {
             // Stopped by the user: it waits for the user to resume it
             if (whole && !shuttingDown) settings.set("job.${run.sourceId}.running", null)
-            if (!shuttingDown) recommendations.scoreAll(store.type)
+            if (!shuttingDown) recommendations.scoreAll(store.type, "crawl")
             run.update { it.copy(state = JobState.CANCELLED, finishedAt = Instant.now()) }
         } catch (e: Exception) {
             log.error("{}: the job failed", run.sourceId, e)

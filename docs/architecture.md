@@ -155,7 +155,7 @@ chance of interest, their product — updated in place. The filters, the orders,
 page are a query of it; only the cards of the page are read of the databases, by their keys. The
 databases stay the truth: the index is written in the queue of the computations (`ListIndexing`)
 a second after what it names changed — an item's data, an answer, the values the model gives, a
-grade, a mark of interest, the predictions of a training, a regrouping of the works — and of
+grade, a mark of interest, the predictions of a sweep of the scores, a regrouping of the works — and of
 every item at every start; an index of another format is made anew whole.
 
 ## Works, items and their data
@@ -200,14 +200,34 @@ paired with each other.
 
 For every content type:
 
-1. one pass over every source of the type builds the input of every item: the vectors of its
-   texts, pictures and sets, its facets, numbers, the user's site signals and the grade of an
-   earlier version;
+1. the training reads the works it learns of alone — the graded and those marked of interest, each
+   with all its items (`EveryWork.training`): the vectors of their texts, pictures and sets, their
+   facets, numbers and the grade of an earlier version — and what the average work of the type
+   is, as the last sweep of the scores counted it (below);
 2. the active scorer (`recommend4me.scorer.<type>` setting, the first available by default) is
    measured on 5-fold cross-validation over works for each of its candidate parameters and the
    one-standard-error choice is made;
 3. the grades are placed on 0..10 from the out-of-fold scores (the ladder);
-4. every item is scored; the explanation switches feature groups off one at a time.
+4. every item is scored by the sweep of the scores that the training begins; the explanation
+   switches feature groups off one at a time.
+
+THE TRAINING AND THE SCORING ARE TWO WORKS OF THE QUEUE (user, 2026-11-17): of the books' 1.4
+million works one training that scored every work held the queue for an hour and a half. The
+training (`Recommendations.retrain`, the work `train`, asked when the user's action asked) reads
+the graded works alone and takes seconds; the average work it centres the vectors and the numbers
+by is kept in the model database (`average_work`, `AverageWorkRepository`) — counted by a pass over
+every work only when none is kept, or the encoders or the directions of the sets changed since
+(`AverageWork.basis`). Its end begins the sweep (`ScoreSweep`, the work `score`, never asked): every
+work read a portion of ten thousand at a time in the order of the sources and of their items' ids
+(`EveryWork.portions`), scored by the model kept, the predictions that changed written and told
+(`PredictionsChanged`), and the average work counted along — every vector of an item as the scoring
+reads it, every work's features (`AverageCount`). A turn of the sweep goes on for a minute and plans
+the next one where it stopped: whatever waits in the queue goes between. Where it stands — the
+model it scores by, the next portion, the sums counted so far — is kept in the model database
+(`score_sweep`), so a restart of the application goes on with it. A turn that finds another model
+than the sweep's begins it again from the first work: a sweep never mixes two models. At its end
+the predictions of the items gone are removed and the average work counted is kept for the next
+training. An explicit re-scoring (`Recommendations.scoreAll`) begins the sweep anew.
 
 Scorers implement `Scorer`; anything that maps a row of features to a number fits.
 

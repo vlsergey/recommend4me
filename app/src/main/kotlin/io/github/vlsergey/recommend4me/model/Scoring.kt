@@ -6,11 +6,8 @@ import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
-import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
-
-private val log = LoggerFactory.getLogger(Scoring::class.java)
 
 /**
  * THE SCORE OF EVERY ITEM BY THE CURRENT MODELS — of 0..10 by the model of the grades, the chance of interest by the
@@ -20,7 +17,6 @@ private val log = LoggerFactory.getLogger(Scoring::class.java)
 class Scoring(
     private val stores: Stores,
     private val reader: CatalogueReader,
-    private val everyWork: EveryWork,
     private val works: Works,
     private val likenesses: Likenesses,
     private val kept: KeptModels,
@@ -28,37 +24,40 @@ class Scoring(
 ) {
 
     /**
-     * Every item of the [type] scored by the [model] and the model of [interest], the likeness to the marks by
-     * [likeness], and the scores kept: a portion of the works at a time ([EveryWork.forEachPortion]) read, scored and
-     * written — its vectors read with its chunk and let go after it — and told changed; the predictions of the items no
-     * longer of the type removed at the end.
+     * The works of the [catalogue] — a portion of every work ([EveryWork.portions]) — scored by the [model] and the
+     * model of [interest], each work's prediction written to every item of it where it changed
+     * ([PredictionRepository.write]) and told: their vectors read a chunk at a time and let go after it. Answers how
+     * many items were scored, and of how many the prediction changed.
      */
-    fun scoreAll(
-        type: TypeStore,
-        model: TrainedModel,
-        interest: TrainedInterest?,
-        likeness: TypeLikeness = likenesses.stored(type),
-    ) {
-        val started = System.currentTimeMillis()
-        val scored = HashSet<ItemKey>()
-        var changed = 0
-        everyWork.forEachPortion(type, likeness) { portion ->
-            val predicted = scored(portion.catalogue, model, interest)
-            predicted.forEach { scored += it.first }
-            val written = type.predictions.write(predicted)
-            changed += written.size
-            if (written.isNotEmpty()) events.publishEvent(PredictionsChanged(type.id, written))
+    fun score(catalogue: Catalogue, model: TrainedModel, interest: TrainedInterest?): PortionScored {
+        val predicted = scored(catalogue, model, interest)
+        val written = catalogue.type.predictions.write(predicted)
+        if (written.isNotEmpty()) events.publishEvent(PredictionsChanged(catalogue.type.id, written))
+        return PortionScored(predicted.size, written.size)
+    }
+
+    /**
+     * The predictions of the items no longer of the [type] removed — of a source gone, of an item gone from its source:
+     * the predictions looked over a [PAGE] at a time, each page's ids asked of their source. Answers how many.
+     */
+    fun forgetGone(type: TypeStore): Int {
+        var gone = 0
+        type.predictions.sources().forEach { source ->
+            val s = type.source(source)
+            var after: String? = null
+            do {
+                val ids = type.predictions.idsAfter(source, after, PAGE)
+                after = ids.lastOrNull()
+                val left = s?.items?.keysOf(ids)?.mapTo(HashSet()) { it.id }.orEmpty()
+                val removed = ids.filter { it !in left }
+                if (removed.isNotEmpty()) {
+                    type.predictions.remove(source, removed)
+                    events.publishEvent(PredictionsChanged(type.id, removed.map { ItemKey(source, it) }))
+                    gone += removed.size
+                }
+            } while (ids.size == PAGE)
         }
-        val gone = type.predictions.removeOthers(scored)
-        if (gone.isNotEmpty()) events.publishEvent(PredictionsChanged(type.id, gone))
-        log.info(
-            "{}: {} predictions made in {} ms, {} of them changed, {} of items gone removed",
-            type.id,
-            scored.size,
-            System.currentTimeMillis() - started,
-            changed,
-            gone.size,
-        )
+        return gone
     }
 
     /** The prediction of every item of the works of the [catalogue], a chunk of them at a time side by side. */
@@ -126,5 +125,11 @@ class Scoring(
 
     private companion object {
         const val SCORE_CHUNK = 1024
+
+        /** The predictions looked over at a time for the items gone: the size of a query, not meaning. */
+        const val PAGE = 1000
     }
 }
+
+/** Of a portion scored ([Scoring.score]): how many items, and of how many the prediction changed. */
+class PortionScored(val items: Int, val changed: Int)

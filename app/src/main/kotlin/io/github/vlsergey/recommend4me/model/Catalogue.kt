@@ -54,8 +54,8 @@ class TypedRating(val key: ItemKey, val version: String, val grade: Int, val rat
  * NEVER EVERY WORK AT ONCE: a type of a million works — ficbook's dump — held whole is more than the memory
  * (2026-11-17). A training reads the works it learns of alone — the graded, those marked of interest
  * ([EveryWork.training], [CatalogueReader.gradedWorks]) — and what the average work is ([averages]), counted of every
- * work as it streams past ([AverageCount]) or told by the model kept; a scoring reads every work a portion at a time
- * ([EveryWork.forEachPortion]).
+ * work as it streams past ([AverageCount]) by the last sweep of the scores and kept ([AverageWorkRepository]); a sweep
+ * of the scores reads every work a portion at a time ([EveryWork.portions], [ScoreSweep]).
  *
  * A WORK IS ONE ROW, whatever sites have it: of several items it is made of all of them ([WorkFeatures]), named by the
  * first of them ([WorkClusters.representative]); its grades and its mark are the grades and the mark of that item, as
@@ -170,18 +170,25 @@ class CatalogueReader(
         clusters: WorkClusters,
         /** The manners of every work, when read; else those of the works read later read with them. */
         manners: TypeManners? = null,
+        /** Told of every vector of an item read later, as it is read. */
+        seen: VectorSeen? = null,
+        /**
+         * The sets of the works of several items made of all of them; none when the vectors of the works are not read —
+         * a pass that counts the works and reads their vectors otherwise ([EveryWork.averageWork]).
+         */
+        sets: Boolean = true,
     ): Catalogue {
         val vectors = HashMap(read)
         val merged = HashMap<ItemKey, CatalogueItem>()
         val itemOf = items.associateBy { it.key }
         val linked = clusters.linkedWorks().filter { it.first() in itemOf }
         // The sets of every work of several items read at once, not a reading a work
-        val sets = setVectors.ofWorks(type, linked)
+        val made = if (sets) setVectors.ofWorks(type, linked) else List(linked.size) { emptyMap() }
         val joins = WorkFeatures.joins(type.sources.map { it.source })
         linked.forEachIndexed { w, members ->
             val name = members.first()
             merged[name] = WorkFeatures.item(name, members.mapNotNull(itemOf::get), joins)
-            val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + sets[w]
+            val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + made[w]
             members.forEach(vectors::remove)
             vectors[name] = joined
         }
@@ -197,7 +204,7 @@ class CatalogueReader(
             interest.filterKeys { it in keys },
             averages = averages,
             read = { wanted ->
-                (manners ?: TypeManners.of(type, clusters, wanted)).with(vectorsOfMany(type, wanted), wanted)
+                (manners ?: TypeManners.of(type, clusters, wanted)).with(vectorsOfMany(type, wanted, seen), wanted)
             },
         )
     }
@@ -318,38 +325,49 @@ class CatalogueReader(
      * The vectors of [keys] — texts, pictures, sets — without their likeness to the marks: a query of each kind a
      * source.
      */
-    fun vectorsOfMany(type: TypeStore, keys: List<ItemKey>): Map<ItemKey, Map<String, FloatArray>> {
+    fun vectorsOfMany(
+        type: TypeStore,
+        keys: List<ItemKey>,
+        /** Told of every vector as it is read. */
+        seen: VectorSeen? = null,
+    ): Map<ItemKey, Map<String, FloatArray>> {
         val out = HashMap<ItemKey, HashMap<String, FloatArray>>()
         val embeddings = type.embeddings.ids()
         keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
             type.source(source)?.let { s ->
-                vectorsOf(s, ids, embeddings) { id, block, v ->
+                vectorsOf(s, ids, embeddings) { id, block, v, picture ->
                     out.getOrPut(ItemKey(source, id)) { HashMap() }[block] = v
+                    seen?.seen(block, v, picture)
                 }
             }
         }
         return out
     }
 
-    /** The vectors of the items [ids] of the source [s], every one handed to [put]: of texts, of pictures, of sets. */
+    /**
+     * The vectors of the items [ids] of the source [s], every one handed to [put]: of texts, of pictures (`picture`),
+     * of sets.
+     */
     private fun vectorsOf(
         s: SourceStore,
         ids: List<String>,
         embeddings: Map<SetKind, Long>,
-        put: (id: String, block: String, v: FloatArray) -> Unit,
+        put: (id: String, block: String, v: FloatArray, picture: Boolean) -> Unit,
     ) {
         plugins.textEncoder()?.let { encoder ->
             val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
             s.textVectors.ofMany(ids, encoder.id).forEach { (id, texts) ->
-                texts.forEach { (k, v) -> blocks[k]?.let { put(id, it, v) } }
+                texts.forEach { (k, v) -> blocks[k]?.let { put(id, it, v, false) } }
             }
         }
         plugins.imageEncoder()?.let { encoder ->
             s.pictures.itemVectors.itemVectorsOf(ids, encoder.id).forEach { (id, blocks) ->
-                blocks.forEach { (b, v) -> put(id, b, v) }
+                blocks.forEach { (b, v) -> put(id, b, v, true) }
             }
         }
-        s.setVectors.ofMany(ids, embeddings).forEach { (id, blocks) -> blocks.forEach { (b, v) -> put(id, b, v) } }
+        s.setVectors.ofMany(ids, embeddings).forEach { (id, blocks) ->
+            blocks.forEach { (b, v) -> put(id, b, v, false) }
+        }
     }
 
     companion object {

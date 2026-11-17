@@ -23,6 +23,10 @@ class ModelRepository(private val db: DSLContext) {
 
     fun load(): StoredModel? = load(CURRENT)
 
+    /** When the current model of the grades was trained, read alone; null without one. */
+    fun trainedAt(): Instant? =
+        db.select(MODEL.TRAINED_AT).from(MODEL).where(MODEL.ID.eq(CURRENT)).fetchOne { it.value1() }
+
     fun saveInterest(scorer: String, trainedAt: Instant, meta: String, weights: ByteArray) =
         save(INTEREST, scorer, trainedAt, meta, weights)
 

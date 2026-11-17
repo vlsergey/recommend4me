@@ -240,7 +240,10 @@ class SiteTest : SiteTestBase() {
             gradesController.rateItem("site", "s$k", RatingRequest(5))
             gradesController.rateItem("site", "d$k", RatingRequest(1))
         }
-        inBackground { recommendations.retrainAndScore("books") }
+        inBackground {
+            recommendations.retrain("books")
+            scoreSweep.sweepNow("books")
+        }
         // What every part is worth: the ranking cross-validated without it, every part measured
         val worth = inBackground { inputMeasures.worth("books")!! }
         // The parts by the keys of their labels: the site's tags a standard facet, the title the standard text
