@@ -209,7 +209,9 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
 
     /**
      * The calibration of the facet ([Calibration]) of what the folds of a fitting said of the values the user answered
-     * on ([held]): a yes of a value the user confirmed, a no of one rejected; null of no answer.
+     * on ([held]): a yes of a value the user confirmed, a no of one rejected; null of no answer. Of a work the user
+     * said all named ([FacetData.complete]) every other value is rejected to the model, thousands of a universe: no
+     * word of the user's on any of them, none taken.
      */
     private fun calibrated(data: FacetData, held: HeldOutScores): Calibration? {
         val task = data.task
@@ -218,9 +220,9 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
                 val i = held.items[k]
                 val v = held.values[k]
                 val yes =
-                    when (v) {
-                        in task.confirmed[i] -> true
-                        in task.rejected[i] -> false
+                    when {
+                        v in task.confirmed[i] -> true
+                        v in task.rejected[i] && !data.complete[i] -> false
                         else -> return@mapNotNull null
                     }
                 Answered(task.valueKeys[v], held.scores[k], yes)
