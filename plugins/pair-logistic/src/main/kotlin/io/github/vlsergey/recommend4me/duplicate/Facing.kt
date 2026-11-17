@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
+import io.github.vlsergey.recommend4me.matrix.Halves
 
 /**
  * THE [a]-TH SITE'S WORKS AGAINST THE [b]-TH'S ON THE CARD ([CardSearch]): of every work of the first, its values and
@@ -20,6 +21,8 @@ internal class Facing(
     private val models: Int,
     private val weights: Cublas.DeviceBytes,
     room: CardRoom,
+    /** The memory the planes of a block take on the card ([MOST_ROOM] at most): as many rows as it holds. */
+    planes: Long,
 ) {
     private val own = search.sites[a]
     private val n = search.sites[b].count
@@ -54,9 +57,9 @@ internal class Facing(
     private val pass = room.ints(passed.entries)
     private val familyOf = room.ints(search.familyOf)
 
-    /** The rows of a block: as many as the planes of [ROOM] hold. */
+    /** The rows of a block: as many as the [planes] hold. */
     private val rows =
-        (ROOM / maxOf(1L, n.toLong() * (Float.SIZE_BYTES * (2 + families) + 1)))
+        (planes / maxOf(1L, n.toLong() * (Float.SIZE_BYTES * (2 + families) + 1)))
             .toInt()
             .coerceIn(1, maxOf(1, own.count))
     private val t = room.floats(rows.toLong() * n)
@@ -100,8 +103,26 @@ internal class Facing(
      * site; the planes of the facets and the authors made nought.
      */
     private fun products(from: Int, m: Int, card: Cublas) {
-        card.gemm(false, true, m, n, width, x.titles, from.toLong() * width, width, y.titles, 0, width, t, 0, n)
-        card.gemm(
+        // Of halves on the tensor cores, summed in single precision: the vectors as the database keeps them
+        val halves = card.halves
+        halves.gemm(
+            false,
+            true,
+            m,
+            n,
+            width,
+            x.titles,
+            from.toLong() * width,
+            width,
+            y.titles,
+            0,
+            width,
+            t,
+            0,
+            n,
+            halves = Halves.IEEE,
+        )
+        halves.gemm(
             false,
             true,
             m,
@@ -116,6 +137,7 @@ internal class Facing(
             d,
             0,
             n,
+            halves = Halves.IEEE,
         )
         v.zero(0, families.toLong() * m * n)
         s.zero()
@@ -192,8 +214,16 @@ internal class Facing(
         return bestBack.ints(0, m * models)
     }
 
-    private companion object {
-        /** The memory a block's planes take on the card: memory, not meaning. */
-        const val ROOM = 768L shl 20
+    companion object {
+        /**
+         * The memory a block's planes take on the card at most, halved while the card has no room for it ([NoRoom]):
+         * every block reads every work of the other site's vectors again, and of a million works of 11 facets a row's
+         * planes are 74 MB — 768 MB made blocks of ten rows, the products read the vectors over again a hundred
+         * thousand times (2026-11-17).
+         */
+        const val MOST_ROOM = 4L shl 30
+
+        /** The least memory of a block's planes tried before the search is given to the processor. */
+        const val LEAST_ROOM = 64L shl 20
     }
 }

@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
-import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import java.util.Random
@@ -28,12 +28,10 @@ class SearchTest {
                     val l = sqrt(v.sumOf { (it * it).toDouble() }).toFloat()
                     FloatArray(width) { v[it] / l }
                 }
-        val titles = Matrix(count, width).also { m -> for (i in 0 until count) m.held.put(unit(), 0, m.row(i), width) }
+        val titles = HalfMatrix(count, width).also { m -> for (i in 0 until count) m.put(i, unit()) }
         val described = BooleanArray(count) { random.nextInt(4) != 0 }
         val descriptions =
-            Matrix(count, width).also { m ->
-                for (i in 0 until count) if (described[i]) m.held.put(unit(), 0, m.row(i), width)
-            }
+            HalfMatrix(count, width).also { m -> for (i in 0 until count) if (described[i]) m.put(i, unit()) }
         val values =
             Array(count) { IntArray(random.nextInt(6)) { random.nextInt(valueCount) }.distinct().sorted().toIntArray() }
         val weights = Array(count) { i -> FloatArray(values[i].size) { 0.2f + random.nextFloat() } }

@@ -36,12 +36,23 @@ internal object CardSearch {
                 val likeliest = Likeliest(search, models.size)
                 for (a in sites.indices) for (b in sites.indices) {
                     if (!search.compared(a, b)) continue
-                    CardRoom(card).use { own ->
-                        // The weights of the models as the two sites are scored: their sites' weight in the constant
-                        val between = models.map { it.between(search.sites[a].source, search.sites[b].source) }
-                        val weights = own.floatsOf(between.flatMap { it.flat().asList() }.toFloatArray())
-                        Facing(search, a, b, sites[a], sites[b], models.size, weights, own)
-                            .offer(kernels, card, likeliest)
+                    // The block as large as the card has room for: halved till it has
+                    var planes = Facing.MOST_ROOM
+                    while (true) {
+                        try {
+                            CardRoom(card).use { own ->
+                                // The weights of the models as the two sites are scored: their sites' weight in the
+                                // constant
+                                val between = models.map { it.between(search.sites[a].source, search.sites[b].source) }
+                                val weights = own.floatsOf(between.flatMap { it.flat().asList() }.toFloatArray())
+                                Facing(search, a, b, sites[a], sites[b], models.size, weights, own, planes)
+                                    .offer(kernels, card, likeliest)
+                            }
+                            break
+                        } catch (e: NoRoom) {
+                            if (planes <= Facing.LEAST_ROOM) throw e
+                            planes /= 2
+                        }
                     }
                 }
                 likeliest.found()
@@ -89,14 +100,12 @@ internal class CardRoom(private val card: Cublas) : AutoCloseable {
  * another), and its works by what they have.
  */
 internal class SiteOnCard(site: SiteWorks, val inverted: Inverted, room: CardRoom) {
+    // Half precision, as the site's works hold them: half the room of single precision's (a million works of 1024
+    // numbers 6 GB of the card's 16, not 12)
     val titles =
-        room.floats(site.count.toLong() * site.width).also {
-            it.upload(site.titles.held, 0, 0, site.count * site.width)
-        }
+        room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(site.titles, 0, site.count) }
     val descriptions =
-        room.floats(site.count.toLong() * site.width).also {
-            it.upload(site.descriptions.held, 0, 0, site.count * site.width)
-        }
+        room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(site.descriptions, 0, site.count) }
     val described = room.marks(site.described)
     val facets = room.longs(site.facets)
     val sizes =
@@ -137,3 +146,6 @@ internal class RowLists(val at: IntArray, val entries: IntArray, val cum: IntArr
         }
     }
 }
+
+/** The bytes of a number of half precision. */
+internal const val HALF_BYTES = 2L

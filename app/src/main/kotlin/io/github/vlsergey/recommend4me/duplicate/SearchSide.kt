@@ -2,7 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
-import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
@@ -30,8 +30,8 @@ internal fun familyOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACE
 internal class SearchSide(
     val store: SourceStore,
     val ids: List<String>,
-    val titles: Matrix,
-    val descriptions: Matrix,
+    val titles: HalfMatrix,
+    val descriptions: HalfMatrix,
     val described: BooleanArray,
     val values: Array<IntArray>,
     val sizes: Map<String, DoubleArray>,
@@ -83,20 +83,21 @@ internal class SearchSide(
             val ids = s.textVectors.itemsWith(TextVectors.TITLE)
             if (ids.isEmpty()) return null
             val at = ids.withIndex().associate { it.value to it.index }
-            var titles: Matrix? = null
-            var descriptions: Matrix? = null
+            // In half precision, as the database keeps them: half the memory of a million works', half the card's
+            var titles: HalfMatrix? = null
+            var descriptions: HalfMatrix? = null
             val described = BooleanArray(ids.size)
             s.textVectors.forEach(encoder, listOfNotNull(TextVectors.TITLE, description)) { id, key, vector ->
                 val i = at[id] ?: return@forEach
                 if (titles == null) {
-                    titles = Matrix(ids.size, vector.size)
-                    descriptions = Matrix(ids.size, vector.size)
+                    titles = HalfMatrix(ids.size, vector.size)
+                    descriptions = HalfMatrix(ids.size, vector.size)
                 }
                 if (vector.size != titles!!.cols) return@forEach
                 val unit = Vectors.unit(vector)
-                if (key == TextVectors.TITLE) titles!!.held.put(unit, 0, titles!!.row(i), unit.size)
+                if (key == TextVectors.TITLE) titles!!.put(i, unit)
                 else {
-                    descriptions!!.held.put(unit, 0, descriptions!!.row(i), unit.size)
+                    descriptions!!.put(i, unit)
                     described[i] = true
                 }
             }
@@ -122,18 +123,18 @@ internal class SearchSide(
             val own = ids.filter { vectors[it]?.get(TextVectors.TITLE) != null }.distinct().sorted()
             if (own.isEmpty()) return null
             val width = vectors.getValue(own.first()).getValue(TextVectors.TITLE).size
-            val titles = Matrix(own.size, width)
-            val descriptions = Matrix(own.size, width)
+            val titles = HalfMatrix(own.size, width)
+            val descriptions = HalfMatrix(own.size, width)
             val described = BooleanArray(own.size)
             own.forEachIndexed { i, id ->
                 val texts = vectors.getValue(id)
                 val title = Vectors.unit(texts.getValue(TextVectors.TITLE))
-                if (title.size == width) titles.held.put(title, 0, titles.row(i), width)
+                if (title.size == width) titles.put(i, title)
                 description
                     ?.let(texts::get)
                     ?.takeIf { it.size == width }
                     ?.let { v ->
-                        descriptions.held.put(Vectors.unit(v), 0, descriptions.row(i), width)
+                        descriptions.put(i, Vectors.unit(v))
                         described[i] = true
                     }
             }

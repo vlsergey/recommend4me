@@ -110,11 +110,20 @@ class Duplicates(
                 cards.getIfAvailable()?.cublas(),
             )
         val compared = System.currentTimeMillis() - started
-        val fitted = PairModels.fit(model, found.values, said)
+        // Of the likeliest pair of every work, those a model of the answers gives a chance of 1 % at least — its scale
+        // calibrated on the answers — and every pair answered on: of a million works most are plainly two works (user,
+        // 2026-11-17: "even 1 % should cut off much"). Of models of no answer yet, every pair
+        val likely =
+            if (kept?.learnt != true) found.values.toList()
+            else
+                found.values.filter { c ->
+                    c.pair in said || kept.same(c) >= LEAST_CHANCE || (kept.series(c) ?: 0.0) >= LEAST_CHANCE
+                }
+        val fitted = PairModels.fit(model, likely, said)
         val fit = System.currentTimeMillis() - started
         val now = Instant.now()
         type.duplicates.replace(
-            found.values,
+            likely,
             DuplicateSearch(
                 now,
                 encoder,
@@ -128,13 +137,15 @@ class Duplicates(
             search.rarity,
         )
         log.info(
-            "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs in {} ms " +
+            "{}: duplicates looked for among {} works of {} sites, by {} facets apart — {} pairs, {} of them kept, " +
+                "in {} ms " +
                 "(reading {}, comparing {}, fitting {}, writing {}); a model of one work {}, of one series {}",
             type.id,
             search.works,
             search.sides.size,
             search.search.families.size,
             found.size,
+            likely.size,
             System.currentTimeMillis() - started,
             read,
             compared - read,
@@ -188,5 +199,8 @@ class Duplicates(
          * data the search reads.
          */
         private const val START_ORDER = 20
+
+        /** The least chance of a pair kept by a search: of the models calibrated on the user's answers. */
+        private const val LEAST_CHANCE = 0.01
     }
 }

@@ -1,22 +1,22 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 
 /**
  * THE WORKS OF ONE SITE AS A SEARCH OF PAIRS READS THEM: those with a vector of their title ([ids], ascending) — its
- * unit row ([titles], a row a work) — and of their descriptions ([descriptions], a row of noughts and [described] false
- * of a work without one); the values of the facets the sites share ([values], by their places among every value of the
- * type, ascending) with the weight of each ([weights]: its rarity among every work of the type, a work's values of each
- * facet of unit length) and the facets it has a value of ([facets], a bit a facet by its place among
- * [PairSearch.families]); the numbers of its size ([sizes], by the places of [PairSearch.sizes], a row a number, nought
- * when not known); its normalized authors ([authors]) and with them every author the dictionary of authors gives as one
- * with them, fully or in part ([kin]).
+ * unit row ([titles], a row a work, in half precision as the database keeps it) — and of their descriptions
+ * ([descriptions], a row of noughts and [described] false of a work without one); the values of the facets the sites
+ * share ([values], by their places among every value of the type, ascending) with the weight of each ([weights]: its
+ * rarity among every work of the type, a work's values of each facet of unit length) and the facets it has a value of
+ * ([facets], a bit a facet by its place among [PairSearch.families]); the numbers of its size ([sizes], by the places
+ * of [PairSearch.sizes], a row a number, nought when not known); its normalized authors ([authors]) and with them every
+ * author the dictionary of authors gives as one with them, fully or in part ([kin]).
  */
 class SiteWorks(
     val source: String,
     val ids: List<String>,
-    val titles: Matrix,
-    val descriptions: Matrix,
+    val titles: HalfMatrix,
+    val descriptions: HalfMatrix,
     val described: BooleanArray,
     val values: Array<IntArray>,
     val weights: Array<FloatArray>,
@@ -76,9 +76,9 @@ class PairSearch(
     fun layers(a: Int, i: Int, b: Int, j: Int): PairLayers {
         val x = sites[a]
         val y = sites[b]
-        fun dot(u: Matrix, v: Matrix): Float {
+        fun dot(u: HalfMatrix, v: HalfMatrix): Float {
             var sum = 0f
-            for (k in 0 until x.width) sum += u.held[u.row(i) + k] * v.held[v.row(j) + k]
+            for (k in 0 until x.width) sum += u[i, k] * v[j, k]
             return sum
         }
         val facets = FloatArray(families.size)

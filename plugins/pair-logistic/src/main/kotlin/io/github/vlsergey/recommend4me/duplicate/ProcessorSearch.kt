@@ -44,6 +44,13 @@ private class Against(
     private val rows = maxOf(1, minOf(x.count, BLOCK / maxOf(1, n)))
     private val titles = Floats(rows * n)
     private val descriptions = Floats(rows * n)
+
+    // The vectors kept in half precision made single precision for the processor's products: the second site's whole,
+    // once; the first's a block of rows at a time
+    private val otherTitles = Floats(n * width).also { y.titles.floats(0, n, it) }
+    private val otherDescriptions = Floats(n * width).also { y.descriptions.floats(0, n, it) }
+    private val ownTitles = Floats(rows * width)
+    private val ownDescriptions = Floats(rows * width)
     private val title = FloatArray(n)
     private val description = FloatArray(n)
 
@@ -63,16 +70,18 @@ private class Against(
         var from = 0
         while (from < x.count) {
             val m = minOf(rows, x.count - from)
+            x.titles.floats(from, m, ownTitles)
+            x.descriptions.floats(from, m, ownDescriptions)
             Blas.gemm(
                 false,
                 true,
                 m,
                 n,
                 width,
-                x.titles.held,
-                from * width,
+                ownTitles,
+                0,
                 width,
-                y.titles.held,
+                otherTitles,
                 0,
                 width,
                 titles,
@@ -85,10 +94,10 @@ private class Against(
                 m,
                 n,
                 width,
-                x.descriptions.held,
-                from * width,
+                ownDescriptions,
+                0,
                 width,
-                y.descriptions.held,
+                otherDescriptions,
                 0,
                 width,
                 descriptions,
