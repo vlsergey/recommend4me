@@ -280,13 +280,20 @@ internal class Scoring(
          * On the card when the coordinates are there and it chooses as many ([FeatureKernels.MAX_LEAST]); else of the
          * rows handed over.
          */
-        override fun shown(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>, least: Int): List<Shown> {
+        override fun shown(
+            rows: IntArray,
+            columns: List<IntArray?>,
+            closed: List<IntArray>,
+            least: Int,
+            likely: FloatArray?,
+        ): List<Shown> {
             require(columns.size == rows.size && closed.size == rows.size) {
                 "${columns.size} sets of values, ${closed.size} closed of ${rows.size} rows"
             }
             coordinates
             val c = card
-            if (c != null && least <= FeatureKernels.MAX_LEAST) {
+            // The card's choosing knows one half alone: a cutoff of every value is chosen of the rows handed over
+            if (c != null && least <= FeatureKernels.MAX_LEAST && likely == null) {
                 runCatching { c.cublas.lock.withLock { c.shown(rows, columns, closed, least) } }
                     .onSuccess {
                         return it
@@ -300,7 +307,7 @@ internal class Scoring(
                         dropCard()
                     }
             }
-            return super.shown(rows, columns, closed, least)
+            return super.shown(rows, columns, closed, least, likely)
         }
 
         override fun chance(score: Float): Float = Bilinear.sigmoid(score)

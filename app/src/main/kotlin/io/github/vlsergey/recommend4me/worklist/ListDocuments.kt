@@ -45,6 +45,7 @@ object ListDocuments {
         doc.add(StringField(KEY, row.key.toString(), Field.Store.YES))
         doc.add(StringField(SOURCE, row.key.source, Field.Store.NO))
         doc.add(SortedDocValuesField(WORK, BytesRef(row.work.toString())))
+        doc.add(StringField(WORK, row.work.toString(), Field.Store.NO))
         doc.add(NumericDocValuesField(RANK, row.rank.toLong()))
         if (row.linked) doc.add(StringField(LINKED, YES, Field.Store.NO))
         doc.add(NumericDocValuesField(UPDATED, row.updatedAt.toEpochMilli()))

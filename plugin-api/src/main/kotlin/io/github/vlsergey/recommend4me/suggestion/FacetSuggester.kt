@@ -319,6 +319,28 @@ interface FittedSuggester {
     fun model(task: SuggestionTask): ByteArray
 
     fun pack(): ByteArray
+
+    /**
+     * WHAT THE FOLDS OF THE FITTING SAID OF THE VALUES THE USER ANSWERED ON, each by a model that had not seen the
+     * answer ([HeldOutScores]): what the application calibrates the chances of the facet by. Null of a state unpacked,
+     * or of a suggester that holds nothing out.
+     */
+    val heldOut: HeldOutScores?
+        get() = null
+}
+
+/**
+ * OF EVERY VALUE THE USER ANSWERED ON OF AN ITEM — the [SuggestionTask.confirmed] and the [SuggestionTask.rejected] of
+ * the task fitted on — the score the model of the fold that held the item out gave it: the scale the scoring of the
+ * model kept gives ([SuggestionScores.scores]), not its chance. Three arrays of one length: the item, the value — in
+ * the task's order — and the score. A pair no fold held out is not among them.
+ */
+class HeldOutScores(val items: IntArray, val values: IntArray, val scores: FloatArray) {
+    init {
+        require(items.size == values.size && values.size == scores.size) {
+            "${items.size} items, ${values.size} values, ${scores.size} scores"
+        }
+    }
 }
 
 /**
@@ -376,7 +398,8 @@ fun interface SuggestionScores : AutoCloseable {
 
     /**
      * OF EACH OF [rows], WHAT IT IS SHOWN WITH of its values [columns] (null: every value; one array given to several
-     * rows one set of values for them all): every value likely — its score above [half] — and of the rest the
+     * rows one set of values for them all): every value likely — its score above [likely] of it, the application's
+     * calibrated cutoff of every value of the task, by its index; null: above [half] — and of the rest the
      * highest-scored, likely or not, up to [least] with the likely; none of its [closed] (values, ascending, a list a
      * row). The likely in the order of their places, the rest after them, the higher first, of equal scores the lower
      * value ([choose]). Of the tags of fanfics.me a work is a few values of 8 894: a suggester that scores where it
@@ -384,12 +407,18 @@ fun interface SuggestionScores : AutoCloseable {
      *
      * Of a suggester that tells no other: chosen of the rows handed over one at a time ([scores] with a reader).
      */
-    fun shown(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>, least: Int): List<Shown> {
+    fun shown(
+        rows: IntArray,
+        columns: List<IntArray?>,
+        closed: List<IntArray>,
+        least: Int,
+        likely: FloatArray? = null,
+    ): List<Shown> {
         require(columns.size == rows.size && closed.size == rows.size) {
             "${columns.size} sets of values, ${closed.size} closed of ${rows.size} rows"
         }
         val out = arrayOfNulls<Shown>(rows.size)
-        scores(rows, columns) { r, row -> out[r] = choose(row, columns[r], closed[r], least, half) }
+        scores(rows, columns) { r, row -> out[r] = choose(row, columns[r], closed[r], least, half, likely) }
         return out.map { it!! }
     }
 
@@ -419,8 +448,14 @@ fun interface SuggestionScores : AutoCloseable {
          * set asked of every value in five passes, a facet of thousands of characters over tens of thousands of works
          * took half a minute.
          */
-        fun choose(scores: FloatArray, allowed: IntArray?, closed: IntArray, least: Int, half: Float): Shown =
-            RowChoice(scores, allowed, closed, least).shown(half)
+        fun choose(
+            scores: FloatArray,
+            allowed: IntArray?,
+            closed: IntArray,
+            least: Int,
+            half: Float,
+            likely: FloatArray? = null,
+        ): Shown = RowChoice(scores, allowed, closed, least).shown(half, likely)
     }
 }
 
@@ -441,10 +476,13 @@ private class RowChoice(
     private val others = IntArray(least)
     private var kept = 0
 
-    /** The places shown and their scores: the likely, then as many of the rest as make [least] with them. */
-    fun shown(half: Float): Shown {
+    /**
+     * The places shown and their scores: the likely — above [above] of their value, else above [half] — then as many of
+     * the rest as make [least] with them.
+     */
+    fun shown(half: Float, above: FloatArray?): Shown {
         for (p in scores.indices) {
-            if (scores[p] > half) {
+            if (scores[p] > (above?.get(value(p)) ?: half)) {
                 if (!shut(p)) likely += p
             } else if (wouldStay(p) && !shut(p)) {
                 keep(p)

@@ -129,7 +129,7 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     companion object {
         /** How the documents are made ([ListDocuments]): an index of another made anew whole. */
-        const val FORMAT = 1
+        const val FORMAT = 2
         private const val FORMAT_KEY = "format"
 
         /** The memory the writer gathers documents in before it writes them out. */

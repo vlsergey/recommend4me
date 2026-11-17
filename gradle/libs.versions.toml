@@ -41,7 +41,6 @@ jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 lucene-core = { module = "org.apache.lucene:lucene-core", version.ref = "lucene" }
 lucene-analysis-common = { module = "org.apache.lucene:lucene-analysis-common", version.ref = "lucene" }
 lucene-highlighter = { module = "org.apache.lucene:lucene-highlighter", version.ref = "lucene" }
-lucene-grouping = { module = "org.apache.lucene:lucene-grouping", version.ref = "lucene" }
 opennlp-tools = { module = "org.apache.opennlp:opennlp-tools", version.ref = "opennlp" }
 opennlp-langdetect = { module = "org.apache.opennlp:opennlp-models-langdetect", version.ref = "opennlp-langdetect" }
 onnxruntime-gpu = { module = "com.microsoft.onnxruntime:onnxruntime_gpu", version.ref = "onnxruntime" }

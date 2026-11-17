@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.item.ItemView
 import io.github.vlsergey.recommend4me.item.NumberRange
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.work.WorkClusters
 import org.apache.lucene.document.DoubleField
 import org.apache.lucene.document.NumericDocValuesField
 import org.apache.lucene.index.Term
@@ -21,8 +22,6 @@ import org.apache.lucene.search.SortField
 import org.apache.lucene.search.SortedNumericSortField
 import org.apache.lucene.search.TermInSetQuery
 import org.apache.lucene.search.TermQuery
-import org.apache.lucene.search.grouping.GroupingSearch
-import org.apache.lucene.search.grouping.TopGroups
 import org.apache.lucene.util.BytesRef
 
 /**
@@ -42,13 +41,17 @@ class ListAsked(
     val surprise: Map<ItemKey, Double> = emptyMap(),
 )
 
-/** A page of the list: how many works it has in all, and the items the works of the page are shown with. */
-class ListPage(val total: Int, val keys: List<ItemKey>)
+/**
+ * A page of the list: how many works it has in all, the items the works of the page are shown with, and the works of
+ * several items among them ([clusters]) as the cards read them.
+ */
+class ListPage(val total: Int, val keys: List<ItemKey>, val clusters: WorkClusters)
 
 /**
  * THE LIST ASKED OF ITS INDEX ([ListIndex]): the filters a query, a work of several items one row — of those that pass,
  * the one the work is shown with first ([ListRow.rank]), of a search the one it found best — sorted, counted and cut
- * into a page, no database read.
+ * into a page, no database read. A work of several items is rare: every item is sorted as it is and the works of
+ * several collapsed after ([ListWorks]), no group looked up for every item.
  */
 internal object ListQuery {
 
@@ -56,26 +59,35 @@ internal object ListQuery {
     fun page(index: ListIndex, type: TypeStore, asked: ListAsked, offset: Int, limit: Int): ListPage =
         index.searching { s ->
             val query = query(index, s, type, asked)
-            when {
-                asked.relevance != null -> byRelevance(s, query, asked.relevance, offset, limit)
-                asked.order == ItemOrder.SURPRISE -> bySurprise(s, query, asked.surprise, offset, limit)
-                else -> grouped(s, query, sort(asked), offset, limit)
-            }
+            val (total, keys) =
+                when {
+                    asked.relevance != null -> byRelevance(s, query, asked.relevance, offset, limit)
+                    asked.order == ItemOrder.SURPRISE -> bySurprise(s, query, asked.surprise, offset, limit)
+                    else -> sorted(s, query, sort(asked), offset, limit)
+                }
+            ListPage(total, keys, ListWorks.clustersOf(s, keys))
         }
 
-    /** The works of [query] in the order of [sort], each shown with its first item that passes; and how many. */
-    private fun grouped(s: IndexSearcher, query: Query, sort: Sort, offset: Int, limit: Int): ListPage {
-        val groups = GroupingSearch(ListDocuments.WORK)
-        groups.setGroupSort(sort)
-        groups.setSortWithinGroup(BY_RANK)
-        groups.setGroupDocsLimit(1)
-        groups.setAllGroups(true)
-        val top: TopGroups<BytesRef> = groups.search(s, query, offset.coerceAtLeast(0), limit.coerceAtLeast(1))
+    /**
+     * The works of [query] in the order of [sort] from [offset], [limit] of them, each shown with its first item that
+     * passes; and how many works there are. Every item sorted, so many more than the page as there are items of works
+     * of several that pass — each of them may stand for a work already shown.
+     */
+    private fun sorted(s: IndexSearcher, query: Query, sort: Sort, offset: Int, limit: Int): Pair<Int, List<ItemKey>> {
+        val linked = ListWorks.linkedOf(s, query)
+        val shown = linked.values.groupBy { it.work }.mapValues { (_, items) -> items.minBy { it.rank }.key }
+        val total = s.count(query) - linked.values.groupBy { it.work }.values.sumOf { it.size - 1 }
+        val start = offset.coerceAtLeast(0)
+        val wanted = start + limit.coerceAtLeast(1) + linked.size
+        val top = s.search(query, wanted.coerceAtMost(s.indexReader.maxDoc().coerceAtLeast(1)), sort)
         val stored = s.storedFields()
-        return ListPage(
-            top.totalGroupCount ?: top.totalGroupedHitCount,
-            top.groups.map { ItemKey.parse(stored.document(it.scoreDocs[0].doc, KEY_ONLY).get(ListDocuments.KEY)) },
-        )
+        val works = LinkedHashSet<ItemKey>()
+        top.scoreDocs.forEach { d ->
+            val key = ItemKey.parse(stored.document(d.doc, KEY_ONLY).get(ListDocuments.KEY))
+            works += linked[key]?.work ?: key
+        }
+        val page = works.drop(start).take(limit.coerceAtLeast(1)).map { shown[it] ?: it }
+        return total to page
     }
 
     /** Of a search, the works it found that pass in the order it found them, each shown with the item it found best. */
@@ -85,33 +97,20 @@ internal object ListQuery {
         relevance: Map<ItemKey, Int>,
         offset: Int,
         limit: Int,
-    ): ListPage {
-        if (relevance.isEmpty()) return ListPage(0, emptyList())
+    ): Pair<Int, List<ItemKey>> {
+        if (relevance.isEmpty()) return 0 to emptyList()
         val found =
-            BooleanQuery.Builder()
-                .add(query, BooleanClause.Occur.FILTER)
-                .add(
-                    TermInSetQuery(ListDocuments.KEY, relevance.keys.map { BytesRef(it.toString()) }),
-                    BooleanClause.Occur.FILTER,
-                )
-                .build()
-        val groups = GroupingSearch(ListDocuments.WORK)
-        groups.setGroupSort(Sort.INDEXORDER)
-        groups.setSortWithinGroup(BY_RANK)
-        groups.setGroupDocsLimit(relevance.size)
-        val top: TopGroups<BytesRef> = groups.search(s, found, 0, relevance.size)
-        val stored = s.storedFields()
+            ListWorks.found(
+                s,
+                with(query, TermInSetQuery(ListDocuments.KEY, relevance.keys.map { BytesRef(it.toString()) })),
+            )
         val best =
-            top.groups
-                .map { g ->
-                    g.scoreDocs
-                        .map { ItemKey.parse(stored.document(it.doc, KEY_ONLY).get(ListDocuments.KEY)) }
-                        .minBy {
-                            relevance.getValue(it)
-                        }
-                }
+            found
+                .groupBy { it.work }
+                .values
+                .map { items -> items.minBy { relevance.getValue(it.key) }.key }
                 .sortedBy { relevance.getValue(it) }
-        return ListPage(best.size, best.drop(offset.coerceAtLeast(0)).take(limit.coerceAtLeast(1)))
+        return best.size to best.drop(offset.coerceAtLeast(0)).take(limit.coerceAtLeast(1))
     }
 
     /**
@@ -124,27 +123,27 @@ internal object ListQuery {
         surprise: Map<ItemKey, Double>,
         offset: Int,
         limit: Int,
-    ): ListPage {
+    ): Pair<Int, List<ItemKey>> {
         val gradedQuery = with(query, NumericDocValuesField.newSlowExactQuery(ListDocuments.GRADED, 1L))
         val graded = s.count(gradedQuery)
         val first =
             if (graded == 0) emptyList()
             else
-                grouped(s, gradedQuery, BY_UPDATE, 0, graded).keys.sortedByDescending {
+                sorted(s, gradedQuery, BY_UPDATE, 0, graded).second.sortedByDescending {
                     surprise[it] ?: Double.NEGATIVE_INFINITY
                 }
         val start = offset.coerceAtLeast(0)
         val fromFirst = first.drop(start).take(limit.coerceAtLeast(1))
-        val rest =
-            grouped(
+        val (others, rest) =
+            sorted(
                 s,
                 with(query, NumericDocValuesField.newSlowExactQuery(ListDocuments.GRADED, 0L)),
                 BY_UPDATE,
                 (start - first.size).coerceAtLeast(0),
                 (limit - fromFirst.size).coerceAtLeast(1),
             )
-        val keys = fromFirst + if (fromFirst.size < limit) rest.keys else emptyList()
-        return ListPage(first.size + rest.total, keys)
+        val keys = fromFirst + if (fromFirst.size < limit) rest else emptyList()
+        return first.size + others to keys
     }
 
     /** The [query] narrowed by the [filter]. */
@@ -247,7 +246,4 @@ internal object ListQuery {
     private val UPDATED_DOWN = SortField(ListDocuments.UPDATED, SortField.Type.LONG, true)
 
     private val BY_UPDATE = Sort(UPDATED_DOWN)
-
-    /** Of a work's items, the one it is shown with first. */
-    private val BY_RANK = Sort(SortField(ListDocuments.RANK, SortField.Type.LONG))
 }

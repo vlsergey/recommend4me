@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.worklist.ListAsked
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.ListQuery
@@ -94,7 +93,6 @@ internal fun filterId(store: SourceStore, facet: FacetDef) = FeatureNames.facetI
 @Component
 class ItemList(
     private val stores: Stores,
-    private val works: Works,
     private val cards: ItemCards,
     private val search: Search,
     private val recommendations: Recommendations,
@@ -132,7 +130,7 @@ class ItemList(
                 .orEmpty()
         return ItemPage(
             total = page.total,
-            items = cards.cards(type, page.keys, matches, search.places(matches), works.of(type), judged),
+            items = cards.cards(type, page.keys, matches, search.places(matches), page.clusters, judged),
         )
     }
 

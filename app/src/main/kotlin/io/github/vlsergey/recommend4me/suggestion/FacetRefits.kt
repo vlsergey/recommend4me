@@ -86,10 +86,16 @@ internal class FacetRefits(
 
     /**
      * Fits the model of every facet of the source again when what it learns from changed, down the chain. For a caller
-     * that waits for it: carried through whatever changes meanwhile; those are refreshed after their quiet.
+     * that waits for it: carried through whatever changes meanwhile; those are refreshed after their quiet. A work of
+     * its own, never joined to the background's alike, which a newer change gives up.
      */
     fun refresh(store: SourceStore) =
-        told(store, workload.run(refreshing(store.id), mapOf("asked" to 1)) { refreshed(store, givenUp = false) })
+        told(
+            store,
+            workload.run(refreshing(store.id), mapOf("asked" to 1), joinAlike = false) {
+                refreshed(store, givenUp = false)
+            },
+        )
 
     /**
      * The model of every facet of the [store] fitted again, down the chain: the works whose given values it changed.
