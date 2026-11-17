@@ -12,10 +12,12 @@ import io.github.vlsergey.recommend4me.source.job
 import io.github.vlsergey.recommend4me.source.resumable
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import jakarta.annotation.PreDestroy
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -218,14 +220,28 @@ class Jobs(
         }
     }
 
+    /**
+     * Every job asked to stop, and waited for till it does at its next look at being cancelled — before the databases
+     * close. Not interrupted: an interrupt in the middle of a database's reading closes its file under it, and the
+     * application's stop once hung on a database left so (2026-11-17). Interrupted only of a job that would not stop in
+     * [STOP_WAIT].
+     */
     @PreDestroy
     fun shutdown() {
         shuttingDown = true
         runs.values.forEach { it.cancelRequested = true }
-        executors.values.forEach { it.shutdownNow() }
+        executors.values.forEach { it.shutdown() }
+        val until = System.nanoTime() + STOP_WAIT.toNanos()
+        executors.values.forEach { e ->
+            val left = until - System.nanoTime()
+            if (left <= 0 || !e.awaitTermination(left, TimeUnit.NANOSECONDS)) e.shutdownNow()
+        }
     }
 
     private companion object {
+        /** How long the stop of the application waits for the jobs to stop at their next look at being cancelled. */
+        val STOP_WAIT: Duration = Duration.ofSeconds(30)
+
         /**
          * The place of [resume] among the listeners of the application's start: after those that make the catalogue
          * ready to be read (of orders up to 6), before the sources' own background work (20).
