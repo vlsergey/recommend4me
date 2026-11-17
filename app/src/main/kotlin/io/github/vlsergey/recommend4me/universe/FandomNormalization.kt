@@ -4,6 +4,8 @@ import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.workload.Work
+import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -23,7 +25,10 @@ private val log = LoggerFactory.getLogger(FandomNormalization::class.java)
  * ([FandomRepository.calculatedName]): the name of its sites' fandom of the most works.
  */
 @Component
-class FandomNormalization(private val stores: Stores) {
+class FandomNormalization(private val stores: Stores, private val workload: Workload) {
+
+    /** The fandoms whose names wait to be worked out again ([renameLater]); taken whole by the work. */
+    private val toRename = HashSet<Long>()
 
     /** Every source of every type with universes that has the site's fandoms, with the key of that facet. */
     private fun sites(): List<Pair<SourceStore, String>> =
@@ -61,7 +66,21 @@ class FandomNormalization(private val stores: Stores) {
         // The names of the fandoms bound to alone worked out again: of every fandom, a batch of a dump's import a pass
         // over every value of every site, slower with every work it added (user, 2026-11-17)
         val touched = bind(fandoms, sites()) { s, _ -> if (s.id == event.source) keys else emptySet() }
-        if (touched.isNotEmpty()) rename(fandoms, sites(), touched)
+        if (touched.isNotEmpty()) renameLater(touched)
+    }
+
+    /**
+     * The names of the fandoms [ids] worked out again in the queue of the computations: counting the works of their
+     * sites' fandoms reads every work of a large one — seconds of a fandom of a hundred thousand works — which no
+     * request waits for (user, 2026-11-17: a merging of universes took 15 s). Those gone by then are left out.
+     */
+    fun renameLater(ids: Collection<Long>) {
+        synchronized(toRename) { toRename += ids }
+        workload.plan(RENAME, Instant.now(), "universes") {
+            val ids = synchronized(toRename) { toRename.toList().also { toRename.clear() } }
+            val fandoms = fandoms()
+            if (fandoms != null && ids.isNotEmpty()) rename(fandoms, sites(), ids.filter(fandoms::exists))
+        }
     }
 
     /**
@@ -164,5 +183,8 @@ class FandomNormalization(private val stores: Stores) {
 
         /** Of the start, before anything reads the universes. */
         const val BEFORE_READING = -10
+
+        /** The names of fandoms worked out again ([renameLater]). */
+        private val RENAME = Work("fandomRename")
     }
 }

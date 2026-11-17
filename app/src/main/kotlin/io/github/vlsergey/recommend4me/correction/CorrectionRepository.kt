@@ -31,8 +31,6 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
     private fun workOf(itemId: String, now: Instant = Instant.now()) = works.of(ItemKey(source, itemId), now)
 
     /** The works of the source's items: what a word on a value of the source reaches. */
-    private fun ownWorks() = DSL.select(SITE_WORK.NORMALIZED).from(SITE_WORK).where(SITE_WORK.SOURCE.eq(source))
-
     fun setFacet(itemId: String, facet: String, key: String, added: Boolean, name: String?, now: Instant) {
         val f = WORK_FACET_CORRECTION
         db.insertInto(f)
@@ -59,7 +57,8 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
         val f = WORK_FACET_CORRECTION
         val value = f.FACET.eq(facet).and(f.VALUE_KEY.eq(key))
         val items = seenFacets(value.and(SITE_WORK.SOURCE.eq(source))).map { it.itemId }
-        db.deleteFrom(f).where(value, f.WORK.`in`(ownWorks())).execute()
+        val works = db.select(f.WORK).from(f).where(value).fetch { it.value1()!! }
+        ownOf(db, works).chunked(BATCH).forEach { chunk -> db.deleteFrom(f).where(value, f.WORK.`in`(chunk)).execute() }
         return items
     }
 
@@ -96,9 +95,12 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
         db.transaction { c ->
             val tx = DSL.using(c)
             val f = WORK_FACET_CORRECTION
-            val answers =
-                tx.selectFrom(f).where(f.FACET.eq(facet), f.VALUE_KEY.`in`(from + to), f.WORK.`in`(ownWorks())).fetch()
+            // The answers on the values by their index — a few — then those of the source's works by theirs: not every
+            // work of the source read for them, of a million works ten seconds a merging (user, 2026-11-17)
+            val answers = tx.selectFrom(f).where(f.FACET.eq(facet), f.VALUE_KEY.`in`(from + to)).fetch()
+            val own = ownOf(tx, answers.map { it.work!! })
             answers
+                .filter { it.work in own }
                 .groupBy { it.work!! }
                 .forEach { (work, own) ->
                     if (own.all { it.valueKey == to }) return@forEach
@@ -122,6 +124,15 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
                 .fetch { it.value1()!! }
         }
     }
+
+    /** Of the normalized works [works], those of the source: by their ids, a [BATCH] a query. */
+    private fun ownOf(tx: DSLContext, works: Collection<Long>): Set<Long> =
+        works.distinct().chunked(BATCH).flatMapTo(HashSet()) { chunk ->
+            tx.selectDistinct(SITE_WORK.NORMALIZED)
+                .from(SITE_WORK)
+                .where(SITE_WORK.SOURCE.eq(source), SITE_WORK.NORMALIZED.`in`(chunk))
+                .fetch { it.value1()!! }
+        }
 
     /** Every facet correction: they are few, the user makes them by hand. */
     fun allFacets(): List<FacetCorrection> = seenFacets(SITE_WORK.SOURCE.eq(source))

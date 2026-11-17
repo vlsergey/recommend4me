@@ -46,7 +46,9 @@ class FandomEditing(
             f.relations.unlink(other, universe)
             f.relations.unlink(universe, other)
             f.relations.forgetApart(universe, other)
-            refuseLoop(FandomDictionary.load(f), universe, other, relation)
+            // Of a universe put above or under another alone the whole dictionary read: no other word can loop
+            if (relation == UniverseRelation.CHILD || relation == UniverseRelation.PARENT)
+                refuseLoop(FandomDictionary.load(f), universe, other, relation)
             when (relation) {
                 UniverseRelation.MERGED -> f.merge(other, universe, now)
                 UniverseRelation.CHILD -> f.relations.link(other, universe, now)
@@ -144,11 +146,12 @@ class FandomEditing(
     }
 
     /**
-     * The universes [renamed] named anew of their sites' fandoms, and every source of the universes told: its works are
-     * drafted again, and read again by what they are named and found by.
+     * The universes [renamed] named anew of their sites' fandoms, in the queue — the request does not wait for their
+     * works counted — and every source of the universes told: its works are drafted again, and read again by what they
+     * are named and found by.
      */
     private fun changed(renamed: List<Long>) {
-        if (renamed.isNotEmpty()) normalization.rename(renamed.filter { dictionary().fandoms.exists(it) })
+        if (renamed.isNotEmpty()) normalization.renameLater(renamed)
         sources().forEach { events.publishEvent(ItemsChanged(it.id, emptyList())) }
         events.publishEvent(UniversesRelated)
     }
