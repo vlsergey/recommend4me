@@ -17,22 +17,14 @@ internal class BayesWork(
     val ones: FloatArray,
     val contexts: IntArray,
 ) {
-    fun write(out: DataOutputStream) {
-        out.writeFloat(uniform)
-        out.writeInt(values.size)
-        values.forEach(out::writeInt)
-        zeros.forEach(out::writeFloat)
-        ones.forEach(out::writeFloat)
-        out.writeInt(contexts.size)
-        contexts.forEach(out::writeInt)
-    }
-
     companion object {
         /**
-         * Of every work of the [task], what it adds. Of a work that may have only some values, the others are counted
-         * as lacking too: an approximation of the method's own — what it is judged by ([SuggestionPairs]) is exact.
+         * Of every work of the [task] — a portion — what it adds, its other values numbered as the counts number them
+         * ([column]: of every value of the task's context, its number of the counts, -1 of one they never saw; null:
+         * the task's own numbers). Of a work that may have only some values, the others are counted as lacking too: an
+         * approximation of the method's own — what it is judged by ([SuggestionPairs]) is exact.
          */
-        fun of(task: SuggestionTask, pairs: SuggestionPairs): List<BayesWork> =
+        fun of(task: SuggestionTask, pairs: SuggestionPairs, column: IntArray? = null): List<BayesWork> =
             List(task.itemCount) { i ->
                 val uniform = if (task.assigned[i].isNotEmpty()) task.lackWeight.toFloat() else 0f
                 val values = ArrayList<Int>()
@@ -47,23 +39,16 @@ internal class BayesWork(
                         ones += if (y > 0f) w else 0f
                     }
                 }
+                val own = task.context[i]
+                val contexts = if (column == null) own else IntArray(own.size) { column[own[it]] }
                 BayesWork(
                     uniform,
                     values.toIntArray(),
                     zeros.toFloatArray(),
                     ones.toFloatArray(),
-                    task.context[i].distinct().sorted().toIntArray(),
+                    contexts.filter { it >= 0 }.distinct().sorted().toIntArray(),
                 )
             }
-
-        fun read(input: DataInputStream): BayesWork {
-            val uniform = input.readFloat()
-            val size = input.readInt()
-            val values = IntArray(size) { input.readInt() }
-            val zeros = FloatArray(size) { input.readFloat() }
-            val ones = FloatArray(size) { input.readFloat() }
-            return BayesWork(uniform, values, zeros, ones, IntArray(input.readInt()) { input.readInt() })
-        }
     }
 }
 
@@ -71,7 +56,8 @@ internal class BayesWork(
  * THE WEIGHTS OF THE PAIRS OF EVERY VALUE, labelled 1 and 0 — of all the works counted, and of every value of the other
  * facets of the works with it. Every work's pairs are a uniform weight over every value (its lacking ones, when it has
  * any) and the few that differ ([BayesWork]): the uniform part is summed apart, so a context's map holds only the
- * values its works have, rejected or were given. Of [m] values and [contextCount] values of the other facets.
+ * values its works have, rejected or were given. Of [m] values and as many contexts as [contextUniform] has; summed
+ * over the portions by [BayesTally].
  */
 internal class BayesCounts(
     val m: Int,
@@ -88,15 +74,22 @@ internal class BayesCounts(
 ) {
     /**
      * THE CHANCE OF EVERY VALUE of a work of the values of other facets [contexts] (indices of these counts,
-     * ascending): its own pairs taken out of the counts when it was counted ([own]) — a work is not its own witness.
+     * ascending): its own pairs taken out of the counts ([own]) — a work is not its own witness — and the counts of
+     * [less] taken out too: of a work held out with its fold, the fold's counts, the chances by the other folds alone.
      *
      *     logit P(v | i) = ln((N₁ᵥ + α) / (N₀ᵥ + α))
      *                    + s · Σ_{c ∈ context(i)} ln( (n₁(c,v) + α·q_c) / (N₁ᵥ + α) · (N₀ᵥ + α) / (n₀(c,v) + α·q_c) )
      */
-    fun chances(contexts: IntArray, own: BayesWork?, alpha: Double, scale: Double): FloatArray {
-        val self = Witness(own, m, zero, one, alpha)
+    fun chances(
+        contexts: IntArray,
+        own: BayesWork?,
+        alpha: Double,
+        scale: Double,
+        less: BayesCounts? = null,
+    ): FloatArray {
+        val self = Witness(own, this, less, alpha)
         val u = own?.uniform?.toDouble() ?: 0.0
-        val total = (works - if (own != null) 1 else 0).coerceAtLeast(1)
+        val total = (works - (less?.works ?: 0) - if (own != null) 1 else 0).coerceAtLeast(1)
         // Whether the work was counted under each of its contexts: its own pairs taken out of those alone
         val counted = BooleanArray(contexts.size) { own != null && own.contexts.binarySearch(contexts[it]) >= 0 }
         // A context's term of a value none of its works has, rejected or was given — most of them:
@@ -106,31 +99,33 @@ internal class BayesCounts(
         val cus = DoubleArray(contexts.size)
         var constant = 0.0
         contexts.forEachIndexed { k, c ->
-            val worksWith = (contextWorks[c] - if (counted[k]) 1 else 0).coerceAtLeast(0)
-            qs[k] = (worksWith + 1.0) / (total + 2.0)
-            cus[k] = (contextUniform[c] - if (counted[k]) u else 0.0).coerceAtLeast(0.0)
+            val others = contextWorks[c] - (less?.contextWorks?.get(c) ?: 0) - if (counted[k]) 1 else 0
+            qs[k] = (others.coerceAtLeast(0) + 1.0) / (total + 2.0)
+            val uniform = contextUniform[c] - (less?.contextUniform?.get(c) ?: 0.0) - if (counted[k]) u else 0.0
+            cus[k] = uniform.coerceAtLeast(0.0)
             constant += ln(alpha * qs[k]) - ln(cus[k] + alpha * qs[k])
         }
         val a = self.a
         val logit = DoubleArray(m) { v -> -a[v] + scale * (constant + contexts.size * a[v]) }
         contexts.forEachIndexed { k, c ->
-            val corrections = Context(contextZero[c], contextOne[c], qs[k], cus[k], counted[k])
-            corrections.correct(logit, self, alpha, scale)
+            val sparse = Sparse(contextZero[c], contextOne[c], less?.contextZero?.get(c), less?.contextOne?.get(c))
+            Context(sparse, qs[k], cus[k], counted[k]).correct(logit, self, alpha, scale)
         }
         return FloatArray(m) { (1.0 / (1.0 + exp(-logit[it]))).toFloat() }
     }
 
     /**
      * A work's own pairs, taken out of the counts it was counted in — none of a work not counted — and of every value
-     * the weights of 0 and 1 of the other works ([n0], [n1]) and ln(N₀ᵥ + α) − ln(N₁ᵥ + α) of them ([a]): the prior's
-     * log odds negated, and the part of every context's term that is the value's alone.
+     * the weights of 0 and 1 of the other works ([n0], [n1]), the counts of [less] taken out too, and ln(N₀ᵥ + α) −
+     * ln(N₁ᵥ + α) of them ([a]): the prior's log odds negated, and the part of every context's term that is the value's
+     * alone.
      */
-    private class Witness(own: BayesWork?, m: Int, zero: DoubleArray, one: DoubleArray, alpha: Double) {
+    private class Witness(own: BayesWork?, counts: BayesCounts, less: BayesCounts?, alpha: Double) {
         val zeros = HashMap<Int, Double>()
         val ones = HashMap<Int, Double>()
-        val n0 = DoubleArray(m)
-        val n1 = DoubleArray(m)
-        val a = DoubleArray(m)
+        val n0 = DoubleArray(counts.m)
+        val n1 = DoubleArray(counts.m)
+        val a = DoubleArray(counts.m)
 
         init {
             own?.values?.forEachIndexed { k, v ->
@@ -138,36 +133,52 @@ internal class BayesCounts(
                 ones[v] = own.ones[k].toDouble()
             }
             val u = own?.uniform?.toDouble() ?: 0.0
-            for (v in 0 until m) {
-                n0[v] = (zero[v] - u - (zeros[v] ?: 0.0)).coerceAtLeast(0.0)
-                n1[v] = (one[v] - (ones[v] ?: 0.0)).coerceAtLeast(0.0)
+            for (v in 0 until counts.m) {
+                val zero = counts.zero[v] - (less?.zero?.get(v) ?: 0.0)
+                val one = counts.one[v] - (less?.one?.get(v) ?: 0.0)
+                n0[v] = (zero - u - (zeros[v] ?: 0.0)).coerceAtLeast(0.0)
+                n1[v] = (one - (ones[v] ?: 0.0)).coerceAtLeast(0.0)
                 a[v] = ln(n0[v] + alpha) - ln(n1[v] + alpha)
             }
         }
     }
 
     /**
-     * One context of a work: the sparse weights of 0 and 1 of the values its works touch ([z], [o]), its share of the
-     * works [q] and their uniform weight [cu], and whether the work was counted under it ([mine]).
+     * The sparse weights of 0 and 1 of the values a context's works touch ([zero], [one]), less those of the counts
+     * taken out ([lessZero], [lessOne]) — a subset of them.
      */
-    private class Context(
-        val z: Map<Int, Double>?,
-        val o: Map<Int, Double>?,
-        val q: Double,
-        val cu: Double,
-        val mine: Boolean,
+    private class Sparse(
+        val zero: Map<Int, Double>?,
+        val one: Map<Int, Double>?,
+        val lessZero: Map<Int, Double>?,
+        val lessOne: Map<Int, Double>?,
     ) {
+        fun zeroOf(v: Int) = (zero?.get(v) ?: 0.0) - (lessZero?.get(v) ?: 0.0)
+
+        fun oneOf(v: Int) = (one?.get(v) ?: 0.0) - (lessOne?.get(v) ?: 0.0)
+
+        /** The values touched: every value of the counts taken out is among the counts' own. */
+        fun touched(into: HashSet<Int>) {
+            zero?.keys?.let(into::addAll)
+            one?.keys?.let(into::addAll)
+        }
+    }
+
+    /**
+     * One context of a work: the [sparse] weights of the values its works touch, its share of the works [q] and their
+     * uniform weight [cu], and whether the work was counted under it ([mine]).
+     */
+    private class Context(val sparse: Sparse, val q: Double, val cu: Double, val mine: Boolean) {
         /** The context's term of every value its works touch, put in place of the term of a value none touches. */
         fun correct(logit: DoubleArray, self: Witness, alpha: Double, scale: Double) {
             val touched = HashSet<Int>()
-            z?.keys?.let(touched::addAll)
-            o?.keys?.let(touched::addAll)
+            sparse.touched(touched)
             if (mine) touched.addAll(self.zeros.keys)
             touched.forEach { v ->
                 val ownZero = if (mine) self.zeros[v] ?: 0.0 else 0.0
                 val ownOne = if (mine) self.ones[v] ?: 0.0 else 0.0
-                val c0 = (cu + (z?.get(v) ?: 0.0) - ownZero).coerceAtLeast(0.0)
-                val c1 = ((o?.get(v) ?: 0.0) - ownOne).coerceAtLeast(0.0)
+                val c0 = (cu + sparse.zeroOf(v) - ownZero).coerceAtLeast(0.0)
+                val c1 = (sparse.oneOf(v) - ownOne).coerceAtLeast(0.0)
                 val actual = ln((c1 + alpha * q) / (self.n1[v] + alpha)) - ln((c0 + alpha * q) / (self.n0[v] + alpha))
                 val default = ln(alpha * q) - ln(cu + alpha * q) + self.a[v]
                 logit[v] += scale * (actual - default)
@@ -197,40 +208,6 @@ internal class BayesCounts(
     }
 
     companion object {
-        /** The counts of the [works] that [included] names, of [m] values and [contextCount] contexts. */
-        fun of(m: Int, contextCount: Int, works: List<BayesWork>, included: (Int) -> Boolean): BayesCounts {
-            val zero = DoubleArray(m)
-            val one = DoubleArray(m)
-            val contextUniform = DoubleArray(contextCount)
-            val contextWorks = IntArray(contextCount)
-            val contextZero = HashMap<Int, HashMap<Int, Double>>()
-            val contextOne = HashMap<Int, HashMap<Int, Double>>()
-            var counted = 0
-            var uniformTotal = 0.0
-            works.forEachIndexed { i, w ->
-                if (!included(i)) return@forEachIndexed
-                counted++
-                uniformTotal += w.uniform
-                w.values.forEachIndexed { k, v ->
-                    zero[v] += w.zeros[k]
-                    one[v] += w.ones[k]
-                }
-                w.contexts.forEach { c ->
-                    contextWorks[c]++
-                    contextUniform[c] += w.uniform.toDouble()
-                    if (w.values.isEmpty()) return@forEach
-                    val z = contextZero.getOrPut(c) { HashMap() }
-                    val o = contextOne.getOrPut(c) { HashMap() }
-                    w.values.forEachIndexed { k, v ->
-                        if (w.zeros[k] != 0f) z.merge(v, w.zeros[k].toDouble(), Double::plus)
-                        if (w.ones[k] != 0f) o.merge(v, w.ones[k].toDouble(), Double::plus)
-                    }
-                }
-            }
-            for (v in 0 until m) zero[v] += uniformTotal
-            return BayesCounts(m, counted, zero, one, contextUniform, contextWorks, contextZero, contextOne)
-        }
-
         fun read(input: DataInputStream): BayesCounts {
             val m = input.readInt()
             val works = input.readInt()

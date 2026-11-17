@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.IOException
 import java.util.concurrent.CancellationException
 import org.slf4j.LoggerFactory
 
@@ -20,103 +21,119 @@ private val log = LoggerFactory.getLogger(NaiveBayesSuggester::class.java)
  * the same twice — so their sum is scaled by s; α smooths a rare one. Both chosen by the held-out loss of the five
  * folds, the one-standard-error rule preferring the stronger smoothing and the smaller scale.
  *
- * THE MODEL KEPT IS THE COUNTS OF THE WORKS FITTED ON ([BayesModel]): a work asked later is scored by them, of its own
- * other values alone — its own pairs taken out when it was counted. What the user answered on is handed over held out
- * one work at a time so ([FittedSuggester.heldOut]), by the settings chosen.
+ * TWO WALKS OF THE PORTIONS, no work kept between them: the first counts the works of every fold ([BayesFolds]), the
+ * second judges every setting on every work by the counts of the other folds and scores what the user answered on by
+ * the counts of every other work ([BayesTrials]) — as large as the values and their contexts, whatever the number of
+ * works. THE MODEL KEPT IS THE COUNTS ([BayesModel]): a work asked later is scored by them, of its own other values
+ * alone, its own pairs taken out. What the user answered on is handed over held out one work at a time so
+ * ([FittedSuggester.heldOut]), by the settings chosen.
  */
 class NaiveBayesSuggester : FacetSuggester {
 
     override val id = "naive-bayes-1"
 
-    override fun fit(task: SuggestionTask, previous: FittedSuggester?, stop: () -> Boolean): FittedSuggester? {
-        if (task.valueCount == 0 || task.assigned.all { it.isEmpty() }) return null
+    override fun fit(portions: TaskPortions, previous: FittedSuggester?, stop: () -> Boolean): FittedSuggester? {
+        if (portions.values.valueCount == 0) return null
         val started = System.currentTimeMillis()
-        val pairs = SuggestionPairs(task)
-        val works = BayesWork.of(task, pairs)
-        val tried = ArrayList<Tried>()
-        for (alpha in ALPHAS) for (scale in SCALES) {
-            if (stop()) throw CancellationException("naive Bayes given up for newer changes")
-            val at = System.currentTimeMillis()
-            val held = pairs.heldOut { fold, items ->
-                val train = BayesCounts.of(task.valueCount, task.contextCount, works) { pairs.foldOf[it] != fold }
-                items.map { i ->
-                    train.chances(task.context[i].distinct().sorted().toIntArray(), null, alpha, scale)
-                }
-            }
-            tried += Tried(alpha, scale, held, System.currentTimeMillis() - at)
-        }
-        val chosen = oneStandardError(tried, { it.held }, compareByDescending<Tried> { it.alpha }.thenBy { it.scale })
+        return BayesFolds.of(portions, stop).takeIf { it.valued }?.let { chosen(portions, it, started, stop) }
+    }
+
+    /**
+     * The settings tried over the second walk of the [portions] by the counts of the first ([counted]), and the one
+     * chosen, fitted.
+     */
+    private fun chosen(portions: TaskPortions, counted: BayesFolds, started: Long, stop: () -> Boolean): Fitted {
+        val side = portions.values
+        val trials = BayesTrials(counted, ALPHAS.flatMap { alpha -> SCALES.map { BayesSetting(alpha, it) } })
+        trials.walk(portions, stop)
+        val tried = trials.settings.indices.toList()
+        val chosen =
+            oneStandardError(
+                tried,
+                { trials.held[it] },
+                compareByDescending<Int> { trials.settings[it].alpha }.thenBy { trials.settings[it].scale },
+            )
+        val setting = trials.settings[chosen]
         log.info(
             "{} items × {} values, {} values of other facets: {}; chosen α={} s={} in {} ms",
-            task.itemCount,
-            task.valueCount,
-            task.contextCount,
-            tried.joinToString("; ") { "α=${it.alpha} s=${it.scale}: %.4f ± %.4f".format(it.held.mean, it.held.error) },
-            chosen.alpha,
-            chosen.scale,
+            portions.items,
+            side.valueCount,
+            side.contextCount,
+            tried.joinToString("; ") {
+                val s = trials.settings[it]
+                "α=${s.alpha} s=${s.scale}: %.4f ± %.4f".format(trials.held[it].mean, trials.held[it].error)
+            },
+            setting.alpha,
+            setting.scale,
             System.currentTimeMillis() - started,
         )
         val report =
             FitReport(
-                settings(chosen),
-                chosen.held.mean,
-                chosen.held.error,
-                tried.map { FitTry(settings(it), it.held.mean, it.held.error, it.millis) },
+                settings(setting),
+                trials.held[chosen].mean,
+                trials.held[chosen].error,
+                tried.map {
+                    FitTry(
+                        settings(trials.settings[it]),
+                        trials.held[it].mean,
+                        trials.held[it].error,
+                        trials.millis(it),
+                    )
+                },
                 fromScratch = true,
             )
-        return Fitted(chosen.alpha, chosen.scale, report, heldOut(task, works, chosen.alpha, chosen.scale))
+        val model = BayesModel(setting.alpha, setting.scale, side.contextKeys, counted.total)
+        return Fitted(side.valueKeys, model, report, trials.heldOut(chosen))
     }
 
-    /**
-     * LEAVE ONE OUT: of every value the user answered on of a work, its chance by the counts of every work with the
-     * work's own pairs taken out ([BayesCounts.chances]) — as the model kept scores it — by the settings chosen: what
-     * counts of every work but this one give it.
-     */
-    private fun heldOut(task: SuggestionTask, works: List<BayesWork>, alpha: Double, scale: Double): HeldOutScores {
-        val counts = BayesCounts.of(task.valueCount, task.contextCount, works) { true }
-        return answered(task) { i -> counts.chances(works[i].contexts, works[i], alpha, scale) }
-    }
-
-    override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? {
-        val input = DataInputStream(ByteArrayInputStream(bytes))
-        if (input.readInt() != FORMAT) return null
-        return Fitted(input.readDouble(), input.readDouble())
-    }
+    override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? =
+        try {
+            val input = DataInputStream(ByteArrayInputStream(bytes))
+            if (input.readInt() != FORMAT) return null
+            val keys = List(input.readInt()) { input.readUTF() }
+            if (keys != task.valueKeys) return null
+            val model = BayesModel.read(ByteArray(input.readInt()).also(input::readFully)) ?: return null
+            Fitted(keys, model)
+        } catch (_: IOException) {
+            null
+        }
 
     override fun scoring(model: ByteArray, task: SuggestionTask): SuggestionScores? = BayesModel.read(model)?.on(task)
 
     /** Every value's share among the works the model was fitted on. */
     override fun weights(model: ByteArray): DoubleArray? = BayesModel.read(model)?.shares()
 
-    private class Tried(val alpha: Double, val scale: Double, val held: HeldLoss, val millis: Long)
-
-    private fun settings(t: Tried) = mapOf(ALPHA to t.alpha.toString(), SCALE to t.scale.toString())
+    private fun settings(s: BayesSetting) = mapOf(ALPHA to s.alpha.toString(), SCALE to s.scale.toString())
 
     /**
-     * The settings chosen: the state a refit knows; the counts of the works are the model ([model]). [heldOut]: of the
-     * fitting alone, not packed.
+     * The [model] fitted — the counts and the settings chosen — of the values [valueKeys]: the state a refit knows,
+     * packed whole, the model made of it alone. [heldOut]: of the fitting alone, not packed.
      */
     private class Fitted(
-        val alpha: Double,
-        val scale: Double,
+        val valueKeys: List<String>,
+        val model: BayesModel,
         override val report: FitReport? = null,
         override val heldOut: HeldOutScores? = null,
     ) : FittedSuggester {
-        override fun model(task: SuggestionTask): ByteArray = BayesModel.of(task, alpha, scale).pack()
+        override fun model(task: SuggestionTask): ByteArray = model.pack()
 
         override fun pack(): ByteArray {
+            val counts = model.pack()
             val bytes = ByteArrayOutputStream()
             DataOutputStream(bytes).use { out ->
                 out.writeInt(FORMAT)
-                out.writeDouble(alpha)
-                out.writeDouble(scale)
+                out.writeInt(valueKeys.size)
+                valueKeys.forEach(out::writeUTF)
+                out.writeInt(counts.size)
+                out.write(counts)
             }
             return bytes.toByteArray()
         }
     }
 
     companion object {
-        private const val FORMAT = 1
+        /** The format of the state packed: the keys of the values and the model. */
+        private const val FORMAT = 2
         private const val ALPHA = "α"
         private const val SCALE = "s"
 
@@ -125,26 +142,10 @@ class NaiveBayesSuggester : FacetSuggester {
 
         /** The scales of the other values' sum tried: they say much the same of a work many times over. */
         private val SCALES = listOf(0.1, 0.3, 1.0)
-
-        /**
-         * Of every value the user answered on of every work of [task] — confirmed, then rejected — the chance [row]
-         * gives it, [row] asked once of each work answered on.
-         */
-        private fun answered(task: SuggestionTask, row: (Int) -> FloatArray): HeldOutScores {
-            val items = ArrayList<Int>()
-            val values = ArrayList<Int>()
-            val scores = ArrayList<Float>()
-            for (i in 0 until task.itemCount) {
-                val asked = task.confirmed[i] + task.rejected[i]
-                if (asked.isEmpty()) continue
-                val chances = row(i)
-                asked.forEach { v ->
-                    items += i
-                    values += v
-                    scores += chances[v]
-                }
-            }
-            return HeldOutScores(items.toIntArray(), values.toIntArray(), scores.toFloatArray())
-        }
     }
+}
+
+/** Gives the fitting up once [stop] says so: newer data came, and it is fitted on that. */
+internal fun stopIf(stop: () -> Boolean) {
+    if (stop()) throw CancellationException("naive Bayes given up for newer changes")
 }

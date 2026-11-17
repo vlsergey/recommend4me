@@ -13,11 +13,12 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * THE MODEL OF THE NEAREST WORKS, kept by the application ([FittedSuggester.model]): the works fitted on — their ids,
- * where each lies ([vectors], [Neighbours.DIMENSIONS] numbers of unit length of each, in half precision as kept), what
- * each says of the values ([labels]) — the share of every value among them all ([share]), the [k] chosen, and the
- * [layout] of the blocks the works were projected of. A work asked is projected the same way of its own inputs alone
- * and scored by its nearest among the works kept ([on]): no other work of the source read.
+ * THE MODEL OF THE NEAREST WORKS, kept by the application ([FittedSuggester.model]): the works gathered as neighbours
+ * ([ReferenceSet], [TaskPortions.MOST] at most of the works fitted on) — their ids, where each lies ([vectors],
+ * [Neighbours.DIMENSIONS] numbers of unit length of each, in half precision as kept), what each says of the values
+ * ([labels]) — the share of every value among every work fitted on ([share]), the [k] chosen, and the [layout] of the
+ * blocks the works were projected of. A work asked is projected the same way of its own inputs alone and scored by its
+ * nearest among the works kept ([on]): no other work of the source read.
  */
 internal class KnnModel(
     val k: Int,
@@ -73,14 +74,6 @@ internal class KnnModel(
         private const val HALF = 2
 
         private const val BUFFER = 1 shl 16
-
-        /** The model of the works of [task] fitted on, with the [k] chosen. */
-        fun of(task: SuggestionTask, k: Int): KnnModel {
-            val layout = task.inputs.map { it.name to it.dim }
-            val vectors = Neighbours.project(task.inputs, task.itemCount, layout)!!
-            val labels = Labels.of(SuggestionPairs(task))
-            return KnnModel(k, layout, task.itemIds, vectors, labels, labels.share { true })
-        }
 
         /** The model kept; null of bytes not of its making. */
         fun read(bytes: ByteArray): KnnModel? =
