@@ -1,8 +1,6 @@
 package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.api.model.ItemPage
-import io.github.vlsergey.recommend4me.correction.Corrected
-import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.search.Search
@@ -11,7 +9,6 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.suggestion.ModelValueRepository
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.worklist.ListAsked
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
@@ -163,33 +160,6 @@ class ItemList(
                 }
             }
             .toMap()
-    }
-
-    /**
-     * Every item's values of one facet as the user sees them: the site's, the model's of a facet it works out, the
-     * user's corrections on top. The model's as the last pass of the models kept them ([ModelValueRepository]): no
-     * model run at a request (user, 2026-11-17).
-     */
-    fun valuesOf(
-        s: SourceStore,
-        def: FacetDef,
-        corrections: Map<String, List<FacetCorrection>>,
-    ): Map<String, List<String>> {
-        val byItem = HashMap<String, List<String>>()
-        s.items.forEachFacet(def.key) { id, keys -> byItem[id] = keys }
-        if (def.infer) s.modelValues.of(def.key).forEach { (id, given) -> byItem[id] = byItem[id].orEmpty() + given }
-        corrections.forEach { (id, list) ->
-            val own = list.filter { it.facet == def.key }
-            if (own.isNotEmpty())
-                byItem[id] =
-                    Corrected.facets(
-                            mapOf(def.key to byItem[id].orEmpty()),
-                            own,
-                            if (def.single) setOf(def.key) else emptySet(),
-                        )[def.key]
-                        .orEmpty()
-        }
-        return byItem
     }
 
     private companion object {

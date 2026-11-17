@@ -56,7 +56,12 @@ class ListIndexing(
      */
     fun change(typeId: String, reason: String, change: ListWaiting.() -> Unit) {
         synchronized(waiting) { waiting.getOrPut(typeId) { ListWaiting() }.change() }
-        workload.plan(Work(WORK, type = typeId), Instant.now().plusSeconds(QUIET_SECONDS), reason) { write(typeId) }
+        // The user's own action the list is looked at for, and an index never made — an empty list — go ahead of the
+        // background's works
+        val asked = reason in USERS || (reason == START && !indexes.of(typeId).current())
+        workload.plan(Work(WORK, type = typeId), Instant.now().plusSeconds(QUIET_SECONDS), reason, asked = asked) {
+            write(typeId)
+        }
     }
 
     /**
@@ -128,11 +133,17 @@ class ListIndexing(
         return keys.filter { it.source !in whole }.groupBy({ it.source }, { it.id }).mapValues { it.value.toSet() }
     }
 
-    private companion object {
+    companion object {
         /** The work of the queue writing the index of a content type's list. */
-        const val WORK = "listIndex"
+        private const val WORK = "listIndex"
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */
-        const val QUIET_SECONDS = 1L
+        private const val QUIET_SECONDS = 1L
+
+        /** The reasons of the start of the application. */
+        const val START = "start"
+
+        /** The reasons that are the user's own actions: their writing goes ahead of the background's works. */
+        private val USERS = setOf("grade", "interest", "answer")
     }
 }

@@ -23,7 +23,9 @@ internal class ListIndexEvents(private val stores: Stores, private val indexing:
 
     @EventListener(ApplicationReadyEvent::class)
     fun start() =
-        stores.types.forEach { type -> indexing.change(type.id, "start") { whole += type.sources.map { it.id } } }
+        stores.types.forEach { type ->
+            indexing.change(type.id, ListIndexing.START) { whole += type.sources.map { it.id } }
+        }
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) =

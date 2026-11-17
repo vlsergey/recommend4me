@@ -9,7 +9,7 @@ import io.github.vlsergey.recommend4me.api.model.SiteLine
 import io.github.vlsergey.recommend4me.correction.Answering
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemList
+import io.github.vlsergey.recommend4me.item.filterId
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -18,6 +18,8 @@ import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.work.Works
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListSelection
 import java.time.Instant
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -33,7 +35,7 @@ import org.springframework.stereotype.Service
 class Marking(
     private val stores: Stores,
     private val suggestions: FacetSuggestions,
-    private val list: ItemList,
+    private val indexes: ListIndexes,
     private val answering: Answering,
     private val works: Works,
 ) {
@@ -66,22 +68,17 @@ class Marking(
 
     /**
      * The works of the source that may have the value: of a value of characters, those with a universe of each of its
-     * [characters] — the universes as the works are shown, the site's, the model's and the user's word on top; of any
-     * other, every work.
+     * [characters] — the universes as the works are shown, the site's, the model's kept and the user's word on top, of
+     * the index of the list; of any other, every work.
      */
     private fun scope(s: SourceStore, characters: List<String>?, universesOf: Map<String, Set<String>>): Set<String> {
-        val every = s.items.keys().map { it.id }.toSet()
         val def = s.schema.facet(UniverseFacet.KEY)
         val needed = characters.orEmpty().map { universesOf[it].orEmpty() }
         return when {
-            characters.isNullOrEmpty() -> every
+            characters.isNullOrEmpty() -> s.items.keys().mapTo(HashSet()) { it.id }
             def == null || needed.any { it.isEmpty() } -> emptySet()
-            else -> {
-                val shown = list.valuesOf(s, def, s.corrections.allFacets().groupBy { it.itemId })
-                every
-                    .filter { id -> shown[id].orEmpty().toSet().let { own -> needed.all { u -> u.any { it in own } } } }
-                    .toSet()
-            }
+            // Of the index of the list: no work read, no model run
+            else -> ListSelection.idsOf(indexes.of(s.type), s.id, filterId(s, def), needed)
         }
     }
 
