@@ -43,12 +43,6 @@ private constructor(
             }
             .toMap()
 
-    /** Of every work of the [keys] — each the item that names it — that has a block of the manners, its blocks. */
-    fun forEachWork(keys: Collection<ItemKey>, action: (key: ItemKey, blocks: Map<String, FloatArray>) -> Unit) =
-        keys.forEach { key ->
-            blocks(key).takeIf { it.isNotEmpty() }?.let { action(key, it) }
-        }
-
     companion object {
         const val WORK = "manner:work"
         const val AUTHOR = "manner:author"
@@ -62,7 +56,13 @@ private constructor(
          * The manners of the works of the items [keys] alone — of a request, of a portion of every work: their items'
          * manners, their authors' and their series' kept ones, of no other work.
          */
-        fun of(type: TypeStore, clusters: WorkClusters, keys: Collection<ItemKey>): TypeManners {
+        fun of(
+            type: TypeStore,
+            clusters: WorkClusters,
+            keys: Collection<ItemKey>,
+            /** The site's values of the items read already, by source: not read again. */
+            read: Map<String, Map<String, Map<String, List<String>>>> = emptyMap(),
+        ): TypeManners {
             val words = type.mannerWords.id() ?: return none(clusters)
             val members = keys.flatMapTo(LinkedHashSet()) { clusters.members(it) }
             val items = HashMap<ItemKey, MutableList<FloatArray>>()
@@ -73,7 +73,7 @@ private constructor(
                     items.getOrPut(clusters.representative(ItemKey(source, id))) { ArrayList() } += v
                 }
                 val facet = authorFacet(s) ?: return@forEach
-                val facets = s.items.facetsOf(ids)
+                val facets = read[source] ?: s.items.facetsOf(ids)
                 val bound = s.authors.bindingsOf(s.id, facets.values.flatMap { it[facet].orEmpty() })
                 facets.forEach { (id, ofItem) ->
                     val own = ofItem[facet].orEmpty().mapNotNull(bound::get)

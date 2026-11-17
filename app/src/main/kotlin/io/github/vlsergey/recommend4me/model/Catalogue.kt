@@ -150,7 +150,7 @@ class CatalogueReader(
             items.size,
             System.currentTimeMillis() - started,
         )
-        return catalogue(type, items, ratings, vectors, likeness, interest, averages)
+        return catalogue(type, items, ratings, vectors, likeness, interest, averages, clusters)
     }
 
     /**
@@ -165,10 +165,11 @@ class CatalogueReader(
         likeness: TypeLikeness,
         interest: Map<ItemKey, InterestMark>,
         averages: Averages,
+        /** Which items are one work, as the operation read it. */
+        clusters: WorkClusters,
         /** The manners of every work, when read; else those of the works read later read with them. */
         manners: TypeManners? = null,
     ): Catalogue {
-        val clusters = works.of(type)
         val vectors = HashMap(read)
         val merged = HashMap<ItemKey, CatalogueItem>()
         val itemOf = items.associateBy { it.key }
@@ -210,11 +211,13 @@ class CatalogueReader(
         series: TypeSeries,
         heads: List<ItemKeys>,
         laps: Laps = Laps(),
+        /** The site's values of the items, read already by the operation: not read again. */
+        read: Map<String, Map<String, List<String>>>? = null,
     ): List<CatalogueItem> {
         val ids = heads.map { it.id }
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
         // A facet not of the model gives no feature below
-        val facets = s.items.facetsOf(ids)
+        val facets = read ?: s.items.facetsOf(ids)
         laps.lap("facets", facets.size)
         val facetCorrections = s.corrections.facetsOf(ids)
         laps.lap("corrections", facetCorrections.size)

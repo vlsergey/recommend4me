@@ -108,20 +108,39 @@ class EveryWork(
         fun portion(s: SourceStore, keys: List<ItemKeys>): WorkPortion? {
             val named = keys.map { ItemKey(s.id, it.id) }.filter { clusters.representative(it) == it }
             if (named.isEmpty()) return null
+            val laps = Laps()
             val members = named.flatMap(clusters::members)
             val own = keys.associateBy { it.id }
-            val items =
-                members.groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-                    val of = type.source(source) ?: return@flatMap emptyList()
-                    // The items of the works of several of other sites, or further in this one, read by their ids
-                    val heads = ids.mapNotNull { if (source == s.id) own[it] else null }.takeIf { it.size == ids.size }
-                    reader.readItems(of, severalSources, series, heads ?: of.items.keysOf(ids))
-                }
-            val manners = TypeManners.of(type, clusters, members)
+            val idsOf = members.groupBy({ it.source }, { it.id })
+            // The site's values of the portion read once, for the works and their manners alike
+            val values =
+                idsOf
+                    .mapNotNull { (source, ids) -> type.source(source)?.let { source to it.items.facetsOf(ids) } }
+                    .toMap()
+            laps.lap("values", members.size)
+            val items = idsOf.flatMap { (source, ids) ->
+                val of = type.source(source) ?: return@flatMap emptyList()
+                // The items of the works of several of other sites, or further in this one, read by their ids
+                val heads = ids.mapNotNull { if (source == s.id) own[it] else null }.takeIf { it.size == ids.size }
+                val read = values[source]
+                reader.readItems(
+                    of,
+                    severalSources,
+                    series,
+                    heads ?: of.items.keysOf(ids),
+                    laps.within("$source:"),
+                    read,
+                )
+            }
+            laps.restart()
+            val manners = TypeManners.of(type, clusters, members, values)
+            laps.lap("manners")
             // The vectors of the works of several items read now: a work's are made of all of its items'
             val linked = members.filter(clusters::linked)
             val vectors = manners.with(reader.vectorsOfMany(type, linked), linked)
-            val catalogue = reader.catalogue(type, items, ratings, vectors, likeness, interest, none, manners)
+            val catalogue = reader.catalogue(type, items, ratings, vectors, likeness, interest, none, clusters, manners)
+            laps.lap("works of several", linked.size)
+            log.info("{}/{}: a portion of {} works read in ms: {}", type.id, s.id, catalogue.items.size, laps)
             return WorkPortion(catalogue, items.associateBy { it.key }, manners)
         }
     }
