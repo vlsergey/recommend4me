@@ -35,8 +35,9 @@ internal class WorkPasses(
         every: EveryItemFacets? = null,
         characters: CharactersRead = charactersRead(store),
         card: Boolean = false,
-    ) =
-        WorksRead(
+    ): WorksRead {
+        if (ids == null) refuseTooLarge(store)
+        return WorksRead(
             store,
             encoder,
             plugins.imageEncoder()?.id,
@@ -46,7 +47,29 @@ internal class WorkPasses(
             every?.takeIf { ids == null },
             if (card && ids == null) cards.getIfAvailable()?.cublas() else null,
         )
+    }
+
+    /**
+     * A pass over every work of the [store] refused when it would not fit the memory, every work held at once
+     * ([TooManyWorks]): the work asking for it fails, not the application out of its memory (ficbook's 1.39 million
+     * works, 2026-11-17) — till such a pass reads its works a portion at a time.
+     */
+    private fun refuseTooLarge(store: SourceStore) {
+        val works = store.items.count()
+        val most = Runtime.getRuntime().maxMemory() / BYTES_A_WORK
+        if (works > most) throw TooManyWorks(store.id, works, most)
+    }
 
     /** The characters of the dictionary of the [store]'s type, for one operation to read once ([CharactersRead]). */
     fun charactersRead(store: SourceStore) = CharactersRead(stores.typeOf(store.id).universes)
 }
+
+/** A pass over every work of a source refused: more works than the memory holds of a pass ([WorkPasses]). */
+class TooManyWorks(source: String, works: Int, most: Long) :
+    IllegalStateException("$source: a pass over its $works works refused, the memory holds $most")
+
+/**
+ * The memory a pass over a source's works holds of a work, twice as much as it was seen to (the memory of 12 GB full of
+ * a pass over a million works of ficbook): what tells a source too large for a pass ([WorkPasses]).
+ */
+private const val BYTES_A_WORK = 24L * 1024
