@@ -3,7 +3,6 @@ package io.github.vlsergey.recommend4me.item
 import io.github.vlsergey.recommend4me.api.model.ItemPage
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
-import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.search.Search
@@ -13,9 +12,10 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.ModelValueRepository
-import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
-import java.time.Instant
+import io.github.vlsergey.recommend4me.worklist.ListAsked
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListQuery
 import kotlin.math.abs
 import org.springframework.stereotype.Component
 
@@ -90,10 +90,9 @@ class NumberRange(val numberId: String, val from: Double?, val to: Double?) {
 internal fun filterId(store: SourceStore, facet: FacetDef) = FeatureNames.facetId(store.source, facet)
 
 /**
- * The list of the works of a content type. H2 joins no two files, so the list is put together here for each request
- * from what each file says, read in one batch per file and only the columns the list needs: the items' keys and update
- * times from the source databases, the values of the filtered facets, the grades from the ratings databases, the
- * predictions from the model database. Nothing of it is kept after the request.
+ * The list of the works of a content type: what passes its filters, in its order, counted and cut into a page, asked of
+ * its index ([ListIndex][io.github.vlsergey.recommend4me.worklist.ListIndex]) alone — no database read, no model run,
+ * of a million works (user, 2026-11-17); the cards of the page alone read of the databases, by their keys.
  */
 @Component
 class ItemList(
@@ -102,36 +101,8 @@ class ItemList(
     private val cards: ItemCards,
     private val search: Search,
     private val recommendations: Recommendations,
+    private val indexes: ListIndexes,
 ) {
-
-    /**
-     * One row of the list before its card is read; [expected] — the prediction times the chance of interest — is what
-     * the list is sorted by first, [number] what it is sorted by otherwise.
-     */
-    private class Row(
-        val key: ItemKey,
-        val updatedAt: Instant,
-        val firstSeenAt: Instant,
-        val graded: Boolean,
-        val prediction: Double?,
-        val expected: Double?,
-        val interest: Double?,
-        val number: Double?,
-    )
-
-    /**
-     * What the rows of every source are read by: the [order] and its number [sortNumber], the [places] of the grades of
-     * an order by the surprise, the [relevance] of the works a search found, the [choices] of the filter facets and the
-     * [ranges] of the numbers.
-     */
-    private class RowsAsked(
-        val order: ItemOrder,
-        val sortNumber: String?,
-        val places: Map<Int, Double>?,
-        val relevance: Map<ItemKey, Int>?,
-        val choices: Map<String, FacetChoice>,
-        val ranges: List<NumberRange>,
-    )
 
     fun page(
         typeId: String,
@@ -148,24 +119,14 @@ class ItemList(
         language: String,
     ): ItemPage {
         val type = stores.type(typeId) ?: return ItemPage(0, emptyList())
-        val clusters = works.of(type)
-        val places = if (order == ItemOrder.SURPRISE) recommendations.gradePlaces(typeId) else null
         val found = line?.takeIf { it.isNotBlank() }?.let { search.search(typeId, it, language) }
         val relevance = found?.keys?.withIndex()?.associate { (i, k) -> k to i }
-        val asked = RowsAsked(order, sortNumber, places, relevance, facets.associateBy { it.facet }, ranges)
-
-        val rows = type.sources.filter { sources == null || it.id in sources }.flatMap { s -> rowsOf(type, s, asked) }
-        val viewed =
-            oneAWork(clusters, rows, relevance).filter { row ->
-                when (view) {
-                    ItemView.UNRATED -> !row.graded
-                    ItemView.RATED -> row.graded
-                    ItemView.ALL -> true
-                }
-            }
-        val sorted = sorted(viewed, order, relevance)
-        val pageKeys = sorted.drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, MAX_PAGE)).map { it.key }
-        val matches = found?.let { search.matches(typeId, it, pageKeys) }.orEmpty()
+        val surprise =
+            if (order != ItemOrder.SURPRISE) emptyMap()
+            else recommendations.gradePlaces(typeId)?.let { surprises(type, it) }.orEmpty()
+        val asked = ListAsked(view, order, sortNumber, relevance, facets, sources, ranges, surprise)
+        val page = ListQuery.page(indexes.of(typeId), type, asked, offset, limit.coerceIn(1, MAX_PAGE))
+        val matches = found?.let { search.matches(typeId, it, page.keys) }.orEmpty()
         // The user's word on the snippet every work is shown with: of another snippet of it, none
         val judged =
             found
@@ -173,168 +134,35 @@ class ItemList(
                 ?.let { SearchSnippet.judgedShown(it, matches.mapValues { (_, m) -> SearchSnippet.of(m) }) }
                 .orEmpty()
         return ItemPage(
-            total = sorted.size,
-            items = cards.cards(type, pageKeys, matches, search.places(matches), clusters, judged),
+            total = page.total,
+            items = cards.cards(type, page.keys, matches, search.places(matches), works.of(type), judged),
         )
     }
 
-    /** The rows of the source [s] shown by what is [asked], each with what the list is sorted by. */
-    private fun rowsOf(type: TypeStore, s: SourceStore, asked: RowsAsked): List<Row> {
-        val keys = s.items.keys()
-        val versions = keys.associate { it.id to it.version }
-        val graded = cards.graded(s.ratings.all(), versions)
-        val grades = graded.mapNotNull { (id, g) -> g.grade?.let { id to it } }.toMap()
-        val predicted = type.predictions.predicted(s.id)
-        val marks = s.interest.all()
-        val numbers =
-            if (asked.order == ItemOrder.NUMBER && asked.sortNumber != null) numberOf(s, asked.sortNumber).orEmpty()
-            else emptyMap()
-        val surprises =
-            if (asked.order == ItemOrder.SURPRISE && asked.places != null) surprises(type, s, asked.places, grades)
-            else emptyMap()
-        val passes = facetFilter(s, asked.choices)
-        // The ranges of the numbers the source has, with their values: a source without one is not limited by it
-        val limits = asked.ranges.mapNotNull { r -> numberOf(s, r.numberId)?.let { r to it } }
-        return keys.mapNotNull { k ->
-            val key = ItemKey(s.id, k.id)
-            if (!shows(key, asked.relevance, passes, limits)) return@mapNotNull null
-            val p = predicted[k.id]
-            // What the user said of the work decides its chance; the prediction alone without a model of interest
-            val chance = Interest.chance(marks[k.id]?.interesting, p?.interest)
-            // Equal, the prediction decides
-            val expected = p?.let { Interest.expected(it.score, chance) }
-            Row(
-                key,
-                k.updatedAt,
-                k.firstSeenAt,
-                k.id in grades,
-                p?.score,
-                expected,
-                chance,
-                numbers[k.id] ?: surprises[k.id],
-            )
-        }
-    }
-
     /**
-     * Whether the item [key] is shown: found by the search when searched ([relevance]), let by the filter facets
-     * ([passes]) and within every range of the numbers ([limits]).
+     * Of every graded item of the type, how far the model that had not seen it puts it from where the user's grade
+     * stands ([places] of the grades): beyond the lowest grade's place for a work of it is no surprise, nor beyond the
+     * highest's. The graded items alone read.
      */
-    private fun shows(
-        key: ItemKey,
-        relevance: Map<ItemKey, Int>?,
-        passes: ((String) -> Boolean)?,
-        limits: List<Pair<NumberRange, Map<String, Double>>>,
-    ): Boolean =
-        when {
-            relevance != null && key !in relevance -> false
-            passes != null && !passes(key.id) -> false
-            // A work without the number is not known to be within the range: not shown
-            else -> limits.none { (r, values) -> values[key.id]?.let { it !in r } ?: true }
-        }
-
-    /**
-     * How far the model that had not seen a graded work of the source [s] puts it from where the user's grade stands
-     * ([places] of the grades): beyond the lowest grade's place for a work of it is no surprise, nor beyond the
-     * highest's.
-     */
-    private fun surprises(
-        type: TypeStore,
-        s: SourceStore,
-        places: Map<Int, Double>,
-        grades: Map<String, Int>,
-    ): Map<String, Double> {
+    private fun surprises(type: TypeStore, places: Map<Int, Double>): Map<ItemKey, Double> {
         val low = places.values.min()
         val high = places.values.max()
-        return type.heldOut
-            .scores(s.id)
-            .mapNotNull { (id, score) ->
-                val place = places[grades[id]] ?: return@mapNotNull null
-                id to
-                    when (place) {
-                        low -> (score - place).coerceAtLeast(0.0)
-                        high -> (place - score).coerceAtLeast(0.0)
-                        else -> abs(score - place)
-                    }
+        return type.sources
+            .flatMap { s ->
+                val ratings = s.ratings.all()
+                val versions = s.items.heads(ratings.map { it.itemId }).mapValues { it.value.version }
+                val grades = cards.graded(ratings, versions).mapNotNull { (id, g) -> g.grade?.let { id to it } }.toMap()
+                type.heldOut.scores(s.id).mapNotNull { (id, score) ->
+                    val place = places[grades[id]] ?: return@mapNotNull null
+                    ItemKey(s.id, id) to
+                        when (place) {
+                            low -> (score - place).coerceAtLeast(0.0)
+                            high -> (place - score).coerceAtLeast(0.0)
+                            else -> abs(score - place)
+                        }
+                }
             }
             .toMap()
-    }
-
-    /**
-     * The [rows] with a work one row, whatever sites have it: of those found, the item a search found best, else the
-     * one the work is shown with ([WorkClusters.shown]) when it is among them, else the one of them that says the most.
-     */
-    private fun oneAWork(clusters: WorkClusters, rows: List<Row>, relevance: Map<ItemKey, Int>?): List<Row> {
-        val shown =
-            rows
-                .filter { clusters.linked(it.key) }
-                .groupBy { clusters.representative(it.key) }
-                .values
-                .mapTo(HashSet()) { same ->
-                    if (relevance != null) same.minBy { relevance.getValue(it.key) }.key
-                    else {
-                        val keys = same.mapTo(HashSet()) { it.key }
-                        clusters.fullestFirst(same.first().key).first { it in keys }
-                    }
-                }
-        return rows.filter { !clusters.linked(it.key) || it.key in shown }
-    }
-
-    /** The [rows] in the [order] asked; of a search, by the [relevance] alone. */
-    private fun sorted(rows: List<Row>, order: ItemOrder, relevance: Map<ItemKey, Int>?): List<Row> =
-        if (relevance != null) rows.sortedBy { relevance.getValue(it.key) } else rows.sortedWith(comparator(order))
-
-    /** How the rows go in the [order]: the newest update first among the equal. */
-    private fun comparator(order: ItemOrder): Comparator<Row> =
-        when (order) {
-            ItemOrder.SCORE ->
-                compareByDescending<Row> { it.expected ?: Double.NEGATIVE_INFINITY }
-                    .thenByDescending { it.prediction ?: Double.NEGATIVE_INFINITY }
-                    .thenByDescending { it.updatedAt }
-            // Interest first, the prediction among the equal; the prediction first, interest among the equal
-            ItemOrder.INTEREST ->
-                compareByDescending<Row> { it.interest ?: Double.NEGATIVE_INFINITY }
-                    .thenByDescending { it.prediction ?: Double.NEGATIVE_INFINITY }
-                    .thenByDescending { it.updatedAt }
-            ItemOrder.GRADE ->
-                compareByDescending<Row> { it.prediction ?: Double.NEGATIVE_INFINITY }
-                    .thenByDescending { it.interest ?: Double.NEGATIVE_INFINITY }
-                    .thenByDescending { it.updatedAt }
-            ItemOrder.NUMBER,
-            ItemOrder.SURPRISE ->
-                compareByDescending<Row> { it.number ?: Double.NEGATIVE_INFINITY }.thenByDescending { it.updatedAt }
-            ItemOrder.ADDED -> compareByDescending<Row> { it.firstSeenAt }.thenByDescending { it.updatedAt }
-            ItemOrder.UPDATED -> compareByDescending { it.updatedAt }
-        }
-
-    /**
-     * The values of the number [numberId] (shared, or "<source>.<key>") of the source's items, as the user corrected
-     * them; null when the source has no such number.
-     */
-    private fun numberOf(s: SourceStore, numberId: String): Map<String, Double>? {
-        val def = s.schema.numbers.firstOrNull { FeatureNames.numberId(s.source, it) == numberId } ?: return null
-        val site = s.items.number(def.key)
-        val overrides =
-            s.corrections
-                .allFields()
-                .mapNotNull { (id, fields) ->
-                    fields[Corrected.numberField(def.key)]?.toDoubleOrNull()?.let { id to it }
-                }
-                .toMap()
-        return site + overrides
-    }
-
-    /**
-     * Whether an item of the source shows by the filters: by every facet's [FacetChoice] the source has. Null when no
-     * facet of the source is filtered.
-     */
-    private fun facetFilter(s: SourceStore, choices: Map<String, FacetChoice>): ((String) -> Boolean)? {
-        val filtered =
-            s.schema.facets.filter { it.filter }.mapNotNull { def -> choices[filterId(s, def)]?.let { def to it } }
-        if (filtered.isEmpty()) return null
-        val corrections = s.corrections.allFacets().groupBy { it.itemId }
-        val values = filtered.map { (def, choice) -> valuesOf(s, def, corrections) to choice }
-        return { id -> values.all { (byItem, choice) -> choice.passes(byItem[id].orEmpty()) } }
     }
 
     /**

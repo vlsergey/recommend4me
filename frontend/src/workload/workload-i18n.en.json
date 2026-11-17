@@ -41,6 +41,7 @@
   "What.heldOut": "The model that has not seen a graded work",
   "What.interestScorersCompared": "Methods of interest compared",
   "What.layerDrafts": "Drafts of the layer by the dictionary",
+  "What.listIndex": "The index of the list of works",
   "What.manners": "The manner of the texts by word frequencies",
   "What.methodsCompared": "Methods of a field compared",
   "What.modelValues": "The values the models give the works, for the filters",

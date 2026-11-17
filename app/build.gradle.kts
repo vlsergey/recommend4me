@@ -29,6 +29,8 @@ dependencies {
     implementation(libs.javif)
     // The stemmer of Russian words: a character is found however its name is declined
     implementation(libs.lucene.analysis.common)
+    // The index of the list of works: a work of several items one row of it
+    implementation(libs.lucene.grouping)
 
     jooqCodegen(platform(libs.spring.boot.bom))
     jooqCodegen(libs.h2)

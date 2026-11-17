@@ -134,15 +134,29 @@ types/<type>/model.mv.db           the trained model, the predictions, the liken
                                    the directions of the set embeddings, the suggested tags — all
                                    recomputable
 types/<type>/search-index/         the search index
+types/<type>/list-index/           the index of the list of works (Lucene): what the list is
+                                   filtered, sorted, counted and paged by — all recomputable
 models/                            ONNX graphs of the encoders
 backups/                           the settings, the dictionaries, the preferences, corrections
                                    and ratings, zipped on every start
 ```
 
 Every file has its own connection pool and its own Flyway history. H2 does not join across
-files, so whatever reads several of them — the list of works, filtered by corrected tags, sorted
-by prediction, without the rated — reads each file once, in batch, only the columns it needs,
-and puts the answer together in memory for that one request. Nothing is kept between requests.
+files, so whatever reads several of them reads each file once, in batch, only the columns it
+needs, and puts the answer together in memory for that one operation.
+
+THE LIST OF WORKS IS ASKED OF ITS INDEX ALONE (user, 2026-11-17): of a million works, the list put
+together of every file at every request was minutes. A Lucene index of every content type
+(`worklist`: `ListIndex`) holds a document of every item — the work it is of, a work of several
+items one row grouped by it; the values of every filter facet as the user sees them (the site's,
+the model's kept in `model_value`, the user's word on top) as terms; every number as a point and
+a sorted value; its dates; and what changes of its work without it — graded, the prediction, the
+chance of interest, their product — updated in place. The filters, the orders, the count and the
+page are a query of it; only the cards of the page are read of the databases, by their keys. The
+databases stay the truth: the index is written in the queue of the computations (`ListIndexing`)
+a second after what it names changed — an item's data, an answer, the values the model gives, a
+grade, a mark of interest, the predictions of a training, a regrouping of the works — and of
+every item at every start; an index of another format is made anew whole.
 
 ## Works, items and their data
 

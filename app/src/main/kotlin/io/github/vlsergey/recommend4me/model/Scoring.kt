@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(Scoring::class.java)
@@ -22,6 +23,7 @@ class Scoring(
     private val works: Works,
     private val likenesses: Likenesses,
     private val kept: KeptModels,
+    private val events: ApplicationEventPublisher,
 ) {
 
     /** Every item of the [catalogue] scored by the [model] and the model of [interest], and the scores kept. */
@@ -50,7 +52,8 @@ class Scoring(
                 }
                 .toList()
         val written = System.currentTimeMillis()
-        catalogue.type.predictions.replace(predicted)
+        val changed = catalogue.type.predictions.replace(predicted)
+        if (changed.isNotEmpty()) events.publishEvent(PredictionsChanged(catalogue.type.id, changed))
         log.info(
             "{}: {} predictions written in {} ms",
             catalogue.type.id,
@@ -65,7 +68,9 @@ class Scoring(
         val model = kept.load(type) ?: return
         val input = inputOf(type, key, likenesses.stored(type)) ?: return
         val prediction = Predicted(model.score(input), kept.loadInterest(type)?.chances(listOf(input))?.single())
-        works.of(type).members(key).forEach { type.predictions.save(it, prediction) }
+        val members = works.of(type).members(key)
+        members.forEach { type.predictions.save(it, prediction) }
+        events.publishEvent(PredictionsChanged(type.id, members))
     }
 
     /** The input of the work of one item as the model reads it now; [stored]: the type's likeness to the marks. */

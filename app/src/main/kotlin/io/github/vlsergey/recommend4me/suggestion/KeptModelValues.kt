@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
@@ -36,6 +37,7 @@ internal class KeptModelValues(
     private val stores: Stores,
     private val workload: Workload,
     private val chain: FacetChain,
+    private val events: ApplicationEventPublisher,
 ) {
     /** The works of every source whose values are to be written anew, named by the changes since the last writing. */
     private val waiting = ConcurrentHashMap<String, MutableSet<String>>()
@@ -85,7 +87,7 @@ internal class KeptModelValues(
         every: Boolean,
     ) {
         val started = System.currentTimeMillis()
-        var changed = 0
+        val changed = HashSet<String>()
         store.schema.facets
             .filter { it.infer }
             .forEach { def ->
@@ -105,13 +107,14 @@ internal class KeptModelValues(
                         .filter { id -> stored[id].orEmpty().toSet() != fresh[id].orEmpty().toSet() }
                         .associateWith { fresh[it].orEmpty() }
                 store.modelValues.replace(def.key, other)
-                changed += other.size
+                changed += other.keys
             }
+        if (changed.isNotEmpty()) events.publishEvent(ModelValuesChanged(store.id, changed.toList()))
         log.info(
-            "{}: the values the model gives {} works kept, {} of a work and a facet written anew in {} ms",
+            "{}: the values the model gives {} works kept, those of {} works written anew in {} ms",
             store.id,
             ids.size,
-            changed,
+            changed.size,
             System.currentTimeMillis() - started,
         )
     }

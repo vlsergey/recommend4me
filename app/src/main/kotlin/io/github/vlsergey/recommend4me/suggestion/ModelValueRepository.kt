@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.database.model.tables.references.MODEL_VALUE
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 
 /**
  * THE VALUES THE MODEL GIVES THE WORKS of one source, of every facet it works out, beyond the site's own
@@ -14,19 +13,29 @@ class ModelValueRepository(private val db: DSLContext, private val source: Strin
 
     /**
      * The values of the [facet] the model gives the works [ids] — every work when null: item to its values, none of a
-     * work it gives none. Of the works named, by their ids a [BATCH] at a time.
+     * work it gives none. Of the works named, by their ids alone a [BATCH] at a time, the other sources' and facets'
+     * left out here: H2 reads the source, the facet and a list of ids by the prefix of the key, every value of the
+     * facet walked.
      */
     fun of(facet: String, ids: Collection<String>? = null): Map<String, List<String>> {
         val out = HashMap<String, MutableList<String>>()
-        val chunks = ids?.distinct()?.chunked(BATCH) ?: listOf(null)
-        chunks.forEach { chunk ->
+        if (ids == null) {
             db.select(MODEL_VALUE.ITEM_ID, MODEL_VALUE.VALUE_KEY)
                 .from(MODEL_VALUE)
                 .where(MODEL_VALUE.SOURCE.eq(source), MODEL_VALUE.FACET.eq(facet))
-                .and(if (chunk == null) DSL.noCondition() else MODEL_VALUE.ITEM_ID.`in`(chunk))
                 .fetchSize(FETCH)
                 .fetchLazy()
                 .use { cursor -> cursor.forEach { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! } }
+            return out
+        }
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(MODEL_VALUE.SOURCE, MODEL_VALUE.FACET, MODEL_VALUE.ITEM_ID, MODEL_VALUE.VALUE_KEY)
+                .from(MODEL_VALUE)
+                .where(MODEL_VALUE.ITEM_ID.`in`(chunk))
+                .fetch {
+                    if (it.value1() == source && it.value2() == facet)
+                        out.getOrPut(it.value3()!!) { ArrayList() } += it.value4()!!
+                }
         }
         return out
     }

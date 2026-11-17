@@ -16,11 +16,11 @@ class PredictionRepository(private val db: DSLContext) {
      * Replaces every item's prediction in one transaction: readers see the old ones until the new ones are committed;
      * nothing else writes this table. Only what changed is written — a score or a chance of interest beyond [STEP], an
      * item new or gone: most of a retraining's scores come out as they were, and a file rewritten whole on every
-     * training only grows.
+     * training only grows. Answers the items whose prediction was written or removed.
      */
-    fun replace(predicted: List<Pair<ItemKey, Predicted>>) {
+    fun replace(predicted: List<Pair<ItemKey, Predicted>>): List<ItemKey> {
         fun same(a: Double?, b: Double?) = if (a == null || b == null) a == b else kotlin.math.abs(a - b) < STEP
-        db.transaction { configuration ->
+        return db.transactionResult { configuration ->
             val tx = DSL.using(configuration)
             val stored = HashMap<ItemKey, Pair<Double?, Double?>>()
             tx.select(PREDICTION.SOURCE, PREDICTION.ITEM_ID, PREDICTION.SCORE, PREDICTION.INTEREST)
@@ -55,6 +55,7 @@ class PredictionRepository(private val db: DSLContext) {
                 chunk.forEach { (key, p) -> batch.bind(key.source, key.id, p.score, p.interest) }
                 batch.execute()
             }
+            gone.toList() + changed.map { it.first }
         }
     }
 

@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.FacetChoice
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.InterestRequest
+import io.github.vlsergey.recommend4me.api.model.ItemPage
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.api.model.ItemSort
@@ -33,6 +34,8 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
+import io.github.vlsergey.recommend4me.worklist.ListIndexing
+import io.github.vlsergey.recommend4me.workload.inBackground
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -99,6 +102,7 @@ class ScenarioTest {
     @Autowired lateinit var captures: CaptureController
 
     @Autowired lateinit var items: ItemsController
+    @Autowired lateinit var listIndexing: ListIndexing
     @Autowired lateinit var searchController: SearchController
     @Autowired lateinit var filtersController: FiltersController
     @Autowired lateinit var explanationController: ExplanationController
@@ -122,13 +126,16 @@ class ScenarioTest {
         sortNumber: String? = null,
         facets: List<FacetChoice>? = null,
         range: List<String>? = null,
-    ) =
-        items
+    ): ItemPage {
+        // The index of the list written of what changed, as the background does a second after
+        inBackground { listIndexing.writeWaiting("books") }
+        return items
             .listItems(
                 "books",
                 ItemQuery(view = view, sort = sort, sortNumber = sortNumber, facets = facets, ranges = range),
             )
             .body!!
+    }
 
     @Test
     fun `a captured page becomes an item that can be graded, corrected, filtered and sorted`() {
