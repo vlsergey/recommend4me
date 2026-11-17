@@ -56,7 +56,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         // Words of five letters and a space: one word to six characters
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово ".repeat(1000))))
         workSizes.fit(type)
-        assertEquals(1000, a.parts.counted().getValue("z1").first.toInt())
+        assertEquals(1000, a.parts.counts.counted().getValue("z1").first.toInt())
         val first = workSizes.ofItems(type, a, listOf("z1"), a.items.numbersOf(listOf("z1")), emptyMap()).getValue("z1")
         assertEquals(SizeNumber(900.0, true), first.words)
         assertEquals(false, first.chars!!.stated)
@@ -69,7 +69,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertTrue(second.words!!.value in 950.0..1050.0, second.words.toString())
         // A text changed is counted anew
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово")))
-        assertNull(a.parts.counted()["z1"])
+        assertNull(a.parts.counts.counted()["z1"])
     }
 
     @Test

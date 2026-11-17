@@ -54,10 +54,12 @@ private const val COUNTED_AT_ONCE = 100
 /** Every part whose text is not counted yet counted: one count of a part, kept, however often the model is fitted. */
 private fun countTexts(s: SourceStore) {
     while (true) {
-        val parts = s.parts.uncounted(COUNTED_AT_ONCE)
+        val parts = s.parts.counts.uncounted(COUNTED_AT_ONCE)
         if (parts.isEmpty()) return
         s.writing.withLock {
-            parts.forEach { s.parts.setCounted(it.itemId, it.partId, it.content.length, WordCount.of(it.content)) }
+            parts.forEach {
+                s.parts.counts.setCounted(it.itemId, it.partId, it.content.length, WordCount.of(it.content))
+            }
         }
     }
 }
@@ -120,7 +122,7 @@ private class SourceSizes(private val s: SourceStore, private val works: HashMap
 
     /** The kept texts of every item, counted: the longest of a work's. */
     private fun texts() {
-        s.parts.counted().forEach { (id, count) ->
+        s.parts.counts.counted().forEach { (id, count) ->
             val k = of(id) ?: return@forEach
             if (count.first > 0 && count.second > (k.text?.second ?: 0.0)) k.text = count
         }

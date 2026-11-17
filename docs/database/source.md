@@ -21,9 +21,7 @@
 | `review` | an opinion of another reader, its text kept by the key it is encoded under |
 | `series` | a series of the site — a cycle of works — as its own page, or a list of an author's series, said it last: its page, title, description, status and dates |
 | `series_place` | the number of a work in a series of the site, as the site tells it; that the work is of the series is its facet of the series |
-| `part` | a part of a work's text — a chapter — kept whole, with the hash of its text, its characters and words counted once |
-| `part_vector` | the vector of every window of a part, the windows overlapping by half: what the search finds a scene of a chapter by and what the models read of it (`part.encoder`: what they were made by) |
-| `part_paragraph_vector` | the vector of every paragraph of a part — its lines with a letter in them, short ones in a row joined — what the tags are held against to be offered by the text |
+| `part` | a part of a work's text — a chapter: what it has, its text and its vectors kept outside the database, in the source's store of parts (`sources/<source>/parts/`, `PartStore`, RocksDB): the hash of its text (a part has a text when it is written), its characters and words counted once; of its windows' vectors — overlapping by half, what the search finds a scene of a chapter by and what the models read of it — the encoder, the text's hash and how many (`windows`); of its paragraphs' vectors — what the tags are held against to be offered by the text — the encoder and the text's hash |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
 | `item_manner` | the manner of a work's text: the share in it of every word its content type measures a manner by, standardised, and the hash of the texts it was made of |
 | `captured_page` | a page kept, gzipped, to be read again when the parser changes |
@@ -109,7 +107,6 @@ erDiagram
         VARCHAR part_id PK
         INTEGER position
         VARCHAR title "null"
-        CLOB content "null"
         TIMESTAMPTZ published_at "null"
         VARCHAR encoded_hash "null"
         VARCHAR encoder "null"
@@ -118,19 +115,7 @@ erDiagram
         INTEGER chars "null"
         INTEGER words "null"
         VARCHAR content_hash "null"
-    }
-    part_paragraph_vector {
-        VARCHAR item_id PK, FK
-        VARCHAR part_id PK, FK
-        INTEGER paragraph_no PK
-        VARBINARY vec
-        VARCHAR text_hash "null"
-    }
-    part_vector {
-        VARCHAR item_id PK, FK
-        VARCHAR part_id PK, FK
-        INTEGER window_no PK
-        VARBINARY vec
+        INTEGER windows "null"
     }
     phrase_vector {
         BIGINT text_key PK
@@ -215,6 +200,4 @@ erDiagram
     item ||--o{ set_vector : "item_id"
     item ||--o{ text_vector : "item_id"
     item ||--o{ text_window : "item_id"
-    part ||--o{ part_paragraph_vector : "item_id, part_id"
-    part ||--o{ part_vector : "item_id, part_id"
 ```

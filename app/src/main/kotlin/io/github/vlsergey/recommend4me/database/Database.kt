@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 import org.flywaydb.core.Flyway
+import org.flywaydb.core.api.migration.JavaMigration
 import org.h2.engine.SessionLocal
 import org.h2.jdbc.JdbcConnection
 import org.h2.mvstore.MVStore
@@ -42,6 +43,11 @@ class Database(
      * gigabyte, 300 without (the user, 2026-11-07: the database's cache, not one of ours).
      */
     cacheMegabytes: Int? = null,
+    /**
+     * The application's migrations of the file written in code and given what they need — a store outside the file they
+     * move data into — numbered among those of its [kind].
+     */
+    private val code: List<JavaMigration> = emptyList(),
     /** Done with the file as it is, before its migrations: what a migration drops copied elsewhere first. */
     beforeMigrations: (DSLContext) -> Unit = {},
 ) : AutoCloseable {
@@ -96,6 +102,7 @@ class Database(
             Flyway.configure(classLoader)
                 .dataSource(pool)
                 .placeholders(if (shared) emptyMap() else placeholders)
+                .javaMigrations(*(if (shared) emptyList() else code).toTypedArray())
                 .locations(*locations.toTypedArray())
                 .table(table)
                 .baselineOnMigrate(shared)

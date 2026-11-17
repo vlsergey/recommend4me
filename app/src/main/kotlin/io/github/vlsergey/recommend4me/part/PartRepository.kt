@@ -15,36 +15,42 @@ data class StoredPart(
     val publishedAt: Instant?,
 )
 
-/** A part whose text is to be counted. */
-class PartToCount(val itemId: String, val partId: String, val content: String)
-
 /**
  * The parts of the works' texts — chapters — of one source, their texts and their words counted; the vectors of their
- * windows are kept by [windows], those of their paragraphs by [paragraphs].
+ * windows are kept by [windows], those of their paragraphs by [paragraphs]. THE TEXTS AND THE VECTORS ARE KEPT OUTSIDE
+ * THE DATABASE, in the [store] (user, 2026-11-17): the database says what a part has — a part has a text when the hash
+ * of one is written ([PART.CONTENT_HASH]) — the store holds the text.
  */
-class PartRepository(private val db: DSLContext) {
+class PartRepository(private val db: DSLContext, private val store: PartStore) {
 
     /** The vector of every window of every part. */
-    val windows = PartVectorRepository(db)
+    val windows = PartVectorRepository(db, store)
 
     /** The vector of every paragraph of every part. */
-    val paragraphs = ParagraphVectorRepository(db)
+    val paragraphs = ParagraphVectorRepository(db, store)
 
     /** What every part is made of, its text not read. */
     val marks = PartMarks(db)
 
     /** The texts of the parts of every item, an item at a time. */
-    val texts = ItemTexts(db)
+    val texts = ItemTexts(db, store)
+
+    /** The characters and the words of the parts' texts, counted once. */
+    val counts = PartCounts(db, store)
 
     /**
      * Stores parts, a known one updated; a part named without its text keeps the text it had, and a part whose text
-     * changed is encoded again.
+     * changed is encoded again. The text is kept in the store before its hash says the part has it.
      */
     fun save(itemId: String, parts: List<PartData>) {
         parts.forEach { p ->
             val id = p.id.take(ID_WIDTH)
             val known =
-                db.select(PART.CONTENT).from(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).fetchOne()
+                db.select(PART.CONTENT_HASH).from(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).fetchOne()
+            val content = p.content
+            val hash = content?.let(Vectors::hash)
+            val changed = hash != null && hash != known?.value1()
+            if (content != null && changed) store.putText(itemId, id, content)
             if (known == null) {
                 db.insertInto(PART)
                     .set(PART.ITEM_ID, itemId)
@@ -52,8 +58,7 @@ class PartRepository(private val db: DSLContext) {
                     // A part whose place the page does not tell goes after the known ones
                     .set(PART.POSITION, if (p.position >= 0) p.position else UNKNOWN_POSITION)
                     .set(PART.TITLE, p.title?.take(TITLE_WIDTH))
-                    .set(PART.CONTENT, p.content)
-                    .set(PART.CONTENT_HASH, p.content?.let(Vectors::hash))
+                    .set(PART.CONTENT_HASH, hash)
                     .set(PART.PUBLISHED_AT, p.publishedAt)
                     .execute()
                 return@forEach
@@ -62,14 +67,13 @@ class PartRepository(private val db: DSLContext) {
             if (p.position >= 0) update = update.set(PART.POSITION, p.position)
             p.title?.let { update = update.set(PART.TITLE, it.take(TITLE_WIDTH)) }
             if (p.publishedAt != null) update = update.set(PART.PUBLISHED_AT, p.publishedAt)
-            val content = p.content
-            if (content != null && content != known.value1()) {
+            if (changed) {
                 update =
                     update
-                        .set(PART.CONTENT, content)
-                        .set(PART.CONTENT_HASH, Vectors.hash(content))
+                        .set(PART.CONTENT_HASH, hash)
                         .setNull(PART.ENCODER)
                         .setNull(PART.ENCODED_HASH)
+                        .setNull(PART.WINDOWS)
                         .setNull(PART.PARAGRAPHS_ENCODER)
                         .setNull(PART.PARAGRAPHS_HASH)
                         .setNull(PART.CHARS)
@@ -80,7 +84,7 @@ class PartRepository(private val db: DSLContext) {
     }
 
     fun ofItem(itemId: String): List<StoredPart> =
-        db.select(PART.PART_ID, PART.POSITION, PART.TITLE, PART.CONTENT.isNotNull, PART.PUBLISHED_AT)
+        db.select(PART.PART_ID, PART.POSITION, PART.TITLE, PART.CONTENT_HASH.isNotNull, PART.PUBLISHED_AT)
             .from(PART)
             .where(PART.ITEM_ID.eq(itemId))
             .orderBy(PART.POSITION)
@@ -88,35 +92,28 @@ class PartRepository(private val db: DSLContext) {
 
     fun text(itemId: String, partId: String): Pair<StoredPart, String>? =
         db.selectFrom(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).fetchOne()?.let {
-            val content = it.content ?: return null
+            if (it.contentHash == null) return null
+            val content = store.text(itemId, partId) ?: return null
             StoredPart(it.partId!!, it.position!!, it.title, true, it.publishedAt) to content
         }
 
-    /** The texts of every part of the item that has one, streamed in their order, each with its title. */
+    /**
+     * The texts of every part of the item that has one, in their order, each with its title: one text read at a time.
+     */
     fun forEachContent(itemId: String, action: (title: String?, content: String) -> Unit) {
-        db.select(PART.TITLE, PART.CONTENT)
-            .from(PART)
-            .where(PART.ITEM_ID.eq(itemId), PART.CONTENT.isNotNull)
-            .orderBy(PART.POSITION)
-            .fetchSize(1)
-            .fetchLazy()
-            .use { cursor -> cursor.forEach { action(it.value1(), it.value2()!!) } }
+        titlesOf(listOf(itemId))[itemId].orEmpty().forEach { (part, title) ->
+            store.text(itemId, part)?.let { action(title, it) }
+        }
     }
 
     /** The texts of every part of the items [ids] that has one, in their order: item to (part, title, text). */
-    fun contentsOf(ids: Collection<String>): Map<String, List<Triple<String, String?, String>>> {
-        val out = HashMap<String, MutableList<Triple<String, String?, String>>>()
-        ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE, PART.CONTENT)
-                .from(PART)
-                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT.isNotNull)
-                .orderBy(PART.ITEM_ID, PART.POSITION)
-                .fetch {
-                    out.getOrPut(it.value1()!!) { ArrayList() } += Triple(it.value2()!!, it.value3(), it.value4()!!)
-                }
-        }
-        return out
-    }
+    fun contentsOf(ids: Collection<String>): Map<String, List<Triple<String, String?, String>>> =
+        titlesOf(ids)
+            .mapValues { (item, parts) ->
+                val texts = store.texts(item, parts.map { it.first })
+                parts.mapNotNull { (part, title) -> texts[part]?.let { Triple(part, title, it) } }
+            }
+            .filterValues { it.isNotEmpty() }
 
     /**
      * The titles of every part of the items [ids] that has a text, in their order — the texts not read: item to (part,
@@ -127,7 +124,7 @@ class PartRepository(private val db: DSLContext) {
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE)
                 .from(PART)
-                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT.isNotNull)
+                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT_HASH.isNotNull)
                 .orderBy(PART.ITEM_ID, PART.POSITION)
                 .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! to it.value3() }
         }
@@ -150,32 +147,10 @@ class PartRepository(private val db: DSLContext) {
         return out
     }
 
-    fun countWithText(): Int = db.fetchCount(PART, PART.CONTENT.isNotNull)
+    fun countWithText(): Int = db.fetchCount(PART, PART.CONTENT_HASH.isNotNull)
 
-    /** The parts whose text is not counted yet, at most [limit]. */
-    fun uncounted(limit: Int): List<PartToCount> =
-        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
-            .from(PART)
-            .where(PART.CONTENT.isNotNull, PART.CHARS.isNull)
-            .limit(limit)
-            .fetch { PartToCount(it.value1()!!, it.value2()!!, it.value3()!!) }
-
-    fun setCounted(itemId: String, partId: String, chars: Int, words: Int) {
-        db.update(PART)
-            .set(PART.CHARS, chars)
-            .set(PART.WORDS, words)
-            .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
-            .execute()
-    }
-
-    /** The words and the characters of the texts kept, every part counted summed, of every item that has any. */
-    fun counted(): Map<String, Pair<Double, Double>> =
-        db.select(PART.ITEM_ID, DSL.sum(PART.WORDS), DSL.sum(PART.CHARS))
-            .from(PART)
-            .where(PART.CHARS.isNotNull)
-            .groupBy(PART.ITEM_ID)
-            .fetch()
-            .associate { it.value1()!! to (it.value2()!!.toDouble() to it.value3()!!.toDouble()) }
+    /** Everything of the item's parts the store keeps gone, as the work is removed: its rows go with the item's. */
+    fun forget(itemId: String) = store.forget(itemId)
 
     private companion object {
         /** The items read by one statement: the length of a query's list, not a meaning. */

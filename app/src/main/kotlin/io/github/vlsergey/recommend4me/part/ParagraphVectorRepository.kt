@@ -1,16 +1,16 @@
 package io.github.vlsergey.recommend4me.part
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
-import io.github.vlsergey.recommend4me.database.source.tables.references.PART_PARAGRAPH_VECTOR
-import io.github.vlsergey.recommend4me.vector.Vectors
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 
 /** A paragraph of a part, by its number among the part's ([Paragraphs]), its vector and the hash of its text. */
 class Paragraph(val partId: String, val number: Int, val vector: FloatArray, val hash: String)
 
-/** The vector of every paragraph of every part of one source's works ([Paragraphs]), by an encoder. */
-class ParagraphVectorRepository(private val db: DSLContext) {
+/**
+ * The vector of every paragraph of every part of one source's works ([Paragraphs]), by an encoder: kept in the [store],
+ * outside the database, each with the hash of its text; the database says by what encoder and of what text.
+ */
+class ParagraphVectorRepository(private val db: DSLContext, private val store: PartStore) {
 
     /**
      * The parts whose paragraphs have no vectors by [encoder] yet, at most [limit], from past [after] in the order of
@@ -22,25 +22,25 @@ class ParagraphVectorRepository(private val db: DSLContext) {
         after: Pair<String, String>? = null,
         items: Collection<String>? = null,
     ): List<PartToEncode> =
-        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
-            .from(PART)
-            .where(PART.CONTENT.isNotNull)
-            .and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)))
-            .and(pastPart(after))
-            .and(ofItems(items))
-            .orderBy(PART.ITEM_ID, PART.PART_ID)
-            .limit(limit)
-            .fetch { PartToEncode(it.value1()!!, it.value2()!!, it.value3()!!, Vectors.hash(it.value3()!!)) }
+        partsToEncode(
+            db,
+            store,
+            PART.PARAGRAPHS_ENCODER.isNull
+                .or(PART.PARAGRAPHS_ENCODER.ne(encoder))
+                .and(pastPart(after))
+                .and(ofItems(items)),
+            limit,
+        )
 
     fun countParagraphsToEncode(encoder: String): Int =
         db.fetchCount(
             PART,
-            PART.CONTENT.isNotNull.and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder))),
+            PART.CONTENT_HASH.isNotNull.and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder))),
         )
 
     /**
      * Replaces the vectors of the paragraphs of a part ([Paragraphs]), made by [encoder] of the text of [hash], each
-     * with the hash of its own text ([hashes]).
+     * with the hash of its own text ([hashes]): kept, then told.
      */
     fun saveParagraphVectors(
         itemId: String,
@@ -50,73 +50,49 @@ class ParagraphVectorRepository(private val db: DSLContext) {
         paragraphs: List<FloatArray?>,
         hashes: List<String>,
     ) {
-        db.transaction { c ->
-            val tx = DSL.using(c)
-            tx.deleteFrom(PART_PARAGRAPH_VECTOR)
-                .where(PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId), PART_PARAGRAPH_VECTOR.PART_ID.eq(partId))
-                .execute()
-            if (paragraphs.any { it != null }) {
-                // One statement prepared and bound a paragraph each
-                val batch =
-                    tx.batch(
-                        tx.insertInto(
-                                PART_PARAGRAPH_VECTOR,
-                                PART_PARAGRAPH_VECTOR.ITEM_ID,
-                                PART_PARAGRAPH_VECTOR.PART_ID,
-                                PART_PARAGRAPH_VECTOR.PARAGRAPH_NO,
-                                PART_PARAGRAPH_VECTOR.VEC,
-                                PART_PARAGRAPH_VECTOR.TEXT_HASH,
-                            )
-                            .values(null as String?, null as String?, null as Int?, null as ByteArray?, null as String?)
-                    )
-                paragraphs.forEachIndexed { i, v ->
-                    if (v != null) batch.bind(itemId, partId, i, Vectors.half(v), hashes[i])
-                }
-                batch.execute()
-            }
-            tx.update(PART)
-                .set(PART.PARAGRAPHS_ENCODER, encoder)
-                .set(PART.PARAGRAPHS_HASH, hash)
-                .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
-                .execute()
-        }
+        store.putParagraphs(itemId, partId, paragraphs, hashes)
+        db.update(PART)
+            .set(PART.PARAGRAPHS_ENCODER, encoder)
+            .set(PART.PARAGRAPHS_HASH, hash)
+            .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
+            .execute()
     }
 
     /** Every paragraph's vector by [encoder] of the item's parts, in the parts' order. */
-    fun paragraphVectors(itemId: String, encoder: String): List<Paragraph> =
-        db.select(
-                PART_PARAGRAPH_VECTOR.PART_ID,
-                PART_PARAGRAPH_VECTOR.PARAGRAPH_NO,
-                PART_PARAGRAPH_VECTOR.VEC,
-                PART_PARAGRAPH_VECTOR.TEXT_HASH,
-            )
-            .from(PART_PARAGRAPH_VECTOR)
-            .join(PART)
-            .on(PART.ITEM_ID.eq(PART_PARAGRAPH_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_PARAGRAPH_VECTOR.PART_ID))
-            .where(PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId), PART.PARAGRAPHS_ENCODER.eq(encoder))
-            .orderBy(PART.POSITION, PART_PARAGRAPH_VECTOR.PARAGRAPH_NO)
-            .fetch { Paragraph(it.value1()!!, it.value2()!!, Vectors.fromHalf(it.value3()!!), it.value4()!!) }
+    fun paragraphVectors(itemId: String, encoder: String): List<Paragraph> {
+        val parts =
+            db.select(PART.PART_ID)
+                .from(PART)
+                .where(PART.ITEM_ID.eq(itemId), PART.PARAGRAPHS_ENCODER.eq(encoder))
+                .orderBy(PART.POSITION)
+                .fetch { it.value1()!! }
+        val kept = store.paragraphs(itemId, parts)
+        return parts.flatMap { part ->
+            kept[part].orEmpty().mapIndexedNotNull { i, p -> p?.let { Paragraph(part, i, it.vector, it.hash) } }
+        }
+    }
 
     /** One paragraph by [encoder], its vector and hash; null when it has none. */
-    fun paragraph(itemId: String, partId: String, number: Int, encoder: String): Paragraph? =
-        db.select(PART_PARAGRAPH_VECTOR.VEC, PART_PARAGRAPH_VECTOR.TEXT_HASH)
-            .from(PART_PARAGRAPH_VECTOR)
-            .join(PART)
-            .on(PART.ITEM_ID.eq(PART_PARAGRAPH_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_PARAGRAPH_VECTOR.PART_ID))
-            .where(
-                PART_PARAGRAPH_VECTOR.ITEM_ID.eq(itemId),
-                PART_PARAGRAPH_VECTOR.PART_ID.eq(partId),
-                PART_PARAGRAPH_VECTOR.PARAGRAPH_NO.eq(number),
+    fun paragraph(itemId: String, partId: String, number: Int, encoder: String): Paragraph? {
+        val encoded =
+            db.fetchExists(
+                PART,
+                PART.ITEM_ID.eq(itemId),
+                PART.PART_ID.eq(partId),
+                PART.PARAGRAPHS_ENCODER.eq(encoder),
             )
-            .and(PART.PARAGRAPHS_ENCODER.eq(encoder))
-            .fetchOne { Paragraph(partId, number, Vectors.fromHalf(it.value1()!!), it.value2()!!) }
+        if (!encoded) return null
+        return store.paragraphs(itemId, listOf(partId))[partId]?.getOrNull(number)?.let {
+            Paragraph(partId, number, it.vector, it.hash)
+        }
+    }
 
     /** Whether some part of the item has a text whose paragraphs have no vectors by [encoder] yet. */
     fun paragraphsPending(itemId: String, encoder: String): Boolean =
         db.fetchExists(
             PART,
             PART.ITEM_ID.eq(itemId),
-            PART.CONTENT.isNotNull,
+            PART.CONTENT_HASH.isNotNull,
             PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)),
         )
 }

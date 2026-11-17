@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.database
 
 import io.github.vlsergey.recommend4me.folder.DataFolder
+import io.github.vlsergey.recommend4me.part.PartStore
+import io.github.vlsergey.recommend4me.part.V19__parts_out_of_database
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
 import org.jooq.DSLContext
@@ -9,9 +11,10 @@ import org.springframework.stereotype.Component
 
 /**
  * The three files of a source: what the site says, the user's answers on the paragraphs of its texts, the user's marks
- * of its pictures and reviews.
+ * of its pictures and reviews; and the store of the texts of its parts and their vectors, outside the database
+ * ([PartStore]).
  */
-class SourceDatabases(val source: Database, val corrections: Database, val ratings: Database)
+class SourceDatabases(val source: Database, val corrections: Database, val ratings: Database, val parts: PartStore)
 
 /** The file of a content type: what is learnt. */
 class TypeDatabases(val model: Database)
@@ -41,6 +44,8 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
     private val sources: Map<String, SourceDatabases> =
         plugins.sources.associate { s ->
             val dir = folder.source(s.id)
+            // Opened before the source's file: one of its migrations moves the texts into it
+            val parts = PartStore(dir)
             s.id to
                 SourceDatabases(
                     // The pages of a source's file H2 keeps: every pass reads its vectors whole
@@ -51,6 +56,7 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
                             "source",
                             s.migrations,
                             cacheMegabytes = SOURCE_CACHE_MB,
+                            code = listOf(V19__parts_out_of_database(parts)),
                         ),
                     corrections =
                         Database(
@@ -60,6 +66,7 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
                             placeholders = mapOf("source" to s.id),
                         ),
                     ratings = Database("${s.id}/ratings", dir.resolve("ratings"), "ratings"),
+                    parts = parts,
                 )
         }
 
@@ -86,7 +93,10 @@ class Databases(folder: DataFolder, plugins: Plugins) : DisposableBean {
             preferences
 
     override fun destroy() {
-        sources.values.forEach { listOf(it.source, it.corrections, it.ratings).forEach(Database::close) }
+        sources.values.forEach {
+            listOf(it.source, it.corrections, it.ratings).forEach(Database::close)
+            it.parts.close()
+        }
         types.values.forEach { it.model.close() }
         dictionaries.close()
         preferences.close()

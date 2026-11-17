@@ -124,7 +124,7 @@ class SourceStore(
     val pictures = PictureRepository(dbs.source.dsl)
     val files = PictureFiles(folder)
     val reviews = ReviewRepository(dbs.source.dsl)
-    val parts = PartRepository(dbs.source.dsl)
+    val parts = PartRepository(dbs.source.dsl, dbs.parts)
 
     /** What the pages of the site's series say of them, and the places of the works in them. */
     val series = SiteSeriesRepository(dbs.source.dsl)

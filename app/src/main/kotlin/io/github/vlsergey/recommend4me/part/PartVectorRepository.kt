@@ -1,8 +1,6 @@
 package io.github.vlsergey.recommend4me.part
 
 import io.github.vlsergey.recommend4me.database.source.tables.references.PART
-import io.github.vlsergey.recommend4me.database.source.tables.references.PART_VECTOR
-import io.github.vlsergey.recommend4me.vector.Vectors
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -21,14 +19,31 @@ internal fun pastPart(after: Pair<String, String>?): Condition =
 /** The parts of the [items] — a portion's few works; every part when null. */
 internal fun ofItems(items: Collection<String>?): Condition = items?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition()
 
+/**
+ * The parts with a text the [condition] chooses, at most [limit], in the order of the table's key, their texts read of
+ * the [store]; a part whose text the store lost left out.
+ */
+internal fun partsToEncode(db: DSLContext, store: PartStore, condition: Condition, limit: Int): List<PartToEncode> =
+    db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT_HASH)
+        .from(PART)
+        .where(PART.CONTENT_HASH.isNotNull)
+        .and(condition)
+        .orderBy(PART.ITEM_ID, PART.PART_ID)
+        .limit(limit)
+        .fetch()
+        .mapNotNull { r ->
+            store.text(r.value1()!!, r.value2()!!)?.let { PartToEncode(r.value1()!!, r.value2()!!, it, r.value3()!!) }
+        }
+
 /** The rows streamed from the database at a time: memory, not meaning. */
 private const val STREAMED = 5000
 
 /**
  * The vector of every window of every part of one source's works, by an encoder: a long text is a set of vectors rather
- * than their average.
+ * than their average. The vectors are kept in the [store], outside the database; the database says by what encoder, of
+ * what text, and how many ([PART.WINDOWS]).
  */
-class PartVectorRepository(private val db: DSLContext) {
+class PartVectorRepository(private val db: DSLContext, private val store: PartStore) {
 
     /**
      * The parts whose text has no vectors by [encoder] yet, at most [limit], in the order of the table's key from past
@@ -41,15 +56,12 @@ class PartVectorRepository(private val db: DSLContext) {
         after: Pair<String, String>? = null,
         items: Collection<String>? = null,
     ): List<PartToEncode> =
-        db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
-            .from(PART)
-            .where(PART.CONTENT.isNotNull)
-            .and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder)))
-            .and(pastPart(after))
-            .and(ofItems(items))
-            .orderBy(PART.ITEM_ID, PART.PART_ID)
-            .limit(limit)
-            .fetch { PartToEncode(it.value1()!!, it.value2()!!, it.value3()!!, Vectors.hash(it.value3()!!)) }
+        partsToEncode(
+            db,
+            store,
+            PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder)).and(pastPart(after)).and(ofItems(items)),
+            limit,
+        )
 
     /**
      * The items with a part whose text has no vectors by [windows] of its windows or by [paragraphs] of its paragraphs
@@ -58,7 +70,7 @@ class PartVectorRepository(private val db: DSLContext) {
     fun itemsToEncode(windows: String, paragraphs: String): Set<String> =
         db.selectDistinct(PART.ITEM_ID)
             .from(PART)
-            .where(PART.CONTENT.isNotNull)
+            .where(PART.CONTENT_HASH.isNotNull)
             .and(
                 PART.ENCODER.isNull
                     .or(PART.ENCODER.ne(windows))
@@ -69,113 +81,82 @@ class PartVectorRepository(private val db: DSLContext) {
             .fetchSet { it.value1()!! }
 
     fun countToEncode(encoder: String): Int =
-        db.fetchCount(PART, PART.CONTENT.isNotNull.and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder))))
+        db.fetchCount(PART, PART.CONTENT_HASH.isNotNull.and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder))))
 
-    /** Replaces the vectors of the windows of a part, made by [encoder] of the text of [hash]. */
+    /** Replaces the vectors of the windows of a part, made by [encoder] of the text of [hash]: kept, then told. */
     fun saveVectors(itemId: String, partId: String, encoder: String, hash: String, windows: List<FloatArray>) {
-        db.transaction { c ->
-            val tx = DSL.using(c)
-            tx.deleteFrom(PART_VECTOR).where(PART_VECTOR.ITEM_ID.eq(itemId), PART_VECTOR.PART_ID.eq(partId)).execute()
-            if (windows.isNotEmpty()) {
-                // One statement prepared and bound a window each
-                val batch =
-                    tx.batch(
-                        tx.insertInto(
-                                PART_VECTOR,
-                                PART_VECTOR.ITEM_ID,
-                                PART_VECTOR.PART_ID,
-                                PART_VECTOR.WINDOW_NO,
-                                PART_VECTOR.VEC,
-                            )
-                            .values(null as String?, null as String?, null as Int?, null as ByteArray?)
-                    )
-                windows.forEachIndexed { i, v -> batch.bind(itemId, partId, i, Vectors.half(v)) }
-                batch.execute()
-            }
-            tx.update(PART)
-                .set(PART.ENCODER, encoder)
-                .set(PART.ENCODED_HASH, hash)
-                .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
-                .execute()
-        }
+        store.putWindows(itemId, partId, windows)
+        db.update(PART)
+            .set(PART.ENCODER, encoder)
+            .set(PART.ENCODED_HASH, hash)
+            .set(PART.WINDOWS, windows.size)
+            .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId))
+            .execute()
     }
 
     /** How many window vectors by [encoder] every item has. */
     fun windowCounts(encoder: String): Map<String, Int> =
-        db.select(PART_VECTOR.ITEM_ID, DSL.count())
-            .from(PART_VECTOR)
-            .join(PART)
-            .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
-            .where(PART.ENCODER.eq(encoder))
-            .groupBy(PART_VECTOR.ITEM_ID)
+        db.select(PART.ITEM_ID, DSL.sum(PART.WINDOWS))
+            .from(PART)
+            .where(PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
+            .groupBy(PART.ITEM_ID)
             .fetch()
-            .associate { it.value1()!! to it.value2()!! }
+            .associate { it.value1()!! to it.value2()!!.toInt() }
 
     /** How many window vectors by [encoder] the item has. */
     fun windowCount(itemId: String, encoder: String): Int =
-        db.fetchCount(
-            db.select(PART_VECTOR.WINDOW_NO)
-                .from(PART_VECTOR)
-                .join(PART)
-                .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
-                .where(PART_VECTOR.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder))
-        )
+        db.select(DSL.sum(PART.WINDOWS))
+            .from(PART)
+            .where(PART.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder))
+            .fetchOne()
+            ?.value1()
+            ?.toInt() ?: 0
 
     /** Every window vector by [encoder] of the items. */
-    fun windows(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> {
-        val out = HashMap<String, MutableList<FloatArray>>()
-        itemIds.chunked(BATCH).forEach { ids ->
-            db.select(PART_VECTOR.ITEM_ID, PART_VECTOR.VEC)
-                .from(PART_VECTOR)
-                .join(PART)
-                .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
-                .where(PART_VECTOR.ITEM_ID.`in`(ids), PART.ENCODER.eq(encoder))
-                .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += Vectors.fromHalf(it.value2()!!) }
-        }
-        return out
-    }
+    fun windows(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> =
+        windowsByParts(itemIds, encoder).mapValues { (_, parts) -> parts.values.flatten() }
 
     /** The window vectors by [encoder] of the parts of the items [ids]: item to part to its windows in order. */
     fun windowsByParts(ids: Collection<String>, encoder: String): Map<String, Map<String, List<FloatArray>>> {
-        val out = HashMap<String, MutableMap<String, MutableList<FloatArray>>>()
-        ids.distinct().chunked(BATCH).forEach { chunk ->
-            db.select(PART_VECTOR.ITEM_ID, PART_VECTOR.PART_ID, PART_VECTOR.VEC)
-                .from(PART_VECTOR)
-                .join(PART)
-                .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
-                .where(PART_VECTOR.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder))
-                .orderBy(PART_VECTOR.ITEM_ID, PART_VECTOR.PART_ID, PART_VECTOR.WINDOW_NO)
-                .fetch {
-                    out.getOrPut(it.value1()!!) { HashMap() }.getOrPut(it.value2()!!) { ArrayList() } +=
-                        Vectors.fromHalf(it.value3()!!)
-                }
+        val out = HashMap<String, Map<String, List<FloatArray>>>()
+        encodedParts(ids, encoder).forEach { (item, parts) ->
+            val windows = store.windows(item, parts)
+            out[item] = parts.mapNotNull { p -> windows[p]?.takeIf { it.isNotEmpty() }?.let { p to it } }.toMap()
         }
-        return out
+        return out.filterValues { it.isNotEmpty() }
     }
 
     /** The window vectors by [encoder] of the item's parts: part to its windows in order. */
     fun windowsByPart(itemId: String, encoder: String): Map<String, List<FloatArray>> {
-        val out = LinkedHashMap<String, MutableList<FloatArray>>()
-        db.select(PART_VECTOR.PART_ID, PART_VECTOR.VEC)
-            .from(PART_VECTOR)
-            .join(PART)
-            .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
-            .where(PART_VECTOR.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder))
-            .orderBy(PART.POSITION, PART_VECTOR.WINDOW_NO)
-            .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += Vectors.fromHalf(it.value2()!!) }
+        val parts = encodedParts(listOf(itemId), encoder)[itemId].orEmpty()
+        val windows = store.windows(itemId, parts)
+        val out = LinkedHashMap<String, List<FloatArray>>()
+        parts.forEach { p -> windows[p]?.takeIf { it.isNotEmpty() }?.let { out[p] = it } }
         return out
     }
 
-    /** [n] window vectors of the catalogue drawn at random. */
+    /** [n] window vectors of the catalogue drawn at random: a window of each of [n] parts drawn at random. */
     fun sample(n: Int, encoder: String): List<FloatArray> =
-        db.select(PART_VECTOR.VEC)
-            .from(PART_VECTOR)
-            .join(PART)
-            .on(PART.ITEM_ID.eq(PART_VECTOR.ITEM_ID), PART.PART_ID.eq(PART_VECTOR.PART_ID))
-            .where(PART.ENCODER.eq(encoder))
+        db.select(PART.ITEM_ID, PART.PART_ID)
+            .from(PART)
+            .where(PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
             .orderBy(DSL.rand())
             .limit(n)
-            .fetch { Vectors.fromHalf(it.value1()!!) }
+            .fetch()
+            .mapNotNull { r -> store.windows(r.value1()!!, listOf(r.value2()!!))[r.value2()!!]?.randomOrNull() }
+
+    /** The parts of the items [ids] with windows by [encoder], in their order: item to its parts. */
+    private fun encodedParts(ids: Collection<String>, encoder: String): Map<String, List<String>> {
+        val out = HashMap<String, MutableList<String>>()
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(PART.ITEM_ID, PART.PART_ID)
+                .from(PART)
+                .where(PART.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
+                .orderBy(PART.ITEM_ID, PART.POSITION)
+                .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! }
+        }
+        return out
+    }
 
     private companion object {
         /** The items read by one statement: the length of a query's list, not a meaning. */

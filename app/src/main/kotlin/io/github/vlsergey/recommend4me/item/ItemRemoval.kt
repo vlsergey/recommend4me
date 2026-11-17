@@ -41,6 +41,8 @@ class ItemRemoval(
         // The files of its pictures first: their names are in the rows that go with the work
         store.files.delete(store.pictures.sync(key.id, emptyList()))
         store.items.remove(key.id)
+        // The texts of its parts and their vectors, kept outside the database: its rows went with it
+        store.parts.forget(key.id)
         store.signals.forget(key.id)
         store.drafts.forget(key.id)
         // A word on a match of a mark of any source may name it

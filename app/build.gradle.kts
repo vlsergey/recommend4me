@@ -18,6 +18,9 @@ dependencies {
     implementation(libs.hikari)
     // Its own classes too: a file is compacted while open through them (Database.compact)
     implementation(libs.h2)
+    // The texts of the works' parts and their vectors, outside the database: a store of keys and values, the texts
+    // compressed by zstd with a dictionary of their own (PartStore)
+    implementation(libs.rocksdbjni)
     // Shared with the source plugins: the pages they read
     implementation(libs.jsoup)
     // Pictures: WebP is not among the formats ImageIO reads by itself, and some sites keep every
