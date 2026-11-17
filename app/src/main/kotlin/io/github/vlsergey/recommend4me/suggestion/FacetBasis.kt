@@ -14,9 +14,10 @@ internal object FacetBasis {
      * the likely ones; 3 — the rejected ones too; 4 — the site's examples too; 5 — of a facet of limited values, not
      * every value the work may have: the likely and the offered alone; 6 — the chain: a facet reads the values the
      * model gives of the facets before it alone, made in the same pass; 7 — no counts of the values' names in the
-     * works' texts: the models of the characters and the pairings fitted again without them.
+     * works' texts: the models of the characters and the pairings fitted again without them; 8 — the chances calibrated
+     * by the user's answers, of what the folds said of them ([Calibration]): every facet fitted again to learn it.
      */
-    private const val KEPT = 7
+    private const val KEPT = 8
 
     /**
      * What an item's chances are made of: every value of it, the user's answers — the facets said to be all named
