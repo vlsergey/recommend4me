@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.manner.MannerGroup
 import io.github.vlsergey.recommend4me.manner.Manners
 import io.github.vlsergey.recommend4me.manner.TypeManners
-import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PartData
@@ -52,7 +51,8 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
 
     private fun read(): TypeManners {
         val type = stores.type("books")!!
-        return TypeManners.read(type, works.of(type), TypeSeries.read(type))
+        val every = type.sources.flatMap { s -> s.items.keys().map { ItemKey(s.id, it.id) } }
+        return TypeManners.of(type, works.of(type), every)
     }
 
     @Test

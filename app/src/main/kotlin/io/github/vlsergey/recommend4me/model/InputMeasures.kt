@@ -23,7 +23,7 @@ private val log = LoggerFactory.getLogger(InputMeasures::class.java)
 class InputMeasures(
     private val stores: Stores,
     private val plugins: Plugins,
-    private val reader: CatalogueReader,
+    private val everyWork: EveryWork,
     private val workload: Workload,
 ) {
 
@@ -34,7 +34,7 @@ class InputMeasures(
      */
     fun measuringInput(typeId: String, interest: Boolean = false): MeasuringInput? =
         workload.run(Work("scorersInput", type = typeId), mapOf("asked" to 1), asked = true, joinAlike = false) {
-            val catalogue = reader.read(stores.contentType(typeId))
+            val catalogue = everyWork.training(stores.contentType(typeId))
             val p = (if (interest) Prepared.interest(catalogue) else Prepared.grades(catalogue)) ?: return@run null
             MeasuringInput(p.task, p.xFor, p.grades.size)
         }
@@ -50,7 +50,7 @@ class InputMeasures(
         workload.run(Work("worth", type = typeId), mapOf("asked" to 1), asked = true) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId) ?: return@run null
-            val p = Prepared.grades(reader.read(type)) ?: return@run null
+            val p = Prepared.grades(everyWork.training(type)) ?: return@run null
             if (p.perItem.size < CrossValidation.MIN_WORKS) return@run null
             val full = CrossValidation.choose(CrossValidation.measureAll(p.task, scorer, p.xFor))?.metrics
             val columns = partColumns(p.layout)
@@ -102,7 +102,7 @@ class InputMeasures(
             val scorer = plugins.scorer(typeId)
             val p =
                 scorer
-                    ?.let { Prepared.grades(reader.read(type)) }
+                    ?.let { Prepared.grades(everyWork.training(type)) }
                     ?.takeIf { it.perItem.size >= CrossValidation.MIN_WORKS }
             if (scorer == null || p == null) null else weigh(type, scorer, p, cautious)
         }

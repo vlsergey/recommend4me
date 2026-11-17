@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -78,8 +77,7 @@ internal constructor(
         ids: Collection<String>?,
         through: String? = null,
         laps: Laps = Laps(),
-        every: EveryItemFacets? = null,
-    ): WorkChances = chain.chances(store, ids, through, laps, every)
+    ): WorkChances = chain.chances(store, ids, through, laps)
 
     /** The model's chance of one value for every work of [ids] ([OneFacetModel.chancesOfValue]). */
     fun chancesOfValue(store: SourceStore, ids: Collection<String>, facet: String, key: String): Map<String, Double> =
@@ -94,8 +92,7 @@ internal constructor(
         ids: Collection<String>?,
         wanted: Collection<String>,
         laps: Laps = Laps(),
-        every: EveryItemFacets? = null,
-    ): WorkChances = chain.chancesOf(store, ids, wanted, laps, every)
+    ): WorkChances = chain.chancesOf(store, ids, wanted, laps)
 
     /** The values to suggest for an item ([WorkCandidates.ofItem]). */
     fun ofItem(

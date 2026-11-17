@@ -13,37 +13,26 @@ class Predicted(val score: Double, val interest: Double?)
 class PredictionRepository(private val db: DSLContext) {
 
     /**
-     * Replaces every item's prediction in one transaction: readers see the old ones until the new ones are committed;
-     * nothing else writes this table. Only what changed is written — a score or a chance of interest beyond [STEP], an
-     * item new or gone: most of a retraining's scores come out as they were, and a file rewritten whole on every
-     * training only grows. Answers the items whose prediction was written or removed.
+     * The predictions of a portion of the items written where they changed — a score or a chance of interest beyond
+     * [STEP], an item new: most of a retraining's scores come out as they were, and a file rewritten whole on every
+     * training only grows. The stored ones of the portion alone read, by their keys. Answers the items whose prediction
+     * was written.
      */
-    fun replace(predicted: List<Pair<ItemKey, Predicted>>): List<ItemKey> {
+    fun write(predicted: List<Pair<ItemKey, Predicted>>): List<ItemKey> {
         fun same(a: Double?, b: Double?) = if (a == null || b == null) a == b else kotlin.math.abs(a - b) < STEP
-        return db.transactionResult { configuration ->
+        val stored = HashMap<ItemKey, Predicted>()
+        predicted.groupBy({ it.first.source }, { it.first.id }).forEach { (source, ids) ->
+            ids.chunked(BATCH).forEach { chunk ->
+                predicted(source, chunk).forEach { (id, p) -> stored[ItemKey(source, id)] = p }
+            }
+        }
+        val changed = predicted.filter { (key, p) ->
+            stored[key]?.let { same(it.score, p.score) && same(it.interest, p.interest) } != true
+        }
+        // One statement prepared and bound a row each: every row's own statement parsed by the database apart was
+        // seconds of the training when the scores moved
+        db.transaction { configuration ->
             val tx = DSL.using(configuration)
-            val stored = HashMap<ItemKey, Pair<Double?, Double?>>()
-            tx.select(PREDICTION.SOURCE, PREDICTION.ITEM_ID, PREDICTION.SCORE, PREDICTION.INTEREST)
-                .from(PREDICTION)
-                .fetchSize(FETCH)
-                .fetchLazy()
-                .use { cursor ->
-                    cursor.forEach { stored[ItemKey(it.value1()!!, it.value2()!!)] = it.value3() to it.value4() }
-                }
-            val wanted = predicted.toMap()
-            val gone = stored.keys - wanted.keys
-            gone.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
-                ids.chunked(BATCH).forEach { chunk ->
-                    tx.deleteFrom(PREDICTION)
-                        .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, chunk))
-                        .execute()
-                }
-            }
-            val changed = predicted.filter { (key, p) ->
-                stored[key]?.let { (score, interest) -> same(score, p.score) && same(interest, p.interest) } != true
-            }
-            // One statement prepared and bound a row each: every row's own statement parsed by the database apart was
-            // seconds of the training when the scores moved
             changed.chunked(BATCH).forEach { chunk ->
                 val batch =
                     tx.batch(
@@ -55,8 +44,24 @@ class PredictionRepository(private val db: DSLContext) {
                 chunk.forEach { (key, p) -> batch.bind(key.source, key.id, p.score, p.interest) }
                 batch.execute()
             }
-            gone.toList() + changed.map { it.first }
         }
+        return changed.map { it.first }
+    }
+
+    /** The predictions of every item but the [kept] removed — of the items gone from the type; answers those. */
+    fun removeOthers(kept: Set<ItemKey>): List<ItemKey> {
+        val gone = ArrayList<ItemKey>()
+        db.select(PREDICTION.SOURCE, PREDICTION.ITEM_ID).from(PREDICTION).fetchSize(FETCH).fetchLazy().use { cursor ->
+            cursor.forEach { ItemKey(it.value1()!!, it.value2()!!).takeIf { key -> key !in kept }?.let(gone::add) }
+        }
+        gone.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+            ids.chunked(BATCH).forEach { chunk ->
+                db.deleteFrom(PREDICTION)
+                    .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, chunk))
+                    .execute()
+            }
+        }
+        return gone
     }
 
     fun save(key: ItemKey, p: Predicted) {

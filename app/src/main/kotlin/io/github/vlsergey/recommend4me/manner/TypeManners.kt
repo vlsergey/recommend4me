@@ -59,36 +59,6 @@ private constructor(
             TypeManners(clusters, emptyMap(), emptyMap(), emptyMap(), { null }, emptyMap())
 
         /**
-         * The manners of every work of the [type], the works and the [series] as the operation read them: every kept
-         * manner of an item, an author and a series, every item's authors, one pass a source.
-         */
-        fun read(type: TypeStore, clusters: WorkClusters, series: TypeSeries): TypeManners {
-            val words = type.mannerWords.id() ?: return none(clusters)
-            val items = HashMap<ItemKey, MutableList<FloatArray>>()
-            val authorsOf = HashMap<ItemKey, MutableSet<Long>>()
-            type.sources.forEach { s ->
-                s.manner.all(words).forEach { (id, v) ->
-                    items.getOrPut(clusters.representative(ItemKey(s.id, id))) { ArrayList() } += v
-                }
-                val facet = authorFacet(s) ?: return@forEach
-                val bound = s.authors.bindingsOf(s.id)
-                s.items.forEachFacet(facet) { id, keys ->
-                    val own = keys.mapNotNull(bound::get)
-                    if (own.isNotEmpty())
-                        authorsOf.getOrPut(clusters.representative(ItemKey(s.id, id))) { HashSet() } += own
-                }
-            }
-            return TypeManners(
-                clusters,
-                items.mapValues { meanManner(it.value)!! },
-                authorsOf,
-                type.groupManners.all(MannerGroup.AUTHOR, words),
-                series::keyOf,
-                type.groupManners.all(MannerGroup.SERIES, words),
-            )
-        }
-
-        /**
          * The manners of the works of the items [keys] alone, for a request: their items' manners, their authors' and
          * their series' kept ones, of no other work.
          */

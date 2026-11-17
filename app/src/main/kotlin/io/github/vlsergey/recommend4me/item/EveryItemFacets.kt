@@ -18,12 +18,6 @@ class EveryItemFacets(
 
     companion object {
         /**
-         * Every value of every facet of every item of the [store], and every answer on them: one pass over each table.
-         */
-        fun read(store: SourceStore): EveryItemFacets =
-            EveryItemFacets(siteOf(store), store.corrections.allFacets().groupBy { it.itemId })
-
-        /**
          * Every value of every facet of every item of the [store], by item and facet: one pass over its table, a work's
          * facets in arrays ([WorkFacets]).
          */

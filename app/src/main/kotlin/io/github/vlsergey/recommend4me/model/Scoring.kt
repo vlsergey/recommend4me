@@ -20,46 +20,74 @@ private val log = LoggerFactory.getLogger(Scoring::class.java)
 class Scoring(
     private val stores: Stores,
     private val reader: CatalogueReader,
+    private val everyWork: EveryWork,
     private val works: Works,
     private val likenesses: Likenesses,
     private val kept: KeptModels,
     private val events: ApplicationEventPublisher,
 ) {
 
-    /** Every item of the [catalogue] scored by the [model] and the model of [interest], and the scores kept. */
-    fun scoreAll(catalogue: Catalogue, model: TrainedModel, interest: TrainedInterest?) {
+    /**
+     * Every item of the [type] scored by the [model] and the model of [interest], the likeness to the marks by
+     * [likeness], and the scores kept: a portion of the works at a time ([EveryWork.forEachPortion]) read, scored and
+     * written — its vectors read with its chunk and let go after it — and told changed; the predictions of the items no
+     * longer of the type removed at the end.
+     */
+    fun scoreAll(
+        type: TypeStore,
+        model: TrainedModel,
+        interest: TrainedInterest?,
+        likeness: TypeLikeness = likenesses.stored(type),
+    ) {
+        val started = System.currentTimeMillis()
+        val scored = HashSet<ItemKey>()
+        var changed = 0
+        everyWork.forEachPortion(type, likeness) { portion ->
+            val predicted = scored(portion.catalogue, model, interest)
+            predicted.forEach { scored += it.first }
+            val written = type.predictions.write(predicted)
+            changed += written.size
+            if (written.isNotEmpty()) events.publishEvent(PredictionsChanged(type.id, written))
+        }
+        val gone = type.predictions.removeOthers(scored)
+        if (gone.isNotEmpty()) events.publishEvent(PredictionsChanged(type.id, gone))
+        log.info(
+            "{}: {} predictions made in {} ms, {} of them changed, {} of items gone removed",
+            type.id,
+            scored.size,
+            System.currentTimeMillis() - started,
+            changed,
+            gone.size,
+        )
+    }
+
+    /** The prediction of every item of the works of the [catalogue], a chunk of them at a time side by side. */
+    private fun scored(
+        catalogue: Catalogue,
+        model: TrainedModel,
+        interest: TrainedInterest?,
+    ): List<Pair<ItemKey, Predicted>> {
         val previousForCurrent =
             CatalogueReader.previousGradesOfCurrentVersions(catalogue.ratings, catalogue::versionOf)
-        // Every work's vectors read with its chunk and let go after it: of the catalogue only the training's are kept
-        val predicted =
-            catalogue.items
-                .chunked(SCORE_CHUNK)
-                .parallelStream()
-                .flatMap { chunk ->
-                    val vectors = catalogue.vectorsOfMany(chunk.map { it.key })
-                    val inputs = chunk.map {
-                        CatalogueReader.inputOf(it, vectors.getValue(it.key), previousForCurrent[it.key])
-                    }
-                    val raw = model.scores(model.layout.matrix(inputs))
-                    val chances = interest?.chances(inputs)
-                    // Of a work, every item of it: each shows the work's
-                    chunk.indices
-                        .flatMap { i ->
-                            val prediction = Predicted(model.scale.score(raw[i].toDouble()), chances?.get(i))
-                            catalogue.works.members(chunk[i].key).map { it to prediction }
-                        }
-                        .stream()
+        return catalogue.items
+            .chunked(SCORE_CHUNK)
+            .parallelStream()
+            .flatMap { chunk ->
+                val vectors = catalogue.vectorsOfMany(chunk.map { it.key })
+                val inputs = chunk.map {
+                    CatalogueReader.inputOf(it, vectors.getValue(it.key), previousForCurrent[it.key])
                 }
-                .toList()
-        val written = System.currentTimeMillis()
-        val changed = catalogue.type.predictions.replace(predicted)
-        if (changed.isNotEmpty()) events.publishEvent(PredictionsChanged(catalogue.type.id, changed))
-        log.info(
-            "{}: {} predictions written in {} ms",
-            catalogue.type.id,
-            predicted.size,
-            System.currentTimeMillis() - written,
-        )
+                val raw = model.scores(model.layout.matrix(inputs))
+                val chances = interest?.chances(inputs)
+                // Of a work, every item of it: each shows the work's
+                chunk.indices
+                    .flatMap { i ->
+                        val prediction = Predicted(model.scale.score(raw[i].toDouble()), chances?.get(i))
+                        catalogue.works.members(chunk[i].key).map { it to prediction }
+                    }
+                    .stream()
+            }
+            .toList()
     }
 
     /** Re-scores the work of one item, after its data changed outside a training. */

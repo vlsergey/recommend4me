@@ -28,9 +28,10 @@ interface ItemFacets {
     fun facets(itemId: String): Map<String, List<String>>
 
     /**
-     * The facets of the items [ids]: item to facet to keys in order. By their ids up to a batch of them ([ITEM_BATCH]);
-     * of more, every value of every item streamed once and picked from, each list put in order after: by thousands of
-     * ids the values of 31 000 works of 75 000 took 5 s.
+     * The facets of the items [ids]: item to facet to keys in order. By their ids, a batch of them ([ITEM_BATCH]) a
+     * query, up to a portion of a scoring ([BY_IDS_UP_TO]); of more, every value of every item streamed once and picked
+     * from, each list put in order after: by thousands of ids the values of 31 000 works of 75 000 took 5 s — but a
+     * pass over the values of a million works for every portion of ten thousand is a hundred passes (2026-11-17).
      */
     fun facetsOf(ids: Collection<String>): Map<String, Map<String, List<String>>>
 
@@ -126,7 +127,11 @@ internal class ItemFacetRepository(
 
     override fun facetsOf(ids: Collection<String>): Map<String, Map<String, List<String>>> {
         val asked = ids.toHashSet()
-        return if (asked.size <= ITEM_BATCH) facetsByIds(asked) else facetsStreamed(asked)
+        return if (asked.size > BY_IDS_UP_TO) facetsStreamed(asked)
+        else
+            HashMap<String, Map<String, List<String>>>().apply {
+                asked.chunked(ITEM_BATCH).forEach { putAll(facetsByIds(it.toSet())) }
+            }
     }
 
     /** The facets of the items [asked], by their ids in one query: item to facet to keys in order. */

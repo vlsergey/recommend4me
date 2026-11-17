@@ -16,6 +16,12 @@ internal const val ITEM_BATCH = 1000
 /** The rows streamed from the database at a time: memory, not meaning. */
 internal const val STREAMED_ROWS = 5000
 
+/**
+ * The most items whose values are read by their ids, a batch a query ([ItemFacets.facetsOf]): twice a portion of a
+ * scoring; of more, one pass over every value of the source.
+ */
+internal const val BY_IDS_UP_TO = 20_000
+
 /** The longest key of a facet's value the tables of the facets hold (`VARCHAR(500)`). */
 internal const val VALUE_KEY_LENGTH = 500
 

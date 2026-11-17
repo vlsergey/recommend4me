@@ -30,7 +30,7 @@ internal fun Stores.contentType(id: String): TypeStore = type(id) ?: error("No s
 class Recommendations(
     private val stores: Stores,
     private val plugins: Plugins,
-    private val reader: CatalogueReader,
+    private val everyWork: EveryWork,
     private val works: Works,
     private val settings: Settings,
     private val workload: Workload,
@@ -104,13 +104,13 @@ class Recommendations(
             trainingNow += typeId
             try {
                 val started = System.currentTimeMillis()
-                val catalogue = reader.read(type)
+                val catalogue = everyWork.training(type)
                 val loaded = System.currentTimeMillis()
                 val model = fitting.grades(catalogue)
                 // Of no use without the scores it multiplies
                 val interest = if (model != null) fitting.interest(catalogue) else null
                 val trained = System.currentTimeMillis()
-                if (model != null) scoring.scoreAll(catalogue, model, interest)
+                if (model != null) scoring.scoreAll(type, model, interest, catalogue.likeness)
                 lastTraining[typeId] = System.currentTimeMillis() - started
                 log.info(
                     "{}: retrained and every item scored in {} ms: read {}, trained {}, scored {}",
@@ -131,7 +131,7 @@ class Recommendations(
         workload.run(Work("score", type = typeId)) {
             val type = stores.contentType(typeId)
             val model = kept.load(type) ?: return@run
-            scoring.scoreAll(reader.read(type, withLikeness = false), model, kept.loadInterest(type))
+            scoring.scoreAll(type, model, kept.loadInterest(type))
         }
 
     /** Where every grade stands on 0..10 by the current model of the type; null without one. */

@@ -58,7 +58,9 @@ data class JobProgress(
  * the vectors of the texts it wrote and a training of the content type.
  *
  * A JOB OF THE WHOLE CATALOGUE OR OF A DUMP GOES ON AFTER A RESTART ([resumable]): it is remembered as running
- * (`job.<source>.running`) until it ends or the user stops it, and started again on the next start.
+ * (`job.<source>.running`) until the source's own work of it ends or the user stops it, and started again on the next
+ * start. What follows the source's work — the vectors, the training — is not: a dump's import read to its end and its
+ * training failed was read again from its first file at every start (2026-11-17).
  */
 @Service
 class Jobs(
@@ -174,6 +176,7 @@ class Jobs(
         try {
             store.source.scrape(run.mode, contexts.of(store.id), run)
             run.checkCancelled()
+            if (whole) settings.set("job.${run.sourceId}.running", null)
             // An import of a dump writes a million works: their texts are encoded in the queue a portion at a time, the
             // likeliest first, and the training of the end gives the first likelihoods — the job waits for none of it
             if (run.mode != SourceMode.IMPORT) {
@@ -188,7 +191,6 @@ class Jobs(
             run.checkCancelled()
             run.phase("scoring")
             recommendations.retrainAndScore(store.type)
-            if (whole) settings.set("job.${run.sourceId}.running", null)
             run.update { it.copy(state = JobState.DONE, finishedAt = Instant.now()) }
         } catch (_: JobCancelled) {
             // Stopped by the user: it waits for the user to resume it

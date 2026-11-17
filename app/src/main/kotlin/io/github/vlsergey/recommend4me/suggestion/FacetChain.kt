@@ -65,29 +65,23 @@ internal class FacetChain(
         ids: Collection<String>?,
         through: String? = null,
         laps: Laps = Laps(),
-        every: EveryItemFacets? = null,
     ): WorkChances {
         val facets = facetsOf(store)
         val upTo = if (through == null) facets.size else facets.indexOfFirst { it.key == through } + 1
-        return chain(store, ids, upTo, laps, every)
+        return chain(store, ids, upTo, laps)
     }
 
     /**
      * [chances] of the [wanted] facets alone — those on a card, those the model of the grades reads: the chain down to
-     * the last of them. [laps]: the time of every step of it. [every]: of every work ([ids] null), their facets and
-     * answers read already by the reading it serves: not read again.
+     * the last of them. [laps]: the time of every step of it.
      */
     fun chancesOf(
         store: SourceStore,
         ids: Collection<String>?,
         wanted: Collection<String>,
         laps: Laps = Laps(),
-        every: EveryItemFacets? = null,
-    ): WorkChances {
-        val given = every?.takeIf { ids == null }
-        return facetsOf(store).lastOrNull { it.key in wanted }?.let { chances(store, ids, it.key, laps, given) }
-            ?: seeded(store, ids, every = given)
-    }
+    ): WorkChances =
+        facetsOf(store).lastOrNull { it.key in wanted }?.let { chances(store, ids, it.key, laps) } ?: seeded(store, ids)
 
     /** The chances of the works [ids] (every work when null) of the first [upTo] facets of the chain. */
     fun chain(
@@ -95,13 +89,10 @@ internal class FacetChain(
         ids: Collection<String>?,
         upTo: Int,
         laps: Laps = Laps(),
-        every: EveryItemFacets? = null,
     ): MadeChances {
-        // The facets read already are of every work alone
-        val given = every?.takeIf { ids == null }
         val encoder = plugins.textEncoder()
-        return if (encoder == null || ids?.isEmpty() == true) seeded(store, ids, every = given)
-        else passes.worksRead(store, encoder, ids, given, card = true).use { chain(store, encoder, it, upTo, laps) }
+        return if (encoder == null || ids?.isEmpty() == true) seeded(store, ids)
+        else passes.worksRead(store, encoder, ids, card = true).use { chain(store, encoder, it, upTo, laps) }
     }
 
     /**

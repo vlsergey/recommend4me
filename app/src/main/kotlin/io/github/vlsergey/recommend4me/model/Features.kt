@@ -180,19 +180,6 @@ class FeatureLayout(
             val names = (support.filter { it.value >= MIN_SUPPORT }.keys + ItemInput.PREVIOUS_GRADES).toSortedSet()
             return FeatureLayout(names.toList(), spreads, numbers)
         }
-
-        /** The mean and spread of every number over the catalogue's [inputs]. */
-        fun numberSpreads(inputs: Collection<ItemInput>): Map<String, NumberSpread> {
-            val values = HashMap<String, MutableList<Float>>()
-            inputs.forEach { input -> input.numeric.forEach { (k, v) -> values.getOrPut(k) { ArrayList() } += v } }
-            return values
-                .filterValues { it.size >= 2 }
-                .mapValues { (_, list) ->
-                    val mean = list.average()
-                    val sd = sqrt(list.sumOf { (it - mean) * (it - mean) } / list.size).coerceAtLeast(1e-6)
-                    NumberSpread(mean.toFloat(), sd.toFloat())
-                }
-        }
     }
 }
 
