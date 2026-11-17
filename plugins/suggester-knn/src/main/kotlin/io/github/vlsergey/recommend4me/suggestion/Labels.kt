@@ -51,16 +51,19 @@ internal class Labels(
         }
     }
 
-    /** Of every value, its weighted share labelled 1 among the pairs of the works [counted]. */
-    fun share(counted: (Int) -> Boolean): DoubleArray = Sums.of(this, counted).share()
-
     /**
      * THE WEIGHTS OF THE PAIRS OF EVERY VALUE among some works: of those labelled 1 ([one]) and of all ([all]) — the
-     * share of a value made of them, with a work's own pairs taken out when it is to be no witness of itself.
+     * share of a value made of them, with a work's own pairs taken out when it is to be no witness of itself, or a
+     * fold's works ([minus]) when they are held out.
      */
     class Sums(val one: DoubleArray, val all: DoubleArray) {
-        /** Of every value, its weighted share labelled 1. */
-        fun share(): DoubleArray = DoubleArray(one.size) { if (all[it] > 0) one[it] / all[it] else 0.0 }
+        /** Of every value, its weighted share labelled 1; nought of a value of no pair, or of what rounding left. */
+        fun share(): DoubleArray =
+            DoubleArray(one.size) { if (all[it] > RESIDUE) one[it].coerceIn(0.0, all[it]) / all[it] else 0.0 }
+
+        /** The sums of these works but those of [other], counted among them. */
+        operator fun minus(other: Sums): Sums =
+            Sums(DoubleArray(one.size) { one[it] - other.one[it] }, DoubleArray(all.size) { all[it] - other.all[it] })
 
         /**
          * Of every value, its share among the works summed but [i] of [labels]: its own pairs taken out. What is left
@@ -76,23 +79,9 @@ internal class Labels(
             return DoubleArray(o.size) { if (a[it] > RESIDUE) o[it].coerceIn(0.0, a[it]) / a[it] else 0.0 }
         }
 
-        companion object {
+        private companion object {
             /** Less than any weight of a pair: what is left of the sums once the only pairs of a value are out. */
-            private const val RESIDUE = 1e-9
-
-            /** The sums of the pairs of the works [counted] of [labels]. */
-            fun of(labels: Labels, counted: (Int) -> Boolean): Sums {
-                val one = DoubleArray(labels.m)
-                val all = DoubleArray(labels.m)
-                for (i in 0 until labels.n) {
-                    if (!counted(i)) continue
-                    labels.forEach(i) { v, w, y ->
-                        all[v] += w.toDouble()
-                        one[v] += (w * y).toDouble()
-                    }
-                }
-                return Sums(one, all)
-            }
+            const val RESIDUE = 1e-9
         }
     }
 
