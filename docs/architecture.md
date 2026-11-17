@@ -268,8 +268,11 @@ weighs 1, one the user rejected 1, one it merely lacks less (the rule of success
 user's answers), one it may not have at all and every value of a work with none of the facet
 nought. Every work is judged by a model that did not learn from it (five folds by the work's id),
 so a value the site gave it that nothing else supports comes out unlikely, and an answer on a
-work does not move its own chances. The rank and the penalty are chosen by the held-out loss —
-the strongest penalty within one standard error of the least.
+work does not move its own chances. The penalty is chosen by the held-out loss — the strongest
+penalty within one standard error of the least. No fitting holds more than a portion of ten
+thousand works: the model descends a portion at a time (Adam, every penalty's every fold in one
+product), walking the portions a few times — from scratch once to see them, three to six to
+descend, once to score them by the model kept; gone on from the state fitted last, twice and once.
 
 An input block holds the rows of the works that have it alone (`InputBlock`: the vectors and the
 work of each row), as the products read them — of the 75 630 works of fanfics.me the notes are of

@@ -119,30 +119,6 @@ class BilinearTest {
     }
 
     @Test
-    fun `a step on the card is the processor's`() {
-        val task = task()
-        val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
-        val card = StepOnCard.open(Onnx(defaultModelsDir(), gpu = true), problem, 3)
-        assumeTrue(card != null, "no card to run on")
-        card.use {
-            val onProcessor = Bilinear(problem, 3)
-            val onCard = Bilinear(problem, 3, card)
-            val random = Random(11)
-            val theta = FloatArray(onProcessor.size) { (random.nextGaussian() * 0.3).toFloat() }
-            val trains: (Int) -> Boolean = { problem.foldOf[it] != 0 }
-            val g1 = FloatArray(onProcessor.size)
-            val g2 = FloatArray(onProcessor.size)
-            val l1 = onProcessor.lossAndGradient(theta, g1, 0.01f, trains)
-            val l2 = onCard.lossAndGradient(theta, g2, 0.01f, trains)
-            assertTrue(abs(l1 - l2) < 1e-4 * abs(l1), "loss $l1 on the processor, $l2 on the card")
-            // Floats added in another order on the card: the last digits differ, where a wrong graph
-            // would be wrong by the whole
-            val worst = g1.indices.maxOf { abs(g1[it] - g2[it]) / max(1e-4f, abs(g1[it])) }
-            assertTrue(worst < 1e-3, "the worst relative difference of the gradient $worst")
-        }
-    }
-
-    @Test
     fun `every model in one product has the loss and the gradient it has alone, without names`() {
         val t = task()
         val task =
@@ -206,8 +182,7 @@ class BilinearTest {
      * Of models at random points, the held-out loss [Ensemble.heldOut] makes — on the [card] when given — against its
      * measure: on the card, the processor's of the same coordinates (the items' features' products in brain floating
      * point there, which the card's pairs and the processor's read alike); without one, the one each makes alone
-     * ([Bilinear.heldOutLoss]). The same pairs weighed alike, the losses the same but for the order of the sums. And
-     * the scores of the pairs the user answered on: of the items of a model's fold alone, the same.
+     * ([Bilinear.heldOutLoss]). The same pairs weighed alike, the losses the same but for the order of the sums.
      */
     private fun heldOutTogether(task: SuggestionTask, card: Cublas? = null, rank: Int = 3) {
         val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
@@ -221,32 +196,17 @@ class BilinearTest {
         val unseenTogether = helds()
         val measure = helds()
         val unseenMeasure = helds()
-        val answered = problem.answered
-        assertTrue(answered.size > 1, "${answered.size} answered pairs")
-        fun answers() = List(lambdas.size) { FloatArray(answered.size) { Float.NaN } }
-        val answersTogether = answers()
-        val answersMeasure = answers()
-        Ensemble(problem, rank, lambdas, folds, card).use { ensemble ->
-            ensemble.heldOut(thetas, together, unseenTogether, answersTogether)
+        val point = EnsemblePoint(lambdas.size, rank, problem.design.itemWidth, problem.design.valueWidth, problem.m)
+        thetas.forEachIndexed { k, theta -> point.put(k, theta) }
+        Ensemble(problem, rank, lambdas, folds, card, point).use { ensemble ->
+            ensemble.heldOut(together, unseenTogether, problem::unseenOutside)
             if (card != null) {
                 assertTrue(ensemble.pairsOnCardUsed, "the pairs not on the card")
-                ensemble.heldOut(thetas, measure, unseenMeasure, answersMeasure, pairsThere = false)
+                ensemble.heldOut(measure, unseenMeasure, problem::unseenOutside, pairsThere = false)
             }
         }
         if (card == null)
-            thetas.forEachIndexed { k, theta ->
-                alone.heldOutLoss(theta, folds[k], measure[k], unseenMeasure[k], answersMeasure[k])
-            }
-        for (k in thetas.indices) for (a in 0 until answered.size) {
-            val (expected, got) = answersMeasure[k][a] to answersTogether[k][a]
-            if (problem.foldOf[answered.items[a]] != folds[k])
-                assertTrue(expected.isNaN() && got.isNaN(), "model $k, answered pair $a of another fold scored")
-            else
-                assertTrue(
-                    abs(expected - got) <= 1e-4f * (1 + abs(expected)),
-                    "model $k, answered pair $a: $expected measured, $got together",
-                )
-        }
+            thetas.forEachIndexed { k, theta -> alone.heldOutLoss(theta, folds[k], measure[k], unseenMeasure[k]) }
         for (k in thetas.indices) {
             listOf("every pair" to (measure[k] to together[k]), "the unseen" to (unseenMeasure[k] to unseenTogether[k]))
                 .forEach { (what, held) ->
@@ -340,61 +300,54 @@ class BilinearTest {
         }
     }
 
-    @Test fun `models fitted together come out as fitted alone`() = fitTogether(task(), null)
+    @Test
+    fun `the descent of a portion comes down to where the loss of every item has no slope`() =
+        descended(TaskPortions.of(task()), Plan(WALKS, STEPS, RATE), FLATTER)
 
     @Test
-    fun `models fitted together with their searches on the card come out as fitted alone`() {
-        val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
-        assumeTrue(dir != null, "no CUDA libraries")
-        val cublas = Cublas.open(dir!!)
-        assumeTrue(cublas != null, "no cuBLAS to run on")
-        fitTogether(task(), cublas)
-        val t = task()
-        // And of a task without names: the weights A and their gradient never leave the card
-        fitTogether(
-            SuggestionTask(
-                t.itemIds,
-                t.inputs,
-                t.values,
-                t.valueKeys,
-                t.assigned,
-                t.confirmed,
-                t.rejected,
-                t.context,
-                t.contextKeys,
-                t.allowed,
-                t.groupings,
-                t.lackWeight,
-                t.examples,
-                emptyList(),
-                Matrix(0, 0),
-                t.drafts,
-                t.draftWeight,
-            ),
-            cublas,
-        )
+    fun `the descent over several portions, the names a share of them each, comes down the loss of every item`() {
+        val task = task()
+        // A step a portion of every walk, the portions taking turns
+        val portions =
+            object : TaskPortions {
+                override val values = task.ofItems(IntArray(0))
+                override val items = task.itemCount
+
+                override fun forEach(action: (SuggestionTask) -> Unit) =
+                    (0 until task.itemCount).chunked(PORTION).forEach { action(task.ofItems(it.toIntArray())) }
+            }
+        descended(portions, Plan(WALKS * STEPS / 3, 3, RATE), FLATTER_IN_PORTIONS)
     }
 
-    private fun fitTogether(task: SuggestionTask, card: Cublas?) {
-        val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
+    /**
+     * Two models of the task of [portions] descended by the [plan]: the slope of the loss of every item and every name
+     * at their points [flatter] times flatter at the end than at the start — the loss of each portion's own items, of
+     * its own share of the names, a mean over its pairs, comes down to where the whole's has no slope, or near; their
+     * held-out losses made on the last walk.
+     */
+    private fun descended(portions: TaskPortions, plan: Plan, flatter: Int) {
+        val task = task()
+        val design = Design.of(task)
         val rank = 3
         val lambdas = floatArrayOf(0.1f, 0.01f)
         val folds = intArrayOf(1, 3)
+        val problem = Problem(task, design, BilinearSuggester.FOLDS)
+        val layout = ModelLayout(design, rank)
+        val starts = List(lambdas.size) { layout.start(it + 1L, BooleanArray(problem.m) { true }, 0f) }
         val alone = Bilinear(problem, rank)
-        val starts = List(lambdas.size) { alone.start(it + 1L) }
-        val ensemble = Ensemble(problem, rank, lambdas, folds, card)
-        val fits = ensemble.use { it.fit(starts, Bilinear.MAX_STEPS) { false } }
-        if (card != null) assertTrue(ensemble.searchesOnCard, "the searches not on the card")
-        starts.forEachIndexed { k, start ->
-            val theta = alone.fit(start, lambdas[k], folds[k])
-            val loss =
-                alone.lossAndGradient(theta, FloatArray(alone.size), lambdas[k]) { problem.foldOf[it] != folds[k] }
-            val together =
-                alone.lossAndGradient(fits.weights[k], FloatArray(alone.size), lambdas[k]) {
-                    problem.foldOf[it] != folds[k]
-                }
-            // The same search on floats added in another order: the same minimum to the float's resolution of the loss
-            assertTrue(abs(loss - together) < 1e-3 * abs(loss), "model $k: loss $loss alone, $together together")
+        fun slope(theta: FloatArray, k: Int): Double {
+            val grad = FloatArray(alone.size)
+            alone.lossAndGradient(theta, grad, lambdas[k]) { problem.foldOf[it] != folds[k] }
+            return sqrt(grad.sumOf { it.toDouble() * it })
+        }
+        val descent = Descent(portions, design, rank, lambdas, folds, null, plan) { false }
+        val held = List(lambdas.size) { Bilinear.Held() }
+        descent.run(starts, held, List(lambdas.size) { Bilinear.Held() })
+        lambdas.indices.forEach { k ->
+            val before = slope(starts[k], k)
+            val after = slope(descent.point.take(k), k)
+            assertTrue(after < before / flatter, "model $k: the slope $before at the start, $after at the end")
+            assertTrue(held[k].weight > 0 && held[k].mean.isFinite(), "model $k: held out ${held[k].mean}")
         }
     }
 
@@ -514,5 +467,20 @@ class BilinearTest {
 
         /** A piece's length below which its difference is told against this: of no length at all. */
         const val TINY = 1e-12
+
+        /** The walks of the descent's test, its steps a walk and first rate. */
+        const val WALKS = 4
+        const val STEPS = 150
+        const val RATE = 0.05f
+
+        /** How many times flatter the loss of every item is at the descent's end than at its start, at least. */
+        const val FLATTER = 10
+
+        /**
+         * The items of a portion of the descent over several, and how many times flatter the whole's loss is at its end
+         * at least: each portion's loss a mean over its own pairs, the whole's slope nought where theirs is, near.
+         */
+        const val PORTION = 4
+        const val FLATTER_IN_PORTIONS = 3
     }
 }

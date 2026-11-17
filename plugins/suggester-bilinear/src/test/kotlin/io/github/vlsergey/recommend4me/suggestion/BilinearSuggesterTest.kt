@@ -3,8 +3,10 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
+import java.lang.ref.WeakReference
 import java.util.Random
 import java.util.concurrent.CancellationException
+import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,7 +19,10 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 class BilinearSuggesterTest {
     /** The chances of the items of [task] by the model [fitted] made of it: the one way to them. */
     private fun scored(fitted: FittedSuggester, task: SuggestionTask) =
-        assertNotNull(BilinearSuggester().scoring(fitted.model(task), task))
+        assertNotNull(BilinearSuggester().scoring(fitted.model(task.valueSide()), task))
+
+    /** The value side of [task], of no item: what a model is made of beside what was fitted. */
+    private fun SuggestionTask.valueSide() = ofItems(IntArray(0))
 
     private val d = 8
 
@@ -59,7 +64,7 @@ class BilinearSuggesterTest {
     @Test
     fun `a value goes with the texts that point its way, every item judged by a model that did not learn from it`() {
         val task = task(300, wrong = 5)
-        val fitted = assertNotNull(BilinearSuggester().fit(task))
+        val fitted = assertNotNull(BilinearSuggester().fit(TaskPortions.of(task)))
         val chances = scored(fitted, task).of(IntArray(task.itemCount) { it })
         var right = 0
         var all = 0
@@ -113,7 +118,8 @@ class BilinearSuggesterTest {
                 allowed = List(n) { IntArray(shares.size) { it } },
             )
         val suggester = BilinearSuggester()
-        val weights = assertNotNull(suggester.weights(assertNotNull(assertNotNull(suggester.fit(task)).model(task))))
+        val fitted = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val weights = assertNotNull(suggester.weights(fitted.model(task.valueSide())))
         assertEquals(values, weights.size)
         assertTrue(weights.take(shares.size).all { it > 0 && it < 1 }, weights.toList().toString())
         assertTrue(weights[0] > weights[2] && weights[2] > weights[1], weights.toList().toString())
@@ -126,8 +132,8 @@ class BilinearSuggesterTest {
     fun `the scoring kept apart gives the items read later the chances of the whole task, without the values' names`() {
         val task = task(120, wrong = 5)
         val suggester = BilinearSuggester()
-        val fitted = assertNotNull(suggester.fit(task))
-        val kept = assertNotNull(fitted.model(task))
+        val fitted = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val kept = assertNotNull(fitted.model(task.valueSide()))
         // Some items alone, as a page reads them: their texts, the values by their keys, no names
         val rows = intArrayOf(3, 5, 40, 77)
         val texts = task.inputs.single().vectors.gather(rows)
@@ -213,7 +219,7 @@ class BilinearSuggesterTest {
                 lackWeight = 1.0 / 14,
                 examples = examples,
             )
-        val fitted = assertNotNull(BilinearSuggester().fit(task))
+        val fitted = assertNotNull(BilinearSuggester().fit(TaskPortions.of(task)))
         val lost = scored(fitted, task).of(intArrayOf(n - 1)).single()
         assertTrue(
             lost[0] > 0.5f && lost[1] > 0.5f && lost[2] < 0.5f && lost[3] < 0.5f,
@@ -278,7 +284,7 @@ class BilinearSuggesterTest {
                 lackWeight = 1.0 / 14,
                 examples = examples,
             )
-        val fitted = assertNotNull(BilinearSuggester().fit(task))
+        val fitted = assertNotNull(BilinearSuggester().fit(TaskPortions.of(task)))
         val lost = scored(fitted, task).of(intArrayOf(n - 1)).single()
         assertTrue(
             lost[3] > 0.5f && lost[2] > 0.5f && lost[0] < 0.5f && lost[1] < 0.5f,
@@ -341,7 +347,7 @@ class BilinearSuggesterTest {
     fun `kept and read again, the model judges the same`() {
         val task = task(120)
         val suggester = BilinearSuggester()
-        val fitted = assertNotNull(suggester.fit(task))
+        val fitted = assertNotNull(suggester.fit(TaskPortions.of(task)))
         val again = assertNotNull(suggester.unpack(fitted.pack(), task))
         val rows = IntArray(task.itemCount) { it }
         val a = scored(fitted, task).of(rows)
@@ -353,11 +359,11 @@ class BilinearSuggesterTest {
     fun `gone on from the last state with more items, the model judges as one fitted from scratch`() {
         val small = task(240)
         val suggester = BilinearSuggester()
-        val last = assertNotNull(suggester.fit(small))
+        val last = assertNotNull(suggester.fit(TaskPortions.of(small)))
         // Sixty items more, the same values: the refit starts where the last one stopped
         val task = task(300)
-        val again = assertNotNull(suggester.fit(task, last))
-        val scratch = assertNotNull(suggester.fit(task))
+        val again = assertNotNull(suggester.fit(TaskPortions.of(task), last))
+        val scratch = assertNotNull(suggester.fit(TaskPortions.of(task)))
         val rows = IntArray(task.itemCount) { it }
         val a = scored(again, task).of(rows)
         val b = scored(scratch, task).of(rows)
@@ -400,6 +406,10 @@ class BilinearSuggesterTest {
         heldOutAsKept(BilinearSuggester(), SCORE_32)
 
     @Test
+    fun `of a task in several portions, the values answered on are scored as the model kept scores them`() =
+        heldOutAsKept(BilinearSuggester(), SCORE_32, PORTION)
+
+    @Test
     fun `on the card the values the user answered on are scored by the model of the fold that held their item out`() {
         val onnx = Onnx(defaultModelsDir(), gpu = true)
         assumeTrue(onnx.cudaLibraries() != null, "no CUDA libraries")
@@ -408,24 +418,27 @@ class BilinearSuggesterTest {
     }
 
     /**
-     * Of a fitting by [suggester] of a task with the user's answers, the scores handed over
-     * ([FittedSuggester.heldOut]): every pair answered on once, each scored as the scoring kept scores its item — by
-     * the model of the fold that held it out — the difference's length within [tolerance] of the scores'; of a refit
-     * gone on from the last state too, none of a state unpacked.
+     * Of a fitting by [suggester] of a task with the user's answers, in portions of [portion] items, the scores handed
+     * over ([FittedSuggester.heldOut]): every pair answered on once, by its item's id, each scored as the scoring kept
+     * scores its item — by the model of the fold that held it out — the difference's length within [tolerance] of the
+     * scores'; of a refit gone on from the last state too, none of a state unpacked.
      */
-    private fun heldOutAsKept(suggester: BilinearSuggester, tolerance: Float) {
+    private fun heldOutAsKept(suggester: BilinearSuggester, tolerance: Float, portion: Int = TaskPortions.MOST) {
         val task = answered(task(300, wrong = 5))
         val expected =
             (0 until task.itemCount).flatMap { i ->
-                (task.confirmed[i].asList() + task.rejected[i].asList()).distinct().sorted().map { i to it }
+                (task.confirmed[i].asList() + task.rejected[i].asList()).distinct().sorted().map {
+                    task.itemIds[i] to it
+                }
             }
         assertTrue(expected.size > 40, "${expected.size} answered pairs")
-        val fitted = assertNotNull(suggester.fit(task))
-        val again = assertNotNull(suggester.fit(task, suggester.unpack(fitted.pack(), task)))
+        val fitted = assertNotNull(suggester.fit(Cut(task, portion)))
+        val again = assertNotNull(suggester.fit(Cut(task, portion), suggester.unpack(fitted.pack(), task.valueSide())))
         for ((what, fit) in listOf("from scratch" to fitted, "from the last state" to again)) {
             val held = assertNotNull(fit.heldOut, what)
             assertEquals(expected, held.items.indices.map { held.items[it] to held.values[it] }, what)
-            val kept = scored(fit, task).scores(held.items, held.values.map { intArrayOf(it) }).map { it.single() }
+            val rows = held.items.map { task.itemIds.indexOf(it) }.toIntArray()
+            val kept = scored(fit, task).scores(rows, held.values.map { intArrayOf(it) }).map { it.single() }
             // Within the digits as a whole, not score by score: a score that is the sum of terms that all but cancel
             // keeps few of the digits of its terms
             var diff = 0.0
@@ -455,16 +468,140 @@ class BilinearSuggesterTest {
                 task.context,
                 task.contextKeys,
             )
-        assertEquals(null, BilinearSuggester().fit(empty))
+        assertEquals(null, BilinearSuggester().fit(TaskPortions.of(empty)))
     }
 
     @Test
     fun `told to stop, the fitting is given up`() {
         val task = task(120)
-        assertFailsWith<CancellationException> { BilinearSuggester().fit(task, stop = { true }) }
+        assertFailsWith<CancellationException> { BilinearSuggester().fit(TaskPortions.of(task), stop = { true }) }
+    }
+
+    @Test
+    fun `a task cut into several portions fits to a model that judges as one fitted of a single portion`() {
+        val task = task(400, wrong = 5)
+        val suggester = BilinearSuggester()
+        val whole = assertNotNull(suggester.fit(TaskPortions.of(task)))
+        val cut = assertNotNull(suggester.fit(Cut(task, PORTION)))
+        assertAlike(scored(whole, task), scored(cut, task), task, "a portion and portions of $PORTION")
+    }
+
+    @Test
+    fun `fitted on the card, the model judges as one fitted on the processor`() {
+        val onnx = Onnx(defaultModelsDir(), gpu = true)
+        assumeTrue(onnx.cudaLibraries() != null, "no CUDA libraries")
+        val task = task(400, wrong = 5)
+        val processor = assertNotNull(BilinearSuggester().fit(Cut(task, PORTION)))
+        val card = assertNotNull(BilinearSuggester(onnx).fit(Cut(task, PORTION)))
+        assertAlike(scored(processor, task), scored(card, task), task, "the processor and the card")
+    }
+
+    /**
+     * The chances of every item of [task] by [a] and by [b] alike: of nearly every pair on the same side of a half, and
+     * near on the whole — two descents of other orders of their steps reach the same model, not the same digits.
+     */
+    private fun assertAlike(a: SuggestionScores, b: SuggestionScores, task: SuggestionTask, what: String) {
+        val rows = IntArray(task.itemCount) { it }
+        val x = a.of(rows)
+        val y = b.of(rows)
+        var agree = 0
+        var all = 0
+        var apart = 0.0
+        rows.forEach { i ->
+            x[i].indices.forEach { v ->
+                if ((x[i][v] > 0.5f) == (y[i][v] > 0.5f)) agree++
+                apart += abs(x[i][v] - y[i][v])
+                all++
+            }
+        }
+        assertTrue(agree >= all * AGREE, "$what: $agree of $all pairs agree")
+        assertTrue(apart / all < APART, "$what: the chances apart by ${apart / all} on the whole")
+    }
+
+    @Test
+    fun `the fitting holds one portion at a time, and walks them a few times`() {
+        val task = task(400, wrong = 5)
+        val suggester = BilinearSuggester()
+        val scratch = Cut(task, PORTION, watched = true)
+        val fitted = assertNotNull(suggester.fit(scratch))
+        assertEquals(1, scratch.mostAlive, "portions held at once")
+        assertTrue(scratch.walks <= WALKS_FROM_SCRATCH, "${scratch.walks} walks from scratch")
+        val goneOn = Cut(task, PORTION, watched = true)
+        assertNotNull(suggester.fit(goneOn, suggester.unpack(fitted.pack(), task.valueSide())))
+        assertEquals(1, goneOn.mostAlive, "portions held at once, gone on from the last state")
+        assertEquals(WALKS_GONE_ON, goneOn.walks, "walks gone on from the last state")
+    }
+
+    /**
+     * The items of [task] in portions of [size] items each, made anew at every walk, as the application reads them —
+     * the walks counted. [watched]: every portion handed over watched, and how many of them were still held at most
+     * when the next was handed over told ([mostAlive]) — by the garbage collected, a portion held by nothing gone.
+     */
+    private class Cut(private val task: SuggestionTask, private val size: Int, private val watched: Boolean = false) :
+        TaskPortions {
+        override val values: SuggestionTask = task.ofItems(IntArray(0))
+        override val items: Int = task.itemCount
+
+        var walks = 0
+            private set
+
+        var mostAlive = 0
+            private set
+
+        /** Of every portion handed over, the portion and its rows of the input: held by nothing, both gone. */
+        private val handed = ArrayList<List<WeakReference<Any>>>()
+
+        override fun forEach(action: (SuggestionTask) -> Unit) {
+            walks++
+            var from = 0
+            while (from < task.itemCount) {
+                val to = minOf(from + size, task.itemCount)
+                if (watched) mostAlive = maxOf(mostAlive, alive() + 1)
+                action(portion(from, to))
+                from = to
+            }
+        }
+
+        /** The portion of the items [from] till [to], watched when they are. */
+        private fun portion(from: Int, to: Int): SuggestionTask {
+            val portion = task.ofItems(IntArray(to - from) { from + it })
+            if (watched) handed += listOf(WeakReference(portion), WeakReference(portion.inputs.first().vectors))
+            return portion
+        }
+
+        /** How many of the portions handed over are held still, the garbage collected first. */
+        private fun alive(): Int {
+            repeat(COLLECTIONS) {
+                System.gc()
+                if (handed.none { refs -> refs.any { it.get() != null } }) return 0
+                Thread.sleep(COLLECTION_PAUSE)
+            }
+            return handed.count { refs -> refs.any { it.get() != null } }
+        }
     }
 
     private companion object {
+        /** The items of a portion of the tests cut into several. */
+        const val PORTION = 70
+
+        /** The share of the pairs two fittings of one task agree on the side of a half of. */
+        const val AGREE = 0.95
+
+        /** How far two fittings' chances of a pair are apart, on the whole. */
+        const val APART = 0.05
+
+        /**
+         * The walks of a fitting from scratch at most: seeing the items, descending, scoring them by the model kept.
+         */
+        const val WALKS_FROM_SCRATCH = 8
+
+        /** The walks of a fitting gone on from the last state: descending twice, scoring once. */
+        const val WALKS_GONE_ON = 3
+
+        /** The collections of the garbage a portion held by nothing is waited for, and the pause between them. */
+        const val COLLECTIONS = 10
+        const val COLLECTION_PAUSE = 20L
+
         /** A score made in single precision in two orders of the sums: its last digits. */
         const val SCORE_32 = 1e-4f
 

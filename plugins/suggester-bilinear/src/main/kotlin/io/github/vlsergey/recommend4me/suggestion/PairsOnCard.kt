@@ -9,19 +9,19 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger(PairsOnCard::class.java)
 
 /**
- * THE PAIRS AND THE NAMES OF A FITTING ON THE CARD ([Ensemble] with its items' features there), OF EVERY MODEL STILL
- * SEARCHING AT ONCE: a launch of a kernel of our own (`pairs.cu`) for them all, not one a model. The pairs of the items
- * and their values from both sides — a thread an item, its loss and slopes dU; a thread a value, its slopes dV and of
- * its bias — every pair's score U·V made again where it is needed, of every value an item merely lacks by what it may
- * have ([SuggestionPairs]), of its own pairs one by one: no matrix of the scores written to the card's memory and read
- * back, which a model's 93 million pairs made the most of a step. The names' groups the same: their names' and values'
+ * THE PAIRS AND THE NAMES OF A FITTING ON THE CARD ([Ensemble] with its items' features there), OF EVERY MODEL AT ONCE:
+ * a launch of a kernel of our own (`pairs.cu`) for them all, not one a model. The pairs of the items and their values
+ * from both sides — a thread an item, its loss and slopes dU; a thread a value, its slopes dV and of its bias — every
+ * pair's score U·V made again where it is needed, of every value an item merely lacks by what it may have
+ * ([SuggestionPairs]), of its own pairs one by one: no matrix of the scores written to the card's memory and read back,
+ * which a model's 93 million pairs made the most of a step. The names' groups the same: their names' and values'
  * coordinates gathered side by side; a tile of a group a block — its losses and the values' slopes; a name's slopes by
  * a warp, made again of the same numbers. What the processor works out between its products in [Ensemble.evaluate], the
  * same to the float's last digits but for the order of the sums.
  *
- * The task's pairs and names put on the card once for the fitting; a step sends the values' and the names' coordinates
- * and the biases there, and takes back the values', the biases' and the names' slopes — the items' coordinates and
- * their slopes never leave it.
+ * The portion's pairs and names put on the card once for the portion; a step sends the values' and the names'
+ * coordinates and the biases there, and takes back the values', the biases' and the names' slopes — the items'
+ * coordinates and their slopes never leave it.
  */
 internal class PairsOnCard
 private constructor(
@@ -41,7 +41,7 @@ private constructor(
     private val vT = values.vT
     private val gE = values.gE
 
-    // Of every model still searching: its biases sent, their slopes taken back; what it is read with — its scale, the
+    // Of every model: its biases sent, their slopes taken back; what it is read with — its scale, the
     // weight of the example, the common bias — and its held-out fold
     private val bias = room.floats(count.toLong() * m)
     private val gBias = room.floats(count.toLong() * m)
@@ -67,13 +67,6 @@ private constructor(
     /** Of every model, the values no item outside its fold has, and the sums of its held-out loss ([heldOut]). */
     private val unseenOf = room.bytes(count.toLong() * p.m * Int.SIZE_BYTES)
     private val heldSums = room.bytes(count.toLong() * HELD_SUMS * Double.SIZE_BYTES)
-
-    /** The pairs the user answered on ([Problem.answered]), and the score of each by every model ([answered]). */
-    private val answeredItem = room.ints(p.answered.items)
-    private val answeredValue = room.ints(p.answered.values)
-    private val answeredExample = room.floatsOf(p.answered.examples)
-    private val answeredScores = room.floats(count.toLong() * p.answered.size)
-    private val answeredHost = Floats(count * p.answered.size)
 
     // Of every item, the weight of a value it merely lacks, and which of the arrays of values it may have is its
     // own, as a mask of a bit a value (-1: any) — every array once, however many items share it
@@ -220,9 +213,8 @@ private constructor(
      * The held-out loss of the first [k] slots, the model in each by [slotModel], its held-out fold of [heldOut]: of
      * the items' coordinates [uT] and the values' made before ([coordinates]), the biases and the pair's own weights of
      * the slots, the pairs of the items of the fold, as [Bilinear.heldOutLoss] takes them — [HELD_SUMS] sums a slot, of
-     * every pair and of the values of [unseen] (of every slot, 1 of a value no item outside its fold has). And the
-     * scores of the pairs the user answered on ([Problem.answered]) of the items of the fold, made as a pair of the
-     * loss is ([HeldOnCard]).
+     * every pair and of the values of [unseen] (of every slot, 1 of a value no item outside its fold has), one slot's
+     * after another.
      */
     fun heldOut(
         k: Int,
@@ -230,7 +222,7 @@ private constructor(
         heldOut: IntArray,
         unseen: IntArray,
         uT: Cublas.DeviceFloats,
-    ): HeldOnCard {
+    ): DoubleArray {
         for (slot in 0 until k) {
             scalesHost[slot] = 1f
             heldOutHost[slot] = heldOut[slotModel[slot]]
@@ -247,25 +239,8 @@ private constructor(
                     listOf(firstEntry, entryValue, entryWeight, entryLabel, entryExample, order, unseenOf, heldSums))
                 .toTypedArray(),
         )
-        val count = p.answered.size
-        kernels.launch(
-            "held_answers",
-            k.toLong() * count,
-            *(listOf(k, n, m, r, uT, vT, bias, params, heldOutOf, foldOf) +
-                    listOf(count, answeredItem, answeredValue, answeredExample, answeredScores))
-                .toTypedArray(),
-        )
-        answeredScores.download(answeredHost, 0, 0, k * count)
-        val answers = FloatArray(k * count).also { answeredHost.take(it, 0, 0, k * count) }
-        return HeldOnCard(heldSums.doubles(k * HELD_SUMS), answers)
+        return heldSums.doubles(k * HELD_SUMS)
     }
-
-    /**
-     * What [heldOut] made of the first slots: [HELD_SUMS] sums of the loss a slot; of every slot a score of every pair
-     * the user answered on ([Problem.answered]), one slot's after another — those of the items outside its fold not
-     * made.
-     */
-    class HeldOnCard(val sums: DoubleArray, val answers: FloatArray)
 
     /**
      * The losses of the first [k] slots finished, the model in each by [slotModel], into [losses]: the pair's own
@@ -552,7 +527,6 @@ private constructor(
                 "pairs_items_16",
                 "held_items",
                 "held_items_16",
-                "held_answers",
                 "pairs_values",
                 "pairs_values_16",
                 "listed_items",

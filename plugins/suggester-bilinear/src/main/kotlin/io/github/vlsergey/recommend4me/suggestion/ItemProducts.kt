@@ -25,11 +25,8 @@ internal class ItemProducts(
     private val n = p.n
     private val dx = p.design.itemWidth
 
-    /** Whether there are names, whose part of dA is added in the main memory. */
-    private val named = p.hints.isNotEmpty()
-
     /**
-     * THE ITEMS' VECTORS ON THE CARD, and the sides of their two products: every block there once for the fitting — as
+     * THE ITEMS' VECTORS ON THE CARD, and the sides of their two products: every block there once for the portion — as
      * the application put the task's there for its operation, or put there now — its rows of the items that have it
      * alone, read at the card's speed, not the main memory's. A step sends the models' A there and takes U back, sends
      * dU and takes dA back — tens of megabytes, not the features; the part of the ones ([ItemFeatures.ones]) made in
@@ -50,7 +47,7 @@ internal class ItemProducts(
         val halves: HalvesOnCard,
         /** The items' ones there ([OnesOnCard]). */
         val ones: OnesOnCard,
-        /** What was put there for the fitting: freed with it — the application's rows are the application's. */
+        /** What was put there for the portion: freed with it — the application's rows are the application's. */
         private val made: List<AutoCloseable>,
     ) : AutoCloseable {
         override fun close() = made.forEach { it.close() }
@@ -105,17 +102,16 @@ internal class ItemProducts(
     }
 
     /**
-     * Uᵀ = Aᵀ Xᵀ of the first [kr] rows of Aᵀ — every model still searching: the vectors' part on the card when they
-     * are there, onto the ones' part made here; Aᵀ sent there first unless the searches write it there ([aOnCard]) —
-     * then brought over, the ones read it here.
+     * Uᵀ = Aᵀ Xᵀ of the first [kr] rows of Aᵀ — every model: the vectors' part on the card when they are there, onto
+     * the ones' part made there; Aᵀ sent there first.
      */
-    fun coordinates(kr: Int, aOnCard: Boolean, keep: Boolean = false) {
+    fun coordinates(kr: Int, keep: Boolean = false) {
         val c = onCard
         if (c == null) {
             p.x.transposedCoordinates(aT, kr, uT, blockPart)
             return
         }
-        if (!aOnCard) c.aT.upload(aT, 0, 0, kr * dx)
+        c.aT.upload(aT, 0, 0, kr * dx)
         // The weights as brain floating point, for the tensor cores' products
         c.kernels.launch("floats_to_bf16", kr.toLong() * dx, kr.toLong() * dx, c.aT, c.halves.a)
         c.kernels.launch("ones_coordinates", kr.toLong() * n, kr, n, dx, c.ones.at, c.ones.features, c.aT, c.uT)
@@ -149,10 +145,9 @@ internal class ItemProducts(
 
     /**
      * dAᵀ = dUᵀ X of the first [kr] rows: the vectors' part on the card when they are there, beside the ones' part made
-     * here and sent; taken back unless the searches read it there ([aOnCard]) — then only for the names to add their
-     * part — or unless the caller takes it back itself ([bringBack]): the names' part added there first.
+     * there; taken back unless the caller takes it back itself ([bringBack]): the names' part added there first.
      */
-    fun gradient(kr: Int, aOnCard: Boolean, duOnCard: Boolean = false, bringBack: Boolean = !aOnCard || named) {
+    fun gradient(kr: Int, duOnCard: Boolean = false, bringBack: Boolean = true) {
         val c = onCard
         if (c == null) {
             p.x.transposedGradient(duT, kr, gA, blockPart)
