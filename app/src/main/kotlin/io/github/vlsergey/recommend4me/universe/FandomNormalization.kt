@@ -40,7 +40,7 @@ class FandomNormalization(private val stores: Stores) {
         val sites = sites()
         val made = bind(fandoms, sites) { s, f -> s.items.valueUses(f).keys }
         rename(fandoms, sites, null)
-        return made
+        return made.size
     }
 
     /**
@@ -57,26 +57,29 @@ class FandomNormalization(private val stores: Stores) {
                 ?.let { (source, facet) -> source.items.facetsOf(event.ids).values.flatMap { it[facet].orEmpty() } }
                 .orEmpty()
                 .toSet()
-        if (keys.isNotEmpty() && bind(fandoms, sites()) { s, _ -> if (s.id == event.source) keys else emptySet() } > 0)
-            rename(fandoms, sites(), null)
+        if (keys.isEmpty()) return
+        // The names of the fandoms bound to alone worked out again: of every fandom, a batch of a dump's import a pass
+        // over every value of every site, slower with every work it added (user, 2026-11-17)
+        val touched = bind(fandoms, sites()) { s, _ -> if (s.id == event.source) keys else emptySet() }
+        if (touched.isNotEmpty()) rename(fandoms, sites(), touched)
     }
 
     /**
-     * The site's fandoms [keysOf] gives of every source bound, the ones not bound yet; how many. One at a time: two at
-     * once would make two fandoms of one name.
+     * The site's fandoms [keysOf] gives of every source bound, the ones not bound yet; the normalized fandoms they were
+     * bound to. One at a time: two at once would make two fandoms of one name.
      */
     @Synchronized
     private fun bind(
         fandoms: FandomRepository,
         sites: List<Pair<SourceStore, String>>,
         keysOf: (SourceStore, String) -> Set<String>,
-    ): Int {
+    ): Set<Long> {
         val bound = fandoms.sites.bindings()
         val fresh =
             sites
                 .associate { (s, f) -> s to (f to keysOf(s, f).filter { SiteFandomRef(s.id, it) !in bound }) }
                 .filterValues { it.second.isNotEmpty() }
-        if (fresh.isEmpty()) return 0
+        if (fresh.isEmpty()) return emptySet()
         val names = sites.associate { (s, f) -> s.id to s.items.facetNames(f) }
         // The normalized fandoms every name is bound to, of every site
         val byName = HashMap<String, MutableSet<Long>>()
@@ -84,7 +87,7 @@ class FandomNormalization(private val stores: Stores) {
             byName.getOrPut(LayerValues.keyOf(names[ref.source]?.get(ref.key) ?: ref.key)) { HashSet() } += id
         }
         val now = Instant.now()
-        var made = 0
+        val made = HashSet<Long>()
         fresh.forEach { (s, of) ->
             of.second.forEach { key ->
                 val written = (names[s.id]?.get(key) ?: key).trim()
@@ -95,10 +98,14 @@ class FandomNormalization(private val stores: Stores) {
                             byName.getOrPut(name) { HashSet() } += it
                         }
                 fandoms.sites.bind(SiteFandomRef(s.id, key), id, now)
-                made++
+                made += id
             }
         }
-        log.info("{} fandoms of the sites bound to normalized fandoms", made)
+        log.info(
+            "{} fandoms of the sites bound to {} normalized fandoms",
+            fresh.values.sumOf { it.second.size },
+            made.size,
+        )
         return made
     }
 
@@ -117,13 +124,14 @@ class FandomNormalization(private val stores: Stores) {
         // Of every fandom, its sites' fandoms' names with their works: the most works first, of as many by the alphabet
         val named = HashMap<Long, MutableList<Pair<String, Int>>>()
         sites.forEach { (s, f) ->
-            val names = s.items.facetNames(f)
-            val uses = s.items.valueUses(f)
-            bound
-                .filterKeys { it.source == s.id }
-                .forEach { (ref, id) ->
-                    named.getOrPut(id) { ArrayList() } += (names[ref.key] ?: ref.key).trim() to (uses[ref.key] ?: 0)
-                }
+            val own = bound.filterKeys { it.source == s.id }
+            // Of a few fandoms, the names and the works of their sites' fandoms alone
+            val keys = own.keys.map { it.key }
+            val names = if (wanted == null) s.items.facetNames(f) else s.items.facetNames(f, keys)
+            val uses = if (wanted == null) s.items.valueUses(f) else s.items.valueUsesOf(f, keys)
+            own.forEach { (ref, id) ->
+                named.getOrPut(id) { ArrayList() } += (names[ref.key] ?: ref.key).trim() to (uses[ref.key] ?: 0)
+            }
         }
         val best = named.mapValues { (_, of) ->
             of.sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first }).first().first

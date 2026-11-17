@@ -21,6 +21,9 @@ interface ItemFacets {
     /** How many items have each value of a facet, as the site gives them. */
     fun valueUses(facet: String): Map<String, Int>
 
+    /** How many items have each of the [keys] of the facet: key to items, a key of none left out. */
+    fun valueUsesOf(facet: String, keys: Collection<String>): Map<String, Int>
+
     /** The facets of one item: facet to keys in order. */
     fun facets(itemId: String): Map<String, List<String>>
 
@@ -99,6 +102,19 @@ internal class ItemFacetRepository(
             .where(ITEM_FACET.FACET.eq(facet))
             .groupBy(ITEM_FACET.VALUE_KEY)
             .fetchMap({ it.value1()!! }, { it.value2()!! })
+
+    override fun valueUsesOf(facet: String, keys: Collection<String>): Map<String, Int> =
+        keys
+            .distinct()
+            .chunked(ITEM_BATCH)
+            .flatMap { chunk ->
+                db.select(ITEM_FACET.VALUE_KEY, DSL.count())
+                    .from(ITEM_FACET)
+                    .where(ITEM_FACET.FACET.eq(facet), ITEM_FACET.VALUE_KEY.`in`(chunk))
+                    .groupBy(ITEM_FACET.VALUE_KEY)
+                    .fetch { it.value1()!! to it.value2()!! }
+            }
+            .toMap()
 
     override fun facets(itemId: String): Map<String, List<String>> =
         db.select(ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
