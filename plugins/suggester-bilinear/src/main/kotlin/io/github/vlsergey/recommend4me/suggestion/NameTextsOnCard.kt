@@ -31,7 +31,7 @@ internal class NameTextsOnCard(
     private val offsets = room.ints(IntArray(blocks) { p.design.blockOffsets[p.hintBlocks[it]] })
     private val scales = room.floatsOf(FloatArray(blocks) { p.design.blocks[p.hintBlocks[it]].scale })
 
-    /** The names' texts, a row of each: on the card once for the fitting. */
+    /** The names' texts, a row of each: on the card once for the portion. */
     private val texts = room.floats(h.toLong() * hd).also { it.upload(p.hintText.held, 0, 0, h * hd) }
     private val sumT = room.floats(count.toLong() * r * hd)
     private val dSum = room.floats(count.toLong() * r * hd)

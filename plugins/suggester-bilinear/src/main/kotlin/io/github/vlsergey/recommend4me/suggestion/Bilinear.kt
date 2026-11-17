@@ -7,15 +7,11 @@ import io.github.vlsergey.recommend4me.matrix.Simd
 import io.github.vlsergey.recommend4me.matrix.weightedLogisticRow
 import java.io.DataInputStream
 import java.io.DataOutputStream
-import java.util.Collections
-import java.util.IdentityHashMap
-import java.util.Random
 import java.util.stream.IntStream
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln1p
 import kotlin.math.max
-import kotlin.math.sqrt
 
 /**
  * The weights of one model ([Bilinear]): [a] the item's features to its [rank] coordinates (itemWidth × rank), [b] the
@@ -69,20 +65,26 @@ class Weights(
  * nought for a value the item may not have at all ([SuggestionTask.allowed]: a character of another universe;
  * [SuggestionTask.barred]), for every value an item without any value of the facet lacks — such an item is unknown, not
  * denied.
+ *
+ * Of a portion of the items when the fitting walks them ([TaskPortions]): its items, and the names of the values the
+ * portion is given to learn from with them ([SuggestionTask.hints]); [z] made once of the value side for every portion.
  */
-internal class Problem(val task: SuggestionTask, val design: Design, val folds: Int) {
+internal class Problem(
+    val task: SuggestionTask,
+    val design: Design,
+    val folds: Int,
+    /** The features of every value, in the order of the task's. */
+    val z: Matrix = design.values(task),
+) {
     val n = task.itemCount
     val m = task.valueCount
     val x: ItemFeatures = design.features(task)
-    val z: Matrix = design.values(task)
+
     /** The values the site gives each item as an example — the site's word, an input of the pair — ascending. */
     val exampleValues: Array<IntArray> =
         Array(n) { i -> task.examples[i].filter { it in 0 until m }.distinct().sorted().toIntArray() }
 
     val foldOf = IntArray(n) { foldOf(task.itemIds[it], folds) }
-
-    /** The pairs the user answered on: scored by the model of the fold that held each item out ([AnsweredPairs]). */
-    val answered: AnsweredPairs = AnsweredPairs.of(task, m, exampleValues)
 
     /**
      * The names of the values as texts of a work ([SuggestionTask.hints]), learnt from in every fold and judged in
@@ -165,19 +167,27 @@ internal class Problem(val task: SuggestionTask, val design: Design, val folds: 
     }
 
     /**
+     * Of every fold — [seen] by the folds — the values an item outside it has, marked: what the model fitted without
+     * the fold learns of more than their names and groups. Marked portion by portion, every item of the source's.
+     */
+    fun markSeen(seen: Array<BooleanArray>) {
+        for (i in 0 until n) {
+            // A value an item has is among its own pairs, labelled 1
+            pairs.own[i].forEachIndexed { k, value ->
+                if (pairs.ownLabel[i][k] > 0f && pairs.ownWeight[i][k] != 0f)
+                    for (f in seen.indices) if (f != foldOf[i]) seen[f][value] = true
+            }
+        }
+    }
+
+    /**
      * The values no item outside [fold] has: what the model fitted without the fold learns of them is their name and
      * groups alone.
      */
     fun unseenOutside(fold: Int): BooleanArray {
-        val unseen = BooleanArray(m) { true }
-        for (i in 0 until n) {
-            if (foldOf[i] == fold) continue
-            // A value an item has is among its own pairs, labelled 1
-            pairs.own[i].forEachIndexed { k, value ->
-                if (pairs.ownLabel[i][k] > 0f && pairs.ownWeight[i][k] != 0f) unseen[value] = false
-            }
-        }
-        return unseen
+        val seen = Array(folds) { BooleanArray(m) }
+        markSeen(seen)
+        return BooleanArray(m) { !seen[fold][it] }
     }
 
     companion object {
@@ -197,13 +207,14 @@ internal class Problem(val task: SuggestionTask, val design: Design, val folds: 
  * B, learnt together: a value never given to any item is judged by its name and its groups, a frequent one by its
  * examples too.
  *
- * Learnt by the weighted logistic loss over every pair ([Problem]) with an L2 penalty [lambda] on every weight,
- * minimised by L-BFGS from a small random start.
+ * Learnt by the weighted logistic loss over every pair ([Problem]) with an L2 penalty [lambda] on every weight, by a
+ * descent over the portions of the items ([Descent]) — every model of a fitting at once ([Ensemble]): this one, a model
+ * alone on the processor, is the measure that one is checked against.
  *
  * EVERYTHING IN SINGLE PRECISION — the weights, the gradient, every sum: what the model gives is a chance to show, not
  * a number to compute further with, and floats go twice as many at once through the wide registers and OpenBLAS.
  */
-internal class Bilinear(private val p: Problem, val rank: Int, private val step: StepOnCard? = null) {
+internal class Bilinear(private val p: Problem, val rank: Int) {
     private val n = p.n
     private val m = p.m
     private val dx = p.design.itemWidth
@@ -224,81 +235,6 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
 
     /** The names as texts of a work ([Problem.hints]): their coordinates, loss and gradient on the processor. */
     private val namesAsTexts = NamesAsTexts(p, rank)
-
-    /**
-     * The start: A and B nought, so a weight grows only where the data lead it — along a direction no item varies in
-     * (titles alike) it stays nought, and an item unlike the rest there is not judged by a random weight; the own
-     * coordinates of the values the training has pairs of small and random, for the gradient not to be nought
-     * everywhere as at the very origin.
-     */
-    fun start(seed: Long): FloatArray {
-        val random = Random(seed)
-        val out = FloatArray(size)
-        val used = BooleanArray(m)
-        // The values an item may lack, every array of them once, and its own pairs
-        val marked = Collections.newSetFromMap(IdentityHashMap<IntArray, Boolean>())
-        var every = false
-        for (i in 0 until n) {
-            if (p.pairs.lack[i] > 0f) {
-                val may = p.pairs.may[i]
-                if (may == null) every = true else if (marked.add(may)) may.forEach { used[it] = true }
-            }
-            p.pairs.own[i].forEachIndexed { k, v -> if (p.pairs.ownWeight[i][k] != 0f) used[v] = true }
-        }
-        if (every) used.fill(true)
-        // The names' rivals: one array for every name of the same universe, gone through once
-        p.hints.forEach { hint -> if (marked.add(hint.among)) hint.among.forEach { used[it] = true } }
-        val eAt = dx * rank + dz * rank
-        val se = 0.1 / sqrt(rank.toDouble())
-        for (v in 0 until m) if (used[v])
-            for (q in 0 until rank) out[eAt + v * rank + q] = (random.nextGaussian() * se).toFloat()
-        return out
-    }
-
-    /**
-     * The weights [w] fitted on the layout [old], carried to this task's: a feature or a value the old one had keeps
-     * its weight, scaled to weigh as it did; a new one starts at nought — its gradient is not, the other side being
-     * learnt already.
-     */
-    fun carried(w: Weights, old: Design): FloatArray {
-        check(w.rank == rank) { "Weights of rank ${w.rank}, a model of rank $rank" }
-        val out = FloatArray(size)
-        val (items, itemFactor) = p.design.itemFeaturesFrom(old)
-        for (f in 0 until dx) items[f]
-            .takeIf { it >= 0 }
-            ?.let { o -> for (q in 0 until rank) out[f * rank + q] = w.a[o * rank + q] * itemFactor[f] }
-        val bAt = dx * rank
-        val (values, valueFactor) = p.design.valueFeaturesFrom(old)
-        for (f in 0 until dz) values[f]
-            .takeIf { it >= 0 }
-            ?.let { o -> for (q in 0 until rank) out[bAt + f * rank + q] = w.b[o * rank + q] * valueFactor[f] }
-        val eAt = bAt + dz * rank
-        val biasAt = eAt + m * rank
-        p.design.valueKeys.forEachIndexed { v, key ->
-            val o = old.valueIndex[key] ?: return@forEachIndexed
-            for (q in 0 until rank) out[eAt + v * rank + q] = w.e[o * rank + q]
-            out[biasAt + v] = w.bias[o]
-        }
-        w.pair.copyInto(out, size - PAIR)
-        return out
-    }
-
-    /** How many losses the fittings of this model took: told in the log, the measure of a fitting's work. */
-    var losses = 0
-        private set
-
-    /** The weights minimising the loss over the items not of [heldOut] (-1: every item), from [from]. */
-    fun fit(
-        from: FloatArray,
-        lambda: Float,
-        heldOut: Int,
-        maxSteps: Int = MAX_STEPS,
-        stop: () -> Boolean = { false },
-    ): FloatArray =
-        Lbfgs.minimize(from, maxSteps, stop) { theta, grad ->
-            losses++
-            lossAndGradient(theta, grad, lambda) { p.foldOf[it] != heldOut }
-        }
 
     /** The weighted losses of held-out pairs, summed: Σw, Σw·l, Σw·l², Σw². */
     class Held(var weight: Double = 0.0, var loss: Double = 0.0, var squares: Double = 0.0, var weights: Double = 0.0) {
@@ -333,10 +269,9 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
     /**
      * The weighted losses of the pairs of the items of [fold] by [theta], added to [into]; those of the values no item
      * of the other folds has ([Problem.unseenOutside]) to [unseen] besides — how the model judges a value it learnt
-     * nothing of but its name and groups. Of the pairs the user answered on ([Problem.answered]) of the items of
-     * [fold], their scores into [answers] besides, at their places among them.
+     * nothing of but its name and groups.
      */
-    fun heldOutLoss(theta: FloatArray, fold: Int, into: Held, unseen: Held? = null, answers: FloatArray? = null) {
+    fun heldOutLoss(theta: FloatArray, fold: Int, into: Held, unseen: Held? = null) {
         val fresh = if (unseen == null) null else p.unseenOutside(fold)
         // The pairs that weigh anything alone, as the fitting scores them: the rest count nothing
         coordinates(theta, names = false)
@@ -344,7 +279,6 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         val vH = FloatArray(m * rank).also { v.take(it, 0, 0, m * rank) }
         val pair = theta.copyOfRange(size - PAIR, size)
         val bias = size - PAIR - m
-        if (answers != null) answered(theta, uH, vH, fold, answers)
         val row = p.row()
         for (i in 0 until n) {
             if (p.foldOf[i] != fold) continue
@@ -357,22 +291,6 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
                 into.add(row.weights[j].toDouble(), l)
                 if (fresh != null && fresh[v]) unseen!!.add(row.weights[j].toDouble(), l)
             }
-        }
-    }
-
-    /**
-     * The scores by [theta] of the pairs the user answered on ([Problem.answered]) of the items of [fold], of the
-     * items' and the values' coordinates [uH] and [vH], into [answers] at their places: as a pair is scored in the
-     * held-out loss.
-     */
-    private fun answered(theta: FloatArray, uH: FloatArray, vH: FloatArray, fold: Int, answers: FloatArray) {
-        val bias = size - PAIR - m
-        val example = theta[size - PAIR]
-        val common = theta[size - PAIR + 1]
-        p.answered.scoreFold(fold, p.foldOf, answers) { _, i, v, ex ->
-            var z = theta[bias + v] + common + example * ex
-            for (q in 0 until rank) z += uH[i * rank + q] * vH[v * rank + q]
-            z
         }
     }
 
@@ -410,22 +328,11 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         p.hints.forEach { total += it.among.size }
         if (total == 0f) total = 1f
         val scale = 1 / total
-        // ON THE CARD, when there is one: the values' coordinates, the names' loss and its gradient in
-        // one run, the pairs of the items here, the values' gradient carried back to their weights in
-        // another; the items' coordinates and their gradient here, of their features as they lie
-        val card = step?.forward(theta, size, scale)
-        val vH: FloatArray
-        if (card != null) {
-            aF.put(theta, 0, 0, dx * rank)
-            p.x.times(aF, rank, u, blockPart)
-            vH = card.v
-        } else {
-            coordinates(theta)
-            vH = FloatArray(m * rank).also { v.take(it, 0, 0, m * rank) }
-        }
+        coordinates(theta)
+        val vH = FloatArray(m * rank).also { v.take(it, 0, 0, m * rank) }
         val uH = FloatArray(n * rank).also { u.take(it, 0, 0, n * rank) }
         val pairs = pairs(uH, vH, theta, pair, bias, scale, trains)
-        val names = if (card != null) namesOnCard(card, step, pairs) else namesOnProcessor(theta, pair, total, pairs)
+        val names = namesOnProcessor(theta, pair, total, pairs)
         val loss = (pairs.loss + names.loss) / total
         val bAt = dx * rank
         val eAt = bAt + dz * rank
@@ -450,22 +357,6 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
      * the slope of the common bias, dA and dB.
      */
     private class Gradient(val loss: Float, val common: Float, val dA: FloatArray, val dB: FloatArray)
-
-    /**
-     * The names' loss and slopes as the [card]'s forward run gave them, added to the values' slopes of [pairs] (in
-     * place); dA of the items' slopes here and of the names', dB by the card's backward run of [onCard].
-     */
-    private fun namesOnCard(card: StepOnCard.Forward, onCard: StepOnCard, pairs: Pairs): Gradient {
-        val dE = pairs.dv
-        val gBias = pairs.bias
-        for (k in dE.indices) dE[k] += card.dv[k]
-        for (j in 0 until m) gBias[j] += card.dBias[j]
-        du.put(pairs.du, 0, 0, n * rank)
-        p.x.transposedTimes(du, rank, da, blockPart)
-        val dA = FloatArray(dx * rank).also { da.take(it, 0, 0, dx * rank) }
-        namesAsTexts.addGradient(dA, card.dSum, card.dBase)
-        return Gradient(card.loss, card.slope, dA, onCard.backward(dE))
-    }
 
     /**
      * The names as texts that name their values, on the processor: their loss and slopes added to the values' slopes of
@@ -561,29 +452,12 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         return Pairs(partLoss.sum(), partCommon.sum(), partExample.sum(), duH, dvH, gBias)
     }
 
-    /** The weights [theta] as kept. */
-    fun weights(theta: FloatArray): Weights {
-        fun part(from: Int, count: Int) = theta.copyOfRange(from, from + count)
-        val bAt = dx * rank
-        val eAt = bAt + dz * rank
-        val biasAt = eAt + m * rank
-        return Weights(
-            rank,
-            part(0, dx * rank),
-            part(bAt, dz * rank),
-            part(eAt, m * rank),
-            part(biasAt, m),
-            part(size - PAIR, PAIR),
-        )
-    }
-
     companion object {
         /**
          * The pair's own feature, the site gives the value as an example; and the common bias — a value no item had yet
          * is as likely as values are.
          */
         const val PAIR = 2
-        const val MAX_STEPS = 300
 
         fun sigmoid(z: Float) = 1f / (1f + exp(-z))
 

@@ -54,31 +54,8 @@ internal class Scoring(
         require(shares == null || shares.size == m) { "${shares?.size} shares of $m values" }
     }
 
-    /**
-     * The scoring with every value's share of the items of [task] — the task it was fitted on: the sum of their chances
-     * of it over their number, scored a thousand items at a time, none kept. An item that may not have the value at all
-     * ([SuggestionTask.allowed]: a pairing of characters it has not) adds nothing: the model never learns of such a
-     * pair, its score there tells nothing.
-     */
-    fun withShares(task: SuggestionTask): Scoring {
-        val m = valueKeys.size
-        val sums = DoubleArray(m)
-        val scores = on(task)
-        for (chunk in (0 until task.itemCount).chunked(SHARE_CHUNK)) {
-            scores.of(chunk.toIntArray()).forEachIndexed { r, row ->
-                val allowed = task.allowed[chunk[r]]
-                if (allowed == null) for (j in 0 until m) sums[j] += row[j]
-                else {
-                    allowed.forEach { j -> if (j in 0 until m) sums[j] += row[j] }
-                    // Of those, the ones the item may not have after all
-                    task.barred[chunk[r]].forEach { j -> if (j in 0 until m) sums[j] -= row[j] }
-                }
-            }
-        }
-        scores.close()
-        val n = task.itemCount.coerceAtLeast(1)
-        return Scoring(design, rank, valueKeys, a, pair, vt, bias, FloatArray(m) { (sums[it] / n).toFloat() })
-    }
+    /** The scoring with every value's [shares] of the works fitted on ([ScoredPortions]). */
+    fun withShares(shares: FloatArray): Scoring = Scoring(design, rank, valueKeys, a, pair, vt, bias, shares)
 
     /**
      * The chances of every value of the items of [task] — of the values the scoring is of, in its order. Every item by
@@ -802,9 +779,6 @@ internal class Scoring(
         private const val FORMAT = 4
 
         private const val BUFFER = 1 shl 16
-
-        /** The items scored at once for the shares. */
-        private const val SHARE_CHUNK = 1000
 
         /** Rows × values × rank up to which the scores are summed by hand: a product is set up for more. */
         private const val DIRECT = 1 shl 16

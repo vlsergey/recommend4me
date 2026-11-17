@@ -1,25 +1,18 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Cublas
-import io.github.vlsergey.recommend4me.matrix.Floats
 import io.github.vlsergey.recommend4me.onnx.Onnx
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.DataInputStream
-import java.io.DataOutputStream
-import java.util.zip.GZIPInputStream
-import java.util.zip.GZIPOutputStream
-import kotlin.math.abs
-import kotlin.math.ln
-import org.slf4j.LoggerFactory
-
-private val log = LoggerFactory.getLogger(BilinearSuggester::class.java)
 
 /**
  * THE VALUES OF A FACET BY ONE MODEL ([Bilinear]) of every item and every value — the tags, the universes, the
  * characters, the pairings alike: every input of the item the model of the grades reads, the item's other facets, the
  * value's name and groups, the pair's own features.
+ *
+ * LEARNT A PORTION OF THE ITEMS AT A TIME ([TaskPortions]): no fitting holds more than a portion's items, of a source
+ * of a million works (user, 2026-11-17). A walk over the portions reads every work anew, so a fitting walks them a few
+ * times ([PortionFitting]): from scratch once to see them ([Survey]), a few times to descend ([Descent]: every model's
+ * points moved by the gradient of a portion at a time, [Plan]), and once to score them by the model kept
+ * ([ScoredPortions]).
  *
  * EVERY ITEM IS JUDGED BY A MODEL THAT DID NOT LEARN FROM IT. The items fall into [FOLDS] folds by their ids; a model
  * is fitted on the items of all folds but one, and judges the items of that one. What the site or the user said of a
@@ -28,297 +21,34 @@ private val log = LoggerFactory.getLogger(BilinearSuggester::class.java)
  * setting give the values the user answered on are handed over with the fitting ([FittedSuggester.heldOut]): what the
  * application calibrates the chances by.
  *
- * NO NUMBER OF THE MODEL IS CHOSEN BY HAND: the rank and the penalty are chosen among [RANKS] and the penalties from
- * [STRONGEST] down by the held-out loss of every fold summed — the strongest penalty within one standard error of the
- * least.
+ * NO NUMBER OF THE MODEL IS CHOSEN BY HAND: the penalty is chosen among the penalties from [STRONGEST] down by the
+ * held-out loss of every fold summed — the strongest penalty within one standard error of the least —, every penalty's
+ * every fold descending together, in the same walks.
  *
- * A REFIT GOES ON FROM THE STATE FITTED LAST: its weights carried to the task as it is now, by the keys of the features
- * and the values, and the penalty chosen again beside the last one — seconds where a search from scratch takes minutes.
- * From scratch only the first time, or when the last state does not read the task.
+ * A REFIT GOES ON FROM THE STATE FITTED LAST: its weights carried to the facet as it is now, by the keys of the
+ * features and the values, its layout's scales kept, and the penalty chosen again beside the last one — three walks
+ * where a fitting from scratch takes five to eight. From scratch only the first time, or when the last state does not
+ * read the facet.
  */
 class BilinearSuggester
 internal constructor(
-    /** The runtime a step of the fitting goes to the card through, when there is one: on the processor without. */
+    /** The runtime whose libraries of the card the products go through, when there is one: on the processor without. */
     private val onnx: Onnx?
 ) : FacetSuggester {
     constructor() : this(null)
 
     override val id = "bilinear-1"
 
-    override fun fit(task: SuggestionTask, previous: FittedSuggester?, stop: () -> Boolean): FittedSuggester? {
-        if (task.valueCount == 0 || task.assigned.all { it.isEmpty() }) return null
-        val started = System.currentTimeMillis()
-        val design = Design.of(task)
-        val problem = Problem(task, design, FOLDS)
-        val tried = ArrayList<Tried>()
-        // Every penalty from the strongest down by tenfold steps, to the weakest: the held-out loss is
-        // not a valley — the characters' was flat from 10 to 0.1, worse at 0.01 and least at 1e-4 —
-        // and a search stopped at the first rise never reaches the better side of it
-        val grid = generateSequence(STRONGEST) { it / 10 }.takeWhile { it >= WEAKEST }.toList()
-        // GONE ON FROM THE STATE FITTED LAST: a few answers or works more move the optimum a little,
-        // and the walk to it from the last is a few steps, where a search from scratch is hundreds. The
-        // penalty is then chosen again among the last one and the two beside it on the grid — the
-        // choice moves with the data, a step at a time
-        val last = (previous as? Fitted)?.takeIf { it.folds.size == FOLDS && it.rank in RANKS }
-        val ranks = if (last == null) RANKS else listOf(last.rank)
-        val lambdas = penaltiesTried(grid, last)
-        var where = "on the processor"
-        // The card found slower last time at as many groups of names or fewer: not opened again — its
-        // graph of hundreds of groups takes tens of seconds to open, only to be closed. More groups
-        // are more launches on the card, slower still; fewer may be faster, and are measured again
-        var slowerAt = (previous as? Fitted)?.cardSlowerAt?.takeIf { problem.hintGroups.size >= it }
-        // cuBLAS on the card, when the launch asks for it: every model in one product, the items'
-        // features on the card ([Ensemble]) — the step of ONNX Runtime's graph not tried then
-        val cublas = onnx?.cudaLibraries()?.let(Cublas::open)
-        for (rank in ranks) {
-            // The task put on the card once for every fold and penalty of the rank, when there is a
-            // card: closed with the fitting, and the card's memory given back. Kept only where its
-            // step is the faster: a node of the graph is a launch on the card, and names in hundreds
-            // of small groups — the pairings' 301 — are thousands of launches, slower than the
-            // processor's whole step
-            val card =
-                onnx
-                    ?.takeIf { cublas == null && slowerAt == null }
-                    ?.let { StepOnCard.open(it, problem, rank) }
-                    ?.let { opened ->
-                        if (faster(problem, rank, opened)) opened
-                        else {
-                            opened.close()
-                            slowerAt = problem.hintGroups.size
-                            null
-                        }
-                    }
-            card.use {
-                val (fitted, place) = fitRank(problem, rank, lambdas, last, card, cublas, stop)
-                tried += fitted
-                where = place
-            }
-        }
-        // The one-standard-error rule (Breiman et al.): of the penalties that hold out no worse than
-        // the best by more than its standard error, the strongest — the data cannot tell them apart,
-        // and the stronger guesses less where an item is unlike those it learnt from
-        val least = tried.minBy { it.held.mean }
-        val chosen = tried.filter { it.held.mean <= least.held.mean + least.held.error }.maxBy { it.lambda }
-        log.info(
-            "{} items × {} values, {} features of an item, {} of a value, {} names against {} values, {}: {}; " +
-                "chosen r={} λ={} — in {} ms; of the values no item of the other folds has: {}",
-            task.itemCount,
-            task.valueCount,
-            design.itemWidth,
-            design.valueWidth,
-            problem.hints.size,
-            problem.hintPairs,
-            (if (last == null) "from scratch" else "from the last state") + ", " + where,
-            tried.joinToString("; ") { it.told() },
-            chosen.rank,
-            chosen.lambda,
-            System.currentTimeMillis() - started,
-            tried.joinToString("; ") { it.unseenTold() },
-        )
-        val report = reportOf(chosen, tried, fromScratch = last == null)
-        return chosen.fitted.handedOver(besideChosen(grid, chosen, tried), slowerAt, report)
+    override fun fit(portions: TaskPortions, previous: FittedSuggester?, stop: () -> Boolean): FittedSuggester? {
+        if (portions.values.valueCount == 0 || portions.items == 0) return null
+        // GONE ON FROM THE STATE FITTED LAST: a few answers or works more move the optimum a little, and the walk to it
+        // from the last is short
+        val last = (previous as? FittedBilinear)?.takeIf { it.folds.size == FOLDS && it.rank == RANK }
+        return PortionFitting(portions, last, onnx?.cudaLibraries()?.let(Cublas::open), stop).fitted()
     }
 
-    /** What the fitting tried and chose, by their settings — the rank and the penalty — and held-out losses. */
-    private fun reportOf(chosen: Tried, tried: List<Tried>, fromScratch: Boolean): FitReport {
-        fun settings(t: Tried) = mapOf(RANK to t.rank.toString(), PENALTY to t.lambda.toString())
-        return FitReport(
-            settings(chosen),
-            chosen.held.mean,
-            chosen.held.error,
-            tried.map { FitTry(settings(it), it.held.mean, it.held.error, it.millis) },
-            fromScratch = fromScratch,
-        )
-    }
-
-    /** A penalty tried: what its folds held out, the folds' weights, how many losses each took and how long. */
-    private class Tried(
-        val rank: Int,
-        val lambda: Double,
-        val held: Bilinear.Held,
-        val unseen: Bilinear.Held,
-        val fitted: Fitted,
-        val losses: List<Int>,
-        val millis: Long,
-    ) {
-        /** As the log tells it: the settings, the held-out loss, the losses each fold took and how long. */
-        fun told() = "r=$rank λ=$lambda: %.4f ± %.4f (losses %s in %d ms)".format(held.mean, held.error, losses, millis)
-
-        /** As the log tells it: the held-out loss of the values no item of the other folds has. */
-        fun unseenTold() =
-            "λ=$lambda: " + if (unseen.weight > 0) "%.4f ± %.4f".format(unseen.mean, unseen.error) else "none"
-    }
-
-    /**
-     * The penalties tried: every one of the [grid] when fitted from scratch; gone on from the [last] state, its penalty
-     * and the two beside it on the grid — the choice moves with the data, a step at a time.
-     */
-    private fun penaltiesTried(grid: List<Double>, last: Fitted?): List<Double> =
-        if (last == null) grid
-        else
-            grid.indices
-                .minBy { abs(ln(grid[it] / last.lambda)) }
-                .let { at -> grid.subList(maxOf(0, at - 1), minOf(grid.size, at + 2)) }
-
-    /**
-     * Kept with the chosen weights: the folds' weights of the penalties beside the [chosen] one on the [grid], each of
-     * the next refit's to go on from.
-     */
-    private fun besideChosen(grid: List<Double>, chosen: Tried, tried: List<Tried>): Map<Double, List<Weights>> {
-        val at = grid.indices.minBy { abs(ln(grid[it] / chosen.lambda)) }
-        val beside = setOfNotNull(grid.getOrNull(at - 1), grid.getOrNull(at + 1))
-        return tried.filter { it.rank == chosen.rank && it.lambda in beside }.associate { it.lambda to it.fitted.folds }
-    }
-
-    /**
-     * Whether a step on the [card] is faster than on the processor, measured: one loss and gradient on each, from the
-     * same weights, after one before it that opens what the first opens — the card's session its handles, the
-     * processor's model its buffers.
-     */
-    private fun faster(problem: Problem, rank: Int, card: StepOnCard): Boolean {
-        val trains: (Int) -> Boolean = { problem.foldOf[it] != 0 }
-        val millis =
-            listOf(card, null).map { on ->
-                val model = Bilinear(problem, rank, on)
-                val theta = model.start(1)
-                val grad = FloatArray(model.size)
-                model.lossAndGradient(theta, grad, STRONGEST.toFloat(), trains)
-                val started = System.nanoTime()
-                model.lossAndGradient(theta, grad, STRONGEST.toFloat(), trains)
-                (System.nanoTime() - started) / 1e6
-            }
-        log.info("a step on the card {} ms, on the processor {} ms", "%.1f".format(millis[0]), "%.1f".format(millis[1]))
-        return millis[0] < millis[1]
-    }
-
-    /**
-     * Every penalty of [lambdas] at [rank], every fold of each: ALL OF THEM IN ONE PRODUCT ([Ensemble]), on one thread
-     * — the items' features and their products on the card through [cublas] when there is one, else OpenBLAS sharing
-     * the products out among its own threads; on the [card] of ONNX Runtime, when it is the one, a model after another.
-     * With where it was fitted.
-     */
-    private fun fitRank(
-        problem: Problem,
-        rank: Int,
-        lambdas: List<Double>,
-        last: Fitted?,
-        card: StepOnCard?,
-        cublas: Cublas?,
-        stop: () -> Boolean,
-    ): Pair<List<Tried>, String> {
-        // The model of one penalty and fold: its start, and on the card the model it is fitted by
-        val helper = Bilinear(problem, rank, card)
-
-        // Every penalty from its own last weights carried to this task — those of the penalty
-        // nearest to it when it had none — or from a fresh start: from scratch, or when the last
-        // weights are all nought, where the two sides' products have no gradient and stay. From
-        // scratch every penalty from a fresh start: carried from a stronger one, the weights would
-        // start at nought
-        fun start(lambda: Double, k: Int): FloatArray =
-            last
-                ?.let { l -> l.nearest(lambda)?.let { helper.carried(it[k], l.design) } }
-                ?.takeIf { theta -> theta.any { it != 0f } } ?: helper.start(k.toLong() + 1)
-        // Model q: the penalty q / FOLDS, the fold q % FOLDS
-        val count = lambdas.size * FOLDS
-        val starts = List(count) { q -> start(lambdas[q / FOLDS], q % FOLDS) }
-        val begun = System.currentTimeMillis()
-        val held = List(lambdas.size) { Bilinear.Held() }
-        val unseen = List(lambdas.size) { Bilinear.Held() }
-        // Of every penalty, the score of every pair the user answered on by the fold that held its item out
-        val answers = List(lambdas.size) { FloatArray(problem.answered.size) }
-        val fits: Ensemble.Fits
-        val where: String
-        if (card == null) {
-            Ensemble(
-                    problem,
-                    rank,
-                    FloatArray(count) { lambdas[it / FOLDS].toFloat() },
-                    IntArray(count) { it % FOLDS },
-                    cublas,
-                )
-                .use { ensemble ->
-                    fits = ensemble.fit(starts, Bilinear.MAX_STEPS, stop)
-                    ensemble.heldOut(
-                        fits.weights,
-                        List(count) { held[it / FOLDS] },
-                        List(count) { unseen[it / FOLDS] },
-                        List(count) { answers[it / FOLDS] },
-                    )
-                    where = placeOf(ensemble)
-                }
-        } else {
-            where = "on the card (ONNX Runtime), a model at a time"
-            fits = oneByOne(helper, starts, lambdas, stop)
-            fits.weights.forEachIndexed { q, theta ->
-                helper.heldOutLoss(theta, q % FOLDS, held[q / FOLDS], unseen[q / FOLDS], answers[q / FOLDS])
-            }
-        }
-        return lambdas.mapIndexed { j, lambda ->
-            val own = (j * FOLDS until (j + 1) * FOLDS)
-            val folds = own.map { helper.weights(fits.weights[it]) }
-            Tried(
-                rank,
-                lambda,
-                held[j],
-                unseen[j],
-                Fitted(problem.design, rank, lambda, folds, heldOut = problem.answered.scored(answers[j])),
-                own.map { fits.losses[it] },
-                own.maxOf { fits.endedAt[it] } - begun,
-            )
-        } to where
-    }
-
-    /**
-     * Every model of a penalty of [lambdas] and a fold — model q the penalty q / [FOLDS], the fold q % [FOLDS] — fitted
-     * from its start of [starts] by the [helper] on the card of ONNX Runtime, a model after another, on this thread:
-     * the card takes one step at a time.
-     */
-    private fun oneByOne(
-        helper: Bilinear,
-        starts: List<FloatArray>,
-        lambdas: List<Double>,
-        stop: () -> Boolean,
-    ): Ensemble.Fits {
-        val endedAt = LongArray(starts.size)
-        val losses = IntArray(starts.size)
-        val weights =
-            List(starts.size) { q ->
-                val before = helper.losses
-                helper.fit(starts[q], lambdas[q / FOLDS].toFloat(), q % FOLDS, stop = stop).also {
-                    losses[q] = helper.losses - before
-                    endedAt[q] = System.currentTimeMillis()
-                }
-            }
-        return Ensemble.Fits(weights, losses, endedAt)
-    }
-
-    /** Where the [ensemble] fitted its models, as the log tells it: its features, searches, pairs and its timing. */
-    private fun placeOf(ensemble: Ensemble): String =
-        (if (ensemble.featuresOnCard) "the items' features on the card (cuBLAS)" else "on the processor (OpenBLAS)") +
-            (if (ensemble.searchesOnCard) ", the searches on the card" else ", the searches on the processor") +
-            (if (ensemble.pairsOnCardUsed) ", the pairs and names on the card" else "") +
-            ", " +
-            ensemble.timing
-
-    override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? = runCatching {
-        // Buffered: the stream is read in many small pieces — the numbers in blocks, the keys one by one
-        DataInputStream(GZIPInputStream(ByteArrayInputStream(bytes), BUFFER).buffered(BUFFER)).use { input ->
-            // A state of 7 read with the weight of the counts of names left out — the core gave none
-            // since before it was fitted: its folds go on from where they were, not fitted anew; another not read
-            val format = input.readInt()
-            if (format != FORMAT && format != FORMAT - 1) return null
-            fun weights() = Weights.read(input).let { if (format == FORMAT) it else it.withoutCounts() }
-            val design = Design.read(input)
-            val rank = input.readInt()
-            val lambda = input.readDouble()
-            val weights = List(input.readInt()) { weights() }
-            val nearby = List(input.readInt()) { input.readDouble() to List(input.readInt()) { weights() } }.toMap()
-            val slowerAt = input.readInt().takeIf { it >= 0 }
-            if (weights.size != FOLDS || !design.reads(task)) null
-            else Fitted(design, rank, lambda, weights, nearby, slowerAt)
-        }
-    }
-        .getOrNull()
+    override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? =
+        FittedBilinear.read(bytes, task, FOLDS)
 
     /** A work is scored of its own features by the coordinates of the values kept: no other work read. */
     override fun scoring(model: ByteArray, task: SuggestionTask): SuggestionScores? =
@@ -330,129 +60,16 @@ internal constructor(
      */
     override fun weights(model: ByteArray): DoubleArray? = Scoring.read(model)?.weights()
 
-    /**
-     * The model of every fold, fitted with the [rank] and the [lambda] chosen, on the [design] of the task fitted on;
-     * and the folds' weights at the penalties beside it ([nearby]), for a refit to go on from.
-     */
-    private class Fitted(
-        val design: Design,
-        val rank: Int,
-        val lambda: Double,
-        val folds: List<Weights>,
-        val nearby: Map<Double, List<Weights>> = emptyMap(),
-        /**
-         * How many groups of names the task had when a step on the card was measured slower than on the processor; null
-         * when it was not.
-         */
-        val cardSlowerAt: Int? = null,
-        /** What the fitting that made it tried and chose; none of a state unpacked. */
-        override val report: FitReport? = null,
-        /**
-         * The scores of the pairs the user answered on, each by the fold that held its item out ([AnsweredPairs]); none
-         * of a state unpacked. Every fitting, a refit gone on from the last state too, fits every fold of the penalties
-         * it tries: of the one it chooses.
-         */
-        override val heldOut: HeldOutScores? = null,
-    ) : FittedSuggester {
-
-        /**
-         * The state of the penalty chosen as the fitting hands it over: with the folds' weights of the penalties beside
-         * it ([nearby]), the card's verdict ([cardSlowerAt]) and the [report].
-         */
-        fun handedOver(nearby: Map<Double, List<Weights>>, slowerAt: Int?, report: FitReport) =
-            Fitted(design, rank, lambda, folds, nearby, slowerAt, report, heldOut)
-
-        /** The folds' weights at the penalty kept nearest to [penalty]. */
-        fun nearest(penalty: Double): List<Weights> =
-            (nearby + (lambda to folds)).minBy { abs(ln(it.key / penalty)) }.value.takeIf { it.size == FOLDS } ?: folds
-
-        /**
-         * The scoring of the values of [task], kept with every value's share of its items — the task fitted on: what
-         * the model tells of the values over the works as a whole.
-         */
-        override fun model(task: SuggestionTask): ByteArray = scoringOf(task).withShares(task).pack()
-
-        /**
-         * The scoring of the items against the values of [task]: every fold's coordinates of its values — their names
-         * and groups carried by B, their own coordinates added — and their biases.
-         */
-        private fun scoringOf(task: SuggestionTask): Scoring {
-            val m = task.valueCount
-            val z = design.values(task)
-            val known = design.valueIndices(task)
-            val dz = design.valueWidth
-            val sides = folds.map { w ->
-                val v = Floats(m * rank)
-                Blas.product(z.held, dz, m, dz, Floats.of(w.b), rank, v)
-                // Transposed for the product
-                val vt = FloatArray(rank * m)
-                val bias = FloatArray(m)
-                for (j in 0 until m) {
-                    val own = known[j]
-                    for (q in 0 until rank) vt[q * m + j] =
-                        v[j * rank + q] + (if (own >= 0) w.e[own * rank + q] else 0f)
-                    if (own >= 0) bias[j] = w.bias[own]
-                }
-                vt to bias
-            }
-            return Scoring(
-                design,
-                rank,
-                task.valueKeys,
-                folds.map { it.a },
-                folds.map { it.pair },
-                sides.map { it.first },
-                sides.map { it.second },
-            )
-        }
-
-        override fun pack(): ByteArray {
-            val bytes = ByteArrayOutputStream()
-            DataOutputStream(GZIPOutputStream(bytes, BUFFER).buffered(BUFFER)).use { out ->
-                out.writeInt(FORMAT)
-                design.write(out)
-                out.writeInt(rank)
-                out.writeDouble(lambda)
-                out.writeInt(folds.size)
-                folds.forEach { it.write(out) }
-                out.writeInt(nearby.size)
-                nearby.forEach { (penalty, weights) ->
-                    out.writeDouble(penalty)
-                    out.writeInt(weights.size)
-                    weights.forEach { it.write(out) }
-                }
-                out.writeInt(cardSlowerAt ?: -1)
-            }
-            return bytes.toByteArray()
-        }
-    }
-
     companion object {
-        /** The names the settings are reported by ([FitReport]): the rank of the factorisation, the penalty. */
-        private const val RANK = "r"
-        private const val PENALTY = "λ"
-
-        /**
-         * The version of what [pack] writes; 5: fitted in single precision, every facet fitted again; 6: the weights at
-         * the penalties beside the chosen one too; 7: the card's verdict, how many groups of names it was slower at; 8:
-         * no weight of the counts of the values' names in the texts ([Bilinear.PAIR]) — a state of 7 read without it
-         * ([Weights.withoutCounts]), one before not read.
-         */
-        private const val FORMAT = 8
-
-        /** The buffer of the compressed state read and written: the numbers go in blocks of many kilobytes. */
-        private const val BUFFER = 1 shl 16
-
         /** The folds an item is held out in: four fifths of the items teach the model judging the fifth. */
         const val FOLDS = 5
 
-        /** The ranks tried: how many coordinates the items and the values meet in. */
-        val RANKS = listOf(16)
+        /** The rank: how many coordinates the items and the values meet in. */
+        const val RANK = 16
 
         /**
-         * The penalties tried: from [STRONGEST] — at which every weight is all but nought — down tenfold at a time to
-         * [WEAKEST], every one of them when fitted from scratch; the last one chosen and the two beside it when gone on
-         * from the state fitted last.
+         * The penalties tried ([PortionFitting]): from [STRONGEST] — at which every weight is all but nought — down
+         * tenfold at a time to [WEAKEST].
          */
         const val STRONGEST = 10.0
         const val WEAKEST = 1e-7

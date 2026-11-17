@@ -10,7 +10,7 @@ import java.util.stream.IntStream
  * THE NAMES AS TEXTS OF A WORK ([Problem.hints]) in a model's fitting on the processor ([Bilinear]): every text block
  * of theirs holds the name, so their coordinates are the name times the text blocks' weights summed, plus the
  * constant's and the blocks' marks'. Their loss on the processor needs room for a group's every pair — a large
- * universe's a hundred megabytes: made only when the processor is the one to take it, never with a card ([StepOnCard]).
+ * universe's a hundred megabytes: made only when it is asked for.
  */
 internal class NamesAsTexts(private val p: Problem, private val rank: Int) {
     private val m = p.m
@@ -141,7 +141,7 @@ internal class NamesAsTexts(private val p: Problem, private val rank: Int) {
      * The gradient of the names' coordinates carried back into the text blocks' weights, the constant's and the marks',
      * added to [da]: of Hᵀ dUh ([sum], hintDim × rank) and of Σ dUh ([base]).
      */
-    fun addGradient(da: FloatArray, sum: FloatArray, base: FloatArray) {
+    private fun addGradient(da: FloatArray, sum: FloatArray, base: FloatArray) {
         for (q in 0 until rank) da[q] += base[q]
         p.hintBlocks.forEach { b ->
             val mark = p.design.blockOffsets[b]

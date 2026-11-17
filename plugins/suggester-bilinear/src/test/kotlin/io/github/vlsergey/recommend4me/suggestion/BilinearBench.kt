@@ -8,8 +8,9 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
  * The fitting of a real task kept by the application ([SuggestionTaskFile]), measured: BENCH_TASK names the file. Not a
- * test of anything — a measure, run by hand: the fitting from scratch, then the refit after one answer more, gone on
- * from it, as the application makes it.
+ * test of anything — a measure, run by hand: a step of the models of a refit over a portion of the task, then — of
+ * BENCH_WHOLE — the fitting from scratch in portions and the refit after one answer more, gone on from it, as the
+ * application makes them.
  */
 class BilinearBench {
     @Test
@@ -17,74 +18,46 @@ class BilinearBench {
         val file = System.getenv("BENCH_TASK")
         assumeTrue(file != null, "BENCH_TASK names a kept task")
         val task = SuggestionTaskFile.read(Path.of(file!!))
-        val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
+        val portion = task.ofItems(IntArray(minOf(task.itemCount, TaskPortions.MOST)) { it })
+        val problem = Problem(portion, Design.of(task), BilinearSuggester.FOLDS)
         println(
-            "BENCH ${task.itemCount} items × ${task.valueCount} values, " +
+            "BENCH ${task.itemCount} items × ${task.valueCount} values, a portion of ${portion.itemCount}: " +
                 "${problem.pairs.count.sumOf { it.toLong() }} pairs that weigh anything, " +
                 "${problem.hintPairs} pairs of names in ${problem.hintGroups.size} groups"
         )
-        // On the card when there is one, as the application fits
-        val onnx = Onnx(defaultModelsDir(), gpu = true)
-        val started = System.nanoTime()
-        val card = StepOnCard.open(onnx, problem, BilinearSuggester.RANKS.first())
-        println("BENCH the task on the card: ${card != null}, in ${(System.nanoTime() - started) / 1_000_000} ms")
-        stepsAndFolds(problem, card)
-        card?.close()
         ensembleStep(problem)
-        if (System.getenv("BENCH_WHOLE") != null) fittedAndRefitted(BilinearSuggester(onnx), task)
+        if (System.getenv("BENCH_WHOLE") != null)
+            fittedAndRefitted(BilinearSuggester(Onnx(defaultModelsDir(), gpu = true)), task)
     }
 
-    /** One loss and gradient, and one fold's fitting from scratch, on the processor and on the [card]. */
-    private fun stepsAndFolds(problem: Problem, card: StepOnCard?) {
-        val where = listOf("processor" to Bilinear(problem, 16), "card" to Bilinear(problem, 16, card))
-        for ((where, model) in
-            where.filter { (w, _) -> System.getenv("BENCH_ON") == null || w == System.getenv("BENCH_ON") }) {
-            val theta = model.start(1)
-            val grad = FloatArray(model.size)
-            val trains: (Int) -> Boolean = { problem.foldOf[it] != 0 }
-            repeat(3) { model.lossAndGradient(theta, grad, 1e-4f, trains) }
-            var t = System.nanoTime()
-            repeat(10) { model.lossAndGradient(theta, grad, 1e-4f, trains) }
-            val one = (System.nanoTime() - t) / 10 / 1_000_000
-            var calls = 0
-            t = System.nanoTime()
-            Lbfgs.minimize(theta, Bilinear.MAX_STEPS) { x, g ->
-                calls++
-                model.lossAndGradient(x, g, 1e-4f, trains)
-            }
-            println(
-                "BENCH on the $where: one loss $one ms; a fold from scratch $calls losses in " +
-                    "${(System.nanoTime() - t) / 1_000_000} ms"
-            )
-        }
-    }
-
-    /** One step of two penalties' five folds each in one product, as a refit takes them. */
+    /** One step of two penalties' five folds each in one product, as a refit takes them, of a portion's items. */
     private fun ensembleStep(problem: Problem) {
-        val alone = Bilinear(problem, 16)
+        val layout = ModelLayout(problem.design, BilinearSuggester.RANK)
         val count = 2 * BilinearSuggester.FOLDS
         val ensemble =
             Ensemble(
                 problem,
-                16,
+                BilinearSuggester.RANK,
                 FloatArray(count) { if (it < BilinearSuggester.FOLDS) 1e-6f else 1e-7f },
                 IntArray(count) { it % BilinearSuggester.FOLDS },
             )
-        val thetas = List(count) { alone.start(it + 1L) }
+        val thetas = List(count) { layout.start(it + 1L, BooleanArray(problem.m) { true }, 0f) }
         repeat(2) { ensemble.lossesAndGradients(thetas) }
         val t = System.nanoTime()
-        repeat(5) { ensemble.lossesAndGradients(thetas) }
-        println("BENCH ten models in one product: one step of them all ${(System.nanoTime() - t) / 5 / 1_000_000} ms")
+        repeat(STEPS) { ensemble.lossesAndGradients(thetas) }
+        println(
+            "BENCH ten models in one product: one step of them all ${(System.nanoTime() - t) / STEPS / 1_000_000} ms"
+        )
     }
 
     /** The whole fitting from scratch, then the refit after one answer more, gone on from it. */
     private fun fittedAndRefitted(suggester: BilinearSuggester, task: SuggestionTask) {
         var started = System.nanoTime()
-        val scratch = suggester.fit(task)!!
+        val scratch = suggester.fit(TaskPortions.of(task))!!
         println("BENCH from scratch: ${(System.nanoTime() - started) / 1_000_000} ms")
         val changed = withOneAnswerMore(task)
         started = System.nanoTime()
-        suggester.fit(changed, suggester.unpack(scratch.pack(), changed))
+        suggester.fit(TaskPortions.of(changed), suggester.unpack(scratch.pack(), changed.ofItems(IntArray(0))))
         println("BENCH after one answer more, from the last state: ${(System.nanoTime() - started) / 1_000_000} ms")
     }
 
@@ -112,5 +85,10 @@ class BilinearBench {
             task.drafts,
             task.draftWeight,
         )
+    }
+
+    private companion object {
+        /** The steps measured. */
+        const val STEPS = 5
     }
 }

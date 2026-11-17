@@ -45,8 +45,8 @@ class PairsOnCardBench {
         for ((what, task) in listOf("with names" to t, "pairs alone" to bare)) {
             val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
             val count = 3 * BilinearSuggester.FOLDS
-            val alone = Bilinear(problem, 16)
-            val thetas = List(count) { alone.start(it + 1L) }
+            val layout = ModelLayout(problem.design, 16)
+            val thetas = List(count) { layout.start(it + 1L, BooleanArray(problem.m) { true }, 0f) }
             Ensemble(problem, 16, FloatArray(count) { 1e-4f }, IntArray(count) { it % BilinearSuggester.FOLDS }, cublas)
                 .use { ensemble ->
                     repeat(2) { ensemble.lossesAndGradients(thetas) }

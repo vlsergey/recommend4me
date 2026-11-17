@@ -6,7 +6,9 @@ package io.github.vlsergey.recommend4me.suggestion
  * the biases and the pair's own weights as they are.
  */
 internal class TransposedLayout(private val dx: Int, private val dz: Int, private val m: Int, private val r: Int) {
-    /** The numbers of one model, in the order its search reads them: Aᵀ, Bᵀ, Eᵀ, the biases, the pair's own weights. */
+    /**
+     * The numbers of one model, in the order the descent moves them: Aᵀ, Bᵀ, Eᵀ, the biases, the pair's own weights.
+     */
     val size = r * dx + r * dz + r * m + m + Bilinear.PAIR
 
     /**

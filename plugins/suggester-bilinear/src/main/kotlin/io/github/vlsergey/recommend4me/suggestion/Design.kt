@@ -31,8 +31,23 @@ class BlockScale(val name: String, val dim: Int, val scale: Float) {
             of(name, vectors.rows, vectors.cols) { k, into -> vectors.take(k, into) }
 
         /** Of [count] vectors of [d] numbers, each taken by [take]: their typical length. */
-        private fun of(name: String, count: Int, d: Int, take: (Int, FloatArray) -> Unit): BlockScale? {
-            if (count == 0 || d == 0) return null
+        private fun of(name: String, count: Int, d: Int, take: (Int, FloatArray) -> Unit): BlockScale? =
+            of(name, d, count.toLong(), lengths(count, d, take))
+
+        /**
+         * Of [count] vectors of [d] numbers whose lengths sum to [lengths] — of every item's, summed a portion at a
+         * time ([lengths]); null of none, or of vectors of no length.
+         */
+        fun of(name: String, d: Int, count: Long, lengths: Double): BlockScale? {
+            if (count == 0L || d == 0) return null
+            val length = lengths / count
+            return BlockScale(name, d, if (length > 0) (sqrt(d.toDouble()) / length).toFloat() else 1f)
+        }
+
+        /** The lengths of every row of [vectors], summed. */
+        fun lengths(vectors: HalfMatrix): Double = lengths(vectors.rows, vectors.cols) { k, v -> vectors.take(k, v) }
+
+        private fun lengths(count: Int, d: Int, take: (Int, FloatArray) -> Unit): Double {
             val v = FloatArray(d)
             var length = 0.0
             for (k in 0 until count) {
@@ -41,8 +56,7 @@ class BlockScale(val name: String, val dim: Int, val scale: Float) {
                 for (q in 0 until d) s += v[q] * v[q]
                 length += sqrt(s)
             }
-            length /= count
-            return BlockScale(name, d, if (length > 0) (sqrt(d.toDouble()) / length).toFloat() else 1f)
+            return length
         }
     }
 }
@@ -87,6 +101,16 @@ class Design(
 
     /** Whether the task can be read by this layout: its blocks of the same names and its names of the same length. */
     fun reads(task: SuggestionTask): Boolean = task.values.cols == nameDim && readsItems(task)
+
+    /**
+     * The layout of the value side [task] — its context, its values' names and groups — with the scales of the blocks
+     * of this one: a refit's, the typical lengths of the vectors moving little with a few works more, no item read.
+     * Null when an input of the task is no block of this layout of the same length: its scale is of the items.
+     */
+    fun over(task: SuggestionTask): Design? {
+        val known = task.inputs.map { input -> blocks.find { it.name == input.name && it.dim == input.dim } }
+        return if (known.any { it == null }) null else of(task, known.map { it!! })
+    }
 
     /**
      * Whether the items of [task] are read by this layout: every block it knows of the length it knows — whatever its
@@ -251,15 +275,21 @@ class Design(
     }
 
     companion object {
-        /** The layout of a task: its blocks some item has, its context, its values' names and groups. */
-        fun of(task: SuggestionTask): Design {
+        /**
+         * The layout of a task: its [blocks] — of a task read whole those some item of it has, scaled by its items —,
+         * its context, its values' names and groups.
+         */
+        fun of(
+            task: SuggestionTask,
+            blocks: List<BlockScale> = task.inputs.mapNotNull { BlockScale.of(it.name, it.vectors) },
+        ): Design {
             val named =
                 (0 until task.valueCount).filter { v ->
                     (0 until task.values.cols).any { task.values.held[task.values.row(v) + it] != 0f }
                 }
             val names = BlockScale.of("names", task.values, named.toIntArray())
             return Design(
-                task.inputs.mapNotNull { BlockScale.of(it.name, it.vectors) },
+                blocks,
                 task.contextKeys,
                 names,
                 task.values.cols,

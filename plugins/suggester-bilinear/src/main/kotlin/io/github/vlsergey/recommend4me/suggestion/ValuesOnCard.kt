@@ -14,7 +14,7 @@ internal class ValuesOnCard(p: Problem, private val cublas: Cublas, room: CardRo
     private val dz = p.design.valueWidth
     private val z = room.floats(m.toLong() * dz).also { it.upload(p.z.held, 0, 0, m * dz) }
 
-    /** The weights B and E of every slot, and the slopes of B: where the searches write and read them. */
+    /** The weights B and E of every slot, and the slopes of B: sent there a step. */
     val bT = room.floats(count.toLong() * r * dz)
     val eT = room.floats(count.toLong() * r * m)
     val gB = room.floats(count.toLong() * r * dz)
