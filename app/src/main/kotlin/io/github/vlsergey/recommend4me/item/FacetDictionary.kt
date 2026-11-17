@@ -71,9 +71,32 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             }
     }
 
-    override fun facetNames(facet: String, keys: Collection<String>): Map<String, String> {
-        if (keys.isEmpty()) return emptyMap()
-        val wanted = keys as? Set<String> ?: keys.toHashSet()
+    /**
+     * The names of the facet's values [keys]: of a few — a work's values written — each by the table's key, a lookup
+     * apiece; of more, every row of the facet read in one pass and the keys picked out of it — H2 matches a long list
+     * of keys against every row of the facet rather than by the key. A pass for a work written was a pass over every
+     * author and tag of the site a work: the import of a million works slower with every one (user, 2026-11-17).
+     */
+    override fun facetNames(facet: String, keys: Collection<String>): Map<String, String> =
+        when {
+            keys.isEmpty() -> emptyMap()
+            keys.size <= LOOKED_UP ->
+                keys
+                    .distinct()
+                    .mapNotNull { key ->
+                        db.select(FACET_VALUE.NAME)
+                            .from(FACET_VALUE)
+                            .where(FACET_VALUE.FACET.eq(facet), FACET_VALUE.VALUE_KEY.eq(key))
+                            .fetchOne()
+                            ?.value1()
+                            ?.let { key to it }
+                    }
+                    .toMap()
+            else -> namesInOnePass(facet, keys as? Set<String> ?: keys.toHashSet())
+        }
+
+    /** The names of the facet's values [wanted], every row of the facet read in one pass. */
+    private fun namesInOnePass(facet: String, wanted: Set<String>): Map<String, String> {
         val out = HashMap<String, String>()
         db.select(FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)
             .from(FACET_VALUE)
@@ -167,5 +190,11 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
 
         /** The longest description of a value the table holds (`VARCHAR(4000)`). */
         const val DESCRIPTION_LENGTH = 4000
+
+        /**
+         * The keys whose names are looked up one by one, by the table's key: a work's values; of more, one pass over
+         * the facet is fewer reads than a lookup a key ([facetNames]).
+         */
+        const val LOOKED_UP = 50
     }
 }
