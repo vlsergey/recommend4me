@@ -225,30 +225,62 @@ class ScoringTest {
                 List(rows.size) {
                     IntArray(random.nextInt(4)) { random.nextInt(values) }.distinct().sorted().toIntArray()
                 }
+            // A cutoff of every value of its own, as the application calibrates them: some above the half, some under
+            val cutoffs = FloatArray(values) { random.nextFloat() * CUTOFFS - CUTOFFS / 2 }
+            val asked = Asked(rows, columns, closed, cutoffs)
             // The stripe of the one pass as it is, and of one: nearly every row of more likely than it holds, written
             // again whole
             for (stripe in listOf(FeatureKernels.STRIPE, 1)) for (least in listOf(0, 3, FeatureKernels.MAX_LEAST)) {
                 (card as Scoring.Scored).stripe = stripe
-                val expected = main.shown(rows, columns, closed, least)
-                val got = card.shown(rows, columns, closed, least)
-                assertTrue(card.onTheCard, "chosen on the card")
-                assertShownAlike(expected, got, "least $least, stripe $stripe")
-                if (stripe == 1)
-                    assertTrue(
-                        expected.any { e -> e.scores.count { it > card.half } > 1 },
-                        "some row of more likely than the stripe",
-                    )
+                shownAlike(main, card, asked, least)
             }
             // The coordinates made on the card, brought over: the chances of every value as the main memory's
-            val asked = intArrayOf(0, 3, items - 1, items / 2)
-            val a = main.of(asked)
-            val b = card.of(asked)
-            asked.indices.forEach { r -> for (v in 0 until values) assertNear(a[r][v], b[r][v], "row $r, value $v") }
+            val some = intArrayOf(0, 3, items - 1, items / 2)
+            val a = main.of(some)
+            val b = card.of(some)
+            some.indices.forEach { r -> for (v in 0 until values) assertNear(a[r][v], b[r][v], "row $r, value $v") }
             card.close()
             main.close()
         } finally {
             there.inputs.forEach { it.onCard?.close() }
         }
+    }
+
+    /** What is asked of the scores: the rows, the values of each, those it may not be shown with, the cutoffs. */
+    private class Asked(
+        val rows: IntArray,
+        val columns: List<IntArray?>,
+        val closed: List<IntArray>,
+        val cutoffs: FloatArray,
+    )
+
+    /**
+     * What every row [asked] is shown with, of [least] besides the likely, chosen on the [card] as in the [main] memory
+     * — of the half, and of the cutoffs of the values, whose choosing is also the rule's ([SuggestionScores.choose]) of
+     * the card's own scores, and another than of the half.
+     */
+    private fun shownAlike(main: SuggestionScores, card: Scoring.Scored, asked: Asked, least: Int) {
+        val (rows, columns, closed) = Triple(asked.rows, asked.columns, asked.closed)
+        val what = "least $least, stripe ${card.stripe}"
+        val expected = main.shown(rows, columns, closed, least)
+        val got = card.shown(rows, columns, closed, least)
+        assertTrue(card.onTheCard, "chosen on the card")
+        assertShownAlike(expected, got, what)
+        if (card.stripe == 1)
+            assertTrue(
+                expected.any { e -> e.scores.count { it > card.half } > 1 },
+                "some row of more likely than the stripe",
+            )
+        val chosen = card.shown(rows, columns, closed, least, asked.cutoffs)
+        assertTrue(card.onTheCard, "chosen on the card of the cutoffs")
+        val scores = card.scores(rows, columns)
+        val rule =
+            rows.indices.map { r ->
+                SuggestionScores.choose(scores[r], columns[r], closed[r], least, card.half, asked.cutoffs)
+            }
+        assertShownAlike(rule, chosen, "$what, the rule of the cutoffs")
+        assertShownAlike(main.shown(rows, columns, closed, least, asked.cutoffs), chosen, "$what, of the cutoffs")
+        assertTrue(rows.indices.any { r -> !chosen[r].places.contentEquals(got[r].places) }, "the cutoffs as the half")
     }
 
     /**
@@ -262,5 +294,10 @@ class ScoringTest {
                 assertRelative(expected[r].scores[k], got[r].scores[k], "row $r, place ${expected[r].places[k]}")
             }
         }
+    }
+
+    private companion object {
+        /** The width of the scores the cutoffs of the values are drawn from, around nought. */
+        const val CUTOFFS = 4f
     }
 }

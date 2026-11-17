@@ -140,8 +140,9 @@ extern "C" __global__ void ones_gradient_heavy(
 // its coordinates U[item, f·rank ..] by the fold's model; its values — those of cols from colAt[r],
 // colLen[r] of them, or every value when colAt[r] < 0 — each scored as the processor does
 // (Simd.combine: the shift, then every coordinate by fma, in order; the site's example after), the
-// closed (ascending, closedAt[r] .. closedAt[r + 1]) passed over. A score above half is likely;
-// of the rest the `least` highest, of equal scores the lower value.
+// closed (ascending, closedAt[r] .. closedAt[r + 1]) passed over. A score above its value's cutoff —
+// above half when there are none — is likely; of the rest the `least` highest, of equal scores the
+// lower value.
 
 #define MAX_RANK 64
 #define MAX_LEAST 8
@@ -183,12 +184,18 @@ __device__ __forceinline__ float score_of(
     return s;
 }
 
+// The score above which the value v is likely: its own of cutoff, the application's calibrated one of
+// every value of the task by its index; without them (a null cutoff) the half of every value
+__device__ __forceinline__ float above(int v, float half, const float* cutoff) {
+    return cutoff ? cutoff[v] : half;
+}
+
 // Of a score and its value before another's: higher, or as high and of a lower value
 __device__ __forceinline__ bool before(float s, int v, float t, int u) {
     return s > t || s == t && v < u;
 }
 
-#define SHOWN_PARAMETERS     const int* item, const int* foldOf, const float* U, int width, int rank,     const float* vt, const float* shifts, const float* examples, int m,     const int* colAt, const int* colLen, const int* cols, const int* closedAt, const int* closed, const int* exAt, const int* ex, float half
+#define SHOWN_PARAMETERS     const int* item, const int* foldOf, const float* U, int width, int rank,     const float* vt, const float* shifts, const float* examples, int m,     const int* colAt, const int* colLen, const int* cols, const int* closedAt, const int* closed, const int* exAt, const int* ex, float half, const float* cutoff
 
 // The likely of a row kept in its own stripe of `cap` by the one pass; a row of more is written again whole (shown_likely)
 #define WARPS (BLOCK / 32)
@@ -251,7 +258,7 @@ extern "C" __global__ void shown_one(
             int v = w.colAt < 0 ? p : cols[w.colAt + p];
             if (!shut(v, closed, w.closedFrom, w.closedTo)) {
                 s = score_of(v, u, rank, side, m, shift, w, ex, example);
-                if (s > half) flag = true;
+                if (s > above(v, half, cutoff)) flag = true;
                 else if (least > 0 && (kept < least || before(s, v, ks[least - 1], kv[least - 1]))) {
                     int at = kept < least ? kept : least - 1;
                     while (at > 0 && before(s, v, ks[at - 1], kv[at - 1])) {
@@ -355,7 +362,7 @@ extern "C" __global__ void shown_likely(SHOWN_PARAMETERS, const int* which, cons
             int v = w.colAt < 0 ? p : cols[w.colAt + p];
             if (!shut(v, closed, w.closedFrom, w.closedTo)) {
                 s = score_of(v, u, rank, side, m, shift, w, ex, example);
-                flag = s > half;
+                flag = s > above(v, half, cutoff);
             }
         }
         unsigned mask = __ballot_sync(0xffffffffu, flag);

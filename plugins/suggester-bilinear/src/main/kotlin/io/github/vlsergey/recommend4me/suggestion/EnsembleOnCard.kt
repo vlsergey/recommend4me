@@ -61,9 +61,18 @@ internal class EnsembleOnCard(
      * slot's, A there too), into [into], and of the values no item outside a model's fold has ([Problem.unseenOutside]
      * of [p]) into [unseen] besides — as [Bilinear.heldOutLoss] makes it: the items' and the values' coordinates made
      * of them here, then every pair of the items of each fold at once ([PairsOnCard.heldOut]), where the processor went
-     * through them one by one — of the tags of 75 707 works and 9871 values, a minute and more on one thread.
+     * through them one by one — of the tags of 75 707 works and 9871 values, a minute and more on one thread. Of the
+     * pairs the user answered on ([Problem.answered]), the score every model gives those of the items of its fold into
+     * its array of [answers], at their places among them, made there too.
      */
-    fun heldOut(p: Problem, k: Int, points: Array<Pieces>, into: List<Bilinear.Held>, unseen: List<Bilinear.Held>) {
+    fun heldOut(
+        p: Problem,
+        k: Int,
+        points: Array<Pieces>,
+        into: List<Bilinear.Held>,
+        unseen: List<Bilinear.Held>,
+        answers: List<FloatArray>?,
+    ) {
         val m = p.m
         val fresh = HashMap<Int, BooleanArray>()
         val unseenOf = IntArray(k * m)
@@ -75,11 +84,17 @@ internal class EnsembleOnCard(
         slots.send(k, points, withA = false)
         products.coordinates(k * r, aOnCard = false, keep = true)
         pairs.coordinates(k, onCard.aT)
-        val sums = pairs.heldOut(k, slotModel, heldOut, unseenOf, onCard.uT)
+        val held = pairs.heldOut(k, slotModel, heldOut, unseenOf, onCard.uT)
+        val count = p.answered.size
         for (slot in 0 until k) {
             val at = slot * PairsOnCard.HELD_SUMS
-            into[slotModel[slot]].add(sums, at)
-            unseen[slotModel[slot]].add(sums, at + PairsOnCard.HELD_SUMS / 2)
+            into[slotModel[slot]].add(held.sums, at)
+            unseen[slotModel[slot]].add(held.sums, at + PairsOnCard.HELD_SUMS / 2)
+            answers?.let { a ->
+                p.answered.scoreFold(heldOut[slotModel[slot]], p.foldOf, a[slotModel[slot]]) { place, _, _, _ ->
+                    held.answers[slot * count + place]
+                }
+            }
         }
     }
 

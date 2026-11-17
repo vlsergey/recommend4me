@@ -126,9 +126,13 @@ class Calibration(
                 Calibration(scores, chances, own, threshold, answers)
             }
 
-        /** Learnt of the [answered]: null of none. */
+        /**
+         * Learnt of the [answered]: null of none, or of answers all of one word — of yeses alone every score is as
+         * likely, the curve flat, and every value would be given: what tells a likely value from an unlikely one is
+         * learnt of both.
+         */
         fun fit(answered: List<Answered>): Calibration? {
-            if (answered.isEmpty()) return null
+            if (answered.none { it.yes } || answered.all { it.yes }) return null
             val (scores, chances) = FacetCurve.of(answered)
             val facet = Calibration(scores, chances, emptyMap(), NONE_LEARNT, answered.size)
             val own = ValueShifts.of(answered) { a -> logit(facet.curve(a.score)) }

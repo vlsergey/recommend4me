@@ -1,13 +1,18 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.onnx.Onnx
+import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import java.util.Random
 import java.util.concurrent.CancellationException
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class BilinearSuggesterTest {
     /** The chances of the items of [task] by the model [fitted] made of it: the one way to them. */
@@ -368,6 +373,73 @@ class BilinearSuggesterTest {
         assertTrue(agree >= all * 0.95, "$agree of $all pairs agree")
     }
 
+    /**
+     * The [task] with the user's answers: of every seventh item its values confirmed, of some others a value it has not
+     * rejected; the site's examples of every fourth item — its values, some of them answered on too.
+     */
+    private fun answered(task: SuggestionTask): SuggestionTask =
+        SuggestionTask(
+            itemIds = task.itemIds,
+            inputs = task.inputs,
+            values = task.values,
+            valueKeys = task.valueKeys,
+            assigned = task.assigned,
+            confirmed = List(task.itemCount) { i -> if (i % 7 == 0) task.assigned[i] else IntArray(0) },
+            rejected =
+                List(task.itemCount) { i ->
+                    if (i % 11 != 3) IntArray(0)
+                    else (0 until task.valueCount).filter { it !in task.assigned[i] }.take(2).toIntArray()
+                },
+            context = task.context,
+            contextKeys = task.contextKeys,
+            examples = List(task.itemCount) { i -> if (i % 4 == 0) task.assigned[i] else IntArray(0) },
+        )
+
+    @Test
+    fun `the values the user answered on are scored by the model of the fold that held their item out`() =
+        heldOutAsKept(BilinearSuggester(), SCORE_32)
+
+    @Test
+    fun `on the card the values the user answered on are scored by the model of the fold that held their item out`() {
+        val onnx = Onnx(defaultModelsDir(), gpu = true)
+        assumeTrue(onnx.cudaLibraries() != null, "no CUDA libraries")
+        // The items' features' products on the tensor cores, in brain floating point: within its digits
+        heldOutAsKept(BilinearSuggester(onnx), SCORE_16)
+    }
+
+    /**
+     * Of a fitting by [suggester] of a task with the user's answers, the scores handed over
+     * ([FittedSuggester.heldOut]): every pair answered on once, each scored as the scoring kept scores its item — by
+     * the model of the fold that held it out — the difference's length within [tolerance] of the scores'; of a refit
+     * gone on from the last state too, none of a state unpacked.
+     */
+    private fun heldOutAsKept(suggester: BilinearSuggester, tolerance: Float) {
+        val task = answered(task(300, wrong = 5))
+        val expected =
+            (0 until task.itemCount).flatMap { i ->
+                (task.confirmed[i].asList() + task.rejected[i].asList()).distinct().sorted().map { i to it }
+            }
+        assertTrue(expected.size > 40, "${expected.size} answered pairs")
+        val fitted = assertNotNull(suggester.fit(task))
+        val again = assertNotNull(suggester.fit(task, suggester.unpack(fitted.pack(), task)))
+        for ((what, fit) in listOf("from scratch" to fitted, "from the last state" to again)) {
+            val held = assertNotNull(fit.heldOut, what)
+            assertEquals(expected, held.items.indices.map { held.items[it] to held.values[it] }, what)
+            val kept = scored(fit, task).scores(held.items, held.values.map { intArrayOf(it) }).map { it.single() }
+            // Within the digits as a whole, not score by score: a score that is the sum of terms that all but cancel
+            // keeps few of the digits of its terms
+            var diff = 0.0
+            var own = 0.0
+            held.scores.forEachIndexed { k, score ->
+                diff += (kept[k] - score).toDouble().let { it * it }
+                own += kept[k].toDouble().let { it * it }
+            }
+            val relative = sqrt(diff / own)
+            assertTrue(relative < tolerance, "$what: the scores held out differ from those kept by $relative")
+        }
+        assertNull(assertNotNull(suggester.unpack(fitted.pack(), task)).heldOut)
+    }
+
     @Test
     fun `nothing to learn from, nothing is fitted`() {
         val task = task(20)
@@ -390,5 +462,16 @@ class BilinearSuggesterTest {
     fun `told to stop, the fitting is given up`() {
         val task = task(120)
         assertFailsWith<CancellationException> { BilinearSuggester().fit(task, stop = { true }) }
+    }
+
+    private companion object {
+        /** A score made in single precision in two orders of the sums: its last digits. */
+        const val SCORE_32 = 1e-4f
+
+        /**
+         * A score of coordinates the card made in brain floating point (a fraction of 8 bits), against single
+         * precision: within its digits.
+         */
+        const val SCORE_16 = 1e-2f
     }
 }

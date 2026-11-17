@@ -290,11 +290,11 @@ internal class Scoring(
             require(columns.size == rows.size && closed.size == rows.size) {
                 "${columns.size} sets of values, ${closed.size} closed of ${rows.size} rows"
             }
+            require(likely == null || likely.size == m) { "${likely?.size} cutoffs of $m values" }
             coordinates
             val c = card
-            // The card's choosing knows one half alone: a cutoff of every value is chosen of the rows handed over
-            if (c != null && least <= FeatureKernels.MAX_LEAST && likely == null) {
-                runCatching { c.cublas.lock.withLock { c.shown(rows, columns, closed, least) } }
+            if (c != null && least <= FeatureKernels.MAX_LEAST) {
+                runCatching { c.cublas.lock.withLock { c.shown(rows, columns, closed, least, likely) } }
                     .onSuccess {
                         return it
                     }
@@ -549,14 +549,21 @@ internal class Scoring(
              * [SuggestionScores.shown] on the card, of every row at once: what the kernels read sent in one copy, from
              * page-locked memory; ONE PASS over a row (`shown_one`) — its likely into its stripe, the highest of the
              * rest merged by the warps' registers; the stripes packed (`shown_pack`); a row of more likely than a
-             * stripe holds written again whole (`shown_likely`); what is chosen brought back in one copy.
+             * stripe holds written again whole (`shown_likely`); what is chosen brought back in one copy. A value
+             * likely above its own cutoff of [likely] — sent once a choosing — or, without them, above [half].
              */
-            fun shown(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>, least: Int): List<Shown> {
+            fun shown(
+                rows: IntArray,
+                columns: List<IntArray?>,
+                closed: List<IntArray>,
+                least: Int,
+                likely: FloatArray?,
+            ): List<Shown> {
                 check(!this.closed) { "the scores on the card are freed" }
                 val started = System.nanoTime()
                 val count = rows.size
                 if (count == 0) return emptyList()
-                val args = sent(rows, columns, closed)
+                val args = sent(rows, columns, closed, likely)
                 // What it gives: of every row how many are likely and how many of the highest besides, their places and
                 // scores
                 val l = maxOf(least, 0)
@@ -609,9 +616,14 @@ internal class Scoring(
              * What the kernels read, laid out and sent in one copy from page-locked memory: ints one after another —
              * the items, where each row's values begin and how many, the values, the closed and the examples by where
              * each row's begin. Answers the arguments every kernel of the choosing begins with, the scoring's numbers
-             * on the card among them.
+             * on the card among them — the cutoff of every value of [likely] in a room of its own, or none.
              */
-            private fun sent(rows: IntArray, columns: List<IntArray?>, closed: List<IntArray>): Array<Any> {
+            private fun sent(
+                rows: IntArray,
+                columns: List<IntArray?>,
+                closed: List<IntArray>,
+                likely: FloatArray?,
+            ): Array<Any> {
                 val count = rows.size
                 // Every array of values once, every row by where its array begins (-1: every value)
                 val arrays = IdentityHashMap<IntArray, Int>()
@@ -643,6 +655,9 @@ internal class Scoring(
                 val input = room("in", inBytes)
                 input.upload(staging, inBytes)
                 fun at(int: Int) = input.at(int.toLong() * Int.SIZE_BYTES)
+                val cutoff: Any =
+                    likely?.let { room("cutoff", it.size.toLong() * Float.SIZE_BYTES).also { r -> r.upload(it) } }
+                        ?: MemorySegment.NULL
                 return arrayOf<Any>(
                     at(0),
                     folded,
@@ -661,6 +676,7 @@ internal class Scoring(
                     at(exFrom),
                     at(exFrom + count + 1),
                     half,
+                    cutoff,
                 )
             }
 

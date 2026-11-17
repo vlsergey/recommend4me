@@ -18,9 +18,12 @@ class CalibrationTest {
         }
     }
 
+    /** Of no answer none; of answers all of one word none: a likely value is told from an unlikely one of both. */
     @Test
-    fun `none of no answer`() {
+    fun `none of no answer, nor of answers all of one word`() {
         assertNull(Calibration.fit(emptyList()))
+        assertNull(Calibration.fit(List(50) { Answered("v", it / 10f, true) }))
+        assertNull(Calibration.fit(List(50) { Answered("v", it / 10f, false) }))
     }
 
     /** A suggester too sure of itself: the facet's curve gives the share of yeses a score has. */

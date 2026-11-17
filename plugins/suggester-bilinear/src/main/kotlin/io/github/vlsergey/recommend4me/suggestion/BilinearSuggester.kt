@@ -24,7 +24,9 @@ private val log = LoggerFactory.getLogger(BilinearSuggester::class.java)
  * EVERY ITEM IS JUDGED BY A MODEL THAT DID NOT LEARN FROM IT. The items fall into [FOLDS] folds by their ids; a model
  * is fitted on the items of all folds but one, and judges the items of that one. What the site or the user said of a
  * work does not vouch for itself: a value the site gave it that nothing else supports comes out unlikely, and an answer
- * on a work does not move its own chances — the next likeliest are offered after it.
+ * on a work does not move its own chances — the next likeliest are offered after it. The scores the folds of the chosen
+ * setting give the values the user answered on are handed over with the fitting ([FittedSuggester.heldOut]): what the
+ * application calibrates the chances by.
  *
  * NO NUMBER OF THE MODEL IS CHOSEN BY HAND: the rank and the penalty are chosen among [RANKS] and the penalties from
  * [STRONGEST] down by the held-out loss of every fold summed — the strongest penalty within one standard error of the
@@ -113,9 +115,8 @@ internal constructor(
             System.currentTimeMillis() - started,
             tried.joinToString("; ") { it.unseenTold() },
         )
-        val nearby = besideChosen(grid, chosen, tried)
         val report = reportOf(chosen, tried, fromScratch = last == null)
-        return Fitted(design, chosen.rank, chosen.lambda, chosen.fitted.folds, nearby, slowerAt, report)
+        return chosen.fitted.handedOver(besideChosen(grid, chosen, tried), slowerAt, report)
     }
 
     /** What the fitting tried and chose, by their settings — the rank and the penalty — and held-out losses. */
@@ -221,11 +222,11 @@ internal constructor(
         val count = lambdas.size * FOLDS
         val starts = List(count) { q -> start(lambdas[q / FOLDS], q % FOLDS) }
         val begun = System.currentTimeMillis()
-        val weights: List<FloatArray>
-        val losses: IntArray
-        val endedAt: LongArray
         val held = List(lambdas.size) { Bilinear.Held() }
         val unseen = List(lambdas.size) { Bilinear.Held() }
+        // Of every penalty, the score of every pair the user answered on by the fold that held its item out
+        val answers = List(lambdas.size) { FloatArray(problem.answered.size) }
+        val fits: Ensemble.Fits
         val where: String
         if (card == null) {
             Ensemble(
@@ -236,42 +237,59 @@ internal constructor(
                     cublas,
                 )
                 .use { ensemble ->
-                    val fits = ensemble.fit(starts, Bilinear.MAX_STEPS, stop)
-                    weights = fits.weights
-                    losses = fits.losses
-                    endedAt = fits.endedAt
-                    ensemble.heldOut(weights, List(count) { held[it / FOLDS] }, List(count) { unseen[it / FOLDS] })
+                    fits = ensemble.fit(starts, Bilinear.MAX_STEPS, stop)
+                    ensemble.heldOut(
+                        fits.weights,
+                        List(count) { held[it / FOLDS] },
+                        List(count) { unseen[it / FOLDS] },
+                        List(count) { answers[it / FOLDS] },
+                    )
                     where = placeOf(ensemble)
                 }
         } else {
             where = "on the card (ONNX Runtime), a model at a time"
-            // On the card a model after another, on this thread: the card takes one step at a time
-            endedAt = LongArray(count)
-            losses = IntArray(count)
-            weights =
-                List(count) { q ->
-                    val before = helper.losses
-                    helper.fit(starts[q], lambdas[q / FOLDS].toFloat(), q % FOLDS, stop = stop).also {
-                        losses[q] = helper.losses - before
-                        endedAt[q] = System.currentTimeMillis()
-                    }
-                }
-            weights.forEachIndexed { q, theta ->
-                helper.heldOutLoss(theta, q % FOLDS, held[q / FOLDS], unseen[q / FOLDS])
+            fits = oneByOne(helper, starts, lambdas, stop)
+            fits.weights.forEachIndexed { q, theta ->
+                helper.heldOutLoss(theta, q % FOLDS, held[q / FOLDS], unseen[q / FOLDS], answers[q / FOLDS])
             }
         }
         return lambdas.mapIndexed { j, lambda ->
             val own = (j * FOLDS until (j + 1) * FOLDS)
+            val folds = own.map { helper.weights(fits.weights[it]) }
             Tried(
                 rank,
                 lambda,
                 held[j],
                 unseen[j],
-                Fitted(problem.design, rank, lambda, own.map { helper.weights(weights[it]) }),
-                own.map { losses[it] },
-                own.maxOf { endedAt[it] } - begun,
+                Fitted(problem.design, rank, lambda, folds, heldOut = problem.answered.scored(answers[j])),
+                own.map { fits.losses[it] },
+                own.maxOf { fits.endedAt[it] } - begun,
             )
         } to where
+    }
+
+    /**
+     * Every model of a penalty of [lambdas] and a fold — model q the penalty q / [FOLDS], the fold q % [FOLDS] — fitted
+     * from its start of [starts] by the [helper] on the card of ONNX Runtime, a model after another, on this thread:
+     * the card takes one step at a time.
+     */
+    private fun oneByOne(
+        helper: Bilinear,
+        starts: List<FloatArray>,
+        lambdas: List<Double>,
+        stop: () -> Boolean,
+    ): Ensemble.Fits {
+        val endedAt = LongArray(starts.size)
+        val losses = IntArray(starts.size)
+        val weights =
+            List(starts.size) { q ->
+                val before = helper.losses
+                helper.fit(starts[q], lambdas[q / FOLDS].toFloat(), q % FOLDS, stop = stop).also {
+                    losses[q] = helper.losses - before
+                    endedAt[q] = System.currentTimeMillis()
+                }
+            }
+        return Ensemble.Fits(weights, losses, endedAt)
     }
 
     /** Where the [ensemble] fitted its models, as the log tells it: its features, searches, pairs and its timing. */
@@ -329,7 +347,20 @@ internal constructor(
         val cardSlowerAt: Int? = null,
         /** What the fitting that made it tried and chose; none of a state unpacked. */
         override val report: FitReport? = null,
+        /**
+         * The scores of the pairs the user answered on, each by the fold that held its item out ([AnsweredPairs]); none
+         * of a state unpacked. Every fitting, a refit gone on from the last state too, fits every fold of the penalties
+         * it tries: of the one it chooses.
+         */
+        override val heldOut: HeldOutScores? = null,
     ) : FittedSuggester {
+
+        /**
+         * The state of the penalty chosen as the fitting hands it over: with the folds' weights of the penalties beside
+         * it ([nearby]), the card's verdict ([cardSlowerAt]) and the [report].
+         */
+        fun handedOver(nearby: Map<Double, List<Weights>>, slowerAt: Int?, report: FitReport) =
+            Fitted(design, rank, lambda, folds, nearby, slowerAt, report, heldOut)
 
         /** The folds' weights at the penalty kept nearest to [penalty]. */
         fun nearest(penalty: Double): List<Weights> =

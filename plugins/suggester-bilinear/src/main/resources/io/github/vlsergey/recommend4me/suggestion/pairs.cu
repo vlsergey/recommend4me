@@ -335,6 +335,29 @@ __device__ void held_items_of(
 extern "C" __global__ void held_items(HELD_ITEMS_PARAMETERS) { held_items_of<0>(HELD_ITEMS_ARGUMENTS); }
 extern "C" __global__ void held_items_16(HELD_ITEMS_PARAMETERS) { held_items_of<16>(HELD_ITEMS_ARGUMENTS); }
 
+// THE SCORES OF THE PAIRS THE USER ANSWERED ON, by the model that held their item out: a thread a pair
+// of a model — `count` pairs of the items item[a], the values value[a], example[a] 1 of a value the
+// site gives the item as an example — the score made as held_items makes it, of a pair of an item of
+// the model's held-out fold alone, into out[slot · count + a]; the rest left as they were
+extern "C" __global__ void held_answers(
+    int k, int n, int m, int r, const float* uT, const float* vT, const float* bias, const float* params, const int* heldOut,
+    const int* foldOf, int count, const int* item, const int* value, const float* example, float* out
+) {
+    long long t = (long long) blockIdx.x * blockDim.x + threadIdx.x;
+    if (t >= (long long) k * count) return;
+    int slot = (int) (t / count);
+    int a = (int) (t % count);
+    int i = item[a];
+    Model mo = model_of(params, heldOut, slot);
+    if (foldOf[i] != mo.heldOut) return;
+    int j = value[a];
+    const float* u = uT + (size_t) slot * r * n;
+    const float* v = vT + (size_t) slot * r * m;
+    float z = bias[(size_t) slot * m + j] + mo.common + mo.example * example[a];
+    for (int q = 0; q < r; q++) z += u[(size_t) q * n + i] * v[(size_t) q * m + j];
+    out[t] = z;
+}
+
 // THE VALUES' SIDE: a thread a value of a model, a block the values of one model. Of every item — the
 // items a chunk at a time, their coordinates and what they weigh held by the block — the same pairs as
 // the items' side, their slopes made again of the same numbers: the value's own entries of the items

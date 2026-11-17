@@ -29,8 +29,8 @@ class BilinearTest {
             values = names,
             valueKeys = List(m) { "v$it" },
             assigned = List(n) { i -> if (i % 4 == 0) IntArray(0) else intArrayOf(i % m) },
-            confirmed = List(n) { IntArray(0) },
-            rejected = List(n) { i -> if (i == 3) intArrayOf(1) else IntArray(0) },
+            confirmed = List(n) { i -> if (i % 5 == 2) intArrayOf(i % m) else IntArray(0) },
+            rejected = List(n) { i -> if (i == 3) intArrayOf(1) else if (i == 10) intArrayOf(0) else IntArray(0) },
             context = List(n) { i -> intArrayOf(i % 2) },
             contextKeys = listOf("f\u0001a", "f\u0001b"),
             lackWeight = 0.5,
@@ -60,8 +60,8 @@ class BilinearTest {
             values = randomRows(random, m, d),
             valueKeys = List(m) { "v$it" },
             assigned = List(n) { i -> if (i == 1) intArrayOf(1) else if (i == 2) intArrayOf(2, 5) else IntArray(0) },
-            confirmed = List(n) { IntArray(0) },
-            rejected = List(n) { i -> if (i == 3) intArrayOf(1) else IntArray(0) },
+            confirmed = List(n) { i -> if (i == 2) intArrayOf(5) else IntArray(0) },
+            rejected = List(n) { i -> if (i == 3) intArrayOf(1) else if (i == 8) intArrayOf(9) else IntArray(0) },
             context = List(n) { i -> intArrayOf(i % 2) },
             contextKeys = listOf("f\u0001a", "f\u0001b"),
             lackWeight = 0.5,
@@ -206,7 +206,8 @@ class BilinearTest {
      * Of models at random points, the held-out loss [Ensemble.heldOut] makes — on the [card] when given — against its
      * measure: on the card, the processor's of the same coordinates (the items' features' products in brain floating
      * point there, which the card's pairs and the processor's read alike); without one, the one each makes alone
-     * ([Bilinear.heldOutLoss]). The same pairs weighed alike, the losses the same but for the order of the sums.
+     * ([Bilinear.heldOutLoss]). The same pairs weighed alike, the losses the same but for the order of the sums. And
+     * the scores of the pairs the user answered on: of the items of a model's fold alone, the same.
      */
     private fun heldOutTogether(task: SuggestionTask, card: Cublas? = null, rank: Int = 3) {
         val problem = Problem(task, Design.of(task), BilinearSuggester.FOLDS)
@@ -220,15 +221,32 @@ class BilinearTest {
         val unseenTogether = helds()
         val measure = helds()
         val unseenMeasure = helds()
+        val answered = problem.answered
+        assertTrue(answered.size > 1, "${answered.size} answered pairs")
+        fun answers() = List(lambdas.size) { FloatArray(answered.size) { Float.NaN } }
+        val answersTogether = answers()
+        val answersMeasure = answers()
         Ensemble(problem, rank, lambdas, folds, card).use { ensemble ->
-            ensemble.heldOut(thetas, together, unseenTogether)
+            ensemble.heldOut(thetas, together, unseenTogether, answersTogether)
             if (card != null) {
                 assertTrue(ensemble.pairsOnCardUsed, "the pairs not on the card")
-                ensemble.heldOut(thetas, measure, unseenMeasure, pairsThere = false)
+                ensemble.heldOut(thetas, measure, unseenMeasure, answersMeasure, pairsThere = false)
             }
         }
         if (card == null)
-            thetas.forEachIndexed { k, theta -> alone.heldOutLoss(theta, folds[k], measure[k], unseenMeasure[k]) }
+            thetas.forEachIndexed { k, theta ->
+                alone.heldOutLoss(theta, folds[k], measure[k], unseenMeasure[k], answersMeasure[k])
+            }
+        for (k in thetas.indices) for (a in 0 until answered.size) {
+            val (expected, got) = answersMeasure[k][a] to answersTogether[k][a]
+            if (problem.foldOf[answered.items[a]] != folds[k])
+                assertTrue(expected.isNaN() && got.isNaN(), "model $k, answered pair $a of another fold scored")
+            else
+                assertTrue(
+                    abs(expected - got) <= 1e-4f * (1 + abs(expected)),
+                    "model $k, answered pair $a: $expected measured, $got together",
+                )
+        }
         for (k in thetas.indices) {
             listOf("every pair" to (measure[k] to together[k]), "the unseen" to (unseenMeasure[k] to unseenTogether[k]))
                 .forEach { (what, held) ->

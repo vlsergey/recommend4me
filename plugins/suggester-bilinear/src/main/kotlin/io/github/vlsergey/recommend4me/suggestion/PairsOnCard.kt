@@ -68,6 +68,13 @@ private constructor(
     private val unseenOf = room.bytes(count.toLong() * p.m * Int.SIZE_BYTES)
     private val heldSums = room.bytes(count.toLong() * HELD_SUMS * Double.SIZE_BYTES)
 
+    /** The pairs the user answered on ([Problem.answered]), and the score of each by every model ([answered]). */
+    private val answeredItem = room.ints(p.answered.items)
+    private val answeredValue = room.ints(p.answered.values)
+    private val answeredExample = room.floatsOf(p.answered.examples)
+    private val answeredScores = room.floats(count.toLong() * p.answered.size)
+    private val answeredHost = Floats(count * p.answered.size)
+
     // Of every item, the weight of a value it merely lacks, and which of the arrays of values it may have is its
     // own, as a mask of a bit a value (-1: any) — every array once, however many items share it
     private val lack = room.floatsOf(p.pairs.lack)
@@ -213,7 +220,9 @@ private constructor(
      * The held-out loss of the first [k] slots, the model in each by [slotModel], its held-out fold of [heldOut]: of
      * the items' coordinates [uT] and the values' made before ([coordinates]), the biases and the pair's own weights of
      * the slots, the pairs of the items of the fold, as [Bilinear.heldOutLoss] takes them — [HELD_SUMS] sums a slot, of
-     * every pair and of the values of [unseen] (of every slot, 1 of a value no item outside its fold has).
+     * every pair and of the values of [unseen] (of every slot, 1 of a value no item outside its fold has). And the
+     * scores of the pairs the user answered on ([Problem.answered]) of the items of the fold, made as a pair of the
+     * loss is ([HeldOnCard]).
      */
     fun heldOut(
         k: Int,
@@ -221,7 +230,7 @@ private constructor(
         heldOut: IntArray,
         unseen: IntArray,
         uT: Cublas.DeviceFloats,
-    ): DoubleArray {
+    ): HeldOnCard {
         for (slot in 0 until k) {
             scalesHost[slot] = 1f
             heldOutHost[slot] = heldOut[slotModel[slot]]
@@ -234,31 +243,29 @@ private constructor(
         kernels.launch(
             if (r == KNOWN_RANK) "held_items_16" else "held_items",
             blocksOf(n) * k * CudaKernels.BLOCK,
-            k,
-            n,
-            m,
-            r,
-            uT,
-            vT,
-            bias,
-            params,
-            heldOutOf,
-            lack,
-            group,
-            masks,
-            words,
-            foldOf,
-            firstEntry,
-            entryValue,
-            entryWeight,
-            entryLabel,
-            entryExample,
-            order,
-            unseenOf,
-            heldSums,
+            *(listOf(k, n, m, r, uT, vT, bias, params, heldOutOf, lack, group, masks, words, foldOf) +
+                    listOf(firstEntry, entryValue, entryWeight, entryLabel, entryExample, order, unseenOf, heldSums))
+                .toTypedArray(),
         )
-        return heldSums.doubles(k * HELD_SUMS)
+        val count = p.answered.size
+        kernels.launch(
+            "held_answers",
+            k.toLong() * count,
+            *(listOf(k, n, m, r, uT, vT, bias, params, heldOutOf, foldOf) +
+                    listOf(count, answeredItem, answeredValue, answeredExample, answeredScores))
+                .toTypedArray(),
+        )
+        answeredScores.download(answeredHost, 0, 0, k * count)
+        val answers = FloatArray(k * count).also { answeredHost.take(it, 0, 0, k * count) }
+        return HeldOnCard(heldSums.doubles(k * HELD_SUMS), answers)
     }
+
+    /**
+     * What [heldOut] made of the first slots: [HELD_SUMS] sums of the loss a slot; of every slot a score of every pair
+     * the user answered on ([Problem.answered]), one slot's after another — those of the items outside its fold not
+     * made.
+     */
+    class HeldOnCard(val sums: DoubleArray, val answers: FloatArray)
 
     /**
      * The losses of the first [k] slots finished, the model in each by [slotModel], into [losses]: the pair's own
@@ -545,6 +552,7 @@ private constructor(
                 "pairs_items_16",
                 "held_items",
                 "held_items_16",
+                "held_answers",
                 "pairs_values",
                 "pairs_values_16",
                 "listed_items",

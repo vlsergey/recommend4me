@@ -81,6 +81,9 @@ internal class Problem(val task: SuggestionTask, val design: Design, val folds: 
 
     val foldOf = IntArray(n) { foldOf(task.itemIds[it], folds) }
 
+    /** The pairs the user answered on: scored by the model of the fold that held each item out ([AnsweredPairs]). */
+    val answered: AnsweredPairs = AnsweredPairs.of(task, m, exampleValues)
+
     /**
      * The names of the values as texts of a work ([SuggestionTask.hints]), learnt from in every fold and judged in
      * none: a name read as the work's every text — each block of [hintBlocks] — that names its value and none of its
@@ -330,9 +333,10 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
     /**
      * The weighted losses of the pairs of the items of [fold] by [theta], added to [into]; those of the values no item
      * of the other folds has ([Problem.unseenOutside]) to [unseen] besides — how the model judges a value it learnt
-     * nothing of but its name and groups.
+     * nothing of but its name and groups. Of the pairs the user answered on ([Problem.answered]) of the items of
+     * [fold], their scores into [answers] besides, at their places among them.
      */
-    fun heldOutLoss(theta: FloatArray, fold: Int, into: Held, unseen: Held? = null) {
+    fun heldOutLoss(theta: FloatArray, fold: Int, into: Held, unseen: Held? = null, answers: FloatArray? = null) {
         val fresh = if (unseen == null) null else p.unseenOutside(fold)
         // The pairs that weigh anything alone, as the fitting scores them: the rest count nothing
         coordinates(theta, names = false)
@@ -340,6 +344,7 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
         val vH = FloatArray(m * rank).also { v.take(it, 0, 0, m * rank) }
         val pair = theta.copyOfRange(size - PAIR, size)
         val bias = size - PAIR - m
+        if (answers != null) answered(theta, uH, vH, fold, answers)
         val row = p.row()
         for (i in 0 until n) {
             if (p.foldOf[i] != fold) continue
@@ -352,6 +357,22 @@ internal class Bilinear(private val p: Problem, val rank: Int, private val step:
                 into.add(row.weights[j].toDouble(), l)
                 if (fresh != null && fresh[v]) unseen!!.add(row.weights[j].toDouble(), l)
             }
+        }
+    }
+
+    /**
+     * The scores by [theta] of the pairs the user answered on ([Problem.answered]) of the items of [fold], of the
+     * items' and the values' coordinates [uH] and [vH], into [answers] at their places: as a pair is scored in the
+     * held-out loss.
+     */
+    private fun answered(theta: FloatArray, uH: FloatArray, vH: FloatArray, fold: Int, answers: FloatArray) {
+        val bias = size - PAIR - m
+        val example = theta[size - PAIR]
+        val common = theta[size - PAIR + 1]
+        p.answered.scoreFold(fold, p.foldOf, answers) { _, i, v, ex ->
+            var z = theta[bias + v] + common + example * ex
+            for (q in 0 until rank) z += uH[i * rank + q] * vH[v * rank + q]
+            z
         }
     }
 

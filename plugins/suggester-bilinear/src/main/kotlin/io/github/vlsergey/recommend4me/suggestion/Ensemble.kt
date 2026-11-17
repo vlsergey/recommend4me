@@ -392,12 +392,15 @@ internal class Ensemble(
     /**
      * The held-out loss of every model, the pairs of the items of its fold that weigh anything, as
      * [Bilinear.heldOutLoss] takes them — of the weights [fitted] ([Bilinear]'s layout), into [into] and, of the values
-     * no item outside the fold has, [unseen].
+     * no item outside the fold has, [unseen]. Of the pairs the user answered on ([Problem.answered]), the score every
+     * model gives those of the items of its fold into its array of [answers], at their places among them — several
+     * models of one array, the folds of one penalty, each writing its own.
      */
     fun heldOut(
         fitted: List<FloatArray>,
         into: List<Bilinear.Held>,
         unseen: List<Bilinear.Held>,
+        answers: List<FloatArray>? = null,
         /** Of the pairs on the card, there; false: on the processor, of the same coordinates — the measure of it. */
         pairsThere: Boolean = true,
     ) = onTheCard {
@@ -410,7 +413,7 @@ internal class Ensemble(
             }
             val card = stepOnCard?.takeIf { pairsThere }
             if (card != null) {
-                card.heldOut(p, count, points, into, unseen)
+                card.heldOut(p, count, points, into, unseen, answers)
                 return@wide
             }
             val kr = count * r
@@ -424,13 +427,19 @@ internal class Ensemble(
                 val vAt = model * r * m
                 val example = pair[model * Bilinear.PAIR]
                 val common = pair[model * Bilinear.PAIR + 1]
+                // A pair's score: of the pairs of the loss, and of those the user answered on
+                fun score(i: Int, v: Int, ex: Float): Float {
+                    var dot = bias[model * m + v] + common + example * ex
+                    for (q in 0 until r) dot += uT[uAt + q * n + i] * vT[vAt + q * m + v]
+                    return dot
+                }
+                answers?.let { a -> p.answered.scoreFold(fold, p.foldOf, a[model]) { _, i, v, ex -> score(i, v, ex) } }
                 for (i in 0 until n) {
                     if (p.foldOf[i] != fold) continue
                     val len = p.pairsOf(i, pairRow)
                     for (j in 0 until len) {
                         val v = pairRow.values[j]
-                        var dot = bias[model * m + v] + common + example * pairRow.examples[j]
-                        for (q in 0 until r) dot += uT[uAt + q * n + i] * vT[vAt + q * m + v]
+                        val dot = score(i, v, pairRow.examples[j])
                         val l = (Bilinear.softplus(dot) - pairRow.labels[j] * dot).toDouble()
                         into[model].add(pairRow.weights[j].toDouble(), l)
                         if (fresh[v]) unseen[model].add(pairRow.weights[j].toDouble(), l)
