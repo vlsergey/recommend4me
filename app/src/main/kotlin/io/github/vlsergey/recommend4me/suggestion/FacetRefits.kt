@@ -36,6 +36,7 @@ internal class FacetRefits(
     private val chain: FacetChain,
     vocabularies: FacetVocabularies,
     private val passes: WorkPasses,
+    private val kept: KeptModelValues,
 ) {
     private val fitting = FacetFitting(chain, vocabularies)
 
@@ -76,7 +77,10 @@ internal class FacetRefits(
     @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        stores.sources.forEach { s -> s.suggestions.keepOnly(chain.facetsOf(s).map { it.key }) }
+        stores.sources.forEach { s ->
+            s.suggestions.keepOnly(chain.facetsOf(s).map { it.key })
+            s.modelValues.keepOnly(s.schema.facets.filter { it.infer }.map { it.key })
+        }
         stores.sources.filter { chain.facetsOf(it).isNotEmpty() }.forEach { planRefresh(it, null, "start") }
     }
 
@@ -108,6 +112,8 @@ internal class FacetRefits(
                 val suggester = plugins.suggester(store.id, facet.key) ?: return@forEachIndexed
                 changedIds += fitting.fit(store, facets, k, suggester, encoder, made, stop, works)
             }
+            // Of every work the chances of every facet made: the values they give kept for the filters
+            kept.keep(store, works, made)
         }
         return changedIds.toList()
     }
@@ -133,7 +139,11 @@ internal class FacetRefits(
             null,
             "asked",
             asked = true,
-            after = { ids: List<String> -> told(store, ids) },
+            // The facets after it in the chain read its values: a pass of every one of them, the values kept with it
+            after = { ids: List<String> ->
+                told(store, ids)
+                changed(store.id, "chances")
+            },
         ) {
             fittedAnew(store, facets, k, encoder)
         }

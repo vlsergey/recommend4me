@@ -12,6 +12,7 @@ import io.github.vlsergey.recommend4me.api.model.UniverseName
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
 import io.github.vlsergey.recommend4me.api.model.UniverseRelation
 import io.github.vlsergey.recommend4me.api.model.UniverseRelationRequest
+import io.github.vlsergey.recommend4me.item.ItemList
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -25,6 +26,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
 
 /**
@@ -34,6 +36,8 @@ import org.springframework.test.context.TestPropertySource
  */
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-universes"])
 class SiteUniversesTest : SiteTestBase() {
+
+    @Autowired lateinit var itemList: ItemList
 
     /** The universe of the entry U2 of the catalogue, as the test running made it: what its steps read. */
     private lateinit var u2: String
@@ -231,6 +235,19 @@ class SiteUniversesTest : SiteTestBase() {
             setOf("fake:C1", "fake:C2"),
             characters.filter { it.inferred == true }.map { it.key }.toSet(),
             "characters $characters",
+        )
+        // Kept for the filters by the pass of the models: the filter of the list runs no model
+        assertEquals(
+            setOf("fake:C1", "fake:C2"),
+            stores.source("site")!!.modelValues.of("characters")["p9"].orEmpty().toSet(),
+        )
+        assertEquals(
+            setOf("fake:C1", "fake:C2"),
+            itemList
+                .valuesOf(stores.source("site")!!, stores.source("site")!!.schema.facet("characters")!!, emptyMap())[
+                    "p9"]
+                .orEmpty()
+                .toSet(),
         )
         assertEquals("Pilot", characters.single { it.key == "fake:C1" }.name)
         val pairing = facets.single { it.facet == "pairings" }.propertyValues.single { it.offered != true }

@@ -77,8 +77,9 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         val made = pairingsApi.getPairing(UniverseFacets.pairing("fake:C2", "fake:C1")).body!!
         assertEquals(UniverseFacets.pairing("fake:C1", "fake:C2"), made.key)
         assertEquals(setOf("Pilot", "Captain"), made.characters.map { it.name }.toSet())
+        // The universes drafted of the works kept for the marking in the queue, after the quiet
         assertTrue(
-            toMark(made.key).map { it.item }.containsAll(listOf("g1", "g2")),
+            waitFor(60) { toMark(made.key).map { it.item }.containsAll(listOf("g1", "g2")) },
             "to mark: ${toMark(made.key).map { it.item }}",
         )
         assertEquals(listOf("Space Pilot & Captain"), toMark(made.key).first { it.item == "g1" }.lines.map { it.line })

@@ -119,16 +119,6 @@ abstract class TwoSitesTestBase {
     protected fun tagOf(source: String, tag: String) =
         TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef(source, tag)))
 
-    /** Waits up to [seconds] for [condition]; true when it came. */
-    protected fun waitFor(seconds: Int = 30, condition: () -> Boolean): Boolean {
-        val until = System.currentTimeMillis() + seconds * 1000L
-        while (System.currentTimeMillis() < until) {
-            if (condition()) return true
-            Thread.sleep(50)
-        }
-        return condition()
-    }
-
     /** Waits for a value that is not null yet. */
     protected fun <T : Any> waitForValue(read: () -> T?): T {
         waitFor { read() != null }

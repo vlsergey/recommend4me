@@ -20,7 +20,8 @@ internal typealias MadeChances = HashMap<String, HashMap<String, Map<String, Cha
  * THE CHAIN OF THE FACETS: the chances of works made in memory by the models kept, a facet after another, in the order
  * of [facetsOf] — each reading as its context the values the site and the user give of every other facet and the values
  * the model gives of the facets before it, made in the same pass; of every facet what a work is shown with
- * ([ShownChances.keep]). Nothing waits for a refit, nothing is written of a work (user, 2026-10-15).
+ * ([ShownChances.keep]). Nothing waits for a refit, no chance is written of a work (user, 2026-10-15); the values a
+ * pass over every work gives are kept for the filters ([KeptModelValues]).
  *
  * EVERY FACET READ, THEN WORKED OUT WITH THE DATABASE REFUSED (user, 2026-11-12): the works of the pass are read as it
  * begins ([WorksRead]); of every facet its model kept, the dictionary's word on its values ([Vocabulary]) and the

@@ -23,6 +23,12 @@ interface FacetModel {
 }
 
 /**
+ * A facet's own model ([FacetModel]) fitted again: the chances of its works changed, and with them the values they are
+ * shown with and the context of every facet after it.
+ */
+data class OwnModelFitted(val facet: String)
+
+/**
  * WHAT A FACET'S OWN MODEL READ OF THE WORKS ([FacetModel.read]): their chances made of it alone, by item, then by
  * value — none of a work it tells nothing of — nothing more read.
  */

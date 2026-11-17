@@ -10,12 +10,14 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.Chance
 import io.github.vlsergey.recommend4me.suggestion.FacetModel
 import io.github.vlsergey.recommend4me.suggestion.FacetModelRead
+import io.github.vlsergey.recommend4me.suggestion.OwnModelFitted
 import io.github.vlsergey.recommend4me.tag.TagsChanged
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 
@@ -30,7 +32,12 @@ private val log = LoggerFactory.getLogger(AgeRatings::class.java)
  * ([FacetDef.required][io.github.vlsergey.recommend4me.source.FacetDef.required]), the site's when it lets one alone.
  */
 @Service
-class AgeRatings(private val stores: Stores, private val workload: Workload, databases: Databases) : FacetModel {
+class AgeRatings(
+    private val stores: Stores,
+    private val workload: Workload,
+    private val events: ApplicationEventPublisher,
+    databases: Databases,
+) : FacetModel {
     override val facet: String = AgeRating.KEY
 
     private val models = AgeRatingRepository(databases.dictionaries.dsl)
@@ -106,6 +113,7 @@ class AgeRatings(private val stores: Stores, private val workload: Workload, dat
             model?.let { "%.4f".format(AgeRatingModel.loss(it, examples)) },
             System.currentTimeMillis() - started,
         )
+        events.publishEvent(OwnModelFitted(AgeRating.KEY))
     }
 
     companion object {

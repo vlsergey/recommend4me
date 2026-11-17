@@ -273,12 +273,18 @@ the model gives of the facets before it, made in the same pass. A work's charact
 the universes given before them, its pairings pairs of the characters given before them. The
 fitting and the reading follow the same chain, so a facet is judged on what it was fitted on.
 
-ONLY THE MODEL OF EACH FACET IS KEPT, in the model database: its fitted state, the values it
-chooses from, and the model the works are scored by. THE CHANCES OF THE WORKS ARE NOT KEPT (user,
-2026-10-15): whoever reads works — a page, a card, the extension, a filter over the catalogue, the
-search index, the training of the grades — gets them made in memory at the reading, of those works
-alone, from their vectors and values by the models kept, through the chain. Nothing waits for a
-refit and nothing is written.
+THE MODEL OF EACH FACET IS KEPT, in the model database: its fitted state, the values it chooses
+from, and the model the works are scored by. THE CHANCES OF THE WORKS ARE NOT KEPT (user,
+2026-10-15): whoever reads works — a page, a card, the extension, the search index, the training of
+the grades — gets them made in memory at the reading, of those works alone, from their vectors and
+values by the models kept, through the chain. Nothing waits for a refit.
+
+THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17): a filter of the list runs no
+model — of a million works the chain over every work at every request was minutes. Every pass of
+the models of a source's facets, which makes the chances of every work anyway, writes the values
+each work is given beyond the site's own (`model_value`) where they changed (`KeptModelValues`); the
+filters read them with the site's values and the user's answers. A change of a work, of an answer,
+of a model — the age rating's own included — plans that pass.
 
 EVERY SUGGESTER KEEPS ITS MODEL, AND A WORK IS SCORED BY IT ALONE (user, 2026-11-12):
 `FittedSuggester.model` is made of the task fitted on and kept; `FacetSuggester.scoring` of it and

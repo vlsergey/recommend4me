@@ -43,6 +43,7 @@
   "What.layerDrafts": "Drafts of the layer by the dictionary",
   "What.manners": "The manner of the texts by word frequencies",
   "What.methodsCompared": "Methods of a field compared",
+  "What.modelValues": "The values the models give the works, for the filters",
   "What.partVectors": "Vectors of chapters",
   "What.score": "Every work scored",
   "What.scorersCompared": "Methods of the grade compared",

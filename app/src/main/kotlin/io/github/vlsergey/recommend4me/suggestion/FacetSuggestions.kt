@@ -22,10 +22,11 @@ typealias WorkChances = Map<String, Map<String, Map<String, Chance>>>
  * [suggest][FacetDef.suggest] or [infer][FacetDef.infer]: the chance of every value a work has, and of every value it
  * lacks that it more likely has than not.
  *
- * ONLY THE MODEL OF EACH FACET IS KEPT ([SuggestionRepository]): its fitted state and the values it chooses from. THE
- * CHANCES OF THE WORKS ARE NOT (user, 2026-10-15): whoever reads works — a page, a card, a filter over the catalogue,
- * the search index, the training of the grades — gets them made in memory of those works alone, from their vectors and
- * values, by the models kept ([chances]). Nothing waits for a refit, nothing is written of a work.
+ * THE MODEL OF EACH FACET IS KEPT ([SuggestionRepository]): its fitted state and the values it chooses from. THE
+ * CHANCES OF THE WORKS ARE NOT (user, 2026-10-15): whoever reads works — a page, a card, the search index, the training
+ * of the grades — gets them made in memory of those works alone, from their vectors and values, by the models kept
+ * ([chances]). Nothing waits for a refit. THE VALUES A WORK IS GIVEN ARE KEPT (user, 2026-11-17), for the filters of
+ * the list: a filter over a million works runs no model ([KeptModelValues]).
  *
  * THE FACETS ARE WORKED OUT IN A CHAIN, in the order of [facetsOf]: each reads as its context the values the site and
  * the user give of every other facet, and the values the model gives of the facets before it, made in the same pass — a

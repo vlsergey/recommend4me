@@ -12,8 +12,7 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
-import io.github.vlsergey.recommend4me.suggestion.ModelValues
+import io.github.vlsergey.recommend4me.suggestion.ModelValueRepository
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
@@ -103,7 +102,6 @@ class ItemList(
     private val cards: ItemCards,
     private val search: Search,
     private val recommendations: Recommendations,
-    private val suggestions: FacetSuggestions,
 ) {
 
     /**
@@ -341,8 +339,8 @@ class ItemList(
 
     /**
      * Every item's values of one facet as the user sees them: the site's, the model's of a facet it works out, the
-     * user's corrections on top. The model's made now of every work of the source, at every asking (user, 2026-10-15:
-     * slow for now, made faster later), none kept.
+     * user's corrections on top. The model's as the last pass of the models kept them ([ModelValueRepository]): no
+     * model run at a request (user, 2026-11-17).
      */
     fun valuesOf(
         s: SourceStore,
@@ -351,11 +349,7 @@ class ItemList(
     ): Map<String, List<String>> {
         val byItem = HashMap<String, List<String>>()
         s.items.forEachFacet(def.key) { id, keys -> byItem[id] = keys }
-        if (def.infer)
-            suggestions.chances(s, null, through = def.key).forEach { (id, chances) ->
-                byItem[id] =
-                    ModelValues.of(s.schema, mapOf(def.key to byItem[id].orEmpty()), chances)[def.key].orEmpty()
-            }
+        if (def.infer) s.modelValues.of(def.key).forEach { (id, given) -> byItem[id] = byItem[id].orEmpty() + given }
         corrections.forEach { (id, list) ->
             val own = list.filter { it.facet == def.key }
             if (own.isNotEmpty())
