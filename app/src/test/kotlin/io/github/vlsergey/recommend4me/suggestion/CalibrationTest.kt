@@ -59,23 +59,21 @@ class CalibrationTest {
     }
 
     /**
-     * Rather shown wrongly than hidden: the cutoff leaves no more answers wrongly hidden than wrongly shown, and is the
-     * highest that does.
+     * Rather shown wrongly than hidden: of the chances of every work's open values, the cutoff leaves no more expected
+     * wrongly hidden than wrongly shown, and is the highest that does.
      */
     @Test
     fun `the cutoff shows wrongly at least as many as it hides wrongly`() {
-        val answered = answers("v", 3000, 3) { Calibration.sigmoid(it.toDouble() - 1) }
-        val c = assertNotNull(Calibration.fit(answered))
-        val shownWrongly = answered.count { !it.yes && c.likely(it.value, it.score) }
-        val hiddenWrongly = answered.count { it.yes && !c.likely(it.value, it.score) }
-        assertTrue(shownWrongly >= hiddenWrongly, "shown $shownWrongly, hidden $hiddenWrongly")
-        // The highest such: one step up hides more wrongly than it shows
-        val above = answered.map { c.chance(it.value, it.score) }.filter { it > c.threshold }.minOrNull()
-        if (above != null)
-            assertTrue(
-                answered.count { !it.yes && c.chance(it.value, it.score) >= above } <
-                    answered.count { it.yes && c.chance(it.value, it.score) < above }
-            )
+        val random = Random(5)
+        val chances = DoubleArray(5000) { random.nextDouble().let { it * it * it } }
+        val t = Calibration.balanced(chances)
+        fun shown(at: Double) = chances.filter { it >= at }.sumOf { 1 - it }
+        fun hidden(at: Double) = chances.filter { it < at }.sum()
+        assertTrue(shown(t) >= hidden(t), "at $t shown ${shown(t)}, hidden ${hidden(t)}")
+        val above = chances.filter { it > t }.minOrNull()
+        if (above != null) assertTrue(shown(above) < hidden(above))
+        assertTrue(t < 0.5, "rather shown: $t")
+        assertEquals(0.5, Calibration.balanced(DoubleArray(0)))
     }
 
     /** A score above a value's cutoff is likely, one below it is not; kept and read back the same. */

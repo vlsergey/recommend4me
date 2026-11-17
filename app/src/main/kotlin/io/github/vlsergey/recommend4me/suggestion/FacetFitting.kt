@@ -178,11 +178,9 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         checkpoint()
         val fit = SuggesterFit(fresh.report, System.currentTimeMillis() - fitStarted, data.ids.size, data.values.size)
         val model = fresh.model(data.task)
-        // Not learnt till what the task tells answered is the user's own word alone: of aff's universes 44 912 answers
-        // of
-        // 439 works, the cutoff at nought gave every work every universe (user, 2026-11-17)
-        val calibration: Calibration? =
-            null.takeIf { CALIBRATED }?.let { fresh.heldOut?.let { h -> calibrated(data, h) } }
+        // Of what its folds said of the values the user answered on; of a fitting that held none out, the one kept
+        val kept = store.suggestions.scoring(facet.key)?.calibration
+        val calibration = fresh.heldOut?.let { calibrated(data, it, kept?.threshold) } ?: kept
         store.suggestions.saveSuggester(
             facet.key,
             suggester.id,
@@ -211,25 +209,25 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
 
     /**
      * The calibration of the facet ([Calibration]) of what the folds of a fitting said of the values the user answered
-     * on ([held]): a yes of a value the user confirmed, a no of one rejected; null of no answer. Of a work the user
-     * said all named ([FacetData.complete]) every other value is rejected to the model, thousands of a universe: no
-     * word of the user's on any of them, none taken.
+     * on ([held]): a yes of a value the user said a work has, a no of one the user said it has not — as said
+     * ([FacetData.saidYes], [FacetData.saidNo]), not spread over the values' hierarchy nor over every other value of a
+     * work all named, which are no word of the user's on them; null of no answer.
      */
-    private fun calibrated(data: FacetData, held: HeldOutScores): Calibration? {
-        val task = data.task
+    private fun calibrated(data: FacetData, held: HeldOutScores, threshold: Double?): Calibration? {
         val answered =
             held.items.indices.mapNotNull { k ->
                 val i = held.items[k]
                 val v = held.values[k]
                 val yes =
                     when {
-                        v in task.confirmed[i] -> true
-                        v in task.rejected[i] && !data.complete[i] -> false
+                        data.saidYes.getOrNull(i)?.contains(v) == true -> true
+                        data.saidNo.getOrNull(i)?.contains(v) == true -> false
                         else -> return@mapNotNull null
                     }
-                Answered(task.valueKeys[v], held.scores[k], yes)
+                Answered(data.task.valueKeys[v], held.scores[k], yes)
             }
-        return Calibration.fit(answered)
+        // The cutoff of the last pass over every work kept till the next works it out anew
+        return if (threshold == null) Calibration.fit(answered) else Calibration.fit(answered, threshold)
     }
 
     /**
@@ -265,6 +263,7 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
                 }
             }
         val after = shown(model.after, { data }, made, calibration) ?: return emptyList()
+        calibration?.let { keepCutoff(store, facet, data, made, it) }
         val scored = stages.now()
         // What the model before the refit gave alone: scored again, nothing of it kept
         val changedIds =
@@ -278,6 +277,46 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
             }
         logMade(store, facet, data, after, changedIds, stages, scored)
         return changedIds
+    }
+
+    /**
+     * The facet's cutoff worked out anew of the chances [made] of every work of the pass ([Calibration.balanced]): of
+     * the values neither the site gives a work, nor a draft, nor the user answered on — the model's to give or not —,
+     * kept for the next pass when it moved.
+     */
+    private fun keepCutoff(
+        store: SourceStore,
+        facet: FacetDef,
+        data: FacetData,
+        made: MadeChances,
+        calibration: Calibration,
+    ) {
+        val open =
+            data.ids.flatMapIndexed { i, id ->
+                // The values the user answered on are the user's, not the model's to give
+                val said = (data.saidYes.getOrNull(i) ?: IntArray(0)) + (data.saidNo.getOrNull(i) ?: IntArray(0))
+                val answered = said.mapTo(HashSet()) { data.values[it] }
+                made[id]
+                    ?.get(facet.key)
+                    ?.values
+                    .orEmpty()
+                    .filter {
+                        !it.had && !it.drafted && it.key !in answered
+                    }
+                    .map { it.chance }
+            }
+        val threshold = Calibration.balanced(open.toDoubleArray())
+        if (threshold == calibration.threshold) return
+        store.suggestions.keepCalibration(facet.key, calibration.withThreshold(threshold))
+        log.info(
+            "{}: the cutoff of {} of {} values open of {} works moved from {} to {}",
+            store.id,
+            facet.key,
+            open.size,
+            data.ids.size,
+            "%.3f".format(calibration.threshold),
+            "%.3f".format(threshold),
+        )
     }
 
     /**
@@ -322,9 +361,6 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
          * unset, none is.
          */
         private const val TASKS_FOLDER = "RECOMMEND4ME_TASKS"
-
-        /** Whether a facet is calibrated by the answers: not till they are the user's own word alone. */
-        private const val CALIBRATED = false
 
         /**
          * How many values given to one work the log of a refit counts the works above: a sign of a model gone wide, not

@@ -31,6 +31,13 @@ internal class FacetData(
     val judged: BooleanArray,
     /** The fingerprint of the whole facet: of every item's; [NO_BASIS] of the task of some works read alone. */
     val basis: Long,
+    /**
+     * Of each item, the values of the facet the user said it has ([saidYes]) and has not ([saidNo]), as the user said
+     * them: not spread over the values' hierarchy, not every other value of a work said all named — what the chances
+     * are calibrated by ([Calibration]).
+     */
+    val saidYes: List<IntArray> = emptyList(),
+    val saidNo: List<IntArray> = emptyList(),
 ) {
     companion object {
         /**

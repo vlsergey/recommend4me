@@ -136,6 +136,14 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
             .execute()
     }
 
+    /** The facet's calibration kept anew: its cutoff worked out of a pass over every work ([Calibration.balanced]). */
+    fun keepCalibration(facet: String, calibration: Calibration) {
+        db.update(FACET_SUGGESTER)
+            .set(FACET_SUGGESTER.CALIBRATION, calibration.pack())
+            .where(FACET_SUGGESTER.SOURCE.eq(source), FACET_SUGGESTER.FACET.eq(facet))
+            .execute()
+    }
+
     /**
      * The values the facet's model chooses from, and its scoring of them, kept beside a state fitted before they were.
      */

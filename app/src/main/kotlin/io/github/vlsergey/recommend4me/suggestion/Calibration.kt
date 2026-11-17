@@ -20,9 +20,12 @@ class Answered(val value: String, val score: Float, val yes: Boolean)
  * - EVERY VALUE'S OWN ([own]): its answers' slope and shift over the facet's curve on the scale of the log-odds, drawn
  *   to none — the facet's curve — by as much as the values are seen to differ from it, learnt of all of them (the
  *   empirical Bayes): a value of no answer the facet's curve, of a few between them, of many its own.
- * - THE CUTOFF ([threshold]): a value is likely of a chance at or above it — the highest at which the answers wrongly
- *   shown (a no above it) are not fewer than those wrongly hidden (a yes under it): rather shown wrongly than hidden
- *   (user, 2026-11-17).
+ * - THE CUTOFF ([threshold]): a value is likely of a chance at or above it — rather shown wrongly than hidden (user,
+ *   2026-11-17): of every work's values not given by the site nor the user, the highest at which the values expected
+ *   wrongly shown — the sum of one less the chance of those at or above it — are not fewer than those expected wrongly
+ *   hidden — the sum of the chances of those under it ([balanced]); worked out of every pass of the facet's model over
+ *   every work, one half till the first. Not of the answers' words: the user answers the values offered, the doubtful,
+ *   mostly no — a cutoff of them hides nearly all.
  */
 class Calibration(
     private val scores: FloatArray,
@@ -81,6 +84,9 @@ class Calibration(
             }
         }
 
+    /** The same with the cutoff [threshold]. */
+    fun withThreshold(threshold: Double) = Calibration(scores, chances, own, threshold, answers)
+
     fun pack(): ByteArray {
         val bytes = ByteArrayOutputStream()
         DataOutputStream(bytes).use { out ->
@@ -104,10 +110,11 @@ class Calibration(
 
     companion object {
         /**
-         * 2 — every calibration of 1 read as none: of the answers it was learnt of most were no word of the user's
-         * (aff's universes 44 912 of 439 works), the cutoffs at the very top or bottom.
+         * 3 — every calibration of 1 or 2 read as none: of the answers it was learnt of most were no word of the user's
+         * (aff's universes 44 912 of 439 works, every universe a no of a work said to have none), the cutoffs at the
+         * very top or bottom.
          */
-        private const val VERSION = 2
+        private const val VERSION = 3
 
         /** The chance of a facet learnt of no answer: one half, as a suggester's own. */
         private const val NONE_LEARNT = 0.5
@@ -135,35 +142,36 @@ class Calibration(
          * likely, the curve flat, and every value would be given: what tells a likely value from an unlikely one is
          * learnt of both.
          */
-        fun fit(answered: List<Answered>): Calibration? {
+        fun fit(answered: List<Answered>, threshold: Double = NONE_LEARNT): Calibration? {
             if (answered.none { it.yes } || answered.all { it.yes }) return null
             val (scores, chances) = FacetCurve.of(answered)
             val facet = Calibration(scores, chances, emptyMap(), NONE_LEARNT, answered.size)
             val own = ValueShifts.of(answered) { a -> logit(facet.curve(a.score)) }
-            val made = Calibration(scores, chances, own, NONE_LEARNT, answered.size)
-            val threshold = cutoffOf(answered.map { made.chance(it.value, it.score) to it.yes })
             return Calibration(scores, chances, own, threshold, answered.size)
         }
 
         /**
-         * The highest chance at which the answers wrongly shown — a no at or above it — are not fewer than those
-         * wrongly hidden — a yes under it — of the answers' [chances] and their words.
+         * The highest of the [chances] at which those at or above it expected wrongly shown — the sum of one less each
+         * — are not fewer than those under it expected wrongly hidden — the sum of each: rather shown wrongly than
+         * hidden. One half of none.
          */
-        private fun cutoffOf(chances: List<Pair<Double, Boolean>>): Double {
-            val down = chances.sortedByDescending { it.first }
-            var hidden = chances.count { it.second }
-            var shown = 0
+        fun balanced(chances: DoubleArray): Double {
+            val down = chances.sortedArrayDescending()
+            var hidden = down.sum()
+            var shown = 0.0
             var k = 0
-            while (k < down.size) {
-                val at = down[k].first
-                // Every answer of the same chance on the same side of it
-                while (k < down.size && down[k].first == at) {
-                    if (down[k].second) hidden-- else shown++
+            var found: Double? = null
+            while (k < down.size && found == null) {
+                val at = down[k]
+                // Every value of the same chance on the same side of it
+                while (k < down.size && down[k] == at) {
+                    hidden -= down[k]
+                    shown += 1 - down[k]
                     k++
                 }
-                if (shown >= hidden) return at
+                if (shown >= hidden) found = at
             }
-            return down.last().first
+            return found ?: down.lastOrNull() ?: NONE_LEARNT
         }
 
         fun logit(p: Double): Double = ln(p / (1 - p))

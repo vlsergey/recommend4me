@@ -89,7 +89,11 @@ internal class FacetRead(
         val basis =
             if (only != null || asked.kept != null) FacetData.NO_BASIS
             else FacetBasis.of(facet.key, read, values, task.groupings, asked.hintNames, cast?.signature)
-        return FacetData(ids, values, task, held, allNamed, read.encoded, basis)
+        // The user's word as said, for the calibration: one answer one value, nothing spread over the others
+        fun said(added: Boolean) = ids.map { id ->
+            index.of(corrections[id].orEmpty().filter { it.facet == facet.key && it.added == added }.map { it.key })
+        }
+        return FacetData(ids, values, task, held, allNamed, read.encoded, basis, said(true), said(false))
     }
 
     /**
