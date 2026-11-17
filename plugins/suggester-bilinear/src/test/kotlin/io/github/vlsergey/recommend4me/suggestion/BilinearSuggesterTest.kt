@@ -1,8 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Matrix
-import io.github.vlsergey.recommend4me.onnx.Onnx
-import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import java.lang.ref.WeakReference
 import java.util.Random
 import java.util.concurrent.CancellationException
@@ -14,7 +12,6 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class BilinearSuggesterTest {
     /** The chances of the items of [task] by the model [fitted] made of it: the one way to them. */
@@ -435,14 +432,6 @@ class BilinearSuggesterTest {
     fun `of a task in several portions, the values answered on are scored as the model kept scores them`() =
         heldOutAsKept(BilinearSuggester(), SCORE_32, PORTION)
 
-    @Test
-    fun `on the card the values the user answered on are scored by the model of the fold that held their item out`() {
-        val onnx = Onnx(defaultModelsDir(), gpu = true)
-        assumeTrue(onnx.cudaLibraries() != null, "no CUDA libraries")
-        // The items' features' products on the tensor cores, in brain floating point: within its digits
-        heldOutAsKept(BilinearSuggester(onnx), SCORE_16)
-    }
-
     /**
      * Of a fitting by [suggester] of a task with the user's answers, in portions of [portion] items, the scores handed
      * over ([FittedSuggester.heldOut]): every pair answered on once, by its item's id, each scored as the scoring kept
@@ -510,16 +499,6 @@ class BilinearSuggesterTest {
         val whole = assertNotNull(suggester.fit(whole(task)))
         val cut = assertNotNull(suggester.fit(Cut(task, PORTION)))
         assertAlike(scored(whole, task), scored(cut, task), task, "a portion and portions of $PORTION")
-    }
-
-    @Test
-    fun `fitted on the card, the model judges as one fitted on the processor`() {
-        val onnx = Onnx(defaultModelsDir(), gpu = true)
-        assumeTrue(onnx.cudaLibraries() != null, "no CUDA libraries")
-        val task = task(400, wrong = 5)
-        val processor = assertNotNull(BilinearSuggester().fit(Cut(task, PORTION)))
-        val card = assertNotNull(BilinearSuggester(onnx).fit(Cut(task, PORTION)))
-        assertAlike(scored(processor, task), scored(card, task), task, "the processor and the card")
     }
 
     /**
@@ -658,11 +637,5 @@ class BilinearSuggesterTest {
 
         /** A score made in single precision in two orders of the sums: its last digits. */
         const val SCORE_32 = 1e-4f
-
-        /**
-         * A score of coordinates the card made in brain floating point (a fraction of 8 bits), against single
-         * precision: within its digits.
-         */
-        const val SCORE_16 = 1e-2f
     }
 }

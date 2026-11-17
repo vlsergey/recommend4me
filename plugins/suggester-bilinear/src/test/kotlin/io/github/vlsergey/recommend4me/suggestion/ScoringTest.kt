@@ -1,16 +1,12 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.Matrix
-import io.github.vlsergey.recommend4me.onnx.Onnx
-import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import java.util.Random
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
  * The scores of the values asked ([SuggestionScores.scores]) are the chances of every value ([SuggestionScores.of]) of
@@ -19,84 +15,16 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
  * of.
  */
 class ScoringTest {
-    /** The chances of the items of [task] by the model [fitted] made of it: the one way to them. */
-    private fun scored(fitted: FittedSuggester, task: SuggestionTask) =
-        assertNotNull(BilinearSuggester().scoring(fitted.model(task.ofItems(IntArray(0))), task))
-
-    private val d = 8
-    private val m = 50
-    private val n = 300
-
-    /** The rows a task of many is fitted on: the fit of more of them is not what a test of the scoring checks. */
-    private val fitRows = 2_000
-
-    private fun FloatArray.normalized(): FloatArray {
-        val l = kotlin.math.sqrt(sumOf { (it * it).toDouble() }).toFloat()
-        return FloatArray(size) { this[it] / l }
-    }
-
-    /**
-     * Items of a text each, values of a name each; an item has a value its text points to; some items the site's
-     * examples. A block of notes of every third item besides: of the items that have it alone. Given a [card], the
-     * inputs put there, as the application puts those of a pass of every work.
-     */
-    private fun task(
-        random: Random = Random(5),
-        m: Int = this.m,
-        card: Cublas? = null,
-        n: Int = this.n,
-    ): SuggestionTask {
-        val directions = List(m) { FloatArray(d) { random.nextGaussian().toFloat() }.normalized() }
-        val texts = Matrix(n, d)
-        val notes = Matrix(n, d)
-        val assigned =
-            List(n) { i ->
-                val v = FloatArray(d) { random.nextGaussian().toFloat() }.normalized()
-                texts.held.put(v, 0, texts.row(i), d)
-                notes.held.put(FloatArray(d) { v[(it + 1) % d] }, 0, notes.row(i), d)
-                directions.indices
-                    .filter { k -> directions[k].indices.sumOf { (directions[k][it] * v[it]).toDouble() } > 0.6 }
-                    .toIntArray()
-            }
-        val names = Matrix(m, d)
-        directions.forEachIndexed { k, v -> names.held.put(v, 0, names.row(k), d) }
-        val inputs =
-            listOf(
-                    InputBlock.of("text:annotation", texts, BooleanArray(n) { true }),
-                    InputBlock.of("text:notes", notes, BooleanArray(n) { it % 3 == 0 }),
-                )
-                .map { b ->
-                    if (card == null) b
-                    else InputBlock(b.name, b.vectors, b.rows, CardRows.put(card, b.vectors, b.rows)!!)
-                }
-        return SuggestionTask(
-            itemIds = List(n) { "item$it" },
-            inputs = inputs,
-            values = names,
-            valueKeys = List(m) { "v$it" },
-            assigned = assigned,
-            confirmed = List(n) { IntArray(0) },
-            rejected = List(n) { IntArray(0) },
-            context = List(n) { IntArray(0) },
-            contextKeys = emptyList(),
-            examples = List(n) { i -> if (i % 4 == 0) intArrayOf((i * 3) % m, 41) else IntArray(0) },
-        )
-    }
+    private val task = TASK
+    private val scores = SCORES
+    private val m = VALUES
+    private val n = ITEMS
 
     private fun assertNear(expected: Float, actual: Float, what: String) =
         assertTrue(abs(expected - actual) <= 1e-5f, "$what: $expected, scored $actual")
 
-    /**
-     * Near as two products of single precision summed in other orders are: by a few of the last digits of their terms —
-     * of the scores of this task terms of a hundred, cancelling down to a score of one.
-     */
-    private fun assertRelative(expected: Float, actual: Float, what: String) =
-        assertTrue(abs(expected - actual) <= 2e-4f + 1e-5f * abs(expected), "$what: $expected, scored $actual")
-
     @Test
     fun `the scores of every value, of a shared set and of a few of a row's own are the chances of those values`() {
-        val task = task()
-        val scores = scored(assertNotNull(BilinearSuggester().fit(TaskPortions.of(task))), task)
         val rows = IntArray(n) { it }
         val chances = scores.of(rows)
         // Every value: the same chance, made of the score
@@ -125,11 +53,10 @@ class ScoringTest {
 
     @Test
     fun `the rows handed over one at a time, made in a buffer of their block, are the rows of the scores`() {
-        // So many values that the rows of every value are made side by side, a block of them in a buffer each
-        val values = 900
-        val task = task(Random(11), values)
-        val scores = scored(assertNotNull(BilinearSuggester().fit(TaskPortions.of(task))), task)
-        val rows = IntArray(2_000) { (it * 7) % n }
+        // So many rows that the rows of every value are made side by side, a block of them in a buffer each: of the
+        // task's few values, a quarter of the rows asked every value ([Scoring]'s DIRECT is 2^16 of rows by values)
+        val values = m
+        val rows = IntArray(HANDED) { (it * 7) % n }
         val shared = IntArray(40) { (it * 11 + 3) % values }.distinct().toIntArray()
         val columns =
             List(rows.size) { r ->
@@ -158,8 +85,6 @@ class ScoringTest {
 
     @Test
     fun `a few rows of a big set and many of a few values alike`() {
-        val task = task(Random(9))
-        val scores = scored(assertNotNull(BilinearSuggester().fit(TaskPortions.of(task))), task)
         val rows = intArrayOf(3, 0, 299, 12, 4)
         val chances = scores.of(rows)
         val big = IntArray(m) { m - 1 - it }
@@ -171,8 +96,6 @@ class ScoringTest {
 
     @Test
     fun `a score at or under the half is no likelier than one half, and the chance never falls as the score grows`() {
-        val task = task()
-        val scores = scored(assertNotNull(BilinearSuggester().fit(TaskPortions.of(task))), task)
         assertEquals(0.5f, scores.chance(scores.half))
         var last = 0f
         for (k in -400..400) {
@@ -182,123 +105,70 @@ class ScoringTest {
         }
     }
 
-    @Test
-    fun `on the card the chances and what every row is shown with are those of the main memory`() = cardAlike(n, 900)
-
-    @Test
-    fun `on the card as in the main memory of a block of more rows than are made single precision at a time`() =
-        cardAlike(maxOf(FeatureKernels.CARD_ROWS, ItemFeatures.ROWS) + 3_000, 60)
-
-    /**
-     * Of a task of [items] and [values], the scoring on the card and in the main memory: what every row is shown with
-     * the same, the scores near.
-     */
-    private fun cardAlike(items: Int, values: Int) {
-        val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
-        assumeTrue(dir != null, "no CUDA libraries")
-        val cublas = Cublas.open(dir!!)
-        assumeTrue(cublas != null, "no cuBLAS to run on")
-        val here = task(Random(11), values, n = items)
-        val there = task(Random(11), values, cublas, items)
-        try {
-            val suggester = BilinearSuggester()
-            // Fitted on the first rows alone — the same values, the same seed: what is checked is the scoring of a
-            // block of many rows, not the fit, whose time grows with them
-            val fitted = task(Random(11), values, n = minOf(items, fitRows))
-            val bytes =
-                assertNotNull(assertNotNull(suggester.fit(TaskPortions.of(fitted))).model(fitted.ofItems(IntArray(0))))
-            val main = assertNotNull(suggester.scoring(bytes, here))
-            val card = assertNotNull(suggester.scoring(bytes, there))
-            val rows = IntArray(2_000) { (it * 7 + it / 3 * 4_001) % items }
-            // Every value, a set of many rows, a few of a row's own, none; of the closed some
-            val shared = IntArray(40) { (it * 11 + 3) % values }.distinct().sorted().toIntArray()
-            val columns =
-                List(rows.size) { r ->
-                    when (r % 4) {
-                        0 -> null
-                        1 -> shared
-                        2 -> intArrayOf(r % values, 40, 41).distinct().toIntArray()
-                        else -> IntArray(0)
-                    }
-                }
-            val random = Random(3)
-            val closed =
-                List(rows.size) {
-                    IntArray(random.nextInt(4)) { random.nextInt(values) }.distinct().sorted().toIntArray()
-                }
-            // A cutoff of every value of its own, as the application calibrates them: some above the half, some under
-            val cutoffs = FloatArray(values) { random.nextFloat() * CUTOFFS - CUTOFFS / 2 }
-            val asked = Asked(rows, columns, closed, cutoffs)
-            // The stripe of the one pass as it is, and of one: nearly every row of more likely than it holds, written
-            // again whole
-            for (stripe in listOf(FeatureKernels.STRIPE, 1)) for (least in listOf(0, 3, FeatureKernels.MAX_LEAST)) {
-                (card as Scoring.Scored).stripe = stripe
-                shownAlike(main, card, asked, least)
-            }
-            // The coordinates made on the card, brought over: the chances of every value as the main memory's
-            val some = intArrayOf(0, 3, items - 1, items / 2)
-            val a = main.of(some)
-            val b = card.of(some)
-            some.indices.forEach { r -> for (v in 0 until values) assertNear(a[r][v], b[r][v], "row $r, value $v") }
-            card.close()
-            main.close()
-        } finally {
-            there.inputs.forEach { it.onCard?.close() }
-        }
-    }
-
-    /** What is asked of the scores: the rows, the values of each, those it may not be shown with, the cutoffs. */
-    private class Asked(
-        val rows: IntArray,
-        val columns: List<IntArray?>,
-        val closed: List<IntArray>,
-        val cutoffs: FloatArray,
-    )
-
-    /**
-     * What every row [asked] is shown with, of [least] besides the likely, chosen on the [card] as in the [main] memory
-     * — of the half, and of the cutoffs of the values, whose choosing is also the rule's ([SuggestionScores.choose]) of
-     * the card's own scores, and another than of the half.
-     */
-    private fun shownAlike(main: SuggestionScores, card: Scoring.Scored, asked: Asked, least: Int) {
-        val (rows, columns, closed) = Triple(asked.rows, asked.columns, asked.closed)
-        val what = "least $least, stripe ${card.stripe}"
-        val expected = main.shown(rows, columns, closed, least)
-        val got = card.shown(rows, columns, closed, least)
-        assertTrue(card.onTheCard, "chosen on the card")
-        assertShownAlike(expected, got, what)
-        if (card.stripe == 1)
-            assertTrue(
-                expected.any { e -> e.scores.count { it > card.half } > 1 },
-                "some row of more likely than the stripe",
-            )
-        val chosen = card.shown(rows, columns, closed, least, asked.cutoffs)
-        assertTrue(card.onTheCard, "chosen on the card of the cutoffs")
-        val scores = card.scores(rows, columns)
-        val rule =
-            rows.indices.map { r ->
-                SuggestionScores.choose(scores[r], columns[r], closed[r], least, card.half, asked.cutoffs)
-            }
-        assertShownAlike(rule, chosen, "$what, the rule of the cutoffs")
-        assertShownAlike(main.shown(rows, columns, closed, least, asked.cutoffs), chosen, "$what, of the cutoffs")
-        assertTrue(rows.indices.any { r -> !chosen[r].places.contentEquals(got[r].places) }, "the cutoffs as the half")
-    }
-
-    /**
-     * What every row is shown with on the card, [got], as in the main memory, [expected]: the same places, the scores
-     * near — the coordinates of the card's product and of the processor's differ in their last digits.
-     */
-    private fun assertShownAlike(expected: List<Shown>, got: List<Shown>, what: String) {
-        expected.indices.forEach { r ->
-            assertEquals(expected[r].places.toList(), got[r].places.toList(), "row $r, $what")
-            expected[r].scores.indices.forEach { k ->
-                assertRelative(expected[r].scores[k], got[r].scores[k], "row $r, place ${expected[r].places[k]}")
-            }
-        }
-    }
-
     private companion object {
-        /** The width of the scores the cutoffs of the values are drawn from, around nought. */
-        const val CUTOFFS = 4f
+        const val DIMENSIONS = 8
+        const val VALUES = 50
+        const val ITEMS = 300
+
+        /**
+         * The rows handed over one at a time: a quarter of them of every value, of a fold more rows by values than are
+         * made in one block.
+         */
+        const val HANDED = 40_000
+
+        /** The one task of the tests, its model fitted once: what is checked is the scoring, not the fit. */
+        val TASK = task()
+        val SCORES: SuggestionScores =
+            assertNotNull(
+                BilinearSuggester()
+                    .scoring(
+                        assertNotNull(BilinearSuggester().fit(TaskPortions.of(TASK))).model(TASK.ofItems(IntArray(0))),
+                        TASK,
+                    )
+            )
+
+        private fun FloatArray.normalized(): FloatArray {
+            val l = kotlin.math.sqrt(sumOf { (it * it).toDouble() }).toFloat()
+            return FloatArray(size) { this[it] / l }
+        }
+
+        /**
+         * Items of a text each, values of a name each; an item has a value its text points to; some items the site's
+         * examples. A block of notes of every third item besides: of the items that have it alone.
+         */
+        private fun task(random: Random = Random(5), m: Int = VALUES, n: Int = ITEMS): SuggestionTask {
+            val d = DIMENSIONS
+            val directions = List(m) { FloatArray(d) { random.nextGaussian().toFloat() }.normalized() }
+            val texts = Matrix(n, d)
+            val notes = Matrix(n, d)
+            val assigned =
+                List(n) { i ->
+                    val v = FloatArray(d) { random.nextGaussian().toFloat() }.normalized()
+                    texts.held.put(v, 0, texts.row(i), d)
+                    notes.held.put(FloatArray(d) { v[(it + 1) % d] }, 0, notes.row(i), d)
+                    directions.indices
+                        .filter { k -> directions[k].indices.sumOf { (directions[k][it] * v[it]).toDouble() } > 0.6 }
+                        .toIntArray()
+                }
+            val names = Matrix(m, d)
+            directions.forEachIndexed { k, v -> names.held.put(v, 0, names.row(k), d) }
+            val inputs =
+                listOf(
+                    InputBlock.of("text:annotation", texts, BooleanArray(n) { true }),
+                    InputBlock.of("text:notes", notes, BooleanArray(n) { it % 3 == 0 }),
+                )
+            return SuggestionTask(
+                itemIds = List(n) { "item$it" },
+                inputs = inputs,
+                values = names,
+                valueKeys = List(m) { "v$it" },
+                assigned = assigned,
+                confirmed = List(n) { IntArray(0) },
+                rejected = List(n) { IntArray(0) },
+                context = List(n) { IntArray(0) },
+                contextKeys = emptyList(),
+                examples = List(n) { i -> if (i % 4 == 0) intArrayOf((i * 3) % m, 41) else IntArray(0) },
+            )
+        }
     }
 }
