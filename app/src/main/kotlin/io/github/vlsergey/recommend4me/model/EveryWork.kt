@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.ItemKeyList
 import io.github.vlsergey.recommend4me.item.ItemKeys
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.likeness.Likenesses
@@ -18,9 +19,10 @@ private val log = LoggerFactory.getLogger(EveryWork::class.java)
 
 /**
  * EVERY WORK OF A CONTENT TYPE READ AS THE MODEL READS IT, NEVER ALL AT ONCE: a type of a million works — ficbook's
- * dump — held whole was more than the memory (2026-11-17). A scoring reads them a [PORTION] at a time
- * ([forEachPortion]); a training reads the works it learns of alone ([training]) and the average work counted of every
- * work as it streams past ([averageWork]), nothing of a work kept once counted.
+ * dump — held whole was more than the memory (2026-11-17). The sweep of the scores reads them a [PORTION] at a time
+ * from where it stopped ([portions], [ScoreSweep]); a training reads the works it learns of alone ([training]) with the
+ * average work as the last sweep counted it and kept ([AverageWorkRepository]) — counted of every work as it streams
+ * past ([averageWork]) only when none is kept, nothing of a work kept once counted.
  */
 @Component
 class EveryWork(
@@ -32,11 +34,11 @@ class EveryWork(
 
     /**
      * What a training of the [type] learns of: the works graded or marked of interest, each with all its items, as
-     * [CatalogueReader.gradedWorks] reads them, with the average work counted now of every work ([averageWork]) and the
-     * likeness to the marks made anew for the training ([withLikeness]) or as kept.
+     * [CatalogueReader.gradedWorks] reads them, with the average work kept ([averageOf]) and the likeness to the marks
+     * made anew for the training ([withLikeness]) or as kept.
      */
     fun training(type: TypeStore, withLikeness: Boolean = true): Catalogue {
-        val average = averageWork(type)
+        val average = averageOf(type)
         val interest = interestOf(type)
         return reader.gradedWorks(type, average.averages, interest.keys, ratingsOf(type), interest) { graded ->
             if (withLikeness) likenesses.forTraining(type, average.pictureCenter, graded) else likenesses.stored(type)
@@ -44,8 +46,19 @@ class EveryWork(
     }
 
     /**
+     * The average work of the [type] as the last sweep of the scores counted it, of the vectors as they are made now
+     * ([AverageWork.basis]); when none is kept — the first training, the encoders changed — counted now of every work
+     * ([averageWork]) and kept.
+     */
+    fun averageOf(type: TypeStore): AverageWork {
+        val basis = AverageWork.basis(plugins, type)
+        return type.averageWork.load(basis) ?: averageWork(type).also { type.averageWork.save(it, basis) }
+    }
+
+    /**
      * THE AVERAGE WORK OF THE [type], counted of every work as it streams past: the vectors of every source in one pass
-     * of each kind, every work's features and manners a portion at a time ([forEachPortion]).
+     * of each kind, every work's features and manners a portion at a time ([portions]) — no vectors of a portion read,
+     * nor the sets of its works of several items made.
      */
     fun averageWork(type: TypeStore): AverageWork {
         val started = System.currentTimeMillis()
@@ -57,11 +70,10 @@ class EveryWork(
         }
         val read = System.currentTimeMillis()
         var counted = 0
-        forEachPortion(type, likenesses.stored(type)) { portion ->
-            portion.catalogue.items.forEach { work ->
-                count.add(work, portion.own.getValue(work.key), portion.manners.blocks(work.key))
-            }
+        Pass(type, likenesses.stored(type), seen = null, vectors = false).walk(null) { portion ->
+            count.addAll(portion)
             counted += portion.catalogue.items.size
+            true
         }
         return count.made().also {
             log.info(
@@ -76,30 +88,61 @@ class EveryWork(
     }
 
     /**
-     * EVERY WORK OF THE [type], a [PORTION] of works at a time, each with all its items: the memory of a portion alone
-     * in use whatever the number of the works. A portion's vectors are read as it is scored
-     * ([Catalogue.vectorsOfMany]), the likeness to the marks by [likeness].
+     * EVERY WORK OF THE [type] FROM [from] ON (from the first when null), a [portion] of works at a time, each with all
+     * its items, till [action] answers false: the memory of a portion alone in use whatever the number of the works. A
+     * portion's vectors are read as it is scored ([Catalogue.vectorsOfMany]), [seen] told of every one, the likeness to
+     * the marks by [likeness]. Answers where the walk stopped — the portion to go on from — or null when every work was
+     * read.
      */
-    fun forEachPortion(type: TypeStore, likeness: TypeLikeness, action: (WorkPortion) -> Unit) {
-        val pass = Pass(type, likeness)
-        type.sources.forEach { s ->
-            var after: String? = null
-            do {
-                val keys = s.items.keysAfter(after, PORTION)
-                after = keys.lastOrNull()?.id
-                pass.portion(s, keys)?.let(action)
-            } while (keys.size == PORTION)
-        }
-    }
+    internal fun portions(
+        type: TypeStore,
+        likeness: TypeLikeness,
+        from: PortionCursor?,
+        seen: VectorSeen? = null,
+        portion: Int = PORTION,
+        action: (WorkPortion) -> Boolean,
+    ): PortionCursor? = Pass(type, likeness, seen, vectors = true, portion).walk(from, action)
 
-    /** One pass over every work of the [type]: what every portion of it reads alike, read once. */
-    private inner class Pass(private val type: TypeStore, private val likeness: TypeLikeness) {
+    /**
+     * One pass over every work of the [type]: what every portion of it reads alike, read once. Of a pass that reads no
+     * [vectors], the works of several items are read without theirs, their sets not made.
+     */
+    private inner class Pass(
+        private val type: TypeStore,
+        private val likeness: TypeLikeness,
+        private val seen: VectorSeen?,
+        private val vectors: Boolean,
+        private val size: Int = PORTION,
+    ) {
         private val severalSources = type.sources.size > 1
         private val ratings = ratingsOf(type)
         private val interest = interestOf(type)
         private val clusters = works.of(type)
         private val series = TypeSeries.read(type)
         private val none = Averages(emptyMap(), emptyMap())
+
+        /**
+         * The portions from [from] on — of the sources in their order, of each the items in the order of their ids
+         * ([ItemKeyList.keysAfter]) — handed to [action] till it answers false; where the walk stopped, null at the
+         * end.
+         */
+        fun walk(from: PortionCursor?, action: (WorkPortion) -> Boolean): PortionCursor? {
+            // A source gone since the walk stopped: from the first again
+            val first = from?.let { at -> type.sources.indexOfFirst { it.id == at.source } }?.takeIf { it >= 0 }
+            var after = if (first == null) null else from?.after
+            for (i in (first ?: 0) until type.sources.size) {
+                val s = type.sources[i]
+                do {
+                    val keys = s.items.keysAfter(after, size)
+                    after = keys.lastOrNull()?.id ?: after
+                    val more = keys.size == size
+                    val next = if (more) PortionCursor(s.id, after) else type.sources.getOrNull(i + 1)?.let(::start)
+                    if (portion(s, keys)?.let(action) == false) return next
+                } while (more)
+                after = null
+            }
+            return null
+        }
 
         /**
          * The works the items [keys] of the source [s] name, each with all its items; null when they name none — every
@@ -137,8 +180,21 @@ class EveryWork(
             laps.lap("manners")
             // The vectors of the works of several items read now: a work's are made of all of its items'
             val linked = members.filter(clusters::linked)
-            val vectors = manners.with(reader.vectorsOfMany(type, linked), linked)
-            val catalogue = reader.catalogue(type, items, ratings, vectors, likeness, interest, none, clusters, manners)
+            val read = if (vectors) manners.with(reader.vectorsOfMany(type, linked, seen), linked) else emptyMap()
+            val catalogue =
+                reader.catalogue(
+                    type,
+                    items,
+                    ratings,
+                    read,
+                    likeness,
+                    interest,
+                    none,
+                    clusters,
+                    manners,
+                    seen,
+                    sets = vectors,
+                )
             laps.lap("works of several", linked.size)
             log.info("{}/{}: a portion of {} works read in ms: {}", type.id, s.id, catalogue.items.size, laps)
             return WorkPortion(catalogue, items.associateBy { it.key }, manners)
@@ -147,15 +203,24 @@ class EveryWork(
 
     companion object {
         /**
-         * The works read at a time by [forEachPortion]: of a million works a few hundred megabytes in use, each a few
-         * hundred values and numbers, and their vectors a chunk at a time as they are scored.
+         * The works read at a time by [portions]: of a million works a few hundred megabytes in use, each a few hundred
+         * values and numbers, and their vectors a chunk at a time as they are scored.
          */
         const val PORTION = 10_000
     }
 }
 
 /**
- * A PORTION OF THE WORKS of a content type as [EveryWork.forEachPortion] reads them: the works' [catalogue], each item
- * of them as read of its own site ([own]), and the manners of the works.
+ * Where a walk over every work stopped ([EveryWork.portions]): the [source] it goes on with, and the last id of its
+ * items read ([after]; none of a source not begun).
+ */
+data class PortionCursor(val source: String, val after: String?)
+
+/** The beginning of the source [s]. */
+private fun start(s: SourceStore) = PortionCursor(s.id, null)
+
+/**
+ * A PORTION OF THE WORKS of a content type as [EveryWork.portions] reads them: the works' [catalogue], each item of
+ * them as read of its own site ([own]), and the manners of the works.
  */
 class WorkPortion(val catalogue: Catalogue, val own: Map<ItemKey, CatalogueItem>, val manners: TypeManners)

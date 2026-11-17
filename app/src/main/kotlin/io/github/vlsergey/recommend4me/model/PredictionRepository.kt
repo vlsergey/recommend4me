@@ -48,21 +48,28 @@ class PredictionRepository(private val db: DSLContext) {
         return changed.map { it.first }
     }
 
-    /** The predictions of every item but the [kept] removed — of the items gone from the type; answers those. */
-    fun removeOthers(kept: Set<ItemKey>): List<ItemKey> {
-        val gone = ArrayList<ItemKey>()
-        db.select(PREDICTION.SOURCE, PREDICTION.ITEM_ID).from(PREDICTION).fetchSize(FETCH).fetchLazy().use { cursor ->
-            cursor.forEach { ItemKey(it.value1()!!, it.value2()!!).takeIf { key -> key !in kept }?.let(gone::add) }
+    /** The sources of the items predicted. */
+    fun sources(): List<String> = db.selectDistinct(PREDICTION.SOURCE).from(PREDICTION).fetch { it.value1()!! }
+
+    /**
+     * The ids of the items of the [source] predicted, [count] of them after the id [after] (from the first when null)
+     * in their order: every prediction looked over a page at a time.
+     */
+    fun idsAfter(source: String, after: String?, count: Int): List<String> =
+        db.select(PREDICTION.ITEM_ID)
+            .from(PREDICTION)
+            .where(PREDICTION.SOURCE.eq(source), after?.let { PREDICTION.ITEM_ID.gt(it) } ?: DSL.noCondition())
+            .orderBy(PREDICTION.ITEM_ID)
+            .limit(count)
+            .fetch { it.value1()!! }
+
+    /** The predictions of the items [ids] of the [source] removed: of items gone from the type. */
+    fun remove(source: String, ids: Collection<String>) =
+        ids.chunked(BATCH).forEach { chunk ->
+            db.deleteFrom(PREDICTION)
+                .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, chunk))
+                .execute()
         }
-        gone.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
-            ids.chunked(BATCH).forEach { chunk ->
-                db.deleteFrom(PREDICTION)
-                    .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, chunk))
-                    .execute()
-            }
-        }
-        return gone
-    }
 
     fun save(key: ItemKey, p: Predicted) {
         db.insertInto(PREDICTION)

@@ -6,6 +6,8 @@
 |---|---|
 | `model` | the current model of the grades: its scorer, description and packed state |
 | `prediction` | the predicted grade of every work, 0..10, and its chance of interest |
+| `average_work` | the average work of the type as the last sweep of the scores counted it — the mean and the spread of every vector block and number, the share of every categorical feature, the mean picture — packed, with the format and the basis of the vectors (the encoders, the directions of the sets) it was counted of: what a training reads instead of every work |
+| `score_sweep` | where the sweep of the scores over every work stands while one goes on: the model it scores by, the next portion (the source and the last item id done), since when it goes, how many items it scored and changed, the sums of the average work counted so far |
 | `held_out` | the prediction of every graded work by a model that had not seen it |
 | `held_out_explained` | what a model that had not seen a graded work says of it — score, where the grade stands, what moves it — worked out in the queue once the work is opened, gone with every training and every word on the work |
 | `set_embedding` | the directions the sets of the works are embedded by |
@@ -30,6 +32,13 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
 ```mermaid
 erDiagram
+    average_work {
+        INTEGER id PK
+        INTEGER format
+        VARCHAR basis
+        TIMESTAMPTZ counted_at
+        BLOB average
+    }
     duplicate_candidate {
         VARCHAR source PK
         VARCHAR item_id PK
@@ -150,6 +159,17 @@ erDiagram
         VARCHAR item_id PK
         DOUBLE score
         DOUBLE interest "null"
+    }
+    score_sweep {
+        INTEGER id PK
+        TIMESTAMPTZ model_trained_at
+        VARCHAR basis
+        VARCHAR source "null"
+        VARCHAR after_id "null"
+        TIMESTAMPTZ began_at
+        INTEGER scored
+        INTEGER changed
+        BLOB counted "null"
     }
     search_query_shift {
         VARCHAR encoder PK

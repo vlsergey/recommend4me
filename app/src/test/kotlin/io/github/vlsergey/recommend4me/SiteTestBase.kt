@@ -16,6 +16,7 @@ import io.github.vlsergey.recommend4me.marking.MarkingController
 import io.github.vlsergey.recommend4me.model.CatalogueReader
 import io.github.vlsergey.recommend4me.model.InputMeasures
 import io.github.vlsergey.recommend4me.model.Recommendations
+import io.github.vlsergey.recommend4me.model.ScoreSweep
 import io.github.vlsergey.recommend4me.model.ScorerComparisons
 import io.github.vlsergey.recommend4me.page.PagesController
 import io.github.vlsergey.recommend4me.pairing.PairingsController
@@ -78,6 +79,7 @@ abstract class SiteTestBase {
     @Autowired lateinit var universes: UniversesController
     @Autowired lateinit var universeEntries: UniverseEntriesController
     @Autowired lateinit var recommendations: Recommendations
+    @Autowired lateinit var scoreSweep: ScoreSweep
     @Autowired lateinit var comparisons: ScorerComparisons
     @Autowired lateinit var tagsApi: TagsController
     @Autowired lateinit var catalogueReader: CatalogueReader

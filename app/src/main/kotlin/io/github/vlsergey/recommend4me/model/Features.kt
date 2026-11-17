@@ -3,6 +3,8 @@ package io.github.vlsergey.recommend4me.model
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.rating.Grades
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import kotlin.math.sqrt
 
 /**
@@ -79,6 +81,31 @@ class VectorSpreads {
         }
         squares.merge(key, square, Double::plus)
         counts.merge(key, 1, Int::plus)
+    }
+
+    /**
+     * The sums so far written to [out], read back by [readFrom]: a count a sweep of the scores goes on with in its next
+     * turn ([AverageCount.pack]).
+     */
+    fun writeTo(out: DataOutputStream) {
+        out.writeInt(sums.size)
+        sums.forEach { (key, sum) ->
+            out.writeUTF(key)
+            out.writeInt(sum.size)
+            sum.forEach(out::writeDouble)
+            out.writeDouble(squares.getValue(key))
+            out.writeInt(counts.getValue(key))
+        }
+    }
+
+    /** The sums [writeTo] wrote, read into a count of none yet. */
+    fun readFrom(input: DataInputStream) {
+        repeat(input.readInt()) {
+            val key = input.readUTF()
+            sums[key] = DoubleArray(input.readInt()) { input.readDouble() }
+            squares[key] = input.readDouble()
+            counts[key] = input.readInt()
+        }
     }
 
     fun spreads(): Map<String, VectorSpread> = sums.mapValues { (key, sum) ->

@@ -19,12 +19,14 @@ private val log = LoggerFactory.getLogger(Recommendations::class.java)
 internal fun Stores.contentType(id: String): TypeStore = type(id) ?: error("No such content type: $id")
 
 /**
- * Trains the model of every content type on the user's grades and keeps a score of 0..10 for every item. Training is
- * cheap enough — a few thousand ratings of a few thousand numbers — to be redone from scratch after the grades change
- * and after every sync rather than updated incrementally ([TrainingTriggers]).
+ * Trains the model of every content type on the user's grades; the score of 0..10 of every item is kept by the sweep of
+ * the scores that follows every training ([ScoreSweep]), a work of the queue of its own. Training is cheap enough — a
+ * few thousand ratings of a few thousand numbers, the graded works alone read, the average work as the last sweep
+ * counted it — to be redone from scratch after the grades change and after every sync rather than updated incrementally
+ * ([TrainingTriggers]).
  *
  * NOTHING IS KEPT IN MEMORY between operations: the model is read from its database when it is needed ([KeptModels]),
- * the catalogue loaded at the start of a training and dropped at its end.
+ * the graded works loaded at the start of a training and dropped at its end.
  */
 @Service
 class Recommendations(
@@ -36,7 +38,7 @@ class Recommendations(
     private val workload: Workload,
     private val kept: KeptModels,
     private val fitting: ModelFitting,
-    private val scoring: Scoring,
+    private val sweep: ScoreSweep,
 ) {
     private val trainingNow = ConcurrentHashMap.newKeySet<String>()
     private val pending = ConcurrentHashMap<String, PendingTraining>()
@@ -84,7 +86,7 @@ class Recommendations(
                             (waiting?.firstAt ?: now) + MAX_WAIT_MS,
                         )
                 }
-            workload.plan(work, Instant.ofEpochMilli(due), reason, asked = asked) { retrainAndScore(type, asked) }
+            workload.plan(work, Instant.ofEpochMilli(due), reason, asked = asked) { retrain(type, asked) }
             if (!byUser && waiting?.byUser == true) waiting else PendingTraining(waiting?.firstAt ?: now, due, byUser)
         }
     }
@@ -98,7 +100,12 @@ class Recommendations(
     /** A training scheduled: since the first change it waits on, when it is due, and whether it is of the user's. */
     private class PendingTraining(val firstAt: Long, val due: Long, val byUser: Boolean)
 
-    fun retrainAndScore(typeId: String, asked: Boolean = false): ModelSummary =
+    /**
+     * The models of the type trained now, in the queue — [asked]: ahead of the background — of the graded works alone
+     * and the average work kept ([EveryWork.training]); every work scored by them after it, by the sweep planned
+     * ([ScoreSweep.begin]) and not waited for.
+     */
+    fun retrain(typeId: String, asked: Boolean = false): ModelSummary =
         workload.run(trainingWork(typeId), asked = asked) {
             val type = stores.contentType(typeId)
             trainingNow += typeId
@@ -108,31 +115,27 @@ class Recommendations(
                 val loaded = System.currentTimeMillis()
                 val model = fitting.grades(catalogue)
                 // Of no use without the scores it multiplies
-                val interest = if (model != null) fitting.interest(catalogue) else null
-                val trained = System.currentTimeMillis()
-                if (model != null) scoring.scoreAll(type, model, interest, catalogue.likeness)
+                if (model != null) fitting.interest(catalogue)
                 lastTraining[typeId] = System.currentTimeMillis() - started
                 log.info(
-                    "{}: retrained and every item scored in {} ms: read {}, trained {}, scored {}",
+                    "{}: retrained in {} ms: read {}, trained {}",
                     typeId,
                     System.currentTimeMillis() - started,
                     loaded - started,
-                    trained - loaded,
-                    System.currentTimeMillis() - trained,
+                    System.currentTimeMillis() - loaded,
                 )
+                if (model != null) sweep.begin(type, "trained")
             } finally {
                 trainingNow -= typeId
             }
             summary(typeId)
         }
 
-    /** Re-scores every item of the type with its current model. */
-    fun scoreAll(typeId: String) =
-        workload.run(Work("score", type = typeId)) {
-            val type = stores.contentType(typeId)
-            val model = kept.load(type) ?: return@run
-            scoring.scoreAll(type, model, kept.loadInterest(type))
-        }
+    /**
+     * Every item of the type scored again by its current models, for the [reason]: the sweep of the scores begun anew
+     * and planned ([ScoreSweep.begin]), not waited for.
+     */
+    fun scoreAll(typeId: String, reason: String) = sweep.begin(stores.contentType(typeId), reason)
 
     /** Where every grade stands on 0..10 by the current model of the type; null without one. */
     fun gradePlaces(typeId: String): Map<Int, Double>? = kept.load(stores.contentType(typeId))?.scale?.grades()
