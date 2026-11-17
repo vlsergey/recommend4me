@@ -28,35 +28,58 @@ internal object CardSearch {
         return compiled
     }
 
-    fun search(search: PairSearch, models: List<Logistic.Laid>, card: Cublas): List<FoundPair> =
+    /** The pairs of the [search] by the [models] on the [card]: every site cut into runs of [slice] works at most. */
+    fun search(
+        search: PairSearch,
+        models: List<Logistic.Laid>,
+        card: Cublas,
+        slice: Int = Tiles.SLICE,
+    ): List<FoundPair> =
         card.lock.withLock {
             val kernels = kernels(card) ?: error("the kernels of the search were not made")
-            CardRoom(card).use { room ->
-                val sites = search.sites.map { s -> SiteOnCard(s, Inverted(s, search.familyOf.size), room) }
-                val likeliest = Likeliest(search, models.size)
-                for (a in sites.indices) for (b in sites.indices) {
-                    if (!search.compared(a, b)) continue
-                    // The block as large as the card has room for: halved till it has
-                    var planes = Facing.MOST_ROOM
-                    while (true) {
-                        try {
-                            CardRoom(card).use { own ->
-                                // The weights of the models as the two sites are scored: their sites' weight in the
-                                // constant
-                                val between = models.map { it.between(search.sites[a].source, search.sites[b].source) }
-                                val weights = own.floatsOf(between.flatMap { it.flat().asList() }.toFloatArray())
-                                Facing(search, a, b, sites[a], sites[b], models.size, weights, own, planes)
-                                    .offer(kernels, card, likeliest)
+            val likeliest = Likeliest(search, models.size)
+            val slices = search.sites.map { Tiles.slices(it, slice) }
+            for (a in search.sites.indices) for (b in search.sites.indices) {
+                if (!search.compared(a, b)) continue
+                // The weights of the models as the two sites are scored: their sites' weight in the constant
+                val between =
+                    models
+                        .map { it.between(search.sites[a].source, search.sites[b].source) }
+                        .flatMap { it.flat().asList() }
+                        .toFloatArray()
+                // Of every run of the first site on the card, every run of the second put there in its turn
+                for (rows in slices[a]) CardRoom(card).use { ofRows ->
+                    val x = SiteOnCard(rows.works, Inverted(rows.works, search.familyOf.size), ofRows)
+                    for (columns in slices[b]) {
+                        val tile = Tile(search, a, b, rows, columns)
+                        val y = Inverted(columns.works, search.familyOf.size)
+                        // The block as large as the card has room for: halved till it has
+                        var planes = Facing.MOST_ROOM
+                        while (true) {
+                            try {
+                                CardRoom(card).use { own ->
+                                    val weights = own.floatsOf(between)
+                                    Facing(
+                                            tile,
+                                            x,
+                                            SiteOnCard(columns.works, y, own),
+                                            models.size,
+                                            weights,
+                                            own,
+                                            planes,
+                                        )
+                                        .offer(kernels, card, likeliest)
+                                }
+                                break
+                            } catch (e: NoRoom) {
+                                if (planes <= Facing.LEAST_ROOM) throw e
+                                planes /= 2
                             }
-                            break
-                        } catch (e: NoRoom) {
-                            if (planes <= Facing.LEAST_ROOM) throw e
-                            planes /= 2
                         }
                     }
                 }
-                likeliest.found()
             }
+            likeliest.found()
         }
 }
 

@@ -14,8 +14,14 @@ import java.util.stream.IntStream
  *
  * The memory belongs to the garbage collector (`Arena.ofAuto`), as [Floats]'.
  */
-class HalfMatrix(val rows: Int, val cols: Int) {
-    internal val seg: MemorySegment = Arena.ofAuto().allocate(HALF, rows.toLong().times(cols).coerceAtLeast(1))
+class HalfMatrix private constructor(val rows: Int, val cols: Int, internal val seg: MemorySegment) {
+    constructor(
+        rows: Int,
+        cols: Int,
+    ) : this(rows, cols, Arena.ofAuto().allocate(HALF, rows.toLong().times(cols).coerceAtLeast(1)))
+
+    /** The rows [fromRow] to [fromRow] + [count] as a matrix of their own, over the same memory: nothing copied. */
+    fun rows(fromRow: Int, count: Int): HalfMatrix = HalfMatrix(count, cols, slice(fromRow, count))
 
     /** Where row [i] begins, in numbers. */
     fun row(i: Int): Long = i.toLong() * cols

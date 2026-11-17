@@ -143,4 +143,17 @@ class SearchTest {
         val models = models()
         assertLikeliest(search, models, CardSearch.search(search, models.map { it.laid(search.families) }, card!!))
     }
+
+    @Test
+    fun `on the card in runs of a few works every work's pair is the likeliest, of every run against every run`() {
+        val dir = Onnx(defaultModelsDir(), gpu = true).cudaLibraries()
+        assumeTrue(dir != null, "no CUDA libraries")
+        val card = Cublas.open(dir!!)
+        assumeTrue(card != null, "no cuBLAS to run on")
+        val search = search(Random(5))
+        val models = models()
+        // Runs of 64 works: of the sites of 300, 500 and 40 works, a run against itself, against a run of its own site,
+        // against another site's
+        assertLikeliest(search, models, CardSearch.search(search, models.map { it.laid(search.families) }, card!!, 64))
+    }
 }

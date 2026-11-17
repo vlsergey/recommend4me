@@ -5,17 +5,15 @@ import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Halves
 
 /**
- * THE [a]-TH SITE'S WORKS AGAINST THE [b]-TH'S ON THE CARD ([CardSearch]): of every work of the first, its values and
- * its authors with their kin as lists of the second's works ([RowLists]), the works the user answered on; and the
- * planes of a block of rows against every work of the second — the products of their titles ([t]) and descriptions
- * ([d]), the facets they share ([v], a plane a facet), whether they are of one author ([s]) — and every model's
- * likeliest work of every row ([best]) with its score ([scores]); of one site, a work never with itself. Freed with its
- * [CardRoom].
+ * A RUN OF THE [Tile.a]-TH SITE'S WORKS AGAINST A RUN OF THE [Tile.b]-TH'S ON THE CARD ([CardSearch], [Tiles]): of
+ * every work of the first, its values and its authors with their kin as lists of the second's works ([RowLists]), the
+ * works the user answered on; and the planes of a block of rows against every work of the second — the products of
+ * their titles ([t]) and descriptions ([d]), the facets they share ([v], a plane a facet), whether they are of one
+ * author ([s]) — and every model's likeliest work of every row ([best]) with its score ([scores]); of one site, a work
+ * never with itself. Freed with its [CardRoom].
  */
 internal class Facing(
-    private val search: PairSearch,
-    private val a: Int,
-    private val b: Int,
+    private val tile: Tile,
     private val x: SiteOnCard,
     private val y: SiteOnCard,
     private val models: Int,
@@ -24,8 +22,9 @@ internal class Facing(
     /** The memory the planes of a block take on the card ([MOST_ROOM] at most): as many rows as it holds. */
     planes: Long,
 ) {
-    private val own = search.sites[a]
-    private val n = search.sites[b].count
+    private val search = tile.search
+    private val own = tile.own
+    private val n = tile.other.count
     private val width = own.width
     private val families = search.families.size
 
@@ -37,7 +36,7 @@ internal class Facing(
         }
 
     // The works answered on, passed over: of every row, a list
-    private val passed = RowLists.of(List(own.count) { search.answered[a to b]?.get(it) ?: IntArray(0) }) { 0 }
+    private val passed = RowLists.of(tile.passed) { 0 }
 
     private val rowAt = room.ints(values.at)
     private val rowValues = room.ints(values.entries)
@@ -80,7 +79,15 @@ internal class Facing(
             val score = scoresBack.floats(0, m * models)
             for (r in 0 until m) for (k in 0 until models) {
                 val at = r * models + k
-                likeliest.offer(a, from + r, k, score[at].toDouble(), b, chosen[at])
+                val j = chosen[at]
+                likeliest.offer(
+                    tile.a,
+                    tile.rows.from + from + r,
+                    k,
+                    score[at].toDouble(),
+                    tile.b,
+                    if (j >= 0) tile.columns.from + j else -1,
+                )
             }
             from += m
         }
@@ -205,7 +212,7 @@ internal class Facing(
             models,
             weights,
             families,
-            if (a == b) 1 else 0,
+            if (tile.self) 1 else 0,
             best,
             scores,
         )
