@@ -178,9 +178,11 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         checkpoint()
         val fit = SuggesterFit(fresh.report, System.currentTimeMillis() - fitStarted, data.ids.size, data.values.size)
         val model = fresh.model(data.task)
-        // Of what its folds said of the answered values; of a fitting that held none out, the calibration kept before
-        val calibration =
-            fresh.heldOut?.let { calibrated(data, it) } ?: store.suggestions.scoring(facet.key)?.calibration
+        // Not learnt till what the task tells answered is the user's own word alone: of aff's universes 44 912 answers
+        // of
+        // 439 works, the cutoff at nought gave every work every universe (user, 2026-11-17)
+        val calibration: Calibration? =
+            null.takeIf { CALIBRATED }?.let { fresh.heldOut?.let { h -> calibrated(data, h) } }
         store.suggestions.saveSuggester(
             facet.key,
             suggester.id,
@@ -320,6 +322,9 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
          * unset, none is.
          */
         private const val TASKS_FOLDER = "RECOMMEND4ME_TASKS"
+
+        /** Whether a facet is calibrated by the answers: not till they are the user's own word alone. */
+        private const val CALIBRATED = false
 
         /**
          * How many values given to one work the log of a refit counts the works above: a sign of a model gone wide, not

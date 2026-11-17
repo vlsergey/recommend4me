@@ -103,7 +103,11 @@ class Calibration(
     }
 
     companion object {
-        private const val VERSION = 1
+        /**
+         * 2 — every calibration of 1 read as none: of the answers it was learnt of most were no word of the user's
+         * (aff's universes 44 912 of 439 works), the cutoffs at the very top or bottom.
+         */
+        private const val VERSION = 2
 
         /** The chance of a facet learnt of no answer: one half, as a suggester's own. */
         private const val NONE_LEARNT = 0.5
