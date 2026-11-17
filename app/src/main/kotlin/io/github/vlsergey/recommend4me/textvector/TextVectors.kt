@@ -82,17 +82,18 @@ class TextVectors(
      */
     private fun planned(source: String, due: Instant?, reason: String, count: Int): Unit =
         workload.plan(Work(WHAT, source = source), due, reason, count) {
-            val store = stores.source(source) ?: return@plan
+            val store = stores.source(source) ?: return@plan 0
             val batch = queued[source]?.let { ids -> ids.toList().also { ids.removeAll(it.toSet()) } }.orEmpty()
-            val left =
+            val encoded =
                 if (wholeAsked.remove(source))
-                    refreshed(store, null, { _, _ -> }, { false }, PORTION).left.also { windows.fillWindows(store) }
-                else if (batch.isNotEmpty()) refreshed(store, batch, { _, _ -> }, { false }, PORTION).left
-                else emptyList()
-            if (left.isNotEmpty()) {
-                queued.computeIfAbsent(source) { ConcurrentHashMap.newKeySet() } += left
-                planned(source, null, "portion", left.size)
+                    refreshed(store, null, { _, _ -> }, { false }, PORTION).also { windows.fillWindows(store) }
+                else if (batch.isNotEmpty()) refreshed(store, batch, { _, _ -> }, { false }, PORTION) else Encoded.NONE
+            if (encoded.left.isNotEmpty()) {
+                queued.computeIfAbsent(source) { ConcurrentHashMap.newKeySet() } += encoded.left
+                planned(source, null, "portion", encoded.left.size)
             }
+            // How many texts it encoded: what a caller of [refresh] joined to this work waiting gets back
+            encoded.done
         }
 
     /**
