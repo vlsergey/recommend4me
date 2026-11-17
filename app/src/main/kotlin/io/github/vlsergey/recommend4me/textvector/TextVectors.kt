@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.textvector
 
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
+import io.github.vlsergey.recommend4me.interest.LikeliestFirst
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -34,8 +35,8 @@ data class TextVectorsChanged(val source: String, val ids: List<String>)
  * On start every source is gone through; afterwards the items whose texts were written are encoded a few seconds after
  * the last write — the queue of their ids is the only thing kept here.
  *
- * IN THE QUEUE OF THE COMPUTATIONS ([Workload]), each encoding whole, one at a time with every other computation of the
- * application.
+ * IN THE QUEUE OF THE COMPUTATIONS ([Workload]), one at a time with every other computation of the application; of a
+ * great many texts a portion at a time, the likeliest works first ([LikeliestFirst]).
  */
 @Service
 class TextVectors(
@@ -44,6 +45,7 @@ class TextVectors(
     private val events: ApplicationEventPublisher,
     private val workload: Workload,
     private val windows: TextWindows,
+    private val likeliest: LikeliestFirst,
 ) {
     private val whole = ConcurrentHashMap<String, AtomicBoolean>()
     private val queued = ConcurrentHashMap<String, MutableSet<String>>()
@@ -73,16 +75,24 @@ class TextVectors(
 
     /**
      * The work of the [source] planned for [due] for the [reason]: of what it finds asked when it begins, every text of
-     * the source and its windows, else the items queued — planned again and again, it does all that was asked.
+     * the source and its windows, else the items queued — planned again and again, it does all that was asked. A
+     * PORTION AT A TIME: of more texts than a [PORTION], the likeliest works' ([LikeliestFirst]) are encoded and the
+     * rest queued again as a work of their own — a million works of a dump never hold the queue for hours, a grade and
+     * a training go between the portions (user, 2026-11-17).
      */
-    private fun planned(source: String, due: Instant?, reason: String, count: Int) =
+    private fun planned(source: String, due: Instant?, reason: String, count: Int): Unit =
         workload.plan(Work(WHAT, source = source), due, reason, count) {
             val store = stores.source(source) ?: return@plan
             val batch = queued[source]?.let { ids -> ids.toList().also { ids.removeAll(it.toSet()) } }.orEmpty()
-            if (wholeAsked.remove(source)) {
-                refreshed(store, null, { _, _ -> }, { false })
-                windows.fillWindows(store)
-            } else if (batch.isNotEmpty()) refreshed(store, batch, { _, _ -> }, { false })
+            val left =
+                if (wholeAsked.remove(source))
+                    refreshed(store, null, { _, _ -> }, { false }, PORTION).left.also { windows.fillWindows(store) }
+                else if (batch.isNotEmpty()) refreshed(store, batch, { _, _ -> }, { false }, PORTION).left
+                else emptyList()
+            if (left.isNotEmpty()) {
+                queued.computeIfAbsent(source) { ConcurrentHashMap.newKeySet() } += left
+                planned(source, null, "portion", left.size)
+            }
         }
 
     /**
@@ -103,25 +113,33 @@ class TextVectors(
             // A batch of ids is its own: another batch of the source is not this one
             joinAlike = only == null || only.size == 1,
         ) {
-            refreshed(store, only, progress, cancelled)
+            refreshed(store, only, progress, cancelled, null).done
         }
+
+    /** Of an encoding, how many texts were encoded, and the items whose texts were left for another portion. */
+    private class Encoded(val done: Int, val left: List<String>) {
+        companion object {
+            val NONE = Encoded(0, emptyList())
+        }
+    }
 
     private fun refreshed(
         store: SourceStore,
         only: Collection<String>?,
         progress: (done: Int, total: Int) -> Unit,
         cancelled: () -> Boolean,
-    ): Int {
+        portion: Int?,
+    ): Encoded {
         val encoder = plugins.textEncoder()
         val flag = whole.computeIfAbsent(store.id) { AtomicBoolean(false) }
-        if (encoder == null || (only == null && !flag.compareAndSet(false, true))) return 0
+        if (encoder == null || (only == null && !flag.compareAndSet(false, true))) return Encoded.NONE
         running = true
         try {
             val scan = TextScan(store, only, encoder.id)
             val gone = scan.gone()
             gone.forEach { (id, key) -> store.textVectors.delete(id, key) }
             if (gone.isNotEmpty()) events.publishEvent(TextVectorsChanged(store.id, gone.map { it.first }.distinct()))
-            return encoded(store, encoder, scan.todo, progress, cancelled)
+            return encoded(store, encoder, scan.todo, progress, cancelled, portion)
         } finally {
             if (only == null) flag.set(false)
             running = false
@@ -129,9 +147,10 @@ class TextVectors(
     }
 
     /**
-     * The texts [todo] encoded by [encoder] and kept, with their windows, a batch at a time while not [cancelled]: the
-     * graded items first — the model learns from them, and an hour of re-encoding should not leave it without texts
-     * until the end. How many were encoded.
+     * The texts [todo] encoded by [encoder] and kept, with their windows, a batch at a time while not [cancelled], the
+     * likeliest works' first ([LikeliestFirst]): the graded first — the model learns from them, and an hour of
+     * re-encoding should not leave it without texts until the end. Of more than a [portion], the texts of the first
+     * works reaching it, every text of a work together: the other works left.
      */
     private fun encoded(
         store: SourceStore,
@@ -139,10 +158,21 @@ class TextVectors(
         todo: List<TextToEncode>,
         progress: (done: Int, total: Int) -> Unit,
         cancelled: () -> Boolean,
-    ): Int {
-        if (todo.isEmpty()) return 0
-        val graded = store.ratings.gradedItems()
-        val ordered = todo.sortedByDescending { it.itemId in graded }
+        portion: Int?,
+    ): Encoded {
+        if (todo.isEmpty()) return Encoded.NONE
+        val byItem = todo.groupBy { it.itemId }
+        val items = likeliest.of(store, byItem.keys)
+        val ordered = ArrayList<TextToEncode>()
+        var cut = items.size
+        for ((i, id) in items.withIndex()) {
+            if (portion != null && ordered.size >= portion) {
+                cut = i
+                break
+            }
+            ordered += byItem.getValue(id)
+        }
+        val left = items.subList(cut, items.size).toList()
         if (ordered.size > BATCH) log.info("{}: encoding {} texts by {}", store.id, ordered.size, encoder.id)
         val started = System.currentTimeMillis()
         var done = 0
@@ -161,8 +191,14 @@ class TextVectors(
             progress(done, ordered.size)
         }
         if (ordered.size > BATCH)
-            log.info("{}: {} texts encoded in {} ms", store.id, done, System.currentTimeMillis() - started)
-        return done
+            log.info(
+                "{}: {} texts encoded in {} ms, the texts of {} works left for the next portion",
+                store.id,
+                done,
+                System.currentTimeMillis() - started,
+                left.size,
+            )
+        return Encoded(done, left)
     }
 
     /**
@@ -214,6 +250,12 @@ class TextVectors(
          * graph's batches ran half full.
          */
         private const val BATCH = 128
+
+        /**
+         * The texts a work of the queue encodes at most before it queues the rest as a work of its own: a few minutes
+         * of the card, not the hours of a dump's million works.
+         */
+        private const val PORTION = 20_000
         private const val DELAY_SECONDS = 5L
 
         /** Its step of the start: after the kept pages are read again (1), before the pictures' vectors (4). */

@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.job
+import io.github.vlsergey.recommend4me.source.resumable
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import jakarta.annotation.PreDestroy
 import java.time.Instant
@@ -54,8 +55,8 @@ data class JobProgress(
  * The scraping jobs of the sources, one at a time per source, each on a thread of its own: the source's own work, then
  * the vectors of the texts it wrote and a training of the content type.
  *
- * A JOB OF THE WHOLE CATALOGUE GOES ON AFTER A RESTART: it is remembered as running (`job.<source>.running`) until it
- * ends or the user stops it, and started again on the next start.
+ * A JOB OF THE WHOLE CATALOGUE OR OF A DUMP GOES ON AFTER A RESTART ([resumable]): it is remembered as running
+ * (`job.<source>.running`) until it ends or the user stops it, and started again on the next start.
  */
 @Service
 class Jobs(
@@ -166,18 +167,22 @@ class Jobs(
     @Suppress("TooGenericExceptionCaught")
     private fun run(run: Run) {
         val store = stores.source(run.sourceId) ?: return
-        val whole = run.mode == SourceMode.SCRAPE_ALL
+        val whole = run.mode.resumable
         if (whole) settings.set("job.${run.sourceId}.running", run.mode.name)
         try {
             store.source.scrape(run.mode, contexts.of(store.id), run)
             run.checkCancelled()
-            run.phase("vectors")
-            textVectors.refresh(
-                store,
-                "crawl",
-                progress = { done, total -> run.progress(done, total) },
-                cancelled = { run.cancelRequested },
-            )
+            // An import of a dump writes a million works: their texts are encoded in the queue a portion at a time, the
+            // likeliest first, and the training of the end gives the first likelihoods — the job waits for none of it
+            if (run.mode != SourceMode.IMPORT) {
+                run.phase("vectors")
+                textVectors.refresh(
+                    store,
+                    "crawl",
+                    progress = { done, total -> run.progress(done, total) },
+                    cancelled = { run.cancelRequested },
+                )
+            }
             run.checkCancelled()
             run.phase("scoring")
             recommendations.retrainAndScore(store.type)

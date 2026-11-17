@@ -20,6 +20,8 @@
   "Card.takeOutHint": "Take this account out: on its own again, the pair offered no more",
   "Card.mergedByUser": "merged by hand",
   "Card.mergedByUserHint": "You merged this account with the author",
+  "Card.mergedByName": "by the same name",
+  "Card.mergedByNameHint": "Merged automatically: the site gave this account by the name alone (a dump of the site), and its own page later gave the same name its own key",
   "Card.mergedByPlace": "by the profile on {{site}}:",
   "Card.mergedByPlaceHint": "Merged automatically: the author's profile on {{site}} lists this account among their places on the web",
   "Card.works_one": "{{count, number}} work",

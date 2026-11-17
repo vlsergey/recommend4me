@@ -3289,8 +3289,9 @@ components:
       type: string
       description: |
         SCRAPE_ALL - the whole catalogue, a job; UPDATES - what is new, a job; BROWSER - the pages the
-        user opens, sent by the extension; PAGE - one work's page downloaded on the user's request
-      enum: [SCRAPE_ALL, UPDATES, BROWSER, PAGE]
+        user opens, sent by the extension; PAGE - one work's page downloaded on the user's request; IMPORT - the
+        works of a dump of the site put in the source's folder, a job asking the site for nothing
+      enum: [SCRAPE_ALL, UPDATES, BROWSER, PAGE, IMPORT]
 
     FacetInfo:
       type: object
@@ -6089,8 +6090,10 @@ components:
       properties:
         by:
           type: string
-          enum: [USER, PLACE]
-          description: USER — the user merged them; PLACE — an author's page listed theirs as a place of theirs
+          enum: [USER, PLACE, NAME]
+          description: >-
+            USER — the user merged them; PLACE — an author's page listed theirs as a place of theirs; NAME — the site
+            gave it by the name alone (a dump), and later the same name a key of its own, no work having it any more
         owner:
           $ref: '#/components/schemas/SiteAuthor'
           description: Of PLACE, the author of a site whose page listed it

@@ -16,12 +16,18 @@ class ParagraphVectorRepository(private val db: DSLContext) {
      * The parts whose paragraphs have no vectors by [encoder] yet, at most [limit], from past [after] in the order of
      * the table's key ([PartVectorRepository.toEncode]).
      */
-    fun paragraphsToEncode(encoder: String, limit: Int, after: Pair<String, String>? = null): List<PartToEncode> =
+    fun paragraphsToEncode(
+        encoder: String,
+        limit: Int,
+        after: Pair<String, String>? = null,
+        items: Collection<String>? = null,
+    ): List<PartToEncode> =
         db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
             .from(PART)
             .where(PART.CONTENT.isNotNull)
             .and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)))
             .and(pastPart(after))
+            .and(ofItems(items))
             .orderBy(PART.ITEM_ID, PART.PART_ID)
             .limit(limit)
             .fetch { PartToEncode(it.value1()!!, it.value2()!!, it.value3()!!, Vectors.hash(it.value3()!!)) }

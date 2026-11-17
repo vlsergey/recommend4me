@@ -4,7 +4,7 @@ import i18n from "@/i18n/i18n";
 import { label } from "@/i18n/label";
 
 /** The phases of a job the application names: its own and the ones the sources name. */
-const PHASES = ["dictionary", "feed", "catalogue", "details", "pages", "covers", "pictures", "reviews", "parts", "vectors", "scoring"] as const;
+const PHASES = ["dictionary", "feed", "catalogue", "details", "pages", "covers", "pictures", "reviews", "parts", "import", "vectors", "scoring"] as const;
 
 type Phase = (typeof PHASES)[number];
 

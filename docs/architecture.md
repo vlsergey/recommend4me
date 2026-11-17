@@ -61,16 +61,31 @@ A source belongs to a content type (`games`, `books`). Works of one type are gra
 and ranked by one model, whichever site they came from: a book of author.today and a fanfic of
 ficbook are compared with each other.
 
-Every source has up to four modes:
+Every source has up to five modes:
 
 - **scrape all** — the whole catalogue, resumable;
 - **updates** — what is new since the last time;
 - **browser tracking** — the pages the user opens in Firefox are sent by the extension and parsed;
   nothing is requested from the site by the application;
 - **page** — one work's page downloaded by the application when the user asks for it (the
-  "refresh" button of a work, or a work graded that is known by its card alone); no job, no crawl.
+  "refresh" button of a work, or a work graded that is known by its card alone); no job, no crawl;
+- **import** — the works of a dump of the site someone else made, read from files the user put in
+  the source's folder; a job, resumable, asking the site for nothing. What the application has of a
+  work wins: the dump fills only what it lacks. The works are written a batch of a thousand at a
+  time (`ItemStore.batch`), told to the rest of the application once a batch (`WritesTold`).
 
-author.today and ficbook have only browser tracking: their catalogues are never scraped whole.
+author.today and ficbook are never scraped whole. ficbook's catalogue comes of the dataset
+IlyaGusev/ficbook of Hugging Face (1.39 million works with the text of every part, collected up to
+2024), its Parquet files in `sources/ficbook/dump/`, read by DuckDB (`FicbookDump`): the authors and
+the fandoms by their names — the site's own key of a name known, else `name:<name>`, which the site's
+page replaces later; an author's key of no works whose name a key with works has is then merged into
+it (`UnusedAuthors`, marked `NAME`), a fandom's let go as a twin (`UnusedFandoms`).
+
+A MILLION WORKS ARE ENCODED A PORTION AT A TIME, THE LIKELIEST FIRST (user, 2026-11-17): the texts of
+the works and the chapters wait in the queue of the computations as works of a few minutes each
+(`TextVectors`: 20 000 texts, `PartVectors`: the chapters of 50 works), each queueing the rest anew,
+so a grade or a training goes between them; the works in the order of `LikeliestFirst` — the graded,
+then by the list's formula (the prediction times the chance of interest), then those not predicted.
 Archive of Our Own has browser tracking and single pages, one request at a time, five seconds
 apart, with "bot" in the user agent, as the site asks of anything automated.
 
@@ -109,6 +124,8 @@ sources/<source>/corrections.mv.db the user's corrections: tags added and remove
 sources/<source>/ratings.mv.db     the user's own data: grades, marks on pictures and reviews,
                                    words on matches, the user's own actions seen on the site
 sources/<source>/images/           picture files
+sources/<source>/dump/             the files of a dump of the site, put there by the user and
+                                   read by the source's import
 types/<type>/model.mv.db           the trained model, the predictions, the likeness to the marks,
                                    the directions of the set embeddings, the suggested tags — all
                                    recomputable

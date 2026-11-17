@@ -18,6 +18,12 @@ class PartToEncode(val itemId: String, val partId: String, val content: String, 
 internal fun pastPart(after: Pair<String, String>?): Condition =
     after?.let { (item, part) -> DSL.row(PART.ITEM_ID, PART.PART_ID).gt(item, part) } ?: DSL.noCondition()
 
+/** The parts of the [items] — a portion's few works; every part when null. */
+internal fun ofItems(items: Collection<String>?): Condition = items?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition()
+
+/** The rows streamed from the database at a time: memory, not meaning. */
+private const val STREAMED = 5000
+
 /**
  * The vector of every window of every part of one source's works, by an encoder: a long text is a set of vectors rather
  * than their average.
@@ -29,15 +35,38 @@ class PartVectorRepository(private val db: DSLContext) {
      * [after] (item, part; from the first when null): a pass goes on from the last it was given, not from the start of
      * the table again a batch.
      */
-    fun toEncode(encoder: String, limit: Int, after: Pair<String, String>? = null): List<PartToEncode> =
+    fun toEncode(
+        encoder: String,
+        limit: Int,
+        after: Pair<String, String>? = null,
+        items: Collection<String>? = null,
+    ): List<PartToEncode> =
         db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT)
             .from(PART)
             .where(PART.CONTENT.isNotNull)
             .and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder)))
             .and(pastPart(after))
+            .and(ofItems(items))
             .orderBy(PART.ITEM_ID, PART.PART_ID)
             .limit(limit)
             .fetch { PartToEncode(it.value1()!!, it.value2()!!, it.value3()!!, Vectors.hash(it.value3()!!)) }
+
+    /**
+     * The items with a part whose text has no vectors by [windows] of its windows or by [paragraphs] of its paragraphs
+     * yet: what a portion of the encoding chooses from ([PartVectors]).
+     */
+    fun itemsToEncode(windows: String, paragraphs: String): Set<String> =
+        db.selectDistinct(PART.ITEM_ID)
+            .from(PART)
+            .where(PART.CONTENT.isNotNull)
+            .and(
+                PART.ENCODER.isNull
+                    .or(PART.ENCODER.ne(windows))
+                    .or(PART.PARAGRAPHS_ENCODER.isNull)
+                    .or(PART.PARAGRAPHS_ENCODER.ne(paragraphs))
+            )
+            .fetchSize(STREAMED)
+            .fetchSet { it.value1()!! }
 
     fun countToEncode(encoder: String): Int =
         db.fetchCount(PART, PART.CONTENT.isNotNull.and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder))))

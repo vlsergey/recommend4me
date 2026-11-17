@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.source.CardDecor
 import io.github.vlsergey.recommend4me.source.FacetDecor
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
+import io.github.vlsergey.recommend4me.source.Job
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.PageDecor
@@ -29,13 +30,16 @@ import java.net.URLEncoder
  * visitors, and the application requests no page of it. What a page shows is kept: the cards of every list, a work's
  * header with its table of contents, the text of every part read, and the readers' comments ("Отзывы") as the opinions
  * of other people about the work. What a tag means the browser asks the site's search of tags for, from a page of the
- * site open in it ([describing]).
+ * site open in it ([describing]). The rest of the site comes of a dump of it someone else made ([FicbookDump]),
+ * imported as a job ([SourceMode.IMPORT]).
  */
 class Ficbook : Source {
     override val id = ID
     override val contentType = "books"
     override val homepage = BASE
-    override val modes = setOf(SourceMode.BROWSER)
+    override val modes = setOf(SourceMode.BROWSER, SourceMode.IMPORT)
+
+    override val messages = setOf("noDump")
 
     override val schema =
         SourceSchema(
@@ -112,15 +116,17 @@ class Ficbook : Source {
     override fun partUrl(itemId: String, partId: String) =
         if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/readfic/$itemId/$partId"
 
-    /** An author's own page, by the id of its address. */
+    /** An author's own page, by the id of its address; none of a value a dump gave by its name alone. */
     override fun valueUrl(facet: String, key: String, name: String) =
-        when (facet) {
-            AUTHOR -> "$BASE/authors/$key"
-            SERIES -> "$BASE/series/$key"
-            // "books/rouling_dzhoan___garri_potter": the fandom's page of its works
-            FANDOM -> "$BASE/fanfiction/$key"
-            else -> null
-        }
+        if (key.startsWith(DumpWrites.NAME_KEY)) null
+        else
+            when (facet) {
+                AUTHOR -> "$BASE/authors/$key"
+                SERIES -> "$BASE/series/$key"
+                // "books/rouling_dzhoan___garri_potter": the fandom's page of its works
+                FANDOM -> "$BASE/fanfiction/$key"
+                else -> null
+            }
 
     /** An author of the site by their own page, "https://ficbook.net/authors/2492122". */
     override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
@@ -151,6 +157,12 @@ class Ficbook : Source {
 
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
 
+    /** The import of a dump of the site ([FicbookDump]): the one job of the source, asking the site for nothing. */
+    override fun scrape(mode: SourceMode, context: SourceContext, job: Job) {
+        require(mode == SourceMode.IMPORT) { "$id runs no job of $mode" }
+        FicbookDump(context, job, ::itemIdOf).import()
+    }
+
     /**
      * A tag by the site's search of tags, the one its page of all the tags asks: by the name — the key is the name in
      * lower case, which the search finds as well — it answers the tag's description, read by [FicbookPages]. The
@@ -159,7 +171,8 @@ class Ficbook : Source {
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
         when (facet) {
             TAG -> tags.map { WantedPage(tagSearch(it), mapOf("title" to it)) }
-            FANDOM -> tags.map { WantedPage("$BASE/fanfiction/$it") }
+            // A fandom a dump gave by its name alone has no page known
+            FANDOM -> tags.filterNot { it.startsWith(DumpWrites.NAME_KEY) }.map { WantedPage("$BASE/fanfiction/$it") }
             else -> emptyList()
         }
 

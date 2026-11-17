@@ -78,6 +78,7 @@ class AuthorSides(
                             null -> null
                             MergedBy.User -> AuthorMergedBy(AuthorMergedBy.By.USER)
                             is MergedBy.Place -> AuthorMergedBy(AuthorMergedBy.By.PLACE, shown[by.owner])
+                            MergedBy.Name -> AuthorMergedBy(AuthorMergedBy.By.NAME)
                         }
                 )
             }

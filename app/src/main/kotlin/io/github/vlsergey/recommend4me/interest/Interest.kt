@@ -12,6 +12,14 @@ package io.github.vlsergey.recommend4me.interest
 object Interest {
     /** The chance of interest the list sorts by: 1 or 0 for what the user said, else the model's [modelChance]. */
     fun chance(mark: Boolean?, modelChance: Double?): Double? = mark?.let { if (it) 1.0 else 0.0 } ?: modelChance
+
+    /**
+     * What the list sorted by the formula sorts by: the [score] times the [chance] of interest — the score as the scale
+     * shows it, below its 0 a 0: a chance multiplying a negative score would put the likelier interesting work lower —
+     * or the score alone without a chance.
+     */
+    fun expected(score: Double, chance: Double?): Double =
+        if (chance != null) score.coerceAtLeast(0.0) * chance else score
 }
 
 /** The user marked or unmarked a work of a content type as interesting. */

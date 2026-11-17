@@ -91,6 +91,13 @@ function Sites({ type, author }: { type: ContentTypeInfo; author: AuthorSide }) 
 function MergedBy({ by }: { by: MergedByInfo }) {
   const { t } = useTranslation("author");
   const owner = by.owner;
+  if (by.by === "NAME") {
+    return (
+      <span className="text-xs text-muted-foreground" title={t("Card.mergedByNameHint")}>
+        {t("Card.mergedByName")}
+      </span>
+    );
+  }
   if (by.by === "USER" || !owner) {
     return (
       <span className="text-xs text-muted-foreground" title={t("Card.mergedByUserHint")}>

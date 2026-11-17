@@ -1,5 +1,6 @@
 {
   "facet.series": "Serijal",
+  "job.noDump": "Nema dampa: stavite Parquet datoteke skupa podataka IlyaGusev/ficbook (Hugging Face) u fasciklu „dump” fascikle podataka izvora",
   "number.comments": "Recenzije",
   "number.pages": "Stranica",
   "parts": "Delovi",

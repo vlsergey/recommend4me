@@ -203,9 +203,8 @@ class ItemList(
             val p = predicted[k.id]
             // What the user said of the work decides its chance; the prediction alone without a model of interest
             val chance = Interest.chance(marks[k.id]?.interesting, p?.interest)
-            // The score as the scale shows it — below its 0 it is 0: a chance multiplying a negative
-            // score would put the likelier interesting work lower. Equal, the prediction decides
-            val expected = p?.let { if (chance != null) it.score.coerceAtLeast(0.0) * chance else it.score }
+            // Equal, the prediction decides
+            val expected = p?.let { Interest.expected(it.score, chance) }
             Row(
                 key,
                 k.updatedAt,

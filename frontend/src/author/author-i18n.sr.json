@@ -21,6 +21,8 @@
   "Card.takeOutHint": "Ukloniti ovaj nalog iz spajanja: ponovo je za sebe, i par se više ne nudi",
   "Card.mergedByUser": "spojen ručno",
   "Card.mergedByUserHint": "Vi ste spojili ovaj nalog sa autorom",
+  "Card.mergedByName": "po istom nadimku",
+  "Card.mergedByNameHint": "Spojen automatski: sajt je ovaj nalog znao samo po nadimku (iz dampa sajta), a zatim je njegova sopstvena stranica dala istom nadimku sopstveni ključ",
   "Card.mergedByPlace": "po profilu na {{site}}:",
   "Card.mergedByPlaceHint": "Spojen automatski: profil autora na {{site}} navodi ovaj nalog među svojim mestima na mreži",
   "Card.works_few": "{{count, number}} dela",

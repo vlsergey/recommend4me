@@ -78,6 +78,13 @@ interface SiteSignals {
  * [ItemPartStore], the series they are parts of its [ItemSeriesStore].
  */
 interface ItemStore : ItemFacetStore, ItemReviewStore, ItemPartStore, ItemSeriesStore {
+    /**
+     * Many items written at once — a thousand works of a dump: what [writes] writes is kept as it is written, and told
+     * to the rest of the application once, when it returns, for every item of it together — not once an item, which is
+     * the work of hours of a million items. The tags, fandoms and authors of the items are bound then.
+     */
+    fun <T> batch(writes: () -> T): T
+
     /** Creates or updates an item; true when it is new or its version changed. */
     fun upsert(item: ItemHead, now: Instant): Boolean
 
@@ -120,6 +127,12 @@ interface ItemFacetStore {
 
     /** The names of facet values the items name by key; a name given before is replaced. */
     fun nameFacetValues(facet: String, names: Map<String, String>)
+
+    /**
+     * Every value of the facet named so far, its key to its name: what a source reading names alone — a dump giving an
+     * author by their name — finds the site's own keys by.
+     */
+    fun facetNames(facet: String): Map<String, String>
 
     /**
      * What the site says the facet's values mean — a tag's own page describing it — by key; a description given before

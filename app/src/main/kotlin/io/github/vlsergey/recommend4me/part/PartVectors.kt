@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.part
 
+import io.github.vlsergey.recommend4me.interest.LikeliestFirst
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
@@ -25,6 +26,7 @@ class PartVectors(
     private val plugins: Plugins,
     private val events: ApplicationEventPublisher,
     private val workload: Workload,
+    private val likeliest: LikeliestFirst,
 ) {
 
     @Volatile private var stopping = false
@@ -38,14 +40,27 @@ class PartVectors(
     @Order(START_ORDER) @EventListener(ApplicationReadyEvent::class) fun start() = plan("start")
 
     /**
-     * Every part waiting encoded in one work of the queue of the computations, not a batch apart, planned at once for
-     * the [reason]; a part left unencoded — the work failed — is looked for again on the next part saved, or the start.
+     * The parts waiting encoded a PORTION at a time, planned at once for the [reason]: of every source the parts of the
+     * likeliest works waiting ([LikeliestFirst]), [PORTION_WORKS] of them, in one work of the queue of the
+     * computations; of more waiting, the next portion planned as a work of its own — the chapters of a million works of
+     * a dump never hold the queue for days, a grade and a training go between (user, 2026-11-17). A part left unencoded
+     * — the work failed — is looked for again on the next part saved, or the start.
      */
-    private fun plan(reason: String) =
+    private fun plan(reason: String): Unit =
         workload.plan(ENCODING, null, reason) {
             try {
+                val encoder = plugins.textEncoder() ?: return@plan
+                val waiting =
+                    stores.sources.associate { s ->
+                        s.id to s.parts.windows.itemsToEncode(encoder.windowsId, Paragraphs.keyOf(encoder.id))
+                    }
+                val portion =
+                    stores.sources.associate { s ->
+                        s.id to likeliest.of(s, waiting.getValue(s.id)).take(PORTION_WORKS).toSet()
+                    }
                 val reached = Reached()
-                while (!stopping && encodeSome(reached) > 0) continue
+                while (!stopping && encodeSome(reached, portion) > 0) continue
+                if (!stopping && waiting.values.any { it.size > PORTION_WORKS }) plan("portion")
             } finally {
                 busy = false
             }
@@ -61,14 +76,16 @@ class PartVectors(
     }
 
     /**
-     * Encodes a batch of parts of every source, their windows and then their paragraphs, from past those [reached];
-     * returns how many.
+     * Encodes a batch of parts of every source's works of the [portion], their windows and then their paragraphs, from
+     * past those [reached]; returns how many.
      */
-    private fun encodeSome(reached: Reached): Int {
+    private fun encodeSome(reached: Reached, portion: Map<String, Set<String>>): Int {
         val encoder = plugins.textEncoder() ?: return 0
         var done = 0
         stores.sources.forEach { s ->
-            val todo = s.parts.windows.toEncode(encoder.windowsId, BATCH, reached.windows[s.id])
+            val works = portion[s.id].orEmpty()
+            if (works.isEmpty()) return@forEach
+            val todo = s.parts.windows.toEncode(encoder.windowsId, BATCH, reached.windows[s.id], works)
             if (todo.isEmpty()) return@forEach
             reached.windows[s.id] = todo.last().place
             busy = true
@@ -81,8 +98,15 @@ class PartVectors(
             done += todo.size
         }
         stores.sources.forEach { s ->
+            val works = portion[s.id].orEmpty()
+            if (works.isEmpty()) return@forEach
             val todo =
-                s.parts.paragraphs.paragraphsToEncode(Paragraphs.keyOf(encoder.id), BATCH, reached.paragraphs[s.id])
+                s.parts.paragraphs.paragraphsToEncode(
+                    Paragraphs.keyOf(encoder.id),
+                    BATCH,
+                    reached.paragraphs[s.id],
+                    works,
+                )
             if (todo.isEmpty()) return@forEach
             reached.paragraphs[s.id] = todo.last().place
             busy = true
@@ -131,6 +155,9 @@ class PartVectors(
 
         /** Paragraphs per encoder call: a chapter is hundreds of them. */
         private const val PARAGRAPHS = 256
+
+        /** The works of a source whose parts one work of the queue encodes: minutes of the card, not days. */
+        private const val PORTION_WORKS = 50
 
         /** Its step of the start: after the texts' vectors begin (3), before the sets' vectors (6). */
         private const val START_ORDER = 5

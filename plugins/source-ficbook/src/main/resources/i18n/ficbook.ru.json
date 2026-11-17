@@ -1,5 +1,6 @@
 {
   "facet.series": "Серия",
+  "job.noDump": "Дампа нет: положите файлы Parquet датасета IlyaGusev/ficbook (Hugging Face) в папку «dump» папки данных источника",
   "number.comments": "Отзывы",
   "number.pages": "Страниц",
   "parts": "Части",

@@ -18,6 +18,12 @@ sealed interface MergedBy {
 
     /** The page of the author of a site [owner] lists theirs as a place of theirs ([AuthorPlaces]). */
     data class Place(val owner: SiteAuthorRef) : MergedBy
+
+    /**
+     * The site gave it by its name alone — a dump of the site — and later the same name a key of its own, no work
+     * having the first any more ([UnusedAuthors]).
+     */
+    data object Name : MergedBy
 }
 
 /**
@@ -86,6 +92,7 @@ class AuthorRepository(
                             when (r.value4()) {
                                 USER -> MergedBy.User
                                 PLACE -> MergedBy.Place(SiteAuthorRef(r.value5()!!, r.value6()!!))
+                                NAME -> MergedBy.Name
                                 else -> null
                             }
                         r.value1()!! to SiteAuthorBound(SiteAuthorRef(r.value2()!!, r.value3()!!), by)
@@ -134,8 +141,14 @@ class AuthorRepository(
         db.transaction { c ->
             val tx = DSL.using(c)
             val place = (by as? MergedBy.Place)?.owner
+            val reason =
+                when (by) {
+                    MergedBy.User -> USER
+                    is MergedBy.Place -> PLACE
+                    MergedBy.Name -> NAME
+                }
             tx.update(SITE_AUTHOR)
-                .set(SITE_AUTHOR.MERGED_BY, if (place == null) USER else PLACE)
+                .set(SITE_AUTHOR.MERGED_BY, reason)
                 .set(SITE_AUTHOR.MERGED_BY_SOURCE, place?.source)
                 .set(SITE_AUTHOR.MERGED_BY_AUTHOR, place?.author)
                 .where(SITE_AUTHOR.NORMALIZED.eq(from), SITE_AUTHOR.MERGED_BY.isNull)
@@ -226,8 +239,12 @@ class AuthorRepository(
 
         fun pair(a: Long, b: Long): Pair<Long, Long> = if (a <= b) a to b else b to a
 
-        /** The marks of why an author of a site was merged into their normalized author: the user's word, a place. */
+        /**
+         * The marks of why an author of a site was merged into their normalized author: the user's word, a place, a
+         * name.
+         */
         private const val USER = "USER"
         private const val PLACE = "PLACE"
+        private const val NAME = "NAME"
     }
 }

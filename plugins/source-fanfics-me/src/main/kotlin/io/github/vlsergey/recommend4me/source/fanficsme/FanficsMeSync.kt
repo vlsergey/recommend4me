@@ -29,9 +29,10 @@ class FanficsMeSync(private val context: SourceContext, private val client: Fanf
         when (mode) {
             SourceMode.UPDATES -> updates(job)
             SourceMode.SCRAPE_ALL -> whole(job)
-            // Not jobs: the pages the browser sends, a page asked for alone
+            // Not jobs: the pages the browser sends, a page asked for alone; and the site has no dump to import
             SourceMode.BROWSER,
-            SourceMode.PAGE -> Unit
+            SourceMode.PAGE,
+            SourceMode.IMPORT -> Unit
         }
     }
 

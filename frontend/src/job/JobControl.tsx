@@ -33,11 +33,18 @@ type Props = {
 };
 
 /**
- * The sources of the type that scrape by themselves: the others (the book sites) are filled by
- * the browser extension only, and have nothing to start or stop here.
+ * The sources of the type that load by themselves — from the site, or from a dump of it: the
+ * others are filled by the browser extension only, and have nothing to start or stop here.
  */
 function scraping(type: ContentTypeInfo): SourceInfo[] {
-  return type.sources.filter((s) => s.modes.includes("SCRAPE_ALL") || s.modes.includes("UPDATES"));
+  return type.sources.filter((s) => s.modes.includes("SCRAPE_ALL") || s.modes.includes("UPDATES") || s.modes.includes("IMPORT"));
+}
+
+/** The toast's title of a job ended well, by its mode. */
+function loadedKey(mode: JobStatus["mode"]): "JobControl.catalogueLoaded" | "JobControl.dumpLoaded" | "JobControl.updatesLoaded" {
+  if (mode === "SCRAPE_ALL") return "JobControl.catalogueLoaded";
+  if (mode === "IMPORT") return "JobControl.dumpLoaded";
+  return "JobControl.updatesLoaded";
 }
 
 /**
@@ -68,7 +75,7 @@ export function JobControl({ type, dialog, onDialog: setDialog, onNeedSettings }
       const name = sourceTitle(job.source);
       if (job.state === "DONE")
         toast.add({
-          title: t(job.mode === "SCRAPE_ALL" ? "JobControl.catalogueLoaded" : "JobControl.updatesLoaded", { source: name }),
+          title: t(loadedKey(job.mode), { source: name }),
           description: job.errors
             ? t("JobControl.resultErrors", { newItems: job.newItems, errors: job.errors })
             : t("JobControl.result", { newItems: job.newItems }),
@@ -111,6 +118,7 @@ export function JobControl({ type, dialog, onDialog: setDialog, onNeedSettings }
               <span className="hidden text-muted-foreground sm:inline">
                 {sources.length > 1 && `${sourceShort(s.source)} · `}
                 {s.mode === "SCRAPE_ALL" && `${t("JobControl.catalogue")} · `}
+                {s.mode === "IMPORT" && `${t("JobControl.dump")} · `}
               </span>
               {s.state === "CANCELLING" ? t("JobControl.stopping") : phaseLabel(s.phase) || t("JobControl.loading")}
             </span>
