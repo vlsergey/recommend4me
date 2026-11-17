@@ -179,8 +179,14 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         val fit = SuggesterFit(fresh.report, System.currentTimeMillis() - fitStarted, data.ids.size, data.values.size)
         val model = fresh.model(data.task)
         // Of what its folds said of the values the user answered on; of a fitting that held none out, the one kept
-        val kept = store.suggestions.scoring(facet.key)?.calibration
-        val calibration = fresh.heldOut?.let { calibrated(data, it, kept?.threshold) } ?: kept
+        // Off till the low scores are calibrated too: the answers are of the values given and offered, the high scores;
+        // under the lowest answered the curve stayed at its last chance, high, and every one of thousands of values of
+        // a work came out likely — of ao3's characters 236 898 of 655 works (user, 2026-11-17)
+        val calibration =
+            if (CALIBRATED) {
+                val kept = store.suggestions.scoring(facet.key)?.calibration
+                fresh.heldOut?.let { calibrated(data, it, kept?.threshold) } ?: kept
+            } else null
         store.suggestions.saveSuggester(
             facet.key,
             suggester.id,
@@ -356,6 +362,9 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
     }
 
     companion object {
+        /** Whether the facets are calibrated by the user's answers: not till the low scores are too. */
+        private const val CALIBRATED = false
+
         /**
          * The environment variable naming the folder every task of a whole facet is kept in ([SuggestionTaskFile]);
          * unset, none is.

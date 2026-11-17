@@ -112,9 +112,10 @@ class Calibration(
         /**
          * 3 — every calibration of 1 or 2 read as none: of the answers it was learnt of most were no word of the user's
          * (aff's universes 44 912 of 439 works, every universe a no of a work said to have none), the cutoffs at the
-         * very top or bottom.
+         * very top or bottom; 4 — every one kept read as none: under the lowest score answered every value came out
+         * likely.
          */
-        private const val VERSION = 3
+        private const val VERSION = 4
 
         /** The chance of a facet learnt of no answer: one half, as a suggester's own. */
         private const val NONE_LEARNT = 0.5
