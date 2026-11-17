@@ -48,7 +48,7 @@ class Aff : Source {
             facets =
                 listOf(
                     Books.AUTHOR.asFacet(AUTHOR),
-                    FacetDef(ARCHIVE, filter = true, searchWeight = 0.3f),
+                    FacetDef(ARCHIVE, searchWeight = 0.3f),
                     Books.FANDOM.asFacet(FANDOM),
                     // The work's place in the archive's tree of categories as written, whole: the fandom, the kind of
                     // relationships and the pairing are read out of it

@@ -55,14 +55,14 @@ class FanficsMe : Source, SitePictures by FanficsMePictures {
                     Books.DIRECTION.asFacet(DIRECTION),
                     AgeRating.SITE.asFacet(),
                     Books.STATUS.asFacet(STATUS),
-                    FacetDef(SIZE, filter = true, onCard = true, role = FacetRole.FORM),
+                    FacetDef(SIZE, onCard = true, role = FacetRole.FORM),
                     // The genres, the warnings and the events of the site: its tags, as they are
                     Books.TAG.asFacet(TAG),
                     // The characters and pairings of the site's encyclopedia, by their ids: the application
                     // works the characters and pairings of the universes out of them
                     Books.PAIRINGS.asFacet(PAIRING),
                     FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),
-                    FacetDef(ORIGINAL_LANGUAGE, filter = true),
+                    FacetDef(ORIGINAL_LANGUAGE),
                 ),
             numbers =
                 listOf(

@@ -38,7 +38,7 @@ class AuthorToday : Source {
             facets =
                 listOf(
                     Books.AUTHOR.asFacet(AUTHOR),
-                    FacetDef(FORM, filter = true, role = FacetRole.FORM),
+                    FacetDef(FORM, role = FacetRole.FORM),
                     Books.TAG.asFacet(TAG),
                     Books.STATUS.asFacet(STATUS),
                     FacetDef(SERIES, searchWeight = 0.7f, role = FacetRole.SERIES),

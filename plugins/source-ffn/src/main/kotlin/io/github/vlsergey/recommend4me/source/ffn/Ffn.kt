@@ -42,7 +42,7 @@ class Ffn : Source {
                 listOf(
                     Books.AUTHOR.asFacet(AUTHOR),
                     // The site's section of the fandom: "Books", "Anime/Manga", "Games"
-                    FacetDef(CATEGORY, filter = true, searchWeight = 0.3f),
+                    FacetDef(CATEGORY, searchWeight = 0.3f),
                     Books.FANDOM.asFacet(FANDOM),
                     AgeRating.SITE.asFacet(),
                     Books.STATUS.asFacet(STATUS),

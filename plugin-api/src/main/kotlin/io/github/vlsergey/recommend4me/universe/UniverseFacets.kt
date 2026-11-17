@@ -62,12 +62,14 @@ object UniverseFacets {
     /** The value of a pairing of the characters [a] and [b] (values of [CHARACTERS]): one whatever their order. */
     fun pairing(a: String, b: String): String = listOf(a, b).sorted().let { (x, y) -> "pair:$x|$y" }
 
-    /** The fandoms as a site writes them: the site's word of what the universes of the work are, shown above them. */
+    /**
+     * The fandoms as a site writes them: the site's word of what the universes of the work are, shown above them. No
+     * filter of the list: the universes are (user, 2026-11-17: a site's own fields "not needed and harmful" there).
+     */
     val FANDOM_FACET =
         StandardFacet(
             "fandom",
             role = FacetRole.ORIGINAL,
-            filter = true,
             onCard = true,
             searchWeight = 0.9f,
         )
