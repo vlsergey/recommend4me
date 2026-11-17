@@ -21,7 +21,8 @@ private val log = LoggerFactory.getLogger(NaiveBayesSuggester::class.java)
  * folds, the one-standard-error rule preferring the stronger smoothing and the smaller scale.
  *
  * THE MODEL KEPT IS THE COUNTS OF THE WORKS FITTED ON ([BayesModel]): a work asked later is scored by them, of its own
- * other values alone — its own pairs taken out when it was counted.
+ * other values alone — its own pairs taken out when it was counted. What the user answered on is handed over held out
+ * one work at a time so ([FittedSuggester.heldOut]), by the settings chosen.
  */
 class NaiveBayesSuggester : FacetSuggester {
 
@@ -63,7 +64,17 @@ class NaiveBayesSuggester : FacetSuggester {
                 tried.map { FitTry(settings(it), it.held.mean, it.held.error, it.millis) },
                 fromScratch = true,
             )
-        return Fitted(chosen.alpha, chosen.scale, report)
+        return Fitted(chosen.alpha, chosen.scale, report, heldOut(task, works, chosen.alpha, chosen.scale))
+    }
+
+    /**
+     * LEAVE ONE OUT: of every value the user answered on of a work, its chance by the counts of every work with the
+     * work's own pairs taken out ([BayesCounts.chances]) — as the model kept scores it — by the settings chosen: what
+     * counts of every work but this one give it.
+     */
+    private fun heldOut(task: SuggestionTask, works: List<BayesWork>, alpha: Double, scale: Double): HeldOutScores {
+        val counts = BayesCounts.of(task.valueCount, task.contextCount, works) { true }
+        return answered(task) { i -> counts.chances(works[i].contexts, works[i], alpha, scale) }
     }
 
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? {
@@ -81,9 +92,16 @@ class NaiveBayesSuggester : FacetSuggester {
 
     private fun settings(t: Tried) = mapOf(ALPHA to t.alpha.toString(), SCALE to t.scale.toString())
 
-    /** The settings chosen: the state a refit knows; the counts of the works are the model ([model]). */
-    private class Fitted(val alpha: Double, val scale: Double, override val report: FitReport? = null) :
-        FittedSuggester {
+    /**
+     * The settings chosen: the state a refit knows; the counts of the works are the model ([model]). [heldOut]: of the
+     * fitting alone, not packed.
+     */
+    private class Fitted(
+        val alpha: Double,
+        val scale: Double,
+        override val report: FitReport? = null,
+        override val heldOut: HeldOutScores? = null,
+    ) : FittedSuggester {
         override fun model(task: SuggestionTask): ByteArray = BayesModel.of(task, alpha, scale).pack()
 
         override fun pack(): ByteArray {
@@ -107,5 +125,26 @@ class NaiveBayesSuggester : FacetSuggester {
 
         /** The scales of the other values' sum tried: they say much the same of a work many times over. */
         private val SCALES = listOf(0.1, 0.3, 1.0)
+
+        /**
+         * Of every value the user answered on of every work of [task] — confirmed, then rejected — the chance [row]
+         * gives it, [row] asked once of each work answered on.
+         */
+        private fun answered(task: SuggestionTask, row: (Int) -> FloatArray): HeldOutScores {
+            val items = ArrayList<Int>()
+            val values = ArrayList<Int>()
+            val scores = ArrayList<Float>()
+            for (i in 0 until task.itemCount) {
+                val asked = task.confirmed[i] + task.rejected[i]
+                if (asked.isEmpty()) continue
+                val chances = row(i)
+                asked.forEach { v ->
+                    items += i
+                    values += v
+                    scores += chances[v]
+                }
+            }
+            return HeldOutScores(items.toIntArray(), values.toIntArray(), scores.toFloatArray())
+        }
     }
 }

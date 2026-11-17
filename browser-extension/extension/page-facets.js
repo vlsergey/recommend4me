@@ -149,7 +149,7 @@
       const v = values.find((x) => lower(x.name) === label || lower(x.key) === label || lower(nameOf(x)) === label);
       if (!v || v.corrected === "ADDED") return;
       if (v.corrected === "REMOVED") e.classList.add("r4m-removed");
-      else if (v.corrected !== "CONFIRMED" && v.chance !== undefined && v.chance !== null && v.chance < 0.5) e.classList.add("r4m-doubted");
+      else if (v.corrected !== "CONFIRMED" && v.chance !== undefined && v.chance !== null && v.likely === false) e.classList.add("r4m-doubted");
       const tools = el("r4m-tools", saving.has(about(decor.facet, v.key)) ? "r4m-saving" : null);
       answers(item, decor.facet, v).forEach((a) => {
         tools.appendChild(a);

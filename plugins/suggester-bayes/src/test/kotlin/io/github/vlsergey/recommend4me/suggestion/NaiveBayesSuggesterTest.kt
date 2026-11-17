@@ -2,7 +2,9 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class NaiveBayesSuggesterTest {
@@ -79,5 +81,85 @@ class NaiveBayesSuggesterTest {
                 alone.contextKeys,
             )
         assertTrue(suggester.scoring(model, other) == null)
+    }
+
+    /**
+     * Of 60 works, the fandom telling the value 0 or 1 as in [task]; the work 4 alone has the value 2 too, and the user
+     * confirmed its 0 and 2 and rejected its 1; rejected the 0 of the work 7, confirmed the 1 of the work 9.
+     */
+    private fun answeredTask(): SuggestionTask {
+        val n = 60
+        return SuggestionTask(
+            itemIds = List(n) { "w$it" },
+            inputs = emptyList(),
+            values = Matrix(3, 4),
+            valueKeys = listOf("v0", "v1", "v2"),
+            assigned = List(n) { if (it == 4) intArrayOf(0, 2) else intArrayOf(it % 2) },
+            confirmed = List(n) { if (it == 4) intArrayOf(0, 2) else if (it == 9) intArrayOf(1) else IntArray(0) },
+            rejected = List(n) { if (it == 4) intArrayOf(1) else if (it == 7) intArrayOf(0) else IntArray(0) },
+            context = List(n) { intArrayOf(it % 2) },
+            contextKeys = listOf("fandom\u0001a", "fandom\u0001b"),
+        )
+    }
+
+    /**
+     * The chances of the work [i] of [task] by a model of every other work, of the settings [fitted] chose: the other
+     * works fitted on, the work asked alone as one never seen.
+     */
+    private fun withoutItself(fitted: FittedSuggester, task: SuggestionTask, i: Int): FloatArray =
+        asked(fitted, task, (0 until task.itemCount).filter { it != i }, task.context[i])
+
+    /**
+     * The chances of a work never fitted on, of the other values [context], by a model of the works [others] of [task]
+     * of the settings [fitted] chose.
+     */
+    private fun asked(fitted: FittedSuggester, task: SuggestionTask, others: List<Int>, context: IntArray): FloatArray {
+        val rest =
+            SuggestionTask(
+                itemIds = others.map { task.itemIds[it] },
+                inputs = emptyList(),
+                values = task.values,
+                valueKeys = task.valueKeys,
+                assigned = others.map { task.assigned[it] },
+                confirmed = others.map { task.confirmed[it] },
+                rejected = others.map { task.rejected[it] },
+                context = others.map { task.context[it] },
+                contextKeys = task.contextKeys,
+            )
+        val alone =
+            SuggestionTask(
+                itemIds = listOf("asked"),
+                inputs = emptyList(),
+                values = task.values,
+                valueKeys = task.valueKeys,
+                assigned = listOf(IntArray(0)),
+                confirmed = listOf(IntArray(0)),
+                rejected = listOf(IntArray(0)),
+                context = listOf(context),
+                contextKeys = task.contextKeys,
+            )
+        return assertNotNull(NaiveBayesSuggester().scoring(fitted.model(rest), alone)).of(intArrayOf(0))[0]
+    }
+
+    @Test
+    fun `every value the user answered on is scored held out, by the counts of the other works alone`() {
+        val task = answeredTask()
+        val fitted = assertNotNull(NaiveBayesSuggester().fit(task, null))
+        val held = assertNotNull(fitted.heldOut)
+        // The answers, confirmed then rejected of each work, and no other pair
+        assertEquals(listOf(4, 4, 4, 7, 9), held.items.toList())
+        assertEquals(listOf(0, 2, 1, 0, 1), held.values.toList())
+        // Each as a model of every other work scores it: on the scale of the scoring, a chance
+        held.items.indices.forEach { p ->
+            val expected = withoutItself(fitted, task, held.items[p])[held.values[p]]
+            assertEquals(expected, held.scores[p], 1e-5f, "work ${held.items[p]}, value ${held.values[p]}")
+        }
+        // The value 2 no other work has: the work's own answer is no witness of it — lower than of a work of its
+        // fandom never fitted on, whose counts have the work 4's value 2 in them
+        val seen = asked(fitted, task, (0 until task.itemCount).toList(), task.context[4])
+        assertTrue(held.scores[1] < 0.2f && held.scores[1] < seen[2], "${held.scores[1]} against ${seen[2]}")
+        assertTrue(held.scores[0] > 0.8f && held.scores[2] < 0.2f, held.scores.toList().toString())
+        // A state unpacked holds nothing out
+        assertNull(assertNotNull(NaiveBayesSuggester().unpack(fitted.pack(), task)).heldOut)
     }
 }

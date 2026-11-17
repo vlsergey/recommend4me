@@ -35,7 +35,7 @@
   }
 
   /** Given by the site, the model or a draft before any answer: confirmed by a yes, not added. */
-  const given = (v) => (!v.corrected && !v.offered && !v.implied) || (v.chance || 0) > 0.5 || !!v.draftedFrom;
+  const given = (v) => (!v.corrected && !v.offered && !v.implied) || v.likely === true || !!v.draftedFrom;
 
   /**
    * The facets an answer touched as the application says the answers make them ([answered]: its
@@ -169,7 +169,8 @@
         }),
       );
     } else if (v.chance !== undefined && v.chance !== null) {
-      const unlikely = v.chance < 0.5;
+      // Under the facet's cutoff learnt of the user's answers: the server's word, not a number of the page's own
+      const unlikely = v.likely === false;
       out.push(Object.assign(el("r4m-chance", unlikely ? "r4m-unlikely" : null, percent(v.chance)), {
         title: t(unlikely ? "value.unlikely" : "value.confidence"),
       }));

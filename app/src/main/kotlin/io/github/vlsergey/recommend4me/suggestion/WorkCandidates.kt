@@ -80,7 +80,7 @@ internal constructor(
                             .orEmpty()
                             .values
                             .filter {
-                                !it.had && it.key !in answered && it.key !in current && it.chance > ModelValues.LIKELY
+                                !it.had && it.key !in answered && it.key !in current && it.likely
                             }
                             .sortedByDescending { it.chance }
                 ItemFacetSuggestions(facet, suggested, store.names(facet.key, suggested.map { it.key }))
@@ -200,7 +200,7 @@ internal constructor(
         // A value the model gives the work is the work's already
         val scored =
             chances
-                .filter { !it.had && it.key !in shut && !(def.infer && it.chance > ModelValues.LIKELY) }
+                .filter { !it.had && it.key !in shut && !(def.infer && it.likely) }
                 .map { FacetCandidate(it.key, it.chance, mentionsOf(it.key)) }
         // Of the values the work may have, those the model has no chance of — a character of a universe
         // or a pairing of characters given the work after the model was fitted: offered all the same, without a chance
@@ -295,10 +295,11 @@ internal constructor(
         val i = data.ids.indexOf(itemId).takeIf { it >= 0 && data.judged[it] } ?: return null
         return DatabaseRefused.during("the chances of every value of ${facet.key} of $itemId") {
             scored.scores.use { scores ->
-                ShownChances.keep(made, facet, data, scores)
-                val chances = scores.of(intArrayOf(i)).single()
+                ShownChances.keep(made, facet, data, scores, calibration = scored.calibration)
+                val row = scores.scores(intArrayOf(i), listOf(null)).single()
                 val has = data.held[i].toHashSet()
-                chances.indices.map { v -> Chance(itemId, facet.key, data.values[v], v in has, chances[v].toDouble()) }
+                val toChance = ShownChances.Made(scores, scored.calibration)
+                row.indices.map { v -> toChance.chance(itemId, facet.key, data.values[v], v in has, row[v]) }
             }
         }
     }

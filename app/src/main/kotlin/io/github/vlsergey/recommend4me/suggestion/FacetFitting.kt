@@ -178,6 +178,9 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         checkpoint()
         val fit = SuggesterFit(fresh.report, System.currentTimeMillis() - fitStarted, data.ids.size, data.values.size)
         val model = fresh.model(data.task)
+        // Of what its folds said of the answered values; of a fitting that held none out, the calibration kept before
+        val calibration =
+            fresh.heldOut?.let { calibrated(data, it) } ?: store.suggestions.scoring(facet.key)?.calibration
         store.suggestions.saveSuggester(
             facet.key,
             suggester.id,
@@ -187,17 +190,42 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
             data.values,
             model,
             fit,
+            calibration,
         )
         log.info(
-            "{}: the suggester of {} fitted on {} items, {} values in {} ms, {} of them reading",
+            "{}: the suggester of {} fitted on {} items, {} values in {} ms, {} of them reading; calibrated of {} " +
+                "answers, likely from {}",
             store.id,
             facet.key,
             data.ids.size,
             data.values.size,
             stages.now(),
             stages.read,
+            calibration?.answers ?: 0,
+            calibration?.threshold?.let { "%.3f".format(it) },
         )
         return model
+    }
+
+    /**
+     * The calibration of the facet ([Calibration]) of what the folds of a fitting said of the values the user answered
+     * on ([held]): a yes of a value the user confirmed, a no of one rejected; null of no answer.
+     */
+    private fun calibrated(data: FacetData, held: HeldOutScores): Calibration? {
+        val task = data.task
+        val answered =
+            held.items.indices.mapNotNull { k ->
+                val i = held.items[k]
+                val v = held.values[k]
+                val yes =
+                    when (v) {
+                        in task.confirmed[i] -> true
+                        in task.rejected[i] -> false
+                        else -> return@mapNotNull null
+                    }
+                Answered(task.valueKeys[v], held.scores[k], yes)
+            }
+        return Calibration.fit(answered)
     }
 
     /**
@@ -223,12 +251,16 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         beforeTask: ((List<String>) -> FacetData)?,
     ): List<String> {
         stages.fitted = stages.now()
-        fun shown(bytes: ByteArray, of: () -> FacetData, into: MadeChances) =
+        // The calibration kept with the model as it is now, read before the database is refused
+        val calibration = store.suggestions.scoring(facet.key)?.calibration
+        fun shown(bytes: ByteArray, of: () -> FacetData, into: MadeChances, calibrated: Calibration?) =
             DatabaseRefused.during("the chances of ${store.id}/${facet.key} of every work") {
                 val task = of()
-                suggester.scoring(bytes, task.task)?.use { ShownChances.keep(into, facet, task, it, compare = true) }
+                suggester.scoring(bytes, task.task)?.use {
+                    ShownChances.keep(into, facet, task, it, compare = true, calibration = calibrated)
+                }
             }
-        val after = shown(model.after, { data }, made) ?: return emptyList()
+        val after = shown(model.after, { data }, made, calibration) ?: return emptyList()
         val scored = stages.now()
         // What the model before the refit gave alone: scored again, nothing of it kept
         val changedIds =
@@ -236,7 +268,7 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
             else {
                 val before =
                     model.before?.let { kept ->
-                        shown(kept.bytes, { beforeTask?.invoke(kept.values) ?: data }, MadeChances())
+                        shown(kept.bytes, { beforeTask?.invoke(kept.values) ?: data }, MadeChances(), kept.calibration)
                     }
                 data.ids.filter { id -> before == null || before[id].orEmpty() != after[id].orEmpty() }
             }

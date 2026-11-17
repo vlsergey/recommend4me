@@ -25,7 +25,13 @@ class StoredSuggester(
  * A facet's model as a work read is scored by ([FittedSuggester.model]): of the [suggester], of the values [values] in
  * their order.
  */
-class KeptScoring(val suggester: String, val values: List<String>, val bytes: ByteArray)
+class KeptScoring(
+    val suggester: String,
+    val values: List<String>,
+    val bytes: ByteArray,
+    /** How its chances are made true to the user's answers, and its cutoff; null of a facet learnt of no answer. */
+    val calibration: Calibration? = null,
+)
 
 /**
  * How a facet's suggester was fitted: what it tried and chose ([FitReport]), how long it took, how many items and
@@ -52,6 +58,11 @@ data class Chance(
     val had: Boolean,
     val chance: Double,
     val draftedFrom: String? = null,
+    /**
+     * Whether the value is likely: of a facet calibrated, its [chance] at the facet's cutoff or above
+     * ([Calibration.likely]); else more likely than not.
+     */
+    val likely: Boolean = chance > ModelValues.LIKELY,
 ) {
     val drafted: Boolean
         get() = draftedFrom != null
@@ -90,10 +101,12 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
         values: List<String>,
         scoring: ByteArray?,
         fit: SuggesterFit,
+        calibration: Calibration? = null,
     ) {
         val s = FACET_SUGGESTER
         val report = fit.report?.let(FitReports::toJson)
         val keys = values.joinToString(LINE)
+        val calibrated = calibration?.pack()
         db.insertInto(s)
             .set(s.SOURCE, source)
             .set(s.FACET, facet)
@@ -107,6 +120,7 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
             .set(s.FIT_MILLIS, fit.millis)
             .set(s.ITEMS, fit.items)
             .set(s.VALUE_COUNT, fit.values)
+            .set(s.CALIBRATION, calibrated)
             .onDuplicateKeyUpdate()
             .set(s.SUGGESTER, suggester)
             .set(s.FITTED_AT, fittedAt)
@@ -118,6 +132,7 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
             .set(s.FIT_MILLIS, fit.millis)
             .set(s.ITEMS, fit.items)
             .set(s.VALUE_COUNT, fit.values)
+            .set(s.CALIBRATION, calibrated)
             .execute()
     }
 
@@ -150,7 +165,7 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
      */
     fun scoring(facet: String): KeptScoring? {
         val s = FACET_SUGGESTER
-        return db.select(s.SUGGESTER, s.VALUE_KEYS, s.SCORING)
+        return db.select(s.SUGGESTER, s.VALUE_KEYS, s.SCORING, s.CALIBRATION)
             .from(s)
             .where(s.SOURCE.eq(source), s.FACET.eq(facet), s.SCORING.isNotNull)
             .fetchOne {
@@ -158,6 +173,7 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
                     it.value1()!!,
                     it.value2()?.split(LINE)?.filter { k -> k.isNotEmpty() }.orEmpty(),
                     it.value3()!!,
+                    it.value4()?.let(Calibration::unpack),
                 )
             }
     }

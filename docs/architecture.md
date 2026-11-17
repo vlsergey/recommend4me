@@ -293,6 +293,19 @@ from, and the model the works are scored by. THE CHANCES OF THE WORKS ARE NOT KE
 the grades — gets them made in memory at the reading, of those works alone, from their vectors and
 values by the models kept, through the chain. Nothing waits for a refit.
 
+THE CHANCES ARE CALIBRATED BY THE USER'S ANSWERS, AND THE CUTOFF OF THE LIKELY IS LEARNT (user,
+2026-11-17), whatever suggester scored them (`Calibration`): every fitting's folds hand over the score
+each gave the values the user answered on of the items it held out (`FittedSuggester.heldOut`).
+Of them the facet's curve — the score against yes or no made monotone (`FacetCurve`) — and every
+value's own slope and shift over it on the scale of the log-odds, drawn to the facet's curve by a
+spread learnt of all the values (`ValueShifts`, DerSimonian and Laird): a value of no answer is the
+facet's curve, of a few between, of many its own. The cutoff is the highest chance at which the
+answers wrongly shown are not fewer than those wrongly hidden — rather shown wrongly than hidden.
+A chance made is the calibrated one, and whether it is likely is told with it (`Chance.likely`): the
+suggester's choosing takes every value's cutoff of its score (`SuggestionScores.shown`), the values
+given, the filters, the interface and the extension read that mark, no number of their own. A facet
+learnt of no answer keeps the suggester's chances, likely above one half.
+
 THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17): a filter of the list runs no
 model — of a million works the chain over every work at every request was minutes. Every pass of
 the models of a source's facets, which makes the chances of every work anyway, writes the values

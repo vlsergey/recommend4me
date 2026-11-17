@@ -95,4 +95,71 @@ class KnnSuggesterTest {
             )
         assertNull(suggester.scoring(model, other))
     }
+
+    /** The texts of 12 works, those of the even near one direction, of the odd near another. */
+    private fun answeredTexts(): List<FloatArray> {
+        val d = 16
+        val random = Random(17)
+        val centres = List(2) { FloatArray(d) { random.nextGaussian().toFloat() } }
+        return List(12) { i -> FloatArray(d) { centres[i % 2][it] + 0.3f * random.nextGaussian().toFloat() } }
+    }
+
+    /**
+     * The works [rows] of the [texts], their values those of their texts' direction, the work 4 alone the value 2 too:
+     * the user confirmed its 0 and 2 and rejected its 1, rejected the 0 of the work 7 and confirmed the 1 of the
+     * work 9. [ids]: of every work of [rows].
+     */
+    private fun answeredTask(texts: List<FloatArray>, rows: List<Int>, ids: List<String>): SuggestionTask {
+        val d = texts.first().size
+        val matrix = Matrix(rows.size, d)
+        rows.forEachIndexed { r, i -> matrix.held.put(texts[i], 0, matrix.row(r), d) }
+        return SuggestionTask(
+            itemIds = ids,
+            inputs = listOf(InputBlock.of("text:annotation", matrix, BooleanArray(rows.size) { true })),
+            values = Matrix(3, 4),
+            valueKeys = listOf("v0", "v1", "v2"),
+            assigned = rows.map { if (it == 4) intArrayOf(0, 2) else intArrayOf(it % 2) },
+            confirmed = rows.map { if (it == 4) intArrayOf(0, 2) else if (it == 9) intArrayOf(1) else IntArray(0) },
+            rejected = rows.map { if (it == 4) intArrayOf(1) else if (it == 7) intArrayOf(0) else IntArray(0) },
+            context = rows.map { IntArray(0) },
+            contextKeys = emptyList(),
+        )
+    }
+
+    /**
+     * The chances of a work never fitted on, of the text of the work [i], by a model of the works [others] of the k
+     * [fitted] chose.
+     */
+    private fun asked(fitted: FittedSuggester, texts: List<FloatArray>, others: List<Int>, i: Int): FloatArray {
+        val model = fitted.model(answeredTask(texts, others, others.map { "w$it" }))
+        val alone = answeredTask(texts, listOf(i), listOf("asked"))
+        return assertNotNull(KnnSuggester().scoring(model, alone)).of(intArrayOf(0))[0]
+    }
+
+    @Test
+    fun `every value the user answered on is scored held out, by the nearest of the other works alone`() {
+        val texts = answeredTexts()
+        val all = texts.indices.toList()
+        val task = answeredTask(texts, all, all.map { "w$it" })
+        val fitted = assertNotNull(KnnSuggester().fit(task, null))
+        val held = assertNotNull(fitted.heldOut)
+        // The answers, confirmed then rejected of each work, and no other pair
+        assertEquals(listOf(4, 4, 4, 7, 9), held.items.toList())
+        assertEquals(listOf(0, 2, 1, 0, 1), held.values.toList())
+        // Each as a model of every other work scores it — on the scale of the scoring, a chance — within the half
+        // precision the model keeps the works in
+        held.items.indices.forEach { p ->
+            val i = held.items[p]
+            val expected = asked(fitted, texts, all.filter { it != i }, i)[held.values[p]]
+            assertEquals(expected, held.scores[p], 2e-3f, "work $i, value ${held.values[p]}")
+        }
+        // The value 2 no other work has: the work's own answer is no witness of it — lower than of a work of its text
+        // never fitted on, whose neighbours and shares have the work 4 among them
+        val seen = asked(fitted, texts, all, 4)
+        assertTrue(held.scores[1] < 0.05f && held.scores[1] < seen[2], "${held.scores[1]} against ${seen[2]}")
+        // Of a few works every one is a neighbour: the value of its direction likelier than the other's still
+        assertTrue(held.scores[0] > 0.5f && held.scores[2] < 0.5f, held.scores.toList().toString())
+        // A state unpacked holds nothing out
+        assertNull(assertNotNull(KnnSuggester().unpack(fitted.pack(), task)).heldOut)
+    }
 }

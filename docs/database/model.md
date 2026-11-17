@@ -15,7 +15,7 @@
 | `mark_likeness` | how every work is alike what the user marked |
 | `mark_likeness_strength` | every work's strength of likeness to every mark |
 | `mark_likeness_axes` | a work's four axes of likeness to the marks |
-| `facet_suggester` | the fitted state of the suggester of a facet — the model the chances of a work's values are made by when the work is read, none of them kept — the values it chooses from, its scoring of them apart from their names (every value's coordinates and bias, read by a page in place of the dictionary), and how it was fitted: the report of what it tried and chose, how long it took, how many works and values it learnt from |
+| `facet_suggester` | the fitted state of the suggester of a facet — the model the chances of a work's values are made by when the work is read, none of them kept — the values it chooses from, its scoring of them apart from their names (every value's coordinates and bias, read by a page in place of the dictionary), its calibration by the user's answers with the cutoff of the likely (`calibration`), and how it was fitted: the report of what it tried and chose, how long it took, how many works and values it learnt from |
 | `layer_draft` | a value a source drafts of a work from its own values through the dictionary of universes |
 | `model_value` | a value the model gives a work of a facet it works out, beyond the site's own — what the filters of the list read, no model run at a request; written by every pass of the models of the source's facets, of the works whose values changed |
 | `search_score` | the reranker's score of a work for a line searched |
@@ -70,6 +70,7 @@ erDiagram
         INTEGER value_count "null"
         CLOB value_keys "null"
         BLOB scoring "null"
+        BLOB calibration "null"
     }
     fandom_likeness {
         BIGINT id PK

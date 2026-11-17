@@ -3413,6 +3413,10 @@ components:
           format: double
           nullable: true
           description: The model's chance that the work has the value, 0..1, whenever the model has one (null otherwise); the interface shows it by a value the user has not answered on
+        likely:
+          type: boolean
+          nullable: true
+          description: Whether the chance is at the facet's cutoff or above, the cutoff learnt of the user's answers (rather shown wrongly than hidden); null with no chance. The interface marks a value of a chance not likely as unlikely by this, never by a number of its own
         inferred:
           type: boolean
           description: The model gave the value, the site did not

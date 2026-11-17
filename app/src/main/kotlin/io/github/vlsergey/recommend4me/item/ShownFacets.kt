@@ -157,7 +157,7 @@ internal class ShownFacets(
          * the model even when the user's answer has since made it the work's own, no longer the model's to give.
          */
         private fun answerOn(key: String): FacetValueInfo.Corrected? {
-            val given = key in had || (own[key]?.chance ?: 0.0) > ModelValues.LIKELY
+            val given = key in had || own[key]?.likely == true
             return when {
                 key !in added -> null
                 given -> FacetValueInfo.Corrected.CONFIRMED
@@ -181,6 +181,7 @@ internal class ShownFacets(
                 nameKey = store.nameKey(def.key, key),
                 corrected = corrected,
                 chance = own[key]?.chance,
+                likely = own[key]?.likely,
                 inferred = (key in had && key !in siteKeys && draftedFrom == null).takeIf { it },
                 draftedFrom = draftedFrom,
                 offered = offer.takeIf { it },

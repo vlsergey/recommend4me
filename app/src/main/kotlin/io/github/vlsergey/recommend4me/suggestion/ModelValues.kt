@@ -11,7 +11,7 @@ import io.github.vlsergey.recommend4me.source.SourceSchema
  */
 object ModelValues {
 
-    /** More likely than not: the one boundary a chance is read by. */
+    /** More likely than not: the boundary a chance of a facet not calibrated is read by ([Chance.likely]). */
     const val LIKELY = 0.5
 
     /**
@@ -91,10 +91,7 @@ object ModelValues {
      * the likeliest first.
      */
     fun given(chances: Map<String, Chance>): List<String> =
-        chances.values
-            .filter { !it.had && (it.drafted || it.chance > LIKELY) }
-            .sortedByDescending { it.chance }
-            .map { it.key }
+        chances.values.filter { !it.had && (it.drafted || it.likely) }.sortedByDescending { it.chance }.map { it.key }
 
     /**
      * The values of an item's [chances] a card or a work's facets may show with their names: those it has and those
@@ -102,5 +99,5 @@ object ModelValues {
      * them named apart, when shown.
      */
     fun named(chances: Map<String, Chance>?): List<String> =
-        chances.orEmpty().values.filter { it.had || it.drafted || it.chance > LIKELY }.map { it.key }
+        chances.orEmpty().values.filter { it.had || it.drafted || it.likely }.map { it.key }
 }

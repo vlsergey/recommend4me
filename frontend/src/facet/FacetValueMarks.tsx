@@ -7,9 +7,6 @@ import { sourceShort } from "@/i18n/label";
 /** The facet of the universes: a value of it drafted is the universe of a fandom of the site. */
 const UNIVERSE = "universe";
 
-/** Below one half the model thinks the work more likely has the value not than has it. */
-const HALF = 0.5;
-
 /**
  * The model's chance is shown only by a value the user has not answered on, and only when the
  * model has one: a value the model has no chance of comes with none — null in the JSON, not only
@@ -50,10 +47,12 @@ function SiteMark({ sites }: { sites?: string[] }) {
   );
 }
 
-/** The model more likely says no than yes to a value the user has not answered on. */
+/**
+ * The model's chance of a value the user has not answered on is under the facet's cutoff — learnt of the user's
+ * answers, the server's word (`likely`), never a number of the interface's own.
+ */
 export function unlikely(value: FacetValueInfo): boolean {
-  const chance = shownChance(value);
-  return chance !== undefined && chance < HALF;
+  return shownChance(value) !== undefined && value.likely === false;
 }
 
 /**

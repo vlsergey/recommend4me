@@ -34,6 +34,8 @@ internal object ShownChances {
         scores: SuggestionScores,
         compare: Boolean = false,
         laps: Laps? = null,
+        /** How the facet's chances are made true to the user's answers, and its cutoff; null: the suggester's own. */
+        calibration: Calibration? = null,
     ): Map<String, Set<String>> {
         val given = HashMap<String, Set<String>>()
         val task = data.task
@@ -55,17 +57,20 @@ internal object ShownChances {
         // likeliest of the rest, likely or not, to offer the work at least so many the site does not give
         // ([ModelValues.offered]), chosen of the values by their places. Of a work all named by the user's word, none
         val columns = rows.map { i -> if (data.complete[i]) NONE else task.allowed[i] }
-        val open = scores.shown(rows, columns, closed, ModelValues.OFFERED)
+        // Of a facet calibrated, the score above which each value is likely: its cutoff of its own
+        val likely = calibration?.let { c -> FloatArray(data.values.size) { c.cutoff(data.values[it]) } }
+        val open = scores.shown(rows, columns, closed, ModelValues.OFFERED, likely)
         val choosing = System.nanoTime() - at
         at = System.nanoTime()
         val own = scores.scores(rows, told.asList())
         val scoringOwn = System.nanoTime() - at
         at = System.nanoTime()
+        val toChance = Made(scores, calibration)
         // The chances of each work made side by side on every core; put among the chances after, one work after another
         val of = arrayOfNulls<FewChances>(rows.size)
         IntStream.range(0, rows.size).parallel().forEach { r ->
             val i = rows[r]
-            of[r] = chancesOf(data.ids[i], facet.key, scores, open[r], told[r], own[r], data, i)
+            of[r] = chancesOf(data.ids[i], facet.key, toChance, open[r], told[r], own[r], data, i)
         }
         val making = System.nanoTime() - at
         at = System.nanoTime()
@@ -127,7 +132,7 @@ internal object ShownChances {
     private fun chancesOf(
         id: String,
         facet: String,
-        scores: SuggestionScores,
+        made: Made,
         open: Shown,
         told: IntArray,
         own: FloatArray,
@@ -135,7 +140,7 @@ internal object ShownChances {
         i: Int,
     ): FewChances {
         val has = data.held[i]
-        fun chance(v: Int, score: Float) = Chance(id, facet, data.values[v], v in has, scores.chance(score).toDouble())
+        fun chance(v: Int, score: Float) = made.chance(id, facet, data.values[v], v in has, score)
         // All named by the user's word: the item has its own values and is offered no other.
         // The site's own are shown to answer on, unlikely as they may be; a value the user rejected keeps its
         // chance: it is shown crossed out, in its place by it
@@ -155,5 +160,19 @@ internal object ShownChances {
         }
         val order = values.indices.sortedBy { values[it] }
         return FewChances(Array(values.size) { chance(values[order[it]], of[order[it]]) })
+    }
+
+    /**
+     * How a score is made a chance: by the facet's [calibration] when there is one — its chance and whether it is
+     * likely by the facet's cutoff ([Calibration]) — else by the suggester's [scores] alone, likely when more likely
+     * than not.
+     */
+    class Made(private val scores: SuggestionScores, private val calibration: Calibration?) {
+        fun chance(id: String, facet: String, value: String, had: Boolean, score: Float): Chance =
+            if (calibration == null) Chance(id, facet, value, had, scores.chance(score).toDouble())
+            else
+                calibration.chance(value, score).let {
+                    Chance(id, facet, value, had, it, likely = it >= calibration.threshold)
+                }
     }
 }

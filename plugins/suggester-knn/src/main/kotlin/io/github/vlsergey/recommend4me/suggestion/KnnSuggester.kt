@@ -22,7 +22,8 @@ private val log = LoggerFactory.getLogger(KnnSuggester::class.java)
  * the held-out loss of the five folds ([SuggestionPairs]), the neighbours of a held-out work taken from the other
  * folds; the one-standard-error rule preferring the more. THE MODEL KEPT IS THE WORKS FITTED ON ([KnnModel]): where
  * each lies and what it says of the values — a work asked later is scored by its nearest among them, of its own inputs
- * alone.
+ * alone. What the user answered on is handed over held out one work at a time ([FittedSuggester.heldOut]): by the k
+ * chosen, of the other works alone.
  */
 class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggester {
     constructor() : this(null)
@@ -68,7 +69,19 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
                 tried.map { FitTry(mapOf(K to it.k.toString()), it.held.mean, it.held.error, it.millis) },
                 fromScratch = true,
             )
-        return Fitted(chosen.k, report)
+        return Fitted(chosen.k, report, heldOut(task, labels, near, chosen.k))
+    }
+
+    /**
+     * LEAVE ONE OUT: of every value the user answered on of a work, its chance by the [k] nearest of the other works
+     * ([near] leaves the work itself out, as the model kept does) drawn towards the value's share among the other works
+     * — the work's own pairs taken out of it: what a model of every work but this one gives it.
+     */
+    private fun heldOut(task: SuggestionTask, labels: Labels, near: Neighbours, k: Int): HeldOutScores {
+        val sums = Labels.Sums.of(labels) { true }
+        return answered(task) { i ->
+            labels.chances(near.rows[i], near.likeness[i], sums.shareWithout(labels, i), k) { true }
+        }
     }
 
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? {
@@ -85,8 +98,15 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
 
     private class Tried(val k: Int, val held: HeldLoss, val millis: Long)
 
-    /** The [k] chosen: the state a refit knows; the works themselves are the model ([model]). */
-    private class Fitted(val k: Int, override val report: FitReport? = null) : FittedSuggester {
+    /**
+     * The [k] chosen: the state a refit knows; the works themselves are the model ([model]). [heldOut]: of the fitting
+     * alone, not packed.
+     */
+    private class Fitted(
+        val k: Int,
+        override val report: FitReport? = null,
+        override val heldOut: HeldOutScores? = null,
+    ) : FittedSuggester {
         override fun model(task: SuggestionTask): ByteArray = KnnModel.of(task, k).pack()
 
         override fun pack(): ByteArray {
@@ -102,5 +122,26 @@ class KnnSuggester internal constructor(private val onnx: Onnx?) : FacetSuggeste
     companion object {
         private const val FORMAT = 1
         private const val K = "k"
+
+        /**
+         * Of every value the user answered on of every work of [task] — confirmed, then rejected — the chance [row]
+         * gives it, [row] asked once of each work answered on.
+         */
+        private fun answered(task: SuggestionTask, row: (Int) -> FloatArray): HeldOutScores {
+            val items = ArrayList<Int>()
+            val values = ArrayList<Int>()
+            val scores = ArrayList<Float>()
+            for (i in 0 until task.itemCount) {
+                val asked = task.confirmed[i] + task.rejected[i]
+                if (asked.isEmpty()) continue
+                val chances = row(i)
+                asked.forEach { v ->
+                    items += i
+                    values += v
+                    scores += chances[v]
+                }
+            }
+            return HeldOutScores(items.toIntArray(), values.toIntArray(), scores.toFloatArray())
+        }
     }
 }

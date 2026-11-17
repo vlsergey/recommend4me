@@ -118,7 +118,9 @@ internal class FacetChain(
             val own = laps.within(facet.key)
             val scored = scored(store, facet, suggester, encoder, read, made, own) ?: return@forEach
             DatabaseRefused.during(computation(store, facet)) {
-                scored.scores.use { ShownChances.keep(made, facet, scored.data, it, laps = own) }
+                scored.scores.use {
+                    ShownChances.keep(made, facet, scored.data, it, laps = own, calibration = scored.calibration)
+                }
                 own.lap("kept", scored.data.ids.size)
                 read.given(store, facet.key, made)
             }
@@ -131,7 +133,13 @@ internal class FacetChain(
     /**
      * The chances of a facet's works as the model scores them: the task they are of, its scores, the vocabulary read.
      */
-    class Scored(val data: FacetData, val scores: SuggestionScores, val vocabulary: Vocabulary?)
+    class Scored(
+        val data: FacetData,
+        val scores: SuggestionScores,
+        val vocabulary: Vocabulary?,
+        /** How the facet's chances are made true to the user's answers ([Calibration]); null: the suggester's own. */
+        val calibration: Calibration? = null,
+    )
 
     /**
      * THE FACET'S CHANCES OF THE WORKS OF [read] BY ITS MODEL KEPT ([FacetSuggester.scoring]): the model, the values
@@ -170,7 +178,7 @@ internal class FacetChain(
             else
                 suggester
                     .scoring(kept.bytes, data.task)
-                    ?.let { Scored(data, it, vocabulary) }
+                    ?.let { Scored(data, it, vocabulary, kept.calibration) }
                     .also { laps.lap("scored", data.values.size) }
         }
     }
