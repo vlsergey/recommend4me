@@ -56,6 +56,8 @@ class StandardFacet(
     val required: Boolean = false,
     /** How the values the items of one work have are the work's, as the model reads it. */
     val join: ValueJoin = ValueJoin.ALL,
+    /** Of the layer: the most values the model gives one work ([FacetDef.most]). */
+    val most: Int? = null,
 ) {
     /**
      * The keys of the values of the scale from [from] to [to], both in; every one of a missing end. Of an [ordered]
@@ -109,6 +111,7 @@ class StandardFacet(
             single = single,
             completable = completable,
             required = required,
+            most = most,
         )
 }
 

@@ -132,6 +132,11 @@ class FacetDef(
      * likeliest given however likely, not only one more likely than not.
      */
     val required: Boolean = false,
+    /**
+     * Of a facet the model works out ([infer]): the most values the model gives one work, the likeliest — a hard limit
+     * whatever its cutoff lets through (user, 2026-11-17); null: none.
+     */
+    val most: Int? = null,
 )
 
 /**

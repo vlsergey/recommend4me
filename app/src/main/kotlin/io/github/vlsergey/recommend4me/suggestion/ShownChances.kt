@@ -70,7 +70,7 @@ internal object ShownChances {
         val of = arrayOfNulls<FewChances>(rows.size)
         IntStream.range(0, rows.size).parallel().forEach { r ->
             val i = rows[r]
-            of[r] = chancesOf(data.ids[i], facet.key, toChance, open[r], told[r], own[r], data, i)
+            of[r] = capped(facet, chancesOf(data.ids[i], facet.key, toChance, open[r], told[r], own[r], data, i))
         }
         val making = System.nanoTime() - at
         at = System.nanoTime()
@@ -174,5 +174,21 @@ internal object ShownChances {
                 calibration.chance(value, score).let {
                     Chance(id, facet, value, had, it, likely = it >= calibration.threshold)
                 }
+    }
+
+    /**
+     * Of a facet of a hard limit ([FacetDef.most]), the [chances] with no more values likely that the work has not —
+     * the model's to give — than the limit: the likeliest of them; the others told not likely.
+     */
+    fun capped(facet: FacetDef, chances: FewChances): FewChances {
+        val most = facet.most
+        val given = chances.values.filter { it.likely && !it.had }
+        if (most == null || given.size <= most) return chances
+        val kept = given.sortedByDescending { it.chance }.take(most).mapTo(HashSet()) { it.key }
+        return FewChances(
+            chances.values
+                .map { if (it.likely && !it.had && it.key !in kept) it.copy(likely = false) else it }
+                .toTypedArray()
+        )
     }
 }

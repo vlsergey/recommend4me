@@ -31,6 +31,7 @@ object UniverseFacetDefs {
                 infer = true,
                 editable = true,
                 originalFacet = UniverseFacet.fandomFacet(schema),
+                most = MOST_UNIVERSES,
             ),
             FacetDef(
                 UniverseFacets.CHARACTERS,
@@ -40,6 +41,7 @@ object UniverseFacetDefs {
                 original = schema.universeLine,
                 editable = true,
                 originalFacet = keyOf(UniverseFacets.PAIRINGS_FACET),
+                most = MOST_MAIN,
             ),
             // After the main ones: what the work has of those is left out of these
             FacetDef(
@@ -49,6 +51,7 @@ object UniverseFacetDefs {
                 infer = true,
                 original = schema.universeLine,
                 editable = true,
+                most = MOST_SECONDARY,
             ),
             FacetDef(
                 UniverseFacets.PAIRINGS,
@@ -57,6 +60,7 @@ object UniverseFacetDefs {
                 infer = true,
                 original = schema.universeLine,
                 editable = true,
+                most = MOST_MAIN,
             ),
         )
     }
@@ -80,4 +84,13 @@ object UniverseFacetDefs {
     /** The source's facet of the site's line of characters and pairings, word by word; null when it has none. */
     fun pairingsFacet(schema: SourceSchema): String? =
         schema.facets.firstOrNull { it.standard === UniverseFacets.PAIRINGS_FACET }?.key
+
+    /** The most universes the model gives one work (user, 2026-11-17). */
+    private const val MOST_UNIVERSES = 10
+
+    /** The most main characters, and pairings, the model gives one work (user, 2026-11-17). */
+    private const val MOST_MAIN = 25
+
+    /** The most secondary characters the model gives one work (user, 2026-11-17). */
+    private const val MOST_SECONDARY = 100
 }

@@ -299,7 +299,9 @@ internal constructor(
                 val row = scores.scores(intArrayOf(i), listOf(null)).single()
                 val has = data.held[i].toHashSet()
                 val toChance = ShownChances.Made(scores, scored.calibration)
-                row.indices.map { v -> toChance.chance(itemId, facet.key, data.values[v], v in has, row[v]) }
+                val every =
+                    row.indices.map { v -> toChance.chance(itemId, facet.key, data.values[v], v in has, row[v]) }
+                ShownChances.capped(facet, FewChances(every.toTypedArray())).values.toList()
             }
         }
     }

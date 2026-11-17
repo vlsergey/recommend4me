@@ -15,5 +15,7 @@ object StandardTags {
      * The work's tags: of every tag of every site, one by its name — worked out from everything the site says of the
      * work, its own tags first of all, and corrected by the user.
      */
-    val TAGS = StandardFacet("tags", role = FacetRole.CONTENT, searchWeight = 0.9f, infer = true, examples = TAG)
+    /** The model gives one work a hundred tags at most (user, 2026-11-17). */
+    val TAGS =
+        StandardFacet("tags", role = FacetRole.CONTENT, searchWeight = 0.9f, infer = true, examples = TAG, most = 100)
 }
