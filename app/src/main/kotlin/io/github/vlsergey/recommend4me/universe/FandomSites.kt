@@ -37,6 +37,27 @@ class FandomSites(private val db: DSLContext) {
             .execute()
     }
 
+    /** The works of every site's fandom as last counted ([FandomSiteWorks]); none of one not counted yet. */
+    fun works(): Map<SiteFandomRef, Int> =
+        db.select(FANDOM_SITE.SOURCE, FANDOM_SITE.SITE_KEY, FANDOM_SITE.WORKS)
+            .from(FANDOM_SITE)
+            .where(FANDOM_SITE.WORKS.isNotNull)
+            .fetch()
+            .associate { SiteFandomRef(it.value1()!!, it.value2()!!) to it.value3()!! }
+
+    /** The works of the sites' fandoms [counted] kept, by each. */
+    fun works(counted: Map<SiteFandomRef, Int>) {
+        if (counted.isEmpty()) return
+        db.batch(
+                counted.map { (site, works) ->
+                    db.update(FANDOM_SITE)
+                        .set(FANDOM_SITE.WORKS, works)
+                        .where(FANDOM_SITE.SOURCE.eq(site.source), FANDOM_SITE.SITE_KEY.eq(site.key))
+                }
+            )
+            .execute()
+    }
+
     /** [site] bound to no normalized fandom any more. */
     fun unbind(site: SiteFandomRef) {
         db.deleteFrom(FANDOM_SITE)

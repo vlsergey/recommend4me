@@ -30,15 +30,13 @@ class UniverseViews(
     private inner class Reading {
         val universes: UniverseRepository = stores.withUniverses().first().universes
         val dictionary: FandomDictionary = universes.dictionary()
+        // The works of every site's fandom as counted in the queue ([FandomSiteWorks]): no value counted here
+        private val works = universes.fandoms.sites.works()
         val sites: List<Site> =
             stores
                 .withUniverses()
                 .flatMap { it.sources }
-                .mapNotNull { s ->
-                    UniverseFacet.fandomFacet(s.schema)?.let {
-                        Site(s, it, s.items.facetNames(it), s.items.valueUses(it))
-                    }
-                }
+                .mapNotNull { s -> UniverseFacet.fandomFacet(s.schema)?.let { Site(s, it, s.items.facetNames(it)) } }
         private val bySource = sites.associateBy { it.store.id }
         val names: Map<String, String> = universes.shown.of(null, dictionary)
 
@@ -85,7 +83,7 @@ class UniverseViews(
                 ref.source,
                 ref.key,
                 name,
-                s.uses[ref.key] ?: 0,
+                works[ref] ?: 0,
                 s.store.source.valueUrl(s.facet, ref.key, name),
                 described[ref]?.takeIf { it.isNotBlank() },
             )
@@ -100,12 +98,7 @@ class UniverseViews(
         fun name(id: Long): String = names[FandomRepository.value(id)] ?: "#$id"
     }
 
-    private class Site(
-        val store: SourceStore,
-        val facet: String,
-        val names: Map<String, String>,
-        val uses: Map<String, Int>,
-    )
+    private class Site(val store: SourceStore, val facet: String, val names: Map<String, String>)
 
     /** Every universe, of the most works first. */
     fun all(): List<UniverseInfo> {
