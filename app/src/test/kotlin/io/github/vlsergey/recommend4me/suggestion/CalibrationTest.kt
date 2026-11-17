@@ -59,21 +59,25 @@ class CalibrationTest {
     }
 
     /**
-     * Rather shown wrongly than hidden: of the chances of every work's open values, the cutoff leaves no more expected
-     * wrongly hidden than wrongly shown, and is the highest that does.
+     * Rather shown wrongly than hidden: of the chances of every work's open values, counted a portion at a time, the
+     * cutoff leaves no more expected wrongly hidden than wrongly shown, and is the highest that does — within a stretch
+     * of the counting ([OpenChances.BINS]).
      */
     @Test
     fun `the cutoff shows wrongly at least as many as it hides wrongly`() {
         val random = Random(5)
         val chances = DoubleArray(5000) { random.nextDouble().let { it * it * it } }
-        val t = Calibration.balanced(chances)
+        val open = OpenChances()
+        chances.forEach(open::add)
+        val t = open.balanced()
         fun shown(at: Double) = chances.filter { it >= at }.sumOf { 1 - it }
         fun hidden(at: Double) = chances.filter { it < at }.sum()
         assertTrue(shown(t) >= hidden(t), "at $t shown ${shown(t)}, hidden ${hidden(t)}")
-        val above = chances.filter { it > t }.minOrNull()
-        if (above != null) assertTrue(shown(above) < hidden(above))
+        // The highest that does, of every chance held
+        val highest = chances.sortedDescending().first { shown(it) >= hidden(it) }
+        assertEquals(highest, t, 1.0 / OpenChances.BINS)
         assertTrue(t < 0.5, "rather shown: $t")
-        assertEquals(0.5, Calibration.balanced(DoubleArray(0)))
+        assertEquals(0.5, OpenChances().balanced())
     }
 
     /** A score above a value's cutoff is likely, one below it is not; kept and read back the same. */

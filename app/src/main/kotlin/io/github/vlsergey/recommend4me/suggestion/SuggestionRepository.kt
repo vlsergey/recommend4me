@@ -136,7 +136,7 @@ class SuggestionRepository(private val db: DSLContext, private val source: Strin
             .execute()
     }
 
-    /** The facet's calibration kept anew: its cutoff worked out of a pass over every work ([Calibration.balanced]). */
+    /** The facet's calibration kept anew: its cutoff worked out of a pass over every work ([OpenChances.balanced]). */
     fun keepCalibration(facet: String, calibration: Calibration) {
         db.update(FACET_SUGGESTER)
             .set(FACET_SUGGESTER.CALIBRATION, calibration.pack())

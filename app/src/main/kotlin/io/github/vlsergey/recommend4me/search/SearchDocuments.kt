@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.Corrected
-import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -12,6 +11,7 @@ import io.github.vlsergey.recommend4me.source.StoredItem
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
+import io.github.vlsergey.recommend4me.suggestion.TaskPortions
 import io.github.vlsergey.recommend4me.suggestion.WorkChances
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.vector.Vectors
@@ -26,37 +26,38 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
 
     /**
      * Of every item of a type, what its document is made of ([SearchDocument.fingerprint]), its chapters and the
-     * vectors not read: of every source its items' heads, values, answers and texts in one pass each, and of its texts
-     * and chapters their hashes and how their vectors were made. With them, the values the model gives the works of
-     * every source, made of every work in one pass: the documents of those whose fingerprint changed are made of the
-     * same ([documentsOf]).
+     * vectors not read: of every source a portion of [TaskPortions.MOST] items at a time, in the order of their ids —
+     * their heads, values, answers and texts, of their texts and chapters their hashes and how their vectors were made
+     * — with the values the model gives them as the passes of the facets kept them
+     * ([ModelValueRepository][io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]): no model run, no
+     * chance of every work held. The documents of those whose fingerprint changed are made of the same ([documentsOf]).
      */
     fun printsOf(type: TypeStore): TypePrints {
         val prints = HashMap<ItemKey, Long>()
-        val chances = HashMap<String, WorkChances>()
         for (s in type.sources) {
-            val made = suggestions.chances(s, null)
-            chances[s.id] = made
-            val read = Read(s, null, true, made, s.hierarchies())
-            read.heads.forEach { (id, head) -> prints[ItemKey(s.id, id)] = read.printOf(id, head) }
+            val hierarchies = s.hierarchies()
+            var after: String? = null
+            do {
+                val keys = s.items.keysAfter(after, TaskPortions.MOST)
+                after = keys.lastOrNull()?.id
+                val read = Read(s, keys.map { it.id }, true, null, hierarchies)
+                read.heads.forEach { (id, head) -> prints[ItemKey(s.id, id)] = read.printOf(id, head) }
+            } while (keys.size == TaskPortions.MOST)
         }
-        return TypePrints(prints, chances)
+        return TypePrints(prints)
     }
 
     /**
-     * The documents of the items [keys] of a type, streamed: read a chunk at a time, of the values the model gives the
-     * works of every source ([chances]), each source's tree of tags read once.
+     * The documents of the items [keys] of a type, streamed: read a chunk at a time, of the values the model gives them
+     * as the passes of the facets kept them — as their fingerprints were read ([printsOf]) — each source's tree of tags
+     * read once.
      */
-    fun documentsOf(
-        type: TypeStore,
-        keys: Collection<ItemKey>,
-        chances: Map<String, WorkChances>,
-    ): Sequence<SearchDocument> = sequence {
+    fun documentsOf(type: TypeStore, keys: Collection<ItemKey>): Sequence<SearchDocument> = sequence {
         for ((source, list) in keys.groupBy { it.source }) {
             val s = type.sources.firstOrNull { it.id == source } ?: continue
             val hierarchies = s.hierarchies()
             for (chunk in list.map { it.id }.chunked(CHUNK)) yieldAll(
-                documents(s, chunk, chances = chances[source], hierarchies = hierarchies).values
+                documents(s, chunk, kept = true, hierarchies = hierarchies).values
             )
         }
     }
@@ -75,18 +76,15 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
     /** What the documents of some items of a source are made of ([prints]) and the values the model gives them. */
     class SourcePrints(val prints: Map<ItemKey, Long>, val chances: WorkChances)
 
-    /**
-     * What the documents of every item of a type are made of ([prints]) and the values the model gives the works of
-     * every source ([chances]) they were made with.
-     */
-    class TypePrints(val prints: Map<ItemKey, Long>, val chances: Map<String, WorkChances>)
+    /** What the documents of every item of a type are made of ([prints]), of the values the model gives them kept. */
+    class TypePrints(val prints: Map<ItemKey, Long>)
 
     /**
      * The documents of the items [ids] of a source, read in one batch per table: their fields — the chapters read among
      * them — and, with [passages], the passages of the texts searched by meaning and of the chapters: every window of a
      * text longer than one with its own vector, a shorter one whole with the text's. The values the model gives them of
-     * their [chances], made now of them when not given; the source's tree of tags [hierarchies] read now when not
-     * given.
+     * their [chances], made now of them when not given — as the passes of the facets kept them when [kept]; the
+     * source's tree of tags [hierarchies] read now when not given.
      *
      * THE WORK'S OWN WORDS ([SearchField.counted]) — every text of it, every chapter, every value its site gives it —
      * are all in it, those not searched of weight 0: a name written in them is the work naming it
@@ -100,56 +98,55 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
         passages: Boolean = true,
         chances: WorkChances? = null,
         hierarchies: Map<String, TagHierarchy> = s.hierarchies(),
+        kept: Boolean = false,
     ): Map<ItemKey, SearchDocument> {
-        val read = Read(s, ids, passages, chances ?: suggestions.chances(s, ids), hierarchies)
+        val read = Read(s, ids, passages, if (kept) null else chances ?: suggestions.chances(s, ids), hierarchies)
         return read.heads.map { (id, head) -> ItemKey(s.id, id) to read.documentOf(id, head) }.toMap()
     }
 
     /**
-     * What the documents of the items [ids] of [s] — of every item when null — are made of, read in one batch per table
-     * (of every item, one pass over each table). The chapters' texts and the vectors read only for a document made
-     * ([documentOf]); the fingerprint ([printOf]) reads their hashes alone.
+     * What the documents of the items [ids] of [s] are made of, read in one batch per table. The chapters' texts and
+     * the vectors read only for a document made ([documentOf]); the fingerprint ([printOf]) reads their hashes alone.
+     * The values the model gives them of their [chances]; null — as the passes of the facets kept them.
      */
     private inner class Read(
         private val s: SourceStore,
-        ids: List<String>?,
+        private val ids: List<String>,
         passages: Boolean,
-        chances: WorkChances,
+        chances: WorkChances?,
         hierarchies: Map<String, TagHierarchy>,
     ) {
         private val schema = s.schema
-        val heads: Map<String, StoredItem> =
-            ids?.let { s.items.heads(it) }
-                ?: HashMap<String, StoredItem>().also { all -> s.items.forEachHead { all[it.id] = it } }
-        private val ids: List<String> = ids ?: heads.keys.toList()
-        private val every = ids == null
-        private val site = if (every) EveryItemFacets.siteOf(s) else s.items.facetsOf(this.ids)
-        private val facets = site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
+        val heads: Map<String, StoredItem> = s.items.heads(ids)
+        private val site = s.items.facetsOf(ids)
+        private val facets =
+            if (chances != null) site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
+            else withKept(site, s.modelValues.ofItems(ids))
+
         /**
          * Every answer of the source: they are few. The names the user gave values are read of all of them — a value
          * the user named on one work is named so on every work — whether every work is read or a few.
          */
         private val answers = s.corrections.allFacets()
-        private val facetCorrections = if (every) answers.groupBy { it.itemId } else s.corrections.facetsOf(this.ids)
-        private val fields = if (every) s.corrections.allFields() else s.corrections.fieldsOf(this.ids)
-        private val texts = if (every) everyText() else s.items.textsOf(this.ids)
+        private val facetCorrections = s.corrections.facetsOf(ids)
+        private val fields = s.corrections.fieldsOf(ids)
+        private val texts = s.items.textsOf(ids)
 
         /** The values of every item as the user says, the user's own among them: what is indexed — and named. */
-        private val corrected =
-            this.ids.associateWith { id ->
-                TagHierarchy.corrected(
-                    facets[id].orEmpty(),
-                    facetCorrections[id].orEmpty(),
-                    hierarchies,
-                    s.singleFacets,
-                )
-            }
+        private val corrected = ids.associateWith { id ->
+            TagHierarchy.corrected(
+                facets[id].orEmpty(),
+                facetCorrections[id].orEmpty(),
+                hierarchies,
+                s.singleFacets,
+            )
+        }
         private val names =
             schema.facets.associate { def ->
                 def.key to
                     s.names(
                         def.key,
-                        this.ids.flatMapTo(LinkedHashSet()) {
+                        ids.flatMapTo(LinkedHashSet()) {
                             corrected[it]?.get(def.key).orEmpty() + site[it]?.get(def.key).orEmpty()
                         },
                     ) + answers.filter { it.facet == def.key && it.name != null }.associate { it.key to it.name!! }
@@ -158,31 +155,21 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
         private val encoder = plugins.textEncoder()?.takeIf { passages }
 
         // The texts a work is found by meaning by alone: the title's vector is read by no passage
-        private val vectors by lazy { encoder?.let { e -> s.textVectors.ofMany(this.ids, e.id, meaningful) }.orEmpty() }
+        private val vectors by lazy { encoder?.let { e -> s.textVectors.ofMany(ids, e.id, meaningful) }.orEmpty() }
         private val windows by lazy {
-            encoder?.let { e -> s.textVectors.windows.windowsOf(this.ids, e.id, e.windowsId) }.orEmpty()
+            encoder?.let { e -> s.textVectors.windows.windowsOf(ids, e.id, e.windowsId) }.orEmpty()
         }
-        private val parts by lazy { s.parts.contentsOf(this.ids) }
+        private val parts by lazy { s.parts.contentsOf(ids) }
         private val partWindows by lazy {
-            encoder?.let { e -> s.parts.windows.windowsByParts(this.ids, e.windowsId) }.orEmpty()
+            encoder?.let { e -> s.parts.windows.windowsByParts(ids, e.windowsId) }.orEmpty()
         }
 
         /** Of the texts searched by meaning and of the chapters, what their passages are made of, no vector read. */
-        private val textMarks by lazy {
-            encoder?.let { e -> s.textVectors.marksOf(if (every) null else this.ids, e.id, meaningful) }.orEmpty()
-        }
-        private val partMarks by lazy { s.parts.marks.of(if (every) null else this.ids) }
+        private val textMarks by lazy { encoder?.let { e -> s.textVectors.marksOf(ids, e.id, meaningful) }.orEmpty() }
+        private val partMarks by lazy { s.parts.marks.of(ids) }
 
         /** A word in a chapter says the least of what the work is about: its weight the least of the texts'. */
         private val partWeight = schema.texts.minOfOrNull { it.searchWeight } ?: 0f
-
-        /** Every text of every item, of the keys of the schema: one pass over the table. */
-        private fun everyText(): Map<String, Map<String, String>> {
-            val keys = schema.texts.map { it.key }
-            val out = HashMap<String, Map<String, String>>()
-            if (keys.isNotEmpty()) s.items.forEachTexts(keys) { id, texts -> out[id] = texts }
-            return out
-        }
 
         /**
          * The fields of the item [id] of the [head] but its chapters — its title, its facets, its texts — and the
@@ -329,6 +316,22 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
     }
 
     companion object {
+        /**
+         * The site's values of the works with the values the model gives them as the passes of the facets kept them
+         * ([kept]: facet to work to its values beyond the site's own), as [ModelValues.of] gives them.
+         */
+        private fun withKept(
+            site: Map<String, Map<String, List<String>>>,
+            kept: Map<String, Map<String, List<String>>>,
+        ): Map<String, Map<String, List<String>>> = site.mapValues { (id, values) ->
+            val out = LinkedHashMap(values)
+            kept.forEach { (facet, of) ->
+                val own = values[facet].orEmpty()
+                of[id]?.let { given -> out[facet] = own + given.filter { it !in own } }
+            }
+            out
+        }
+
         /** The items read and indexed at once: memory, not meaning. */
         private const val CHUNK = 500
 

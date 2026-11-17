@@ -4,10 +4,10 @@ import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.source.SourceStore
 
 /**
- * THE VALUES OF THE FACETS OF EVERY ITEM OF A SOURCE, read once by a reading of every work: the site's values by item
- * and facet ([site]), the user's answers by item ([corrections]). Handed to every part of the same reading that reads
- * them — the catalogue, the chain of the facets, the models of facets of their own — not read again by each: of tens of
- * thousands of works a second and more a reading. Lives as long as the reading.
+ * THE VALUES OF THE FACETS OF THE ITEMS A READING READS — every item of a source, or a portion of them: the site's
+ * values by item and facet ([site]), the user's answers by item ([corrections]). Handed to every part of the same
+ * reading that reads them — the catalogue, the chain of the facets, the models of facets of their own — not read again
+ * by each: of ten thousand works a portion, a second and more a reading. Lives as long as the reading.
  */
 class EveryItemFacets(
     val site: Map<String, Map<String, List<String>>>,

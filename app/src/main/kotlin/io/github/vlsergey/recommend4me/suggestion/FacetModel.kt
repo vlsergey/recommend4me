@@ -15,7 +15,7 @@ interface FacetModel {
 
     /**
      * Everything the chances of the [facet] of the works [ids] of the source — every work when null — are made of, read
-     * now: its model kept, what the works tell it. [every]: of every work, their facets and answers read already by the
+     * now: its model kept, what the works tell it. [every]: of the works, their facets and answers read already by the
      * reading it serves; null — read them. The chances are made of it after, the database refused
      * ([DatabaseRefused][io.github.vlsergey.recommend4me.database.DatabaseRefused]).
      */

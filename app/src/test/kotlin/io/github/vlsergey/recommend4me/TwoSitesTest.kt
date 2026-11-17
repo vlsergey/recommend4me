@@ -528,7 +528,7 @@ class TwoSitesTest : TwoSitesTestBase() {
                     val keys = read.prints.keys.filter { it.source == "alpha" }
                     // Each document made apart, as an update makes a few: what one reads of the others is not in it
                     val made = keys.associateWith { k ->
-                        searchDocuments.documentsOf(type, listOf(k), read.chances).single().fingerprint
+                        searchDocuments.documentsOf(type, listOf(k)).single().fingerprint
                     }
                     told = "read ${keys.associateWith { read.prints[it] }}, made $made"
                     keys.isNotEmpty() && made == keys.associateWith { read.prints[it] }

@@ -8,35 +8,47 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.universe.CharactersRead
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
 /**
- * A PASS OVER THE WORKS OF A SOURCE begun: what every facet of it reads alike ([WorksRead]) — the dictionary's
- * characters among it — and the card its inputs are put on.
+ * A PASS OVER THE WORKS OF A SOURCE, A PORTION AT A TIME: what every facet of a portion reads alike ([WorksRead]) — the
+ * dictionary's characters among it — and the card its inputs are put on. NO PASS HOLDS MORE THAN [most] WORKS (user,
+ * 2026-11-17): of ficbook's 1.39 million works a pass holding every work filled the memory of 12 GB; every work of a
+ * source is read [forEachPortion], [most] of them at a time, in the order of their ids.
  */
 @Component
 internal class WorkPasses(
     private val stores: Stores,
     private val plugins: Plugins,
-    /**
-     * The card, when the launch asks for it: the inputs of a pass of every work put there for its facets ([WorksRead]).
-     */
+    /** The card, when the launch asks for it: the inputs of a portion put there for its facets ([WorksRead]). */
     private val cards: ObjectProvider<CardSource>,
-) {
     /**
-     * What the facets of a pass over the works [ids] (every work when null) read alike. [card]: the pass ends with the
-     * operation, and whatever reads its inputs ends with it — of every work its inputs put on the card for its facets,
-     * freed as it is closed; never of a task handed out.
+     * The most works a portion holds: [TaskPortions.MOST], fewer of a test that cuts a source of a few works into
+     * several portions.
+     */
+    @Value("\${recommend4me.portion-works:${TaskPortions.MOST}}") val most: Int,
+) {
+    init {
+        require(most in 1..TaskPortions.MOST) { "A portion of $most works" }
+    }
+
+    /**
+     * What the facets of the works [ids] read alike — [TaskPortions.MOST] of them at most, else [TooManyWorks]. [card]:
+     * their inputs put on the card for their facets, freed as it is closed; never of a task handed out. [inputs]: false
+     * — their vectors not read, of a reading of their values alone. [known]: their site's values and the user's answers
+     * read already by the reading this serves.
      */
     fun worksRead(
         store: SourceStore,
         encoder: TextEncoder,
-        ids: Collection<String>?,
-        every: EveryItemFacets? = null,
+        ids: Collection<String>,
         characters: CharactersRead = charactersRead(store),
         card: Boolean = false,
+        inputs: Boolean = true,
+        known: EveryItemFacets? = null,
     ): WorksRead {
-        if (ids == null) refuseTooLarge(store)
+        if (ids.size > TaskPortions.MOST) throw TooManyWorks(store.id, ids.size, TaskPortions.MOST)
         return WorksRead(
             store,
             encoder,
@@ -44,32 +56,31 @@ internal class WorkPasses(
             stores.typeOf(store.id).embeddings.ids(),
             ids,
             characters,
-            every?.takeIf { ids == null },
-            if (card && ids == null) cards.getIfAvailable()?.cublas() else null,
+            if (card && inputs) cards.getIfAvailable()?.cublas() else null,
+            inputs,
+            known,
         )
     }
 
     /**
-     * A pass over every work of the [store] refused when it would not fit the memory, every work held at once
-     * ([TooManyWorks]): the work asking for it fails, not the application out of its memory (ficbook's 1.39 million
-     * works, 2026-11-17) — till such a pass reads its works a portion at a time.
+     * EVERY WORK OF THE [store], [most] of them at a time in the order of their ids
+     * ([ItemKeyList.keysAfter][io.github.vlsergey.recommend4me.item.ItemKeyList.keysAfter]): the same works in the same
+     * portions at every walk while the source does not change, each a query by the table's key, nothing held between
+     * them.
      */
-    private fun refuseTooLarge(store: SourceStore) {
-        val works = store.items.count()
-        val most = Runtime.getRuntime().maxMemory() / BYTES_A_WORK
-        if (works > most) throw TooManyWorks(store.id, works, most)
+    fun forEachPortion(store: SourceStore, action: (List<String>) -> Unit) {
+        var after: String? = null
+        do {
+            val keys = store.items.keysAfter(after, most)
+            after = keys.lastOrNull()?.id
+            if (keys.isNotEmpty()) action(keys.map { it.id })
+        } while (keys.size == most)
     }
 
     /** The characters of the dictionary of the [store]'s type, for one operation to read once ([CharactersRead]). */
     fun charactersRead(store: SourceStore) = CharactersRead(stores.typeOf(store.id).universes)
 }
 
-/** A pass over every work of a source refused: more works than the memory holds of a pass ([WorkPasses]). */
-class TooManyWorks(source: String, works: Int, most: Long) :
-    IllegalStateException("$source: a pass over its $works works refused, the memory holds $most")
-
-/**
- * The memory a pass over a source's works holds of a work, twice as much as it was seen to (the memory of 12 GB full of
- * a pass over a million works of ficbook): what tells a source too large for a pass ([WorkPasses]).
- */
-private const val BYTES_A_WORK = 24L * 1024
+/** A reading of more works at once than a portion holds refused ([WorkPasses]): the memory holds a portion. */
+class TooManyWorks(source: String, works: Int, most: Int) :
+    IllegalStateException("$source: a reading of $works works at once refused, a portion holds $most")

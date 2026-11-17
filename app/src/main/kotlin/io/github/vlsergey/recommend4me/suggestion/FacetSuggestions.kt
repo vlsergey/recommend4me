@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -65,8 +66,8 @@ internal constructor(
         return searchAnew(store, facetKey)
     }
 
-    /** Everything the suggesters of the facet learn from, read now ([OneFacetModel.task]). */
-    fun task(store: SourceStore, facetKey: String): SuggestionTask? = ownModel.task(store, facetKey)
+    /** Everything the suggesters of the facet learn from, a portion at a time ([OneFacetModel.task]). */
+    fun task(store: SourceStore, facetKey: String): TaskPortions? = ownModel.task(store, facetKey)
 
     /** Whether the facet's suggester is being fitted anew ([searchAnew]). */
     fun searching(store: SourceStore, facetKey: String): Boolean = refits.searching(store, facetKey)
@@ -74,7 +75,7 @@ internal constructor(
     /** The chances of the works [ids] made now down the chain ([FacetChain.chances]). */
     fun chances(
         store: SourceStore,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         through: String? = null,
         laps: Laps = Laps(),
     ): WorkChances = chain.chances(store, ids, through, laps)
@@ -86,13 +87,17 @@ internal constructor(
     /** The model's weight of every value of the [facet] over the works as a whole ([OneFacetModel.weights]). */
     fun weights(store: SourceStore, facet: String): Map<String, Double>? = ownModel.weights(store, facet)
 
-    /** [chances] of the [wanted] facets alone ([FacetChain.chancesOf]). */
+    /**
+     * [chances] of the [wanted] facets alone ([FacetChain.chancesOf]); [known]: the site's values and the user's
+     * answers of the works, read already by the reading this serves.
+     */
     fun chancesOf(
         store: SourceStore,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         wanted: Collection<String>,
         laps: Laps = Laps(),
-    ): WorkChances = chain.chancesOf(store, ids, wanted, laps)
+        known: EveryItemFacets? = null,
+    ): WorkChances = chain.chancesOf(store, ids, wanted, laps, known)
 
     /** The values to suggest for an item ([WorkCandidates.ofItem]). */
     fun ofItem(

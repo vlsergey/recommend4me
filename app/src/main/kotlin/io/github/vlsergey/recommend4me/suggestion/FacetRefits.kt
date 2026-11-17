@@ -31,14 +31,14 @@ import org.springframework.stereotype.Service
 internal class FacetRefits(
     private val stores: Stores,
     private val plugins: Plugins,
-    private val events: ApplicationEventPublisher,
+    events: ApplicationEventPublisher,
     private val workload: Workload,
     private val chain: FacetChain,
     vocabularies: FacetVocabularies,
     private val passes: WorkPasses,
     private val kept: KeptModelValues,
 ) {
-    private val fitting = FacetFitting(chain, vocabularies)
+    private val fitting = FacetFitting(FacetReading(passes, chain, vocabularies), FacetScoring(kept, events))
 
     /** How many changes each source has had ([changed]): a refresh begun before the last one is given up. */
     private val generations = ConcurrentHashMap<String, AtomicLong>()
@@ -60,12 +60,10 @@ internal class FacetRefits(
 
     /**
      * The refresh of every facet of the [store] planned for [due] for the [reason], given up for a newer change — whole
-     * in the queue of the computations, the works read with it; told out of it, the works whose chances changed.
+     * in the queue of the computations, the works read with it, a portion at a time.
      */
     private fun planRefresh(store: SourceStore, due: Instant?, reason: String) =
-        workload.plan(refreshing(store.id), due, reason, after = { ids: List<String> -> told(store, ids) }) {
-            refreshed(store, givenUp = true)
-        }
+        workload.plan(refreshing(store.id), due, reason) { refreshed(store, givenUp = true) }
 
     /** How many changes the source has had: a refresh begun before the last one is of stale data. */
     private fun generationOf(source: String): AtomicLong = generations.computeIfAbsent(source) { AtomicLong() }
@@ -90,49 +88,52 @@ internal class FacetRefits(
      * its own, never joined to the background's alike, which a newer change gives up.
      */
     fun refresh(store: SourceStore) =
-        told(
-            store,
-            workload.run(refreshing(store.id), mapOf("asked" to 1), joinAlike = false) {
-                refreshed(store, givenUp = false)
-            },
-        )
+        workload.run(refreshing(store.id), mapOf("asked" to 1), joinAlike = false) {
+            refreshed(store, givenUp = false)
+        }
 
     /**
-     * The model of every facet of the [store] fitted again, down the chain: the works whose given values it changed.
-     * [givenUp] — with a [CancellationException] once the source changes again ([changed]): the background's.
+     * The model of every facet of the [store] fitted again, down the chain. [givenUp] — with a [CancellationException]
+     * once the source changes again ([changed]): the background's.
      *
-     * ONE WORK OF THE QUEUE, WHOLE, THE READING OF THE WORKS WITH IT: every work read once for the pass, its inputs on
-     * the card till its end — the facets read alike, not each facet reading all again —, and nothing else computes
-     * while the pass holds them. The chances of every work of the facets before, made in the pass, are the context of
-     * the next — held for the pass alone.
+     * ONE WORK OF THE QUEUE, EVERY WORK READ A PORTION AT A TIME ([WorkPasses.forEachPortion]): no pass holds more than
+     * [TaskPortions.MOST] works (user, 2026-11-17). The values the models of their own give every work kept first; then
+     * a facet after another, each walking the works as often as its value side, its fitting and its chances need
+     * ([FacetFitting]) — the values the model gives of each kept as its chances are made ([KeptModelValues]), and read
+     * by the facets after it as their context: the chain is not made again for every portion. The works whose values
+     * changed are told as each portion is done ([FacetChancesChanged]).
      */
-    private fun refreshed(store: SourceStore, givenUp: Boolean): List<String> {
-        val encoder = plugins.textEncoder() ?: return emptyList()
+    private fun refreshed(store: SourceStore, givenUp: Boolean) {
+        val encoder = plugins.textEncoder() ?: return
         val generation = generationOf(store.id).get()
         val stop = if (givenUp) ({ generationOf(store.id).get() != generation }) else ({ false })
         val facets = chain.facetsOf(store)
-        val changedIds = LinkedHashSet<String>()
-        passes.worksRead(store, encoder, null, card = true).use { works ->
-            val made = chain.seeded(store, null, works.drafts, EveryItemFacets(works.site, works.corrections))
-            facets.forEachIndexed { k, facet ->
-                val suggester = plugins.suggester(store.id, facet.key) ?: return@forEachIndexed
-                changedIds += fitting.fit(store, facets, k, suggester, encoder, made, stop, works)
-            }
-            // Of every work the chances of every facet made: the values they give kept for the filters
-            kept.keep(store, works, made)
+        keepOwnModels(store, facets, stop)
+        val characters = passes.charactersRead(store)
+        facets.indices.forEach { k ->
+            fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
         }
-        return changedIds.toList()
     }
 
-    /** The works of the [store] whose given values a refit changed, told once at its end ([FacetChancesChanged]). */
-    private fun told(store: SourceStore, ids: List<String>) {
-        if (ids.isNotEmpty()) events.publishEvent(FacetChancesChanged(store.id, ids))
+    /**
+     * Of every work, a portion at a time, the values the facets worked out by models of their own give it kept
+     * ([FacetModel], [KeptModelValues]): what the facets of the chain read of them, as of the drafts.
+     */
+    private fun keepOwnModels(store: SourceStore, facets: List<FacetDef>, stop: () -> Boolean) {
+        val chained = facets.map { it.key }.toSet()
+        val own = store.schema.facets.filter { it.infer && it.key !in chained }
+        if (own.isEmpty()) return
+        passes.forEachPortion(store) { ids ->
+            if (stop()) throw CancellationException("${store.id}: the models of their own given up for newer changes")
+            val known = EveryItemFacets(store.items.facetsOf(ids), store.corrections.facetsOf(ids))
+            kept.write(store, ids, known.site, chain.seeded(store, ids, every = known), own)
+        }
     }
 
     /**
      * The facet's suggester fitted again FROM SCRATCH — every setting tried anew, not a short walk on from the state
      * fitted last: the user asked for it on the page of the models, and it goes ahead of the background's works. Its
-     * context, the facets before it in the chain, made of every work first. In the background; false when the source
+     * context, the facets before it in the chain, as the last pass kept them. In the background; false when the source
      * has no such facet.
      */
     fun searchAnew(store: SourceStore, facetKey: String): Boolean {
@@ -146,25 +147,18 @@ internal class FacetRefits(
             "asked",
             asked = true,
             // The facets after it in the chain read its values: a pass of every one of them, the values kept with it
-            after = { ids: List<String> ->
-                told(store, ids)
-                changed(store.id, "chances")
-            },
+            after = { _: Unit -> changed(store.id, "chances") },
         ) {
             fittedAnew(store, facets, k, encoder)
         }
         return true
     }
 
-    /** The [k]-th of the [facets] fitted anew ([searchAnew]): the works whose given values it changed. */
-    private fun fittedAnew(store: SourceStore, facets: List<FacetDef>, k: Int, encoder: TextEncoder): List<String> {
+    /** The [k]-th of the [facets] fitted anew ([searchAnew]). */
+    private fun fittedAnew(store: SourceStore, facets: List<FacetDef>, k: Int, encoder: TextEncoder) {
         // The suggester named when it runs: one chosen meanwhile is the one fitted
-        val suggester = plugins.suggester(store.id, facets[k].key) ?: return emptyList()
-        // The context and the fitting of one reading of every work
-        return passes.worksRead(store, encoder, null, card = true).use { works ->
-            val made = chain.chain(store, encoder, works, k)
-            fitting.fit(store, facets, k, suggester, encoder, made, { false }, works, anew = true)
-        }
+        val suggester = plugins.suggester(store.id, facets[k].key) ?: return
+        fitting.fit(store, facets, k, suggester, encoder, passes.charactersRead(store), { false }, anew = true)
     }
 
     /** Whether the facet's suggester is to be fitted anew, or being fitted anew ([searchAnew]). */

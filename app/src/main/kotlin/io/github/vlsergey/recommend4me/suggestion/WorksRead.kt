@@ -18,49 +18,44 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger(WorksRead::class.java)
 
 /**
- * WHAT EVERY FACET OF A PASS READS ALIKE of the works [only] (every work when null): their values, the user's answers,
- * the drafts, the tags under others, their inputs — READ AS THE PASS BEGINS, once, and handed to every facet of the
- * pass, of which it lives no longer: the computation of the facets reads nothing of the database
+ * WHAT EVERY FACET OF THE WORKS [ids] READS ALIKE — a portion of a pass, or the few works of a request
+ * ([TaskPortions.MOST] at most, [WorkPasses]): their values, the user's answers, the drafts, the tags under others,
+ * their inputs — READ AS THE READING BEGINS, once, and handed to every facet of it, of which it lives no longer: the
+ * computation of the facets reads nothing of the database
  * ([DatabaseRefused][io.github.vlsergey.recommend4me.database.DatabaseRefused]). [imageEncoder] and [sets] (kind to the
- * directions in use): the pictures' and the sets' vectors read.
+ * directions in use): the pictures' and the sets' vectors read; [withInputs] false — no vector read, of a reading of
+ * the works' values alone ([PassValues]).
  */
 internal class WorksRead(
     private val store: SourceStore,
     encoder: TextEncoder,
     imageEncoder: String?,
     sets: Map<SetKind, Long>,
-    val only: Collection<String>?,
-    /** The characters of the dictionary's universes, every universe's read once for every facet of the pass. */
+    ids: Collection<String>,
+    /** The characters of the dictionary's universes, every universe's read once for every facet of the operation. */
     val characters: CharactersRead,
-    /** Of every work ([only] null), their facets and answers read already by the reading the pass serves. */
-    val every: EveryItemFacets? = null,
     /**
-     * The card the inputs are put on as they are read, for every facet of the pass to multiply there
+     * The card the inputs are put on as they are read, for every facet of the works to multiply there
      * ([InputBlock.onCard]) — once, not a facet at a time; freed by [close]. Null: in the main memory alone.
      */
     private val card: Cublas? = null,
+    withInputs: Boolean = true,
+    /** The site's values and the user's answers of the works, read already by the reading this serves; null: read. */
+    known: EveryItemFacets? = null,
 ) : AutoCloseable {
-    init {
-        require(every == null || only == null) { "the facets of every work given to a pass of some works" }
-    }
-
-    val ids: List<String> = only?.distinct() ?: store.items.keys().map { it.id }
-    val site: Map<String, Map<String, List<String>>> =
-        every?.site ?: if (only == null) EveryItemFacets.siteOf(store) else store.items.facetsOf(ids)
-    val corrections: Map<String, List<FacetCorrection>> =
-        every?.corrections
-            ?: if (only == null) store.corrections.allFacets().groupBy { it.itemId }
-            else store.corrections.facetsOf(ids)
-    val complete: Map<String, Set<String>> =
-        if (only == null) store.corrections.allComplete() else store.corrections.completeOf(ids)
+    val ids: List<String> = ids.distinct()
+    val site: Map<String, Map<String, List<String>>> = known?.site ?: store.items.facetsOf(this.ids)
+    val corrections: Map<String, List<FacetCorrection>> = known?.corrections ?: store.corrections.facetsOf(this.ids)
+    val complete: Map<String, Set<String>> = store.corrections.completeOf(this.ids)
 
     /**
-     * The user's answers and the facets said whole, as the facets' dictionaries read them ([Answers]): of what the pass
-     * read.
+     * The user's answers and the facets said whole, as the facets' dictionaries read them ([Answers]): of what the
+     * reading read.
      */
     val answers: Answers by lazy { Answers(corrections, complete) }
-    val drafts: Map<String, List<LayerDraft>> = if (only == null) store.drafts.all() else store.drafts.ofItems(ids)
-    val inputs: List<InputBlock> = inputs(store, ids, encoder, imageEncoder, sets, only, card)
+    val drafts: Map<String, List<LayerDraft>> = store.drafts.ofItems(this.ids)
+    val inputs: List<InputBlock> =
+        if (withInputs) inputs(store, this.ids, encoder, imageEncoder, sets, card) else emptyList()
 
     /** The blocks of the texts among the [inputs]: the title, the description, the notes, the site's lines. */
     private val textBlocks = TextVectors.blocks(store.id, store.schema).values.map { it.first }.toSet()
@@ -80,8 +75,8 @@ internal class WorksRead(
     val hierarchies: Map<String, TagHierarchy> = store.hierarchies()
 
     /**
-     * What the bases of the facets of the pass read alike ([FacetBasis.of]): of a fitting alone, read at its first need
-     * — the chances of the works never ask for it.
+     * What the bases of the facets of a pass read alike of these works ([FacetBasis]): of a pass alone, read at its
+     * first need — the chances of the works never ask for it.
      */
     val bases: WorkBases by lazy { WorkBases(store, encoder, this) }
 
@@ -130,11 +125,11 @@ internal class WorksRead(
     }
 
     /**
-     * THE CONTEXT OF EVERY WORK, MADE ONCE OF THE PASS: of every facet of the source, by work, its values — the site's,
-     * the user's answers over them, the tags with those above them, and those the model gives of [modelled] — as a
-     * facet's context reads them, each facet's own left out by it ([FacetData.load]). A facet of the chain given its
-     * chances ([given]) is made again alone, the others kept: the context of six facets of tens of thousands of works
-     * was made whole six times. [modelled] is the chain's one map of the pass, whatever it holds by then.
+     * THE CONTEXT OF EVERY WORK, MADE ONCE OF THE READING: of every facet of the source, by work, its values — the
+     * site's, the user's answers over them, the tags with those above them, and those the model gives of [modelled] —
+     * as a facet's context reads them, each facet's own left out by it ([FacetData.load]). A facet of the chain given
+     * its chances ([given]) is made again alone, the others kept: the context of six facets of tens of thousands of
+     * works was made whole six times. [modelled] is the chain's one map of the pass, whatever it holds by then.
      */
     fun context(store: SourceStore, modelled: WorkChances): Context {
         context?.let {
@@ -209,7 +204,7 @@ internal class WorksRead(
 /**
  * Every input of the [ids], as the model of the grades reads them: a block of every text that has vectors (the title,
  * the description, the notes, the site's lines), of every picture block, of every set (the reviews, the windows of the
- * chapters, the screenshots). Of the works [only] alone when given, read by their keys; of every work streamed.
+ * chapters, the screenshots), read by their keys.
  *
  * A BLOCK OF THE WORKS THAT HAVE IT ALONE ([InputBlock]): every vector written as it is read into the rows of its
  * block, a chunk of them after another ([Gathered]), laid out whole once every vector is read; then, given the [card],
@@ -221,14 +216,12 @@ private fun inputs(
     encoder: TextEncoder,
     imageEncoder: String?,
     sets: Map<SetKind, Long>,
-    only: Collection<String>?,
     card: Cublas?,
 ): List<InputBlock> {
     val texts = TextVectors.blocks(store.id, store.schema).mapValues { it.value.first }
     // Where the time goes, of a pass over every work: every kind of vector read, the blocks laid out, put on the card
     val gathered = InputsGathered(ids)
-    if (only == null) readEvery(store, encoder, texts, imageEncoder, sets, gathered)
-    else readOf(store, ids, encoder, texts, imageEncoder, sets, gathered)
+    readOf(store, ids, encoder, texts, imageEncoder, sets, gathered)
     val laid = gathered.blocks.map { (name, g) -> name to g.laidOut() }
     gathered.mark()
     val out = laid.map { (name, l) ->
@@ -271,27 +264,6 @@ private class InputsGathered(private val ids: List<String>) {
     fun mark() {
         marks += read to System.nanoTime()
     }
-}
-
-/** Every work's vectors streamed, a kind after another: the texts', the pictures' by the [imageEncoder], the sets'. */
-private fun readEvery(
-    store: SourceStore,
-    encoder: TextEncoder,
-    texts: Map<String, String>,
-    imageEncoder: String?,
-    sets: Map<SetKind, Long>,
-    gathered: InputsGathered,
-) {
-    store.textVectors.forEachHalves(encoder.id, texts.keys) { id, key, v ->
-        gathered.halves(id, texts.getValue(key), v)
-    }
-    gathered.mark()
-    imageEncoder?.let { e ->
-        store.pictures.itemVectors.forEachItemHalves(e) { id, block, v -> gathered.halves(id, block, v) }
-    }
-    gathered.mark()
-    store.setVectors.forEach(sets) { id, block, v -> gathered.put(id, block, v) }
-    gathered.mark()
 }
 
 /**
@@ -355,7 +327,7 @@ private fun logInputs(
 }
 
 /**
- * The works of a pass from which the time of reading its inputs is told in the log: of a pass over a source, not of a
+ * The works of a reading from which the time of reading its inputs is told in the log: of a portion of a pass, not of a
  * page.
  */
 private const val LOGGED_INPUTS = 1000

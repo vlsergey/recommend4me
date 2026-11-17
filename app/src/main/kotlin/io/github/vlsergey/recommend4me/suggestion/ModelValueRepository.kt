@@ -41,6 +41,25 @@ class ModelValueRepository(private val db: DSLContext, private val source: Strin
     }
 
     /**
+     * The values of every facet the model gives the works [ids], a [BATCH] of them a query: facet to item to its values
+     * — what a portion of a pass reads of the facets before the one it works out.
+     */
+    fun ofItems(ids: Collection<String>): Map<String, Map<String, List<String>>> {
+        val out = HashMap<String, HashMap<String, MutableList<String>>>()
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(MODEL_VALUE.SOURCE, MODEL_VALUE.FACET, MODEL_VALUE.ITEM_ID, MODEL_VALUE.VALUE_KEY)
+                .from(MODEL_VALUE)
+                .where(MODEL_VALUE.ITEM_ID.`in`(chunk))
+                .fetch {
+                    if (it.value1() == source)
+                        out.getOrPut(it.value2()!!) { HashMap() }.getOrPut(it.value3()!!) { ArrayList() } +=
+                            it.value4()!!
+                }
+        }
+        return out
+    }
+
+    /**
      * The values of the [facet] of the works [values] names replaced by these — a work with none left with none — a
      * transaction a [BATCH] of works.
      */

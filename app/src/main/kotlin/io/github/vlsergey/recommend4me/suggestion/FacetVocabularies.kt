@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -17,16 +18,17 @@ import org.springframework.stereotype.Component
 @Component
 internal class FacetVocabularies(private val stores: Stores, private val universes: UniverseVocabularies) {
     /**
-     * The vocabulary of the facet: of the universes, or of a facet learnt from the sites' facet; null of any other.
-     * [light]: what scoring the works by the scoring kept needs alone — the values each may have, the site's examples —
-     * no name of any value, no group: the scoring knows them. [site]: the site's values of the works ([ids], every work
-     * when null) read already: not read again. [characters]: the dictionary's characters as the operation reads them,
-     * every universe once; [answers] the user's answers on the works, as the operation read them.
+     * The vocabulary of the facet of the works [ids]: of the universes, or of a facet learnt from the sites' facet;
+     * null of any other. What depends on the works of them alone — the values each may have, the site's examples.
+     * [light]: what scoring the works by the scoring kept needs alone — no name of any value, no group: the scoring
+     * knows them; a pass over every work reads them of the value side ([valueSide]). [site]: the site's values of the
+     * works read already: not read again. [characters]: the dictionary's characters as the operation reads them, every
+     * universe once; [answers] the user's answers on the works, as the operation read them.
      */
     fun vocabularyOf(
         store: SourceStore,
         facet: FacetDef,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         made: WorkChances,
         characters: CharactersRead,
         answers: Answers,
@@ -34,87 +36,78 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
         site: Map<String, Map<String, List<String>>>? = null,
     ): Vocabulary? =
         universes.of(store, facet, ids, made, characters, answers, light, site)
-            ?: examplesVocabulary(store, facet, ids, answers, light, site)
+            ?: examplesFrom(store, facet)?.let { worksExamples(store, it, ids, site) }
 
     /**
-     * The values of a facet of the layer learnt from a facet of the sites ([FacetDef.examplesFrom]): every value of
-     * that facet of every source of the type, one by its name — "Магия" of one site and of another one tag — and every
-     * item's own values of it as its examples; null for any other facet.
-     *
-     * Of the works [ids] alone, when given, or [light] — read by the model kept, which knows its values — their
-     * examples alone: the values of every source, their names and the user's answers are what a fitting learns from (of
-     * every work of a source, read for nothing, five seconds). [site]: the site's values of those works read already;
-     * [answers]: the user's answers, as the operation read them.
+     * THE VALUE SIDE OF THE FACET'S DICTIONARY of a pass over every work ([ValueSide]): the values known with the text
+     * of their names, their groups, the names they go by and the values each name is judged among, how much a value a
+     * work lacks weighs — nothing of a work. [pairings]: of a facet of pairings, every pair of characters any work may
+     * have, of the walk over every work; [answers]: every answer of the source. Null of a facet of no dictionary.
      */
-    private fun examplesVocabulary(
+    fun valueSide(
         store: SourceStore,
         facet: FacetDef,
-        ids: Collection<String>?,
-        answers: Answers,
-        light: Boolean = false,
-        site: Map<String, Map<String, List<String>>>? = null,
-    ): Vocabulary? {
-        val from = store.schema.facets.firstOrNull { it.key == facet.examplesFrom } ?: return null
-        return if (ids != null || light) worksExamples(store, from, ids, site)
-        else everyExample(store, facet, from, answers, site)
-    }
+        characters: CharactersRead,
+        answers: List<FacetCorrection>,
+        pairings: Set<String>,
+    ): Vocabulary? =
+        universes.valueSide(store, facet, characters, pairings)
+            ?: examplesFrom(store, facet)?.let { everyExample(store, facet, it, answers) }
+
+    /** The sites' facet the [facet] is learnt from ([FacetDef.examplesFrom]); null of a facet learnt from none. */
+    private fun examplesFrom(store: SourceStore, facet: FacetDef): FacetDef? =
+        store.schema.facets.firstOrNull { it.key == facet.examplesFrom }
 
     /**
-     * The examples of the works [ids] alone — every work when null, of their values read already when [site] is given —
-     * each work's values of the sites' facet [from] as the normalized tags they are bound to; no value named.
+     * The examples of the works [ids] — of their values read already when [site] is given — each work's values of the
+     * sites' facet [from] as the normalized tags they are bound to; no value named.
      */
     private fun worksExamples(
         store: SourceStore,
         from: FacetDef,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         site: Map<String, Map<String, List<String>>>?,
     ): Vocabulary {
         val bound = store.tags.bindingsOf(store.id)
         val own = HashMap<String, List<String>>()
-        fun put(id: String, keys: List<String>) {
-            own[id] = keys.mapNotNull { bound[it]?.let(TagRepository::key) }.distinct()
+        val values = site ?: store.items.facetsOf(ids)
+        ids.forEach { id ->
+            own[id] = values[id]?.get(from.key).orEmpty().mapNotNull { bound[it]?.let(TagRepository::key) }.distinct()
         }
-        if (site != null) (ids ?: site.keys).forEach { id -> put(id, site[id]?.get(from.key).orEmpty()) }
-        else if (ids != null) store.items.facetsOf(ids).forEach { (id, facets) -> put(id, facets[from.key].orEmpty()) }
-        else store.items.forEachFacet(from.key, ::put)
         return Vocabulary(emptyMap(), allowed = null, examples = { id -> own[id].orEmpty() })
     }
 
     /**
-     * Of every work, what a fitting learns from: every normalized tag of the type with its name, every item's own
-     * values as its examples, and how much a value the site lacks weighs.
+     * Of a facet learnt from the sites' facet [from], what a fitting learns from beside the works: every normalized tag
+     * of the type with its name, and how much a value the site lacks weighs.
      *
      * A value the site lacks says little of the work: authors leave out most tags that fit. How little, the user's
-     * answers tell — of the values the site did not give a work, the share the user rejected rather than confirmed, by
-     * the rule of succession: as much as a lacking value weighs as a value the work has not. [answers] and [site] (when
-     * given) of every work, as the operation read them: not read again.
+     * [answers] tell — of the values the site did not give a work, the share the user rejected rather than confirmed,
+     * by the rule of succession: as much as a lacking value weighs as a value the work has not. Of the works answered
+     * on alone their site's values read.
      */
     private fun everyExample(
         store: SourceStore,
         facet: FacetDef,
         from: FacetDef,
-        answers: Answers,
-        site: Map<String, Map<String, List<String>>>?,
+        answers: List<FacetCorrection>,
     ): Vocabulary {
         val bindings = store.tags.bindings()
         val values = tagsOf(store, from, bindings)
         val bound = HashMap<String, Long>()
         bindings.forEach { (ref, tag) -> if (ref.source == store.id) bound[ref.tag] = tag }
-        val own = HashMap<String, List<String>>()
-        fun put(id: String, keys: List<String>) {
-            own[id] = keys.mapNotNull { bound[it]?.let(TagRepository::key) }.distinct()
-        }
-        if (site != null) site.forEach { (id, facets) -> facets[from.key]?.let { put(id, it) } }
-        else store.items.forEachFacet(from.key, ::put)
-        val answered = answers.all.filter { it.facet == facet.key && it.key !in own[it.itemId].orEmpty() }
+        val own = facetAnswers(answers, facet).map { it.itemId }.distinct()
+        val examples =
+            store.items.facetsOf(own).mapValues { (_, facets) ->
+                facets[from.key].orEmpty().mapNotNull { bound[it]?.let(TagRepository::key) }.toSet()
+            }
+        val answered = facetAnswers(answers, facet).filter { it.key !in examples[it.itemId].orEmpty() }
         val denied = answered.count { !it.added }
-        return Vocabulary(
-            values,
-            allowed = null,
-            examples = { id -> own[id].orEmpty() },
-            lackWeight = (denied + 1.0) / (answered.size + 2.0),
-        )
+        return Vocabulary(values, allowed = null, lackWeight = (denied + 1.0) / (answered.size + 2.0))
     }
+
+    /** The [answers] on the [facet]. */
+    private fun facetAnswers(answers: List<FacetCorrection>, facet: FacetDef) = answers.filter { it.facet == facet.key }
 
     /**
      * Every normalized tag a site's tag of the type is bound to, of every source of the type, with its name: a tag is

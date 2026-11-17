@@ -2,7 +2,9 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.cast.CastNamesEncoded
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
@@ -23,8 +25,9 @@ private val log = LoggerFactory.getLogger(KeptModelValues::class.java)
  * minutes. Of every facet the source works out ([io.github.vlsergey.recommend4me.source.FacetDef.infer]) the values a
  * work is shown with beyond the site's own ([ModelValues.of]) — the drafts and the facets' models of their own among
  * them — written where they changed ([ModelValueRepository]):
- * - of every work by every pass of the models of the source's facets ([FacetRefits]), which makes the chances of every
- *   work anyway: what a model changed reaches every work;
+ * - of every work by every pass of the models of the source's facets ([FacetRefits]), a portion at a time, each facet's
+ *   as its chances are made ([FacetScoring]): what a model changed reaches every work, and the facets after it in the
+ *   chain read them as their context;
  * - of the works a change names — their data, their texts' vectors, their casts' names, an answer on them — in a work
  *   of the queue of their own after a quiet, the chain made of them alone: a work new or changed is filtered by its
  *   values without waiting for the pass of every work.
@@ -63,60 +66,59 @@ internal class KeptModelValues(
         }
     }
 
-    /** The values of the works waiting of the [store] written: the chain made of them alone. */
+    /**
+     * The values of the works waiting of the [store] written: the chain made of them alone, a portion of them at a
+     * time.
+     */
     private fun writeWaiting(store: SourceStore) {
         val ids = waiting.remove(store.id)?.toList().orEmpty()
-        if (ids.isEmpty()) return
-        val known = store.items.facetsOf(ids)
-        write(store, ids, known, chain.chances(store, ids), every = false)
+        val facets = store.schema.facets.filter { it.infer }
+        ids.chunked(TaskPortions.MOST).forEach { portion ->
+            val known = EveryItemFacets(store.items.facetsOf(portion), store.corrections.facetsOf(portion))
+            write(store, portion, known.site, chain.chances(store, portion, known = known), facets)
+        }
     }
 
-    /** The values the [made] chances of every work of the pass [works] give, written where they changed. */
-    fun keep(store: SourceStore, works: WorksRead, made: WorkChances) =
-        write(store, works.ids, works.site, made, every = true)
-
     /**
-     * The values the [made] chances of the works [ids] give beyond the site's own ([site]), written where they changed:
-     * of [every] work of the source, the works of none of them among them.
+     * The values the [made] chances of the works [ids] give of the [facets] beyond the site's own ([site]), written
+     * where they changed — a portion of a pass, or the works a change named: the works whose values were written anew,
+     * told ([ModelValuesChanged]).
      */
-    private fun write(
+    fun write(
         store: SourceStore,
         ids: Collection<String>,
         site: Map<String, Map<String, List<String>>>,
         made: WorkChances,
-        every: Boolean,
-    ) {
+        facets: List<FacetDef>,
+    ): Set<String> {
         val started = System.currentTimeMillis()
         val changed = HashSet<String>()
-        store.schema.facets
-            .filter { it.infer }
-            .forEach { def ->
-                val fresh = HashMap<String, List<String>>()
-                ids.forEach { id ->
-                    val chances = made[id]?.get(def.key) ?: return@forEach
-                    val own = site[id]?.get(def.key).orEmpty()
-                    val given =
-                        ModelValues.of(store.schema, mapOf(def.key to own), mapOf(def.key to chances))[def.key]
-                            .orEmpty()
-                            .filter { it !in own }
-                    if (given.isNotEmpty()) fresh[id] = given
-                }
-                val stored = store.modelValues.of(def.key, if (every) null else ids)
-                val other =
-                    (if (every) stored.keys + fresh.keys else ids)
-                        .filter { id -> stored[id].orEmpty().toSet() != fresh[id].orEmpty().toSet() }
-                        .associateWith { fresh[it].orEmpty() }
-                store.modelValues.replace(def.key, other)
-                changed += other.keys
+        facets.forEach { def ->
+            val fresh = HashMap<String, List<String>>()
+            ids.forEach { id ->
+                val chances = made[id]?.get(def.key) ?: return@forEach
+                val own = site[id]?.get(def.key).orEmpty()
+                val given =
+                    ModelValues.of(store.schema, mapOf(def.key to own), mapOf(def.key to chances))[def.key].orEmpty()
+                        .filter { it !in own }
+                if (given.isNotEmpty()) fresh[id] = given
             }
+            val stored = store.modelValues.of(def.key, ids)
+            val other =
+                ids.filter { id -> stored[id].orEmpty().toSet() != fresh[id].orEmpty().toSet() }
+                    .associateWith { fresh[it].orEmpty() }
+            store.modelValues.replace(def.key, other)
+            changed += other.keys
+        }
         if (changed.isNotEmpty()) events.publishEvent(ModelValuesChanged(store.id, changed.toList()))
-        log.info(
+        log.debug(
             "{}: the values the model gives {} works kept, those of {} works written anew in {} ms",
             store.id,
             ids.size,
             changed.size,
             System.currentTimeMillis() - started,
         )
+        return changed
     }
 
     private companion object {

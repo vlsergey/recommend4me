@@ -32,18 +32,34 @@ internal object PairingVocabulary {
         // characters
         val named = pairedNames(store, type, answers, made, characters, linkedCharacters)
         if (light) return Vocabulary(emptyMap(), allowed = { id -> pairs[id].orEmpty() }, names = named, paired = true)
-        val values = namesOf(store, pairs)
-        // A pairing of two characters of the dictionary is named "A / B"; it names no other pairing of either
-        // of them
+        val side = valueSide(store, type, characters, pairs.values.flatten().toSet())
+        return Vocabulary(
+            side.values,
+            hintNames = side.hintNames,
+            hintAmong = side.hintAmong,
+            allowed = { id -> pairs[id].orEmpty() },
+            names = named,
+            paired = true,
+            groupings = side.groupings,
+        )
+    }
+
+    /**
+     * The value side of the dictionary of the pairings of a pass over every work ([ValueSide]): the [pairings] any work
+     * may have — of the walk over every work — each named by its two characters, the names of a pairing of two
+     * characters of the dictionary "A / B" naming no other pairing of either of them, grouped by their sexes and by the
+     * characters themselves.
+     */
+    fun valueSide(store: SourceStore, type: TypeStore, characters: CharactersRead, pairings: Set<String>): Vocabulary {
+        val values = namesOf(store, pairings)
         val ofTwoKnown = values.filterKeys { p ->
             UniverseFacet.members(p)?.toList()?.none { it in UniverseFacet.ORIGINAL_CHARACTERS } == true
         }
         return Vocabulary(
             values,
+            allowed = null,
             hintNames = ofTwoKnown.mapValues { listOf(it.value) },
             hintAmong = rivals(values.keys),
-            allowed = { id -> pairs[id].orEmpty() },
-            names = named,
             paired = true,
             // Their names alone are what the model reads; shown with the sign of their characters' sexes
             // ([UniverseNames])
@@ -75,15 +91,15 @@ internal object PairingVocabulary {
         }
     }
 
-    /** Every pairing of the works' [pairs] with its name, "A / B" of its two characters' names. */
-    private fun namesOf(store: SourceStore, pairs: Map<String, Set<String>>): Map<String, String> {
+    /** Every pairing of [pairings] with its name, "A / B" of its two characters' names. */
+    private fun namesOf(store: SourceStore, pairings: Set<String>): Map<String, String> {
         val names =
             UniverseFacet.ORIGINAL_CHARACTERS +
                 store.names(
                     UniverseFacets.CHARACTERS,
-                    pairs.values.flatten().flatMap { p -> UniverseFacet.members(p)?.toList().orEmpty() },
+                    pairings.flatMap { p -> UniverseFacet.members(p)?.toList().orEmpty() }.distinct(),
                 )
-        return pairs.values.flatten().toSet().associateWith { p ->
+        return pairings.associateWith { p ->
             UniverseFacet.members(p)!!.let { (a, b) -> "${names[a] ?: a} / ${names[b] ?: b}" }
         }
     }

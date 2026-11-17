@@ -51,7 +51,7 @@ class TextVectorRepositoryTest {
                 pool.shutdownNow()
             }
             assertEquals(1, db.dsl.fetchCount(TEXT_VECTOR))
-            assertEquals(setOf("p1" to "annotation"), vectors.hashes("e").keys)
+            assertEquals(setOf("p1"), vectors.hashesOf(listOf("p1", "p2"), "e").keys)
         }
     }
 

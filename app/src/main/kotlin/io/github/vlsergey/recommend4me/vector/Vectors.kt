@@ -35,10 +35,19 @@ object Vectors {
     }
 
     /** The key a short text's vector is kept under: the first 64 bits of its SHA-1. */
-    fun keyOf(text: String): Long {
-        val digest = MessageDigest.getInstance("SHA-1").digest(text.toByteArray())
+    fun keyOf(text: String): Long = keyOf(keyHash().apply { update(text.toByteArray()) })
+
+    /**
+     * The hash [keyOf] is made by, to be given a long text piece by piece — of every work of a source, a portion at a
+     * time — never held whole.
+     */
+    fun keyHash(): MessageDigest = MessageDigest.getInstance("SHA-1")
+
+    /** The key of what the [hash] ([keyHash]) was given: [keyOf] of all of it at once. */
+    fun keyOf(hash: MessageDigest): Long {
+        val bytes = hash.digest()
         var h = 0L
-        for (i in 0 until Long.SIZE_BYTES) h = (h shl Byte.SIZE_BITS) or (digest[i].toLong() and UNSIGNED_BYTE)
+        for (i in 0 until Long.SIZE_BYTES) h = (h shl Byte.SIZE_BITS) or (bytes[i].toLong() and UNSIGNED_BYTE)
         return h
     }
 

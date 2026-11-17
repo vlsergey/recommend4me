@@ -20,15 +20,15 @@ import org.springframework.stereotype.Component
 @Component
 internal class UniverseVocabularies(private val stores: Stores) {
     /**
-     * The vocabulary of a facet of the universes; of the works [ids], when given, what depends on the works read of
-     * them alone — their universes, the characters of their other facet, their pairs — not of every work: of a work of
-     * a large universe the chances of thousands of characters each. The values the model gave of the facets before it
-     * are [made] in the chain; the dictionary's characters of [characters], every universe read once for the operation.
+     * The vocabulary of a facet of the universes of the works [ids]: what depends on the works read of them alone —
+     * their universes, the characters of their other facet, their pairs — not of every work: of a work of a large
+     * universe the chances of thousands of characters each. The values the model gave of the facets before it are
+     * [made] in the chain; the dictionary's characters of [characters], every universe read once for the operation.
      */
     fun of(
         store: SourceStore,
         facet: FacetDef,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         made: WorkChances,
         characters: CharactersRead,
         answers: Answers,
@@ -52,11 +52,43 @@ internal class UniverseVocabularies(private val stores: Stores) {
         }
     }
 
+    /**
+     * The value side of the dictionary of a facet of the universes, of a pass over every work ([ValueSide]): every
+     * value it knows with the text of its name, the names it goes by, its groups — nothing of a work. [pairings]: of
+     * the pairings, every pair of characters any work may have, of the walk over every work. Null of any other facet.
+     */
+    fun valueSide(
+        store: SourceStore,
+        facet: FacetDef,
+        characters: CharactersRead,
+        pairings: Set<String>,
+    ): Vocabulary? {
+        val type = stores.typeOf(store.id)
+        if (!type.type.universes) return null
+        return when (facet.key) {
+            UniverseFacets.KIND -> Vocabulary(UniverseFacet.KINDS, null)
+            UniverseFacets.UNIVERSE -> {
+                val dictionary = type.universes.dictionary()
+                val all = type.universes.shown.of(null, dictionary)
+                Vocabulary(
+                    all,
+                    allowed = null,
+                    hintNames = hintNames(type, dictionary, all, characters),
+                    hintAmong = { all.keys },
+                )
+            }
+            UniverseFacets.CHARACTERS,
+            UniverseFacets.SECONDARY_CHARACTERS -> CharacterVocabulary.valueSide(type, characters)
+            UniverseFacets.PAIRINGS -> PairingVocabulary.valueSide(store, type, characters, pairings)
+            else -> null
+        }
+    }
+
     /** The vocabulary of the universes: every universe of the dictionary, but none of a work of no universe. */
     private fun universes(
         store: SourceStore,
         type: TypeStore,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         characters: CharactersRead,
         answers: Answers,
         light: Boolean,
@@ -84,19 +116,19 @@ internal class UniverseVocabularies(private val stores: Stores) {
     }
 
     /**
-     * The kinds of the works [ids] (every work when null), the site's — of their values read already when they are
-     * ([site]) — with the user's answers over them.
+     * The kinds of the works [ids], the site's — of their values read already when they are ([site]) — with the user's
+     * answers over them.
      */
     private fun kindsOf(
         store: SourceStore,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         answers: Answers,
         site: Map<String, Map<String, List<String>>>?,
     ): Map<String, List<String>> {
         val kinds = HashMap<String, List<String>>()
-        if (site != null) site.forEach { (id, facets) -> facets[UniverseFacets.KIND]?.let { kinds[id] = it } }
-        else if (ids == null) store.items.forEachFacet(UniverseFacets.KIND) { id, keys -> kinds[id] = keys }
-        else store.items.facetsOf(ids).forEach { (id, facets) -> facets[UniverseFacets.KIND]?.let { kinds[id] = it } }
+        (site ?: store.items.facetsOf(ids)).forEach { (id, facets) ->
+            facets[UniverseFacets.KIND]?.let { kinds[id] = it }
+        }
         answers.all
             .filter { it.facet == UniverseFacets.KIND }
             .groupBy { it.itemId }

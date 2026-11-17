@@ -273,9 +273,9 @@ the strongest penalty within one standard error of the least.
 
 An input block holds the rows of the works that have it alone (`InputBlock`: the vectors and the
 work of each row), as the products read them — of the 75 630 works of fanfics.me the notes are of
-46, the cover of 10 217, and no row of zeros is multiplied. A pass over every work (a reading of the
-catalogue, a refit) puts its inputs on the card once, for every facet of the chain, and frees them
-at its end (`FacetData.WorksRead`); there the suggester makes both products — the works'
+46, the cover of 10 217, and no row of zeros is multiplied. A reading of a portion of works (of a
+catalogue, of a refit) puts its inputs on the card once, for every facet that reads them, and frees
+them once the portion is done (`WorksRead`); there the suggester makes both products — the works'
 coordinates and their scores — and chooses what every work is shown with
 (`SuggestionScores.shown`, `features.cu`), bringing back the few chosen, never a row of every value.
 Without a card the same is made in the main memory.
@@ -283,7 +283,8 @@ Without a card the same is made in the main memory.
 The facets the model works out — the kinds, the universes, the main and the secondary characters,
 the pairings, the tags, the languages — are worked out IN A CHAIN, in the order of the schema: each
 reads as its context the values the site and the user give of every other facet, and the values
-the model gives of the facets before it, made in the same pass. A work's characters are those of
+the model gives of the facets before it — made in the same reading of a few works, or, of a pass
+over every work, as the same pass kept them (`model_value`, `FacetChain.keptBefore`). A work's characters are those of
 the universes given before them, its pairings pairs of the characters given before them. The
 fitting and the reading follow the same chain, so a facet is judged on what it was fitted on.
 
@@ -309,8 +310,10 @@ learnt of no answer keeps the suggester's chances, likely above one half.
 THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17): a filter of the list runs no
 model — of a million works the chain over every work at every request was minutes. Every pass of
 the models of a source's facets, which makes the chances of every work anyway, writes the values
-each work is given beyond the site's own (`model_value`) where they changed (`KeptModelValues`); the
-filters read them with the site's values and the user's answers. A change of a work, of an answer,
+each work is given beyond the site's own (`model_value`) where they changed (`KeptModelValues`), a
+facet's as its chances are made, a portion at a time; the filters read them with the site's values
+and the user's answers, the facets after it in the chain as their context, the search index's sync
+of the start as every document's values (`SearchDocuments.printsOf`): no chain run over every work. A change of a work, of an answer,
 of a model — the age rating's own included — plans that pass.
 
 EVERY SUGGESTER KEEPS ITS MODEL, AND A WORK IS SCORED BY IT ALONE (user, 2026-11-12):
@@ -333,10 +336,31 @@ fails at once (`InlineBlobs.acquire`), in the tests as on the user's machine. So
 of the age rating (`FacetModel.read`, then `FacetModelRead.chances`) and the chances of every work
 after a refit.
 The models of a source's facets are fitted again in the background, in the queue of the computations,
-whenever anything they learn from changes: one work of the queue, whole — every work of the source
-read once for the pass, its inputs on the card, every facet down the chain fitted, nothing else
-computing while the pass holds them; a refit tells which works' given values changed by scoring
-every work by the model before and after it.
+whenever anything they learn from changes: one work of the queue, whole, NOTHING OF IT HOLDING MORE
+THAN TEN THOUSAND WORKS (user, 2026-11-17: of ficbook's 1.39 million works a pass holding every work
+was more than the memory of 12 GB). The works of the source are read a portion at a time in the
+order of their ids (`WorkPasses.forEachPortion`, `TaskPortions.MOST`), each portion read anew of
+the database at every walk and let go before the next: no reading of more works at once is let
+through (`TooManyWorks`). The values the models of their own (the age rating) give every work are
+kept first; then a facet after another down the chain (`FacetFitting`, `FacetPass`), each walking
+the works:
+- once, of their values alone (no vector read): what its value side is made of (`ValueCount`) — the
+  values the works have or were answered of, the keys of their context and how many works have each
+  (a key of one work alone no column), the pairs of characters the works may have, the texts of
+  their lines read, the fingerprints of the works, streamed in the order of their ids whatever the
+  portions (`WorksPrint`). The value side (`ValueSide`): those values and every one the dictionary
+  knows, their names, groups and texts, the columns of the context, the basis of the facet — of the
+  values, never of the works;
+- as often as its suggester's fitting needs, of the same value side (`FacetPortions`), unless the
+  model kept was fitted on the same basis; the calibration of what the folds said of the works the
+  user answered on, by their ids;
+- once to make every work's chances by the model kept (`FacetScoring`): the values given written
+  where they changed and the works whose values changed told as each portion is done
+  (`FacetChancesChanged`, ids alone), the chances of the values open to the model counted into a
+  bounded histogram, of which the facet's cutoff is worked out for the next pass (`OpenChances`).
+The context of a facet is read of the values the facets before it gave, as the same pass kept them:
+the chain is not made again for every portion of every walk. Fitted anew from scratch at the user's
+asking, a facet reads them as the last pass kept them.
 
 Of a work's chances those shown are made — of the values it has, rejected, given as examples, more
 likely than not, and the few likeliest others offered — not every character of a work's universes.

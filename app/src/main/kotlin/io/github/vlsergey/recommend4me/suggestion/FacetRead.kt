@@ -27,9 +27,10 @@ internal class ValueIndex(values: List<String>) {
 }
 
 /**
- * ONE FACET OF A PASS READ FOR ITS MODEL ([FacetData.load]): the works' values of it as the site, the user and the
- * drafts give them, the values chosen from, the other facets' values as the context ([TaskContext]), the inputs, the
- * names of the values ([ValueNames]) — the task made of them, with its basis ([FacetBasis]).
+ * ONE FACET OF SOME WORKS READ FOR ITS MODEL ([FacetData.load]): the works' values of it as the site, the user and the
+ * drafts give them, the values chosen from — of the value side of a pass ([ValueSide]) or of the scoring kept — the
+ * other facets' values as the context ([TaskContext]), the inputs: the task made of them. Or what the works tell of the
+ * value side of a pass ([counted]).
  */
 internal class FacetRead(
     private val store: SourceStore,
@@ -39,15 +40,72 @@ internal class FacetRead(
     private val asked: FacetAsked,
     private val laps: Laps,
 ) {
-    // The rows of the task: every work, or the works [WorksRead.only]; their values alone read
-    private val only = read.only
     private val ids = read.ids
 
     /** The facet's task read now, a step after another, the time of each told to the [laps]. */
     fun data(): FacetData {
-        val site = read.site
+        val owned = owned()
+        laps.lap("corrected")
+        val side = asked.side
+        val values = asked.kept ?: checkNotNull(side) { "${facet.key}: a task of no values chosen from" }.values
+        val ownInputs = inputs()
+        laps.lap("inputs", ownInputs.size)
+        // The site's line of characters and pairings as the way chosen reads it: its inputs and its columns in place of
+        // the line's own
+        val (rows, cast) = contextOf(ownInputs)
+        val context =
+            if (side == null) TaskContext.ofKeys(rows) else TaskContext(side.columnsOf(rows), side.contextKeys)
+        laps.lap("context", context.keys.size)
+        val inputs = cast?.inputs ?: ownInputs
+        if (cast != null) laps.lap("cast: ${asked.cast?.asked?.reader?.id}", inputs.size)
+        val index = side?.index ?: ValueIndex(values)
+        val task = task(values, index, owned, context, inputs, cast?.named)
+        laps.lap("task: made")
+        val held = held(task, index, owned)
+        laps.lap("task: held")
+        return FacetData(
+            ids,
+            values,
+            task,
+            held,
+            owned.allNamed,
+            read.encoded,
+            said(index, owned, task, added = true),
+            said(index, owned, task, added = false),
+        )
+    }
+
+    /**
+     * WHAT THE WORKS TELL OF THE VALUE SIDE OF A PASS: every value of the facet the site, the drafts, the site's
+     * examples or the user give them, the keys of their context — the site's line read without its vectors: its columns
+     * are what is counted —, the texts of their lines with vectors.
+     */
+    fun counted(): PortionCount {
+        val owned = owned()
+        val values = HashSet<String>()
+        owned.corrected.values.forEach { values += it[facet.key].orEmpty() }
+        owned.answers.values.forEach { list -> list.forEach { if (it.facet == facet.key) values += it.key } }
+        val (rows, _) = contextOf(emptyList())
+        return PortionCount(values, rows, asked.cast?.vectors?.keys.orEmpty())
+    }
+
+    /**
+     * Of every work, the keys of its context — read by the way chosen of its line ([TaskCast]) when the facet reads
+     * one, of its [inputs] — and the cast read.
+     */
+    private fun contextOf(inputs: List<InputBlock>): Pair<List<List<String>>, TaskCast?> {
+        val own = TaskContext.keysOf(store, read, asked.modelled, facet.key)
+        val cast = asked.cast?.let { TaskCast.of(it, ids, inputs, own) }
+        return (cast?.context ?: own) to cast
+    }
+
+    /**
+     * What each work has of the facet and was answered of it: its values corrected by the user's answers, the answers
+     * with what they say of the tags above and under them, its drafts, and whether the user said its values are all
+     * named.
+     */
+    private fun owned(): Owned {
         val corrections = read.corrections
-        laps.lap("works' values")
         // Of a facet of tags, the user's answers with what they say of the tags above and under them
         val hierarchy = read.hierarchies[facet.key]
         val answers =
@@ -62,73 +120,40 @@ internal class FacetRead(
             read.drafts
                 .mapValues { (_, list) -> list.filter { it.facet == facet.key }.map { it.key } }
                 .filterValues { it.isNotEmpty() }
-        val learnt = learnt(site, drafted)
+        val learnt = learnt(read.site, drafted)
         val corrected = ids.associateWith { id ->
             TagHierarchy.corrected(learnt[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets)
         }
-        laps.lap("corrected")
-        val values = asked.kept ?: chosenFrom(corrected, answers, drafted)
-        val ownContext = TaskContext.of(store, read, asked.modelled, facet.key)
-        laps.lap("context", ownContext.keys.size)
-        val ownInputs = inputs()
-        laps.lap("inputs", ownInputs.size)
-        // The site's line of characters and pairings as the way chosen reads it: its inputs and its columns in place of
-        // the line's own
-        val cast = asked.cast?.let { TaskCast.of(it, ids, ownInputs, ownContext.keysOf()) }
-        val context = cast?.let { TaskContext.ofKeys(it.context, shared = only == null) } ?: ownContext
-        val inputs = cast?.inputs ?: ownInputs
-        if (cast != null) laps.lap("cast: ${asked.cast.asked.reader.id}", inputs.size)
         // An item whose values of the facet are all named: every other value rejected by the user's word
         val allNamed = BooleanArray(ids.size) { facet.key in read.complete[ids[it]].orEmpty() }
-        val index = ValueIndex(values)
-        val task = task(values, index, Owned(corrected, answers, drafted, allNamed), context, inputs, cast?.named)
-        laps.lap("task: made")
-        val held = held(task, index, site, corrections, within, drafted)
-        laps.lap("task: held")
-        // The task of some works, or of the scoring kept, tells nothing of what the weights were fitted on
-        val basis =
-            if (only != null || asked.kept != null) FacetData.NO_BASIS
-            else FacetBasis.of(facet.key, read, values, task.groupings, asked.hintNames, cast?.signature)
-        return FacetData(
-            ids,
-            values,
-            task,
-            held,
-            allNamed,
-            read.encoded,
-            basis,
-            said(index, corrections, allNamed, task, added = true),
-            said(index, corrections, allNamed, task, added = false),
-        )
+        return Owned(corrected, answers, drafted, allNamed, within)
     }
 
     /**
      * Of every work the values of the facet the user said it has ([added]) or has not, for the calibration: one answer
-     * one value, nothing spread over the values' hierarchy; of a work the user said all named ([allNamed]) every value
-     * it has not — "no other": the noes of the values the user never saw, the low scores, which no single answer
-     * reaches.
+     * one value, nothing spread over the values' hierarchy; of a work the user said all named every value it has not —
+     * "no other": the noes of the values the user never saw, the low scores, which no single answer reaches.
      */
-    private fun said(
-        index: ValueIndex,
-        corrections: Map<String, List<FacetCorrection>>,
-        allNamed: BooleanArray,
-        task: SuggestionTask,
-        added: Boolean,
-    ): List<IntArray> = ids.mapIndexed { i, id ->
-        if (!added && allNamed[i]) task.rejected[i]
-        else index.of(corrections[id].orEmpty().filter { it.facet == facet.key && it.added == added }.map { it.key })
-    }
+    private fun said(index: ValueIndex, owned: Owned, task: SuggestionTask, added: Boolean): List<IntArray> =
+        ids.mapIndexed { i, id ->
+            if (!added && owned.allNamed[i]) task.rejected[i]
+            else
+                index.of(
+                    read.corrections[id].orEmpty().filter { it.facet == facet.key && it.added == added }.map { it.key }
+                )
+        }
 
     /**
      * What each work has of the facet and was answered of it: its values [corrected] by the user's answers, the
-     * [answers] — with what they say of the tags above and under them — its drafts ([drafted]), and whether the user
-     * said its values are all named ([allNamed]).
+     * [answers] — with what they say of the tags above and under them — its drafts ([drafted]), whether the user said
+     * its values are all named ([allNamed]), and the facet's tags under others ([within]).
      */
     private class Owned(
         val corrected: Map<String, Facets>,
         val answers: Map<String, List<FacetCorrection>>,
         val drafted: Map<String, List<String>>,
         val allNamed: BooleanArray,
+        val within: Map<String, TagHierarchy>,
     )
 
     /**
@@ -151,38 +176,6 @@ internal class FacetRead(
     }
 
     /**
-     * Every value of the facet the site or the user gave any work read, the values the model kept chooses from, and
-     * every value known besides. Of works of a facet whose values a work may have are limited ([FacetAsked.allowed]: a
-     * work's characters are of its universes), those they may have and their own alone: no other is chosen from — of a
-     * work of two universes some thousand characters, not every one.
-     */
-    private fun chosenFrom(
-        corrected: Map<String, Facets>,
-        answers: Map<String, List<FacetCorrection>>,
-        drafted: Map<String, List<String>>,
-    ): List<String> {
-        val everyValue =
-            (corrected.values.flatMap { it[facet.key].orEmpty() } +
-                    answers.values.flatten().filter { it.facet == facet.key }.map { it.key } +
-                    asked.known.keys +
-                    asked.valueKeys.orEmpty())
-                .distinct()
-                .sorted()
-        val allowed = asked.allowed
-        if (only == null || allowed == null) return everyValue
-        val own = HashSet<String>()
-        ids.forEach { id ->
-            val out = asked.barred?.invoke(id).orEmpty()
-            allowed(id).forEach { if (it !in out) own += it }
-            own += corrected[id]?.get(facet.key).orEmpty()
-            answers[id].orEmpty().filter { it.facet == facet.key }.forEach { own += it.key }
-            own += drafted[id].orEmpty()
-            own += asked.examples?.invoke(id).orEmpty()
-        }
-        return everyValue.filter { it in own }
-    }
-
-    /**
      * The inputs of the works. A facet the site gives values of has them as its labels: its own line on the site is
      * those values written out, no input of it — as the facet is none of its own context — whether the site gives
      * values of it told of every work, as the model was fitted, not of the works read ([FacetAsked.siteGives]).
@@ -196,8 +189,9 @@ internal class FacetRead(
     /**
      * The task of the facet's [values] ([index]): EVERY WORK'S ARRAYS MADE SIDE BY SIDE ON EVERY CORE, each of its own
      * work alone, of what is read already — what it has, was answered of ([owned]), may have and may not, is taught by
-     * besides — with the names of the values, their groups, the [context] and the [inputs]; [named]: of every row, the
-     * values the site's line names, a witness among the examples, never a value taught.
+     * besides — with the names of the values, their groups and texts of the value side of a pass (none of the scoring
+     * kept: it knows every value), the [context] and the [inputs]; [named]: of every row, the values the site's line
+     * names, a witness among the examples, never a value taught.
      */
     private fun task(
         values: List<String>,
@@ -207,24 +201,9 @@ internal class FacetRead(
         inputs: List<InputBlock>,
         named: List<List<String>>?,
     ): SuggestionTask {
-        // Of the scoring kept, no names: it knows every value's coordinates
-        val names =
-            if (asked.kept != null) Matrix(values.size, 0)
-            else
-                ValueNames.matrix(
-                    store,
-                    facet.key,
-                    values,
-                    index,
-                    read.corrections.values.flatten(),
-                    asked.known,
-                    encoder,
-                    asKept = only != null,
-                )
-        val grouped = asked.groupings?.invoke(values).orEmpty()
+        val side = asked.side
         val assigned = ofEvery(ids.size) { i -> index.of(owned.corrected[ids[i]]?.get(facet.key).orEmpty()) }
         laps.lap("task: assigned")
-        val (hints, hintTexts) = hints(index)
         val confirmed = ofEvery(ids.size) { i -> answered(index, owned, i, added = true) }
         val rejected =
             ofEvery(ids.size) { i ->
@@ -243,7 +222,7 @@ internal class FacetRead(
         return SuggestionTask(
             itemIds = ids,
             inputs = inputs,
-            values = names,
+            values = side?.names ?: Matrix(values.size, 0),
             valueKeys = values,
             assigned = assigned,
             confirmed = confirmed,
@@ -252,13 +231,13 @@ internal class FacetRead(
             contextKeys = context.keys,
             allowed = allowedOf,
             barred = barredOf,
-            groupings = grouped,
-            lackWeight = asked.lackWeight,
+            groupings = side?.groupings.orEmpty(),
+            lackWeight = side?.lackWeight ?: 1.0,
             examples = examplesOf,
             drafts = draftsOf,
             draftWeight = FacetData.DRAFT_WEIGHT,
-            hints = hints,
-            hintTexts = hintTexts,
+            hints = side?.hints.orEmpty(),
+            hintTexts = side?.hintTexts ?: Matrix(0, 0),
         )
     }
 
@@ -268,29 +247,6 @@ internal class FacetRead(
      */
     private fun answered(index: ValueIndex, owned: Owned, i: Int, added: Boolean): IntArray =
         index.of(owned.answers[ids[i]].orEmpty().filter { it.facet == facet.key && it.added == added }.map { it.key })
-
-    /**
-     * The texts naming the values and the values each is judged among ([NameHint]): what is learnt from, not what is
-     * judged — no names when the item [only] is judged by the weights fitted last. The names of values of the task:
-     * every one, but of a dictionary's value the task lacks.
-     */
-    private fun hints(index: ValueIndex): Pair<List<NameHint>, Matrix> {
-        if (only != null || asked.kept != null) return emptyList<NameHint>() to Matrix(0, 0)
-        val (hintValues, hintTexts) = ValueNames.texts(store, facet.key, asked.hintNames, encoder)
-        val named = hintValues.indices.filter { index[hintValues[it]] != null }
-        // Every collection of values the names are judged among made indices once, one array
-        // shared by all its names: of a universe's characters thousands of names, each of
-        // thousands of rivals
-        val made = IdentityHashMap<Collection<String>, IntArray>()
-        val hints = named.map { k ->
-            val key = hintValues[k]
-            val v = index[key]!!
-            val of = asked.hintAmong(key)
-            val among = made.getOrPut(of) { index.of(of).also { it.sort() } }
-            NameHint(v, if (among.binarySearch(v) >= 0) among else (among + v).also { it.sort() })
-        }
-        return hints to if (named.size == hintValues.size) hintTexts else hintTexts.gather(named.toIntArray())
-    }
 
     /**
      * Of every work, the values it may have ([FacetAsked.allowed]) and those of them it may not after all
@@ -310,25 +266,29 @@ internal class FacetRead(
     }
 
     /** The item's own values: neither the site's examples nor the drafts. */
-    private fun held(
-        task: SuggestionTask,
-        index: ValueIndex,
-        site: Map<String, Facets>,
-        corrections: Map<String, List<FacetCorrection>>,
-        within: Map<String, TagHierarchy>,
-        drafted: Map<String, List<String>>,
-    ): List<IntArray> =
-        if (asked.examples == null && drafted.isEmpty()) task.assigned
+    private fun held(task: SuggestionTask, index: ValueIndex, owned: Owned): List<IntArray> =
+        if (asked.examples == null && owned.drafted.isEmpty()) task.assigned
         else
             ofEvery(ids.size) { i ->
                 val id = ids[i]
                 index.of(
-                    TagHierarchy.corrected(site[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets)[
-                            facet.key]
+                    TagHierarchy.corrected(
+                            read.site[id].orEmpty(),
+                            read.corrections[id].orEmpty(),
+                            owned.within,
+                            store.singleFacets,
+                        )[facet.key]
                         .orEmpty()
                 )
             }
 }
+
+/**
+ * What a portion of the works of a pass tells of the value side of a facet ([FacetRead.counted]): the [values] its
+ * works have or were answered of, the keys of every work's [context], in its order, the [castTexts] of their lines with
+ * vectors.
+ */
+internal class PortionCount(val values: Set<String>, val context: List<List<String>>, val castTexts: Set<String>)
 
 /**
  * EVERY WORK'S ARRAY MADE SIDE BY SIDE ON EVERY CORE: each of its own work alone, of what is read already — of

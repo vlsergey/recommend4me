@@ -70,7 +70,7 @@ class FacetComparisons(
                 comparison.methods.forEach { it.state = MeasuringState.DONE }
                 return
             }
-            comparison.items = task.itemCount
+            comparison.items = task.items
             comparison.methods.forEach { measure ->
                 val suggester = plugins.suggesters.firstOrNull { it.id == measure.method }
                 if (suggester == null) {
@@ -93,15 +93,15 @@ class FacetComparisons(
     }
 
     /**
-     * The [suggester] fitted on the [task] from scratch, its [measure] told what it tried and chose, or why it failed.
-     * A boundary of a plugin: whatever its fitting throws is the measure's failure, and the other methods are measured
-     * all the same.
+     * The [suggester] fitted on the [task] from scratch — every work of the facet, a portion at a time, walked as often
+     * as its fitting needs —, its [measure] told what it tried and chose, or why it failed. A boundary of a plugin:
+     * whatever its fitting throws is the measure's failure, and the other methods are measured all the same.
      */
     @Suppress("TooGenericExceptionCaught")
     private fun measure(
         store: SourceStore,
         facet: String,
-        task: SuggestionTask,
+        task: TaskPortions,
         suggester: FacetSuggester,
         measure: MethodMeasure,
     ) {
@@ -121,7 +121,7 @@ class FacetComparisons(
             store.id,
             suggester.id,
             facet,
-            task.itemCount,
+            task.items,
             measure.millis,
             measure.report?.loss,
         )

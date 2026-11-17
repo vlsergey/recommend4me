@@ -62,7 +62,7 @@ class PartsOutOfDatabaseTest {
                 val repository = PartRepository(db.dsl, store)
                 assertEquals(1, repository.countWithText())
                 assertEquals("Lorem ipsum", repository.text("w1", "p1")!!.second)
-                assertEquals(2, repository.windows.windowCount("w1", "enc"))
+                assertEquals(2, repository.windows.windowCountsOf(listOf("w1"), "enc")["w1"])
                 // The columns and the tables of the texts and the vectors gone from the file
                 val tables = db.dsl.meta().tables.map { it.name.lowercase() }
                 assertEquals(false, "part_vector" in tables || "part_paragraph_vector" in tables)

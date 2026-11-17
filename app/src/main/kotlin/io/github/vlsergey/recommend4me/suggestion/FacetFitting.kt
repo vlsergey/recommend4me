@@ -1,9 +1,9 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.universe.CharactersRead
 import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.CancellationException
@@ -15,128 +15,110 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger(FacetFitting::class.java)
 
 /**
- * ONE FACET'S MODEL FITTED AGAIN when what it learns from changed, and every work's chances of it made into those of
- * the pass — the context of the facets after it in the chain. One fitting of a facet at a time; a fitting of one facet
+ * ONE FACET'S MODEL FITTED AGAIN when what it learns from changed, and every work's chances of it made and their values
+ * kept — the context of the facets after it in the chain. Every walk of it over the works a portion at a time
+ * ([FacetPass]): the works' values, of which its value side is made ([ValueSide]); the fitting's own, as many as it
+ * needs ([FacetPortions]); the chances made ([FacetScoring]). One fitting of a facet at a time; a fitting of one facet
  * does not wait for a long fitting of another.
  */
-internal class FacetFitting(private val chain: FacetChain, private val vocabularies: FacetVocabularies) {
+internal class FacetFitting(private val reading: FacetReading, private val scoring: FacetScoring) {
     /** One lock a facet, by "source/facet". */
     private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
     /**
-     * The milliseconds from a fitting's start at which each of its stages ended, as its log tells them: the dictionary,
-     * the reading, the weights kept unpacked, the fitting.
-     */
-    private class Stages {
-        private val started = System.currentTimeMillis()
-        var vocabulary = 0L
-        var read = 0L
-        var unpacked = 0L
-        var fitted = 0L
-
-        /** The milliseconds since the fitting began. */
-        fun now() = System.currentTimeMillis() - started
-    }
-
-    /**
-     * The model a fitting ends with, kept ([after], [FittedSuggester.model]), the one kept before it ([before]; null
-     * when there was none of the suggester), and whether that one was [current]: fitted on the same and kept.
-     */
-    private class Model(val after: ByteArray, val before: KeptScoring?, val current: Boolean)
-
-    /**
      * The model of the [k]-th of the [facets] fitted again when what it learns from changed — every setting tried anew
-     * when [anew], the user asked for it ([FacetRefits.searchAnew]) — and every work's chances of it made into [made],
-     * the context of the facets after it. [stop] is asked between the stages, and by the fitting between its steps:
-     * newer data came, and the work is given up with a [CancellationException] before anything made of the old is kept.
-     * Answers the works whose given values a refit changed: every work scored by the model before and after it.
-     *
-     * [works] — every work read once for the whole pass, its inputs on the card: the facet's chances given to its
-     * context ([WorksRead.given]) for the facets after it.
+     * when [anew], the user asked for it ([FacetRefits.searchAnew]) — and every work's chances of it made, the values
+     * they give kept ([KeptModelValues]): the context of the facets after it. [stop] is asked between the portions and
+     * the stages, and by the fitting between its steps: newer data came, and the work is given up with a
+     * [CancellationException] before anything made of the old is kept. [characters]: the dictionary's characters, read
+     * once for the pass.
      */
     fun fit(
         store: SourceStore,
         facets: List<FacetDef>,
         k: Int,
-        suggester: FacetSuggester,
+        suggester: FacetSuggester?,
         encoder: TextEncoder,
-        made: MadeChances,
+        characters: CharactersRead,
         stop: () -> Boolean,
-        works: WorksRead,
         anew: Boolean = false,
-    ): List<String> =
-        lockOf(store, facets[k]).withLock {
-            fit(store, facets[k], suggester, encoder, made, stop, anew, works).also {
-                works.given(store, facets[k].key, made)
+    ) {
+        val facet = facets[k]
+        locks
+            .computeIfAbsent("${store.id}/${facet.key}") { ReentrantLock() }
+            .withLock {
+                val checkpoint = {
+                    if (stop()) throw CancellationException("${store.id}: ${facet.key} given up for newer changes")
+                }
+                val pass = FacetPass(store, facet, k, encoder, characters, reading, checkpoint)
+                // Of no suggester, the drafts and the models of their own alone
+                scoring.walk(pass, suggester?.let { modelled(pass, it, stop, anew, checkpoint) })
             }
-        }
-
-    /** One lock a facet: a fitting of one facet does not wait for a long fitting of another. */
-    private fun lockOf(store: SourceStore, facet: FacetDef) =
-        locks.computeIfAbsent("${store.id}/${facet.key}") { ReentrantLock() }
-
-    /** [fit] of the works read for it, [works]: their inputs on the card for the fitting and the scoring after it. */
-    private fun fit(
-        store: SourceStore,
-        facet: FacetDef,
-        suggester: FacetSuggester,
-        encoder: TextEncoder,
-        made: MadeChances,
-        stop: () -> Boolean,
-        anew: Boolean,
-        works: WorksRead,
-    ): List<String> {
-        val checkpoint = {
-            if (stop()) throw CancellationException("${store.id}: ${facet.key} given up for newer changes")
-        }
-        val stages = Stages()
-        val vocabulary =
-            vocabularies.vocabularyOf(store, facet, null, made, works.characters, works.answers, site = works.site)
-        stages.vocabulary = stages.now()
-        checkpoint()
-        val data = chain.load(store, facet, encoder, vocabulary, made, null, works)
-        stages.read = stages.now()
-        checkpoint()
-        // The whole task kept in a file when asked for: its fitting made again and measured apart from the application
-        System.getenv(TASKS_FOLDER)?.let { dir ->
-            SuggestionTaskFile.write(data.task, Path.of(dir, "${store.id}-${facet.key}.task.gz"))
-        }
-        val model =
-            if (data.values.isEmpty()) null else modelOf(store, facet, suggester, data, stop, anew, stages, checkpoint)
-        // Of a model before the refit that chose from other values: the task of its own values, the works as they are
-        val beforeTask =
-            model
-                ?.takeIf { !it.current && facet.infer }
-                ?.before
-                ?.takeIf { it.values.isNotEmpty() && it.values != data.values }
-                ?.let { chain.keptTask(store, facet, encoder, vocabulary, made, works) }
-        return model?.let { madeOf(store, facet, suggester, data, made, it, stages, beforeTask) }.orEmpty()
     }
 
     /**
-     * The facet's model for the task [data]: the one kept when it was fitted on the same, else fitted again — from the
-     * state fitted last unless [anew]. Null when the suggester fits none.
+     * The facet's model of the [pass] by the [suggester]: its value side read of a walk over the works' values, the
+     * model kept or fitted again ([modelOf]); null when the facet has no value to choose from or the suggester fits
+     * none.
+     */
+    private fun modelled(
+        pass: FacetPass,
+        suggester: FacetSuggester,
+        stop: () -> Boolean,
+        anew: Boolean,
+        checkpoint: () -> Unit,
+    ): PassModel? {
+        val store = pass.store
+        val facet = pass.facet
+        val started = System.currentTimeMillis()
+        val counted = pass.counted()
+        val side = pass.side(counted, store.corrections.allFacets())
+        val read = System.currentTimeMillis() - started
+        checkpoint()
+        val portions = FacetPortions(pass, side, counted.works)
+        // The task kept in files when asked for, a portion a file: its fitting made again and measured apart
+        System.getenv(TASKS_FOLDER)?.let { dir -> keepTasks(store, facet, portions, dir) }
+        val model = if (side.values.isEmpty()) null else modelOf(store, facet, suggester, portions, side, stop, anew)
+        checkpoint()
+        log.info(
+            "{}: {} of {} works and {} values read in {} ms, its model {} in {} ms",
+            store.id,
+            facet.key,
+            counted.works,
+            side.values.size,
+            read,
+            if (model == null) "none" else "made",
+            System.currentTimeMillis() - started - read,
+        )
+        // The calibration kept with the model as it is now
+        return model?.let { PassModel(suggester, it, side, store.suggestions.scoring(facet.key)?.calibration) }
+    }
+
+    /** Every portion of the facet's task kept in a file of the folder [dir] ([SuggestionTaskFile]). */
+    private fun keepTasks(store: SourceStore, facet: FacetDef, portions: FacetPortions, dir: String) {
+        var n = 0
+        portions.forEach { SuggestionTaskFile.write(it, Path.of(dir, "${store.id}-${facet.key}-${n++}.task.gz")) }
+    }
+
+    /**
+     * The facet's model of the value [side]: the one kept when it was fitted on the same, else fitted again on the
+     * [portions] — from the state fitted last unless [anew]. Null when the suggester fits none.
      */
     private fun modelOf(
         store: SourceStore,
         facet: FacetDef,
         suggester: FacetSuggester,
-        data: FacetData,
+        portions: FacetPortions,
+        side: ValueSide,
         stop: () -> Boolean,
         anew: Boolean,
-        stages: Stages,
-        checkpoint: () -> Unit,
-    ): Model? {
+    ): ByteArray? {
         val stored = store.suggestions.suggester(facet.key)?.takeIf { it.suggester == suggester.id }
         val before = store.suggestions.scoring(facet.key)?.takeIf { it.suggester == suggester.id }
-        val kept = stored?.let { suggester.unpack(it.content, data.task) }
-        stages.unpacked = stages.now()
-        checkpoint()
-        val current = !anew && kept != null && stored.basis == data.basis
-        val after =
-            if (current) keepValues(store, facet, suggester, data, stored, before, kept)
-            else refit(store, facet, suggester, data, if (anew) null else kept, stop, stages, checkpoint)
-        return after?.let { Model(it, before, current) }
+        val kept = stored?.let { suggester.unpack(it.content, portions.values) }
+        val current = !anew && kept != null && stored.basis == side.basis
+        return if (current) keepValues(store, facet, suggester, side, stored, before, kept)
+        else refit(store, facet, suggester, portions, side, if (anew) null else kept, stop)
     }
 
     /**
@@ -148,225 +130,73 @@ internal class FacetFitting(private val chain: FacetChain, private val vocabular
         store: SourceStore,
         facet: FacetDef,
         suggester: FacetSuggester,
-        data: FacetData,
+        side: ValueSide,
         stored: StoredSuggester,
         before: KeptScoring?,
         kept: FittedSuggester,
     ): ByteArray {
-        if (stored.values == data.values && before != null && suggester.weights(before.bytes) != null) {
+        if (stored.values == side.values && before != null && suggester.weights(before.bytes) != null) {
             return before.bytes
         }
-        return kept.model(data.task).also { store.suggestions.keepValues(facet.key, data.values, it) }
+        return kept.model(side.task()).also { store.suggestions.keepValues(facet.key, side.values, it) }
     }
 
     /**
-     * The model fitted again and kept, from the state fitted last when there is one ([previous]): the data moved a
-     * little since. Null when the suggester fits none.
+     * The model fitted again on the [portions] and kept, from the state fitted last when there is one ([previous]): the
+     * data moved a little since. Null when the suggester fits none.
      */
     private fun refit(
         store: SourceStore,
         facet: FacetDef,
         suggester: FacetSuggester,
-        data: FacetData,
+        portions: FacetPortions,
+        side: ValueSide,
         previous: FittedSuggester?,
         stop: () -> Boolean,
-        stages: Stages,
-        checkpoint: () -> Unit,
     ): ByteArray? {
-        val fitStarted = System.currentTimeMillis()
-        val fresh = suggester.fit(data.task, previous, stop) ?: return null
-        checkpoint()
-        val fit = SuggesterFit(fresh.report, System.currentTimeMillis() - fitStarted, data.ids.size, data.values.size)
-        val model = fresh.model(data.task)
-        // Of what its folds said of the values the user answered on; of a fitting that held none out, the one kept
+        val started = System.currentTimeMillis()
+        val fresh = suggester.fit(portions, previous, stop) ?: return null
+        if (stop()) throw CancellationException("${store.id}: ${facet.key} given up for newer changes")
+        val millis = System.currentTimeMillis() - started
+        val fit = SuggesterFit(fresh.report, millis, portions.items, side.values.size)
+        val model = fresh.model(side.task())
         // Of what its folds said of the values the user answered on; of a fitting that held none out, the one kept
         val kept = store.suggestions.scoring(facet.key)?.calibration
-        val calibration = fresh.heldOut?.let { calibrated(data, it, kept?.threshold) } ?: kept
+        val calibration =
+            fresh.heldOut?.let { held ->
+                val answered = portions.answered(held)
+                // The cutoff of the last pass over every work kept till the next works it out anew
+                kept?.threshold?.let { Calibration.fit(answered, it) } ?: Calibration.fit(answered)
+            } ?: kept
         store.suggestions.saveSuggester(
             facet.key,
             suggester.id,
             Instant.now(),
-            data.basis,
+            side.basis,
             fresh.pack(),
-            data.values,
+            side.values,
             model,
             fit,
             calibration,
         )
         log.info(
-            "{}: the suggester of {} fitted on {} items, {} values in {} ms, {} of them reading; calibrated of {} " +
-                "answers, likely from {}",
+            "{}: the suggester of {} fitted on {} items, {} values in {} ms; calibrated of {} answers, likely from {}",
             store.id,
             facet.key,
-            data.ids.size,
-            data.values.size,
-            stages.now(),
-            stages.read,
+            portions.items,
+            side.values.size,
+            millis,
             calibration?.answers ?: 0,
             calibration?.threshold?.let { "%.3f".format(it) },
         )
         return model
     }
 
-    /**
-     * The calibration of the facet ([Calibration]) of what the folds of a fitting said of the values the user answered
-     * on ([held]): a yes of a value the user said a work has, a no of one the user said it has not, of a work all named
-     * every value it has not ([FacetData.saidYes], [FacetData.saidNo]) — not spread over the values' hierarchy; null of
-     * no answer.
-     */
-    private fun calibrated(data: FacetData, held: HeldOutScores, threshold: Double?): Calibration? {
-        val answered =
-            held.items.indices.mapNotNull { k ->
-                val i = held.items[k]
-                val v = held.values[k]
-                val yes =
-                    when {
-                        data.saidYes.getOrNull(i)?.contains(v) == true -> true
-                        data.saidNo.getOrNull(i)?.contains(v) == true -> false
-                        else -> return@mapNotNull null
-                    }
-                Answered(data.task.valueKeys[v], held.scores[k], yes)
-            }
-        // The cutoff of the last pass over every work kept till the next works it out anew
-        return if (threshold == null) Calibration.fit(answered) else Calibration.fit(answered, threshold)
-    }
-
-    /**
-     * Every work's chances of the facet by the [model] kept made into [made] — scored by the model as every work is
-     * ([FacetSuggester.scoring]), the database refused; answers the works whose given values a refit changed — what the
-     * model before the refit gave alone scored again, nothing of it kept, the values told apart by their keys. None
-     * made of a model the suggester cannot read.
-     *
-     * [beforeTask]: of a model before the refit that chose from other values — fewer, as the values of a facet grow —
-     * the task of its own values it is scored on; null: it chose from those of [data]. A model is scored on a task of
-     * its values alone ([FacetSuggester.scoring]): scored on the values grown, it answered none, and every work of the
-     * facet was told changed — of the pairings and the tags of ficbook, fanfics.me and author.today a pass after pass,
-     * every work searched for anew.
-     */
-    private fun madeOf(
-        store: SourceStore,
-        facet: FacetDef,
-        suggester: FacetSuggester,
-        data: FacetData,
-        made: MadeChances,
-        model: Model,
-        stages: Stages,
-        beforeTask: ((List<String>) -> FacetData)?,
-    ): List<String> {
-        stages.fitted = stages.now()
-        // The calibration kept with the model as it is now, read before the database is refused
-        val calibration = store.suggestions.scoring(facet.key)?.calibration
-        fun shown(bytes: ByteArray, of: () -> FacetData, into: MadeChances, calibrated: Calibration?) =
-            DatabaseRefused.during("the chances of ${store.id}/${facet.key} of every work") {
-                val task = of()
-                suggester.scoring(bytes, task.task)?.use {
-                    ShownChances.keep(into, facet, task, it, compare = true, calibration = calibrated)
-                }
-            }
-        val after = shown(model.after, { data }, made, calibration) ?: return emptyList()
-        calibration?.let { keepCutoff(store, facet, data, made, it) }
-        val scored = stages.now()
-        // What the model before the refit gave alone: scored again, nothing of it kept
-        val changedIds =
-            if (model.current || !facet.infer) emptyList()
-            else {
-                val before =
-                    model.before?.let { kept ->
-                        shown(kept.bytes, { beforeTask?.invoke(kept.values) ?: data }, MadeChances(), kept.calibration)
-                    }
-                data.ids.filter { id -> before == null || before[id].orEmpty() != after[id].orEmpty() }
-            }
-        logMade(store, facet, data, after, changedIds, stages, scored)
-        return changedIds
-    }
-
-    /**
-     * The facet's cutoff worked out anew of the chances [made] of every work of the pass ([Calibration.balanced]): of
-     * the values neither the site gives a work, nor a draft, nor the user answered on — the model's to give or not —,
-     * kept for the next pass when it moved.
-     */
-    private fun keepCutoff(
-        store: SourceStore,
-        facet: FacetDef,
-        data: FacetData,
-        made: MadeChances,
-        calibration: Calibration,
-    ) {
-        val open =
-            data.ids.flatMapIndexed { i, id ->
-                // The values the user answered on are the user's, not the model's to give
-                val said = (data.saidYes.getOrNull(i) ?: IntArray(0)) + (data.saidNo.getOrNull(i) ?: IntArray(0))
-                val answered = said.mapTo(HashSet()) { data.values[it] }
-                made[id]
-                    ?.get(facet.key)
-                    ?.values
-                    .orEmpty()
-                    .filter {
-                        !it.had && !it.drafted && it.key !in answered
-                    }
-                    .map { it.chance }
-            }
-        val threshold = Calibration.balanced(open.toDoubleArray())
-        if (threshold == calibration.threshold) return
-        store.suggestions.keepCalibration(facet.key, calibration.withThreshold(threshold))
-        log.info(
-            "{}: the cutoff of {} of {} values open of {} works moved from {} to {}",
-            store.id,
-            facet.key,
-            open.size,
-            data.ids.size,
-            "%.3f".format(calibration.threshold),
-            "%.3f".format(threshold),
-        )
-    }
-
-    /**
-     * The log of the chances made: the time of every stage, the works given other values, and how many values the model
-     * gives the works — a model that gives one work dozens tells of itself.
-     */
-    private fun logMade(
-        store: SourceStore,
-        facet: FacetDef,
-        data: FacetData,
-        after: Map<String, Set<String>>,
-        changedIds: List<String>,
-        stages: Stages,
-        scored: Long,
-    ) {
-        val most = after.maxByOrNull { it.value.size }
-        log.info(
-            "{}: chances of {} of {} items made in memory in {} ms — the dictionary {}, reading {}, the weights {}, " +
-                "fitting {}, scoring {}; {} works given other values; " +
-                "{} values given in all, {} works given more than {}, the most {} to {}",
-            store.id,
-            facet.key,
-            data.ids.size,
-            stages.now(),
-            stages.vocabulary,
-            stages.read - stages.vocabulary,
-            stages.unpacked - stages.read,
-            stages.fitted - stages.unpacked,
-            scored - stages.fitted,
-            changedIds.size,
-            after.values.sumOf { it.size },
-            after.values.count { it.size > MANY_GIVEN },
-            MANY_GIVEN,
-            most?.value?.size ?: 0,
-            most?.key,
-        )
-    }
-
     companion object {
         /**
-         * The environment variable naming the folder every task of a whole facet is kept in ([SuggestionTaskFile]);
-         * unset, none is.
+         * The environment variable naming the folder every task of a whole facet is kept in, a portion a file
+         * ([SuggestionTaskFile]); unset, none is.
          */
         private const val TASKS_FOLDER = "RECOMMEND4ME_TASKS"
-
-        /**
-         * How many values given to one work the log of a refit counts the works above: a sign of a model gone wide, not
-         * a rule.
-         */
-        private const val MANY_GIVEN = 10
     }
 }

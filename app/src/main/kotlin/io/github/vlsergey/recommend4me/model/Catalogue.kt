@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.interest.InterestMark
+import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemKeys
 import io.github.vlsergey.recommend4me.laps.Laps
@@ -228,6 +229,8 @@ class CatalogueReader(
                 ids,
                 s.schema.facets.filter { it.infer && it.feature }.map { it.key },
                 laps.within("chances:"),
+                // The values and the answers of the items read above: not read again by the chain
+                EveryItemFacets(facets, facetCorrections),
             )
         laps.restart()
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }

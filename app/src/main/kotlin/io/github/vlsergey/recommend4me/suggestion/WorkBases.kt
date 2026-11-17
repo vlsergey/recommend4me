@@ -6,25 +6,21 @@ import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import java.util.stream.IntStream
 
 /**
- * WHAT THE BASES OF THE FACETS OF A PASS READ ALIKE of its works ([read]): every work's fingerprint, the works in the
- * order of their ids, and every work's facets as the site and the user give them, one part a facet. Made once for every
- * facet of the pass ([WorksRead.bases]), each facet's basis taking what it needs ([FacetBasis.of]): one facet's own
- * values alone tell its basis from another's.
+ * WHAT THE BASES OF THE FACETS OF A PASS READ ALIKE of a portion of its works ([read]): every work's fingerprint, and
+ * every work's facets as the site and the user give them, one part a facet. Made once for every facet reading the
+ * portion ([WorksRead.bases]), each facet's basis taking what it needs ([WorksPrint]): one facet's own values alone
+ * tell its basis from another's.
  */
 internal class WorkBases(
     private val store: SourceStore,
     private val encoder: TextEncoder,
     private val read: WorksRead,
 ) {
-    /** The places of the works of [read] in the order of their ids. */
-    val order: IntArray by lazy { read.ids.indices.sortedBy { read.ids[it] }.toIntArray() }
-
     /** Every work's fingerprint ([FacetBasis.fingerprint]), in the order of the works of [read]. */
     val fingerprints: LongArray by lazy {
         val ids = read.ids
-        val hashes = HashMap<String, MutableList<String>>()
-        store.textVectors.hashes(encoder.id).forEach { (k, hash) -> hashes.getOrPut(k.first) { ArrayList() } += hash }
-        val windowCounts = store.parts.windows.windowCounts(encoder.windowsId)
+        val hashes = store.textVectors.hashesOf(ids, encoder.id)
+        val windowCounts = store.parts.windows.windowCountsOf(ids, encoder.windowsId)
         val site = read.site
         val corrections = read.corrections
         val complete = read.complete

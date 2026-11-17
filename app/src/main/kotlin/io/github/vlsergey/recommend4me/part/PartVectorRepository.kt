@@ -103,14 +103,18 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
             .fetch()
             .associate { it.value1()!! to it.value2()!!.toInt() }
 
-    /** How many window vectors by [encoder] the item has. */
-    fun windowCount(itemId: String, encoder: String): Int =
-        db.select(DSL.sum(PART.WINDOWS))
-            .from(PART)
-            .where(PART.ITEM_ID.eq(itemId), PART.ENCODER.eq(encoder))
-            .fetchOne()
-            ?.value1()
-            ?.toInt() ?: 0
+    /** How many window vectors by [encoder] each of the items [ids] has, a batch a query: of a portion of a pass. */
+    fun windowCountsOf(ids: Collection<String>, encoder: String): Map<String, Int> {
+        val out = HashMap<String, Int>()
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(PART.ITEM_ID, DSL.sum(PART.WINDOWS))
+                .from(PART)
+                .where(PART.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
+                .groupBy(PART.ITEM_ID)
+                .fetch { out[it.value1()!!] = it.value2()!!.toInt() }
+        }
+        return out
+    }
 
     /** Every window vector by [encoder] of the items. */
     fun windows(itemIds: List<String>, encoder: String): Map<String, List<FloatArray>> =

@@ -86,7 +86,7 @@ class SearchIndex(
             // again, of the same values of the model their fingerprints were made of
             if (latch.count > 0) {
                 val prints = documents.printsOf(type)
-                provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys, prints.chances) }
+                provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys) }
             }
         } finally {
             latch.countDown()

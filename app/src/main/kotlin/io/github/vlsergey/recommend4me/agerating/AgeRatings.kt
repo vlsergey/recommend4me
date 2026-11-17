@@ -53,7 +53,7 @@ class AgeRatings(
         // No model read for a source without the age rating
         val model =
             models.takeIf { store.schema.facet(AgeRating.KEY) != null }?.read() ?: return FacetModelRead { emptyMap() }
-        val given = every?.takeIf { ids == null }
+        val given = every
         val answers = given?.allCorrections ?: evidence.answersOf(store, ids)
         val features = evidence.featuresOf(store, ids, answers, given?.site)
         val told = evidence.told(store, ids, answers, given?.site)

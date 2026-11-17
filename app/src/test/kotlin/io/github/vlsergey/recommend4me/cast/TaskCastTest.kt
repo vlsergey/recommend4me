@@ -1,8 +1,10 @@
 package io.github.vlsergey.recommend4me.cast
 
 import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.suggestion.ContextCount
 import io.github.vlsergey.recommend4me.suggestion.InputBlock
 import io.github.vlsergey.recommend4me.suggestion.TaskContext
+import io.github.vlsergey.recommend4me.suggestion.ValueSide
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
 import org.junit.jupiter.api.Test
@@ -80,11 +82,14 @@ class TaskCastTest {
     }
 
     @Test
-    fun `the columns by their keys, of a key more than one work has alone when shared`() {
+    fun `the columns by their keys, of a key more than one work has alone over every portion`() {
         val rows = listOf(listOf("a", "b"), listOf("a", "c"), listOf("b", "b"))
-        val shared = TaskContext.ofKeys(rows, shared = true)
-        assertEquals(listOf("a", "b"), shared.keys)
-        assertEquals(listOf(listOf("a", "b"), listOf("a"), listOf("b")), shared.keysOf())
-        assertEquals(listOf("a", "b", "c"), TaskContext.ofKeys(rows, shared = false).keys)
+        val count = ContextCount()
+        count.add(rows.take(1))
+        count.add(rows.drop(1))
+        assertEquals(listOf("a", "b"), count.keys())
+        val side = ValueSide(emptyList(), Matrix(0, 0), emptyList(), emptyList(), Matrix(0, 0), 1.0, count.keys(), 0L)
+        assertEquals(listOf(listOf(0, 1), listOf(0), listOf(1)), side.columnsOf(rows).map { it.toList() })
+        assertEquals(listOf("a", "b", "c"), TaskContext.ofKeys(rows).keys)
     }
 }

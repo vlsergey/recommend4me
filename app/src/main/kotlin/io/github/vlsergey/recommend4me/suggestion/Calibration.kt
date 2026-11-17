@@ -23,9 +23,9 @@ class Answered(val value: String, val score: Float, val yes: Boolean)
  * - THE CUTOFF ([threshold]): a value is likely of a chance at or above it — rather shown wrongly than hidden (user,
  *   2026-11-17): of every work's values not given by the site nor the user, the highest at which the values expected
  *   wrongly shown — the sum of one less the chance of those at or above it — are not fewer than those expected wrongly
- *   hidden — the sum of the chances of those under it ([balanced]); worked out of every pass of the facet's model over
- *   every work, one half till the first. Not of the answers' words: the user answers the values offered, the doubtful,
- *   mostly no — a cutoff of them hides nearly all.
+ *   hidden — the sum of the chances of those under it ([OpenChances.balanced]); worked out of every pass of the facet's
+ *   model over every work, one half till the first. Not of the answers' words: the user answers the values offered, the
+ *   doubtful, mostly no — a cutoff of them hides nearly all.
  */
 class Calibration(
     private val scores: FloatArray,
@@ -166,30 +166,6 @@ class Calibration(
             val facet = Calibration(scores, chances, emptyMap(), NONE_LEARNT, answered.size)
             val own = ValueShifts.of(answered) { a -> logit(facet.curve(a.score)) }
             return Calibration(scores, chances, own, threshold, answered.size, answered.minOf { it.score })
-        }
-
-        /**
-         * The highest of the [chances] at which those at or above it expected wrongly shown — the sum of one less each
-         * — are not fewer than those under it expected wrongly hidden — the sum of each: rather shown wrongly than
-         * hidden. One half of none.
-         */
-        fun balanced(chances: DoubleArray): Double {
-            val down = chances.sortedArrayDescending()
-            var hidden = down.sum()
-            var shown = 0.0
-            var k = 0
-            var found: Double? = null
-            while (k < down.size && found == null) {
-                val at = down[k]
-                // Every value of the same chance on the same side of it
-                while (k < down.size && down[k] == at) {
-                    hidden -= down[k]
-                    shown += 1 - down[k]
-                    k++
-                }
-                if (shown >= hidden) found = at
-            }
-            return found ?: down.lastOrNull() ?: NONE_LEARNT
         }
 
         fun logit(p: Double): Double = ln(p / (1 - p))

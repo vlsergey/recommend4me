@@ -17,47 +17,35 @@ internal class OneFacetModel(
     private val passes: WorkPasses,
 ) {
     /**
-     * Everything the suggesters of the facet learn from, read now: what a comparison of them fits every one on
-     * ([FacetComparisons]); null when the source has no such facet or nothing to read with.
+     * Everything the suggesters of the facet learn from, as a pass fits them: every work a portion at a time
+     * ([FacetPortions]), the facets before it of the values the last pass kept — what a comparison of them fits every
+     * one on ([FacetComparisons]); null when the source has no such facet or nothing to read with.
      */
-    fun task(store: SourceStore, facetKey: String): SuggestionTask? {
+    fun task(store: SourceStore, facetKey: String): TaskPortions? {
         val facets = chain.facetsOf(store)
         val k = facets.indexOfFirst { it.key == facetKey }
         val encoder = plugins.textEncoder()
         if (k < 0 || encoder == null) return null
-        val read = passes.worksRead(store, encoder, null)
-        val made = chain.chain(store, encoder, read, k)
-        return chain
-            .load(
-                store,
-                facets[k],
-                encoder,
-                vocabularies.vocabularyOf(
-                    store,
-                    facets[k],
-                    null,
-                    made,
-                    read.characters,
-                    read.answers,
-                    site = read.site,
-                ),
-                made,
-                null,
-                read,
-            )
-            .task
+        val reading = FacetReading(passes, chain, vocabularies)
+        val pass = FacetPass(store, facets[k], k, encoder, passes.charactersRead(store), reading) {}
+        val counted = pass.counted()
+        return FacetPortions(pass, pass.side(counted, store.corrections.allFacets()), counted.works)
     }
 
     /**
      * The model's chance of ONE value [key] of the [facet] for every work of [ids], whatever else it gives them and
      * whether or not the work may have it ([Vocabulary.allowed]) — the works of a pairing's universes ranked by it.
-     * Made now as [FacetChain.chances] are, none kept, nothing waited for; a work the facet's model does not score, or
-     * a value it does not know, has none.
+     * Made now as [FacetChain.chances] are, none kept, nothing waited for, a portion of the works at a time; a work the
+     * facet's model does not score, or a value it does not know, has none.
      */
     fun chancesOfValue(store: SourceStore, ids: Collection<String>, facet: String, key: String): Map<String, Double> {
-        val scored = if (ids.isEmpty()) null else scoredOf(store, ids, facet)
-        val v = scored?.data?.values?.indexOf(key) ?: -1
-        return if (scored == null || v < 0) emptyMap() else chancesOf(scored, ids, v)
+        val out = HashMap<String, Double>()
+        ids.distinct().chunked(TaskPortions.MOST).forEach { portion ->
+            val scored = scoredOf(store, portion, facet)
+            val v = scored?.data?.values?.indexOf(key) ?: -1
+            if (scored != null && v >= 0) out += chancesOf(scored, portion, v) else scored?.scores?.close()
+        }
+        return out
     }
 
     /**

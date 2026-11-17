@@ -29,13 +29,17 @@ class TextVectorRepository(private val db: DSLContext) {
     /** The vectors of short texts by their keys, written under the same lock. */
     val phrases = PhraseVectorRepository(db, writing)
 
-    /** The hash of every stored vector of [encoder]: (item, text key) to hash. */
-    fun hashes(encoder: String): Map<Pair<String, String>, String> =
-        db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY, TEXT_VECTOR.TEXT_HASH)
-            .from(TEXT_VECTOR)
-            .where(TEXT_VECTOR.ENCODER.eq(encoder))
-            .fetch()
-            .associate { (it.value1()!! to it.value2()!!) to it.value3()!! }
+    /** The hashes of the stored vectors of [encoder] of the items [ids], a batch a query: item to its texts' hashes. */
+    fun hashesOf(ids: Collection<String>, encoder: String): Map<String, List<String>> {
+        val out = HashMap<String, MutableList<String>>()
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_HASH)
+                .from(TEXT_VECTOR)
+                .where(TEXT_VECTOR.ENCODER.eq(encoder), TEXT_VECTOR.ITEM_ID.`in`(chunk))
+                .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! }
+        }
+        return out
+    }
 
     /**
      * Every stored text of the items [ids] (every item when null), of any encoder, in one read: (item, text key) to the

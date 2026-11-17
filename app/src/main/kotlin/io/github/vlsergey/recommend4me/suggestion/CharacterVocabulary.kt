@@ -25,13 +25,13 @@ internal object CharacterVocabulary {
     )
 
     /**
-     * The vocabulary of the [facet] of characters, of the works [ids] (every work when null); [light]: what scoring the
-     * works by the scoring kept needs alone — the characters each may have, those it may not, their names looked for.
+     * The vocabulary of the [facet] of characters of the works [ids]; [light]: what scoring the works by the scoring
+     * kept needs alone — the characters each may have, those it may not, their names looked for.
      */
     fun of(
         type: TypeStore,
         facet: String,
-        ids: Collection<String>?,
+        ids: Collection<String>,
         made: WorkChances,
         characters: CharactersRead,
         answers: Answers,
@@ -46,14 +46,33 @@ internal object CharacterVocabulary {
             out(id).filterTo(HashSet()) { it in mayOf(id) && it !in UniverseFacet.ORIGINAL_CHARACTERS }
         }
         if (light) return Vocabulary(emptyMap(), allowed = mayOf, names = named, barred = barred)
-        val among = rivals(dictionary.ofUniverse)
-        return Vocabulary(
+        return valueSideOf(dictionary).let {
+            Vocabulary(
+                it.values,
+                hintNames = it.hintNames,
+                hintAmong = it.hintAmong,
+                allowed = mayOf,
+                barred = barred,
+                names = named,
+                groupings = it.groupings,
+            )
+        }
+    }
+
+    /**
+     * The value side of the dictionary of the characters of a pass over every work ([ValueSide]): every character of
+     * every universe of the dictionary — and the original ones — with its names, its rivals and its sex.
+     */
+    fun valueSide(type: TypeStore, characters: CharactersRead): Vocabulary =
+        valueSideOf(read(type, null, emptyMap(), characters))
+
+    /** The values of the [dictionary] read, the names they go by, the rivals of each name, their sexes. */
+    private fun valueSideOf(dictionary: Characters): Vocabulary =
+        Vocabulary(
             dictionary.values,
+            allowed = null,
             hintNames = dictionary.names,
-            hintAmong = among,
-            allowed = mayOf,
-            barred = barred,
-            names = named,
+            hintAmong = rivals(dictionary.ofUniverse),
             // A work's tags tell the sex of its main characters
             groupings = { list ->
                 listOf(
@@ -65,7 +84,6 @@ internal object CharacterVocabulary {
                 )
             },
         )
-    }
 
     /**
      * The characters of the universes of the works [ids] (every universe of the dictionary when null), their entries
