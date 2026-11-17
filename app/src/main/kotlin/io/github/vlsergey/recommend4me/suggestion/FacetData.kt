@@ -33,7 +33,7 @@ internal class FacetData(
     val basis: Long,
     /**
      * Of each item, the values of the facet the user said it has ([saidYes]) and has not ([saidNo]), as the user said
-     * them: not spread over the values' hierarchy, not every other value of a work said all named — what the chances
+     * them — not spread over the values' hierarchy —, of a work said all named every value it has not: what the chances
      * are calibrated by ([Calibration]).
      */
     val saidYes: List<IntArray> = emptyList(),

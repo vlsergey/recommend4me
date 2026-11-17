@@ -17,9 +17,10 @@ internal object FacetBasis {
      * works' texts: the models of the characters and the pairings fitted again without them; 8 — the chances calibrated
      * by the user's answers, of what the folds said of them ([Calibration]): every facet fitted again to learn it; 9 —
      * of a work all named, the values rejected to the model not taken for the user's answers; 10 — the calibration of
-     * the user's answers as said alone, not spread over the values' hierarchy.
+     * the user's answers as said alone, not spread over the values' hierarchy; 11 — the noes of a work all named among
+     * them, the calibration on again.
      */
-    private const val KEPT = 10
+    private const val KEPT = 11
 
     /**
      * What an item's chances are made of: every value of it, the user's answers — the facets said to be all named

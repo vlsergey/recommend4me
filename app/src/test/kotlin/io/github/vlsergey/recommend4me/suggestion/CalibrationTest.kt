@@ -98,4 +98,19 @@ class CalibrationTest {
         }
         assertEquals(c.threshold, read.threshold)
     }
+
+    /**
+     * Under the lowest score answered the answers tell nothing: no value likely by them, its chance no higher than the
+     * suggester's own — of answers all of high scores, every lower score is not made likely by their last chance.
+     */
+    @Test
+    fun `under the lowest score answered nothing is likely, the chance no higher than the suggester's`() {
+        val random = Random(11)
+        val high = List(400) { Answered("v", 2f + random.nextFloat() * 2, random.nextDouble() < 0.7) }
+        val c = assertNotNull(Calibration.fit(high))
+        assertTrue(!c.likely("v", 0f) && !c.likely("v", -3f))
+        assertTrue(c.chance("v", 0f, 0.05) <= 0.05)
+        assertTrue(c.cutoff("v") >= Math.nextDown(c.lowest))
+        assertEquals(c.chance("v", 3f), c.chance("v", 3f, 0.01))
+    }
 }

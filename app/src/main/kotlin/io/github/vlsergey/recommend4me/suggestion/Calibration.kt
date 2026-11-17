@@ -34,6 +34,11 @@ class Calibration(
     val threshold: Double,
     /** How many answers it was learnt of. */
     val answers: Int,
+    /**
+     * The lowest score answered: under it the answers tell nothing — a value is not likely by them, and its chance is
+     * no higher than the suggester's own ([chance]).
+     */
+    val lowest: Float = Float.NEGATIVE_INFINITY,
 ) {
     /** A value's slope and shift on the scale of the log-odds over the facet's curve. */
     class Shift(val slope: Double, val shift: Double)
@@ -46,14 +51,24 @@ class Calibration(
     }
 
     /** Whether the value [value] scored [score] is likely: its chance at the [threshold] or above. */
-    fun likely(value: String, score: Float): Boolean = chance(value, score) >= threshold
+    fun likely(value: String, score: Float): Boolean = score >= lowest && chance(value, score) >= threshold
+
+    /**
+     * The chance of the value [value] scored [score], of a score under the [lowest] answered no higher than the
+     * suggester's own chance of it, [own]: the answers tell nothing there.
+     */
+    fun chance(value: String, score: Float, own: Double): Double =
+        if (score >= lowest) chance(value, score) else minOf(chance(value, score), own)
 
     /**
      * The score above which the value [value] is likely, for a suggester's choosing
      * ([io.github.vlsergey.recommend4me.suggestion.SuggestionScores.shown]): the lowest of the facet's curve's chance
      * the value needs, -∞ when every score is likely, +∞ when none is.
      */
-    fun cutoff(value: String): Float {
+    fun cutoff(value: String): Float = maxOf(ownCutoff(value), Math.nextDown(lowest))
+
+    /** The score above which the value is likely by the curve alone ([cutoff]). */
+    private fun ownCutoff(value: String): Float {
         val s = own[value]
         val needed = if (s == null) threshold else sigmoid((logit(threshold) - s.shift) / s.slope)
         return when {
@@ -85,13 +100,14 @@ class Calibration(
         }
 
     /** The same with the cutoff [threshold]. */
-    fun withThreshold(threshold: Double) = Calibration(scores, chances, own, threshold, answers)
+    fun withThreshold(threshold: Double) = Calibration(scores, chances, own, threshold, answers, lowest)
 
     fun pack(): ByteArray {
         val bytes = ByteArrayOutputStream()
         DataOutputStream(bytes).use { out ->
             out.writeInt(VERSION)
             out.writeInt(answers)
+            out.writeFloat(lowest)
             out.writeDouble(threshold)
             out.writeInt(scores.size)
             scores.indices.forEach {
@@ -113,9 +129,9 @@ class Calibration(
          * 3 — every calibration of 1 or 2 read as none: of the answers it was learnt of most were no word of the user's
          * (aff's universes 44 912 of 439 works, every universe a no of a work said to have none), the cutoffs at the
          * very top or bottom; 4 — every one kept read as none: under the lowest score answered every value came out
-         * likely.
+         * likely; 5 — of the noes of a work all named; 6 — the lowest score answered kept.
          */
-        private const val VERSION = 4
+        private const val VERSION = 6
 
         /** The chance of a facet learnt of no answer: one half, as a suggester's own. */
         private const val NONE_LEARNT = 0.5
@@ -125,6 +141,7 @@ class Calibration(
             DataInputStream(ByteArrayInputStream(bytes)).use { input ->
                 if (input.readInt() != VERSION) return null
                 val answers = input.readInt()
+                val lowest = input.readFloat()
                 val threshold = input.readDouble()
                 val n = input.readInt()
                 val scores = FloatArray(n)
@@ -135,7 +152,7 @@ class Calibration(
                 }
                 val own = HashMap<String, Shift>()
                 repeat(input.readInt()) { own[input.readUTF()] = Shift(input.readDouble(), input.readDouble()) }
-                Calibration(scores, chances, own, threshold, answers)
+                Calibration(scores, chances, own, threshold, answers, lowest)
             }
 
         /**
@@ -148,7 +165,7 @@ class Calibration(
             val (scores, chances) = FacetCurve.of(answered)
             val facet = Calibration(scores, chances, emptyMap(), NONE_LEARNT, answered.size)
             val own = ValueShifts.of(answered) { a -> logit(facet.curve(a.score)) }
-            return Calibration(scores, chances, own, threshold, answered.size)
+            return Calibration(scores, chances, own, threshold, answered.size, answered.minOf { it.score })
         }
 
         /**

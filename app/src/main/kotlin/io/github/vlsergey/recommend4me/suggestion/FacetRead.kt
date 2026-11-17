@@ -89,11 +89,34 @@ internal class FacetRead(
         val basis =
             if (only != null || asked.kept != null) FacetData.NO_BASIS
             else FacetBasis.of(facet.key, read, values, task.groupings, asked.hintNames, cast?.signature)
-        // The user's word as said, for the calibration: one answer one value, nothing spread over the others
-        fun said(added: Boolean) = ids.map { id ->
-            index.of(corrections[id].orEmpty().filter { it.facet == facet.key && it.added == added }.map { it.key })
-        }
-        return FacetData(ids, values, task, held, allNamed, read.encoded, basis, said(true), said(false))
+        return FacetData(
+            ids,
+            values,
+            task,
+            held,
+            allNamed,
+            read.encoded,
+            basis,
+            said(index, corrections, allNamed, task, added = true),
+            said(index, corrections, allNamed, task, added = false),
+        )
+    }
+
+    /**
+     * Of every work the values of the facet the user said it has ([added]) or has not, for the calibration: one answer
+     * one value, nothing spread over the values' hierarchy; of a work the user said all named ([allNamed]) every value
+     * it has not — "no other": the noes of the values the user never saw, the low scores, which no single answer
+     * reaches.
+     */
+    private fun said(
+        index: ValueIndex,
+        corrections: Map<String, List<FacetCorrection>>,
+        allNamed: BooleanArray,
+        task: SuggestionTask,
+        added: Boolean,
+    ): List<IntArray> = ids.mapIndexed { i, id ->
+        if (!added && allNamed[i]) task.rejected[i]
+        else index.of(corrections[id].orEmpty().filter { it.facet == facet.key && it.added == added }.map { it.key })
     }
 
     /**

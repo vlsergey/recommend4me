@@ -171,8 +171,8 @@ internal object ShownChances {
         fun chance(id: String, facet: String, value: String, had: Boolean, score: Float): Chance =
             if (calibration == null) Chance(id, facet, value, had, scores.chance(score).toDouble())
             else
-                calibration.chance(value, score).let {
-                    Chance(id, facet, value, had, it, likely = it >= calibration.threshold)
+                calibration.chance(value, score, scores.chance(score).toDouble()).let {
+                    Chance(id, facet, value, had, it, likely = calibration.likely(value, score))
                 }
     }
 
