@@ -76,17 +76,16 @@ class CorrectionRepository(private val db: DSLContext, private val source: Strin
     fun facetsOf(itemId: String): List<FacetCorrection> = facetsOf(listOf(itemId))[itemId].orEmpty()
 
     /**
-     * The corrections of the items [ids]: by their ids up to a [BATCH] of them; of more, every correction of the source
-     * read once and picked from. They are few, and a query of a thousand ids walks all the source's works, 0.3-0.8 s
-     * for each thousand of 75 000 works.
+     * The corrections of the items [ids]: by their ids, a [BATCH] of them a query — the items found by the key of the
+     * source and the item ([SourceItems]), their works' answers by the work. Never every correction of the source read
+     * for many: it walks every item of the source, 1.4 million of ficbook, 1.5 s, at every portion of ten thousand
+     * (2026-11-17).
      */
-    fun facetsOf(ids: Collection<String>): Map<String, List<FacetCorrection>> {
-        val asked = ids.toHashSet()
-        val read =
-            if (asked.size > BATCH) allFacets().filter { it.itemId in asked }
-            else seenFacets(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked))
-        return read.groupBy { it.itemId }
-    }
+    fun facetsOf(ids: Collection<String>): Map<String, List<FacetCorrection>> =
+        ids.distinct()
+            .chunked(BATCH)
+            .flatMap { chunk -> seenFacets(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk)) }
+            .groupBy { it.itemId }
 
     /**
      * The user's answers on the values [from] of a facet made answers on [to] — the values merged into it: of a work
