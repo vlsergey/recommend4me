@@ -33,7 +33,7 @@ internal class ShownFacets(
     /** Of values read already, what the catalogue says of them, null of one it says nothing of: facet to key to it. */
     private val described: Map<String, Map<String, String?>> = emptyMap(),
 ) {
-    private val base = ModelValues.of(store.schema, work.site, work.chances)
+    private val base = withGiven(ModelValues.of(store.schema, work.site, work.chances))
     // A tag under another gives the work the other too, shown as such; a tag the user said it has
     // not hides every tag under it ([TagHierarchy]) — read only of the facets of tags asked for
     private val hierarchies = if (!ofTags) emptyMap() else store.hierarchies()
@@ -43,6 +43,21 @@ internal class ShownFacets(
     private val plain = Corrected.facets(base, corrections, single)
     private val corrected = TagHierarchy.corrected(base, corrections, hierarchies, single)
     private val said = corrections.filter { it.added }.groupBy({ it.facet }, { it.key })
+
+    /**
+     * The [values] with those the list keeps the work given ([WorkValues.given]) — but a value the user added: the
+     * user's word, not the model's.
+     */
+    private fun withGiven(values: Map<String, List<String>>): Map<String, List<String>> {
+        val given = work.given ?: return values
+        val added = corrections.filter { it.added }.map { it.facet to it.key }.toSet()
+        val out = LinkedHashMap(values)
+        given.forEach { (facet, keys) ->
+            val more = keys.filter { (facet to it) !in added }
+            if (more.isNotEmpty()) out[facet] = (out[facet].orEmpty() + more).distinct()
+        }
+        return out
+    }
 
     /** The facet [def] as shown; null when it has nothing to show and is not one shown empty. */
     fun of(def: FacetDef): ItemFacet? = Facet(def).shown()

@@ -99,7 +99,7 @@ class UniverseRepository(
     fun dictionary(): FandomDictionary = FandomDictionary.load(fandoms)
 
     /** The names and the descriptions the universes are shown by. */
-    val shown = FandomNames(names, ::dictionary)
+    val shown = FandomNames(names, fandoms, ::dictionary)
 
     /** What a catalogue answers of a universe, written into the dictionary. */
     private val fromCatalogue = UniverseFromCatalogue(db)

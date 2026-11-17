@@ -8,13 +8,15 @@ import io.github.vlsergey.recommend4me.tag.TagRepository
 /**
  * What the sites and the model give a work ([ItemCards.ofWork]). [bySite]: of a facet of the layer, every value a site
  * gives, with the sites that give it; [lets]: of a facet told by a site's own (the age rating), the steps any site of
- * the work names.
+ * the work names; [given]: of a facet the model works out, the values the list keeps the work given beside the site's
+ * ([io.github.vlsergey.recommend4me.worklist.ListFacetValues]) — of a card, its chances not made; null when they are.
  */
 data class WorkValues(
     val site: Map<String, List<String>>,
     val chances: Map<String, Map<String, Chance>>?,
     val bySite: Map<String, Map<String, List<String>>> = emptyMap(),
     val lets: Map<String, Set<String>> = emptyMap(),
+    val given: Map<String, List<String>>? = null,
 )
 
 /**

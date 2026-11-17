@@ -65,7 +65,7 @@ class Universes(
      */
     fun bindEntry(fandom: Long, key: UniverseKey, bound: Boolean) {
         val scope = scope()
-        val row = scope.fandoms.one(fandom) ?: throw NoSuchElementException("No universe $fandom")
+        val row = scope.fandoms.rowsOf(listOf(fandom))[fandom] ?: throw NoSuchElementException("No universe $fandom")
         if (bound) {
             reading.read(key, row.characters || scope.fandoms.entries.charactersRead(key))
             scope.fandoms.entries.bind(fandom, key, Instant.now())
@@ -80,7 +80,7 @@ class Universes(
      */
     fun readCharacters(fandom: Long, read: Boolean) {
         val scope = scope()
-        scope.fandoms.one(fandom) ?: throw NoSuchElementException("No universe $fandom")
+        scope.fandoms.rowsOf(listOf(fandom))[fandom] ?: throw NoSuchElementException("No universe $fandom")
         scope.fandoms.characters(fandom, read)
         log.info("The characters of the universe {} {}", fandom, if (read) "read" else "no more read")
         if (read) readOf(fandom) else dictionaryChanged(scope)
@@ -89,7 +89,7 @@ class Universes(
     /** The entries of the universe [fandom] read again of the catalogue, their characters too when it reads them. */
     fun readOf(fandom: Long) {
         val scope = scope()
-        scope.fandoms.one(fandom) ?: throw NoSuchElementException("No universe $fandom")
+        scope.fandoms.rowsOf(listOf(fandom))[fandom] ?: throw NoSuchElementException("No universe $fandom")
         scope.fandoms.entries.of(fandom).forEach { key ->
             reading.read(key, scope.fandoms.entries.charactersRead(key))
         }

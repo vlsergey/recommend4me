@@ -36,7 +36,7 @@
 | `work_field_correction` | a field of a work as the user wrote it: the title, a text, a number |
 | `work_facet_complete` | the user said a work's values of a facet are all named |
 | `work_facet_unknown` | the user's word that whether a work has a value is not clear of it (a pairing): asked so no more, nothing learnt |
-| `fandom` | a universe — a normalized fandom: the name the user gave it, whether the characters of its entries are read and given to its works (`characters`), the name of its sites' fandom of the most works (`calculated_name`, worked out); a work's value of the facet "universe" is its id |
+| `fandom` | a universe — a normalized fandom: the name the user gave it, whether the characters of its entries are read and given to its works (`characters`), the name of its sites' fandom of the most works (`calculated_name`, worked out), the name it is shown by (`shown_name`, worked out in the queue: the user's, else its first entry's in the user's languages, else the calculated one — a page of the list names its universes by their ids alone); a work's value of the facet "universe" is its id |
 | `fandom_site` | every fandom of every site — the site's own key of it — and the normalized fandom it is, at first the one of its name |
 | `fandom_entry` | an entry of a catalogue a universe is bound to, kept in `universe` |
 | `fandom_parent` | a universe under another: a work of the child is of the parent too |
@@ -66,6 +66,7 @@ erDiagram
         BOOLEAN characters
         VARCHAR calculated_name "null"
         TIMESTAMPTZ made_at
+        VARCHAR shown_name "null"
     }
     fandom_distinct {
         BIGINT first_fandom PK, FK

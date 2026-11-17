@@ -11,7 +11,14 @@ import org.jooq.impl.DSL
  * A normalized fandom as kept: the name the user gave it, if any, the name worked out of its sites' fandoms
  * ([calculatedName]) and whether the characters of its entries are read ([characters]).
  */
-class FandomRow(val id: Long, val name: String?, val calculatedName: String?, val characters: Boolean)
+class FandomRow(
+    val id: Long,
+    val name: String?,
+    val calculatedName: String?,
+    val characters: Boolean,
+    /** The name it is shown by, worked out ahead and kept ([FandomShownNames]); null till it is. */
+    val shownName: String? = null,
+)
 
 /**
  * THE NORMALIZED FANDOMS — THE UNIVERSES — in the user's dictionaries ([db]): every one an id, the name the user gave
@@ -42,11 +49,15 @@ class FandomRepository(private val db: DSLContext) {
     }
 
     fun all(): List<FandomRow> =
-        db.selectFrom(FANDOM).fetch { FandomRow(it.id!!, it.name, it.calculatedName, it.characters!!) }
+        db.selectFrom(FANDOM).fetch { FandomRow(it.id!!, it.name, it.calculatedName, it.characters!!, it.shownName) }
 
-    fun one(id: Long): FandomRow? =
-        db.selectFrom(FANDOM).where(FANDOM.ID.eq(id)).fetchOne {
-            FandomRow(it.id!!, it.name, it.calculatedName, it.characters!!)
+    /** The normalized fandoms [ids], by their ids, a [CHUNK] of them a query: of a page's universes, not every one. */
+    fun rowsOf(ids: Collection<Long>): Map<Long, FandomRow> =
+        ids.distinct().chunked(CHUNK).fold(HashMap()) { out, chunk ->
+            db.selectFrom(FANDOM).where(FANDOM.ID.`in`(chunk)).fetch {
+                out[it.id!!] = FandomRow(it.id!!, it.name, it.calculatedName, it.characters!!, it.shownName)
+            }
+            out
         }
 
     fun exists(id: Long): Boolean = db.fetchExists(FANDOM, FANDOM.ID.eq(id))
@@ -61,14 +72,36 @@ class FandomRepository(private val db: DSLContext) {
             .fetchOne()!!
             .value1()!!
 
-    /** The name the user gives the fandom [id]; null takes it back. */
+    /**
+     * The name the user gives the fandom [id]; null takes it back. The name it is shown by is worked out again: till
+     * then, at a reading ([FandomNames.of]).
+     */
     fun name(id: Long, name: String?) {
-        db.update(FANDOM).set(FANDOM.NAME, name?.take(NAME_WIDTH)).where(FANDOM.ID.eq(id)).execute()
+        db.update(FANDOM)
+            .set(FANDOM.NAME, name?.take(NAME_WIDTH))
+            .setNull(FANDOM.SHOWN_NAME)
+            .where(FANDOM.ID.eq(id))
+            .execute()
     }
 
-    /** The name worked out of the sites' fandoms of the fandom [id]. */
+    /** The names the universes [names] are shown by, kept ([FandomShownNames]): by id. */
+    fun shownNames(names: Map<Long, String>) {
+        if (names.isEmpty()) return
+        db.batch(
+                names.map { (id, name) ->
+                    db.update(FANDOM).set(FANDOM.SHOWN_NAME, name.take(NAME_WIDTH)).where(FANDOM.ID.eq(id))
+                }
+            )
+            .execute()
+    }
+
+    /** The name worked out of the sites' fandoms of the fandom [id]; the name it is shown by worked out again. */
     fun calculatedName(id: Long, name: String?) {
-        db.update(FANDOM).set(FANDOM.CALCULATED_NAME, name?.take(NAME_WIDTH)).where(FANDOM.ID.eq(id)).execute()
+        db.update(FANDOM)
+            .set(FANDOM.CALCULATED_NAME, name?.take(NAME_WIDTH))
+            .setNull(FANDOM.SHOWN_NAME)
+            .where(FANDOM.ID.eq(id))
+            .execute()
     }
 
     /** Whether the characters of the entries of the fandom [id] are read and given to its works. */
@@ -99,6 +132,9 @@ class FandomRepository(private val db: DSLContext) {
     }
 
     companion object {
+        /** The ids a query of [rowsOf] asks for at most. */
+        private const val CHUNK = 1000
+
         /** A normalized fandom as a value of the works' universes: its id written out. */
         fun value(id: Long): String = id.toString()
 

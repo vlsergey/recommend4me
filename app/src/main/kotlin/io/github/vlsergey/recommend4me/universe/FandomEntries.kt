@@ -20,6 +20,18 @@ class FandomEntries(private val db: DSLContext) {
             .fetch()
             .groupBy({ it.fandom!! }, { UniverseKey(it.catalogue!!, it.entry!!) })
 
+    /** The entries of the fandoms [ids], each in the order bound: of a page's universes, not every one. */
+    fun ofMany(ids: Collection<Long>): Map<Long, List<UniverseKey>> =
+        ids.distinct().chunked(CHUNK).fold(HashMap()) { out, chunk ->
+            db.selectFrom(FANDOM_ENTRY)
+                .where(FANDOM_ENTRY.FANDOM.`in`(chunk))
+                .orderBy(FANDOM_ENTRY.BOUND_AT, FANDOM_ENTRY.ENTRY)
+                .fetch()
+                .groupBy({ it.fandom!! }, { UniverseKey(it.catalogue!!, it.entry!!) })
+                .let(out::putAll)
+            out
+        }
+
     /** The entries of the fandom [id], in the order bound. */
     fun of(id: Long): List<UniverseKey> =
         db.selectFrom(FANDOM_ENTRY).where(FANDOM_ENTRY.FANDOM.eq(id)).orderBy(FANDOM_ENTRY.BOUND_AT).fetch {
@@ -58,6 +70,7 @@ class FandomEntries(private val db: DSLContext) {
             .set(FANDOM_ENTRY.ENTRY, key.id)
             .set(FANDOM_ENTRY.BOUND_AT, now)
             .execute()
+        renamed(id)
     }
 
     /**
@@ -68,10 +81,24 @@ class FandomEntries(private val db: DSLContext) {
         db.deleteFrom(FANDOM_ENTRY)
             .where(FANDOM_ENTRY.FANDOM.eq(id), FANDOM_ENTRY.CATALOGUE.eq(key.catalogue), FANDOM_ENTRY.ENTRY.eq(key.id))
             .execute()
+        renamed(id)
         if (fandomsOf(key).isEmpty()) {
             db.deleteFrom(UNIVERSE)
                 .where(UNIVERSE.CATALOGUE.eq(key.catalogue), UNIVERSE.UNIVERSE_ID.eq(key.id))
                 .execute()
         }
+    }
+
+    /**
+     * The name the fandom [id] is shown by worked out again, its entries changed: till then, at a reading
+     * ([FandomNames.of]).
+     */
+    private fun renamed(id: Long) {
+        db.update(FANDOM).setNull(FANDOM.SHOWN_NAME).where(FANDOM.ID.eq(id)).execute()
+    }
+
+    private companion object {
+        /** The fandoms a query of [ofMany] asks for at most. */
+        const val CHUNK = 1000
     }
 }

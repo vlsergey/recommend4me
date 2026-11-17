@@ -12,9 +12,9 @@ import org.apache.lucene.util.BytesRef
 /**
  * AN ITEM AS A DOCUMENT OF THE INDEX OF THE LIST ([ListIndex]): its [KEY] and [SOURCE]; the [WORK] it is of, which the
  * rows are grouped by, and its [RANK] among the items of the work; whether the work is of several items ([LINKED]); its
- * dates; the values of every filter facet as terms ([facetField]), an item of none of a facet the term [NONE]; every
- * number as a point and a sorted value ([numberField]); and what changes of its work without it, updated in place
- * ([valueFields]) — a value of none a -∞, last of a list sorted down.
+ * dates; the values of every filter facet as terms ([facetField]), kept with the document too, an item of none of a
+ * facet the term [NONE]; every number as a point and a sorted value ([numberField]); and what changes of its work
+ * without it, updated in place ([valueFields]) — a value of none a -∞, last of a list sorted down.
  */
 object ListDocuments {
     const val KEY = "key"
@@ -32,10 +32,15 @@ object ListDocuments {
     /** The term of an item of a work of several items. */
     const val YES = "1"
 
+    private const val FACET = "f:"
+
     /** The term of an item that has no value of a facet. */
     const val NONE = "\u0000"
 
-    fun facetField(facetId: String) = "f:$facetId"
+    fun facetField(facetId: String) = "$FACET$facetId"
+
+    /** The filter id of the facet of the field [name]; null of a field of no facet. */
+    fun facetIdOf(name: String): String? = name.takeIf { it.startsWith(FACET) }?.substring(FACET.length)
 
     fun numberField(numberId: String) = "n:$numberId"
 
@@ -54,7 +59,8 @@ object ListDocuments {
         row.facets.forEach { (facetId, keys) ->
             val field = facetField(facetId)
             if (keys.isEmpty()) doc.add(StringField(field, NONE, Field.Store.NO))
-            keys.forEach { doc.add(StringField(field, it, Field.Store.NO)) }
+            // Kept with the document too: the cards of a page read them by the items' keys ([ListFacetValues])
+            keys.forEach { doc.add(StringField(field, it, Field.Store.YES)) }
         }
         row.numbers.forEach { (numberId, value) -> doc.add(DoubleField(numberField(numberId), value, Field.Store.NO)) }
         return doc
