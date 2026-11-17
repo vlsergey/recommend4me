@@ -58,6 +58,23 @@ class AuthorRepository(
             .where(SITE_AUTHOR.SOURCE.eq(source))
             .fetchMap({ it.value1()!! }, { it.value2()!! })
 
+    /**
+     * The [authors] of the [source] bound to normalized ones and those they are bound to: the site's key to the id; a
+     * batch of them a query by the table's key — of the authors of a portion of the works, not every author of the
+     * site.
+     */
+    fun bindingsOf(source: String, authors: Collection<String>): Map<String, Long> =
+        authors
+            .distinct()
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(SITE_AUTHOR.AUTHOR, SITE_AUTHOR.NORMALIZED)
+                    .from(SITE_AUTHOR)
+                    .where(SITE_AUTHOR.SOURCE.eq(source), SITE_AUTHOR.AUTHOR.`in`(chunk))
+                    .fetch { it.value1()!! to it.value2()!! }
+            }
+            .toMap()
+
     /** The normalized author the author of a site is bound to now. */
     fun of(site: SiteAuthorRef): Long? =
         db.select(SITE_AUTHOR.NORMALIZED)

@@ -59,8 +59,8 @@ private constructor(
             TypeManners(clusters, emptyMap(), emptyMap(), emptyMap(), { null }, emptyMap())
 
         /**
-         * The manners of the works of the items [keys] alone, for a request: their items' manners, their authors' and
-         * their series' kept ones, of no other work.
+         * The manners of the works of the items [keys] alone — of a request, of a portion of every work: their items'
+         * manners, their authors' and their series' kept ones, of no other work.
          */
         fun of(type: TypeStore, clusters: WorkClusters, keys: Collection<ItemKey>): TypeManners {
             val words = type.mannerWords.id() ?: return none(clusters)
@@ -73,9 +73,10 @@ private constructor(
                     items.getOrPut(clusters.representative(ItemKey(source, id))) { ArrayList() } += v
                 }
                 val facet = authorFacet(s) ?: return@forEach
-                val bound = s.authors.bindingsOf(s.id)
-                s.items.facetsOf(ids).forEach { (id, facets) ->
-                    val own = facets[facet].orEmpty().mapNotNull(bound::get)
+                val facets = s.items.facetsOf(ids)
+                val bound = s.authors.bindingsOf(s.id, facets.values.flatMap { it[facet].orEmpty() })
+                facets.forEach { (id, ofItem) ->
+                    val own = ofItem[facet].orEmpty().mapNotNull(bound::get)
                     if (own.isNotEmpty())
                         authorsOf.getOrPut(clusters.representative(ItemKey(source, id))) { HashSet() } += own
                 }

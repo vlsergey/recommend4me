@@ -28,7 +28,8 @@ internal const val VALUE_KEY_LENGTH = 500
 /**
  * The items of one source as its source database holds them: what every item has, its facets, numbers and texts, and
  * the dictionary of the facets' values — each held by its own part ([ItemFacets], [FacetDictionary], [ItemNumbers],
- * [ItemTexts]), this one by the items' heads. [changed] is told of every item whose searchable data was written.
+ * [ItemTexts], [ItemKeyList]), this one by the items' heads. [changed] is told of every item whose searchable data was
+ * written.
  */
 class ItemRepository
 private constructor(
@@ -39,6 +40,7 @@ private constructor(
     FacetDictionary by dictionary,
     ItemFacets by ItemFacetRepository(db, changed, dictionary),
     ItemNumbers by ItemNumberRepository(db),
+    ItemKeyList by ItemKeyRepository(db),
     ItemTexts by ItemTextRepository(db, changed),
     ItemMeasures by ItemMeasureRepository(db) {
 
@@ -116,16 +118,6 @@ private constructor(
         }
     }
 
-    /**
-     * What the list of a content type sorts and filters by, of every item: id, version, update, when the application
-     * first saw it.
-     */
-    fun keys(): List<ItemKeys> =
-        db.select(ITEM.ITEM_ID, ITEM.VERSION, ITEM.UPDATED_AT, ITEM.FIRST_SEEN_AT)
-            .from(ITEM)
-            .fetchSize(STREAMED_ROWS)
-            .fetch { ItemKeys(it.value1()!!, it.value2()!!, it.value3()!!, it.value4()!!) }
-
     fun count(): Int = db.fetchCount(ITEM)
 
     fun exists(itemId: String): Boolean = db.fetchExists(ITEM, ITEM.ITEM_ID.eq(itemId))
@@ -189,6 +181,3 @@ private constructor(
         ): Boolean = version != item.version || title != item.title || url != item.url || updatedAt != itemUpdatedAt
     }
 }
-
-/** What the list sorts and filters by. */
-data class ItemKeys(val id: String, val version: String, val updatedAt: Instant, val firstSeenAt: Instant)

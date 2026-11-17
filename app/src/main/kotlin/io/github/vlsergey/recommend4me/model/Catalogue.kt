@@ -138,7 +138,7 @@ class CatalogueReader(
             type.sources.flatMap { s ->
                 of[s.id]
                     ?.toHashSet()
-                    ?.let { ids -> readItems(s, type.sources.size > 1, series, headsOf(s, ids)) }
+                    ?.let { ids -> readItems(s, type.sources.size > 1, series, s.items.keysOf(ids)) }
                     .orEmpty()
             }
         val vectors = TypeManners.of(type, clusters, wanted).with(vectorsOfMany(type, wanted.toList()), wanted)
@@ -152,9 +152,6 @@ class CatalogueReader(
         )
         return catalogue(type, items, ratings, vectors, likeness, interest, averages)
     }
-
-    /** What the list of the source [s] knows of its items [ids]: their versions and updates. */
-    private fun headsOf(s: SourceStore, ids: Set<String>): List<ItemKeys> = s.items.keys().filter { it.id in ids }
 
     /**
      * What was read as the catalogue of the normalized works: a work of several items one row, named by the first of

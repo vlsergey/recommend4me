@@ -1,12 +1,14 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.ItemKeys
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.likeness.TypeLikeness
 import io.github.vlsergey.recommend4me.manner.TypeManners
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.series.TypeSeries
+import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
 import org.slf4j.LoggerFactory
@@ -79,30 +81,48 @@ class EveryWork(
      * ([Catalogue.vectorsOfMany]), the likeness to the marks by [likeness].
      */
     fun forEachPortion(type: TypeStore, likeness: TypeLikeness, action: (WorkPortion) -> Unit) {
-        val severalSources = type.sources.size > 1
-        val ratings = ratingsOf(type)
-        val interest = interestOf(type)
-        val clusters = works.of(type)
-        val series = TypeSeries.read(type)
-        val heads = type.sources.associate { s -> s.id to s.items.keys().associateBy { it.id } }
-        val named = heads.flatMap { (source, of) ->
-            of.keys.map { ItemKey(source, it) }.filter { clusters.representative(it) == it }
+        val pass = Pass(type, likeness)
+        type.sources.forEach { s ->
+            var after: String? = null
+            do {
+                val keys = s.items.keysAfter(after, PORTION)
+                after = keys.lastOrNull()?.id
+                pass.portion(s, keys)?.let(action)
+            } while (keys.size == PORTION)
         }
-        val none = Averages(emptyMap(), emptyMap())
-        named.chunked(PORTION).forEach { portion ->
-            val members = portion.flatMap(clusters::members)
+    }
+
+    /** One pass over every work of the [type]: what every portion of it reads alike, read once. */
+    private inner class Pass(private val type: TypeStore, private val likeness: TypeLikeness) {
+        private val severalSources = type.sources.size > 1
+        private val ratings = ratingsOf(type)
+        private val interest = interestOf(type)
+        private val clusters = works.of(type)
+        private val series = TypeSeries.read(type)
+        private val none = Averages(emptyMap(), emptyMap())
+
+        /**
+         * The works the items [keys] of the source [s] name, each with all its items; null when they name none — every
+         * one of a work of several named by an item of another site.
+         */
+        fun portion(s: SourceStore, keys: List<ItemKeys>): WorkPortion? {
+            val named = keys.map { ItemKey(s.id, it.id) }.filter { clusters.representative(it) == it }
+            if (named.isEmpty()) return null
+            val members = named.flatMap(clusters::members)
+            val own = keys.associateBy { it.id }
             val items =
                 members.groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-                    val s = type.source(source) ?: return@flatMap emptyList()
-                    val of = heads[source].orEmpty()
-                    reader.readItems(s, severalSources, series, ids.mapNotNull(of::get))
+                    val of = type.source(source) ?: return@flatMap emptyList()
+                    // The items of the works of several of other sites, or further in this one, read by their ids
+                    val heads = ids.mapNotNull { if (source == s.id) own[it] else null }.takeIf { it.size == ids.size }
+                    reader.readItems(of, severalSources, series, heads ?: of.items.keysOf(ids))
                 }
             val manners = TypeManners.of(type, clusters, members)
             // The vectors of the works of several items read now: a work's are made of all of its items'
             val linked = members.filter(clusters::linked)
             val vectors = manners.with(reader.vectorsOfMany(type, linked), linked)
             val catalogue = reader.catalogue(type, items, ratings, vectors, likeness, interest, none, manners)
-            action(WorkPortion(catalogue, items.associateBy { it.key }, manners))
+            return WorkPortion(catalogue, items.associateBy { it.key }, manners)
         }
     }
 
