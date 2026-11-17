@@ -11,28 +11,29 @@ import org.jooq.DSLContext
 class DraftRepository(private val db: DSLContext, private val source: String) {
 
     /**
-     * The drafts of the items [ids]: item to its drafts. By their ids up to a [BATCH] of them — found by the index of
-     * the item alone (H2 walks every draft of the source by `source = ? AND item_id IN (…)`), the rows of another
-     * source of the same id left out —; of more, every draft of the source read once and picked from.
+     * The drafts of the items [ids]: item to its drafts. By their ids, a [BATCH] of them a query — found by the index
+     * of the item alone (H2 walks every draft of the source by `source = ? AND item_id IN (…)`), the rows of another
+     * source of the same id left out. Never every draft of the source read for many: of a million works a portion of
+     * ten thousand read every draft of the source again (2026-11-17).
      */
     fun ofItems(ids: Collection<String>): Map<String, List<LayerDraft>> {
-        val asked = ids.toHashSet()
-        if (asked.size > BATCH) return all().filterKeys { it in asked }
         val out = HashMap<String, MutableList<LayerDraft>>()
-        db.select(
-                LAYER_DRAFT.SOURCE,
-                LAYER_DRAFT.ITEM_ID,
-                LAYER_DRAFT.FACET,
-                LAYER_DRAFT.VALUE_KEY,
-                LAYER_DRAFT.SITE_VALUE,
-            )
-            .from(LAYER_DRAFT)
-            .where(LAYER_DRAFT.ITEM_ID.`in`(asked))
-            .fetch {
-                if (it.value1() == source)
-                    out.getOrPut(it.value2()!!) { ArrayList() } +=
-                        LayerDraft(it.value3()!!, it.value4()!!, it.value5()!!)
-            }
+        ids.distinct().chunked(BATCH).forEach { chunk ->
+            db.select(
+                    LAYER_DRAFT.SOURCE,
+                    LAYER_DRAFT.ITEM_ID,
+                    LAYER_DRAFT.FACET,
+                    LAYER_DRAFT.VALUE_KEY,
+                    LAYER_DRAFT.SITE_VALUE,
+                )
+                .from(LAYER_DRAFT)
+                .where(LAYER_DRAFT.ITEM_ID.`in`(chunk))
+                .fetch {
+                    if (it.value1() == source)
+                        out.getOrPut(it.value2()!!) { ArrayList() } +=
+                            LayerDraft(it.value3()!!, it.value4()!!, it.value5()!!)
+                }
+        }
         return out
     }
 

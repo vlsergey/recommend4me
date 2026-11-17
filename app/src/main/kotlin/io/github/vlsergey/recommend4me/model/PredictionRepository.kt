@@ -94,17 +94,18 @@ class PredictionRepository(private val db: DSLContext) {
             .fetch()
             .associate { it.value1()!! to Predicted(it.value2()!!, it.value3()) }
 
-    /** The predictions of the items [ids] of a source with their chances of interest: item to both. */
-    fun predicted(source: String, ids: Collection<String>): Map<String, Predicted> {
-        val asked = ids.toHashSet()
-        return if (asked.size > BATCH) predicted(source).filterKeys { it in asked }
-        else
+    /**
+     * The predictions of the items [ids] of a source with their chances of interest: item to both — by the key, a
+     * [BATCH] of them a query, never every prediction of the source for many (a million of ficbook at every portion).
+     */
+    fun predicted(source: String, ids: Collection<String>): Map<String, Predicted> =
+        ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
             db.select(PREDICTION.ITEM_ID, PREDICTION.SCORE, PREDICTION.INTEREST)
                 .from(PREDICTION)
-                .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, asked))
-                .fetch()
-                .associate { it.value1()!! to Predicted(it.value2()!!, it.value3()) }
-    }
+                .where(SourceItems.of(PREDICTION.SOURCE, PREDICTION.ITEM_ID, source, chunk))
+                .fetch { out[it.value1()!!] = Predicted(it.value2()!!, it.value3()) }
+            out
+        }
 
     companion object {
         private const val BATCH = 1000

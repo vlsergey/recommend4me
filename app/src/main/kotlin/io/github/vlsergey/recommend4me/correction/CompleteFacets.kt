@@ -63,18 +63,18 @@ internal class WorkCompleteFacets(
             .mapValues { it.value.toSet() }
     }
 
-    override fun completeOf(ids: Collection<String>): Map<String, Set<String>> {
-        val asked = ids.toHashSet()
-        return if (asked.size > BATCH) allComplete().filterKeys { it in asked }
-        else seenComplete(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, asked))
-    }
+    /** By their ids, a [BATCH] of them a query: never every word of the source for many, its every item walked. */
+    override fun completeOf(ids: Collection<String>): Map<String, Set<String>> =
+        ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk ->
+            out.apply { putAll(seenComplete(SourceItems.of(SITE_WORK.SOURCE, SITE_WORK.ITEM, source, chunk))) }
+        }
 
     override fun completeOf(itemId: String): Set<String> = completeOf(listOf(itemId))[itemId].orEmpty()
 
     override fun allComplete(): Map<String, Set<String>> = seenComplete(SITE_WORK.SOURCE.eq(source))
 
     private companion object {
-        /** The ids asked for by their ids at most; of more, every word of the source is read once and picked from. */
+        /** The ids a query asks for by their ids at most. */
         const val BATCH = 1000
     }
 }
