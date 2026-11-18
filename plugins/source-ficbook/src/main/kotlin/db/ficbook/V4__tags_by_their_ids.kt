@@ -19,9 +19,11 @@ private val log = LoggerFactory.getLogger(V4__tags_by_their_ids::class.java)
  * name alone ("name:"), asked of the site's search later. The other names the site files under a tag are taken away:
  * the kept answers of the search, read again by the parser's version 17, give them by their ids.
  *
- * Run outside a transaction, one tag at a time: of the 6.9 million tags of the works rewritten, every step kept as it
- * is done; a key already an id or a name is left — no name of a tag of the works is all digits (2026-11-18) — so the
- * migration broken off is done again from where it stopped.
+ * Run outside a transaction, a portion of the works at a time — by the range of their ids, read in the order of the
+ * key, their new keys worked out in memory, written by the key in a batch and kept (user, 2026-11-18: the first form, a
+ * statement of every tag over the 6.9 million, held H2's undo log of a tag of half a million works in the memory); a
+ * key already an id or a name is left — no name of a tag of the works is all digits (2026-11-18) — so the migration
+ * broken off is done again from where it stopped.
  */
 @Suppress("ClassName")
 class V4__tags_by_their_ids : BaseJavaMigration() {
@@ -32,16 +34,24 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
         val c = context.connection
         val ids = KeptTagIds().also { it.read(c) }
         val moves = moves(c, ids)
-        moves.forEach { (old, new) -> move(c, old, new.first, new.second) }
-        // The synonyms by their names: given again by their ids as the kept answers are read again
-        c.prepareStatement("DELETE FROM facet_value_synonym WHERE facet = 'tag'").use { it.executeUpdate() }
-        // What is left of the names of no work — the synonyms' — goes with them
-        listOf("facet_value", "facet_value_description", "facet_value_vector").forEach { table ->
-            c.prepareStatement(
-                    "DELETE FROM $table WHERE facet = 'tag' AND value_key NOT LIKE 'name:%' " +
-                        "AND NOT REGEXP_LIKE(value_key, '^[0-9]+$')"
-                )
-                .use { it.executeUpdate() }
+        val autoCommit = c.autoCommit
+        c.autoCommit = false
+        try {
+            if (moves.isNotEmpty()) works(c, moves.mapValues { it.value.first })
+            moves.forEach { (old, new) -> said(c, old, new.first, new.second) }
+            // The synonyms by their names: given again by their ids as the kept answers are read again
+            c.prepareStatement("DELETE FROM facet_value_synonym WHERE facet = 'tag'").use { it.executeUpdate() }
+            // What is left of the names of no work — the synonyms' — goes with them
+            listOf("facet_value", "facet_value_description", "facet_value_vector").forEach { table ->
+                c.prepareStatement(
+                        "DELETE FROM $table WHERE facet = 'tag' AND value_key NOT LIKE 'name:%' " +
+                            "AND NOT REGEXP_LIKE(value_key, '^[0-9]+$')"
+                    )
+                    .use { it.executeUpdate() }
+            }
+            c.commit()
+        } finally {
+            c.autoCommit = autoCommit
         }
         val named = moves.values.count { it.first.startsWith(NAME_KEY) }
         log.info("ficbook: {} tags given their ids, {} keyed by their names alone", moves.size - named, named)
@@ -50,36 +60,83 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
     /** Every tag key of a name the works have: to its id, or to the name alone; with its name. */
     private fun moves(c: Connection, ids: KeptTagIds): Map<String, Pair<String, String>> {
         val names = HashMap<String, String>()
-        c.prepareStatement(
-                "SELECT DISTINCT f.value_key, v.name FROM item_facet f LEFT JOIN facet_value v " +
-                    "ON v.facet = f.facet AND v.value_key = f.value_key WHERE f.facet = 'tag'"
-            )
-            .use { s ->
-                s.executeQuery().use { r -> while (r.next()) names[r.getString(1)] = r.getString(2) ?: r.getString(1) }
+        c.prepareStatement("SELECT value_key, name FROM facet_value WHERE facet = 'tag'").use { s ->
+            s.executeQuery().use { r -> while (r.next()) names[r.getString("value_key")] = r.getString("name") }
+        }
+        val keys =
+            c.prepareStatement("SELECT DISTINCT value_key FROM item_facet WHERE facet = 'tag'").use { s ->
+                s.executeQuery().use { r -> buildList { while (r.next()) add(r.getString(1)) } }
             }
-        return names
-            .filterKeys { !it.startsWith(NAME_KEY) && !it.all(Char::isDigit) }
-            .mapValues { (key, name) ->
-                val id = ids.of(key) ?: ids.of(name)
-                (id?.toString() ?: (NAME_KEY + name.trim())) to name.trim()
+        return keys
+            .filterNot { it.startsWith(NAME_KEY) || it.all(Char::isDigit) }
+            .associateWith { key ->
+                val name = (names[key] ?: key).trim()
+                ((ids.of(key) ?: ids.of(name))?.toString() ?: (NAME_KEY + name)) to name
             }
     }
 
-    /** The tag [old] of every work, and what is said of it, keyed [new] — named [name]. */
-    private fun move(c: Connection, old: String, new: String, name: String) {
+    /** The tags of every work keyed anew by [moves], a portion of the works at a time, each kept as it is done. */
+    private fun works(c: Connection, moves: Map<String, String>) {
+        val items =
+            c.prepareStatement("SELECT DISTINCT item_id FROM item_facet WHERE facet = 'tag' ORDER BY item_id").use {
+                it.executeQuery().use { r -> buildList { while (r.next()) add(r.getString(1)) } }
+            }
+        val read =
+            c.prepareStatement(
+                "SELECT item_id, value_key FROM item_facet WHERE item_id BETWEEN ? AND ? AND facet = 'tag' " +
+                    "ORDER BY item_id, position"
+            )
+        read.use {
+            items.chunked(PORTION).forEach { portion ->
+                read.setString(1, portion.first())
+                read.setString(2, portion.last())
+                val rows =
+                    read.executeQuery().use { r ->
+                        buildList { while (r.next()) add(r.getString(1) to r.getString(2)) }
+                    }
+                portion(c, rows.groupBy({ it.first }, { it.second }), moves)
+                c.commit()
+            }
+        }
+    }
+
+    /**
+     * The tags of the works [tags] keyed anew by [moves], written in a batch by the key: a work of two names of one tag
+     * keeps one.
+     */
+    private fun portion(c: Connection, tags: Map<String, List<String>>, moves: Map<String, String>) {
+        val update = mutableListOf<List<String>>()
+        val delete = mutableListOf<List<String>>()
+        tags.forEach { (item, keys) ->
+            val kept = keys.filterNot(moves::containsKey).toHashSet()
+            keys.filter(moves::containsKey).forEach { old ->
+                val new = moves.getValue(old)
+                if (kept.add(new)) update += listOf(new, item, old) else delete += listOf(item, old)
+            }
+        }
+        batch(c, "DELETE FROM item_facet WHERE item_id = ? AND facet = 'tag' AND value_key = ?", delete)
+        batch(c, "UPDATE item_facet SET value_key = ? WHERE item_id = ? AND facet = 'tag' AND value_key = ?", update)
+    }
+
+    /** The statement [sql] run of every row of [values] in one batch. */
+    private fun batch(c: Connection, sql: String, values: List<List<String>>) {
+        if (values.isEmpty()) return
+        c.prepareStatement(sql).use { s ->
+            values.forEach { row ->
+                row.forEachIndexed { i, v -> s.setString(i + 1, v) }
+                s.addBatch()
+            }
+            s.executeBatch()
+        }
+    }
+
+    /** What is said of the tag [old] — its name, its description, its name's vector — said of [new], named [name]. */
+    private fun said(c: Connection, old: String, new: String, name: String) {
         fun run(sql: String, vararg values: String) =
             c.prepareStatement(sql).use { s ->
                 values.forEachIndexed { i, v -> s.setString(i + 1, v) }
                 s.executeUpdate()
             }
-        // A work of both — two names of one tag — keeps one
-        run(
-            "DELETE FROM item_facet WHERE facet = 'tag' AND value_key = ? AND item_id IN " +
-                "(SELECT item_id FROM item_facet WHERE facet = 'tag' AND value_key = ?)",
-            old,
-            new,
-        )
-        run("UPDATE item_facet SET value_key = ? WHERE facet = 'tag' AND value_key = ?", new, old)
         run("MERGE INTO facet_value (facet, value_key, name) KEY (facet, value_key) VALUES ('tag', ?, ?)", new, name)
         run("DELETE FROM facet_value WHERE facet = 'tag' AND value_key = ?", old)
         listOf("facet_value_description", "facet_value_vector").forEach { table ->
@@ -153,6 +210,9 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
     }
 
     private companion object {
+        /** The works keyed anew at a time. */
+        const val PORTION = 5000
+
         /** The key of a tag known by its name alone, as the source writes it ([Ficbook.NAME_KEY]). */
         const val NAME_KEY = "name:"
 

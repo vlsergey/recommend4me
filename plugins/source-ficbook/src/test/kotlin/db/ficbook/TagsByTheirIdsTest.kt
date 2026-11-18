@@ -55,6 +55,8 @@ class TagsByTheirIdsTest {
         mapOf(
                 "w1" to listOf("ангст", "hurt/comfort", "харассмент", "домогательство", "неведомое"),
                 "w2" to listOf("ангст", "слоуберн"),
+                // Keyed by the id already by a migration broken off, and by the name still: one tag
+                "w3" to listOf("1665", "ангст"),
             )
             .forEach { (work, tags) ->
                 tags.forEachIndexed { i, t -> run("INSERT INTO item_facet VALUES (?, 'tag', ?, ?)", work, t, i) }
@@ -90,6 +92,7 @@ class TagsByTheirIdsTest {
                     listOf("w1", "name:Неведомое"),
                     listOf("w2", "1665"),
                     listOf("w2", "19"),
+                    listOf("w3", "1665"),
                 ),
                 c.rows("SELECT item_id, value_key FROM item_facet WHERE facet = 'tag' ORDER BY item_id, value_key"),
             )
