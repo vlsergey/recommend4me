@@ -29,9 +29,9 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
      * The model of the [k]-th of the [facets] fitted again when what it learns from changed — every setting tried anew
      * when [anew], the user asked for it ([FacetRefits.searchAnew]) — and every work's chances of it made, the values
      * they give kept ([KeptModelValues]): the context of the facets after it. [stop] is asked between the portions and
-     * the stages, and by the fitting between its steps: newer data came, and the work is given up with a
-     * [CancellationException] before anything made of the old is kept. [characters]: the dictionary's characters, read
-     * once for the pass.
+     * the stages, and by the fitting between its steps: the application stops, and the work is given up with a
+     * [CancellationException] before anything half made is kept. [characters]: the dictionary's characters, read once
+     * for the pass.
      */
     fun fit(
         store: SourceStore,
@@ -48,7 +48,7 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
             .computeIfAbsent("${store.id}/${facet.key}") { ReentrantLock() }
             .withLock {
                 val checkpoint = {
-                    if (stop()) throw CancellationException("${store.id}: ${facet.key} given up for newer changes")
+                    if (stop()) throw CancellationException("${store.id}: ${facet.key} given up: the application stops")
                 }
                 val pass = FacetPass(store, facet, k, encoder, characters, reading, checkpoint)
                 // Of no suggester, the drafts and the models of their own alone
@@ -156,7 +156,7 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
     ): ByteArray? {
         val started = System.currentTimeMillis()
         val fresh = suggester.fit(portions, previous, stop) ?: return null
-        if (stop()) throw CancellationException("${store.id}: ${facet.key} given up for newer changes")
+        if (stop()) throw CancellationException("${store.id}: ${facet.key} given up: the application stops")
         val millis = System.currentTimeMillis() - started
         val fit = SuggesterFit(fresh.report, millis, portions.items, side.values.size)
         val model = fresh.model(side.task())

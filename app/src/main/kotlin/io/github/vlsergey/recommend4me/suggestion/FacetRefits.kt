@@ -11,13 +11,14 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import java.util.concurrent.CancellationException
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
+import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
+
+private val log = LoggerFactory.getLogger(FacetRefits::class.java)
 
 /**
  * THE MODELS OF A SOURCE'S FACETS FITTED AGAIN, in the background, in the queue of the computations, down the chain
@@ -42,33 +43,27 @@ internal class FacetRefits(
 ) {
     private val fitting = FacetFitting(FacetReading(passes, chain, vocabularies), FacetScoring(kept, events))
 
-    /** How many changes each source has had ([changed]): a refresh begun before the last one is given up. */
-    private val generations = ConcurrentHashMap<String, AtomicLong>()
-
     /**
      * Something the source's models learn from changed — the [reason], a key the interface words, told in the queue of
      * the works till the refresh begins: the source is refreshed [DELAY_SECONDS] after the first change of a series,
-     * not put off by the next ones. A refresh under way is given up: it works on what it read before the change, and
-     * the one planned works on all of it.
+     * not put off by the next ones. A refresh under way is not given up: it goes on to its end, and the one planned
+     * then works on all that came meanwhile (user, 2026-11-18: of the fitting given up a tenth of a second after its
+     * start at every page a re-read of ficbook's kept pages brought, never ending while it lasted).
      */
     fun changed(source: String, reason: String) {
         val store = stores.source(source) ?: return
         if (chain.facetsOf(store).isEmpty()) return
-        generationOf(source).incrementAndGet()
         val work = refreshing(source)
         val due = if (workload.planned().any { it.work == work }) null else Instant.now().plusSeconds(DELAY_SECONDS)
         planRefresh(store, due, reason)
     }
 
     /**
-     * The refresh of every facet of the [store] planned for [due] for the [reason], given up for a newer change — whole
-     * in the queue of the computations, the works read with it, a portion at a time.
+     * The refresh of every facet of the [store] planned for [due] for the [reason] — whole in the queue of the
+     * computations, the works read with it, a portion at a time.
      */
     private fun planRefresh(store: SourceStore, due: Instant?, reason: String) =
-        workload.plan(refreshing(store.id), due, reason) { refreshed(store, givenUp = true) }
-
-    /** How many changes the source has had: a refresh begun before the last one is of stale data. */
-    private fun generationOf(source: String): AtomicLong = generations.computeIfAbsent(source) { AtomicLong() }
+        workload.plan(refreshing(store.id), due, reason) { refreshed(store) }
 
     /**
      * On the start: what was worked out of facets a source no longer has the model work on forgotten — only when its
@@ -98,16 +93,14 @@ internal class FacetRefits(
     /**
      * Fits the model of every facet of the source again when what it learns from changed, down the chain. For a caller
      * that waits for it: carried through whatever changes meanwhile; those are refreshed after their quiet. A work of
-     * its own, never joined to the background's alike, which a newer change gives up.
+     * its own, never joined to the background's alike.
      */
     fun refresh(store: SourceStore) =
-        workload.run(refreshing(store.id), mapOf("asked" to 1), joinAlike = false) {
-            refreshed(store, givenUp = false)
-        }
+        workload.run(refreshing(store.id), mapOf("asked" to 1), joinAlike = false) { refreshed(store) }
 
     /**
-     * The model of every facet of the [store] fitted again, down the chain. [givenUp] — with a [CancellationException]
-     * once the source changes again ([changed]): the background's.
+     * The model of every facet of the [store] fitted again, down the chain; given up only as the application stops
+     * ([Workload.stopping]), with a [CancellationException]. How long each step took told to the log.
      *
      * ONE WORK OF THE QUEUE, EVERY WORK READ A PORTION AT A TIME ([WorkPasses.forEachPortion]): no pass holds more than
      * [TaskPortions.MOST] works (user, 2026-11-17). The values the models of their own give every work kept first; then
@@ -116,16 +109,30 @@ internal class FacetRefits(
      * by the facets after it as their context: the chain is not made again for every portion. The works whose values
      * changed are told as each portion is done ([FacetChancesChanged]).
      */
-    private fun refreshed(store: SourceStore, givenUp: Boolean) {
+    private fun refreshed(store: SourceStore) {
         val encoder = plugins.textEncoder() ?: return
-        val generation = generationOf(store.id).get()
-        val stop = if (givenUp) ({ generationOf(store.id).get() != generation }) else ({ false })
+        val stop = { workload.stopping }
         val facets = chain.facetsOf(store)
+        val started = System.currentTimeMillis()
         keepOwnModels(store, facets, stop)
+        val own = System.currentTimeMillis()
         val characters = passes.charactersRead(store)
-        facets.indices.forEach { k ->
-            fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
-        }
+        val read = System.currentTimeMillis()
+        val took =
+            facets.indices.map { k ->
+                val began = System.currentTimeMillis()
+                fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
+                "${facets[k].key} ${System.currentTimeMillis() - began}"
+            }
+        log.info(
+            "{}: the models of every facet fitted in {} ms: the values of the models of their own kept {}, the " +
+                "dictionary's characters read {}, the facets {}",
+            store.id,
+            System.currentTimeMillis() - started,
+            own - started,
+            read - own,
+            took,
+        )
     }
 
     /**
@@ -137,7 +144,7 @@ internal class FacetRefits(
         val own = store.schema.facets.filter { it.infer && it.key !in chained }
         if (own.isEmpty()) return
         passes.forEachPortion(store) { ids ->
-            if (stop()) throw CancellationException("${store.id}: the models of their own given up for newer changes")
+            if (stop()) throw CancellationException("${store.id}: the models of their own given up: the app stops")
             val known = EveryItemFacets(store.items.facetsOf(ids), store.corrections.facetsOf(ids))
             kept.write(store, ids, known.site, chain.seeded(store, ids, every = known), own)
         }
@@ -171,7 +178,8 @@ internal class FacetRefits(
     private fun fittedAnew(store: SourceStore, facets: List<FacetDef>, k: Int, encoder: TextEncoder) {
         // The suggester named when it runs: one chosen meanwhile is the one fitted
         val suggester = plugins.suggester(store.id, facets[k].key) ?: return
-        fitting.fit(store, facets, k, suggester, encoder, passes.charactersRead(store), { false }, anew = true)
+        val characters = passes.charactersRead(store)
+        fitting.fit(store, facets, k, suggester, encoder, characters, { workload.stopping }, anew = true)
     }
 
     /** Whether the facet's suggester is to be fitted anew, or being fitted anew ([searchAnew]). */

@@ -211,6 +211,13 @@ class Workload(background: Background = Threads(), private val records: WorkReco
         current?.progress = share.coerceIn(0.0, 1.0)
     }
 
+    /**
+     * Whether the application stops ([close]): a long work asks it between its steps, and gives up with a
+     * [CancellationException] — its record kept, it is done again at the next start — before the files close under it.
+     */
+    val stopping: Boolean
+        get() = turns.closed
+
     /** The work running now, none when idle. */
     fun running(): HeavyWork? = current
 
