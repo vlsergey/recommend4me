@@ -71,8 +71,9 @@ internal class Compared(search: PairSearch, private val progress: (Double) -> Un
 }
 
 /**
- * The steps of a block of rows on the card: the products of the vectors (cuBLAS), the facets and the authors the pairs
- * share (their kernels), every model's likeliest pair chosen (its kernel) and brought back.
+ * The steps of a block of rows on the card: the products of the vectors (cuBLAS), what the rare values the pairs share
+ * add to every model's score (its kernel), every model's likeliest pair chosen — of the layers made of them and of the
+ * frequent values of the two works' lists — and brought back (its kernel).
  */
 internal enum class Phase {
     PRODUCTS,

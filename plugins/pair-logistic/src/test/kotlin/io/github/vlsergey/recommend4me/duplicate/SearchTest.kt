@@ -1,11 +1,9 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
-import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.onnx.Onnx
 import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import java.util.Random
-import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -17,101 +15,16 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
  * in the main memory and on the card alike.
  */
 class SearchTest {
-    private val families = listOf("characters", "status", "tags")
-    private val valueCount = 60
-    private val familyOf = IntArray(valueCount) { it % families.size }
-
-    private fun site(random: Random, source: String, count: Int, width: Int): SiteWorks {
-        fun unit() =
-            FloatArray(width) { random.nextGaussian().toFloat() }
-                .let { v ->
-                    val l = sqrt(v.sumOf { (it * it).toDouble() }).toFloat()
-                    FloatArray(width) { v[it] / l }
-                }
-        val titles = HalfMatrix(count, width).also { m -> for (i in 0 until count) m.put(i, unit()) }
-        val titleLengths = FloatArray(count) { 2f + random.nextInt(6) }
-        // The names of the authors of some, of others none
-        val authorLengths = FloatArray(count) { if (random.nextInt(3) == 0) 0f else 1f + random.nextInt(4) }
-        val authorNames =
-            HalfMatrix(count, width).also { m -> for (i in 0 until count) if (authorLengths[i] > 0f) m.put(i, unit()) }
-        val described = BooleanArray(count) { random.nextInt(4) != 0 }
-        val descriptions =
-            HalfMatrix(count, width).also { m -> for (i in 0 until count) if (described[i]) m.put(i, unit()) }
-        val values =
-            Array(count) { IntArray(random.nextInt(6)) { random.nextInt(valueCount) }.distinct().sorted().toIntArray() }
-        val weights = Array(count) { i -> FloatArray(values[i].size) { 0.2f + random.nextFloat() } }
-        val facets = LongArray(count) { i -> values[i].fold(0L) { bits, v -> bits or (1L shl familyOf[v]) } }
-        val sizes =
-            Array(2) { DoubleArray(count) { if (random.nextInt(3) == 0) 0.0 else 1000.0 + random.nextInt(100_000) } }
-        val authors = Array(count) { LongArray(random.nextInt(2)) { random.nextInt(40).toLong() } }
-        // An author one with the next, in part
-        val kin = Array(count) { i -> authors[i].flatMap { listOf(it, it + 1) }.distinct().toLongArray() }
-        return SiteWorks(
-            source,
-            List(count) { "%05d".format(it) },
-            titles,
-            titleLengths,
-            authorNames,
-            authorLengths,
-            descriptions,
-            described,
-            values,
-            weights,
-            facets,
-            sizes,
-            authors,
-            kin,
-        )
-    }
-
-    private fun search(random: Random): PairSearch {
-        val sites = listOf(site(random, "a", 300, 24), site(random, "b", 500, 24), site(random, "c", 40, 16))
-        // A few pairs answered on, passed over both ways: of two sites, and of one
-        val answered = HashMap<Pair<Int, Int>, HashMap<Int, IntArray>>()
-        fun answer(a: Int, i: Int, b: Int, j: Int) {
-            answered.getOrPut(a to b) { HashMap() }.merge(i, intArrayOf(j)) { x, y -> x + y }
-            answered.getOrPut(b to a) { HashMap() }.merge(j, intArrayOf(i)) { x, y -> x + y }
-        }
-        repeat(30) { answer(0, random.nextInt(300), 1, random.nextInt(500)) }
-        repeat(30) { answer(0, random.nextInt(150), 0, 150 + random.nextInt(150)) }
-        return PairSearch(sites, families, familyOf, listOf("words", "chars"), answered)
-    }
-
-    /** A learnt model of weights of its own, and the mean of the layers. */
-    private fun models(): List<Logistic> =
-        listOf(
-            Logistic(
-                mapOf(
-                    Logistic.CONSTANT to -3.0,
-                    Logistic.TITLE to 2.5,
-                    Logistic.TITLE_WITHIN to 0.6,
-                    Logistic.TITLE_HOLDING to -0.4,
-                    Logistic.AUTHORS to 1.1,
-                    Logistic.has(Logistic.AUTHORS) to -0.2,
-                    Logistic.AUTHORS_WITHIN to 0.5,
-                    Logistic.AUTHORS_HOLDING to 0.3,
-                    Logistic.DESCRIPTION to 1.5,
-                    Logistic.has(Logistic.DESCRIPTION) to 0.2,
-                    Logistic.SIZE to 0.7,
-                    Logistic.has(Logistic.SIZE) to -0.1,
-                    Logistic.SAME_AUTHOR to 1.2,
-                    Logistic.facet("characters") to 2.0,
-                    Logistic.has(Logistic.facet("characters")) to 0.3,
-                    Logistic.facet("tags") to 0.8,
-                    // One site's works with each other unlikely, two sites' likelier: the sites' weight in the scores
-                    Logistic.sites("a", "a") to -1.5,
-                    Logistic.sites("a", "b") to 0.9,
-                    Logistic.sites("b", "c") to 0.4,
-                )
-            ),
-            Logistic(null),
-        )
-
     /**
      * Of every work, by every model, one pair kept — the likeliest of every work of every site compared, its own site
      * too, itself never, the answered passed over —, and as many pairs as there are models at most.
      */
-    private fun assertLikeliest(search: PairSearch, models: List<Logistic>, found: List<FoundPair>) {
+    private fun assertLikeliest(
+        search: PairSearch,
+        models: List<Logistic>,
+        found: List<FoundPair>,
+        close: Double = EXACT,
+    ) {
         val byWork = found.groupBy { it.site to it.item }
         fun passed(a: Int, i: Int, b: Int) = search.answered[a to b]?.get(i) ?: IntArray(0)
         for (a in search.sites.indices) for (i in 0 until search.sites[a].count) {
@@ -133,7 +46,7 @@ class SearchTest {
                         }
                 val got = model.chance(search.layers(a, i, c.otherSite, c.other))
                 assertTrue(
-                    got >= chances.max() - 1e-5,
+                    got >= chances.max() - close,
                     "site $a work $i, model $k: $got, the likeliest ${chances.max()}",
                 )
             }
@@ -142,8 +55,8 @@ class SearchTest {
 
     @Test
     fun `in the main memory every work's pair is the likeliest by every model, the answered passed over`() {
-        val search = search(Random(3))
-        val models = models()
+        val search = RandomSearches.search(Random(3))
+        val models = RandomSearches.models()
         assertLikeliest(search, models, LogisticPairModel().search(search, models, null))
     }
 
@@ -153,9 +66,14 @@ class SearchTest {
         assumeTrue(dir != null, "no CUDA libraries")
         val card = Cublas.open(dir!!)
         assumeTrue(card != null, "no cuBLAS to run on")
-        val search = search(Random(5))
-        val models = models()
-        assertLikeliest(search, models, CardSearch.search(search, models.map { it.laid(search.families) }, card!!))
+        val search = RandomSearches.search(Random(5))
+        val models = RandomSearches.models()
+        assertLikeliest(
+            search,
+            models,
+            CardSearch.search(search, models.map { it.laid(search.families) }, card!!),
+            HALVES,
+        )
     }
 
     @Test
@@ -164,10 +82,26 @@ class SearchTest {
         assumeTrue(dir != null, "no CUDA libraries")
         val card = Cublas.open(dir!!)
         assumeTrue(card != null, "no cuBLAS to run on")
-        val search = search(Random(5))
-        val models = models()
+        val search = RandomSearches.search(Random(5))
+        val models = RandomSearches.models()
         // Runs of 64 works: of the sites of 300, 500 and 40 works, a run against itself, against a run of its own site,
         // against another site's
-        assertLikeliest(search, models, CardSearch.search(search, models.map { it.laid(search.families) }, card!!, 64))
+        assertLikeliest(
+            search,
+            models,
+            CardSearch.search(search, models.map { it.laid(search.families) }, card!!, 64),
+            HALVES,
+        )
+    }
+
+    private companion object {
+        /** The chances of the main memory: of single precision's last digits. */
+        const val EXACT = 1e-5
+
+        /**
+         * The chances of the card: of products summed in half precision, the cosines within its last digits (user,
+         * 2026-11-18: "all in fp16").
+         */
+        const val HALVES = 5e-3
     }
 }

@@ -81,11 +81,12 @@ class Duplicates(
 
     /**
      * The search of the type planned, in the background — ahead of the background's works when the user pressed for it
-     * ([asked]); false when one is planned or running already.
+     * ([asked]); false when one is planned or waiting its turn already — one running is done again after it.
      */
     fun plan(type: TypeStore, reason: String, asked: Boolean = false): Boolean {
         val work = searching(type)
-        if (workload.due(work)) return false
+        // A search running read the works before: asked again, it is done again after it
+        if (workload.ahead(work)) return false
         workload.plan(work, Instant.now(), reason, asked = asked) { search(type) }
         return true
     }
@@ -119,6 +120,7 @@ class Duplicates(
         workload.progress(COMPARED)
         val likely = likely(found.values, said, kept)
         val fitted = PairModels.fit(model, likely, said)
+        model.fitted(search.search, listOfNotNull(fitted.same ?: model.prior(), fitted.series))
         val fit = System.currentTimeMillis() - started
         val now = Instant.now()
         type.duplicates.replace(
@@ -223,6 +225,6 @@ class Duplicates(
         private const val COMPARED = 0.9
 
         /** The least chance of a pair kept by a search: of the models calibrated on the user's answers. */
-        private const val LEAST_CHANCE = 0.01
+        const val LEAST_CHANCE = 0.01
     }
 }

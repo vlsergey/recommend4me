@@ -1,0 +1,121 @@
+package io.github.vlsergey.recommend4me.duplicate
+
+import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import java.util.Random
+import kotlin.math.sqrt
+
+/**
+ * Searches of random works of three sites, and models of them: what the tests of the search and of its plan are made
+ * of.
+ */
+internal object RandomSearches {
+    val families = listOf("characters", "status", "tags")
+    const val VALUES = 60
+    val familyOf = IntArray(VALUES) { it % families.size }
+
+    fun site(random: Random, source: String, count: Int, width: Int): SiteWorks {
+        val titles =
+            HalfMatrix(count, width).also { m -> for (i in 0 until count) m.put(i, unit(random, width, counts = true)) }
+        val titleLengths = FloatArray(count) { 2f + random.nextInt(6) }
+        // The names of the authors of some, of others none
+        val authorLengths = FloatArray(count) { if (random.nextInt(3) == 0) 0f else 1f + random.nextInt(4) }
+        val authorNames =
+            HalfMatrix(count, width).also { m ->
+                for (i in 0 until count) if (authorLengths[i] > 0f) m.put(i, unit(random, width, counts = true))
+            }
+        val described = BooleanArray(count) { random.nextInt(4) != 0 }
+        val descriptions =
+            HalfMatrix(count, width).also { m ->
+                for (i in 0 until count) if (described[i]) m.put(i, unit(random, width))
+            }
+        val values =
+            Array(count) { IntArray(random.nextInt(6)) { random.nextInt(VALUES) }.distinct().sorted().toIntArray() }
+        // A work's values of each facet of unit length, as the application weighs them
+        val weights =
+            Array(count) { i ->
+                val raw = FloatArray(values[i].size) { 0.2f + random.nextFloat() }
+                val lengths = HashMap<Int, Double>()
+                values[i].forEachIndexed { k, v ->
+                    lengths.merge(familyOf[v], (raw[k] * raw[k]).toDouble(), Double::plus)
+                }
+                FloatArray(raw.size) { k -> (raw[k] / sqrt(lengths.getValue(familyOf[values[i][k]]))).toFloat() }
+            }
+        val facets = LongArray(count) { i -> values[i].fold(0L) { bits, v -> bits or (1L shl familyOf[v]) } }
+        val sizes =
+            Array(2) { DoubleArray(count) { if (random.nextInt(3) == 0) 0.0 else 1000.0 + random.nextInt(100_000) } }
+        val authors = Array(count) { LongArray(random.nextInt(2)) { random.nextInt(40).toLong() } }
+        // An author one with the next, in part
+        val kin = Array(count) { i -> authors[i].flatMap { listOf(it, it + 1) }.distinct().toLongArray() }
+        return SiteWorks(
+            source,
+            List(count) { "%05d".format(it) },
+            titles,
+            titleLengths,
+            authorNames,
+            authorLengths,
+            descriptions,
+            described,
+            values,
+            weights,
+            facets,
+            sizes,
+            authors,
+            kin,
+        )
+    }
+
+    fun search(random: Random): PairSearch {
+        val sites = listOf(site(random, "a", 300, 24), site(random, "b", 500, 24), site(random, "c", 40, 16))
+        // A few pairs answered on, passed over both ways: of two sites, and of one
+        val answered = HashMap<Pair<Int, Int>, HashMap<Int, IntArray>>()
+        fun answer(a: Int, i: Int, b: Int, j: Int) {
+            answered.getOrPut(a to b) { HashMap() }.merge(i, intArrayOf(j)) { x, y -> x + y }
+            answered.getOrPut(b to a) { HashMap() }.merge(j, intArrayOf(i)) { x, y -> x + y }
+        }
+        repeat(30) { answer(0, random.nextInt(300), 1, random.nextInt(500)) }
+        repeat(30) { answer(0, random.nextInt(150), 0, 150 + random.nextInt(150)) }
+        return PairSearch(sites, families, familyOf, listOf("words", "chars"), answered)
+    }
+
+    /** A learnt model of weights of its own, and the mean of the layers. */
+    fun models(): List<Logistic> =
+        listOf(
+            Logistic(
+                mapOf(
+                    Logistic.CONSTANT to -3.0,
+                    Logistic.TITLE to 2.5,
+                    Logistic.TITLE_WITHIN to 0.6,
+                    Logistic.TITLE_HOLDING to -0.4,
+                    Logistic.AUTHORS to 1.1,
+                    Logistic.has(Logistic.AUTHORS) to -0.2,
+                    Logistic.AUTHORS_WITHIN to 0.5,
+                    Logistic.AUTHORS_HOLDING to 0.3,
+                    Logistic.DESCRIPTION to 1.5,
+                    Logistic.has(Logistic.DESCRIPTION) to 0.2,
+                    Logistic.SIZE to 0.7,
+                    Logistic.has(Logistic.SIZE) to -0.1,
+                    Logistic.SAME_AUTHOR to 1.2,
+                    Logistic.facet("characters") to 2.0,
+                    Logistic.has(Logistic.facet("characters")) to 0.3,
+                    Logistic.facet("tags") to 0.8,
+                    // One site's works with each other unlikely, two sites' likelier: the sites' weight in the scores
+                    Logistic.sites("a", "a") to -1.5,
+                    Logistic.sites("a", "b") to 0.9,
+                    Logistic.sites("b", "c") to 0.4,
+                )
+            ),
+            Logistic(null),
+        )
+
+    /**
+     * A unit row of [width] numbers; of counts of trigrams — a title's, the authors' names' — a few buckets of a count
+     * each, of no number below nought.
+     */
+    private fun unit(random: Random, width: Int, counts: Boolean = false): FloatArray {
+        val v =
+            if (counts) FloatArray(width).also { v -> repeat(2 + random.nextInt(4)) { v[random.nextInt(width)] += 1f } }
+            else FloatArray(width) { random.nextGaussian().toFloat() }
+        val l = sqrt(v.sumOf { (it * it).toDouble() }).toFloat()
+        return FloatArray(width) { v[it] / l }
+    }
+}

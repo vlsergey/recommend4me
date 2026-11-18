@@ -79,7 +79,63 @@ class HalfProducts internal constructor(private val cublas: Cublas) {
         check(status == 0) { "a product of halves on the card failed: cuBLAS status $status" }
     }
 
+    /**
+     * [gemm] of IEEE halves summed and written in half precision ([c]: two bytes a number, its offset [cAt] in numbers)
+     * — the tensor cores' full speed, twice that of a sum in single precision on a card of the players; the last digits
+     * of a sum of a thousand products go (user, 2026-11-18: "all in fp16").
+     */
+    fun gemmToHalves(
+        transA: Boolean,
+        transB: Boolean,
+        m: Int,
+        n: Int,
+        k: Int,
+        a: Cublas.DeviceBytes,
+        aAt: Long,
+        lda: Int,
+        b: Cublas.DeviceBytes,
+        bAt: Long,
+        ldb: Int,
+        c: Cublas.DeviceBytes,
+        cAt: Long,
+        ldc: Int,
+    ) {
+        if (m == 0 || n == 0) return
+        // The scalars of a sum in half precision are halves: one and nought
+        cublas.scalars.set(ValueLayout.JAVA_SHORT, 0, HALF_ONE)
+        cublas.scalars.set(ValueLayout.JAVA_SHORT, Float.SIZE_BYTES.toLong(), 0)
+        val status =
+            cublasGemmEx.invokeWithArguments(
+                cublas.handle,
+                if (transB) Cublas.OP_T else Cublas.OP_N,
+                if (transA) Cublas.OP_T else Cublas.OP_N,
+                n,
+                m,
+                k,
+                cublas.alphaAt,
+                b.at(bAt * HALF_BYTES),
+                Halves.IEEE.type,
+                ldb,
+                a.at(aAt * HALF_BYTES),
+                Halves.IEEE.type,
+                lda,
+                cublas.betaAt,
+                c.at(cAt * HALF_BYTES),
+                Halves.IEEE.type,
+                ldc,
+                COMPUTE_HALF,
+                GEMM_DEFAULT,
+            ) as Int
+        check(status == 0) { "a product of halves into halves on the card failed: cuBLAS status $status" }
+    }
+
     private companion object {
+        /** CUBLAS_COMPUTE_16F: summed in half precision. */
+        const val COMPUTE_HALF = 64
+
+        /** One in IEEE half precision. */
+        const val HALF_ONE: Short = 0x3C00
+
         // The types and the way of cublasGemmEx: halves in, single precision out and summed, the library's own choice
         // of the algorithm (CUDA_R_32F, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT)
         const val FLOAT = 0

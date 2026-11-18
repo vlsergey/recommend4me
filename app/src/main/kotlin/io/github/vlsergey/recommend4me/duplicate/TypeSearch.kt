@@ -142,6 +142,7 @@ private constructor(
                     familyOf,
                     sizeKeys,
                     answered(sides, said),
+                    Duplicates.LEAST_CHANCE,
                 )
             return TypeSearch(type, sides, search, names.indices.associate { names[it]!! to rarity[it] })
         }

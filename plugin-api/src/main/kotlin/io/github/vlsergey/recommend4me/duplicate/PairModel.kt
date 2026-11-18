@@ -101,4 +101,11 @@ interface PairModel {
         card: Cublas?,
         progress: (Double) -> Unit = {},
     ): List<FoundPair>
+
+    /**
+     * The [models] just fitted, told of the works of the [search] they were fitted after: what a search by them will do
+     * — of a model that plans what a pair needs, its plan — told to the log at once, not at the next search (user,
+     * 2026-11-18). Nothing of a model that plans nothing.
+     */
+    fun fitted(search: PairSearch, models: List<FittedPairModel>) {}
 }

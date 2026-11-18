@@ -26,7 +26,10 @@ class LogisticPairModel : PairModel {
         progress: (Double) -> Unit,
     ): List<FoundPair> {
         require(models.size <= MAX_MODELS) { "${models.size} models: a kernel scores $MAX_MODELS at most" }
-        val laid = models.map { m -> (m as? Logistic ?: error("a model not of ${ID}'s making")).laid(search.families) }
+        val logistic = models.map { m -> m as? Logistic ?: error("a model not of ${ID}'s making") }
+        // What a pair needs to be kept, of the models as they are: told to the log, the search not yet led by it
+        SearchPlan.of(search, logistic)
+        val laid = logistic.map { it.laid(search.families) }
         if (card != null) {
             val started = System.currentTimeMillis()
             runCatching {
@@ -44,6 +47,11 @@ class LogisticPairModel : PairModel {
                 }
         }
         return ProcessorSearch.search(search, laid, Compared(search, progress))
+    }
+
+    override fun fitted(search: PairSearch, models: List<FittedPairModel>) {
+        // What the next search will do of the models as they are now
+        SearchPlan.of(search, models.mapNotNull { it as? Logistic })
     }
 
     companion object {

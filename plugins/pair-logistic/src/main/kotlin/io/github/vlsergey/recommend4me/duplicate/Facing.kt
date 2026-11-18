@@ -2,15 +2,16 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
-import io.github.vlsergey.recommend4me.matrix.Halves
 
 /**
  * A RUN OF THE [Tile.a]-TH SITE'S WORKS AGAINST A RUN OF THE [Tile.b]-TH'S ON THE CARD ([CardSearch], [Tiles]): of
- * every work of the first, its values and its authors with their kin as lists of the second's works ([RowLists]), the
- * works the user answered on; and the planes of a block of rows against every work of the second — the products of
- * their titles ([t]) and descriptions ([d]), the facets they share ([v], a plane a facet), whether they are of one
- * author ([s]) — and every model's likeliest work of every row ([best]) with its score ([scores]); of one site, a work
- * never with itself. Freed with its [CardRoom].
+ * every work of the first, its authors with their kin as places among the second's authors, and the works the user
+ * answered on; the planes of a block of rows against every work of the second — the products of their titles ([t]), of
+ * their authors' names ([a]) and of their descriptions ([d]), in half precision, and what the rare values they share
+ * add to every model's score ([p], a plane a model, not a facet: a model's score is a sum over its facets) — and every
+ * model's likeliest work of every row ([best]) with its score ([scores]); of one site, a work never with itself. The
+ * frequent values a pair shares ([Frequent]) and whether it is of one author are the kernel's of the scores, of the two
+ * works' lists (user, 2026-11-18: "remove the zeroings and the planes"). Freed with its [CardRoom].
  */
 internal class Facing(
     private val tile: Tile,
@@ -31,48 +32,43 @@ internal class Facing(
     private val width = own.width
     private val families = search.families.size
 
-    // The row's values, of each the other's works of it; its authors and their kin by their places among the other's
-    private val values = RowLists.of(own.values.asList()) { v -> y.inverted.at[v + 1] - y.inverted.at[v] }
-    private val kin =
-        RowLists.of(own.kin.map { k -> k.asList().mapNotNull { y.inverted.authors[it] }.toIntArray() }) { k ->
-            y.inverted.authorAt[k + 1] - y.inverted.authorAt[k]
-        }
+    // The row's authors and their kin by their places among the other's authors: those the other has
+    private val kin = Lists.of(own.kin.map { k -> k.asList().mapNotNull { y.inverted.authors[it] }.toIntArray() })
 
     // The works answered on, passed over: of every row, a list
-    private val passed = RowLists.of(tile.passed) { 0 }
+    private val passed = Lists.of(tile.passed)
 
-    private val rowAt = room.ints(values.at)
-    private val rowValues = room.ints(values.entries)
-    private val rowWeights =
-        room.floatsOf(
-            FloatArray(values.entries.size).also { flat ->
-                own.weights.forEachIndexed { i, w -> w.copyInto(flat, values.at[i]) }
-            }
-        )
-    private val cum = room.ints(values.cum)
-    private val total = room.ints(values.total)
+    // The row's rare values, of each the other's works of it
+    private val rare = RowLists.of(x.rare.lists) { v -> y.inverted.at[v + 1] - y.inverted.at[v] }
+
+    init {
+        check(search.sizes.size <= MOST_SIZES) { "${search.sizes.size} numbers of size" }
+        check((0 until own.count).all { kin.at[it + 1] - kin.at[it] <= MOST_KIN }) { "an author of more kin" }
+        check(families <= MOST_FAMILIES) { "$families facets" }
+    }
+
+    private val cum = room.ints(rare.cum)
+    private val total = room.ints(rare.total)
     private val kinAt = room.ints(kin.at)
     private val kinEntries = room.ints(kin.entries)
-    private val kinCum = room.ints(kin.cum)
-    private val kinTotal = room.ints(kin.total)
     private val passAt = room.ints(passed.at)
     private val pass = room.ints(passed.entries)
     private val familyOf = room.ints(search.familyOf)
+    private val frequentFamily = room.ints(x.frequent.family)
 
     /** The rows of a block: as many as the [planes] hold. */
     private val rows =
-        (planes / maxOf(1L, n.toLong() * (Float.SIZE_BYTES * (PLANES + families) + 1)))
+        (planes / maxOf(1L, n.toLong() * (HALF_BYTES * PLANES + Float.SIZE_BYTES * models)))
             .toInt()
             .coerceIn(1, maxOf(1, own.count))
-    private val t = room.floats(rows.toLong() * n)
-    private val a = room.floats(rows.toLong() * n)
-    private val d = room.floats(rows.toLong() * n)
+    private val t = room.bytes(rows.toLong() * n * HALF_BYTES)
+    private val a = room.bytes(rows.toLong() * n * HALF_BYTES)
+    private val d = room.bytes(rows.toLong() * n * HALF_BYTES)
+    private val p = room.floats(models.toLong() * rows * n)
 
     // The descriptions of the two compared: of one encoder's vectors
     private val descriptions = search.descriptionsCompared(tile.a, tile.b)
     private val described = own.descriptions.cols
-    private val v = room.floats(families.toLong() * rows * n)
-    private val s = room.bytes(rows.toLong() * n)
     private val best = room.bytes(rows.toLong() * models * Int.SIZE_BYTES)
     private val bestBack = room.pinned(rows.toLong() * models * Int.SIZE_BYTES)
     private val scores = room.bytes(rows.toLong() * models * Float.SIZE_BYTES)
@@ -109,87 +105,39 @@ internal class Facing(
      */
     private fun block(from: Int, m: Int, kernels: CudaKernels, card: Cublas): IntArray {
         compared.timed(Phase.PRODUCTS, card) { products(from, m, card) }
-        // A block of the kernel's threads a row
-        val threads = m.toLong() * CudaKernels.BLOCK
-        compared.timed(Phase.SHARED, card) { shared(from, m, threads, kernels) }
-        return compared.timed(Phase.CHOSEN, card) { chosen(from, m, threads, kernels) }
+        // A block of the kernel's threads a row; of the scores, a block of ROWS rows
+        compared.timed(Phase.SHARED, card) { shared(from, m, m.toLong() * CudaKernels.BLOCK, kernels) }
+        val scored = (m + ROWS - 1).toLong() / ROWS * CudaKernels.BLOCK
+        return compared.timed(Phase.CHOSEN, card) { chosen(from, scored, m, kernels) }
     }
 
     /**
      * The cosines of the trigrams of the titles and of the authors' names, and of the descriptions, of the [m] rows
-     * from [from] on with every work of the second site; the planes of the facets and the authors made nought.
+     * from [from] on with every work of the second site: halves summed in halves, the tensor cores' full speed.
      */
     private fun products(from: Int, m: Int, card: Cublas) {
-        // Of halves on the tensor cores, summed in single precision: the vectors as the database keeps them
         val halves = card.halves
-        halves.gemm(
-            false,
-            true,
-            m,
-            n,
-            width,
-            x.titles,
-            from.toLong() * width,
-            width,
-            y.titles,
-            0,
-            width,
-            t,
-            0,
-            n,
-            halves = Halves.IEEE,
-        )
-        halves.gemm(
-            false,
-            true,
-            m,
-            n,
-            width,
-            x.authorNames,
-            from.toLong() * width,
-            width,
-            y.authorNames,
-            0,
-            width,
-            a,
-            0,
-            n,
-            halves = Halves.IEEE,
-        )
-        if (descriptions)
-            halves.gemm(
-                false,
-                true,
-                m,
-                n,
-                described,
-                x.descriptions,
-                from.toLong() * described,
-                described,
-                y.descriptions,
-                0,
-                described,
-                d,
-                0,
-                n,
-                halves = Halves.IEEE,
-            )
-        v.zero(0, families.toLong() * m * n)
-        s.zero()
+        fun product(k: Int, own: Cublas.DeviceBytes, other: Cublas.DeviceBytes, into: Cublas.DeviceBytes) =
+            halves.gemmToHalves(false, true, m, n, k, own, from.toLong() * k, k, other, 0, k, into, 0, n)
+        product(width, x.titles, y.titles, t)
+        product(width, x.authorNames, y.authorNames, a)
+        if (descriptions) product(described, x.descriptions, y.descriptions, d)
     }
 
     /**
-     * What the [m] rows from [from] on share with every work of the second site: their facets' cosines, their authors.
+     * What the rare values the [m] rows from [from] on share with every work of the second site add to every model's
+     * score: of every value of a row, the works of the second that have it.
      */
     private fun shared(from: Int, m: Int, threads: Long, kernels: CudaKernels) {
+        p.zero(0, models.toLong() * m * n)
         kernels.launch(
             "facets_onto",
             threads,
             m,
             from,
-            rowAt,
-            rowValues,
-            rowWeights,
+            x.rareAt,
+            x.rareIds,
+            x.rareWeights,
             cum,
             total,
             y.at,
@@ -197,26 +145,15 @@ internal class Facing(
             y.weights,
             familyOf,
             n,
-            v,
-        )
-        kernels.launch(
-            "authors_onto",
-            threads,
-            m,
-            from,
-            kinAt,
-            kinEntries,
-            kinCum,
-            kinTotal,
-            y.authorAt,
-            y.authorItems,
-            n,
-            s,
+            models,
+            weights,
+            Logistic.FLAT_HEAD + 2 * families,
+            p,
         )
     }
 
     /** Every model's score of every pair of the [m] rows from [from] on, of every row every model's likeliest work. */
-    private fun chosen(from: Int, m: Int, threads: Long, kernels: CudaKernels): IntArray {
+    private fun chosen(from: Int, threads: Long, m: Int, kernels: CudaKernels): IntArray {
         kernels.launch(
             "best",
             threads,
@@ -226,9 +163,8 @@ internal class Facing(
             own.count,
             t,
             d,
-            v,
-            s,
             a,
+            p,
             x.titleLengths,
             y.titleLengths,
             x.authorLengths,
@@ -243,6 +179,18 @@ internal class Facing(
             y.sizes,
             passAt,
             pass,
+            x.frequentAt,
+            x.frequentIds,
+            x.frequentWeights,
+            kinAt,
+            kinEntries,
+            y.frequentAt,
+            y.frequentIds,
+            y.frequentWeights,
+            y.authorAt,
+            y.authorPlaces,
+            x.frequent.family.size,
+            frequentFamily,
             models,
             weights,
             families,
@@ -258,16 +206,42 @@ internal class Facing(
     companion object {
         /**
          * The memory a block's planes take on the card at most, halved while the card has no room for it ([NoRoom]):
-         * every block reads every work of the other site's vectors again, and of a million works of 11 facets a row's
-         * planes are 74 MB — 768 MB made blocks of ten rows, the products read the vectors over again a hundred
-         * thousand times (2026-11-17).
+         * every block reads every work of the other site's vectors again — the more rows a block, the fewer readings.
          */
         const val MOST_ROOM = 4L shl 30
 
         /** The least memory of a block's planes tried before the search is given to the processor. */
         const val LEAST_ROOM = 64L shl 20
 
-        /** The planes of a row's every pair besides the facets': the titles, the authors' names, the descriptions. */
+        /** The planes of a row's every pair: the titles, the authors' names, the descriptions. */
         const val PLANES = 3
+
+        /**
+         * The rows of a block of the kernel of the scores (`ROWS`): a thread reads a work of the other site once for
+         * them.
+         */
+        const val ROWS = 8
+
+        /** The numbers of size of a pair the kernel holds at most (`SIZES`). */
+        const val MOST_SIZES = 8
+
+        /** A work's authors and their kin the kernel holds at most (`KIN`). */
+        const val MOST_KIN = 64
+
+        /** The facets the kernel sums apart at most (`MAX_FAMILIES`). */
+        const val MOST_FAMILIES = 64
+    }
+}
+
+/** Lists of every row one after another: [at] where a row's begin among [entries]. */
+internal class Lists(val at: IntArray, val entries: IntArray) {
+    companion object {
+        fun of(rows: List<IntArray>): Lists {
+            val at = IntArray(rows.size + 1)
+            rows.forEachIndexed { i, own -> at[i + 1] = at[i] + own.size }
+            val entries =
+                IntArray(at[rows.size]).also { flat -> rows.forEachIndexed { i, own -> own.copyInto(flat, at[i]) } }
+            return Lists(at, entries)
+        }
     }
 }

@@ -60,7 +60,8 @@ class SiteWorks(
  * WHAT A SEARCH OF PAIRS IS GIVEN: every site's works ([sites]); the facet of every value by its place ([familyOf], a
  * place among [families]); the numbers of size by their keys ([sizes]: the rows of [SiteWorks.sizes]); and of a site's
  * work, the works of another site the user answered on already, passed over ([answered]: by the places in [sites] of
- * the two sites, the work's place to the other's places).
+ * the two sites, the work's place to the other's places). [least]: the least chance of a pair the application keeps — a
+ * pair no model can give so much is not kept whatever the search finds, so a search may leave it uncompared.
  *
  * [layers] works out the layers of one pair as every search makes them, on the card or not: what the application keeps
  * of a pair found, and of a pair answered on that no search kept.
@@ -71,6 +72,7 @@ class PairSearch(
     val familyOf: IntArray,
     val sizes: List<String>,
     val answered: Map<Pair<Int, Int>, Map<Int, IntArray>>,
+    val least: Double = 0.0,
 ) {
     init {
         require(families.size < Long.SIZE_BITS) { "${families.size} facets: no bit of a mask each" }

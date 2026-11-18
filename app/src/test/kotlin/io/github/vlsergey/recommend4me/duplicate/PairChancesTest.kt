@@ -64,11 +64,11 @@ class PairChancesTest {
                 ) = emptyList<FoundPair>()
             }
         val fitted = PairModels.fit(model, pairs, said)
-        // Of one work: one work, different, one series — two works —, not answered; the translation and the part left
-        // out
-        assertEquals(listOf(true, false, false, null), asked[0])
-        // Of one series: every answer but the series a pair not of one
-        assertEquals(listOf(false, false, true, false, false, null), asked[1])
+        // Of the pairs answered alone. Of one work: one work, different, one series — two works —; the translation and
+        // the part left out
+        assertEquals(listOf(true, false, false), asked[0])
+        // Of one series: every answer but the series a pair not of one — one work left out, not said not to be one
+        assertEquals(listOf(false, true, false, false), asked[1])
         assertTrue(fitted.same != null && fitted.series != null)
     }
 

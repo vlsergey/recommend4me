@@ -203,6 +203,12 @@ class Workload(background: Background = Threads()) {
     /** Whether the [work] is to be done: planned, waiting its turn or running now — what it makes is not made yet. */
     fun due(work: Work): Boolean = plans.has(work) || turns.waits(work) || current?.work == work
 
+    /**
+     * Whether the [work] is yet to begin: planned, or waiting its turn — not running: one running read the data before,
+     * and is done again once planned so.
+     */
+    fun ahead(work: Work): Boolean = plans.has(work) || turns.waits(work)
+
     /** The works planned, the soonest due first. */
     fun planned(): List<PlannedWork> = plans.list()
 

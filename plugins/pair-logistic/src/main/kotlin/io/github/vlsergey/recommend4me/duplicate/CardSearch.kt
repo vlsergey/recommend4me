@@ -6,15 +6,15 @@ import kotlin.concurrent.withLock
 
 /**
  * THE SEARCH ON THE CARD ([ProcessorSearch]'s, made there): every site's works put on the card once — their titles' and
- * descriptions' vectors, what they have ([Inverted]), their sizes — and of every two sites, and of every site with
- * itself, a block of rows of one against the whole other at a time ([Facing]): the cosines of their titles and
- * descriptions by two products of cuBLAS, the facets their values share and their works of one author by kernels of
- * their own (`search.cu`), and every model's score of every pair in one more, which keeps of every row the likeliest
- * work of every model with its score; of every work the likeliest of every site kept ([Likeliest]). Nothing of a pair
- * comes back but the works kept and their scores.
+ * descriptions' vectors, their values and authors, their sizes — and of every two sites, and of every site with itself,
+ * a block of rows of one against the whole other at a time ([Facing]): the cosines of their titles, authors' names and
+ * descriptions by products of cuBLAS in half precision, and every model's score of every pair in a kernel of its own
+ * (`search.cu`) — the facets the pair shares and whether it is of one author worked out there, of the two works' lists
+ * — which keeps of every row the likeliest work of every model with its score; of every work the likeliest of every
+ * site kept ([Likeliest]). Nothing of a pair comes back but the works kept and their scores.
  */
 internal object CardSearch {
-    private val NAMES = listOf("facets_onto", "authors_onto", "best")
+    private val NAMES = listOf("facets_onto", "best")
 
     private var compiledFor: Cublas? = null
     private var compiled: CudaKernels? = null
@@ -42,6 +42,8 @@ internal object CardSearch {
             val slices = search.sites.map { Tiles.slices(it, slice) }
             // Every run's works by what they have, made once: a run is faced by every run of every site
             val inverted = slices.map { runs -> runs.map { Inverted(it.works, search.familyOf.size) } }
+            // Of every site, the values many of its works have: looked up of every pair, the rest through their works
+            val frequent = search.sites.map { Frequent.of(it, search) }
             for (a in search.sites.indices) for (b in search.sites.indices) {
                 if (!search.compared(a, b)) continue
                 // The weights of the models as the two sites are scored: their sites' weight in the constant
@@ -50,9 +52,10 @@ internal object CardSearch {
                         .map { it.between(search.sites[a].source, search.sites[b].source) }
                         .flatMap { it.flat().asList() }
                         .toFloatArray()
+                Frequent.tell(search, a, b, frequent[a])
                 // Of every run of the first site on the card, every run of the second put there in its turn
                 for ((r, rows) in slices[a].withIndex()) CardRoom(card).use { ofRows ->
-                    val x = SiteOnCard(rows.works, inverted[a][r], ofRows)
+                    val x = SiteOnCard(rows.works, inverted[a][r], frequent[a], ofRows)
                     for ((c, columns) in slices[b].withIndex()) {
                         val tile = Tile(search, a, b, rows, columns)
                         val y = inverted[b][c]
@@ -65,7 +68,7 @@ internal object CardSearch {
                                     Facing(
                                             tile,
                                             x,
-                                            SiteOnCard(columns.works, y, own),
+                                            SiteOnCard(columns.works, y, frequent[a], own),
                                             models.size,
                                             weights,
                                             own,
@@ -123,9 +126,16 @@ internal class CardRoom(private val card: Cublas) : AutoCloseable {
 
 /**
  * A site on the card: its vectors, whether it has a description, its facets and sizes ([SiteWorks.sizes] one row after
- * another), and its works by what they have.
+ * another); of every work its values with their weights — those [frequent] of the site whose works face it apart from
+ * the rare — and its authors by their places among the site's ([Inverted.authors]), a list a work one after another;
+ * and its works by every value ([Inverted]).
  */
-internal class SiteOnCard(site: SiteWorks, val inverted: Inverted, room: CardRoom) {
+internal class SiteOnCard(
+    site: SiteWorks,
+    val inverted: Inverted,
+    val frequent: FrequentValues,
+    room: CardRoom,
+) {
     // Half precision, as the site's works hold them: half the room of single precision's (a million works of 1024
     // numbers 6 GB of the card's 16, not 12)
     val titles =
@@ -144,11 +154,47 @@ internal class SiteOnCard(site: SiteWorks, val inverted: Inverted, room: CardRoo
         room.floatsOf(
             FloatArray(site.sizes.size * site.count) { site.sizes[it / site.count][it % site.count].toFloat() }
         )
+    /** The frequent values of every work, and the rare. */
+    private val frequentValues = Valued.of(site, { frequent.index[it] >= 0 }) { frequent.index[it] }
+    val rare = Valued.of(site, { frequent.index[it] < 0 }) { it }
+    val frequentAt = room.ints(frequentValues.lists.at)
+    val frequentIds = room.ints(frequentValues.lists.entries)
+    val frequentWeights = room.floatsOf(frequentValues.weights)
+
+    val rareAt = room.ints(rare.lists.at)
+    val rareIds = room.ints(rare.lists.entries)
+    val rareWeights = room.floatsOf(rare.weights)
     val at = room.ints(inverted.at)
     val items = room.ints(inverted.items)
     val weights = room.floatsOf(inverted.weights)
-    val authorAt = room.ints(inverted.authorAt)
-    val authorItems = room.ints(inverted.authorItems)
+    private val authorLists =
+        Lists.of(site.authors.map { own -> own.distinct().map { inverted.authors.getValue(it) }.toIntArray() })
+    val authorAt = room.ints(authorLists.at)
+    val authorPlaces = room.ints(authorLists.entries)
+}
+
+/** The bytes of a number of half precision. */
+internal const val HALF_BYTES = 2L
+
+/**
+ * Of every work, the values [kept] of its own with their weights, a list a work one after another; each written as
+ * [written] — a frequent one by its number among the frequent.
+ */
+internal class Valued(val lists: Lists, val weights: FloatArray) {
+    companion object {
+        fun of(site: SiteWorks, kept: (Int) -> Boolean, written: (Int) -> Int): Valued {
+            val places = site.values.map { own -> own.indices.filter { kept(own[it]) } }
+            val lists =
+                Lists.of(
+                    site.values.indices.map { i -> IntArray(places[i].size) { written(site.values[i][places[i][it]]) } }
+                )
+            val weights = FloatArray(lists.entries.size)
+            site.values.indices.forEach { i ->
+                places[i].forEachIndexed { k, p -> weights[lists.at[i] + k] = site.weights[i][p] }
+            }
+            return Valued(lists, weights)
+        }
+    }
 }
 
 /**
@@ -159,25 +205,19 @@ internal class SiteOnCard(site: SiteWorks, val inverted: Inverted, room: CardRoo
 internal class RowLists(val at: IntArray, val entries: IntArray, val cum: IntArray, val total: IntArray) {
     companion object {
         /** The [rows]' lists, of every entry's list as long as [length] says. */
-        fun of(rows: List<IntArray>, length: (Int) -> Int): RowLists {
-            val at = IntArray(rows.size + 1)
-            rows.forEachIndexed { i, own -> at[i + 1] = at[i] + own.size }
-            val entries =
-                IntArray(at[rows.size]).also { flat -> rows.forEachIndexed { i, own -> own.copyInto(flat, at[i]) } }
-            val cum = IntArray(entries.size)
-            val total = IntArray(rows.size)
-            for (i in rows.indices) {
+        fun of(rows: Lists, length: (Int) -> Int): RowLists {
+            val count = rows.at.size - 1
+            val cum = IntArray(rows.entries.size)
+            val total = IntArray(count)
+            for (i in 0 until count) {
                 var sum = 0
-                for (k in at[i] until at[i + 1]) {
+                for (k in rows.at[i] until rows.at[i + 1]) {
                     cum[k] = sum
-                    sum += length(entries[k])
+                    sum += length(rows.entries[k])
                 }
                 total[i] = sum
             }
-            return RowLists(at, entries, cum, total)
+            return RowLists(rows.at, rows.entries, cum, total)
         }
     }
 }
-
-/** The bytes of a number of half precision. */
-internal const val HALF_BYTES = 2L

@@ -85,28 +85,32 @@ class PairModels(private val plugins: Plugins, private val settings: Settings) {
         fun setting(typeId: String) = "duplicates.model.$typeId"
 
         /**
-         * The models of the user's answers on the [pairs] ([said]) fitted by the [model]: of one work, every pair not
-         * answered on a likely different one, a pair said one series a different one, the translations and the parts
-         * left out (user, 2026-10-30: a translation's authors differ while its tags and description are the other's, a
-         * part is neither one nor two); of one series, every answer but the series a pair not of one. None of a kind no
-         * pair was said to be of.
+         * The models of the user's answers on the [pairs] ([said]) fitted by the [model], of the pairs answered alone —
+         * by the user or by the sites (user, 2026-11-18: "why do you learn of different works not marked as different?
+         * the unmarked pairs come by themselves when you bring me pairs that are different and I mark them"): of one
+         * work, a pair said one series a different one, the translations and the parts left out (user, 2026-10-30: a
+         * translation's authors differ while its tags and description are the other's, a part is neither one nor two);
+         * of one series, every answer but the series a pair not of one — but one work, left out: a pair of one work is
+         * not said not to be of one series (user, 2026-11-18: "one work must not count as the answer 'no' to whether it
+         * is one series"). None of a kind no pair was said to be of.
          */
         fun fit(
             model: PairModel,
             pairs: Collection<DuplicateCandidate>,
             said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
         ): FittedPairs {
-            val ofSame = pairs.filter {
-                said[it.pair]?.let { a -> a == DuplicateAnswer.TRANSLATION || a == DuplicateAnswer.PARTIAL } != true
+            val answered = pairs.filter { it.pair in said }
+            val ofSame = answered.filter {
+                said.getValue(it.pair).let { a -> a != DuplicateAnswer.TRANSLATION && a != DuplicateAnswer.PARTIAL }
             }
             val same =
-                model.fit(
-                    ofSame.map { it.layers },
-                    ofSame.map { c -> said[c.pair]?.let { it == DuplicateAnswer.SAME } },
-                )
-            val all = pairs.toList()
+                model.fit(ofSame.map { it.layers }, ofSame.map { said.getValue(it.pair) == DuplicateAnswer.SAME })
+            val ofSeries = answered.filter { said[it.pair] != DuplicateAnswer.SAME }
             val series =
-                model.fit(all.map { it.layers }, all.map { c -> said[c.pair]?.let { it == DuplicateAnswer.SERIES } })
+                model.fit(
+                    ofSeries.map { it.layers },
+                    ofSeries.map { said.getValue(it.pair) == DuplicateAnswer.SERIES },
+                )
             return FittedPairs(same, series)
         }
     }
