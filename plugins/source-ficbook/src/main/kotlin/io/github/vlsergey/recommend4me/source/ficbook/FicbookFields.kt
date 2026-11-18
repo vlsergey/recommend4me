@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.source.PageText
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.AUTHOR
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.DIRECTION
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.FANDOM
+import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.NAME_KEY
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAGES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRING
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.PAIRINGS_LINE
@@ -117,15 +118,27 @@ internal class FicbookFields(private val items: ItemStore) {
         }
     }
 
+    /**
+     * The tags of a work by their links: a tag is the site's id of its page, its name what the link says (user,
+     * 2026-11-18: "a tag is a numeric id to the site, its name and description bound to it"); a link of no id gives it
+     * by its name alone ([NAME_KEY]).
+     */
     fun tags(id: String, links: List<Element>) =
         items.setFacet(
             id,
             TAG,
-            links.map { a -> a.text().trim().let { FacetValue(it.lowercase(), it) } }.filter { it.key.isNotEmpty() },
+            links.mapNotNull { a ->
+                val name = a.text().trim()
+                val key = TAG_ID.find(a.attr("href"))?.groupValues?.get(1) ?: NAME_KEY + name
+                FacetValue(key, name).takeIf { name.isNotEmpty() }
+            },
         )
 
     companion object {
         internal val AUTHOR_ID = Regex("^/authors/([^/?#]+)")
+
+        /** The id of a tag by the address of its page: "/tags/1682". */
+        internal val TAG_ID = Regex("^/tags/(\\d+)/?$")
 
         /** The fandom of the original works. */
         private const val ORIGINALS = "no_fandom/originals"

@@ -50,7 +50,8 @@ class FicbookPagesTest {
         assertEquals(listOf("nc-17"), facets[AgeRating.KEY])
         assertEquals(listOf("finished"), facets["status"])
         assertEquals(listOf("28510"), facets["series"])
-        assertTrue("слоуберн" in facets.getValue("tag"))
+        assertTrue("19" in facets.getValue("tag"))
+        assertEquals("Слоуберн", context.facetNames.getValue("tag")["19"])
         // Every entry of the line in one field: a pairing one whatever the order of its names, a
         // character alone as itself; the names stay as written
         assertEquals(
@@ -203,25 +204,18 @@ class FicbookPagesTest {
     }
 
     @Test
-    fun `a tag's own page says what the tag means, the tag known by its name as the works write it`() {
+    fun `a tag's own page says what the tag means, the tag known by the id of its page`() {
         val context = MemorySourceContext()
         assertEquals(emptyList(), capture(context, "https://ficbook.net/tags/1682", "tag.html"))
-        assertEquals("Hurt/Comfort", context.facetNames.getValue("tag")["hurt/comfort"])
+        assertEquals("Hurt/Comfort", context.facetNames.getValue("tag")["1682"])
         assertEquals(
             "Работа сосредоточена на эмоциональных и/или физических страданиях одних персонажей " +
                 "и заботе о них со стороны других персонажей.",
-            context.facetDescriptions.getValue("tag")["hurt/comfort"],
+            context.facetDescriptions.getValue("tag")["1682"],
         )
-        // The other names the site files under it: each a tag of its own, named, a synonym of it
-        val synonyms =
-            mapOf(
-                "хёрт/комфорт" to "Хёрт/комфорт",
-                "х/к" to "Х/К",
-                "h/c" to "H/C",
-                "помощь нежностью" to "Помощь нежностью",
-            )
-        assertEquals(synonyms.keys.associateWith { "hurt/comfort" }, context.facetSynonyms.getValue("tag"))
-        synonyms.forEach { (key, name) -> assertEquals(name, context.facetNames.getValue("tag")[key]) }
+        // The other names the page writes have no ids: the site's search of tags gives them
+        assertNull(context.facetSynonyms["tag"])
+        assertEquals("https://ficbook.net/tags/1682", source.valueUrl("tag", "1682", "Hurt/Comfort"))
     }
 
     @Test
@@ -245,26 +239,21 @@ class FicbookPagesTest {
     fun `the site's search of tags, asked by the browser, says what the tag means — of its own name or a synonym`() {
         val harassment =
             "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."
-        val asked = source.describing("tag", listOf("харассмент", "домогательства"))
-        assertEquals(listOf(Ficbook.tagSearch("харассмент"), Ficbook.tagSearch("домогательства")), asked.map { it.url })
-        assertEquals(mapOf("title" to "харассмент"), asked.first().form)
+        // A tag known by its id by its own page; one known by the name alone by the search
+        assertEquals(listOf("https://ficbook.net/tags/477"), source.describing("tag", listOf("477")).map { it.url })
+        val asked = source.describing("tag", listOf("name:Харассмент", "name:Домогательства"))
+        assertEquals(listOf(Ficbook.tagSearch("Харассмент"), Ficbook.tagSearch("Домогательства")), asked.map { it.url })
+        assertEquals(mapOf("title" to "Харассмент"), asked.first().form)
         assertEquals(emptyList(), source.describing("pairing", listOf("x")))
         asked.forEach { wanted ->
             val context = MemorySourceContext()
             assertEquals(emptyList(), capture(context, wanted.url, "tags-search.json"))
-            assertEquals(harassment, context.facetDescriptions.getValue("tag")[wanted.form!!.getValue("title")])
-            // The tag found and its synonyms, asked by either: each a tag of its own of the same thing
-            assertEquals("Харассмент", context.facetNames.getValue("tag")["харассмент"])
+            assertEquals(harassment, context.facetDescriptions.getValue("tag")["477"])
+            // The tag found and its synonyms, asked by either, by their ids: each a tag of its own of the same thing
+            assertEquals("Харассмент", context.facetNames.getValue("tag")["477"])
+            assertEquals("Домогательства", context.facetNames.getValue("tag")["611"])
             assertEquals(
-                setOf(
-                        "домогательство",
-                        "склонение к сексу",
-                        "дискриминация",
-                        "домогательства",
-                        "сексуальное домогательство",
-                        "приставания",
-                    )
-                    .associateWith { "харассмент" },
+                setOf("574", "575", "576", "611", "3377", "4724").associateWith { "477" },
                 context.facetSynonyms.getValue("tag"),
             )
         }

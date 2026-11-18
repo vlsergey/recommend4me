@@ -39,7 +39,8 @@ class FicbookDecorTest {
         // The site's tags are its word, left alone; the work's tags go in one line right after them
         assertTrue(decor.facets.none { it.facet == Ficbook.TAG })
         val tags = decor.facets.single { it.facet == Books.TAGS.key }
-        val shown = doc.select(tags.after!!).select("a.tag").map { it.text().trim().lowercase() }
+        // A tag by the id of its page
+        val shown = doc.select(tags.after!!).select("a.tag").map { it.attr("href").removePrefix("/tags/") }
         assertEquals(context.facets.getValue(work).getValue(Ficbook.TAG).sorted(), shown.sorted())
         // The worked out tags, pairings and characters go under the site's blocks of them
         decor.facets.filter { it.after != null }.forEach { assertEquals(1, doc.select(it.after!!).size, it.after) }

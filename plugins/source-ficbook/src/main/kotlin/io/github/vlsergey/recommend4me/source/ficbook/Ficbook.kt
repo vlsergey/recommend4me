@@ -33,7 +33,9 @@ import java.net.URLEncoder
  *
  * AUTHORS AND FANDOMS KNOWN BY THEIR NAMES ALONE: of the works a one-time import of a dump of the site wrote
  * (2026-11-17), an author or a fandom the dump gave by its name, the site's own key unknown, is keyed by the name under
- * [NAME_KEY] — no page of the site has it.
+ * [NAME_KEY] — no page of the site has it. A tag is the site's id of its page, its name and description bound to it
+ * (user, 2026-11-18); the dump's tags were given their ids by the kept pages once (V4), a name of no tag found keyed by
+ * the name as well.
  */
 class Ficbook : Source {
     override val id = ID
@@ -52,7 +54,7 @@ class Ficbook : Source {
                     Books.DIRECTION.asFacet(DIRECTION),
                     AgeRating.SITE.asFacet(),
                     Books.STATUS.asFacet(STATUS),
-                    Books.TAG.asFacet(TAG),
+                    Books.TAG.asFacet(TAG, byName = NAME_KEY),
                     // The pairings and characters as the authors write them: the site's strings, kept as they
                     // are; the application works the characters and pairings of the universes out of them
                     Books.PAIRINGS.asFacet(PAIRING),
@@ -103,9 +105,9 @@ class Ficbook : Source {
      * of the search of tags — each a tag of its own of the same thing. 12: the series' own pages and an author's list
      * of them. 13: what a fandom's own page says it is of. 14: the co-authors of a work's header, authors of it as its
      * author is. 15: its betas and gammas, facets of their own. 16: the betas and the gammas written anew, people of
-     * the site bound as they are written (V3).
+     * the site bound as they are written (V3). 17: a tag by its id, its name and description bound to it (V4).
      */
-    override val parserVersion = 16
+    override val parserVersion = 17
 
     override val signals =
         listOf(
@@ -120,15 +122,21 @@ class Ficbook : Source {
     override fun partUrl(itemId: String, partId: String) =
         if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/readfic/$itemId/$partId"
 
-    /** An author's own page, by the id of its address; none of a value known by its name alone ([NAME_KEY]). */
+    /**
+     * A value's own page — an author's, a tag's — by the id of its address; none of a value known by its name alone
+     * ([NAME_KEY]).
+     */
     override fun valueUrl(facet: String, key: String, name: String) =
         if (key.startsWith(NAME_KEY)) null
         else
             when (facet) {
-                AUTHOR -> "$BASE/authors/$key"
+                AUTHOR,
+                BETA,
+                GAMMA -> "$BASE/authors/$key"
                 SERIES -> "$BASE/series/$key"
                 // "books/rouling_dzhoan___garri_potter": the fandom's page of its works
                 FANDOM -> "$BASE/fanfiction/$key"
+                TAG -> "$BASE/tags/$key"
                 else -> null
             }
 
@@ -162,13 +170,19 @@ class Ficbook : Source {
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
 
     /**
-     * A tag by the site's search of tags, the one its page of all the tags asks: by the name — the key is the name in
-     * lower case, which the search finds as well — it answers the tag's description, read by [FicbookPages]. The
-     * address carries the name: the answer is known by it. A fandom by its own page, whose heading says what it is of.
+     * A tag by its own page, which says what it means; one known by its name alone ([NAME_KEY]) by the site's search of
+     * tags, the one its page of all the tags asks — by the name, answering the tag's id, its description and its
+     * synonyms, read by [FicbookPages]: the address carries the name, the answer known by it. A fandom by its own page,
+     * whose heading says what it is of.
      */
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
         when (facet) {
-            TAG -> tags.map { WantedPage(tagSearch(it), mapOf("title" to it)) }
+            TAG ->
+                tags.map { key ->
+                    val name = key.removePrefix(NAME_KEY)
+                    if (name != key) WantedPage(tagSearch(name), mapOf("title" to name))
+                    else WantedPage("$BASE/tags/$key")
+                }
             // A fandom known by its name alone has no page known
             FANDOM -> tags.filterNot { it.startsWith(NAME_KEY) }.map { WantedPage("$BASE/fanfiction/$it") }
             else -> emptyList()
@@ -176,8 +190,8 @@ class Ficbook : Source {
 
     companion object {
         /**
-         * The key of an author or a fandom known by the name alone, the site's own unknown: "name:" before the name. No
-         * page of the site has it: no address is made of it ([valueUrl]).
+         * The key of an author, a fandom or a tag known by the name alone, the site's own unknown: "name:" before the
+         * name. No page of the site has it: no address is made of it ([valueUrl]).
          */
         const val NAME_KEY = "name:"
 

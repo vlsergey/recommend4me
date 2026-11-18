@@ -49,7 +49,7 @@ class FicbookPages(private val context: SourceContext) {
         val doc = Jsoup.parse(page.html, page.url)
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
-        if (TAG_PAGE.matches(path)) meanings.tagPage(doc)
+        TAG_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { meanings.tagPage(doc, it) }
         FANDOM_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { fandoms.page(doc, it) }
         // A series' own page, and an author's list of series: after the cards, whose works they list
         FicbookSeries.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
@@ -279,7 +279,7 @@ class FicbookPages(private val context: SourceContext) {
     companion object {
         /** A work's address: "/readfic/<id>", "/readfic/<id>/<part>", "/readfic/<id>/comments". */
         private val READFIC = Regex("/readfic/([0-9a-f-]+)/?([^/]*)/?")
-        private val TAG_PAGE = Regex("/tags/\\d+/?")
+        private val TAG_PAGE = Regex("/tags/(\\d+)/?")
 
         /** A fandom's own page, the list of its works: "/fanfiction/books/rouling_dzhoan___garri_potter". */
         private val FANDOM_PAGE = Regex("/fanfiction/([^/]+/[^/]+)/?")
