@@ -148,9 +148,10 @@ the model, its loss, what it reads and the rule it chooses by are chosen for wha
 ## The form and the rules of the code
 
 **Kotlin is formatted by ktfmt**, kotlinlang's style, lines of 120 at most (Spotless): run
-`gradlew spotlessApply` before committing Kotlin; `spotlessCheck` fails what is not formatted so.
+`gradlew spotlessApply` once, right before committing Kotlin — never in the middle of the work, where it
+rewrites files being edited; `spotlessCheck` of the CI's build fails what is not formatted so.
 **Its rules are detekt's default profile as it is**: a class of 600 lines at most, methods short and
-simple, numbers named, no exception caught but the one meant. Both run before every module's tests.
+simple, numbers named, no exception caught but the one meant. Detekt runs before every module's tests.
 No baseline, no rule turned off: a finding is fixed. The one exception is a boundary that must
 outlive whatever fails — a background loop, a step of the start, a call of a plugin: there
 `@Suppress("TooGenericExceptionCaught")`, with a comment saying why it is a boundary.

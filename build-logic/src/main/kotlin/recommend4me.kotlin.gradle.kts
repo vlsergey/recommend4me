@@ -28,8 +28,9 @@ kotlin {
     }
 }
 
-// THE FORM OF THE CODE (AGENTS.md): ktfmt, kotlinlang's style, lines of 120 at most — `spotlessApply` formats,
-// `spotlessCheck` fails what is not formatted so
+// THE FORM OF THE CODE (AGENTS.md): ktfmt, kotlinlang's style, lines of 120 at most — `spotlessApply` formats, once,
+// before a commit (user, 2026-11-18: "spotless only before git commit / git push"); `spotlessCheck` of `check` fails
+// what is not formatted so — the CI's build, not every run of the tests
 spotless {
     kotlin {
         target("src/**/*.kt")
@@ -42,12 +43,12 @@ spotless {
 }
 
 // THE RULES OF THE CODE (AGENTS.md): detekt's default profile as it is, of the module's sources and tests. Before
-// the tests, with the form: every test run checks both
+// the tests: every test run checks them
 detekt {
     buildUponDefaultConfig = true
     parallel = true
 }
-tasks.withType<Test>().configureEach { dependsOn(tasks.named("detekt"), tasks.named("spotlessCheck")) }
+tasks.withType<Test>().configureEach { dependsOn(tasks.named("detekt")) }
 
 dependencies {
     "testImplementation"(platform(catalog.findLibrary("spring-boot-bom").get()))
