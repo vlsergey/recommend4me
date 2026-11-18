@@ -30,23 +30,42 @@ class LogisticPairModel : PairModel {
         // What a pair needs to be kept, of the models as they are: told to the log, the search not yet led by it
         SearchPlan.of(search, logistic)
         val laid = logistic.map { it.laid(search.families) }
-        if (card != null) {
-            val started = System.currentTimeMillis()
-            runCatching {
-                val compared = Compared(search, progress)
-                return CardSearch.search(search, laid, card, compared = compared).also {
-                    compared.told()
-                    log.info("pairs searched on the card in {} ms", System.currentTimeMillis() - started)
-                }
+        return card?.let { onCard(search, logistic, laid, it, progress) }
+            ?: ProcessorSearch.search(search, laid, Compared(search, progress))
+    }
+
+    /**
+     * The search on the card: of every work its nearest by a graph; every pair of works of trigrams of other widths.
+     * Null when the card fails it: the search is the processor's.
+     */
+    private fun onCard(
+        search: PairSearch,
+        logistic: List<Logistic>,
+        laid: List<Logistic.Laid>,
+        card: Cublas,
+        progress: (Double) -> Unit,
+    ): List<FoundPair>? {
+        val started = System.currentTimeMillis()
+        return runCatching {
+            GraphSearch.search(search, laid, card)?.let { likeliest ->
+                // How much of what a search of every pair keeps it found, and whether the card scored as the
+                // processor does
+                likeliest.found().also { found -> GraphCheck.tell(search, logistic, likeliest, found) }
             }
-                .onFailure { e ->
-                    log.warn(
-                        "the pairs were not searched on the card ({}): in the main memory",
-                        e.message ?: e.javaClass.simpleName,
-                    )
+                ?: Compared(search, progress).let { compared ->
+                    CardSearch.search(search, laid, card, compared = compared).also {
+                        compared.told()
+                        log.info("pairs searched on the card in {} ms", System.currentTimeMillis() - started)
+                    }
                 }
         }
-        return ProcessorSearch.search(search, laid, Compared(search, progress))
+            .onFailure { e ->
+                log.warn(
+                    "the pairs were not searched on the card ({}): in the main memory",
+                    e.message ?: e.javaClass.simpleName,
+                )
+            }
+            .getOrNull()
     }
 
     override fun fitted(search: PairSearch, models: List<FittedPairModel>) {

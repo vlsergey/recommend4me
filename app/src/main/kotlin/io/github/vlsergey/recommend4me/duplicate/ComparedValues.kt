@@ -39,22 +39,46 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
     private val families = compared.families
     private val ignored = compared.ignored
 
-    private val authorFacet = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key
+    private val authorDef = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }
+    private val authorFacet = authorDef?.key
+
+    /** The id the index keeps the site's authors by: read of it, not of the database. */
+    private val authorId = authorDef?.let { FeatureNames.facetId(s.source, it) }
 
     /**
-     * The works [ids] of every work of the site the index holds, read in one pass of it; their numbers of size of the
-     * [sizes] numbers.
+     * Every work of a title of the site the index holds, its ids ascending ([Compared.ids]) with their titles as the
+     * user corrected them ([Compared.titles]), read in one pass of the index; their numbers of size of the [sizes]
+     * numbers.
      */
-    fun every(ids: List<String>, sizes: Collection<String>): Compared {
+    fun every(sizes: Collection<String>): Compared {
         val started = System.currentTimeMillis()
-        val rows = ListFacetValues.everyItem(index, s.id, families.keys, sizes)
+        val rows = ListFacetValues.everyItem(index, s.id, families.keys + listOfNotNull(authorId), sizes, titles = true)
+        val ids = rows.titles.filterValues { it.isNotEmpty() }.keys.sorted()
         val indexed = System.currentTimeMillis()
+        // The authors' keys of every work, of the same reading of the index: its values of the authors' id
         val authorKeys = HashMap<String, List<String>>()
-        authorFacet?.let { f -> s.items.forEachFacet(f) { id, keys -> authorKeys[id] = keys } }
+        authorId?.let { id ->
+            val prefix = "$id:"
+            val keyOf = arrayOfNulls<String>(rows.names.size)
+            rows.names.forEachIndexed { n, name ->
+                if (name.startsWith(prefix)) keyOf[n] = name.substring(prefix.length)
+            }
+            rows.values.forEach { (item, numbers) ->
+                val keys = numbers.asList().mapNotNull { keyOf[it] }
+                if (keys.isNotEmpty()) authorKeys[item] = keys
+            }
+        }
         val keyed = System.currentTimeMillis()
         val names = authorFacet?.let(s::names).orEmpty()
         val named = System.currentTimeMillis()
-        val compared = Compared(rows, ids, authorsOf(ids, authorKeys), namesOf(ids, authorKeys, names))
+        val compared =
+            Compared(
+                rows,
+                ids,
+                authorsOf(ids, authorKeys),
+                namesOf(ids, authorKeys, names),
+                ids.map { rows.titles.getValue(it) },
+            )
         log.info(
             "{}: the values of {} works read in {} ms: the index {}, the authors {}, their names {}, gathered {}",
             s.id,
@@ -86,7 +110,7 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         }
         val facets = authorFacet?.let { f -> s.items.facetsOf(ids).mapValues { it.value[f].orEmpty() } }.orEmpty()
         val names = authorFacet?.let { f -> s.names(f, facets.values.flatten().distinct()) }.orEmpty()
-        return Compared(rows, ids, authorsOf(ids, facets), namesOf(ids, facets, names))
+        return Compared(rows, ids, authorsOf(ids, facets), namesOf(ids, facets, names), emptyList())
     }
 
     /**
@@ -117,10 +141,13 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
      */
     inner class Compared(
         rows: ItemRows,
-        ids: List<String>,
+        /** The works, by their places. */
+        val ids: List<String>,
         val authors: Array<LongArray>,
         /** Every work's authors' names one after another; none of a work of no author. */
         val authorNames: List<String?>,
+        /** Every work's title as the user corrected it, of the index; none of the works read by their ids. */
+        val titles: List<String>,
     ) {
         val numbers: Map<String, Map<String, Double>> = rows.numbers
 
@@ -133,8 +160,13 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         init {
             val named = ArrayList<String?>(rows.names.size)
             rows.names.forEach { n ->
+                // Of the authors' id none: the authors compared as the normalized authors, below
                 named +=
-                    "${families.getValue(n.substringBefore(':'))}:${n.substringAfter(':')}".takeIf { it !in ignored }
+                    families[n.substringBefore(':')]
+                        ?.let { family -> "$family:${n.substringAfter(':')}" }
+                        ?.takeIf {
+                            it !in ignored
+                        }
             }
             val byName = HashMap<String, Int>()
             fun author(a: Long): Int =

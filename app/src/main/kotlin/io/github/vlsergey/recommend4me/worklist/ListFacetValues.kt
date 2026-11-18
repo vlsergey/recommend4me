@@ -45,9 +45,10 @@ object ListFacetValues {
         source: String,
         facetIds: Collection<String>,
         numberIds: Collection<String>,
+        titles: Boolean = false,
     ): ItemRows = index.searching { s ->
         val rows = ItemRows()
-        s.indexReader.leaves().forEach { leaf -> Leaf(leaf.reader(), rows, facetIds, numberIds).read(source) }
+        s.indexReader.leaves().forEach { leaf -> Leaf(leaf.reader(), rows, facetIds, numberIds, titles).read(source) }
         rows
     }
 
@@ -57,8 +58,10 @@ object ListFacetValues {
         private val rows: ItemRows,
         facetIds: Collection<String>,
         numberIds: Collection<String>,
+        titles: Boolean,
     ) {
         private val keys = r.getSortedDocValues(ListDocuments.KEY)
+        private val titles = if (titles) r.getBinaryDocValues(ListDocuments.TITLE) else null
         private val sets = facetIds.mapNotNull { id ->
             r.getSortedSetDocValues(ListDocuments.valuesField(id))?.let { id to it }
         }
@@ -78,6 +81,7 @@ object ListFacetValues {
                 if ((live == null || live.get(doc)) && keys.advanceExact(doc)) {
                     val id = ItemKey.parse(keys.lookupOrd(keys.ordValue()).utf8ToString()).id
                     rows.values[id] = valuesOf(doc)
+                    titles?.let { t -> if (t.advanceExact(doc)) rows.titles[id] = t.binaryValue().utf8ToString() }
                     numbers.forEach { (numberId, dv) ->
                         if (dv.advanceExact(doc))
                             rows.numbers.getOrPut(numberId) { HashMap() }[id] =
@@ -117,6 +121,9 @@ object ListFacetValues {
  */
 class ItemRows {
     val names = ArrayList<String>()
+
+    /** Of every item its title as the user corrected it, when asked for. */
+    val titles = HashMap<String, String>()
     val values = HashMap<String, IntArray>()
     val numbers = HashMap<String, HashMap<String, Double>>()
     private val byName = HashMap<String, Int>()

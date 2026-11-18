@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.model.Predicted
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.FacetDef
+import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkClusters
@@ -38,8 +39,8 @@ class RowValues(val graded: Boolean, val prediction: Double?, val interest: Doub
  * ONE ITEM AS THE LIST OF WORKS READS IT: the [work] it is of — the item that names it, a work of several items one row
  * of the list — and its [rank] among the items of the work, the one the work is shown with ([WorkClusters.shown]) 0;
  * its dates, its [values], the values of every filter facet of its source as the user sees them ([facets], by the
- * facet's filter id — the site's, the model's kept, the user's word on top) and every number with the user's word on
- * top ([numbers], by the number's id).
+ * facet's filter id — the site's, the model's kept, the user's word on top), every number with the user's word on top
+ * ([numbers], by the number's id) and its [title] as the user corrected it.
  */
 class ListRow(
     val key: ItemKey,
@@ -51,6 +52,7 @@ class ListRow(
     val values: RowValues,
     val facets: Map<String, List<String>>,
     val numbers: Map<String, Double>,
+    val title: String,
 )
 
 /**
@@ -70,6 +72,7 @@ internal object ListRows {
         val marks = s.interest.all()
         val facets = facetsOf(s, ids)
         val numbers = numbersOf(s, ids)
+        val titles = titlesOf(s, ids)
         return heads.map { h ->
             val key = ItemKey(s.id, h.id)
             val members = clusters.fullestFirst(key)
@@ -83,6 +86,7 @@ internal object ListRows {
                 values = RowValues.of(h.version, ratings[h.id], predicted[h.id], marks[h.id]),
                 facets = facets.mapValues { (_, byItem) -> byItem[h.id].orEmpty() },
                 numbers = numbers[h.id].orEmpty(),
+                title = titles[h.id].orEmpty(),
             )
         }
     }
@@ -103,13 +107,14 @@ internal object ListRows {
     }
 
     /**
-     * Of every filter facet of the source, by its filter id, every item's values as the user sees them: the site's, the
-     * drafts of the layer, the model's kept of a facet it works out
+     * Of every filter facet of the source, and of its authors, by its filter id, every item's values as the user sees
+     * them: the site's, the drafts of the layer, the model's kept of a facet it works out
      * ([io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]), the user's corrections on top — what the
-     * index keeps of them, read of the databases: of the items [ids], what a screen shows of a few.
+     * index keeps of them, read of the databases: of the items [ids], what a screen shows of a few. The authors no
+     * filter, kept for the search of duplicates to read of the index, not of the database (user, 2026-11-18).
      */
     fun facetsOf(s: SourceStore, ids: Collection<String>?): Map<String, Map<String, List<String>>> {
-        val defs = s.schema.facets.filter { it.filter }
+        val defs = s.schema.facets.filter { it.filter || it.role == FacetRole.AUTHOR }
         if (defs.isEmpty()) return emptyMap()
         val site: Map<String, Map<String, List<String>>> =
             if (ids == null) siteOfEvery(s, defs.map { it.key }.toSet()) else s.items.facetsOf(ids)
@@ -144,6 +149,13 @@ internal object ListRows {
         if (mine.isEmpty()) return given.distinct()
         val single = if (def.single) setOf(def.key) else emptySet()
         return Corrected.facets(mapOf(def.key to given.distinct()), mine, single)[def.key].orEmpty()
+    }
+
+    /** The titles of the items [ids] — of every item when null — as the user corrected them. */
+    private fun titlesOf(s: SourceStore, ids: Collection<String>?): Map<String, String> {
+        val titles = if (ids == null) s.items.titles() else s.items.heads(ids).mapValues { it.value.title }
+        val fields = if (ids == null) s.corrections.allFields() else s.corrections.fieldsOf(ids)
+        return titles.mapValues { (id, title) -> Corrected.title(title, fields[id].orEmpty()) }
     }
 
     /** The site's values of the facets [keys] of every item of the source, one pass of each facet. */

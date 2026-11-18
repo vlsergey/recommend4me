@@ -94,31 +94,30 @@ internal class SearchSide(
          */
         fun read(s: SourceStore, encoder: String, ratios: Map<Long, Double>, index: ListIndex): ReadSide? {
             val started = System.currentTimeMillis()
-            val titled = s.items.titles()
-            if (titled.isEmpty()) return null
-            val fields = s.corrections.allFields()
-            // Every work of a title, ascending, as the user corrected it: its letters, not a vector of its meaning
-            val ids = titled.keys.sorted()
-            val (titles, titleLengths) =
-                Letters.rows(ids.map { Corrected.title(titled.getValue(it), fields[it].orEmpty()) })
+            // Every work of a title, ascending, as the user corrected it, its values, authors and sizes: of the index
+            // of
+            // the list, not of the databases (user, 2026-11-18)
+            val numbers = sizeNumbers(s)
+            val compared = ComparedValues(s, index).every(numbers.keys)
+            val ids = compared.ids
+            if (ids.isEmpty()) return null
+            val read = System.currentTimeMillis()
+            // Its letters, not a vector of its meaning
+            val (titles, titleLengths) = Letters.rows(compared.titles)
+            val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val lettered = System.currentTimeMillis()
             val (descriptions, described) = descriptionsOf(s, encoder, ids)
             val vectors = System.currentTimeMillis()
-            val numbers = sizeNumbers(s)
-            val compared = ComparedValues(s, index).every(ids, numbers.keys)
-            val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
-            val read = System.currentTimeMillis()
             val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.allOf(s.id))
             log.info(
-                "{}: the search's side of {} works read in {} ms: titles {}, vectors {}, values and authors {}, " +
-                    "sizes {}",
+                "{}: the search's side of {} works read in {} ms: the index {}, the letters {}, vectors {}, sizes {}",
                 s.id,
                 ids.size,
                 System.currentTimeMillis() - started,
-                lettered - started,
+                read - started,
+                lettered - read,
                 vectors - lettered,
-                read - vectors,
-                System.currentTimeMillis() - read,
+                System.currentTimeMillis() - vectors,
             )
             return ReadSide(compared.numbered, compared.names) { placed ->
                 SearchSide(

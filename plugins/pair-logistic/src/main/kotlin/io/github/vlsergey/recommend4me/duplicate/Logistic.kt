@@ -18,7 +18,14 @@ internal class Logistic(
     val calibration: Calibration = Calibration.NONE,
 ) : FittedPairModel {
 
-    override fun chance(layers: PairLayers): Double {
+    override fun chance(layers: PairLayers): Double =
+        if (weights == null) score(layers) else calibration.chance(score(layers))
+
+    /**
+     * The score of a pair a search orders the pairs by: of a learnt model its logit, else the mean of the layers both
+     * have.
+     */
+    fun score(layers: PairLayers): Double {
         val w =
             weights
                 ?: return listOfNotNull(
@@ -32,7 +39,7 @@ internal class Logistic(
                     .average()
         var z = 0.0
         features(layers).forEach { (name, x) -> z += (w[name] ?: 0.0) * x }
-        return calibration.chance(z)
+        return z
     }
 
     /**

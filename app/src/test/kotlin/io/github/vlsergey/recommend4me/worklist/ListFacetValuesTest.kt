@@ -18,6 +18,7 @@ class ListFacetValuesTest {
             values = RowValues(false, null, null, null),
             facets = facets,
             numbers = listOfNotNull(words?.let { "words" to it }).toMap(),
+            title = id,
         )
 
     /** Every item's values of the index, as written last — a value of none, an item of none, one written again. */

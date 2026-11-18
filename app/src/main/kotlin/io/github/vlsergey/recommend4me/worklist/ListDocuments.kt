@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import org.apache.lucene.document.BinaryDocValuesField
 import org.apache.lucene.document.Document
 import org.apache.lucene.document.DoubleDocValuesField
 import org.apache.lucene.document.DoubleField
@@ -29,6 +30,9 @@ object ListDocuments {
     const val PREDICTION = "prediction"
     const val INTEREST = "interest"
     const val EXPECTED = "expected"
+
+    /** The item's title as the user corrected it: of the doc values, what the search of duplicates reads. */
+    const val TITLE = "title"
 
     /** The term of an item of a work of several items. */
     const val YES = "1"
@@ -75,6 +79,7 @@ object ListDocuments {
             }
         }
         row.numbers.forEach { (numberId, value) -> doc.add(DoubleField(numberField(numberId), value, Field.Store.NO)) }
+        doc.add(BinaryDocValuesField(TITLE, BytesRef(row.title)))
         return doc
     }
 

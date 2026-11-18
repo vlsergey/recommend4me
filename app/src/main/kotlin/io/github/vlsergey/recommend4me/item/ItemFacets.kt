@@ -38,7 +38,7 @@ interface ItemFacets {
     /** The items the site gives each of the [keys] of the facet: key to items. */
     fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<String>>
 
-    /** Every item's keys of one facet, streamed item by item. */
+    /** Every item's keys of one facet, item by item, in no order of the site's. */
     fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit)
 
     /** Every facet of every item, streamed: (item, facet, key). */
@@ -185,25 +185,15 @@ internal class ItemFacetRepository(
     }
 
     override fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) {
-        var current: String? = null
-        val list = ArrayList<String>()
+        // One pass of the facet's index, no order asked of the database: grouped by item here (user, 2026-11-18)
+        val keys = HashMap<String, MutableList<String>>()
         db.select(ITEM_FACET.ITEM_ID, ITEM_FACET.VALUE_KEY)
             .from(ITEM_FACET)
             .where(ITEM_FACET.FACET.eq(facet))
-            .orderBy(ITEM_FACET.ITEM_ID, ITEM_FACET.POSITION)
             .fetchSize(STREAMED_ROWS)
             .fetchLazy()
-            .use { cursor ->
-                cursor.forEach {
-                    if (it.value1() != current) {
-                        current?.let { id -> action(id, list.toList()) }
-                        list.clear()
-                        current = it.value1()
-                    }
-                    list += it.value2()!!
-                }
-            }
-        current?.let { action(it, list.toList()) }
+            .use { cursor -> cursor.forEach { keys.getOrPut(it.value1()!!) { ArrayList(1) } += it.value2()!! } }
+        keys.forEach { (id, own) -> action(id, own) }
     }
 
     override fun forEachFacetValue(action: (itemId: String, facet: String, key: String) -> Unit) {
