@@ -120,10 +120,14 @@ class FicbookPages(private val context: SourceContext) {
         doc.selectFirst("section.fanfic-badges button span")?.text()?.let(PageText::number)?.let {
             items.setNumbers(id, mapOf(LIKES to it.toDouble()))
         }
+        // Every person of the header the site marks an author or a co-author — the co-authors have no itemprop — and
+        // not the beta or the gamma
         val authors =
-            hat.select("[itemprop=author]").mapNotNull { a ->
-                AUTHOR_ID.find(a.attr("href"))?.groupValues?.get(1)?.let { FacetValue(it, a.text().trim()) }
-            }
+            hat.select("a.word-break[href^=/authors/]")
+                .filter { a -> a.parent()?.parent()?.selectFirst(".ds-badge")?.text()?.trim()?.lowercase() in AUTHORS }
+                .mapNotNull { a ->
+                    AUTHOR_ID.find(a.attr("href"))?.groupValues?.get(1)?.let { FacetValue(it, a.text().trim()) }
+                }
         if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors)
         fields.described(id, blocks.filterKeys { it != "Автор" })
         // The block of tags with no tag found in it: its markup changed, not the work's tags gone
@@ -269,6 +273,9 @@ class FicbookPages(private val context: SourceContext) {
 
         /** An author's list of series: "/authors/3093607/series". */
         private val AUTHOR_SERIES = Regex("/authors/[^/]+/series/?")
+
+        /** The marks of a work's header of its authors: the author and the co-authors, not the beta nor the gamma. */
+        private val AUTHORS = setOf("автор", "соавтор")
 
         /** The site's search of tags ([Ficbook.tagSearch]). */
         private const val TAG_SEARCH = "/tags/search"

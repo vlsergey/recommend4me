@@ -99,9 +99,10 @@ class Ficbook : Source {
      * 9: the covers as the site draws them now: of a work's own page, and of a card of a list as a picture. 10: the
      * covers of the cards of a list, a picture of a source for every width. 11: a tag's synonyms, of its own page and
      * of the search of tags — each a tag of its own of the same thing. 12: the series' own pages and an author's list
-     * of them. 13: what a fandom's own page says it is of.
+     * of them. 13: what a fandom's own page says it is of. 14: the co-authors of a work's header, authors of it as its
+     * author is.
      */
-    override val parserVersion = 13
+    override val parserVersion = 14
 
     override val signals =
         listOf(

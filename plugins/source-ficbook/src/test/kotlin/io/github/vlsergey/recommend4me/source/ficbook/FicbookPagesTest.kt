@@ -89,6 +89,24 @@ class FicbookPagesTest {
         assertEquals(setOf(work), context.heads.keys)
     }
 
+    /** The site marks every person of a work's header: the author and the co-authors are its authors, the beta not. */
+    @Test
+    fun `a work's co-authors are its authors, its beta not`() {
+        fun person(id: String, name: String, mark: String) =
+            """<div class="d-flex align-items-center gap-8"> <div class="avatar-cropper"> <a href="/authors/$id"> <img alt="$name"> </a> </div> <div class="d-flex flex-column align-items-start gap-4 text-n1"> <span class="d-inline-flex align-items-center flex-wrap gap-4"> <a href="/authors/$id" class="word-break">$name</a> </span> <span class="ds-badge ds-badge-regular">$mark</span> </div> </div>"""
+        val html =
+            Jsoup.parse(page("readfic.html"))
+                .also { d ->
+                    d.selectFirst(".fanfic-hat section.flex-wrap")!!
+                        .append(person("111", "Lorem", "соавтор"))
+                        .append(person("222", "Ipsum", "бета"))
+                }
+                .outerHtml()
+        val context = MemorySourceContext()
+        source.capture(CapturedPage("https://ficbook.net/readfic/$work", html, now), context)
+        assertEquals(listOf("019492f9-69b1-7040-8a90-9de7e3cbb01e", "111"), context.facets.getValue(work)["author"])
+    }
+
     /**
      * A work's page as the site shows it to a user logged in ([loggedIn]): the buttons of its header as they are on the
      * site, pressed or not.
