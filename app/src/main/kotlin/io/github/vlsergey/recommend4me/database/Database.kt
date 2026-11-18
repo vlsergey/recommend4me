@@ -48,6 +48,11 @@ class Database(
      * move data into — numbered among those of its [kind].
      */
     private val code: List<JavaMigration> = emptyList(),
+    /**
+     * A new file made by the schema of its kind at once ([Schema]); false: by every migration since the first, as the
+     * test of the schemas makes it to compare.
+     */
+    bySchema: Boolean = true,
     /** Done with the file as it is, before its migrations: what a migration drops copied elsewhere first. */
     beforeMigrations: (DSLContext) -> Unit = {},
 ) : AutoCloseable {
@@ -87,9 +92,33 @@ class Database(
 
     init {
         beforeMigrations(dsl)
-        migrate(listOf("classpath:db/$kind"), "flyway_schema_history", classLoader, shared = false)
+        val own = listOf("classpath:db/$kind")
+        if (bySchema && Schema.empty(dsl)) made(kind, own, classLoader)
+        migrate(own, "flyway_schema_history", classLoader, shared = false)
         if (pluginMigrations.isNotEmpty())
             migrate(pluginMigrations, "plugin_schema_history", classLoader, shared = true)
+    }
+
+    /**
+     * A new file made by the schema of its [kind] ([Schema]) at once, its history of the migrations of [locations]
+     * begun at the last of them: those to come are applied as to any file.
+     */
+    private fun made(kind: String, locations: List<String>, classLoader: ClassLoader) {
+        val script = Schema.of(kind, classLoader, placeholders) ?: return
+        val last =
+            flyway(locations, "flyway_schema_history", classLoader, shared = false)
+                .load()
+                .info()
+                .all()
+                .mapNotNull { it.version }
+                .maxOrNull() ?: return
+        Schema.run(pool, script)
+        flyway(locations, "flyway_schema_history", classLoader, shared = false)
+            .baselineVersion(last)
+            .baselineDescription("schema/$kind.sql")
+            .load()
+            .baseline()
+        log.info("{}: made by its schema, at version {}", name, last)
     }
 
     /**
@@ -98,20 +127,20 @@ class Database(
      * so that their first migration is applied too.
      */
     private fun migrate(locations: List<String>, table: String, classLoader: ClassLoader, shared: Boolean) {
-        val result =
-            Flyway.configure(classLoader)
-                .dataSource(pool)
-                .placeholders(if (shared) emptyMap() else placeholders)
-                .javaMigrations(*(if (shared) emptyList() else code).toTypedArray())
-                .locations(*locations.toTypedArray())
-                .table(table)
-                .baselineOnMigrate(shared)
-                .baselineVersion("0")
-                .load()
-                .migrate()
+        val result = flyway(locations, table, classLoader, shared).baselineVersion("0").load().migrate()
         if (result.migrationsExecuted > 0)
             log.info("{}: {} migrations of {} applied", name, result.migrationsExecuted, locations)
     }
+
+    /** Flyway of the migrations of [locations] with their own history [table], as [migrate] tells. */
+    private fun flyway(locations: List<String>, table: String, classLoader: ClassLoader, shared: Boolean) =
+        Flyway.configure(classLoader)
+            .dataSource(pool)
+            .placeholders(if (shared) emptyMap() else placeholders)
+            .javaMigrations(*(if (shared) emptyList() else code).toTypedArray())
+            .locations(*locations.toTypedArray())
+            .table(table)
+            .baselineOnMigrate(shared)
 
     /** The file's size and the share of it used, in per cent, as H2 counts them now. */
     fun usage(): Triple<Long, Int, Int>? =

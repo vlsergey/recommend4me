@@ -50,8 +50,8 @@ class TwoSitesTest : TwoSitesTestBase() {
         /** A page of the authors holding every author of the application of the tests. */
         const val ALL_AUTHORS = 500
 
-        /** A page of the pairs holding every pair of the works of the application of the tests. */
-        const val ALL_PAIRS = 5000
+        /** A page of the pairs, as the screen of the duplicates reads them. */
+        const val PAGE = 100
     }
 
     @Test
@@ -237,11 +237,18 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertEquals(1.0, pair().title!!.toDouble(), 1e-3)
         keptAsWorkedOut()
         // The pairs chosen by a title wholly alike, and by the authors: those alone, the two of "The Mill" among them
+        // Every page of them: the other classes' pairs too, in the one application of the tests
         fun chosen(authors: Boolean, title: Boolean) =
-            duplicates
-                .getDuplicates("books", true, 0, ALL_PAIRS, DuplicateSort.CHANCE, null, authors, title)
-                .body!!
-                .pairs
+            generateSequence(0) { it + PAGE }
+                .map { offset ->
+                    duplicates
+                        .getDuplicates("books", true, offset, PAGE, DuplicateSort.CHANCE, null, authors, title)
+                        .body!!
+                        .pairs
+                }
+                .takeWhile { it.isNotEmpty() }
+                .flatten()
+                .toList()
         val sameTitle = chosen(authors = false, title = true)
         assertTrue(sameTitle.all { it.first.title.trim().equals(it.second.title.trim(), ignoreCase = true) })
         assertTrue(sameTitle.any { setOf(it.first.item, it.second.item) == setOf("m1", "m2") }, "$sameTitle")

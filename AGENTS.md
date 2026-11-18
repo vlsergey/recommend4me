@@ -158,6 +158,11 @@ tagged `@Tag("ci")` and runs in CI alone (GitHub sets `CI`); locally it is run b
 scenario it tests is worked on (`gradlew :app:test --tests "*Name*" -PallTests`). Every push is followed by watching
 the CI run of the full tests on GitHub till it ends, its failure fixed.
 
+**A new database is made by its schema, an existing one by its migrations**: `schema/<kind>.sql` holds what the
+migrations of `db/<kind>` leave, and an empty file is made by it at once, its history begun at the last migration
+(`database/Schema.kt`). A migration is written as before and its schema with it: `SchemaTest` compares the two and
+writes the schema anew from the migrations when they differ — commit it with them.
+
 **Every test of the application inherits `BaseTest`** and sets nothing of the context of its own — no
 `@TestPropertySource`, no `@Import`, no configuration nested in a test class: Spring starts the application once in a
 process of the tests, with the cheapest plugins (the naive Bayes suggester). What a scenario needs otherwise it sets as

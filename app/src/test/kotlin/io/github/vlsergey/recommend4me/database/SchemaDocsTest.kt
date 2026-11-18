@@ -24,21 +24,22 @@ class SchemaDocsTest {
         // Every kind of database: a folder of migrations of the application, none forgotten
         val folders =
             Files.list(Path.of("src/main/resources/db")).use { s -> s.map { it.fileName.toString() }.sorted().toList() }
-        if (folders != KINDS.sorted())
-            fail("The kinds of databases $folders are not the documented ones ${KINDS.sorted()}")
-        val wrong = KINDS.filter { kind ->
-            val expected =
-                Database(kind, folder.resolve(kind), kind, placeholders = mapOf("source" to "site")).use {
-                    diagram(it.dsl)
-                }
-            val file = docs.resolve("$kind.md")
-            val written = if (Files.exists(file)) mermaid(Files.readString(file)) else null
-            if (written == expected) return@filter false
-            val out = Path.of("build/schema-docs").resolve("$kind.md")
-            Files.createDirectories(out.parent)
-            Files.writeString(out, "```mermaid\n$expected\n```\n")
-            true
-        }
+        if (folders != Schema.KINDS.sorted())
+            fail("The kinds of databases $folders are not the documented ones ${Schema.KINDS.sorted()}")
+        val wrong =
+            Schema.KINDS.filter { kind ->
+                val expected =
+                    Database(kind, folder.resolve(kind), kind, placeholders = mapOf("source" to "site")).use {
+                        diagram(it.dsl)
+                    }
+                val file = docs.resolve("$kind.md")
+                val written = if (Files.exists(file)) mermaid(Files.readString(file)) else null
+                if (written == expected) return@filter false
+                val out = Path.of("build/schema-docs").resolve("$kind.md")
+                Files.createDirectories(out.parent)
+                Files.writeString(out, "```mermaid\n$expected\n```\n")
+                true
+            }
         if (wrong.isNotEmpty()) {
             fail(
                 "The diagrams of $wrong in docs/database differ from the databases the migrations make: " +
@@ -166,9 +167,4 @@ class SchemaDocsTest {
             "DOUBLE PRECISION" -> "DOUBLE"
             else -> type.replace(' ', '_')
         }
-
-    private companion object {
-        /** Every kind of database of the application: the folders of its migrations. */
-        val KINDS = listOf("app", "source", "corrections", "ratings", "model", "dictionaries", "preferences")
-    }
 }
