@@ -46,7 +46,8 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         val rows = ListFacetValues.everyItem(index, s.id, families.keys, sizes)
         val authorKeys = HashMap<String, List<String>>()
         authorFacet?.let { f -> s.items.forEachFacet(f) { id, keys -> authorKeys[id] = keys } }
-        return Compared(rows, ids, authorsOf(ids, authorKeys))
+        val names = authorFacet?.let(s::names).orEmpty()
+        return Compared(rows, ids, authorsOf(ids, authorKeys), namesOf(ids, authorKeys, names))
     }
 
     /** The works [ids] alone, by their keys; their numbers of size of the [sizes] numbers. */
@@ -66,7 +67,20 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
                 numbers.forEach { (item, of) -> of[n.key]?.let { rows.numbers.getOrPut(id) { HashMap() }[item] = it } }
         }
         val facets = authorFacet?.let { f -> s.items.facetsOf(ids).mapValues { it.value[f].orEmpty() } }.orEmpty()
-        return Compared(rows, ids, authorsOf(ids, facets))
+        val names = authorFacet?.let { f -> s.names(f, facets.values.flatten().distinct()) }.orEmpty()
+        return Compared(rows, ids, authorsOf(ids, facets), namesOf(ids, facets, names))
+    }
+
+    /**
+     * The names of every work's authors of [ids] — as the site writes them, by their [names] — one after another: what
+     * the authors are compared by letter by letter ([Letters]); none of a work of no author.
+     */
+    private fun namesOf(
+        ids: List<String>,
+        authorKeys: Map<String, List<String>>,
+        names: Map<String, String>,
+    ): List<String?> = ids.map { id ->
+        authorKeys[id]?.takeIf { it.isNotEmpty() }?.joinToString(" ") { names[it] ?: it }
     }
 
     /** The normalized authors of every work of [ids], by their places, of the site's authors' keys [authorKeys]. */
@@ -83,7 +97,13 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
      * their [names] — "<the facet compared as>:<value>" —, the authors' too; their [authors]; their numbers by the id
      * the index keeps them by, then the work ([numbers]).
      */
-    inner class Compared(rows: ItemRows, ids: List<String>, val authors: Array<LongArray>) {
+    inner class Compared(
+        rows: ItemRows,
+        ids: List<String>,
+        val authors: Array<LongArray>,
+        /** Every work's authors' names one after another; none of a work of no author. */
+        val authorNames: List<String?>,
+    ) {
         val numbers: Map<String, Map<String, Double>> = rows.numbers
 
         /** The name of every value by its number: of a value the user ignores, none. */

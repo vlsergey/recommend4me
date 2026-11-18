@@ -3,12 +3,15 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.matrix.Cublas
 
 /**
- * How alike two works are, of two sites or of one, layer by layer — what a model of pairs reads: the cosines of the
- * vectors of their titles and of their descriptions (none of a work without one), how near their sizes are — of every
- * number both have, the smaller over the larger, their mean (none when they share none) —, of every facet the sites
- * share both have the cosine of their values weighed by rarity ([facets], by the facet), whether the dictionary of
- * authors gives them one author, fully or in part, and the sites they are of ([site] the first's, [otherSite] the
- * second's: a site and itself, or two sites).
+ * How alike two works are, of two sites or of one, layer by layer — what a model of pairs reads: how alike their titles
+ * are letter by letter ([title], the cosine of their trigrams — user, 2026-11-18: the titles and the authors compared
+ * as strings, not as vectors of meaning — and how much of either is the other's: [titleWithin], [titleHolding]), the
+ * cosine of the vectors of their descriptions (none of a work without one), how near their sizes are — of every number
+ * both have, the smaller over the larger, their mean (none when they share none) —, of every facet the sites share both
+ * have the cosine of their values weighed by rarity ([facets], by the facet), whether the dictionary of authors gives
+ * them one author, fully or in part, how alike the names of their authors are letter by letter ([authors]: none when
+ * either has none), and the sites they are of ([site] the first's, [otherSite] the second's: a site and itself, or two
+ * sites).
  */
 class PairLayers(
     val title: Float,
@@ -18,7 +21,33 @@ class PairLayers(
     val sameAuthor: Boolean,
     val site: String,
     val otherSite: String,
+    val titleWithin: Float = 0f,
+    val titleHolding: Float = 0f,
+    val authors: Lexical? = null,
 )
+
+/**
+ * HOW ALIKE TWO STRINGS ARE LETTER BY LETTER, as near as their trigrams tell (user, 2026-11-18: approximately and
+ * fast): the cosine of the counts of their trigrams ([alike]), how much of the first's trigrams are the second's
+ * ([within]: 1 — the first is a substring of the second, as near as trigrams tell) and how much of the second's are the
+ * first's ([holding]). The strings normalized before: lower case, every run of what is no letter nor digit one space,
+ * trimmed.
+ */
+class Lexical(val alike: Float, val within: Float, val holding: Float) {
+    companion object {
+        /**
+         * Of the [cosine] of two strings' trigram counts and the lengths of the counts ([first], [second]): the share
+         * of either's trigrams the other has, of the product of the counts — at most one, a trigram counted twice in
+         * one and once in the other, or two trigrams of one bucket, telling the share over.
+         */
+        fun of(cosine: Float, first: Float, second: Float): Lexical =
+            Lexical(cosine, share(cosine, first, second), share(cosine, second, first))
+
+        /** The share of the trigrams of the string of length [own] the other, of length [other], has. */
+        fun share(cosine: Float, own: Float, other: Float): Float =
+            if (own <= 0f) 0f else (cosine * other / own).coerceIn(0f, 1f)
+    }
+}
 
 /** A model of pairs fitted: how likely a pair of [PairLayers] is of its kind — one work, one series. */
 interface FittedPairModel {

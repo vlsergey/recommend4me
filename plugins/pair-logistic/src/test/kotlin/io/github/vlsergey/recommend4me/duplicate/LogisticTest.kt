@@ -92,7 +92,8 @@ class LogisticTest {
         assertTrue(w.getValue(Logistic.sites(SITE, OTHER_SITE)) > w.getValue(Logistic.sites(SITE, SITE)), "$w")
         // The search scores two sites' pairs by their weight in its constant, as the chance does
         val laid = model.laid(emptyList())
-        val z = laid.between(OTHER_SITE, SITE).score(0.7f, 0.7f, true, 0f, false, 0L, { 0f }, false)
+        val z =
+            laid.between(OTHER_SITE, SITE).score(Lexical(0.7f, 0f, 0f), null, 0.7f, true, 0f, false, 0L, { 0f }, false)
         assertEquals(model.chance(pair(0.7f, 0.7f)), model.calibration.chance(z), 1e-9)
     }
 
@@ -114,8 +115,8 @@ class LogisticTest {
         val laid = model.laid(listOf("characters", "status"))
         val valued = arrayOf(floatArrayOf(0.8f, 0.1f), floatArrayOf(0f, 0f))
         val between = laid.between(SITE, OTHER_SITE)
-        val near = between.score(0.5f, 0.9f, true, 0f, false, 1L, { f -> valued[f][0] }, false)
-        val far = between.score(0.5f, 0.3f, true, 0f, false, 1L, { f -> valued[f][1] }, false)
+        val near = between.score(Lexical(0.5f, 0f, 0f), null, 0.9f, true, 0f, false, 1L, { f -> valued[f][0] }, false)
+        val far = between.score(Lexical(0.5f, 0f, 0f), null, 0.3f, true, 0f, false, 1L, { f -> valued[f][1] }, false)
         assertTrue(near > far)
         assertEquals(model.chance(0.5f, 0.9f, mapOf("characters" to 0.8f)), model.calibration.chance(near), 1e-9)
         val read = LogisticPairModel().unpack(model.pack())!!
@@ -139,7 +140,7 @@ class LogisticTest {
         val model = Logistic.fit(like + unlike, said)!!
         // The model's own sigmoid of the score: the 200 like ones unanswered taken as not, it is below a half
         val laid = model.laid(emptyList()).between(SITE, OTHER_SITE)
-        val z = laid.score(0.5f, 0.9f, true, 0f, false, 0L, { 0f }, false)
+        val z = laid.score(Lexical(0.5f, 0f, 0f), null, 0.9f, true, 0f, false, 0L, { 0f }, false)
         assertTrue(Logistic.sigmoid(z) < 0.5, "the model's own sigmoid ${Logistic.sigmoid(z)}")
         // The answers say a half
         assertEquals(0.5, model.chance(0.5f, 0.9f), 0.1)

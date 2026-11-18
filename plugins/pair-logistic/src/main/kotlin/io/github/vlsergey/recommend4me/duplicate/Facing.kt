@@ -58,11 +58,16 @@ internal class Facing(
 
     /** The rows of a block: as many as the [planes] hold. */
     private val rows =
-        (planes / maxOf(1L, n.toLong() * (Float.SIZE_BYTES * (2 + families) + 1)))
+        (planes / maxOf(1L, n.toLong() * (Float.SIZE_BYTES * (PLANES + families) + 1)))
             .toInt()
             .coerceIn(1, maxOf(1, own.count))
     private val t = room.floats(rows.toLong() * n)
+    private val a = room.floats(rows.toLong() * n)
     private val d = room.floats(rows.toLong() * n)
+
+    // The descriptions of the two compared: of one encoder's vectors
+    private val descriptions = search.descriptionsCompared(tile.a, tile.b)
+    private val described = own.descriptions.cols
     private val v = room.floats(families.toLong() * rows * n)
     private val s = room.bytes(rows.toLong() * n)
     private val best = room.bytes(rows.toLong() * models * Int.SIZE_BYTES)
@@ -106,8 +111,8 @@ internal class Facing(
     }
 
     /**
-     * The cosines of the titles and of the descriptions of the [m] rows from [from] on with every work of the second
-     * site; the planes of the facets and the authors made nought.
+     * The cosines of the trigrams of the titles and of the authors' names, and of the descriptions, of the [m] rows
+     * from [from] on with every work of the second site; the planes of the facets and the authors made nought.
      */
     private fun products(from: Int, m: Int, card: Cublas) {
         // Of halves on the tensor cores, summed in single precision: the vectors as the database keeps them
@@ -135,17 +140,35 @@ internal class Facing(
             m,
             n,
             width,
-            x.descriptions,
+            x.authorNames,
             from.toLong() * width,
             width,
-            y.descriptions,
+            y.authorNames,
             0,
             width,
-            d,
+            a,
             0,
             n,
             halves = Halves.IEEE,
         )
+        if (descriptions)
+            halves.gemm(
+                false,
+                true,
+                m,
+                n,
+                described,
+                x.descriptions,
+                from.toLong() * described,
+                described,
+                y.descriptions,
+                0,
+                described,
+                d,
+                0,
+                n,
+                halves = Halves.IEEE,
+            )
         v.zero(0, families.toLong() * m * n)
         s.zero()
     }
@@ -200,6 +223,12 @@ internal class Facing(
             d,
             v,
             s,
+            a,
+            x.titleLengths,
+            y.titleLengths,
+            x.authorLengths,
+            y.authorLengths,
+            if (descriptions) 1 else 0,
             x.described,
             y.described,
             x.facets,
@@ -232,5 +261,8 @@ internal class Facing(
 
         /** The least memory of a block's planes tried before the search is given to the processor. */
         const val LEAST_ROOM = 64L shl 20
+
+        /** The planes of a row's every pair besides the facets': the titles, the authors' names, the descriptions. */
+        const val PLANES = 3
     }
 }

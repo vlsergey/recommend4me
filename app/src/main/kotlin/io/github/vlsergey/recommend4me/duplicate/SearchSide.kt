@@ -2,13 +2,13 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
+import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
-import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.vector.Vectors
@@ -27,16 +27,21 @@ internal const val AUTHOR_FAMILY = "author"
 internal fun familyOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACETS) UniverseFacets.CHARACTERS else facet
 
 /**
- * The works of one site as the search reads them: those with a vector of their title, its unit rows ([titles], one row
- * a work), and of their descriptions ([descriptions], a row of noughts and [described] false of a work without one);
- * the values of the facets the sites share ([values], by their places among every value of the type); the numbers of
- * its size the sites share ([sizes], by the standard number, nought when not known); and every work's normalized
- * authors ([authors]). Handed to the model of pairs as its [works], weighed once every site is read.
+ * The works of one site as the search reads them: every work of a title — its letters' rows ([titles], [titleLengths]:
+ * [Letters]), its authors' names' ([authorNames], [authorLengths]: nought of a work of no author), and the vectors of
+ * their descriptions ([descriptions], a row of noughts and [described] false of a work without one, of no column a site
+ * of no vector of a description); the values of the facets the sites share ([values], by their places among every value
+ * of the type); the numbers of its size the sites share ([sizes], by the standard number, nought when not known); and
+ * every work's normalized authors ([authors]). Handed to the model of pairs as its [works], weighed once every site is
+ * read.
  */
 internal class SearchSide(
     val store: SourceStore,
     val ids: List<String>,
     val titles: HalfMatrix,
+    val titleLengths: FloatArray,
+    val authorNames: HalfMatrix,
+    val authorLengths: FloatArray,
     val descriptions: HalfMatrix,
     val described: BooleanArray,
     val values: Array<IntArray>,
@@ -64,6 +69,9 @@ internal class SearchSide(
             store.id,
             ids,
             titles,
+            titleLengths,
+            authorNames,
+            authorLengths,
             descriptions,
             described,
             values,
@@ -85,54 +93,74 @@ internal class SearchSide(
          * the sites are read side by side.
          */
         fun read(s: SourceStore, encoder: String, ratios: Map<Long, Double>, index: ListIndex): ReadSide? {
-            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
             val started = System.currentTimeMillis()
-            val ids = s.textVectors.itemsWith(TextVectors.TITLE)
-            if (ids.isEmpty()) return null
-            val at = ids.withIndex().associate { it.value to it.index }
-            // In half precision, as the database keeps them: half the memory of a million works', half the card's
-            var titles: HalfMatrix? = null
-            var descriptions: HalfMatrix? = null
-            val described = BooleanArray(ids.size)
-            s.textVectors.forEach(encoder, listOfNotNull(TextVectors.TITLE, description)) { id, key, vector ->
-                val i = at[id] ?: return@forEach
-                if (titles == null) {
-                    titles = HalfMatrix(ids.size, vector.size)
-                    descriptions = HalfMatrix(ids.size, vector.size)
-                }
-                if (vector.size != titles!!.cols) return@forEach
-                val unit = Vectors.unit(vector)
-                if (key == TextVectors.TITLE) titles!!.put(i, unit)
-                else {
-                    descriptions!!.put(i, unit)
-                    described[i] = true
-                }
-            }
-            return titles?.let {
-                val vectors = System.currentTimeMillis()
-                val numbers = sizeNumbers(s)
-                val compared = ComparedValues(s, index).every(ids, numbers.keys)
-                val read = System.currentTimeMillis()
-                val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.allOf(s.id))
-                log.info(
-                    "{}: the search's side of {} works read in {} ms: vectors {}, values and authors {}, sizes {}",
-                    s.id,
-                    ids.size,
-                    System.currentTimeMillis() - started,
-                    vectors - started,
-                    read - vectors,
-                    System.currentTimeMillis() - read,
+            val titled = s.items.titles()
+            if (titled.isEmpty()) return null
+            val fields = s.corrections.allFields()
+            // Every work of a title, ascending, as the user corrected it: its letters, not a vector of its meaning
+            val ids = titled.keys.sorted()
+            val (titles, titleLengths) =
+                Letters.rows(ids.map { Corrected.title(titled.getValue(it), fields[it].orEmpty()) })
+            val lettered = System.currentTimeMillis()
+            val (descriptions, described) = descriptionsOf(s, encoder, ids)
+            val vectors = System.currentTimeMillis()
+            val numbers = sizeNumbers(s)
+            val compared = ComparedValues(s, index).every(ids, numbers.keys)
+            val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
+            val read = System.currentTimeMillis()
+            val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.allOf(s.id))
+            log.info(
+                "{}: the search's side of {} works read in {} ms: titles {}, vectors {}, values and authors {}, " +
+                    "sizes {}",
+                s.id,
+                ids.size,
+                System.currentTimeMillis() - started,
+                lettered - started,
+                vectors - lettered,
+                read - vectors,
+                System.currentTimeMillis() - read,
+            )
+            return ReadSide(compared.numbered, compared.names) { placed ->
+                SearchSide(
+                    s,
+                    ids,
+                    titles,
+                    titleLengths,
+                    authorNames,
+                    authorLengths,
+                    descriptions,
+                    described,
+                    placed,
+                    sizes,
+                    compared.authors,
                 )
-                ReadSide(compared.numbered, compared.names) { placed ->
-                    SearchSide(s, ids, it, descriptions!!, described, placed, sizes, compared.authors)
-                }
             }
         }
 
         /**
+         * The vectors of the descriptions of the works [ids] by the [encoder], unit rows in half precision, and which
+         * have one: of no column, a site of none.
+         */
+        private fun descriptionsOf(s: SourceStore, encoder: String, ids: List<String>): Pair<HalfMatrix, BooleanArray> {
+            val described = BooleanArray(ids.size)
+            val description =
+                s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+                    ?: return HalfMatrix(ids.size, 0) to described
+            val at = ids.withIndex().associate { it.value to it.index }
+            var rows: HalfMatrix? = null
+            s.textVectors.forEach(encoder, listOf(description)) { id, _, vector ->
+                val i = at[id] ?: return@forEach
+                val into = rows ?: HalfMatrix(ids.size, vector.size).also { rows = it }
+                if (vector.size != into.cols) return@forEach
+                into.put(i, Vectors.unit(vector))
+                described[i] = true
+            }
+            return (rows ?: HalfMatrix(ids.size, 0)) to described
+        }
+
+        /**
          * The side of the works [ids] of the source alone, read as every work of it is ([read]): what a pair no search
-         * kept is compared by as it is shown ([LoosePairs]). Of the works with a vector of their title alone; null when
-         * none has one.
+         * kept is compared by as it is shown ([LoosePairs]). Of the works there alone; null when none is.
          */
         fun readOf(
             s: SourceStore,
@@ -141,20 +169,20 @@ internal class SearchSide(
             ratios: Map<Long, Double>,
             index: ListIndex,
         ): ReadSide? {
-            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-            val vectors = s.textVectors.ofMany(ids, encoder, listOfNotNull(TextVectors.TITLE, description))
-            val own = ids.filter { vectors[it]?.get(TextVectors.TITLE) != null }.distinct().sorted()
+            val heads = s.items.heads(ids)
+            val own = ids.filter { it in heads }.distinct().sorted()
             if (own.isEmpty()) return null
-            val width = vectors.getValue(own.first()).getValue(TextVectors.TITLE).size
-            val titles = HalfMatrix(own.size, width)
+            val fields = s.corrections.fieldsOf(own)
+            val (titles, titleLengths) =
+                Letters.rows(own.map { Corrected.title(heads.getValue(it).title, fields[it].orEmpty()) })
+            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+            val vectors = description?.let { s.textVectors.ofMany(own, encoder, listOf(it)) }.orEmpty()
+            val width = vectors.values.firstNotNullOfOrNull { it[description] }?.size ?: 0
             val descriptions = HalfMatrix(own.size, width)
             val described = BooleanArray(own.size)
             own.forEachIndexed { i, id ->
-                val texts = vectors.getValue(id)
-                val title = Vectors.unit(texts.getValue(TextVectors.TITLE))
-                if (title.size == width) titles.put(i, title)
-                description
-                    ?.let(texts::get)
+                vectors[id]
+                    ?.get(description)
                     ?.takeIf { it.size == width }
                     ?.let { v ->
                         descriptions.put(i, Vectors.unit(v))
@@ -163,9 +191,22 @@ internal class SearchSide(
             }
             val numbers = sizeNumbers(s)
             val compared = ComparedValues(s, index).of(own, numbers.keys)
+            val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val sizes = sizesOf(own, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.ofItems(s.id, own))
             return ReadSide(compared.numbered, compared.names) { placed ->
-                SearchSide(s, own, titles, descriptions, described, placed, sizes, compared.authors)
+                SearchSide(
+                    s,
+                    own,
+                    titles,
+                    titleLengths,
+                    authorNames,
+                    authorLengths,
+                    descriptions,
+                    described,
+                    placed,
+                    sizes,
+                    compared.authors,
+                )
             }
         }
 

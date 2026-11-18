@@ -3,19 +3,24 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 
 /**
- * THE WORKS OF ONE SITE AS A SEARCH OF PAIRS READS THEM: those with a vector of their title ([ids], ascending) — its
- * unit row ([titles], a row a work, in half precision as the database keeps it) — and of their descriptions
- * ([descriptions], a row of noughts and [described] false of a work without one); the values of the facets the sites
- * share ([values], by their places among every value of the type, ascending) with the weight of each ([weights]: its
- * rarity among every work of the type, a work's values of each facet of unit length) and the facets it has a value of
- * ([facets], a bit a facet by its place among [PairSearch.families]); the numbers of its size ([sizes], by the places
- * of [PairSearch.sizes], a row a number, nought when not known); its normalized authors ([authors]) and with them every
+ * THE WORKS OF ONE SITE AS A SEARCH OF PAIRS READS THEM: every work of a title ([ids], ascending) — the unit row of its
+ * trigrams' counts ([titles], a row a work, in half precision; [titleLengths] the counts' lengths, nought of a title of
+ * none), the same of the names of its authors ([authorNames], [authorLengths]: nought of a work of no author named) —
+ * and of the vectors of their descriptions ([descriptions], a row of noughts and [described] false of a work without
+ * one; of no column, a site with no vector of a description); the values of the facets the sites share ([values], by
+ * their places among every value of the type, ascending) with the weight of each ([weights]: its rarity among every
+ * work of the type, a work's values of each facet of unit length) and the facets it has a value of ([facets], a bit a
+ * facet by its place among [PairSearch.families]); the numbers of its size ([sizes], by the places of
+ * [PairSearch.sizes], a row a number, nought when not known); its normalized authors ([authors]) and with them every
  * author the dictionary of authors gives as one with them, fully or in part ([kin]).
  */
 class SiteWorks(
     val source: String,
     val ids: List<String>,
     val titles: HalfMatrix,
+    val titleLengths: FloatArray,
+    val authorNames: HalfMatrix,
+    val authorLengths: FloatArray,
     val descriptions: HalfMatrix,
     val described: BooleanArray,
     val values: Array<IntArray>,
@@ -28,13 +33,19 @@ class SiteWorks(
     val count: Int
         get() = ids.size
 
-    /** How long a vector of a title or a description is: two sites are compared when theirs are alike. */
+    /**
+     * How long a row of the trigrams of a title or of the authors' names is: two sites compared when theirs are alike.
+     */
     val width: Int
         get() = titles.cols
 
     init {
-        require(titles.rows == count && descriptions.rows == count && descriptions.cols == width) {
-            "$source: ${titles.rows} titles, ${descriptions.rows} descriptions of $count works"
+        require(titles.rows == count && authorNames.rows == count && descriptions.rows == count) {
+            "$source: ${titles.rows} titles, ${authorNames.rows} authors, ${descriptions.rows} descriptions " +
+                "of $count works"
+        }
+        require(authorNames.cols == width && titleLengths.size == count && authorLengths.size == count) {
+            "$source: the authors' trigrams of ${authorNames.cols} numbers, not $width; not a length of every work"
         }
         require(
             listOf(described.size, values.size, weights.size, facets.size, authors.size, kin.size).all { it == count }
@@ -67,10 +78,16 @@ class PairSearch(
     }
 
     /**
-     * Whether the works of the [a]-th site and of the [b]-th are compared at all: of vectors alike — a site with itself
-     * too, a work never with itself.
+     * Whether the works of the [a]-th site and of the [b]-th are compared at all: of trigrams alike — a site with
+     * itself too, a work never with itself.
      */
     fun compared(a: Int, b: Int): Boolean = sites[a].width == sites[b].width
+
+    /**
+     * Whether the descriptions of the [a]-th site's works and of the [b]-th's are compared: of one encoder's vectors.
+     */
+    fun descriptionsCompared(a: Int, b: Int): Boolean =
+        sites[a].descriptions.cols > 0 && sites[a].descriptions.cols == sites[b].descriptions.cols
 
     /** THE LAYERS OF THE PAIR of the [a]-th site's [i]-th work and the [b]-th site's [j]-th, worked out alone. */
     fun layers(a: Int, i: Int, b: Int, j: Int): PairLayers {
@@ -78,9 +95,11 @@ class PairSearch(
         val y = sites[b]
         fun dot(u: HalfMatrix, v: HalfMatrix): Float {
             var sum = 0f
-            for (k in 0 until x.width) sum += u[i, k] * v[j, k]
+            for (k in 0 until u.cols) sum += u[i, k] * v[j, k]
             return sum
         }
+        val title = Lexical.of(dot(x.titles, y.titles), x.titleLengths[i], y.titleLengths[j])
+        val authored = x.authorLengths[i] > 0f && y.authorLengths[j] > 0f
         val facets = FloatArray(families.size)
         var p = 0
         var q = 0
@@ -95,13 +114,20 @@ class PairSearch(
         }
         val both = x.facets[i] and y.facets[j]
         return PairLayers(
-            title = dot(x.titles, y.titles),
-            description = if (x.described[i] && y.described[j]) dot(x.descriptions, y.descriptions) else null,
+            title = title.alike,
+            description =
+                if (descriptionsCompared(a, b) && x.described[i] && y.described[j]) dot(x.descriptions, y.descriptions)
+                else null,
             size = size(x, i, y, j),
             facets = families.indices.filter { both and (1L shl it) != 0L }.associate { families[it] to facets[it] },
             sameAuthor = y.authors[j].any { it in x.kin[i] },
             site = x.source,
             otherSite = y.source,
+            titleWithin = title.within,
+            titleHolding = title.holding,
+            authors =
+                if (authored) Lexical.of(dot(x.authorNames, y.authorNames), x.authorLengths[i], y.authorLengths[j])
+                else null,
         )
     }
 

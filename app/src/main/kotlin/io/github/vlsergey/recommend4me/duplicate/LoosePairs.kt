@@ -71,15 +71,6 @@ internal object LoosePairs {
                 emptyMap(),
             )
         if (!search.compared(0, 1)) return null
-        val layers = search.layers(0, 0, 1, 0)
-        return DuplicateCandidate(
-            first,
-            second,
-            layers.title,
-            layers.description,
-            layers.size,
-            layers.facets,
-            sameAuthor = layers.sameAuthor,
-        )
+        return DuplicateCandidate.of(first, second, search.layers(0, 0, 1, 0))
     }
 }

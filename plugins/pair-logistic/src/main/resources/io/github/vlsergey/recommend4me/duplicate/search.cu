@@ -1,5 +1,5 @@
 // THE SEARCH OF PAIRS ON THE CARD (CardSearch): a block of rows of one site's works against every work of another.
-// The cosines of their titles and descriptions are cuBLAS's products, made before; here the facets their values share,
+// The cosines of their titles' and authors' trigrams and of their descriptions are cuBLAS's products, made before; here the facets their values share,
 // through the other site's works of every value (facets_onto); the works of one author (authors_onto); and every
 // model's score of every pair, the likeliest work of every model kept of every row (best) — every model in the same
 // pass over the pairs.
@@ -61,16 +61,26 @@ extern "C" __global__ void authors_onto(
     }
 }
 
+// The share of the trigrams of a string of length own the other, of length other, has, of the cosine c of the two
+// (Lexical.share): at most one
+__device__ __forceinline__ float share(float c, float own, float other) {
+    return own <= 0.0f ? 0.0f : fminf(fmaxf(c * other / own, 0.0f), 1.0f);
+}
+
 // A score of the model of the numbers m (Logistic.Laid.flat: the mean's mark, the constant, the title, the description
-// and that both have one, the size and that both have it, one author, then of every facet its weight and that both have
-// it) of a pair of these layers: of a learnt model its logit, else the mean of the layers both have
+// and that both have one, the size and that both have it, one author, the title's two shares, the authors' names, that
+// both have some and their two shares, then of every facet its weight and that both have it) of a pair of these
+// layers: of a learnt model its logit, else the mean of the layers both have. The title's letters t of the lengths tA,
+// tB; the authors' names' a of aA, aB, none when either is nought
 __device__ float score_of(
-    const float* m, int families, float t, float d, bool hasD, float s, bool hasS, unsigned long long both,
-    const float* V, size_t at, size_t stride, bool same
+    const float* m, int families, float t, float tA, float tB, float a, float aA, float aB, float d, bool hasD, float s,
+    bool hasS, unsigned long long both, const float* V, size_t at, size_t stride, bool same
 ) {
+    bool hasA = aA > 0.0f && aB > 0.0f;
     if (m[0] != 0.0f) {
         float sum = t;
         int layers = 1;
+        if (hasA) { sum += a; layers++; }
         if (hasD) { sum += d; layers++; }
         if (hasS) { sum += s; layers++; }
         if (both != 0ULL) {
@@ -88,14 +98,15 @@ __device__ float score_of(
         }
         return sum / layers;
     }
-    float z = m[1] + m[2] * t;
+    float z = m[1] + m[2] * t + m[8] * share(t, tA, tB) + m[9] * share(t, tB, tA);
+    if (hasA) z += m[10] * a + m[11] + m[12] * share(a, aA, aB) + m[13] * share(a, aB, aA);
     if (hasD) z += m[3] * d + m[4];
     if (hasS) z += m[5] * s + m[6];
     if (same) z += m[7];
     unsigned long long bits = both;
     while (bits != 0ULL) {
         int k = __ffsll((long long) bits) - 1;
-        z += m[8 + 2 * k] * V[k * stride + at] + m[9 + 2 * k];
+        z += m[14 + 2 * k] * V[k * stride + at] + m[15 + 2 * k];
         bits &= bits - 1ULL;
     }
     return z;
@@ -108,6 +119,8 @@ __device__ float score_of(
 // with its score at scores[r][model]. Of one site against itself (self), a work is never its own pair
 extern "C" __global__ void best(
     int rows, int from, int n, int nA, const float* T, const float* D, const float* V, const unsigned char* S,
+    const float* A, const float* titleA, const float* titleB, const float* authorA, const float* authorB,
+    int descriptions,
     const unsigned char* describedA, const unsigned char* describedB, const unsigned long long* facetsA,
     const unsigned long long* facetsB, int sizes, const float* sizesA, const float* sizesB,
     const int* passAt, const int* pass, int models, const float* weights, int families, int self, int* best,
@@ -118,11 +131,13 @@ extern "C" __global__ void best(
     int r = blockIdx.x;
     if (r >= rows) return;
     int i = from + r;
-    int stride = 8 + 2 * families;
+    int stride = 14 + 2 * families;
     float own[MAX_MODELS];
     int at[MAX_MODELS];
     for (int m = 0; m < models; m++) { own[m] = -__int_as_float(0x7f800000); at[m] = -1; }
-    bool describedOwn = describedA[i] != 0;
+    bool describedOwn = descriptions != 0 && describedA[i] != 0;
+    float tOwn = titleA[i];
+    float aOwn = authorA[i];
     unsigned long long facetsOwn = facetsA[i];
     size_t plane = (size_t) rows * n;
     for (int j = threadIdx.x; j < n; j += blockDim.x) {
@@ -144,7 +159,10 @@ extern "C" __global__ void best(
         unsigned long long both = facetsOwn & facetsB[j];
         bool same = S[c] != 0;
         for (int m = 0; m < models; m++) {
-            float z = score_of(weights + (size_t) m * stride, families, T[c], D[c], hasD, s, hasS, both, V, c, plane, same);
+            float z = score_of(
+                weights + (size_t) m * stride, families, T[c], tOwn, titleB[j], A[c], aOwn, authorB[j], D[c], hasD, s,
+                hasS, both, V, c, plane, same
+            );
             if (z > own[m]) { own[m] = z; at[m] = j; }
         }
     }

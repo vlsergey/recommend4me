@@ -29,6 +29,11 @@ class SearchTest {
                     FloatArray(width) { v[it] / l }
                 }
         val titles = HalfMatrix(count, width).also { m -> for (i in 0 until count) m.put(i, unit()) }
+        val titleLengths = FloatArray(count) { 2f + random.nextInt(6) }
+        // The names of the authors of some, of others none
+        val authorLengths = FloatArray(count) { if (random.nextInt(3) == 0) 0f else 1f + random.nextInt(4) }
+        val authorNames =
+            HalfMatrix(count, width).also { m -> for (i in 0 until count) if (authorLengths[i] > 0f) m.put(i, unit()) }
         val described = BooleanArray(count) { random.nextInt(4) != 0 }
         val descriptions =
             HalfMatrix(count, width).also { m -> for (i in 0 until count) if (described[i]) m.put(i, unit()) }
@@ -45,6 +50,9 @@ class SearchTest {
             source,
             List(count) { "%05d".format(it) },
             titles,
+            titleLengths,
+            authorNames,
+            authorLengths,
             descriptions,
             described,
             values,
@@ -76,6 +84,12 @@ class SearchTest {
                 mapOf(
                     Logistic.CONSTANT to -3.0,
                     Logistic.TITLE to 2.5,
+                    Logistic.TITLE_WITHIN to 0.6,
+                    Logistic.TITLE_HOLDING to -0.4,
+                    Logistic.AUTHORS to 1.1,
+                    Logistic.has(Logistic.AUTHORS) to -0.2,
+                    Logistic.AUTHORS_WITHIN to 0.5,
+                    Logistic.AUTHORS_HOLDING to 0.3,
                     Logistic.DESCRIPTION to 1.5,
                     Logistic.has(Logistic.DESCRIPTION) to 0.2,
                     Logistic.SIZE to 0.7,

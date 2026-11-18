@@ -23,6 +23,7 @@ internal class Logistic(
             weights
                 ?: return listOfNotNull(
                         layers.title,
+                        layers.authors?.alike,
                         layers.description,
                         layers.size,
                         layers.facets.values.takeIf { it.isNotEmpty() }?.average()?.toFloat(),
@@ -48,20 +49,28 @@ internal class Logistic(
      * The model as a search weighs millions of pairs: of the [families] of facets by their places, its weights laid
      * out, no map made of a pair ([Laid]).
      */
-    fun laid(families: List<String>): Laid =
-        Laid(
+    fun laid(families: List<String>): Laid {
+        fun weight(name: String) = weights?.get(name) ?: 0.0
+        return Laid(
             mean = weights == null,
-            constant = weights?.get(CONSTANT) ?: 0.0,
-            title = weights?.get(TITLE) ?: 0.0,
-            description = weights?.get(DESCRIPTION) ?: 0.0,
-            described = weights?.get(has(DESCRIPTION)) ?: 0.0,
-            size = weights?.get(SIZE) ?: 0.0,
-            sized = weights?.get(has(SIZE)) ?: 0.0,
-            author = weights?.get(SAME_AUTHOR) ?: 0.0,
-            facet = DoubleArray(families.size) { weights?.get(facet(families[it])) ?: 0.0 },
-            faceted = DoubleArray(families.size) { weights?.get(has(facet(families[it]))) ?: 0.0 },
+            constant = weight(CONSTANT),
+            title = weight(TITLE),
+            titleWithin = weight(TITLE_WITHIN),
+            titleHolding = weight(TITLE_HOLDING),
+            authors = weight(AUTHORS),
+            authored = weight(has(AUTHORS)),
+            authorsWithin = weight(AUTHORS_WITHIN),
+            authorsHolding = weight(AUTHORS_HOLDING),
+            description = weight(DESCRIPTION),
+            described = weight(has(DESCRIPTION)),
+            size = weight(SIZE),
+            sized = weight(has(SIZE)),
+            author = weight(SAME_AUTHOR),
+            facet = DoubleArray(families.size) { weight(facet(families[it])) },
+            faceted = DoubleArray(families.size) { weight(has(facet(families[it]))) },
             ofSites = weights.orEmpty().filterKeys { it.startsWith(SITES) },
         )
+    }
 
     /**
      * A model's weights by the places of the facets: what a pair is scored by in a search — of a learnt model the
@@ -73,6 +82,12 @@ internal class Logistic(
         val mean: Boolean,
         val constant: Double,
         val title: Double,
+        val titleWithin: Double,
+        val titleHolding: Double,
+        val authors: Double,
+        val authored: Double,
+        val authorsWithin: Double,
+        val authorsHolding: Double,
         val description: Double,
         val described: Double,
         val size: Double,
@@ -90,6 +105,12 @@ internal class Logistic(
                 mean,
                 constant + (ofSites[sites(site, other)] ?: 0.0),
                 title,
+                titleWithin,
+                titleHolding,
+                authors,
+                authored,
+                authorsWithin,
+                authorsHolding,
                 description,
                 described,
                 size,
@@ -99,9 +120,13 @@ internal class Logistic(
                 faceted,
             )
 
-        /** The facets both have: the bits of [both]; of the f-th, how alike they are [valued] (f). */
+        /**
+         * The facets both have: the bits of [both]; of the f-th, how alike they are [valued] (f). The title's letters
+         * [t]; the authors' names' [a], none when either has none.
+         */
         fun score(
-            t: Float,
+            t: Lexical,
+            a: Lexical?,
             d: Float,
             hasDescription: Boolean,
             s: Float,
@@ -111,8 +136,12 @@ internal class Logistic(
             sameAuthor: Boolean,
         ): Double {
             if (mean) {
-                var sum = t.toDouble()
+                var sum = t.alike.toDouble()
                 var layers = 1
+                if (a != null) {
+                    sum += a.alike
+                    layers++
+                }
                 if (hasDescription) {
                     sum += d
                     layers++
@@ -135,7 +164,8 @@ internal class Logistic(
                 }
                 return sum / layers
             }
-            var z = constant + title * t
+            var z = constant + title * t.alike + titleWithin * t.within + titleHolding * t.holding
+            if (a != null) z += authors * a.alike + authored + authorsWithin * a.within + authorsHolding * a.holding
             if (hasDescription) z += description * d + described
             if (hasSize) z += size * s + sized
             if (sameAuthor) z += author
@@ -150,8 +180,9 @@ internal class Logistic(
 
         /**
          * The numbers as the card's kernel reads them, one model after another: the mean's mark, the constant, the
-         * title, the description and that both have one, the size and that both have it, one author, then of every
-         * facet its weight and that both have it.
+         * title, the description and that both have one, the size and that both have it, one author, the title's two
+         * shares, the authors' names, that both have some and their two shares, then of every facet its weight and that
+         * both have it.
          */
         fun flat(): FloatArray =
             floatArrayOf(
@@ -163,12 +194,27 @@ internal class Logistic(
                 size.toFloat(),
                 sized.toFloat(),
                 author.toFloat(),
+                titleWithin.toFloat(),
+                titleHolding.toFloat(),
+                authors.toFloat(),
+                authored.toFloat(),
+                authorsWithin.toFloat(),
+                authorsHolding.toFloat(),
             ) + FloatArray(facet.size * 2) { if (it % 2 == 0) facet[it / 2].toFloat() else faceted[it / 2].toFloat() }
     }
 
     companion object {
         const val CONSTANT = "constant"
         const val TITLE = "title"
+
+        /** The features of how much of the first's title the second's is, and of the second's the first's. */
+        const val TITLE_WITHIN = "titleWithin"
+        const val TITLE_HOLDING = "titleHolding"
+
+        /** The features of how alike the names of the two's authors are, letter by letter, and their shares. */
+        const val AUTHORS = "authors"
+        const val AUTHORS_WITHIN = "authorsWithin"
+        const val AUTHORS_HOLDING = "authorsHolding"
         const val DESCRIPTION = "description"
         const val SIZE = "size"
 
@@ -176,7 +222,7 @@ internal class Logistic(
         const val SAME_AUTHOR = "sameAuthor"
 
         /** The numbers of a model before its facets' in [Laid.flat]. */
-        const val FLAT_HEAD = 8
+        const val FLAT_HEAD = 14
 
         /** The feature of how alike the values of a facet the sites share are: "facet:<facet>". */
         fun facet(family: String) = "facet:$family"
@@ -203,6 +249,14 @@ internal class Logistic(
             val out = HashMap<String, Double>()
             out[CONSTANT] = 1.0
             out[TITLE] = layers.title.toDouble()
+            out[TITLE_WITHIN] = layers.titleWithin.toDouble()
+            out[TITLE_HOLDING] = layers.titleHolding.toDouble()
+            layers.authors?.let {
+                out[AUTHORS] = it.alike.toDouble()
+                out[has(AUTHORS)] = 1.0
+                out[AUTHORS_WITHIN] = it.within.toDouble()
+                out[AUTHORS_HOLDING] = it.holding.toDouble()
+            }
             if (layers.sameAuthor) out[SAME_AUTHOR] = 1.0
             out[sites(layers.site, layers.otherSite)] = 1.0
             layers.description?.let {

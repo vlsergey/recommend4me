@@ -129,8 +129,14 @@ internal class SiteOnCard(site: SiteWorks, val inverted: Inverted, room: CardRoo
     // numbers 6 GB of the card's 16, not 12)
     val titles =
         room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(site.titles, 0, site.count) }
+    val authorNames =
+        room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(site.authorNames, 0, site.count) }
+    val titleLengths = room.floatsOf(site.titleLengths)
+    val authorLengths = room.floatsOf(site.authorLengths)
     val descriptions =
-        room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(site.descriptions, 0, site.count) }
+        room.bytes(site.count.toLong() * site.descriptions.cols * HALF_BYTES).also {
+            it.upload(site.descriptions, 0, site.count)
+        }
     val described = room.marks(site.described)
     val facets = room.longs(site.facets)
     val sizes =

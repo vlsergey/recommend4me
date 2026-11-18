@@ -27,15 +27,48 @@ class DuplicateCandidate(
     val facets: Map<String, Float>,
     var foundFor: Int = 0,
     val sameAuthor: Boolean = false,
+    /** How much of the first's title the second's is, and of the second's the first's ([PairLayers.titleWithin]). */
+    val titleWithin: Float = 0f,
+    val titleHolding: Float = 0f,
+    /** How alike the names of the two's authors are letter by letter; none when either has none. */
+    val authors: Lexical? = null,
 ) {
     val pair: Pair<ItemKey, ItemKey>
         get() = first to second
 
     /** How alike the two are, as a model of pairs reads it. */
     val layers: PairLayers
-        get() = PairLayers(title, description, size, facets, sameAuthor, first.source, second.source)
+        get() =
+            PairLayers(
+                title,
+                description,
+                size,
+                facets,
+                sameAuthor,
+                first.source,
+                second.source,
+                titleWithin,
+                titleHolding,
+                authors,
+            )
 
     companion object {
+        /** The pair of [first] and [second] of the [layers], found for the works of [foundFor]. */
+        fun of(first: ItemKey, second: ItemKey, layers: PairLayers, foundFor: Int = 0) =
+            DuplicateCandidate(
+                first,
+                second,
+                layers.title,
+                layers.description,
+                layers.size,
+                layers.facets,
+                foundFor,
+                layers.sameAuthor,
+                layers.titleWithin,
+                layers.titleHolding,
+                layers.authors,
+            )
+
         /** Of [foundFor], the bit of the first work, and of the second. */
         const val FIRST = 1
         const val SECOND = 2
@@ -117,33 +150,7 @@ class DuplicateRepository(private val db: DSLContext) {
             )
         ordered.chunked(BATCH).forEach { chunk ->
             val batch =
-                tx.batch(
-                    tx.insertInto(
-                            DUPLICATE_CANDIDATE,
-                            DUPLICATE_CANDIDATE.SOURCE,
-                            DUPLICATE_CANDIDATE.ITEM_ID,
-                            DUPLICATE_CANDIDATE.OTHER_SOURCE,
-                            DUPLICATE_CANDIDATE.OTHER_ITEM_ID,
-                            DUPLICATE_CANDIDATE.TITLE,
-                            DUPLICATE_CANDIDATE.DESCRIPTION,
-                            DUPLICATE_CANDIDATE.SIZE,
-                            DUPLICATE_CANDIDATE.FACETS,
-                            DUPLICATE_CANDIDATE.FOUND_FOR,
-                            DUPLICATE_CANDIDATE.SAME_AUTHOR,
-                        )
-                        .values(
-                            null as String?,
-                            null as String?,
-                            null as String?,
-                            null as String?,
-                            null as Float?,
-                            null as Float?,
-                            null as Float?,
-                            null as String?,
-                            null as Byte?,
-                            null as Boolean?,
-                        )
-                )
+                tx.batch(tx.insertInto(DUPLICATE_CANDIDATE).columns(COLUMNS).values(List(COLUMNS.size) { null }))
             chunk.forEach { d ->
                 batch.bind(
                     d.first.source,
@@ -156,6 +163,11 @@ class DuplicateRepository(private val db: DSLContext) {
                     d.facets.takeIf { it.isNotEmpty() }?.let(::written),
                     d.foundFor.toByte(),
                     d.sameAuthor,
+                    d.titleWithin,
+                    d.titleHolding,
+                    d.authors?.alike,
+                    d.authors?.within,
+                    d.authors?.holding,
                 )
             }
             batch.execute()
@@ -180,7 +192,19 @@ class DuplicateRepository(private val db: DSLContext) {
     /** The candidate of the two works, the smaller key [first], as the last search kept it; null of none. */
     fun find(first: ItemKey, second: ItemKey): DuplicateCandidate? {
         val c = DUPLICATE_CANDIDATE
-        return db.select(c.TITLE, c.DESCRIPTION, c.SIZE, c.FACETS, c.FOUND_FOR, c.SAME_AUTHOR)
+        return db.select(
+                c.TITLE,
+                c.DESCRIPTION,
+                c.SIZE,
+                c.FACETS,
+                c.FOUND_FOR,
+                c.SAME_AUTHOR,
+                c.TITLE_WITHIN,
+                c.TITLE_HOLDING,
+                c.AUTHORS_ALIKE,
+                c.AUTHORS_WITHIN,
+                c.AUTHORS_HOLDING,
+            )
             .from(c)
             .where(
                 c.SOURCE.eq(first.source),
@@ -198,6 +222,9 @@ class DuplicateRepository(private val db: DSLContext) {
                     r.value4()?.let { numbers(it) { s -> s } }.orEmpty(),
                     r.value5()!!.toInt(),
                     r.value6()!!,
+                    r.value7() ?: 0f,
+                    r.value8() ?: 0f,
+                    lexical(r.value9(), r.value10(), r.value11()),
                 )
             }
     }
@@ -252,6 +279,11 @@ class DuplicateRepository(private val db: DSLContext) {
                 DUPLICATE_CANDIDATE.FACETS,
                 DUPLICATE_CANDIDATE.FOUND_FOR,
                 DUPLICATE_CANDIDATE.SAME_AUTHOR,
+                DUPLICATE_CANDIDATE.TITLE_WITHIN,
+                DUPLICATE_CANDIDATE.TITLE_HOLDING,
+                DUPLICATE_CANDIDATE.AUTHORS_ALIKE,
+                DUPLICATE_CANDIDATE.AUTHORS_WITHIN,
+                DUPLICATE_CANDIDATE.AUTHORS_HOLDING,
             )
             .from(DUPLICATE_CANDIDATE)
             .where(condition)
@@ -269,6 +301,9 @@ class DuplicateRepository(private val db: DSLContext) {
                             r.value8()?.let { numbers(it, one) }.orEmpty(),
                             r.value9()!!.toInt(),
                             r.value10()!!,
+                            r.value11() ?: 0f,
+                            r.value12() ?: 0f,
+                            lexical(r.value13(), r.value14(), r.value15()),
                         )
                 }
             }
@@ -298,5 +333,30 @@ class DuplicateRepository(private val db: DSLContext) {
     companion object {
         private const val BATCH = 1000
         private const val FETCH = 5000
+
+        /** The columns of a candidate written, in the order a row of them is bound. */
+        private val COLUMNS =
+            listOf(
+                DUPLICATE_CANDIDATE.SOURCE,
+                DUPLICATE_CANDIDATE.ITEM_ID,
+                DUPLICATE_CANDIDATE.OTHER_SOURCE,
+                DUPLICATE_CANDIDATE.OTHER_ITEM_ID,
+                DUPLICATE_CANDIDATE.TITLE,
+                DUPLICATE_CANDIDATE.DESCRIPTION,
+                DUPLICATE_CANDIDATE.SIZE,
+                DUPLICATE_CANDIDATE.FACETS,
+                DUPLICATE_CANDIDATE.FOUND_FOR,
+                DUPLICATE_CANDIDATE.SAME_AUTHOR,
+                DUPLICATE_CANDIDATE.TITLE_WITHIN,
+                DUPLICATE_CANDIDATE.TITLE_HOLDING,
+                DUPLICATE_CANDIDATE.AUTHORS_ALIKE,
+                DUPLICATE_CANDIDATE.AUTHORS_WITHIN,
+                DUPLICATE_CANDIDATE.AUTHORS_HOLDING,
+            )
     }
+}
+
+/** How alike the names of a pair's authors are as kept: none of a pair of no names compared. */
+private fun lexical(alike: Float?, within: Float?, holding: Float?): Lexical? = alike?.let {
+    Lexical(it, within ?: 0f, holding ?: 0f)
 }

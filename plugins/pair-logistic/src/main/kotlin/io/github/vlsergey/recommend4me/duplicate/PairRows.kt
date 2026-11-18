@@ -1,10 +1,15 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.AUTHORS
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.AUTHORS_HOLDING
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.AUTHORS_WITHIN
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.CONSTANT
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.DESCRIPTION
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.SAME_AUTHOR
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.SIZE
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE_HOLDING
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE_WITHIN
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.facet
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.has
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.sigmoid
@@ -112,8 +117,26 @@ private constructor(
         /** A pivot nearer nought than this leaves its weight where it is. */
         private const val SINGULAR = 1e-12
 
+        /** The features of the authors' names a pair of them has: how alike, that both have some, the two shares. */
+        private const val AUTHOR_FEATURES = 4
+
         /** The features before the facets', by their places. */
-        private val HEAD = listOf(CONSTANT, TITLE, DESCRIPTION, has(DESCRIPTION), SIZE, has(SIZE), SAME_AUTHOR)
+        private val HEAD =
+            listOf(
+                CONSTANT,
+                TITLE,
+                TITLE_WITHIN,
+                TITLE_HOLDING,
+                DESCRIPTION,
+                has(DESCRIPTION),
+                SIZE,
+                has(SIZE),
+                SAME_AUTHOR,
+                AUTHORS,
+                has(AUTHORS),
+                AUTHORS_WITHIN,
+                AUTHORS_HOLDING,
+            )
 
         /**
          * The features of the [pairs]: every one any pair has, the facets by their names in order, then the sites by
@@ -127,8 +150,9 @@ private constructor(
             val names = HEAD + families.flatMap { listOf(facet(it), has(facet(it))) } + siteNames
             val start = IntArray(pairs.size + 1)
             pairs.forEachIndexed { i, c ->
-                // The constant, the title, the sites
-                var n = 3 + 2 * c.facets.size
+                // The constant, the title and its two shares, the sites
+                var n = 5 + 2 * c.facets.size
+                if (c.authors != null) n += AUTHOR_FEATURES
                 if (c.description != null) n += 2
                 if (c.size != null) n += 2
                 if (c.sameAuthor) n++
@@ -146,6 +170,14 @@ private constructor(
                 // A layer's value, then that both have it, side by side
                 put(HEAD.indexOf(CONSTANT), 1f)
                 put(HEAD.indexOf(TITLE), c.title)
+                put(HEAD.indexOf(TITLE_WITHIN), c.titleWithin)
+                put(HEAD.indexOf(TITLE_HOLDING), c.titleHolding)
+                c.authors?.let {
+                    put(HEAD.indexOf(AUTHORS), it.alike)
+                    put(HEAD.indexOf(AUTHORS) + 1, 1f)
+                    put(HEAD.indexOf(AUTHORS_WITHIN), it.within)
+                    put(HEAD.indexOf(AUTHORS_HOLDING), it.holding)
+                }
                 c.description?.let {
                     put(HEAD.indexOf(DESCRIPTION), it)
                     put(HEAD.indexOf(DESCRIPTION) + 1, 1f)

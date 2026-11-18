@@ -79,16 +79,7 @@ private constructor(
      * its layers.
      */
     private fun candidate(first: ItemKey, second: ItemKey, a: Int, i: Int, b: Int, j: Int): DuplicateCandidate {
-        val layers = search.layers(a, i, b, j)
-        return DuplicateCandidate(
-            first,
-            second,
-            layers.title,
-            layers.description,
-            layers.size,
-            layers.facets,
-            sameAuthor = layers.sameAuthor,
-        )
+        return DuplicateCandidate.of(first, second, search.layers(a, i, b, j))
     }
 
     /**

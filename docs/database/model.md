@@ -23,7 +23,7 @@
 | `search_score` | the reranker's score of a work for a line searched |
 | `search_query_shift` | the closeness of a line and a passage by meaning corrected by the user's judgments: q·p + (q·a)(b·p), the two vectors of weights of the dimensions of the text encoder's vectors; the line's vector moved by it before it is searched |
 | `search_weight` | the order of what a search finds learnt of the user's judgments: of every feature a work is found by — how close by meaning, how its words matched, the reranker's score — its weight on its own scale |
-| `duplicate_candidate` | two works of different sites that may be one, as the last search of the duplicates found them — of every work the likeliest of every other site — with how alike each layer of theirs is: the title, the description, the size, every facet the sites share (`facets`, "<facet>=<cosine>" a line), whether the dictionary of authors gives them one author, fully or in part (`same_author`), and the works it was found for (`found_for`: 1 the first, 2 the second, 3 both); the chance they are one work made when read |
+| `duplicate_candidate` | two works of different sites that may be one, as the last search of the duplicates found them — of every work the likeliest of every other site — with how alike each layer of theirs is: the title, the description, the size, every facet the sites share (`facets`, "<facet>=<cosine>" a line), whether the dictionary of authors gives them one author, fully or in part (`same_author`), and the works it was found for (`found_for`: 1 the first, 2 the second, 3 both); the chance they are one work made when read; the title compared letter by letter — the cosine of the trigrams (`title`) and how much of either the other has (`title_within`, `title_holding`) — and the names of the authors the same (`authors_alike`, `authors_within`, `authors_holding`, none of a pair of no names) |
 | `work_size` | how many words a normalized work has to a character: of its kept text or what its sites state, else by the model of them, made again in the queue; the other of a work's two sizes is worked out of it |
 | `duplicate_value` | how rare every value two works are compared by is among every work of the type, as the last search of the duplicates weighed it (`rarity`, ln(works / works having it)), by the value's name (`name`, "characters:wikidata:Q…"): what a pair the search did not keep is compared by as it is shown; made anew whole by every search |
 | `duplicate_search` | when the duplicates were last looked for, by which encoder, of how many works, and the models of the user's answers as the plugin of pairs (`model`, its id) packed them: of one work (`same_model`) and of one series (`series_model`), none of a kind no pair was said to be of; when they were last fitted (`fitted_at`) and how long it took (`fit_millis`) |
@@ -50,6 +50,11 @@ erDiagram
         REAL size "null"
         TINYINT found_for
         BOOLEAN same_author
+        REAL title_within "null"
+        REAL title_holding "null"
+        REAL authors_alike "null"
+        REAL authors_within "null"
+        REAL authors_holding "null"
     }
     duplicate_search {
         INTEGER id PK
