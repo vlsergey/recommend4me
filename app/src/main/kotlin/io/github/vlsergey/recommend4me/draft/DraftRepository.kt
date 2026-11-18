@@ -50,6 +50,13 @@ class DraftRepository(private val db: DSLContext, private val source: String) {
         return out
     }
 
+    /** The items drafted with the [value] of the [facet]: found by the index of the value, the source's alone. */
+    fun itemsOf(facet: String, value: String): Set<String> =
+        db.selectDistinct(LAYER_DRAFT.ITEM_ID)
+            .from(LAYER_DRAFT)
+            .where(LAYER_DRAFT.FACET.eq(facet), LAYER_DRAFT.VALUE_KEY.eq(value), LAYER_DRAFT.SOURCE.eq(source))
+            .fetchSet { it.value1()!! }
+
     /** Every item's drafts: what a reading of every work is compared with. */
     fun all(): Map<String, List<LayerDraft>> {
         val out = HashMap<String, MutableList<LayerDraft>>()

@@ -67,17 +67,16 @@ class FandomEditing(
 
     /**
      * The merged universe [from] gone: the user's answers on it moved to [into] in every source — of a work answered on
-     * both the newest standing — and it removed; the works whose answers moved told.
+     * both the newest standing — and it removed; the works whose answers moved told, and those drafted with it —
+     * drafted again at once by what they are told, never left naming a universe that is no more till every work of the
+     * source is drafted again in the queue.
      */
     private fun merged(from: Long, into: Long) {
+        val gone = FandomRepository.value(from)
         sources().forEach { s ->
-            val moved =
-                s.corrections.moveFacetValues(
-                    UniverseFacet.KEY,
-                    listOf(FandomRepository.value(from)),
-                    FandomRepository.value(into),
-                )
-            if (moved.isNotEmpty()) events.publishEvent(ItemsChanged(s.id, moved.toList()))
+            val moved = s.corrections.moveFacetValues(UniverseFacet.KEY, listOf(gone), FandomRepository.value(into))
+            val told = moved + s.drafts.itemsOf(UniverseFacet.KEY, gone)
+            if (told.isNotEmpty()) events.publishEvent(ItemsChanged(s.id, told.toList()))
         }
     }
 

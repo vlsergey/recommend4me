@@ -116,6 +116,7 @@ class SiteUniversesTest : SiteTestBase() {
         capture("h1|Wand|magic|A wand||x1|hp:Harry Potter")
         capture("h2|Broom|magic|A broom||x2|hp-movies:harry potter")
         capture("h3|Ring|magic|A ring||x3|lotr:The Lord of the Rings")
+        capture("h5|Sword|magic|A sword||x5|lotr:The Lord of the Rings")
         fun universeOf(key: String) =
             stores.type("books")!!.universes.fandoms.sites.fandomOf(SiteFandomRef("site", key))!!.toString()
         // Two fandoms of one name, any case, are one universe; drafted to their works at once, named by the fandom
@@ -133,6 +134,10 @@ class SiteUniversesTest : SiteTestBase() {
         assertTrue(universes.listUniverses().body!!.none { it.value == lotr })
         assertEquals(hp, universeOf("lotr"))
         assertEquals(3, universes.getUniverse(hp).body!!.sites.size)
+        // A work of the fandom merged no answer was on drafted again at once, not left naming a universe that is no
+        // more till the background drafts every work
+        assertEquals("The Lord of the Rings", valueOf("h5", "universe", hp)?.draftedFrom)
+        assertNull(valueOf("h5", "universe", lotr))
         assertTrue(
             stores.source("site")!!.corrections.facetsOf("h3").any { it.facet == "universe" && it.key == hp },
             "h3 ${stores.source("site")!!.corrections.facetsOf("h3")}",
