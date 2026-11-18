@@ -6,6 +6,7 @@ import org.apache.lucene.document.DoubleField
 import org.apache.lucene.document.Field
 import org.apache.lucene.document.NumericDocValuesField
 import org.apache.lucene.document.SortedDocValuesField
+import org.apache.lucene.document.SortedSetDocValuesField
 import org.apache.lucene.document.StringField
 import org.apache.lucene.util.BytesRef
 
@@ -39,6 +40,9 @@ object ListDocuments {
 
     fun facetField(facetId: String) = "$FACET$facetId"
 
+    /** The field of the doc values of the filter facet [facetId]'s values ([ListFacetValues.everyItem]). */
+    fun valuesField(facetId: String) = "v:$facetId"
+
     /** The filter id of the facet of the field [name]; null of a field of no facet. */
     fun facetIdOf(name: String): String? = name.takeIf { it.startsWith(FACET) }?.substring(FACET.length)
 
@@ -48,6 +52,9 @@ object ListDocuments {
     fun of(row: ListRow): Document {
         val doc = Document()
         doc.add(StringField(KEY, row.key.toString(), Field.Store.YES))
+        // The key and every value as doc values too: what a computation over every work reads in one pass, a value by
+        // its number ([ListFacetValues.everyItem])
+        doc.add(SortedDocValuesField(KEY, BytesRef(row.key.toString())))
         doc.add(StringField(SOURCE, row.key.source, Field.Store.NO))
         doc.add(SortedDocValuesField(WORK, BytesRef(row.work.toString())))
         doc.add(StringField(WORK, row.work.toString(), Field.Store.NO))
@@ -60,7 +67,12 @@ object ListDocuments {
             val field = facetField(facetId)
             if (keys.isEmpty()) doc.add(StringField(field, NONE, Field.Store.NO))
             // Kept with the document too: the cards of a page read them by the items' keys ([ListFacetValues])
-            keys.forEach { doc.add(StringField(field, it, Field.Store.YES)) }
+            // The values as doc values in a field of their own: a field of the mark of none has no doc values, and a
+            // field is one kind of field in every document
+            keys.forEach {
+                doc.add(StringField(field, it, Field.Store.YES))
+                doc.add(SortedSetDocValuesField(valuesField(facetId), BytesRef(it)))
+            }
         }
         row.numbers.forEach { (numberId, value) -> doc.add(DoubleField(numberField(numberId), value, Field.Store.NO)) }
         return doc

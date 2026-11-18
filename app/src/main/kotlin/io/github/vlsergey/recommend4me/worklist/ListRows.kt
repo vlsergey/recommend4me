@@ -104,8 +104,8 @@ internal object ListRows {
 
     /**
      * Of every filter facet of the source, by its filter id, every item's values as the user sees them: the site's, the
-     * model's kept of a facet it works out ([io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]), the
-     * user's corrections on top.
+     * drafts of the layer, the model's kept of a facet it works out
+     * ([io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]), the user's corrections on top.
      */
     private fun facetsOf(s: SourceStore, ids: Collection<String>?): Map<String, Map<String, List<String>>> {
         val defs = s.schema.facets.filter { it.filter }
@@ -114,13 +114,21 @@ internal object ListRows {
             if (ids == null) siteOfEvery(s, defs.map { it.key }.toSet()) else s.items.facetsOf(ids)
         val corrections =
             if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
+        // The drafts of the layer — the site's words bound to the layer's values, a site's tag to a tag — given as the
+        // model's are, before any model is fitted
+        val drafts = HashMap<String, HashMap<String, MutableList<String>>>()
+        (if (ids == null) s.drafts.all() else s.drafts.ofItems(ids)).forEach { (id, own) ->
+            own.forEach { d -> drafts.getOrPut(d.facet) { HashMap() }.getOrPut(id) { ArrayList() } += d.key }
+        }
         // The same keys of a million works held once
         val keys = HashMap<String, String>()
         return defs.associate { def ->
             val model = if (def.infer) s.modelValues.of(def.key, ids) else emptyMap()
+            val drafted = drafts[def.key].orEmpty()
             val byItem = HashMap<String, List<String>>()
-            (site.keys + model.keys + corrections.keys).forEach { id ->
-                val shown = shown(def, site[id]?.get(def.key).orEmpty() + model[id].orEmpty(), corrections[id])
+            (site.keys + model.keys + drafted.keys + corrections.keys).forEach { id ->
+                val given = site[id]?.get(def.key).orEmpty() + drafted[id].orEmpty() + model[id].orEmpty()
+                val shown = shown(def, given, corrections[id])
                 if (shown.isNotEmpty()) byItem[id] = shown.map { keys.getOrPut(it) { it } }
             }
             FeatureNames.facetId(s.source, def) to byItem

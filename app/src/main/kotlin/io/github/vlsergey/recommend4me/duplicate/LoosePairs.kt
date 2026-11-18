@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.worklist.ListIndex
 import kotlin.math.ln
 
 /**
@@ -17,20 +18,31 @@ internal object LoosePairs {
     /**
      * The pair of [first] and [second] with its layers by the texts' vectors of [encoder]; null when either has none.
      */
-    fun candidate(type: TypeStore, encoder: String, first: ItemKey, second: ItemKey): DuplicateCandidate? =
-        sidesOf(type, encoder, first, second)?.let { layersOf(type, first, second, it) }
+    fun candidate(
+        type: TypeStore,
+        encoder: String,
+        first: ItemKey,
+        second: ItemKey,
+        index: ListIndex,
+    ): DuplicateCandidate? = sidesOf(type, encoder, first, second, index)?.let { layersOf(type, first, second, it) }
 
     /**
      * The two works read alone, each its side; null when either is no work of the type, or has no vector of its title.
      */
-    private fun sidesOf(type: TypeStore, encoder: String, first: ItemKey, second: ItemKey): List<ReadSide>? {
+    private fun sidesOf(
+        type: TypeStore,
+        encoder: String,
+        first: ItemKey,
+        second: ItemKey,
+        index: ListIndex,
+    ): List<ReadSide>? {
         val keys = listOf(first, second)
         val stores = keys.mapNotNull { type.source(it.source) }.takeIf { it.size == keys.size } ?: return null
         val works = keys.zip(stores).flatMap { (k, s) -> s.works.ofItems(s.id, listOf(k.id)).values }
         val ratios = type.sizes.of(works)
         return keys
             .zip(stores)
-            .mapNotNull { (k, s) -> SearchSide.readOf(s, encoder, listOf(k.id), ratios) }
+            .mapNotNull { (k, s) -> SearchSide.readOf(s, encoder, listOf(k.id), ratios, index) }
             .takeIf { it.size == keys.size }
     }
 

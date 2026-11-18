@@ -26,6 +26,7 @@ import io.github.vlsergey.recommend4me.tag.TagRenaming
 import io.github.vlsergey.recommend4me.tag.TagRepository
 import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.tag.TagsController
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import java.net.InetSocketAddress
 import java.util.Collections
 import org.junit.jupiter.api.BeforeAll
@@ -98,6 +99,7 @@ abstract class TwoSitesTestBase {
     @Autowired lateinit var authors: AuthorsController
     @Autowired lateinit var tags: TagsController
     @Autowired lateinit var stores: Stores
+    @Autowired lateinit var listIndexes: ListIndexes
     @Autowired lateinit var jobs: Jobs
     @Autowired lateinit var jobsApi: JobsController
     @Autowired lateinit var settingsApi: SettingsController

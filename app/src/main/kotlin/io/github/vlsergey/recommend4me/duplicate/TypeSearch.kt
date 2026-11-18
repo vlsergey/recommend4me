@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.worklist.ListIndex
 import java.util.stream.IntStream
 
 /**
@@ -112,14 +113,19 @@ private constructor(
          * rare it is among every work of the type, its facet given its place; the pairs answered on ([said]) passed
          * over both ways.
          */
-        fun read(type: TypeStore, encoder: String, said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>): TypeSearch {
+        fun read(
+            type: TypeStore,
+            encoder: String,
+            said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+            index: ListIndex,
+        ): TypeSearch {
             val places = HashMap<String, Int>()
             val ratios = type.sizes.all()
             // The sites read side by side, each its own database: their values placed after, in the sites' order
             val sides =
                 type.sources
                     .parallelStream()
-                    .map { SearchSide.read(it, encoder, ratios) }
+                    .map { SearchSide.read(it, encoder, ratios, index) }
                     .toList()
                     .mapNotNull { it?.placed(places) }
             val works = sides.sumOf { it.ids.size }

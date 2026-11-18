@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.math.abs
@@ -49,6 +50,7 @@ class DuplicatePages(
     private val models: PairModels,
     private val plugins: Plugins,
     private val window: PairWindow,
+    private val indexes: ListIndexes,
 ) {
     /**
      * A page of the pairs of the type the [choice] holds by their answer: those not answered on — neither linked (by
@@ -169,7 +171,9 @@ class DuplicatePages(
         val pair = type.links.ordered(a, b)
         val kept =
             type.duplicates.find(pair.first, pair.second)
-                ?: plugins.textEncoder()?.id?.let { LoosePairs.candidate(type, it, pair.first, pair.second) }
+                ?: plugins.textEncoder()?.id?.let {
+                    LoosePairs.candidate(type, it, pair.first, pair.second, indexes.of(type.id))
+                }
         val chances = models.of(type)
         val word =
             type.links.word(a, b, Instant.now())?.let { w -> DuplicateAnswer.entries.firstOrNull { it.name == w } }

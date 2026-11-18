@@ -3,6 +3,8 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.model.FeatureNames
+import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
@@ -10,6 +12,7 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.vector.Vectors
+import io.github.vlsergey.recommend4me.worklist.ListIndex
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(SearchSide::class.java)
@@ -81,7 +84,7 @@ internal class SearchSide(
          * null when it has none. Its values by their names, given their places once every site is read ([ReadSide]):
          * the sites are read side by side.
          */
-        fun read(s: SourceStore, encoder: String, ratios: Map<Long, Double>): ReadSide? {
+        fun read(s: SourceStore, encoder: String, ratios: Map<Long, Double>, index: ListIndex): ReadSide? {
             val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
             val started = System.currentTimeMillis()
             val ids = s.textVectors.itemsWith(TextVectors.TITLE)
@@ -107,25 +110,21 @@ internal class SearchSide(
             }
             return titles?.let {
                 val vectors = System.currentTimeMillis()
-                val values = WorkValues(s).apply { read() }
+                val numbers = sizeNumbers(s)
+                val compared = ComparedValues(s, index).every(ids, numbers.keys)
                 val read = System.currentTimeMillis()
-                val authors = values.authorsOf(ids)
-                values.gather(ids, authors)
-                val gathered = System.currentTimeMillis()
-                val sizes = sizesOf(s, ids, ratios, { s.items.number(it) }, s.works.allOf(s.id))
+                val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.allOf(s.id))
                 log.info(
-                    "{}: the search's side of {} works read in {} ms: vectors {}, values {}, drafts, answers and " +
-                        "authors {}, sizes {}",
+                    "{}: the search's side of {} works read in {} ms: vectors {}, values and authors {}, sizes {}",
                     s.id,
                     ids.size,
                     System.currentTimeMillis() - started,
                     vectors - started,
                     read - vectors,
-                    gathered - read,
-                    System.currentTimeMillis() - gathered,
+                    System.currentTimeMillis() - read,
                 )
-                ReadSide(values.numbered(ids), values.names()) { placed ->
-                    SearchSide(s, ids, it, descriptions!!, described, placed, sizes, authors)
+                ReadSide(compared.numbered, compared.names) { placed ->
+                    SearchSide(s, ids, it, descriptions!!, described, placed, sizes, compared.authors)
                 }
             }
         }
@@ -135,7 +134,13 @@ internal class SearchSide(
          * kept is compared by as it is shown ([LoosePairs]). Of the works with a vector of their title alone; null when
          * none has one.
          */
-        fun readOf(s: SourceStore, encoder: String, ids: List<String>, ratios: Map<Long, Double>): ReadSide? {
+        fun readOf(
+            s: SourceStore,
+            encoder: String,
+            ids: List<String>,
+            ratios: Map<Long, Double>,
+            index: ListIndex,
+        ): ReadSide? {
             val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
             val vectors = s.textVectors.ofMany(ids, encoder, listOfNotNull(TextVectors.TITLE, description))
             val own = ids.filter { vectors[it]?.get(TextVectors.TITLE) != null }.distinct().sorted()
@@ -156,44 +161,42 @@ internal class SearchSide(
                         described[i] = true
                     }
             }
-            val values = WorkValues(s, own).apply { read() }
-            val authors = values.authorsOf(own)
-            values.gather(own, authors)
-            val numbers = s.items.numbersOf(own)
-            val sizes =
-                sizesOf(
-                    s,
-                    own,
-                    ratios,
-                    { key -> numbers.mapNotNull { (id, of) -> of[key]?.let { id to it } }.toMap() },
-                    s.works.ofItems(s.id, own),
-                )
-            return ReadSide(values.numbered(own), values.names()) { placed ->
-                SearchSide(s, own, titles, descriptions, described, placed, sizes, authors)
+            val numbers = sizeNumbers(s)
+            val compared = ComparedValues(s, index).of(own, numbers.keys)
+            val sizes = sizesOf(own, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.ofItems(s.id, own))
+            return ReadSide(compared.numbered, compared.names) { placed ->
+                SearchSide(s, own, titles, descriptions, described, placed, sizes, compared.authors)
             }
         }
 
         /**
-         * The numbers of the size of every work the sites share — a standard number, not how the site's readers met it
-         * — by its key; the words of a work of its characters alone, or the characters of its words alone, worked out
-         * by the [ratios] of the works: so two sites compare, whichever they state.
+         * The numbers of the size the sites share of the source — a standard number, not how the site's readers met a
+         * work — by the id the index of the list keeps them by.
+         */
+        private fun sizeNumbers(s: SourceStore): Map<String, NumberDef> =
+            s.schema.numbers
+                .filter { it.standard != null && it.standard!!.role !in SITE_ROLES }
+                .associateBy { FeatureNames.numberId(s.source, it) }
+
+        /**
+         * The numbers of the size of every work the sites share, of the [numbers] by their ids ([numberOf] of an id
+         * every work's), by the standard number's key; the words of a work of its characters alone, or the characters
+         * of its words alone, worked out by the [ratios] of the works: so two sites compare, whichever they state.
          */
         private fun sizesOf(
-            s: SourceStore,
             ids: List<String>,
             ratios: Map<Long, Double>,
-            numberOf: (key: String) -> Map<String, Double>,
+            numbers: Map<String, NumberDef>,
+            numberOf: (id: String) -> Map<String, Double>,
             bound: Map<String, Long>,
         ): Map<String, DoubleArray> {
             val at = ids.withIndex().associate { it.value to it.index }
             val out =
-                s.schema.numbers
-                    .filter { it.standard != null && it.standard!!.role !in SITE_ROLES }
-                    .associateTo(HashMap()) { n ->
-                        val numbers = DoubleArray(ids.size)
-                        numberOf(n.key).forEach { (id, v) -> at[id]?.let { numbers[it] = v } }
-                        n.standard!!.key to numbers
-                    }
+                numbers.entries.associateTo(HashMap()) { (id, n) ->
+                    val values = DoubleArray(ids.size)
+                    numberOf(id).forEach { (item, v) -> at[item]?.let { values[it] = v } }
+                    n.standard!!.key to values
+                }
             val words = out.getOrPut(StandardNumbers.WORDS.key) { DoubleArray(ids.size) }
             val chars = out.getOrPut(StandardNumbers.CHARS.key) { DoubleArray(ids.size) }
             ids.forEachIndexed { i, id ->
@@ -209,18 +212,21 @@ internal class SearchSide(
 /**
  * A site's [side] read, the values of its works by the site's own numbers ([numbered], ascending) of their [names]:
  * given their places among every value of the type once every site is read, one after another, so a value has one place
- * whichever site read it first — a name looked up once a value, not once a work.
+ * whichever site read it first — a name looked up once a value, not once a work; two numbers of one name (a main and a
+ * secondary character) one place.
  */
 internal class ReadSide(
     private val numbered: Array<IntArray>,
-    private val names: List<String>,
+    private val names: List<String?>,
     private val side: (values: Array<IntArray>) -> SearchSide,
 ) {
     /** The side, its values by their places in [places], every new value given one. */
     fun placed(places: HashMap<String, Int>): SearchSide {
-        val place = IntArray(names.size) { places.getOrPut(names[it]) { places.size } }
+        val place = IntArray(names.size) { k -> names[k]?.let { places.getOrPut(it) { places.size } } ?: -1 }
         return side(
-            Array(numbered.size) { i -> IntArray(numbered[i].size) { k -> place[numbered[i][k]] }.apply { sort() } }
+            Array(numbered.size) { i ->
+                numbered[i].map { place[it] }.filter { it >= 0 }.distinct().sorted().toIntArray()
+            }
         )
     }
 }

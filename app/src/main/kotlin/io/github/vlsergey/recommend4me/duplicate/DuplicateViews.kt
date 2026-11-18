@@ -16,6 +16,8 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.worklist.ListIndex
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import org.springframework.stereotype.Component
 
 /**
@@ -34,7 +36,7 @@ internal class Described(val work: DuplicateWork, val authors: Set<Long>)
 
 /** THE PAIRS AND THEIR WORKS AS THE USER IS SHOWN THEM: every source's works read in one go. */
 @Component
-class DuplicateViews(private val sizes: WorkSizes) {
+class DuplicateViews(private val sizes: WorkSizes, private val indexes: ListIndexes) {
 
     /** The pairs as the user is shown them: a pair of a work no longer there, none. */
     internal fun pairs(
@@ -99,26 +101,21 @@ class DuplicateViews(private val sizes: WorkSizes) {
             .forEach { (source, own) ->
                 val s = type.source(source) ?: return@forEach
                 val ids = own.map { it.id }
-                val shown = ShownWorks(type, s, ids, sizes)
+                val shown = ShownWorks(type, s, ids, sizes, indexes.of(type.id))
                 ids.forEach { id -> shown.described(id)?.let { out[ItemKey(source, id)] = it } }
             }
         return out
     }
 }
 
-/**
- * The facet a site's facet [def] is compared as ([WorkValues]): its authors as the normalized authors, a facet of the
- * layer as its family, a facet of the standard values as the standard one; none of a facet not compared.
- */
-private fun comparedAs(def: FacetDef): String? =
-    when {
-        def.role == FacetRole.AUTHOR -> AUTHOR_FAMILY
-        def.editable -> familyOf(def.key)
-        else -> def.standard?.takeIf { it.values != null }?.key
-    }
-
 /** What the pairs show of the works [ids] of one source, read in one go. */
-private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<String>, sizes: WorkSizes) {
+private class ShownWorks(
+    type: TypeStore,
+    private val s: SourceStore,
+    ids: List<String>,
+    sizes: WorkSizes,
+    index: ListIndex,
+) {
     private val heads = s.items.heads(ids)
     private val fields = s.corrections.fieldsOf(ids)
     private val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
@@ -136,13 +133,18 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
     private val normalized = s.authors.bindingsOf(s.id)
     private val fandomNames = namesOf(fandomFacet)
 
-    // The values the search compared, of these works alone: shown by the facet they are compared as, the authors apart
-    private val compared =
-        WorkValues(s, ids).apply {
-            read()
-            gather(ids, Array(ids.size) { LongArray(0) })
-        }
-    private val values = ids.zip(compared.named(ids)).toMap()
+    // The values the search compared, of these works alone, of the index: shown by the facet they are compared as, the
+    // authors apart
+    private val values = ids.zip(ComparedValues(s, index).of(ids, emptyList()).named()).toMap()
+
+    // The names the user gave the values added, by "<the facet compared as>:<value>"
+    private val given =
+        s.corrections
+            .facetsOf(ids)
+            .values
+            .flatten()
+            .filter { it.added && it.name != null }
+            .associate { "${familyOf(it.facet)}:${it.key}" to it.name!! }
 
     /**
      * The facet every facet compared is named by, in the order of the site's facets: the layer's own facet of it (the
@@ -218,7 +220,7 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
                     keys
                         .map { k ->
                             DuplicateValue(
-                                valueNames[family]?.get(k) ?: compared.given["$family:$k"] ?: k,
+                                valueNames[family]?.get(k) ?: given["$family:$k"] ?: k,
                                 s.nameKey(def.key, k),
                             )
                         }

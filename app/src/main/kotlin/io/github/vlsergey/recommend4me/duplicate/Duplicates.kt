@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkEvents
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
@@ -52,6 +53,8 @@ class Duplicates(
     private val fitting: PairFitting,
     /** The card, when the launch asks for it: the search made there. */
     private val cards: ObjectProvider<CardSource>,
+    /** The index of the list: what a work's values compared are read of. */
+    private val indexes: ListIndexes,
 ) {
     /**
      * Whether a search of the type is planned or running: the pairs are to come. A fitting after an answer is not told:
@@ -99,7 +102,7 @@ class Duplicates(
         val model = models.model(type.id) ?: return
         val started = System.currentTimeMillis()
         val said = answers.said(type)
-        val search = TypeSearch.read(type, encoder, said)
+        val search = TypeSearch.read(type, encoder, said, indexes.of(type.id))
         val read = System.currentTimeMillis() - started
         val kept = models.of(type)
         val found =

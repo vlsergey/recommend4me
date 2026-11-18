@@ -24,6 +24,7 @@ import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PartData
+import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.workload.inBackground
 import java.time.Instant
 import java.util.Locale
@@ -220,15 +221,17 @@ class TwoSitesTest : TwoSitesTestBase() {
             assertEquals(given, w.facets.filter { it.key == "tags" }.flatMap { f -> f.propertyValues.map { it.name } })
             assertTrue(w.facets.all { it.computed == true || !it.key.startsWith("tags") }, "of ${w.item}: ${w.facets}")
         }
-        // Its layers worked out as it is shown, though no search kept it: the same title, the same vector
-        assertTrue(
-            waitFor { duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!.title != null },
-            "the titles encoded",
-        )
-        val loose = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
-        assertEquals(1.0, loose.title!!.toDouble(), 1e-3)
-        assertEquals(listOf("tags"), loose.facets.orEmpty().map { it.key }.filter { it != "author" })
-        // A search keeps how rare every value is, and the pair as the search keeps it is the pair worked out loose
+        // Its layers worked out as it is shown, though no search kept it: the same title, the same vector; its values
+        // compared as the index of the list keeps them — what each work is given — the same as the search's (below)
+        fun pair() = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
+        assertTrue(waitFor { pair().title != null }, "the titles encoded")
+        assertEquals(1.0, pair().title!!.toDouble(), 1e-3)
+        // A search keeps how rare every value is, and the pair as the search keeps it is the pair worked out loose: of
+        // the values the index of the list holds once the background has written them
+        // — of the one or the other: a site's tag the model doubts is given or not as the model is fitted
+        fun listed() =
+            ListFacetValues.of(listIndexes.of("books"), listOf(ItemKey("alpha", "m1"), ItemKey("beta", "m2")))
+        assertTrue(waitFor(120) { listed().values.any { "tags" in it } }, "the tags in the index: ${listed()}")
         val type = stores.type("books")!!
         val before = type.duplicates.search()?.madeAt
         duplicates.searchDuplicates("books")
@@ -237,7 +240,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         val m1 = ItemKey("alpha", "m1")
         val m2 = ItemKey("beta", "m2")
         val kept = type.duplicates.find(m1, m2)!!
-        val worked = LoosePairs.candidate(type, type.duplicates.search()!!.encoder, m1, m2)!!
+        val worked = LoosePairs.candidate(type, type.duplicates.search()!!.encoder, m1, m2, listIndexes.of("books"))!!
         assertEquals(kept.title, worked.title, 1e-3f)
         assertEquals(kept.facets.keys, worked.facets.keys)
         kept.facets.forEach { (k, v) -> assertEquals(v, worked.facets.getValue(k), 1e-3f, k) }
