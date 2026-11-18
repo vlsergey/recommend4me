@@ -10,21 +10,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.TestPropertySource
 
 /**
  * A site's fandom no work of its site has any more goes with its universe when the two are one to one, alone when the
  * universe has a fandom of the same site of the same name that works have; one of a universe with another site's fandom
  * stays, and so does one of a universe the user said anything of.
  */
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/unused-fandoms"])
 class UnusedFandomsTest : SiteTestBase() {
 
     @Autowired lateinit var unused: UnusedFandoms
 
     @Test
     fun `a fandom no work has goes with its universe of it alone, never one of others or of the user's word`() {
-        capture("f1|Lorem|magic|Lorem||x1|alone:Lorem Ipsum")
+        capture("uf1|Lorem|magic|Lorem||x1|alone:Lorem Ipsum")
         capture("f2|Ipsum|magic|Ipsum||x2|shared:Dolor")
         capture("f3|Dolor|magic|Dolor||x3|shared-too:Adipiscing")
         capture("f4|Sit|magic|Sit||x4|named:Sit Amet")
@@ -41,7 +39,7 @@ class UnusedFandomsTest : SiteTestBase() {
         assertEquals(shared, universeOf("shared-too"))
         universes.nameUniverse(UniverseName(named.toString(), "Sit"))
         // The works give their fandoms up for others
-        capture("f1|Lorem|magic|Lorem||x1|other:Consectetur")
+        capture("uf1|Lorem|magic|Lorem||x1|other:Consectetur")
         capture("f2|Ipsum|magic|Ipsum||x2|other:Consectetur")
         capture("f4|Sit|magic|Sit||x4|other:Consectetur")
         capture("f6|Elit|magic|Elit||x6|other:Consectetur")

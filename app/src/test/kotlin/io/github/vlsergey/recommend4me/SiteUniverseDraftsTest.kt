@@ -14,14 +14,12 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
-import org.springframework.test.context.TestPropertySource
 
 /**
  * Characters and a universe drafted from the site's tags by the dictionary — the entries of every universe the
  * dictionary has, made and taken away — and the user's word over them; the works of a pairing of the dictionary offered
  * to mark.
  */
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-universe-drafts"])
 class SiteUniverseDraftsTest : SiteTestBase() {
 
     /** The universe of the entry U2 of the catalogue, as the test running made it: what its steps read. */

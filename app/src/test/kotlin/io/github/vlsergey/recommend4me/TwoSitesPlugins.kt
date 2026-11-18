@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
-import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
@@ -29,8 +28,6 @@ class TwoSitesPlugins {
     @Bean fun alpha(): Source = Alpha()
 
     @Bean fun beta(): Source = Beta()
-
-    @Bean fun wordsEncoder(): TextEncoder = SitePlugins.WordsEncoder()
 
     /**
      * A site read in the browser: pages "<id>|<title>|<tags>|<annotation>|<picture>|<review>". Its parser's version can

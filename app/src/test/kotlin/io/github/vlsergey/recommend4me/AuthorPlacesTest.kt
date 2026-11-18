@@ -12,35 +12,33 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.TestPropertySource
 
 /**
  * An author's page listing their page on another site as a place of theirs makes the two one author, marked as merged
  * by it — at once, a work of the other known or not — and never two the user told apart; a merge of the user's is
  * marked as theirs.
  */
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/author-places"])
 class AuthorPlacesTest : TwoSitesTestBase() {
     @Autowired lateinit var binding: AuthorBinding
 
     @Test
     fun `a place an author's page lists merges the author there, marked by it, never one taken out`() {
-        alpha("q1|Lorem|hay|Lorem ipsum dolor||")
-        stores.source("alpha")!!.items.setFacet("q1", Books.AUTHOR.key, listOf(FacetValue("ann", "Ann")))
+        alpha("ap1|Lorem|hay|Lorem ipsum dolor||")
+        stores.source("alpha")!!.items.setFacet("ap1", Books.AUTHOR.key, listOf(FacetValue("ap-ann", "Ann")))
         val dictionary = stores.type("books")!!.authors
-        val ann = waitForValue { dictionary.bindingsOf("alpha")["ann"] }
+        val ann = waitForValue { dictionary.bindingsOf("alpha")["ap-ann"] }
         // Her page lists her page on beta, of no work known yet, and an address of no site
         contexts
             .of("alpha")
-            .authorPlaces("ann", listOf("https://beta.example/author/bea", "https://elsewhere.example/ann"))
+            .authorPlaces("ap-ann", listOf("https://beta.example/author/ap-bea", "https://elsewhere.example/ap-ann"))
         // One with Ann at once, of no work known on beta
-        assertEquals(ann, dictionary.bindingsOf("beta")["bea"])
+        assertEquals(ann, dictionary.bindingsOf("beta")["ap-bea"])
         assertEquals(0, authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works)
         // A work of hers on beta: still one with Ann
-        beta("q2|Ipsum|hay|Sit amet consectetur")
-        stores.source("beta")!!.items.setFacet("q2", Books.AUTHOR.key, listOf(FacetValue("bea", "Bea")))
+        beta("ap2|Ipsum|hay|Sit amet consectetur")
+        stores.source("beta")!!.items.setFacet("ap2", Books.AUTHOR.key, listOf(FacetValue("ap-bea", "Bea")))
         assertTrue(waitFor { authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works == 1 })
-        assertEquals(ann, dictionary.bindingsOf("beta")["bea"])
+        assertEquals(ann, dictionary.bindingsOf("beta")["ap-bea"])
         val card = authors.getAuthor("books", ann).body!!
         assertNull(card.sites.single { it.source == "alpha" }.mergedBy)
         val bea = card.sites.single { it.source == "beta" }.mergedBy!!
@@ -48,19 +46,19 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         assertEquals("alpha" to "Ann", bea.owner!!.source to bea.owner!!.name)
 
         // Taken out by the user: told apart, the page read again merges them no more
-        authors.takeOutSiteAuthor(ann, "beta", "bea")
-        contexts.of("alpha").authorPlaces("ann", listOf("https://beta.example/author/bea"))
-        assertNotEquals(ann, dictionary.bindingsOf("beta")["bea"])
-        assertNull(authors.getAuthor("books", dictionary.bindingsOf("beta")["bea"]!!).body!!.sites.single().mergedBy)
+        authors.takeOutSiteAuthor(ann, "beta", "ap-bea")
+        contexts.of("alpha").authorPlaces("ap-ann", listOf("https://beta.example/author/ap-bea"))
+        assertNotEquals(ann, dictionary.bindingsOf("beta")["ap-bea"])
+        assertNull(authors.getAuthor("books", dictionary.bindingsOf("beta")["ap-bea"]!!).body!!.sites.single().mergedBy)
 
         // Merged by the user: marked as theirs
         authors.answerAuthors(
-            AuthorAnswer(SiteAuthorKey("alpha", "ann"), SiteAuthorKey("beta", "bea"), AuthorAnswer.Verdict.NONE)
+            AuthorAnswer(SiteAuthorKey("alpha", "ap-ann"), SiteAuthorKey("beta", "ap-bea"), AuthorAnswer.Verdict.NONE)
         )
         authors.answerAuthors(
-            AuthorAnswer(SiteAuthorKey("alpha", "ann"), SiteAuthorKey("beta", "bea"), AuthorAnswer.Verdict.SAME)
+            AuthorAnswer(SiteAuthorKey("alpha", "ap-ann"), SiteAuthorKey("beta", "ap-bea"), AuthorAnswer.Verdict.SAME)
         )
-        val merged = authors.getAuthor("books", dictionary.bindingsOf("alpha")["ann"]!!).body!!
+        val merged = authors.getAuthor("books", dictionary.bindingsOf("alpha")["ap-ann"]!!).body!!
         assertEquals(listOf(null, AuthorMergedBy.By.USER), merged.sites.sortedBy { it.source }.map { it.mergedBy?.by })
     }
 

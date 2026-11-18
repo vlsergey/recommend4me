@@ -35,7 +35,10 @@ dependencies {
 
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.h2)
-    // The suggestions of tags, worked out by the plugin of this build
+    // The suggestions of the facets worked out by the cheapest plugin of this build: every test of the application runs
+    // the fastest plugins (user, 2026-11-18; recommend4me.suggester of the tests' config) — the bilinear suggester,
+    // fitted by up to 1800 steps a facet, 4-5 s on thirty works, by the scenarios of what it works out alone
+    testImplementation(project(":plugins:suggester-bayes"))
     testImplementation(project(":plugins:suggester-bilinear"))
     // A model to explain: the pairwise scorer of this build
     testImplementation(project(":plugins:scorer-pairwise"))

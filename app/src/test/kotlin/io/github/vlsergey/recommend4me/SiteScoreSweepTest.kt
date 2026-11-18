@@ -10,7 +10,6 @@ import io.github.vlsergey.recommend4me.model.Predicted
 import io.github.vlsergey.recommend4me.model.SweepState
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import io.github.vlsergey.recommend4me.workload.inBackground
 import java.time.Duration
 import java.time.Instant
@@ -20,23 +19,17 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.TestPropertySource
 
 /**
  * The training and the sweep of the scores apart: a training reads the graded works alone with the average work kept,
  * the sweep scores every work in turns of the queue from where it stopped, counts the average work along, and begins
  * again by a new model.
  */
-// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
-@Tag("ci")
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-sweep"])
 class SiteScoreSweepTest : SiteTestBase() {
     @Autowired lateinit var everyWork: EveryWork
     @Autowired lateinit var plugins: Plugins
-    @Autowired lateinit var workload: Workload
 
     private val type
         get() = stores.type("books")!!
@@ -51,6 +44,8 @@ class SiteScoreSweepTest : SiteTestBase() {
             gradesController.rateItem("site", "s$k", RatingRequest(5))
             gradesController.rateItem("site", "d$k", RatingRequest(1))
         }
+        // The average work is of every work of the type: nothing of the background changes them while it is compared
+        settled()
         // The first training finds no average work kept: counted of every work once, and kept
         inBackground { recommendations.retrain("books") }
         assertNotNull(type.averageWork.load(basis))

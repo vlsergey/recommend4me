@@ -13,18 +13,13 @@ import io.github.vlsergey.recommend4me.workload.inBackground
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.springframework.test.context.TestPropertySource
 
 /**
  * The tags of two sites: one named by the text itself, counted once of a work of several items, merged across the
  * sites, put above and under one another; a universe or a pairing the dictionary has not, refused.
  */
-// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
-@Tag("ci")
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/two-sites-tags"])
 class TwoSitesTagsTest : TwoSitesTestBase() {
 
     @Test
@@ -94,11 +89,11 @@ class TwoSitesTagsTest : TwoSitesTestBase() {
                     corrections.correctFacet(
                         "alpha",
                         "n1",
-                        FacetCorrection(facet = facet, added = true, name = "Harry Potter"),
+                        FacetCorrection(facet = facet, added = true, name = "Saga Nobody Wrote"),
                     )
                 }
             assertEquals(Refusal.NOT_IN_DICTIONARY, refused.refusal)
-            assertEquals(mapOf("value" to "Harry Potter"), refused.params)
+            assertEquals(mapOf("value" to "Saga Nobody Wrote"), refused.params)
         }
         assertTrue(
             stores.source("alpha")!!.corrections.facetsOf("n1").none {

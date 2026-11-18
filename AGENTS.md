@@ -158,6 +158,13 @@ tagged `@Tag("ci")` and runs in CI alone (GitHub sets `CI`); locally it is run b
 scenario it tests is worked on (`gradlew :app:test --tests "*Name*" -PallTests`). Every push is followed by watching
 the CI run of the full tests on GitHub till it ends, its failure fixed.
 
+**Every test of the application inherits `BaseTest`** and sets nothing of the context of its own — no
+`@TestPropertySource`, no `@Import`, no configuration nested in a test class: Spring starts the application once in a
+process of the tests, with the cheapest plugins (the naive Bayes suggester). What a scenario needs otherwise it sets as
+the user would — a setting, taken back after. The classes share the application's data: each writes and checks by keys
+of its own, a scenario whose models must be of its own works alone has a site of its own (`SiteSource(id)`), and what
+the background works out is checked after `settled()`.
+
 **A class or a file too long is split by meaning, never by its length.** Each new one is about one thing
 — an entity, a step, a purpose the reader names ("the dictionaries of the facets", "the choice of what
 a work is shown with"), named after it and holding all of it: never "part 2", never a cut where the

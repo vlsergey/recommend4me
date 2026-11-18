@@ -3,19 +3,16 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.SiteTestBase
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.context.annotation.Import
-import org.springframework.test.context.TestPropertySource
 
 /**
  * THE PASS OVER THE FACETS A PORTION AT A TIME (user, 2026-11-17: nothing holds more than ten thousand works): the
@@ -25,12 +22,11 @@ import org.springframework.test.context.TestPropertySource
  */
 // More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
 @Tag("ci")
-@Import(CountingSuggester.Plugin::class)
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/facet-portions"])
 class FacetPortionsTest : SiteTestBase() {
-    @Autowired lateinit var settings: Settings
+    // The suggester of counts, a setting of the site's facets taken back after
+    @AfterEach fun cheapest() = learntBy(null)
+
     @Autowired lateinit var plugins: Plugins
-    @Autowired lateinit var workload: Workload
     @Autowired lateinit var events: ApplicationEventPublisher
     @Autowired private lateinit var chain: FacetChain
     @Autowired private lateinit var vocabularies: FacetVocabularies
@@ -71,11 +67,7 @@ class FacetPortionsTest : SiteTestBase() {
 
     @Test
     fun `the facets' pass gives the same values cut into portions as read whole`() {
-        stores.source("site")!!.let { store ->
-            chain.facetsOf(store).forEach {
-                settings.set(Plugins.suggesterSetting(store.id, it.key), CountingSuggester.ID)
-            }
-        }
+        learntBy(CountingSuggester.ID)
         catalogue()
         val whole = pass(TaskPortions.MOST)
         val cut = pass(PORTION)

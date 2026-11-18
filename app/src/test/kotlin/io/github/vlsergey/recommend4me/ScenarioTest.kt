@@ -40,36 +40,15 @@ import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.boot.test.context.TestConfiguration
-import org.springframework.context.annotation.Bean
-import org.springframework.test.context.TestPropertySource
 
 /**
  * The whole application with a source of its own: a page captured from the browser becomes an item, a grade is kept, a
  * correction shows, the list filters and sorts.
  */
-// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
-@Tag("ci")
-@SpringBootTest
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/scenario"])
-class ScenarioTest {
-
-    companion object {
-        /** Every run from an empty data folder of its own ([TestDataFolder]). */
-        @JvmStatic @BeforeAll fun clean(info: TestInfo) = TestDataFolder.clean(info.testClass.get())
-    }
-
-    @TestConfiguration
-    class Plugin {
-        @Bean fun testSource(): Source = TestSource()
-    }
+class ScenarioTest : BaseTest() {
 
     /** A site whose pages are "<id>|<title>|<tags>|<annotation>". */
     class TestSource : Source {
@@ -118,8 +97,6 @@ class ScenarioTest {
 
     @Autowired lateinit var translations: TranslationsController
 
-    @Autowired lateinit var stores: io.github.vlsergey.recommend4me.source.Stores
-
     private fun capture(body: String) =
         captures.capturePage(CaptureRequest("https://test.example/work/${body.substringBefore('|')}", body)).body!!
 
@@ -135,7 +112,15 @@ class ScenarioTest {
         return items
             .listItems(
                 "books",
-                ItemQuery(view = view, sort = sort, sortNumber = sortNumber, facets = facets, ranges = range),
+                // Of its own site alone: the one application of the tests holds the other classes' works too
+                ItemQuery(
+                    view = view,
+                    sort = sort,
+                    sortNumber = sortNumber,
+                    facets = facets,
+                    sources = listOf("test"),
+                    ranges = range,
+                ),
             )
             .body!!
     }
@@ -163,11 +148,10 @@ class ScenarioTest {
      * The content type and its source told by the keys of their words, the words of a source's namespace its plugin's.
      */
     private fun describedByKeys() {
-        val type = types.listTypes().body!!.single()
-        assertEquals("books", type.id)
+        val type = types.listTypes().body!!.single { it.id == "books" }
         // The server words nothing: a source's own things by the keys of its namespace, the standard ones of the
         // standard
-        val source = type.sources.single()
+        val source = type.sources.single { it.id == "test" }
         assertEquals("test:facet.tag", source.facets.single { it.key == "tag" }.labelKey)
         assertEquals("standard:facet.universe", source.facets.single { it.key == "universe" }.labelKey)
         assertEquals("test:number.likes", source.numbers.single().labelKey)
@@ -223,7 +207,7 @@ class ScenarioTest {
 
         assertEquals("w3", list(sort = ItemSort.NUMBER, sortNumber = "test.likes").items.first().item)
         // Limited to a range of a number, both ends included, an end left out open
-        assertEquals(listOf("test.likes"), types.listTypes().body!!.single().filterNumbers.map { it.id })
+        assertTrue("test.likes" in types.listTypes().body!!.single { it.id == "books" }.filterNumbers.map { it.id })
         assertEquals(setOf("w2", "w3"), list(range = listOf("test.likes=2..3")).items.map { it.item }.toSet())
         assertEquals(setOf("w1", "w2"), list(range = listOf("test.likes=..2")).items.map { it.item }.toSet())
         assertEquals(listOf("w3"), list(range = listOf("test.likes=3..")).items.map { it.item })
@@ -237,7 +221,8 @@ class ScenarioTest {
         // The source's filter facet, and the kind, the universe, the characters, the pairings, the tags, the language
         // and the age rating the application gives every book
         val filters = filtersController.listFacets("books").body!!
-        assertEquals(
+        // Among the filters of every site of the one application of the tests, in their order
+        val expected =
             listOf(
                 "test.tag",
                 "kind",
@@ -248,9 +233,8 @@ class ScenarioTest {
                 "tags",
                 "languages",
                 "age-rating",
-            ),
-            filters.map { it.id },
-        )
+            )
+        assertEquals(expected.toSet(), filters.map { it.id }.filter { it in expected }.toSet())
         // The age rating a scale: every value of it in its order, a value no work has too
         val rating = filters.single { it.id == "age-rating" }
         assertEquals(true, rating.ordered)

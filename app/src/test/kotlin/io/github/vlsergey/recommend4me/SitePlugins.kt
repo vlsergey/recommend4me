@@ -41,6 +41,11 @@ import org.springframework.context.annotation.Bean
 class SitePlugins {
     @Bean fun siteSource(): Source = SiteSource()
 
+    /** The sites of the scenarios whose models are of their own works alone: [SiteTest], [SiteUniversesTest]. */
+    @Bean fun tagSite(): Source = SiteSource(SiteTest.SITE)
+
+    @Bean fun universeSite(): Source = SiteSource(SiteUniversesTest.SITE)
+
     @Bean fun wordsEncoder(): TextEncoder = WordsEncoder()
 
     @Bean fun fakeCatalogue(): FakeCatalogue = FakeCatalogue()
@@ -153,10 +158,15 @@ class SitePlugins {
     /**
      * A site whose pages are "<id>|<title>|<tags>|<annotation>|<pairings>[|<series>[|<fandoms>]]": tags to suggest,
      * pairings the application works out from the line the site writes them in, and fandoms "<key>:<name>,…" — of the
-     * fandom "originals" an original work. What a tag means it answers at [describe] of the tag.
+     * fandom "originals" an original work. What a tag means it answers at [describe] of the tag. Its host is
+     * "<id>.example": the scenarios whose models are of their own works alone have a site of their own, the one
+     * application of the tests ([BaseTest]) holding them all.
      */
-    class SiteSource : Source {
+    class SiteSource(override val id: String = ID) : Source {
         companion object {
+            /** The site of every class of the tests but those of a site of their own. */
+            const val ID = "site"
+
             const val DESCRIBE = "https://site.example/tags/"
 
             fun describe(tag: String) = "$DESCRIBE$tag"
@@ -170,9 +180,13 @@ class SitePlugins {
             const val SERIES = "https://site.example/series/"
         }
 
-        override val id = "site"
         override val contentType = "books"
-        override val homepage = "https://site.example"
+        override val homepage = "https://$id.example"
+
+        /** The site's pages of what a tag means, of a tag's other names and of a series, by their address. */
+        private val describes = "$homepage/tags/"
+        private val synonymsOf = "$homepage/synonyms/"
+        private val seriesOf = "$homepage/series/"
 
         /** A character's tag on the site, as the catalogue states it. */
         override val catalogueProperties = mapOf("fake" to setOf("P1"))
@@ -194,12 +208,12 @@ class SitePlugins {
                 universeLine = "pairings",
             )
         override val modes = setOf(SourceMode.BROWSER)
-        override val capturePatterns = listOf(Regex("https://site\\.example/(work|tags|synonyms|series)/.*"))
+        override val capturePatterns = listOf(Regex("${Regex.escape(homepage)}/(work|tags|synonyms|series)/.*"))
 
-        override fun itemUrl(itemId: String) = "https://site.example/work/$itemId"
+        override fun itemUrl(itemId: String) = "$homepage/work/$itemId"
 
         override fun itemIdOf(url: String) =
-            Regex("^https://site\\.example/work/([^/?#]+)").find(url)?.groupValues?.get(1)
+            Regex("^${Regex.escape(homepage)}/work/([^/?#]+)").find(url)?.groupValues?.get(1)
 
         override val pageDecor =
             PageDecor(
@@ -210,19 +224,19 @@ class SitePlugins {
 
         /** What a tag means, asked of the site by its address of the tag: the answer is the description itself. */
         override fun describing(facet: String, tags: List<String>): List<WantedPage> =
-            if (facet != "tag") emptyList() else tags.map { WantedPage(describe(it), mapOf("tag" to it)) }
+            if (facet != "tag") emptyList() else tags.map { WantedPage("$describes$it", mapOf("tag" to it)) }
 
         override fun capture(page: CapturedPage, context: SourceContext): List<String> =
             when {
-                page.url.startsWith(SiteSource.SYNONYMS) -> {
+                page.url.startsWith(synonymsOf) -> {
                     synonyms(page, context)
                     emptyList()
                 }
-                page.url.startsWith(SiteSource.DESCRIBE) -> {
+                page.url.startsWith(describes) -> {
                     description(page, context)
                     emptyList()
                 }
-                page.url.startsWith(SiteSource.SERIES) -> series(page, context)
+                page.url.startsWith(seriesOf) -> series(page, context)
                 else -> listOf(work(page, context))
             }
 
@@ -232,7 +246,7 @@ class SitePlugins {
             val works = ids.split(',').filter { it.isNotBlank() }
             context.items.keepSeries(
                 SeriesData(
-                    page.url.removePrefix(SiteSource.SERIES),
+                    page.url.removePrefix(seriesOf),
                     page.url,
                     title,
                     description,
@@ -248,7 +262,7 @@ class SitePlugins {
             val names = page.html.split(',').map { it.trim() }.filter { it.isNotEmpty() }
             context.items.setFacetValueSynonyms(
                 "tag",
-                mapOf(page.url.removePrefix(SiteSource.SYNONYMS) to names.associateBy { it.lowercase() }),
+                mapOf(page.url.removePrefix(synonymsOf) to names.associateBy { it.lowercase() }),
             )
         }
 
@@ -260,7 +274,7 @@ class SitePlugins {
                 ?.let {
                     context.items.describeFacetValues(
                         "tag",
-                        mapOf(page.url.removePrefix(SiteSource.DESCRIBE) to it),
+                        mapOf(page.url.removePrefix(describes) to it),
                     )
                 }
         }

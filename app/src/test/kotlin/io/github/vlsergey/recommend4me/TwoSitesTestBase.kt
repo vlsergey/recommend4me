@@ -20,7 +20,6 @@ import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.settings.SettingsController
 import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.SourceContexts
-import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
 import io.github.vlsergey.recommend4me.tag.TagRenaming
 import io.github.vlsergey.recommend4me.tag.TagRepository
@@ -30,20 +29,15 @@ import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import java.net.InetSocketAddress
 import java.util.Collections
 import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.TestInfo
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 
 /**
- * THE TWO SITES OF THE TESTS of one content type ([TwoSitesPlugins]): an application for every class of them —
- * [TwoSitesTest], [TwoSitesTagsTest], [TwoSitesSourcesTest] — over its own data folder ([TestDataFolder]), and what
- * they share: the host of the pictures, the controllers they ask, the pages they capture, a wait for the background.
- * Every test stands alone: it captures the works it reads, of ids of its own.
+ * THE TWO SITES OF THE TESTS of one content type ([TwoSitesPlugins]), in the one application of the tests ([BaseTest]),
+ * and what their classes — [TwoSitesTest], [TwoSitesTagsTest], [TwoSitesSourcesTest] — share: the host of the pictures,
+ * the controllers they ask, the pages they capture, a wait for the background. Every test stands alone: it captures the
+ * works it reads, of ids of its own.
  */
-@SpringBootTest
-@Import(TwoSitesPlugins::class)
-abstract class TwoSitesTestBase {
+abstract class TwoSitesTestBase : BaseTest() {
 
     companion object {
         private val server: HttpServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
@@ -60,14 +54,13 @@ abstract class TwoSitesTestBase {
         private var started = false
 
         /**
-         * The class's own data folder emptied ([TestDataFolder]), and the host of the pictures started, once in a
-         * process: every application of the process reads its pictures from it. The host stops with the tests.
+         * The host of the pictures started, once in a process: the application of the process reads its pictures from
+         * it. The host stops with the tests.
          */
         @JvmStatic
         @BeforeAll
         @Synchronized
-        fun start(info: TestInfo) {
-            TestDataFolder.clean(info.testClass.get())
+        fun start() {
             if (started) return
             server.createContext("/") { exchange ->
                 pictureHits += exchange.requestURI.path
@@ -98,7 +91,6 @@ abstract class TwoSitesTestBase {
     @Autowired lateinit var duplicates: DuplicatesController
     @Autowired lateinit var authors: AuthorsController
     @Autowired lateinit var tags: TagsController
-    @Autowired lateinit var stores: Stores
     @Autowired lateinit var listIndexes: ListIndexes
     @Autowired lateinit var jobs: Jobs
     @Autowired lateinit var jobsApi: JobsController

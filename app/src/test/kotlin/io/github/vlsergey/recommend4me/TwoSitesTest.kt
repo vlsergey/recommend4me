@@ -37,7 +37,6 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.context.i18n.LocaleContextHolder
-import org.springframework.test.context.TestPropertySource
 
 /**
  * Two sites of one content type: what spans sources — a work on both sites and its authors, what each site says of it,
@@ -45,8 +44,15 @@ import org.springframework.test.context.TestPropertySource
  */
 // More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
 @Tag("ci")
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/two-sites"])
 class TwoSitesTest : TwoSitesTestBase() {
+
+    private companion object {
+        /** A page of the authors holding every author of the application of the tests. */
+        const val ALL_AUTHORS = 500
+
+        /** A page of the pairs holding every pair of the works of the application of the tests. */
+        const val ALL_PAIRS = 5000
+    }
 
     @Test
     fun `a number the site states shown as it is, the other worked out by the words per character the texts teach`() {
@@ -229,7 +235,24 @@ class TwoSitesTest : TwoSitesTestBase() {
         fun pair() = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
         assertTrue(waitFor { pair().title != null }, "the titles encoded")
         assertEquals(1.0, pair().title!!.toDouble(), 1e-3)
-        // A search keeps how rare every value is, and the pair as the search keeps it is the pair worked out loose: of
+        keptAsWorkedOut()
+        // The pairs chosen by a title wholly alike, and by the authors: those alone, the two of "The Mill" among them
+        fun chosen(authors: Boolean, title: Boolean) =
+            duplicates
+                .getDuplicates("books", true, 0, ALL_PAIRS, DuplicateSort.CHANCE, null, authors, title)
+                .body!!
+                .pairs
+        val sameTitle = chosen(authors = false, title = true)
+        assertTrue(sameTitle.all { it.first.title.trim().equals(it.second.title.trim(), ignoreCase = true) })
+        assertTrue(sameTitle.any { setOf(it.first.item, it.second.item) == setOf("m1", "m2") }, "$sameTitle")
+        assertTrue(sameTitle.size < chosen(authors = false, title = false).size)
+        assertTrue(chosen(authors = true, title = false).all { it.sameAuthor })
+        assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
+    }
+
+    /** A search keeps how rare every value is, and the pair as the search keeps it is the pair worked out loose. */
+    private fun keptAsWorkedOut() {
+        // The values in the index of the list once the background has written them: of
         // the values the index of the list holds once the background has written them
         // — of the one or the other: a site's tag the model doubts is given or not as the model is fitted
         fun listed() =
@@ -240,23 +263,20 @@ class TwoSitesTest : TwoSitesTestBase() {
         duplicates.searchDuplicates("books")
         assertTrue(waitFor(120) { type.duplicates.search()?.madeAt.let { it != null && it != before } }, "searched")
         assertTrue(type.duplicates.rarity.of(listOf("tags:${tagOf("alpha", "river")}")).isNotEmpty())
-        val m1 = ItemKey("alpha", "m1")
-        val m2 = ItemKey("beta", "m2")
-        val kept = type.duplicates.find(m1, m2)!!
-        val worked = LoosePairs.candidate(type, type.duplicates.search()!!.encoder, m1, m2, listIndexes.of("books"))!!
+        // Of a pair the search kept — of the works of the other classes too, in the one application of the tests
+        val kept = type.duplicates.all().first { it.first.source == "alpha" && it.second.source == "beta" }
+        val worked =
+            LoosePairs.candidate(
+                type,
+                type.duplicates.search()!!.encoder,
+                kept.first,
+                kept.second,
+                listIndexes.of("books"),
+            )!!
         assertEquals(kept.title, worked.title, 1e-3f)
         assertEquals(kept.facets.keys, worked.facets.keys)
         kept.facets.forEach { (k, v) -> assertEquals(v, worked.facets.getValue(k), 1e-3f, k) }
         assertEquals(kept.sameAuthor, worked.sameAuthor)
-        // The pairs chosen by a title wholly alike, and by the authors: those alone, the two of "The Mill" among them
-        fun chosen(authors: Boolean, title: Boolean) =
-            duplicates.getDuplicates("books", true, 0, 200, DuplicateSort.CHANCE, null, authors, title).body!!.pairs
-        val sameTitle = chosen(authors = false, title = true)
-        assertTrue(sameTitle.all { it.first.title.trim().equals(it.second.title.trim(), ignoreCase = true) })
-        assertTrue(sameTitle.any { setOf(it.first.item, it.second.item) == setOf("m1", "m2") }, "$sameTitle")
-        assertTrue(sameTitle.size < chosen(authors = false, title = false).size)
-        assertTrue(chosen(authors = true, title = false).all { it.sameAuthor })
-        assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
     }
 
     @Test
@@ -387,17 +407,13 @@ class TwoSitesTest : TwoSitesTestBase() {
 
     /** Every author with works listed, the most works first, found by a name of theirs. */
     private fun authorsListed(ann: Long, annaB: Long, namesake: Long) {
-        // Every author with works listed, the most works first, by a name of theirs
-        assertEquals(
-            listOf(ann, annaB, namesake),
-            authors
-                .listAuthors("books", AuthorKind.ALL, null, 0, 50)
-                .body!!
-                .authors
-                .map { it.id }
-                .sortedWith(compareBy { if (it == ann) 0L else it }),
-        )
-        assertEquals(ann, authors.listAuthors("books", AuthorKind.ALL, null, 0, 1).body!!.authors.single().id)
+        // Every author with works listed, the most works first, by a name of theirs — of the other classes' authors
+        // too, in the one application of the tests: of these three, Ann of the most works first
+        val all = authors.listAuthors("books", AuthorKind.ALL, null, 0, ALL_AUTHORS).body!!.authors.map { it.id }
+        val own = all.filter { it in setOf(ann, annaB, namesake) }
+        assertEquals(ann, own.first(), "authors $all")
+        assertEquals(setOf(annaB, namesake), own.drop(1).toSet(), "authors $all")
+        assertEquals(all.first(), authors.listAuthors("books", AuthorKind.ALL, null, 0, 1).body!!.authors.single().id)
         assertEquals(
             listOf(annaB),
             authors.listAuthors("books", AuthorKind.ALL, "NA b", 0, 50).body!!.authors.map { it.id },

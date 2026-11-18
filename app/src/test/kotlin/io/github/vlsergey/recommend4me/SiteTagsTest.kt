@@ -27,18 +27,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import org.springframework.test.context.TestPropertySource
 
 /**
  * The site's tags as the application's own: bound to normalized tags the user merges, names, binds to a catalogue's
  * entries and puts above and under one another; a tag that keeps its works out.
  */
-// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
-@Tag("ci")
-@TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-tags"])
 class SiteTagsTest : SiteTestBase() {
 
     @Test
@@ -159,7 +154,8 @@ class SiteTagsTest : SiteTestBase() {
         assertTrue(tagsApi.listTags("ship hull", null, null, null, 0, 10).body!!.tags.any { it.key == hulls })
         // Filtered by what it comes from: the site and the catalogue it is bound to an entry of
         val ofCatalogue = tagsApi.listTags(null, listOf("fake"), null, null, 0, 1000).body!!
-        assertEquals(listOf("site", "fake"), ofCatalogue.sources)
+        // Of every site of the one application of the tests that has tags, the site and the catalogue among them
+        assertTrue(ofCatalogue.sources.containsAll(listOf("site", "fake")), "${ofCatalogue.sources}")
         assertEquals(listOf(hulls), ofCatalogue.tags.map { it.key })
         assertTrue(
             tagsApi.listTags(null, listOf("site"), listOf("fake"), null, 0, 1000).body!!.tags.none { it.key == hulls }

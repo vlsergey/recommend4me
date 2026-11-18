@@ -20,8 +20,9 @@ import io.github.vlsergey.recommend4me.model.ScoreSweep
 import io.github.vlsergey.recommend4me.model.ScorerComparisons
 import io.github.vlsergey.recommend4me.page.PagesController
 import io.github.vlsergey.recommend4me.pairing.PairingsController
+import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.SuggestionsController
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
@@ -37,29 +38,37 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseEntriesController
 import io.github.vlsergey.recommend4me.universe.UniversesController
 import io.github.vlsergey.recommend4me.workload.inBackground
-import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.TestInfo
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.boot.test.context.SpringBootTest
-import org.springframework.context.annotation.Import
 
 /**
- * THE SITE OF THE TESTS as the application's interface sees it, its plugins [SitePlugins]: an application for every
- * class of tests over its own data folder ([TestDataFolder]), and what they share — the controllers they ask, the pages
- * they capture, the background made to run at once. Every test stands alone, in any order: it captures the works it
- * reads, of ids of its own, the [catalogue] among them when it needs a model.
+ * THE SITE OF THE TESTS as the application's interface sees it, its plugins [SitePlugins], in the one application of
+ * the tests ([BaseTest]), and what its classes share — the controllers they ask, the pages they capture, the background
+ * made to run at once. Every test stands alone, in any order: it captures the works it reads, of ids of its own, the
+ * [catalogue] among them when it needs a model.
  */
-@SpringBootTest
-@Import(SitePlugins::class)
-abstract class SiteTestBase {
+abstract class SiteTestBase : BaseTest() {
 
     companion object {
         /** The works of a kind of the [catalogue], and of them those told in other words. */
         const val WORKS_OF_A_KIND = 20
         const val TOLD_OTHERWISE = 12
 
-        /** Every class from its own data folder, empty ([TestDataFolder]). */
-        @JvmStatic @BeforeAll fun clean(info: TestInfo) = TestDataFolder.clean(info.testClass.get())
+        /** The bilinear suggester of the facets, by its id. */
+        const val BILINEAR = "bilinear-1"
+    }
+
+    @Autowired lateinit var settings: Settings
+
+    /** The site of the class: of every class the one of the tests, of a scenario whose models are its own its own. */
+    open val site: String = SitePlugins.SiteSource.ID
+
+    /**
+     * Every facet of the site learnt by the suggester [id] — none: by the tests' own ([BaseTest]) —, a setting of the
+     * site's as the user's, not the application's context: a test sets it, and takes it back after.
+     */
+    fun learntBy(id: String?) {
+        val store = stores.source(site)!!
+        store.schema.facets.forEach { settings.set(Plugins.suggesterSetting(store.id, it.key), id) }
     }
 
     @Autowired lateinit var captures: CaptureController
@@ -73,7 +82,6 @@ abstract class SiteTestBase {
     @Autowired lateinit var corrections: CorrectionsController
     @Autowired lateinit var pages: PagesController
     @Autowired lateinit var suggestionsApi: SuggestionsController
-    @Autowired lateinit var stores: Stores
     @Autowired lateinit var textVectors: TextVectors
     @Autowired lateinit var suggestions: FacetSuggestions
     @Autowired lateinit var universes: UniversesController
@@ -94,7 +102,7 @@ abstract class SiteTestBase {
     @Autowired lateinit var layerDrafts: LayerDrafts
 
     protected fun capture(body: String) =
-        captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
+        captures.capturePage(CaptureRequest("https://$site.example/work/${body.substringBefore('|')}", body))
 
     /**
      * The texts' vectors made, and what the background makes of the tags made now: their works counted and kept
@@ -179,25 +187,25 @@ abstract class SiteTestBase {
         // site's, the model learns what the texts say of them
         listOf(5, 10, 15).forEach { k ->
             listOf("space", "ships").forEach {
-                corrections.correctFacet("site", "s$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
+                corrections.correctFacet(site, "s$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
             }
             listOf("dragons", "magic").forEach {
-                corrections.correctFacet("site", "d$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
+                corrections.correctFacet(site, "d$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
             }
         }
-        val store = stores.source("site")!!
+        val store = stores.source(site)!!
         refresh(store)
         inBackground { suggestions.refresh(store) }
     }
 
     /** The facets of the work [id]. */
-    protected fun facetsOf(id: String) = items.getItem("site", id).body!!.allFacets
+    protected fun facetsOf(id: String) = items.getItem(site, id).body!!.allFacets
 
     /** The value [key] of the [facet] of the work [id]; none when the work has it not. */
     protected fun valueOf(id: String, facet: String, key: String) =
         facetsOf(id).find { it.facet == facet }?.propertyValues?.find { it.key == key }
 
     /** The key of the normalized tag the site's tag [site] is bound to. */
-    protected fun tag(site: String) =
-        TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef("site", site)))
+    protected fun tag(name: String) =
+        TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef(site, name)))
 }

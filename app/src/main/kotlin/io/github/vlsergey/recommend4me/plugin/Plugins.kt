@@ -16,6 +16,7 @@ import io.github.vlsergey.recommend4me.universe.UniverseCatalogue
 import java.nio.file.Path
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(Plugins::class.java)
@@ -39,6 +40,11 @@ class Plugins(
     tagCatalogues: ObjectProvider<TagCatalogue>,
     types: ObjectProvider<ContentType>,
     private val settings: Settings,
+    /**
+     * The suggester a facet learns with when none is named for it ([suggester]): the bilinear one, unless the launch
+     * names another — the tests of the application the cheapest (user, 2026-11-18).
+     */
+    @Value("\${recommend4me.suggester:$DEFAULT_SUGGESTER}") private val defaultSuggester: String = DEFAULT_SUGGESTER,
 ) {
     val sources: List<Source> = sources.orderedStream().toList()
     val textEncoders: List<TextEncoder> = textEncoders.orderedStream().toList()
@@ -129,12 +135,12 @@ class Plugins(
             ?: scorers.firstOrNull()
 
     /**
-     * The suggester a facet of a source learns with: the one named by `suggester.<source>.<facet>`, else the bilinear
-     * one, else the first.
+     * The suggester a facet of a source learns with: the one named by `suggester.<source>.<facet>`, else the default
+     * one ([defaultSuggester]), else the first.
      */
     fun suggester(source: String, facet: String): FacetSuggester? =
         suggesters.firstOrNull { it.id == settings.get(suggesterSetting(source, facet)) }
-            ?: suggesters.firstOrNull { it.id == DEFAULT_SUGGESTER }
+            ?: suggesters.firstOrNull { it.id == defaultSuggester }
             ?: suggesters.firstOrNull()
 
     /**
