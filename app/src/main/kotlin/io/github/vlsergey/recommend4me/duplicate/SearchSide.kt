@@ -10,6 +10,9 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.vector.Vectors
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(SearchSide::class.java)
 
 /** The facet the normalized authors are compared as. */
 internal const val AUTHOR_FAMILY = "author"
@@ -80,6 +83,7 @@ internal class SearchSide(
          */
         fun read(s: SourceStore, encoder: String, ratios: Map<Long, Double>): ReadSide? {
             val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+            val started = System.currentTimeMillis()
             val ids = s.textVectors.itemsWith(TextVectors.TITLE)
             if (ids.isEmpty()) return null
             val at = ids.withIndex().associate { it.value to it.index }
@@ -102,11 +106,25 @@ internal class SearchSide(
                 }
             }
             return titles?.let {
+                val vectors = System.currentTimeMillis()
                 val values = WorkValues(s).apply { read() }
+                val read = System.currentTimeMillis()
                 val authors = values.authorsOf(ids)
                 values.gather(ids, authors)
+                val gathered = System.currentTimeMillis()
                 val sizes = sizesOf(s, ids, ratios, { s.items.number(it) }, s.works.allOf(s.id))
-                ReadSide(values.named(ids)) { placed ->
+                log.info(
+                    "{}: the search's side of {} works read in {} ms: vectors {}, values {}, drafts, answers and " +
+                        "authors {}, sizes {}",
+                    s.id,
+                    ids.size,
+                    System.currentTimeMillis() - started,
+                    vectors - started,
+                    read - vectors,
+                    gathered - read,
+                    System.currentTimeMillis() - gathered,
+                )
+                ReadSide(values.numbered(ids), values.names()) { placed ->
                     SearchSide(s, ids, it, descriptions!!, described, placed, sizes, authors)
                 }
             }
@@ -150,7 +168,7 @@ internal class SearchSide(
                     { key -> numbers.mapNotNull { (id, of) -> of[key]?.let { id to it } }.toMap() },
                     s.works.ofItems(s.id, own),
                 )
-            return ReadSide(values.named(own)) { placed ->
+            return ReadSide(values.numbered(own), values.names()) { placed ->
                 SearchSide(s, own, titles, descriptions, described, placed, sizes, authors)
             }
         }
@@ -189,14 +207,20 @@ internal class SearchSide(
 }
 
 /**
- * A site's [side] read, the values of its works by their names ([named]): given their places among every value of the
- * type once every site is read, one after another, so a value has one place whichever site read it first.
+ * A site's [side] read, the values of its works by the site's own numbers ([numbered], ascending) of their [names]:
+ * given their places among every value of the type once every site is read, one after another, so a value has one place
+ * whichever site read it first — a name looked up once a value, not once a work.
  */
 internal class ReadSide(
-    private val named: Array<Collection<String>>,
+    private val numbered: Array<IntArray>,
+    private val names: List<String>,
     private val side: (values: Array<IntArray>) -> SearchSide,
 ) {
     /** The side, its values by their places in [places], every new value given one. */
-    fun placed(places: HashMap<String, Int>): SearchSide =
-        side(Array(named.size) { i -> named[i].map { places.getOrPut(it) { places.size } }.sorted().toIntArray() })
+    fun placed(places: HashMap<String, Int>): SearchSide {
+        val place = IntArray(names.size) { places.getOrPut(names[it]) { places.size } }
+        return side(
+            Array(numbered.size) { i -> IntArray(numbered[i].size) { k -> place[numbered[i][k]] }.apply { sort() } }
+        )
+    }
 }

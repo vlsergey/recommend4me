@@ -103,7 +103,19 @@ class DuplicateRepository(private val db: DSLContext) {
      * own, each parsed by the database apart, were most of a search's half a minute of keeping.
      */
     private fun keep(tx: DSLContext, candidates: Collection<DuplicateCandidate>) {
-        candidates.chunked(BATCH).forEach { chunk ->
+        // In the order of the table's key: every row written after the last, not into the middle of its pages — half a
+        // million rows in the order found took 20 s of a search, most of it the database finding their places
+        // (2026-11-18)
+        val ordered =
+            candidates.sortedWith(
+                compareBy<DuplicateCandidate>(
+                    { it.first.source },
+                    { it.first.id },
+                    { it.second.source },
+                    { it.second.id },
+                )
+            )
+        ordered.chunked(BATCH).forEach { chunk ->
             val batch =
                 tx.batch(
                     tx.insertInto(

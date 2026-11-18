@@ -39,6 +39,8 @@ internal object CardSearch {
             val kernels = kernels(card) ?: error("the kernels of the search were not made")
             val likeliest = Likeliest(search, models.size)
             val slices = search.sites.map { Tiles.slices(it, slice) }
+            // Every run's works by what they have, made once: a run is faced by every run of every site
+            val inverted = slices.map { runs -> runs.map { Inverted(it.works, search.familyOf.size) } }
             for (a in search.sites.indices) for (b in search.sites.indices) {
                 if (!search.compared(a, b)) continue
                 // The weights of the models as the two sites are scored: their sites' weight in the constant
@@ -48,11 +50,11 @@ internal object CardSearch {
                         .flatMap { it.flat().asList() }
                         .toFloatArray()
                 // Of every run of the first site on the card, every run of the second put there in its turn
-                for (rows in slices[a]) CardRoom(card).use { ofRows ->
-                    val x = SiteOnCard(rows.works, Inverted(rows.works, search.familyOf.size), ofRows)
-                    for (columns in slices[b]) {
+                for ((r, rows) in slices[a].withIndex()) CardRoom(card).use { ofRows ->
+                    val x = SiteOnCard(rows.works, inverted[a][r], ofRows)
+                    for ((c, columns) in slices[b].withIndex()) {
                         val tile = Tile(search, a, b, rows, columns)
-                        val y = Inverted(columns.works, search.familyOf.size)
+                        val y = inverted[b][c]
                         // The block as large as the card has room for: halved till it has
                         var planes = Facing.MOST_ROOM
                         while (true) {

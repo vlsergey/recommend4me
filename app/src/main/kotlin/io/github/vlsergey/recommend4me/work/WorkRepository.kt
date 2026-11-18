@@ -118,17 +118,22 @@ class WorkRepository(private val db: DSLContext) {
                 .having(DSL.count().gt(1))
                 .fetchSet { it.value1()!! }
         if (several.isEmpty()) return emptyMap()
-        return db.select(
-                SITE_WORK.NORMALIZED,
-                SITE_WORK.SOURCE,
-                SITE_WORK.ITEM,
-                SITE_WORK.SHOWN_FIRST,
-                SITE_WORK.FULLNESS,
-            )
-            .from(SITE_WORK)
-            .where(SITE_WORK.SOURCE.`in`(sources))
-            .fetch()
-            .filter { it.value1() in several }
+        // Their items by the index of the works, a thousand works a query: not every binding of every site read and
+        // picked from — of a million and a half items, seconds a reading of every work of several (2026-11-18)
+        return several
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(
+                        SITE_WORK.NORMALIZED,
+                        SITE_WORK.SOURCE,
+                        SITE_WORK.ITEM,
+                        SITE_WORK.SHOWN_FIRST,
+                        SITE_WORK.FULLNESS,
+                    )
+                    .from(SITE_WORK)
+                    .where(SITE_WORK.NORMALIZED.`in`(chunk), SITE_WORK.SOURCE.`in`(sources))
+                    .fetch()
+            }
             .sortedWith(SHOWN_ORDER)
             .groupBy({ it.value1()!! }, { ItemKey(it.value2()!!, it.value3()!!) })
     }
