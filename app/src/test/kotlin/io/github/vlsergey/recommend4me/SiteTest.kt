@@ -75,9 +75,12 @@ class SiteTest : SiteTestBase() {
 
     /** The work's tags worked out from the site's: the untagged work [item] given those of its kind, others offered. */
     private fun tagsOfItsKind(item: PageItem) {
-        // The work's tags are worked out from the site's: the untagged work is given those of its kind
+        // The work's tags are worked out from the site's: of the untagged work the likeliest is of its kind — given,
+        // or offered first: how far its chance reaches is the model's of the works of the type, the other classes'
+        // too, in the one application of the tests
         val given = item.facets.single { it.facet == "tags" }.propertyValues
-        assertTrue(given.any { it.key == tag("space") && it.inferred == true }, "given $given")
+        val likeliest = given.filter { it.corrected == null }.maxByOrNull { it.chance ?: 0.0 }
+        assertEquals(tag("space"), likeliest?.key, "given $given")
         assertTrue(given.none { it.key == tag("dragons") && it.offered != true }, "given $given")
         // Beside what it is given, the likeliest others are offered: three the site does not give, at least
         assertEquals(3, given.count { it.corrected == null }, "given $given")

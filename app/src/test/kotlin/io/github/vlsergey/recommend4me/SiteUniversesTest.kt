@@ -381,7 +381,10 @@ class SiteUniversesTest : SiteTestBase() {
         val untaught = suggestionsApi.getCandidates(site, "nc1", "secondary-characters", null, null).body!!
         assertTrue(untaught.isNotEmpty() && untaught.all { it.chance == null }, "secondary $untaught")
         // Each with every name it goes by, the shown one first: a search finds it by any of them
-        assertEquals(listOf("Pilot", "The Pilot"), untaught.first { it.key == "fake:C1" }.names)
+        // — the pilot, unless the model gives it as a main one: a character is never offered in both
+        val pilot = untaught.firstOrNull { it.key == "fake:C1" }
+        if (pilot != null) assertEquals(listOf("Pilot", "The Pilot"), pilot.names)
+        else assertTrue("fake:C1" in keysOf("characters"), "secondary $untaught, main ${keysOf("characters")}")
         corrections.correctFacet(site, "nc1", FacetCorrection(facet = "characters", added = true, key = "fake:C1"))
         assertTrue(
             "fake:C1" !in keysOf("secondary-characters") && "fake:C1" !in candidatesOf("secondary-characters"),
