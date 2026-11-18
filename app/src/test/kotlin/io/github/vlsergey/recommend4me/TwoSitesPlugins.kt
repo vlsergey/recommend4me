@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me
 import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.source.CapturedPage
+import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.Job
@@ -39,7 +40,12 @@ class TwoSitesPlugins {
         override val homepage = "https://alpha.example"
         override val schema =
             SourceSchema(
-                facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet(byName = "name:")),
+                facets =
+                    listOf(
+                        Books.TAG.asFacet(),
+                        Books.AUTHOR.asFacet(byName = "name:"),
+                        FacetDef("beta", people = true),
+                    ),
                 numbers = listOf(StandardNumbers.WORDS.asNumber()),
                 texts = listOf(TextDef("annotation", block = "text:annotation")),
                 reviews = true,

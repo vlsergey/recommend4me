@@ -14,28 +14,29 @@ private val log = LoggerFactory.getLogger(NamedAuthors::class.java)
  * [io.github.vlsergey.recommend4me.source.FacetDef.byName]) — "name:Lorem" — and the site's own key of a value named
  * "Lorem" are one person, the name an account of the site. As soon as a page gives the key, the normalized author of
  * the name is merged into its ([MergedBy.Name]), every work the dump gave the name of — not yet read on the site — one
- * author's with those read. Never two the user told apart; never of a name two keys of the site have.
+ * author's with those read; the key of a beta of a work too, a person of the site as an author is (user, 2026-11-18:
+ * "what stops recording their profiles, not as authors?"). Never two the user told apart; never of a name two keys of
+ * the site have.
  */
 @Component
 class NamedAuthors {
 
     /**
-     * The authors of the [source] given by their names merged into those of the same names the site gave keys of, of
-     * the site's own [keys] — of the works changed; how many merged.
+     * The authors of the [source] given by their names merged into the people of the same names the site gave keys of —
+     * its authors, its betas ([peopleFacetsOf]) — of the site's own [keys], of the works changed; how many merged.
      */
     @Synchronized
     fun merge(source: SourceStore, keys: Collection<String>): Int {
-        val (facet, prefix) =
-            source.schema.facets.firstNotNullOfOrNull { f ->
-                f.byName?.takeIf { f.role == FacetRole.AUTHOR }?.let { f.key to it }
-            } ?: return 0
-        val names = source.items.facetNames(facet, keys.filterNot { it.startsWith(prefix) })
+        val prefix =
+            source.schema.facets.firstNotNullOfOrNull { f -> f.byName?.takeIf { f.role == FacetRole.AUTHOR } }
+                ?: return 0
+        val own = keys.filterNot { it.startsWith(prefix) }
         // The key given by a name to the site's own key of that name, of a name one key has
         val owners =
-            names.entries
-                .filterNot { it.key.startsWith(prefix) }
+            peopleFacetsOf(source)
+                .flatMap { source.items.facetNames(it, own).entries }
                 .groupBy({ prefix + it.value.trim() }, { it.key })
-                .mapNotNull { (named, own) -> own.singleOrNull()?.let { named to it } }
+                .mapNotNull { (named, of) -> of.distinct().singleOrNull()?.let { named to it } }
         return if (owners.isEmpty()) 0 else merged(source, owners)
     }
 

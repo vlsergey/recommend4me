@@ -38,4 +38,22 @@ class NamedAuthorsTest : TwoSitesTestBase() {
         // Ned's name has no key of the site: his stays as it was
         assertNotEquals(nell, dictionary.bindingsOf("alpha")["name:Ned"])
     }
+
+    /** A beta of a work is a person of the site: the author the dump gave by her name is she, no author of the work. */
+    @Test
+    fun `the key of a name merged into the key of a beta of the same name, no author of the work`() {
+        alpha("nb1|Lorem|hay|Lorem ipsum dolor||")
+        alpha("nb2|Ipsum|hay|Sit amet consectetur||")
+        val alpha = stores.source("alpha")!!
+        alpha.items.setFacet("nb1", Books.AUTHOR.key, listOf(FacetValue("name:Bea", "Bea")))
+        alpha.items.setFacet("nb2", Books.AUTHOR.key, listOf(FacetValue("name:Bea", "Bea")))
+        val dictionary = stores.type("books")!!.authors
+
+        // The site's page of the first work: its author another, Bea its beta
+        alpha.items.setFacet("nb1", Books.AUTHOR.key, listOf(FacetValue("nb-amy", "Amy")))
+        alpha.items.setFacet("nb1", "beta", listOf(FacetValue("nb-bea", "Bea")))
+        val bea = dictionary.bindingsOf("alpha").getValue("nb-bea")
+        assertEquals(bea, dictionary.bindingsOf("alpha")["name:Bea"])
+        assertEquals(listOf("nb-amy"), alpha.items.facetsOf(listOf("nb1")).getValue("nb1")[Books.AUTHOR.key])
+    }
 }

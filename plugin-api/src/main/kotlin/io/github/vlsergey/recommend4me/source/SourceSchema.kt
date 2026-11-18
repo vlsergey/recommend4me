@@ -143,6 +143,12 @@ class FacetDef(
      * author Lorem: one person, the name an account of the site); null: no such keys.
      */
     val byName: String? = null,
+    /**
+     * Its values are people of the site keyed as its authors are ([FacetRole.AUTHOR]) who are not the work's authors —
+     * its betas, its gammas: each bound to a normalized author as an author is, one with the author of that key, never
+     * an author of the work.
+     */
+    val people: Boolean = false,
 )
 
 /**

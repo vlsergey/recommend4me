@@ -46,8 +46,8 @@ class Ficbook : Source {
             facets =
                 listOf(
                     Books.AUTHOR.asFacet(AUTHOR, byName = NAME_KEY),
-                    FacetDef(BETA),
-                    FacetDef(GAMMA),
+                    FacetDef(BETA, people = true),
+                    FacetDef(GAMMA, people = true),
                     Books.FANDOM.asFacet(FANDOM),
                     Books.DIRECTION.asFacet(DIRECTION),
                     AgeRating.SITE.asFacet(),
