@@ -6,7 +6,7 @@
 |---|---|
 | `item` | a work of the site: its id, address, title, version and dates |
 | `item_version` | every version of a work seen |
-| `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order |
+| `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order, with its name as the work's page wrote it |
 | `facet_value` | the name of a value the site names by key (a tag's id) |
 | `facet_value_description` | what the site says a value means (a tag's own page, what a fandom is of) |
 | `facet_value_synonym` | another name the site gives a value (a tag's synonym): a value of its own, bound to the tag the value is bound to |
@@ -73,6 +73,7 @@ erDiagram
         VARCHAR facet PK
         VARCHAR value_key PK
         INTEGER position
+        VARCHAR name "null"
     }
     item_manner {
         VARCHAR item_id PK, FK

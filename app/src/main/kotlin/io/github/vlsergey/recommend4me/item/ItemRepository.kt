@@ -25,6 +25,9 @@ internal const val BY_IDS_UP_TO = 20_000
 /** The longest key of a facet's value the tables of the facets hold (`VARCHAR(500)`). */
 internal const val VALUE_KEY_LENGTH = 500
 
+/** The longest name of a facet's value the tables of the facets hold (`VARCHAR(1000)`). */
+internal const val NAME_LENGTH = 1000
+
 /**
  * The items of one source as its source database holds them: what every item has, its facets, numbers and texts, and
  * the dictionary of the facets' values — each held by its own part ([ItemFacets], [FacetDictionary], [ItemNumbers],

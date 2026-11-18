@@ -185,9 +185,6 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             .fetchMap({ it.value1()!! }, { it.value2()!! })
 
     private companion object {
-        /** The longest name of a value the table holds (`VARCHAR(1000)`). */
-        const val NAME_LENGTH = 1000
-
         /** The longest description of a value the table holds (`VARCHAR(4000)`). */
         const val DESCRIPTION_LENGTH = 4000
 

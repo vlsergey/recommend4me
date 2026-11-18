@@ -60,27 +60,32 @@ internal class ItemFacetRepository(
         // The names first: whoever hears of the change reads the values by them (a site's fandom bound by its name)
         val named = distinct.filter { it.name != null }.associate { it.key to it.name!! }
         if (named.isNotEmpty()) dictionary.nameFacetValues(facet, named)
+        // The key of every value and its name as the page wrote it (user, 2026-11-18: "ideally a work keeps both — the
+        // tags and the names"): a value given with no name keeps the one it had
         val before =
-            db.select(ITEM_FACET.VALUE_KEY)
+            db.select(ITEM_FACET.VALUE_KEY, ITEM_FACET.NAME)
                 .from(ITEM_FACET)
                 .where(ITEM_FACET.ITEM_ID.eq(itemId), ITEM_FACET.FACET.eq(facet))
                 .orderBy(ITEM_FACET.POSITION)
-                .fetch { it.value1()!! }
-        if (before != distinct.map { it.key }) {
-            db.transaction { c ->
-                val tx = DSL.using(c)
-                tx.deleteFrom(ITEM_FACET).where(ITEM_FACET.ITEM_ID.eq(itemId), ITEM_FACET.FACET.eq(facet)).execute()
-                distinct.forEachIndexed { i, v ->
-                    tx.insertInto(ITEM_FACET)
-                        .set(ITEM_FACET.ITEM_ID, itemId)
-                        .set(ITEM_FACET.FACET, facet)
-                        .set(ITEM_FACET.VALUE_KEY, v.key.take(VALUE_KEY_LENGTH))
-                        .set(ITEM_FACET.POSITION, i)
-                        .execute()
-                }
+                .fetch { it.value1()!! to it.value2() }
+        val was = before.toMap()
+        val after = distinct.map { it.key to (it.name?.take(NAME_LENGTH) ?: was[it.key]) }
+        if (before == after) return
+        db.transaction { c ->
+            val tx = DSL.using(c)
+            tx.deleteFrom(ITEM_FACET).where(ITEM_FACET.ITEM_ID.eq(itemId), ITEM_FACET.FACET.eq(facet)).execute()
+            after.forEachIndexed { i, (key, name) ->
+                tx.insertInto(ITEM_FACET)
+                    .set(ITEM_FACET.ITEM_ID, itemId)
+                    .set(ITEM_FACET.FACET, facet)
+                    .set(ITEM_FACET.VALUE_KEY, key.take(VALUE_KEY_LENGTH))
+                    .set(ITEM_FACET.NAME, name)
+                    .set(ITEM_FACET.POSITION, i)
+                    .execute()
             }
-            changed(listOf(itemId))
         }
+        // A name the site wrote anew is no change of the work: its values are the same
+        if (before.map { it.first } != after.map { it.first }) changed(listOf(itemId))
     }
 
     override fun keepOnlyFacets(facets: Collection<String>): Map<String, Int> {
