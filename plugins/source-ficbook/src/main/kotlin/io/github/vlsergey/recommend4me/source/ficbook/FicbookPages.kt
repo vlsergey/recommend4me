@@ -11,8 +11,10 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.ANNOTATION
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.AUTHOR
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.BASE
+import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.BETA
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.COMMENTS
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.DEDICATION
+import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.GAMMA
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.LIKES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.NOTES
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.ONLY_PART
@@ -23,6 +25,7 @@ import java.net.URI
 import java.time.Instant
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 
 /**
  * Reads the pages of ficbook.net and writes what they say: the cards of a list (a fandom, a tag, a search, a
@@ -120,15 +123,7 @@ class FicbookPages(private val context: SourceContext) {
         doc.selectFirst("section.fanfic-badges button span")?.text()?.let(PageText::number)?.let {
             items.setNumbers(id, mapOf(LIKES to it.toDouble()))
         }
-        // Every person of the header the site marks an author or a co-author — the co-authors have no itemprop — and
-        // not the beta or the gamma
-        val authors =
-            hat.select("a.word-break[href^=/authors/]")
-                .filter { a -> a.parent()?.parent()?.selectFirst(".ds-badge")?.text()?.trim()?.lowercase() in AUTHORS }
-                .mapNotNull { a ->
-                    AUTHOR_ID.find(a.attr("href"))?.groupValues?.get(1)?.let { FacetValue(it, a.text().trim()) }
-                }
-        if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors)
+        people(id, hat)
         fields.described(id, blocks.filterKeys { it != "Автор" })
         // The block of tags with no tag found in it: its markup changed, not the work's tags gone
         blocks["Метки"]?.let { block ->
@@ -154,6 +149,24 @@ class FicbookPages(private val context: SourceContext) {
                 if (text.isNotBlank()) items.saveParts(id, listOf(PartData(ONLY_PART, 0, title, text)))
             }
         return id
+    }
+
+    /**
+     * The people of a work's header by the site's mark of each: the author and the co-authors — who have no itemprop —
+     * are the work's authors; the betas and the gammas are not, kept apart, a work of none of them having none.
+     */
+    private fun people(id: String, hat: Element) {
+        val people =
+            hat.select("a.word-break[href^=/authors/]")
+                .groupBy(
+                    { a -> a.parent()?.parent()?.selectFirst(".ds-badge")?.text()?.trim()?.lowercase() },
+                    { a ->
+                        AUTHOR_ID.find(a.attr("href"))?.groupValues?.get(1)?.let { FacetValue(it, a.text().trim()) }
+                    },
+                )
+        val authors = AUTHORS.flatMap { people[it].orEmpty() }.filterNotNull()
+        if (authors.isNotEmpty()) items.setFacet(id, AUTHOR, authors)
+        EDITORS.forEach { (mark, facet) -> items.setFacet(id, facet, people[mark].orEmpty().filterNotNull()) }
     }
 
     /** The parts the work's table of contents names, each with the day it came out, without their texts. */
@@ -274,8 +287,11 @@ class FicbookPages(private val context: SourceContext) {
         /** An author's list of series: "/authors/3093607/series". */
         private val AUTHOR_SERIES = Regex("/authors/[^/]+/series/?")
 
-        /** The marks of a work's header of its authors: the author and the co-authors, not the beta nor the gamma. */
-        private val AUTHORS = setOf("автор", "соавтор")
+        /** The marks of a work's header of its authors, in their order: the author and the co-authors. */
+        private val AUTHORS = listOf("автор", "соавтор")
+
+        /** The marks of a work's header of the people who read it before its readers, not its authors: their facets. */
+        private val EDITORS = mapOf("бета" to BETA, "гамма" to GAMMA)
 
         /** The site's search of tags ([Ficbook.tagSearch]). */
         private const val TAG_SEARCH = "/tags/search"

@@ -46,6 +46,8 @@ class Ficbook : Source {
             facets =
                 listOf(
                     Books.AUTHOR.asFacet(AUTHOR),
+                    FacetDef(BETA),
+                    FacetDef(GAMMA),
                     Books.FANDOM.asFacet(FANDOM),
                     Books.DIRECTION.asFacet(DIRECTION),
                     AgeRating.SITE.asFacet(),
@@ -100,9 +102,9 @@ class Ficbook : Source {
      * covers of the cards of a list, a picture of a source for every width. 11: a tag's synonyms, of its own page and
      * of the search of tags — each a tag of its own of the same thing. 12: the series' own pages and an author's list
      * of them. 13: what a fandom's own page says it is of. 14: the co-authors of a work's header, authors of it as its
-     * author is.
+     * author is. 15: its betas and gammas, facets of their own.
      */
-    override val parserVersion = 14
+    override val parserVersion = 15
 
     override val signals =
         listOf(
@@ -191,6 +193,13 @@ class Ficbook : Source {
         fun tagSearch(name: String) = "$BASE/tags/search?title=${URLEncoder.encode(name, Charsets.UTF_8)}"
 
         const val AUTHOR = "author"
+
+        /**
+         * The betas of a work and its gammas: who read it before its readers, marked so in its header; no authors of
+         * it.
+         */
+        const val BETA = "beta"
+        const val GAMMA = "gamma"
         const val FANDOM = "fandom"
         const val DIRECTION = "direction"
         const val STATUS = "status"
