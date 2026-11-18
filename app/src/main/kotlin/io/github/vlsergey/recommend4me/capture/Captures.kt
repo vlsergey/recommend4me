@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.capture
 
+import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.ItemStore
@@ -40,7 +41,11 @@ class Captured(
  * parser grows ([Source.parserVersion][io.github.vlsergey.recommend4me.source.Source.parserVersion]).
  */
 @Service
-class Captures(private val stores: Stores, private val contexts: SourceContexts) {
+class Captures(
+    private val stores: Stores,
+    private val contexts: SourceContexts,
+    private val background: Background,
+) {
 
     private fun tracking(): List<SourceStore> = stores.sources.filter { SourceMode.BROWSER in it.source.modes }
 
@@ -106,9 +111,18 @@ class Captures(private val stores: Stores, private val contexts: SourceContexts)
             .sortedByDescending { it.second.capturedAt }
             .take(limit)
 
-    /** The kept pages read by an older parser, read again. */
+    /**
+     * On the start, the kept pages read by an older parser read again — in the background: thousands of pages of a
+     * parser grown kept the start, and the works the last run left with it, waiting (2026-11-18). Reading pages is no
+     * computation: out of the queue.
+     */
     @Order(1)
     @EventListener(ApplicationReadyEvent::class)
+    fun start() {
+        background.start("reparse") { reparse() }
+    }
+
+    /** The kept pages read by an older parser, read again. */
     // A source's parser is a plugin reading a site's page: one page it fails on any way leaves the others to be read
     @Suppress("TooGenericExceptionCaught")
     fun reparse() {
