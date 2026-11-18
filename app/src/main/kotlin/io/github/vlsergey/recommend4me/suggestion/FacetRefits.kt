@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -37,6 +38,7 @@ internal class FacetRefits(
     vocabularies: FacetVocabularies,
     private val passes: WorkPasses,
     private val kept: KeptModelValues,
+    private val settings: Settings,
 ) {
     private val fitting = FacetFitting(FacetReading(passes, chain, vocabularies), FacetScoring(kept, events))
 
@@ -69,15 +71,23 @@ internal class FacetRefits(
     private fun generationOf(source: String): AtomicLong = generations.computeIfAbsent(source) { AtomicLong() }
 
     /**
-     * Every source refreshed on the start, in the background, each a work of the queue; what was worked out of facets a
-     * source no longer has the model work on is forgotten.
+     * On the start: what was worked out of facets a source no longer has the model work on forgotten — only when its
+     * facets are others than the last start kept ([FACETS]): a pass over every value of every work, never "just in
+     * case" (user, 2026-11-18) —; what the last run left undone of the fitting planned again.
      */
     @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.sources.forEach { s ->
-            s.suggestions.keepOnly(chain.facetsOf(s).map { it.key })
-            s.modelValues.keepOnly(s.schema.facets.filter { it.infer }.map { it.key })
+            val suggested = chain.facetsOf(s).map { it.key }
+            val inferred = s.schema.facets.filter { it.infer }.map { it.key }
+            val facets = (suggested.map { "s:$it" } + inferred.map { "i:$it" }).sorted().joinToString(",")
+            val name = "$FACETS${s.id}"
+            if (settings.get(name) != facets) {
+                s.suggestions.keepOnly(suggested)
+                s.modelValues.keepOnly(inferred)
+                settings.set(name, facets)
+            }
         }
         // What the last run of the application left undone of the fitting, planned again
         workload.resume("suggesters") { left, reason ->
@@ -168,6 +178,9 @@ internal class FacetRefits(
     fun searching(store: SourceStore, facetKey: String): Boolean = workload.due(fittingAnew(store, facetKey))
 
     companion object {
+        /** The setting of a source's facets the last start kept, by the source: "s:<suggested>,i:<inferred>,…". */
+        private const val FACETS = "suggesters.facets."
+
         /**
          * The quiet after the last change before a source is refreshed: a page sends itself several times as it grows.
          */

@@ -6,7 +6,6 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -45,22 +44,6 @@ class AuthorBinding(private val stores: Stores) {
         val facet = authorFacetOf(s) ?: return
         val keys = s.items.facetsOf(event.ids).values.flatMap { it[facet].orEmpty() }.toSet()
         if (keys.isNotEmpty()) bind(s, keys)
-    }
-
-    /** Before anything reads the authors: every author of every site not bound yet bound. */
-    @Order(BEFORE_READERS)
-    @EventListener(ApplicationReadyEvent::class)
-    @Suppress("TooGenericExceptionCaught")
-    fun start() {
-        stores.sources.forEach { s ->
-            try {
-                authorFacetOf(s)?.let { bind(s, s.items.valueUses(it).keys) }
-            } catch (e: Exception) {
-                // A boundary of the start: the authors of one source not bound stop neither the other sources nor
-                // the start of the application
-                log.error("{}: the authors were not bound", s.id, e)
-            }
-        }
     }
 
     companion object {

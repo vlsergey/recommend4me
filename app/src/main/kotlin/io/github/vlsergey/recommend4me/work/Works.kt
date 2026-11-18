@@ -109,12 +109,14 @@ class Works(private val stores: Stores) {
         measure(s, event.ids)
     }
 
-    /** Before anything reads the works: every item bound, and measured if it never was. */
+    /**
+     * Before anything reads the works: every item measured if it never was. Not every item bound again: an item is
+     * bound as it is written ([itemsChanged]) — a start binds nothing "just in case" (user, 2026-11-18).
+     */
     @Order(BIND_FIRST)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.sources.forEach { s ->
-            bind(s, s.items.keys().associate { it.id to it.version })
             val unmeasured = s.works.unmeasured(s.id)
             measure(s, unmeasured)
             if (unmeasured.isNotEmpty()) log.info("{}: {} items measured for their works", s.id, unmeasured.size)
