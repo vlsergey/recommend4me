@@ -135,16 +135,6 @@ class PartVectors(
         return done
     }
 
-    fun pending(): Int =
-        plugins.textEncoder()?.let { e ->
-            stores.sources.sumOf {
-                it.parts.windows.countToEncode(e.windowsId) +
-                    it.parts.paragraphs.countParagraphsToEncode(Paragraphs.keyOf(e.id))
-            }
-        } ?: 0
-
-    fun total(): Int = stores.sources.sumOf { it.parts.countWithText() }
-
     @PreDestroy
     fun shutdown() {
         stopping = true

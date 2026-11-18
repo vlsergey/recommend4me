@@ -32,12 +32,6 @@ class ParagraphVectorRepository(private val db: DSLContext, private val store: P
             limit,
         )
 
-    fun countParagraphsToEncode(encoder: String): Int =
-        db.fetchCount(
-            PART,
-            PART.CONTENT_HASH.isNotNull.and(PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder))),
-        )
-
     /**
      * Replaces the vectors of the paragraphs of a part ([Paragraphs]), made by [encoder] of the text of [hash], each
      * with the hash of its own text ([hashes]): kept, then told.

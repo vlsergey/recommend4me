@@ -30,7 +30,8 @@ class AuthorBinding(private val stores: Stores) {
      */
     @Synchronized
     fun bind(s: SourceStore, keys: Collection<String>) {
-        val fresh = keys.toSet() - s.authors.bindingsOf(s.id).keys
+        // Of the keys alone, not every author of the site: of ficbook's 357 thousand at every page read
+        val fresh = keys.toSet() - s.authors.bindingsOf(s.id, keys).keys
         if (fresh.isEmpty()) return
         s.authors.bindNew(s.id, fresh, Instant.now())
         log.info("{}: {} authors bound to normalized authors of their own", s.id, fresh.size)

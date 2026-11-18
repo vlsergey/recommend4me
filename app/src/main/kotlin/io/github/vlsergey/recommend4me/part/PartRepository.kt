@@ -147,8 +147,6 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
         return out
     }
 
-    fun countWithText(): Int = db.fetchCount(PART, PART.CONTENT_HASH.isNotNull)
-
     /** Everything of the item's parts the store keeps gone, as the work is removed: its rows go with the item's. */
     fun forget(itemId: String) = store.forget(itemId)
 

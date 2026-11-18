@@ -80,9 +80,6 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
             .fetchSize(STREAMED)
             .fetchSet { it.value1()!! }
 
-    fun countToEncode(encoder: String): Int =
-        db.fetchCount(PART, PART.CONTENT_HASH.isNotNull.and(PART.ENCODER.isNull.or(PART.ENCODER.ne(encoder))))
-
     /** Replaces the vectors of the windows of a part, made by [encoder] of the text of [hash]: kept, then told. */
     fun saveVectors(itemId: String, partId: String, encoder: String, hash: String, windows: List<FloatArray>) {
         store.putWindows(itemId, partId, windows)

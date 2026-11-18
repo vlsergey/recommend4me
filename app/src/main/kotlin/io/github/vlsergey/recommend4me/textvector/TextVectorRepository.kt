@@ -180,8 +180,6 @@ class TextVectorRepository(private val db: DSLContext) {
         }
     }
 
-    fun count(encoder: String): Int = db.fetchCount(TEXT_VECTOR, TEXT_VECTOR.ENCODER.eq(encoder))
-
     companion object {
         /** The rows read or written by one statement: the length of a query's list, not a meaning. */
         internal const val BATCH = 1000
