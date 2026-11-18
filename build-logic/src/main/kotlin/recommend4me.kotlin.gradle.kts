@@ -56,7 +56,10 @@ dependencies {
 }
 
 tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
+    // The tests of more than a few seconds, tagged "ci", run in CI alone: the tests of a local build take a minute at
+    // most together (user, 2026-11-18). CI (GitHub sets CI) runs every one; -PallTests runs every one here too
+    val local = System.getenv("CI") == null && !project.hasProperty("allTests")
+    useJUnitPlatform { if (local) excludeTags("ci") }
     // The Vector API is incubating; JavaCPP and the off-heap segments call native code
     jvmArgs("--add-modules", "jdk.incubator.vector", "--enable-native-access=ALL-UNNAMED")
     maxHeapSize = "2g"

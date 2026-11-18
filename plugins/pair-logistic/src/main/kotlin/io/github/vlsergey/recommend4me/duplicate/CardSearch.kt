@@ -34,6 +34,7 @@ internal object CardSearch {
         models: List<Logistic.Laid>,
         card: Cublas,
         slice: Int = Tiles.SLICE,
+        compared: Compared = Compared(search) {},
     ): List<FoundPair> =
         card.lock.withLock {
             val kernels = kernels(card) ?: error("the kernels of the search were not made")
@@ -70,7 +71,7 @@ internal object CardSearch {
                                             own,
                                             planes,
                                         )
-                                        .offer(kernels, card, likeliest)
+                                        .offer(kernels, card, likeliest, compared)
                                 }
                                 break
                             } catch (e: NoRoom) {

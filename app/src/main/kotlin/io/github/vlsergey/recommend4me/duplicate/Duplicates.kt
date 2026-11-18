@@ -104,6 +104,7 @@ class Duplicates(
         val said = answers.said(type)
         val search = TypeSearch.read(type, encoder, said, indexes.of(type.id))
         val read = System.currentTimeMillis() - started
+        workload.progress(READ)
         val kept = models.of(type)
         val found =
             search.found(
@@ -111,17 +112,12 @@ class Duplicates(
                 model,
                 listOfNotNull(kept?.same ?: model.prior(), kept?.series),
                 cards.getIfAvailable()?.cublas(),
-            )
+            ) { share ->
+                workload.progress(READ + share * (COMPARED - READ))
+            }
         val compared = System.currentTimeMillis() - started
-        // Of the likeliest pair of every work, those a model of the answers gives a chance of 1 % at least — its scale
-        // calibrated on the answers — and every pair answered on: of a million works most are plainly two works (user,
-        // 2026-11-17: "even 1 % should cut off much"). Of models of no answer yet, every pair
-        val likely =
-            if (kept?.learnt != true) found.values.toList()
-            else
-                found.values.filter { c ->
-                    c.pair in said || kept.same(c) >= LEAST_CHANCE || (kept.series(c) ?: 0.0) >= LEAST_CHANCE
-                }
+        workload.progress(COMPARED)
+        val likely = likely(found.values, said, kept)
         val fitted = PairModels.fit(model, likely, said)
         val fit = System.currentTimeMillis() - started
         val now = Instant.now()
@@ -158,6 +154,22 @@ class Duplicates(
             fitted.series != null,
         )
     }
+
+    /**
+     * Of the likeliest pair of every work [found], those a model of the answers gives a chance of 1 % at least — its
+     * scale calibrated on the answers — and every pair answered on ([said]): of a million works most are plainly two
+     * works (user, 2026-11-17: "even 1 % should cut off much"). Of models of no answer yet ([kept]), every pair.
+     */
+    private fun likely(
+        found: Collection<DuplicateCandidate>,
+        said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
+        kept: PairChances?,
+    ): List<DuplicateCandidate> =
+        if (kept?.learnt != true) found.toList()
+        else
+            found.filter { c ->
+                c.pair in said || kept.same(c) >= LEAST_CHANCE || (kept.series(c) ?: 0.0) >= LEAST_CHANCE
+            }
 
     /**
      * The user's word on the pair, in place of any before: one work — their normalized works merged, the grade and
@@ -202,6 +214,13 @@ class Duplicates(
          * data the search reads.
          */
         private const val START_ORDER = 20
+
+        /**
+         * The shares of a search done once its works are read, and once its pairs are compared: the reading and the
+         * comparing as the searches of 2026-11-18 took them, the comparing told as it goes, pair by pair.
+         */
+        private const val READ = 0.2
+        private const val COMPARED = 0.9
 
         /** The least chance of a pair kept by a search: of the models calibrated on the user's answers. */
         private const val LEAST_CHANCE = 0.01

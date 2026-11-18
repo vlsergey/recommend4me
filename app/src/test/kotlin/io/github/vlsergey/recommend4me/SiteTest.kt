@@ -21,6 +21,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.http.HttpStatus
@@ -31,6 +32,8 @@ import org.springframework.test.context.TestPropertySource
  * confirmed and rejected, a value added by its name, the works found for a link, a work's chances still to come. Every
  * test of it over the same [catalogue], each making it.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site"])
 class SiteTest : SiteTestBase() {
 

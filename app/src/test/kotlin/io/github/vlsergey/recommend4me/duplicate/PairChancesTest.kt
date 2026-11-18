@@ -60,6 +60,7 @@ class PairChancesTest {
                     search: PairSearch,
                     models: List<FittedPairModel>,
                     card: io.github.vlsergey.recommend4me.matrix.Cublas?,
+                    progress: (Double) -> Unit,
                 ) = emptyList<FoundPair>()
             }
         val fitted = PairModels.fit(model, pairs, said)

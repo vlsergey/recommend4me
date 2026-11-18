@@ -4857,6 +4857,12 @@ components:
           description: >
             Of a work not done, how long it is expected to take: as long as the last run of its kind took (of any
             work alike but for the item); left out when none ran since the application started
+        progress:
+          type: number
+          format: double
+          description: >
+            Of a work running that tells it, how much of it is done, a share from 0 to 1 - its end foreseen by the
+            pace so far; left out of a work that does not tell it
         reasons:
           type: array
           description: The changes that asked for it, each with how many times it came

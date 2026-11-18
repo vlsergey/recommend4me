@@ -12,9 +12,12 @@ import kotlin.test.assertTrue
 import org.h2.engine.SessionLocal
 import org.h2.jdbc.JdbcConnection
 import org.jooq.impl.DSL
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.io.TempDir
 
 /** A file compacted while it is open: what a run of writes left unused is given back, the data kept. */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 class DatabaseTest {
 
     @TempDir lateinit var folder: Path

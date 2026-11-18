@@ -7,7 +7,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Tag
 
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 class E5EncoderTest {
 
     private val textVec = E5Encoder(Onnx(defaultModelsDir()))

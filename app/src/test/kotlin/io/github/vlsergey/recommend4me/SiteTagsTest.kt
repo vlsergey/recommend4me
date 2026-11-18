@@ -27,6 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.test.context.TestPropertySource
@@ -35,6 +36,8 @@ import org.springframework.test.context.TestPropertySource
  * The site's tags as the application's own: bound to normalized tags the user merges, names, binds to a catalogue's
  * entries and puts above and under one another; a tag that keeps its works out.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-tags"])
 class SiteTagsTest : SiteTestBase() {
 

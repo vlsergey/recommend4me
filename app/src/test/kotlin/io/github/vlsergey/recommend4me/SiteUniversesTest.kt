@@ -24,6 +24,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.springframework.test.context.TestPropertySource
 
@@ -32,6 +33,8 @@ import org.springframework.test.context.TestPropertySource
  * the user; an entry of the catalogue found by its button made a universe whose characters are read, the characters and
  * the pairings worked out within them, drafted from the site's tags through the dictionary.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-universes"])
 class SiteUniversesTest : SiteTestBase() {
 

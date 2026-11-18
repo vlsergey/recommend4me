@@ -77,6 +77,7 @@
   "WorkQueue.due": "due {{when}}",
   "WorkQueue.empty": "Nothing is computing or planned.",
   "WorkQueue.endsIn": "ends in about {{span}}",
+  "WorkQueue.progress": "{{percent}} % done",
   "WorkQueue.expected": "takes about {{span}}",
   "WorkQueue.finished": "ended at {{time}}, took {{span}}",
   "WorkQueue.hint": "Every computation runs one at a time, whole, in the order asked. A planned one waits for the changes to settle, and newer changes put it off. How long one takes is told by the last run of the same work since the application started.",

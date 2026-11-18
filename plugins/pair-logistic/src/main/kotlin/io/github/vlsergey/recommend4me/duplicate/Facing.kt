@@ -23,6 +23,9 @@ internal class Facing(
     planes: Long,
 ) {
     private val search = tile.search
+
+    /** How much of the search is done, and the time of its steps on the card. */
+    private lateinit var compared: Compared
     private val own = tile.own
     private val n = tile.other.count
     private val width = own.width
@@ -76,7 +79,8 @@ internal class Facing(
     private val scoresBack = room.pinned(rows.toLong() * models * Float.SIZE_BYTES)
 
     /** Of every work of the first site, the likeliest of the second by every model offered to the [likeliest]. */
-    fun offer(kernels: CudaKernels, card: Cublas, likeliest: Likeliest) {
+    fun offer(kernels: CudaKernels, card: Cublas, likeliest: Likeliest, compared: Compared) {
+        this.compared = compared
         var from = 0
         while (from < own.count) {
             val m = minOf(rows, own.count - from)
@@ -94,6 +98,7 @@ internal class Facing(
                     if (j >= 0) tile.columns.from + j else -1,
                 )
             }
+            compared.add(m.toLong() * n)
             from += m
         }
     }
@@ -103,11 +108,11 @@ internal class Facing(
      * score brought back with it.
      */
     private fun block(from: Int, m: Int, kernels: CudaKernels, card: Cublas): IntArray {
-        products(from, m, card)
+        compared.timed(Phase.PRODUCTS, card) { products(from, m, card) }
         // A block of the kernel's threads a row
         val threads = m.toLong() * CudaKernels.BLOCK
-        shared(from, m, threads, kernels)
-        return chosen(from, m, threads, kernels)
+        compared.timed(Phase.SHARED, card) { shared(from, m, threads, kernels) }
+        return compared.timed(Phase.CHOSEN, card) { chosen(from, m, threads, kernels) }
     }
 
     /**

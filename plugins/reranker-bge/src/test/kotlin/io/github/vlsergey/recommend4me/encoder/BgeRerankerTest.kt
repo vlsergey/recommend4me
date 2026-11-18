@@ -5,7 +5,10 @@ import io.github.vlsergey.recommend4me.onnx.defaultModelsDir
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Tag
 
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 class BgeRerankerTest {
 
     private val reranker = BgeReranker(Onnx(defaultModelsDir()))

@@ -112,6 +112,13 @@ function Times({ w }: { w: QueuedWork }) {
       return t("WorkQueue.finished", { time: formatTime(w.ended), span: w.ended ? span(new Date(w.ended).getTime() - since, t) : "" });
     case "RUNNING": {
       const began = t("WorkQueue.began", { time: formatTime(w.since), span: span(Date.now() - since, t) });
+      // A work that tells how much of it is done: the share, and its end by the pace so far
+      const done = w.progress ?? undefined;
+      if (done !== undefined && done > 0) {
+        const elapsed = Date.now() - since;
+        const left = (elapsed * (1 - done)) / done;
+        return `${began} · ${t("WorkQueue.progress", { percent: Math.floor(done * 100) })} · ${t("WorkQueue.endsIn", { span: span(left, t) })}`;
+      }
       if (expectedMillis === undefined) return `${began} · ${t("WorkQueue.noEstimate")}`;
       const left = since + expectedMillis - Date.now();
       return `${began} · ${left > 0 ? t("WorkQueue.endsIn", { span: span(left, t) }) : t("WorkQueue.longer", { span: span(expectedMillis, t) })}`;

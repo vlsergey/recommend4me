@@ -10,6 +10,9 @@ import io.github.vlsergey.recommend4me.worklist.ItemRows
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListRows
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(ComparedValues::class.java)
 
 /**
  * The facet a site's facet [def] is compared as: its authors as the normalized authors, a facet of the layer as its
@@ -43,11 +46,26 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
      * [sizes] numbers.
      */
     fun every(ids: List<String>, sizes: Collection<String>): Compared {
+        val started = System.currentTimeMillis()
         val rows = ListFacetValues.everyItem(index, s.id, families.keys, sizes)
+        val indexed = System.currentTimeMillis()
         val authorKeys = HashMap<String, List<String>>()
         authorFacet?.let { f -> s.items.forEachFacet(f) { id, keys -> authorKeys[id] = keys } }
+        val keyed = System.currentTimeMillis()
         val names = authorFacet?.let(s::names).orEmpty()
-        return Compared(rows, ids, authorsOf(ids, authorKeys), namesOf(ids, authorKeys, names))
+        val named = System.currentTimeMillis()
+        val compared = Compared(rows, ids, authorsOf(ids, authorKeys), namesOf(ids, authorKeys, names))
+        log.info(
+            "{}: the values of {} works read in {} ms: the index {}, the authors {}, their names {}, gathered {}",
+            s.id,
+            ids.size,
+            System.currentTimeMillis() - started,
+            indexed - started,
+            keyed - indexed,
+            named - keyed,
+            System.currentTimeMillis() - named,
+        )
+        return compared
     }
 
     /** The works [ids] alone, by their keys; their numbers of size of the [sizes] numbers. */

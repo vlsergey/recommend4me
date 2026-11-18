@@ -20,6 +20,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
@@ -29,6 +30,8 @@ import org.springframework.test.context.TestPropertySource
  * the sweep scores every work in turns of the queue from where it stopped, counts the average work along, and begins
  * again by a new model.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/site-sweep"])
 class SiteScoreSweepTest : SiteTestBase() {
     @Autowired lateinit var everyWork: EveryWork

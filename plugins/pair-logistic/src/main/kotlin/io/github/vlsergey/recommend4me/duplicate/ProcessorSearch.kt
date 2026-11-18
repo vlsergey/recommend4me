@@ -10,12 +10,12 @@ import io.github.vlsergey.recommend4me.matrix.HalfMatrix
  * likeliest of every model kept ([Likeliest]).
  */
 internal object ProcessorSearch {
-    fun search(search: PairSearch, models: List<Logistic.Laid>): List<FoundPair> {
+    fun search(search: PairSearch, models: List<Logistic.Laid>, compared: Compared): List<FoundPair> {
         val likeliest = Likeliest(search, models.size)
         for (a in search.sites.indices) for (b in search.sites.indices) {
             if (!search.compared(a, b)) continue
             val between = models.map { it.between(search.sites[a].source, search.sites[b].source) }
-            Against(search, a, b, between, likeliest).offer()
+            Against(search, a, b, between, likeliest).offer(compared)
         }
         return likeliest.found()
     }
@@ -65,7 +65,7 @@ private class Against(
     private val best = IntArray(models.size)
     private val scores = DoubleArray(models.size)
 
-    fun offer() {
+    fun offer(compared: Compared) {
         var from = 0
         while (from < x.count) {
             val m = minOf(rows, x.count - from)
@@ -73,6 +73,7 @@ private class Against(
             authorNames.make(from, m)
             descriptions?.make(from, m)
             for (r in 0 until m) row(from + r, r)
+            compared.add(m.toLong() * n)
             from += m
         }
     }

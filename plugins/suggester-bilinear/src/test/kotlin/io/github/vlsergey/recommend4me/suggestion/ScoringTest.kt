@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 
 /**
  * The scores of the values asked ([SuggestionScores.scores]) are the chances of every value ([SuggestionScores.of]) of
@@ -14,6 +15,8 @@ import kotlin.test.assertTrue
  * a row of its own — summed by hand — the site's examples and the names the texts count landing on the values they are
  * of.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 class ScoringTest {
     private val task = TASK
     private val scores = SCORES

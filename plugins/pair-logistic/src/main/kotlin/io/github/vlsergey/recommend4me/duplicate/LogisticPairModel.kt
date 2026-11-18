@@ -19,13 +19,20 @@ class LogisticPairModel : PairModel {
 
     override fun unpack(bytes: ByteArray): FittedPairModel? = runCatching { Logistic.read(bytes) }.getOrNull()
 
-    override fun search(search: PairSearch, models: List<FittedPairModel>, card: Cublas?): List<FoundPair> {
+    override fun search(
+        search: PairSearch,
+        models: List<FittedPairModel>,
+        card: Cublas?,
+        progress: (Double) -> Unit,
+    ): List<FoundPair> {
         require(models.size <= MAX_MODELS) { "${models.size} models: a kernel scores $MAX_MODELS at most" }
         val laid = models.map { m -> (m as? Logistic ?: error("a model not of ${ID}'s making")).laid(search.families) }
         if (card != null) {
             val started = System.currentTimeMillis()
             runCatching {
-                return CardSearch.search(search, laid, card).also {
+                val compared = Compared(search, progress)
+                return CardSearch.search(search, laid, card, compared = compared).also {
+                    compared.told()
                     log.info("pairs searched on the card in {} ms", System.currentTimeMillis() - started)
                 }
             }
@@ -36,7 +43,7 @@ class LogisticPairModel : PairModel {
                     )
                 }
         }
-        return ProcessorSearch.search(search, laid)
+        return ProcessorSearch.search(search, laid, Compared(search, progress))
     }
 
     companion object {

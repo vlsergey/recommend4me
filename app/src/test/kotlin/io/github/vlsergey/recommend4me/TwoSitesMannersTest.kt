@@ -17,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
@@ -25,6 +26,8 @@ import org.springframework.test.context.TestPropertySource
  * The manner of the works' texts by the frequencies of their words: of a work, of its normalized authors — a work of no
  * text of its own has theirs —, made again when a text changes, the words fitted again when the texts are more.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/two-sites-manners"])
 class TwoSitesMannersTest : TwoSitesTestBase() {
     @Autowired lateinit var manners: Manners

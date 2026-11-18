@@ -77,6 +77,7 @@
   "WorkQueue.due": "počinje {{when}}",
   "WorkQueue.empty": "Ništa se ne računa niti je planirano.",
   "WorkQueue.endsIn": "završava se za oko {{span}}",
+  "WorkQueue.progress": "urađeno {{percent}} %",
   "WorkQueue.expected": "traje oko {{span}}",
   "WorkQueue.finished": "završeno u {{time}}, trajalo {{span}}",
   "WorkQueue.hint": "Sva računanja idu jedno po jedno, cela, redom zahteva. Planirano čeka da se promene smire, a nove promene ga odlažu. Trajanje se procenjuje po poslednjem pokretanju istog posla od pokretanja aplikacije.",

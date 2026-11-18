@@ -93,6 +93,12 @@ interface PairModel {
      * ([PairSearch.answered]). On the [card] when there is one. Of a work, one [FoundPair] of every other work that is
      * the likeliest by some model — so as many as the models at most —, its [FoundPair.kinds] the bits of those models;
      * found for the work ([FoundPair.site], [FoundPair.item]). A work with no other work left to compare with: none.
+     * How much of it is done told to [progress] as it goes, a share of the pairs compared.
      */
-    fun search(search: PairSearch, models: List<FittedPairModel>, card: Cublas?): List<FoundPair>
+    fun search(
+        search: PairSearch,
+        models: List<FittedPairModel>,
+        card: Cublas?,
+        progress: (Double) -> Unit = {},
+    ): List<FoundPair>
 }

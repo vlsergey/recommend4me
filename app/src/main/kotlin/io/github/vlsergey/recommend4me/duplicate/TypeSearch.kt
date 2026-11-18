@@ -38,12 +38,13 @@ private constructor(
         model: PairModel,
         models: List<FittedPairModel>,
         card: Cublas?,
+        progress: (Double) -> Unit = {},
     ): HashMap<Pair<ItemKey, ItemKey>, DuplicateCandidate> {
         // Of every pair in the order kept, the first find of it, and for which of its works it was found: the one it is
         // the likeliest of
         val firsts = LinkedHashMap<Pair<ItemKey, ItemKey>, FoundPair>()
         val foundFor = HashMap<Pair<ItemKey, ItemKey>, Int>()
-        model.search(search, models, card).forEach { f ->
+        model.search(search, models, card, progress).forEach { f ->
             val sought = key(f.site, f.item)
             val pair = type.links.ordered(sought, key(f.otherSite, f.other))
             firsts.putIfAbsent(pair, f)

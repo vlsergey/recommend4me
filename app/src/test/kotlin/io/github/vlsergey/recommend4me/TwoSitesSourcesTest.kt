@@ -13,6 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.core.io.FileSystemResource
@@ -22,6 +23,8 @@ import org.springframework.test.context.TestPropertySource
  * What a site the application scrapes itself has — jobs, settings, nothing asked of the site for a grade — and the
  * sources' own work: kept pages read again, the marks of reviews and pictures, the pictures downloaded, the model.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/two-sites-sources"])
 class TwoSitesSourcesTest : TwoSitesTestBase() {
 

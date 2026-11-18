@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.ApplicationEventPublisher
@@ -22,6 +23,8 @@ import org.springframework.test.context.TestPropertySource
  * values given every work as read in one portion — of a suggester whose model is sums over every work
  * ([CountingSuggester]).
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @Import(CountingSuggester.Plugin::class)
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/facet-portions"])
 class FacetPortionsTest : SiteTestBase() {

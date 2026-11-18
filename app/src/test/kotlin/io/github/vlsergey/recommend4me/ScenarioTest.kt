@@ -41,6 +41,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInfo
 import org.junit.jupiter.api.assertThrows
@@ -54,6 +55,8 @@ import org.springframework.test.context.TestPropertySource
  * The whole application with a source of its own: a page captured from the browser becomes an item, a grade is kept, a
  * correction shows, the list filters and sorts.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @SpringBootTest
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/scenario"])
 class ScenarioTest {

@@ -12,7 +12,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 class BilinearSuggesterTest {
     /** The chances of the items of [task] by the model [fitted] made of it: the one way to them. */
     private fun scored(fitted: FittedSuggester, task: SuggestionTask) =

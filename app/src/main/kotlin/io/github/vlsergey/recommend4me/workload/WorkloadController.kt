@@ -54,7 +54,7 @@ class WorkloadController(private val workload: Workload, private val stores: Sto
             .copy(due = due.atOffset(ZoneOffset.UTC), asked = asked.takeIf { it })
 
     private fun HeavyWork.toApi(state: QueuedWork.State) =
-        queued(work, state, since, reasons).copy(asked = asked.takeIf { it })
+        queued(work, state, since, reasons).copy(asked = asked.takeIf { it }, progress = progress)
 
     /** A work as the page shows it; one not done with how long it is expected to take. */
     private fun queued(work: Work, state: QueuedWork.State, since: Instant, reasons: Map<String, Int>): QueuedWork {

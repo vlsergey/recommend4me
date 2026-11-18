@@ -152,6 +152,12 @@ outlive whatever fails — a background loop, a step of the start, a call of a p
 (`biome.jsonc`; `npm run lint` in `frontend`, `gradlew :app:lintScripts`): a file of 600 lines at most.
 Biome lints alone, it formats nothing.
 
+**The tests of a local build — of a compiling and a restart of the application — take a minute at most, all of
+them together.** A test class of more than a few seconds, and every test of a large volume of synthetic data, is
+tagged `@Tag("ci")` and runs in CI alone (GitHub sets `CI`); locally it is run by its name when the feature or the
+scenario it tests is worked on (`gradlew :app:test --tests "*Name*" -PallTests`). Every push is followed by watching
+the CI run of the full tests on GitHub till it ends, its failure fixed.
+
 **A class or a file too long is split by meaning, never by its length.** Each new one is about one thing
 — an entity, a step, a purpose the reader names ("the dictionaries of the facets", "the choice of what
 a work is shown with"), named after it and holding all of it: never "part 2", never a cut where the

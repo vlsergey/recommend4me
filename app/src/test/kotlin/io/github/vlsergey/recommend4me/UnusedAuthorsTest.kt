@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.source.FacetValue
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.test.context.TestPropertySource
@@ -15,6 +16,8 @@ import org.springframework.test.context.TestPropertySource
  * gave by the name alone, the site's page giving the work the author's own key since — is merged into the other's
  * normalized author, marked as merged by the name; a key of no works whose name no other key has stays.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/unused-authors"])
 class UnusedAuthorsTest : TwoSitesTestBase() {
     @Autowired lateinit var unused: UnusedAuthors

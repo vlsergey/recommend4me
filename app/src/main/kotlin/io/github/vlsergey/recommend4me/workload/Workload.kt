@@ -28,7 +28,10 @@ data class Work(
  * "workload.reason.<key>", each with how many times it came — and whether the user's action in the interface asked for
  * it ([asked]: it waits ahead of the background).
  */
-class HeavyWork(val work: Work, val since: Instant, val reasons: Map<String, Int>, val asked: Boolean = false)
+class HeavyWork(val work: Work, val since: Instant, val reasons: Map<String, Int>, val asked: Boolean = false) {
+    /** Of a work that tells it ([Workload.progress]), how much of it is done: a share; none of one that does not. */
+    @Volatile var progress: Double? = null
+}
 
 /**
  * A work planned for later: when it is due (it may be put off by newer changes), since when it is planned, why, and
@@ -181,6 +184,14 @@ class Workload {
         after: (T) -> Unit = {},
         body: () -> T,
     ) = plans.plan(work, due, mapOf(reason to count), asked) { entry -> after(runOwn(entry, body)) }
+
+    /**
+     * How much of the work running now is done, told by it as it goes: a share (user, 2026-11-18: "a report of the
+     * progress in per cents").
+     */
+    fun progress(share: Double) {
+        current?.progress = share.coerceIn(0.0, 1.0)
+    }
 
     /** The work running now, none when idle. */
     fun running(): HeavyWork? = current

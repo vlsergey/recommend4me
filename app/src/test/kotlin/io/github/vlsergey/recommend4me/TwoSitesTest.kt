@@ -33,6 +33,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.springframework.context.i18n.LocaleContextHolder
@@ -42,6 +43,8 @@ import org.springframework.test.context.TestPropertySource
  * Two sites of one content type: what spans sources — a work on both sites and its authors, what each site says of it,
  * the duplicates, a search.
  */
+// More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
+@Tag("ci")
 @TestPropertySource(properties = ["recommend4me.data-dir=build/test-data/two-sites"])
 class TwoSitesTest : TwoSitesTestBase() {
 
