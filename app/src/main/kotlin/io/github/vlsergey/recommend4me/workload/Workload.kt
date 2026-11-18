@@ -188,10 +188,10 @@ class Workload(background: Background = Threads(), private val records: WorkReco
 
     /**
      * The [work] planned for [due] — later than planned before, if put off; when null, as planned before, else at once
-     * — for one more [reason], [count] times; ahead of the background when the user [asked] for it. When its turn
-     * comes, [body] runs, and [after] of what it answers once the turn is given back: what is told of it — an event
-     * whose listeners may do works of their own — is told out of the queue. Planned again before it begins, the newer
-     * [body] is the one run. A failure of either is told in the log.
+     * — for one more [reason], [count] times; ahead of the background when the user [asked] for it, after all of it
+     * when it goes [last]. When its turn comes, [body] runs, and [after] of what it answers once the turn is given
+     * back: what is told of it — an event whose listeners may do works of their own — is told out of the queue. Planned
+     * again before it begins, the newer [body] is the one run. A failure of either is told in the log.
      */
     fun <T> plan(
         work: Work,
@@ -199,9 +199,10 @@ class Workload(background: Background = Threads(), private val records: WorkReco
         reason: String,
         count: Int = 1,
         asked: Boolean = false,
+        last: Boolean = false,
         after: (T) -> Unit = {},
         body: () -> T,
-    ) = plans.plan(work, due, mapOf(reason to count), asked) { entry -> after(runOwn(entry, body)) }
+    ) = plans.plan(work, due, mapOf(reason to count), asked, last) { entry -> after(runOwn(entry, body)) }
 
     /**
      * How much of the work running now is done, told by it as it goes: a share (user, 2026-11-18: "a report of the

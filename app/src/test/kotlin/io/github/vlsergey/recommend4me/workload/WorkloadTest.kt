@@ -328,6 +328,15 @@ class WorkloadTest {
     }
 
     @Test
+    fun `a work that goes last waits after the whole background, however long it waited`() {
+        val now = Instant.now()
+        val last = Waiter(Work("listValues"), now.minus(Turns.AGING).minusSeconds(60), emptyMap(), true, false, true)
+        val young = Waiter(Work("tagVectors"), now.minusSeconds(1), emptyMap(), true, false)
+        val asked = Waiter(Work("train"), now, emptyMap(), true, true)
+        assertEquals(listOf(asked, young, last), listOf(last, young, asked).sortedWith(Turns.order(now)))
+    }
+
+    @Test
     fun `a work inside another goes on and is not told apart`() {
         val workload = workload()
         workload.run(Work("train", type = "books"), emptyMap()) {

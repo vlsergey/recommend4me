@@ -48,12 +48,17 @@ internal class Turns {
      * The [work] put among the waiting — or, when [joinAlike], joined to a work alike still waiting: its [reasons]
      * added to that one's, and that one put ahead when [asked]. The waiter, and whether it is the caller's own.
      */
-    fun enter(work: Work, reasons: Map<String, Int>, joinAlike: Boolean, asked: Boolean): Pair<Waiter, Boolean> =
-        lock.withLock {
-            val alike = if (joinAlike) joinedTo(work, reasons, asked) else null
-            alike?.let { it to false }
-                ?: (Waiter(work, Instant.now(), reasons, joinAlike, asked).also { waiting += it } to true)
-        }
+    fun enter(
+        work: Work,
+        reasons: Map<String, Int>,
+        joinAlike: Boolean,
+        asked: Boolean,
+        last: Boolean = false,
+    ): Pair<Waiter, Boolean> = lock.withLock {
+        val alike = if (joinAlike) joinedTo(work, reasons, asked) else null
+        alike?.let { it to false }
+            ?: (Waiter(work, Instant.now(), reasons, joinAlike, asked, last).also { waiting += it } to true)
+    }
 
     /**
      * Whether a work alike the [work] waits its turn, not begun: then the [work] is that one — its [reasons] added to
@@ -135,10 +140,19 @@ internal class Turns {
 
         /**
          * The order of the turns at [now]: the works the user asked for and those of the background waiting longer than
-         * [AGING] first, each kind the longest waiting first.
+         * [AGING] first; then the rest of the background; the works that go [Waiter.last] after them all, never aged
+         * ahead — each kind the longest waiting first.
          */
         fun order(now: Instant): Comparator<Waiter> =
-            compareBy<Waiter> { !it.asked && Duration.between(it.since, now) <= AGING }.thenBy { it.since }
+            compareBy<Waiter> {
+                    when {
+                        it.asked -> 0
+                        it.last -> 2
+                        Duration.between(it.since, now) > AGING -> 0
+                        else -> 1
+                    }
+                }
+                .thenBy { it.since }
 
         /** The reasons [a] and [b] together, each counted as many times as both tell it. */
         fun merged(a: Map<String, Int>, b: Map<String, Int>): Map<String, Int> =
@@ -156,6 +170,11 @@ internal class Waiter(
     @Volatile var reasons: Map<String, Int>,
     val joinable: Boolean,
     @Volatile var asked: Boolean,
+    /**
+     * It goes after every other work of the background, however long it waits (user, 2026-11-18: the works' values
+     * filled into the index "lower in priority than every other action").
+     */
+    val last: Boolean = false,
 ) {
     val result = CompletableFuture<Any?>()
 

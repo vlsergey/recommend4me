@@ -36,6 +36,8 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
         val since: Instant,
         val reasons: Map<String, Int>,
         val asked: Boolean,
+        /** It goes after every other work of the background ([Waiter.last]). */
+        val last: Boolean,
         val task: (Waiter) -> Unit,
     ) {
         @Volatile var timer: Later? = null
@@ -45,7 +47,14 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
      * The [work] planned for [due] — when null, as planned before, else at once — for the [reasons], ahead of the
      * background when [asked]; it does [task] when its turn comes.
      */
-    fun plan(work: Work, due: Instant?, reasons: Map<String, Int>, asked: Boolean, task: (Waiter) -> Unit) {
+    fun plan(
+        work: Work,
+        due: Instant?,
+        reasons: Map<String, Int>,
+        asked: Boolean,
+        last: Boolean,
+        task: (Waiter) -> Unit,
+    ) {
         if (turns.joined(work, reasons, asked)) return
         synchronized(planned) {
             val old = planned.remove(work)
@@ -59,6 +68,7 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
                     old?.since ?: now,
                     Turns.merged(old?.reasons.orEmpty(), reasons),
                     asked || old?.asked == true,
+                    last && !asked && old?.asked != true,
                     task,
                 )
             planned[work] = plan
@@ -95,7 +105,7 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
             synchronized(planned) {
                 if (planned[plan.work] !== plan) return
                 planned.remove(plan.work)
-                turns.enter(plan.work, plan.reasons, joinAlike = true, asked = plan.asked)
+                turns.enter(plan.work, plan.reasons, joinAlike = true, asked = plan.asked, last = plan.last)
             }
         if (own) run(plan, entry)
     }
