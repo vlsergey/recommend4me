@@ -31,13 +31,9 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
     /** The places on the web every author's page listed last: the author's key to the addresses. */
     val authorPlaces = HashMap<String, List<String>>()
     val pages = LinkedHashMap<String, String>()
-    /** How many batches of writes the source made ([ItemStore.batch]). */
-    var batches = 0
 
     override val items: ItemStore =
         object : ItemStore {
-            /** How many batches were written: a test of a bulk writer sees it wrote by them. */
-            override fun <T> batch(writes: () -> T): T = writes().also { batches++ }
 
             override fun upsert(item: ItemHead, now: Instant): Boolean {
                 val known = heads[item.id]
@@ -73,9 +69,6 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
             override fun nameFacetValues(facet: String, names: Map<String, String>) {
                 facetNames.getOrPut(facet) { HashMap() } += names
             }
-
-            override fun facetNames(facet: String): Map<String, String> =
-                this@MemorySourceContext.facetNames[facet].orEmpty()
 
             override fun describeFacetValues(facet: String, descriptions: Map<String, String>) {
                 facetDescriptions.getOrPut(facet) { HashMap() } += descriptions

@@ -102,6 +102,14 @@ disabled, a button busy only with its own work, an answer kept and then shown, t
 area reads itself again, layout by CSS alone. **Read it before any change of a screen**, and keep it current:
 a new rule of the interface the owner gives is written there.
 
+## One-time work is never a part of the application
+
+What is done once — an import of a dump, a fix of the data, a migration of a store — is not built into
+the application: no mode of a source, no button, no job, no plugin interface of it (user, 2026-11-17, of
+the ficbook dump's import). It is done by a tool run once outside the application, or by a migration of
+the database that runs once by itself, and its code goes when it is done. What the application keeps
+of the data it wrote is described where that data is read.
+
 ## A request never waits for a computation
 
 A request of the browser never waits for the queue of the computations, nor runs a computation:

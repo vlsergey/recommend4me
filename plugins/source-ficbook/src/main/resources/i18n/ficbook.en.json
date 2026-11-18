@@ -1,6 +1,5 @@
 {
   "facet.series": "Series",
-  "job.noDump": "No dump: put the Parquet files of the dataset IlyaGusev/ficbook (Hugging Face) into the folder \"dump\" of the source's data folder",
   "number.comments": "Reviews",
   "number.pages": "Pages",
   "parts": "Parts",

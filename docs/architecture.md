@@ -61,25 +61,22 @@ A source belongs to a content type (`games`, `books`). Works of one type are gra
 and ranked by one model, whichever site they came from: a book of author.today and a fanfic of
 ficbook are compared with each other.
 
-Every source has up to five modes:
+Every source has up to four modes:
 
 - **scrape all** — the whole catalogue, resumable;
 - **updates** — what is new since the last time;
 - **browser tracking** — the pages the user opens in Firefox are sent by the extension and parsed;
   nothing is requested from the site by the application;
 - **page** — one work's page downloaded by the application when the user asks for it (the
-  "refresh" button of a work, or a work graded that is known by its card alone); no job, no crawl;
-- **import** — the works of a dump of the site someone else made, read from files the user put in
-  the source's folder; a job, resumable, asking the site for nothing. What the application has of a
-  work wins: the dump fills only what it lacks. The works are written a batch of a thousand at a
-  time (`ItemStore.batch`), told to the rest of the application once a batch (`WritesTold`).
+  "refresh" button of a work, or a work graded that is known by its card alone); no job, no crawl.
 
-author.today and ficbook are never scraped whole. ficbook's catalogue comes of the dataset
-IlyaGusev/ficbook of Hugging Face (1.39 million works with the text of every part, collected up to
-2024), its Parquet files in `sources/ficbook/dump/`, read by DuckDB (`FicbookDump`): the authors and
-the fandoms by their names — the site's own key of a name known, else `name:<name>`, which the site's
-page replaces later; an author's key of no works whose name a key with works has is then merged into
-it (`UnusedAuthors`, marked `NAME`), a fandom's let go as a twin (`UnusedFandoms`).
+author.today and ficbook are never scraped whole. ficbook's catalogue was filled once, on
+2026-11-17, from the dataset IlyaGusev/ficbook of Hugging Face (1.39 million works with the text of
+every part, collected up to 2024) by a one-time import, not a part of the application (user,
+2026-11-17: one-time work never becomes a part of the application). Of it, the authors and the
+fandoms the dataset gave by their names alone are keyed `name:<name>` (`Ficbook.NAME_KEY`), which the
+site's page replaces later; an author's key of no works whose name a key with works has is then
+merged into it (`UnusedAuthors`, marked `NAME`), a fandom's let go as a twin (`UnusedFandoms`).
 
 A MILLION WORKS ARE ENCODED A PORTION AT A TIME, THE LIKELIEST FIRST (user, 2026-11-17): the texts of
 the works and the chapters wait in the queue of the computations as works of a few minutes each
@@ -120,16 +117,14 @@ sources/<source>/source.mv.db      what the site says: works, facets, numbers, t
                                    compressed form of the same scrape
 sources/<source>/parts/            the texts of the parts and the vectors of their windows and
                                    paragraphs, outside the database (RocksDB, the texts compressed
-                                   by zstd with a dictionary of their own): tens of gigabytes of a
-                                   dump's chapters, which an H2 file holds badly
+                                   by zstd with a dictionary of their own): tens of gigabytes of
+                                   chapters, which an H2 file holds badly
 sources/<source>/corrections.mv.db the user's corrections: tags added and removed, fields
                                    overridden, duplicates merged within the source and with
                                    the other sources of its type (kept by the smaller key)
 sources/<source>/ratings.mv.db     the user's own data: grades, marks on pictures and reviews,
                                    words on matches, the user's own actions seen on the site
 sources/<source>/images/           picture files
-sources/<source>/dump/             the files of a dump of the site, put there by the user and
-                                   read by the source's import
 types/<type>/model.mv.db           the trained model, the predictions, the likeness to the marks,
                                    the directions of the set embeddings, the suggested tags — all
                                    recomputable

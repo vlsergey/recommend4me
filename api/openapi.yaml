@@ -3289,9 +3289,8 @@ components:
       type: string
       description: |
         SCRAPE_ALL - the whole catalogue, a job; UPDATES - what is new, a job; BROWSER - the pages the
-        user opens, sent by the extension; PAGE - one work's page downloaded on the user's request; IMPORT - the
-        works of a dump of the site put in the source's folder, a job asking the site for nothing
-      enum: [SCRAPE_ALL, UPDATES, BROWSER, PAGE, IMPORT]
+        user opens, sent by the extension; PAGE - one work's page downloaded on the user's request
+      enum: [SCRAPE_ALL, UPDATES, BROWSER, PAGE]
 
     FacetInfo:
       type: object

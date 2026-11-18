@@ -8,7 +8,6 @@ import io.github.vlsergey.recommend4me.source.CardDecor
 import io.github.vlsergey.recommend4me.source.FacetDecor
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
-import io.github.vlsergey.recommend4me.source.Job
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberScale
 import io.github.vlsergey.recommend4me.source.PageDecor
@@ -30,16 +29,17 @@ import java.net.URLEncoder
  * visitors, and the application requests no page of it. What a page shows is kept: the cards of every list, a work's
  * header with its table of contents, the text of every part read, and the readers' comments ("Отзывы") as the opinions
  * of other people about the work. What a tag means the browser asks the site's search of tags for, from a page of the
- * site open in it ([describing]). The rest of the site comes of a dump of it someone else made ([FicbookDump]),
- * imported as a job ([SourceMode.IMPORT]).
+ * site open in it ([describing]).
+ *
+ * AUTHORS AND FANDOMS KNOWN BY THEIR NAMES ALONE: of the works a one-time import of a dump of the site wrote
+ * (2026-11-17), an author or a fandom the dump gave by its name, the site's own key unknown, is keyed by the name under
+ * [NAME_KEY] — no page of the site has it.
  */
 class Ficbook : Source {
     override val id = ID
     override val contentType = "books"
     override val homepage = BASE
-    override val modes = setOf(SourceMode.BROWSER, SourceMode.IMPORT)
-
-    override val messages = setOf("noDump")
+    override val modes = setOf(SourceMode.BROWSER)
 
     override val schema =
         SourceSchema(
@@ -116,9 +116,9 @@ class Ficbook : Source {
     override fun partUrl(itemId: String, partId: String) =
         if (partId == ONLY_PART) itemUrl(itemId) else "$BASE/readfic/$itemId/$partId"
 
-    /** An author's own page, by the id of its address; none of a value a dump gave by its name alone. */
+    /** An author's own page, by the id of its address; none of a value known by its name alone ([NAME_KEY]). */
     override fun valueUrl(facet: String, key: String, name: String) =
-        if (key.startsWith(DumpWrites.NAME_KEY)) null
+        if (key.startsWith(NAME_KEY)) null
         else
             when (facet) {
                 AUTHOR -> "$BASE/authors/$key"
@@ -157,12 +157,6 @@ class Ficbook : Source {
 
     override fun capture(page: CapturedPage, context: SourceContext): List<String> = FicbookPages(context).read(page)
 
-    /** The import of a dump of the site ([FicbookDump]): the one job of the source, asking the site for nothing. */
-    override fun scrape(mode: SourceMode, context: SourceContext, job: Job) {
-        require(mode == SourceMode.IMPORT) { "$id runs no job of $mode" }
-        FicbookDump(context, job, ::itemIdOf).import()
-    }
-
     /**
      * A tag by the site's search of tags, the one its page of all the tags asks: by the name — the key is the name in
      * lower case, which the search finds as well — it answers the tag's description, read by [FicbookPages]. The
@@ -171,12 +165,18 @@ class Ficbook : Source {
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
         when (facet) {
             TAG -> tags.map { WantedPage(tagSearch(it), mapOf("title" to it)) }
-            // A fandom a dump gave by its name alone has no page known
-            FANDOM -> tags.filterNot { it.startsWith(DumpWrites.NAME_KEY) }.map { WantedPage("$BASE/fanfiction/$it") }
+            // A fandom known by its name alone has no page known
+            FANDOM -> tags.filterNot { it.startsWith(NAME_KEY) }.map { WantedPage("$BASE/fanfiction/$it") }
             else -> emptyList()
         }
 
     companion object {
+        /**
+         * The key of an author or a fandom known by the name alone, the site's own unknown: "name:" before the name. No
+         * page of the site has it: no address is made of it ([valueUrl]).
+         */
+        const val NAME_KEY = "name:"
+
         /** An author's own page: their key. */
         private val AUTHOR_PAGE = Regex("^https?://(?:www\\.)?ficbook\\.net/authors/([^/?#]+)")
 

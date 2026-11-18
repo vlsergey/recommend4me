@@ -1,4 +1,4 @@
-import { CheckCircle2Icon, DatabaseIcon, DownloadIcon, PackageOpenIcon, SquareIcon, TriangleAlertIcon } from "lucide-react";
+import { CheckCircle2Icon, DatabaseIcon, DownloadIcon, SquareIcon, TriangleAlertIcon } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { JobStatus, SourceInfo } from "@/api/client";
 import { RefreshSelect } from "@/components/RefreshSelect";
@@ -29,7 +29,6 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
   const active = isActive(job);
   const whole = source?.modes.includes("SCRAPE_ALL");
   const updates = source?.modes.includes("UPDATES");
-  const dump = source?.modes.includes("IMPORT");
   const left = job && active ? timeLeft(job.phaseStartedAt, job.processed, job.total) : undefined;
   const catalogue = whole ? job?.catalogue : undefined;
   const resumeWhole = catalogueUnfinished(job) && !active;
@@ -77,11 +76,6 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
               {whole && (
                 <li>
                   <Trans t={t} i18nKey="JobDialog.wholeAbout" components={{ b: <span className="font-medium" /> }} />
-                </li>
-              )}
-              {dump && (
-                <li>
-                  <Trans t={t} i18nKey="JobDialog.dumpAbout" components={{ b: <span className="font-medium" /> }} />
                 </li>
               )}
               <li>{t("JobDialog.backgroundAbout")}</li>
@@ -179,15 +173,6 @@ export function JobDialog({ source, job, onOpenChange, onNeedSettings }: Props) 
                       disabled={start.isPending}
                     >
                       <DatabaseIcon /> {wholeLabel}
-                    </Button>
-                  )}
-                  {dump && (
-                    <Button
-                      variant={updates || whole ? "outline" : "default"}
-                      onClick={() => start.mutate({ source: source.id, mode: "IMPORT" }, { onSuccess: () => onOpenChange(false) })}
-                      disabled={start.isPending}
-                    >
-                      <PackageOpenIcon /> {t("JobDialog.importDump")}
                     </Button>
                   )}
                 </>

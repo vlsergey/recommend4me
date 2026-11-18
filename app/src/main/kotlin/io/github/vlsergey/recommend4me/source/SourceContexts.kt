@@ -91,11 +91,9 @@ class SourceContexts(
         ItemStore,
         ItemFacetStore by SourceItemFacets(store, events),
         ItemReviewStore by SourceItemReviews(store),
-        ItemPartStore by SourceItemParts(store),
+        ItemPartStore by SourceItemParts(store, events),
         ItemSeriesStore by SourceItemSeries(store) {
         private fun <T> write(block: () -> T): T = store.writing.withLock(block)
-
-        override fun <T> batch(writes: () -> T): T = store.told.batch(writes)
 
         override fun upsert(item: ItemHead, now: Instant): Boolean = write { store.items.upsert(item, now) }
 

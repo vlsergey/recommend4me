@@ -28,8 +28,6 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
         )
     }
 
-    override fun facetNames(facet: String): Map<String, String> = store.items.facetNames(facet)
-
     override fun describeFacetValues(facet: String, descriptions: Map<String, String>) = write {
         store.items.describeFacetValues(facet, descriptions)
     }

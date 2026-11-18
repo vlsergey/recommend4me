@@ -23,22 +23,15 @@ enum class SourceMode {
      * One work's page downloaded by the application when the user asks for it ([Source.refresh]): no catalogue, no job.
      */
     PAGE,
-
-    /**
-     * The works of a dump of the site someone else made, read from files the user put in the source's folder: no
-     * request to the site; resumable as [SCRAPE_ALL]. What the application has of a work already wins over the dump,
-     * which only fills what it lacks.
-     */
-    IMPORT,
 }
 
 /** The modes that are jobs over the catalogue, run in the background. */
 val SourceMode.job: Boolean
-    get() = this == SourceMode.SCRAPE_ALL || this == SourceMode.UPDATES || this == SourceMode.IMPORT
+    get() = this == SourceMode.SCRAPE_ALL || this == SourceMode.UPDATES
 
-/** The jobs that go on after a restart till they end: a pass over the whole of a catalogue or of a dump. */
+/** The jobs that go on after a restart till they end: a pass over the whole of a catalogue. */
 val SourceMode.resumable: Boolean
-    get() = this == SourceMode.SCRAPE_ALL || this == SourceMode.IMPORT
+    get() = this == SourceMode.SCRAPE_ALL
 
 /** Whether the application downloads a work's page itself: by [SourceMode.PAGE], or by a job's own requests. */
 val Source.downloadsPages: Boolean
@@ -75,8 +68,7 @@ val Source.downloadsPages: Boolean
  * - **Its [modes]**: [SourceMode.BROWSER] — [capturePatterns], [capture], [itemIdOf] and a [pageDecor], every selector
  *   of it matching the pages; [SourceMode.PAGE] — [refresh], on the user's press alone: the site asked politely, one
  *   request at a time with a pause between, under a user agent that says what asks, a page gone (404) false, a site
- *   asking to wait (429) an error; [SourceMode.SCRAPE_ALL], [SourceMode.UPDATES] and [SourceMode.IMPORT] — [scrape],
- *   the import writing its works a batch at a time ([ItemStore.batch]).
+ *   asking to wait (429) an error; [SourceMode.SCRAPE_ALL] and [SourceMode.UPDATES] — [scrape].
  * - **Its items**: an id stable, of the site's own number, fit to stand in an address's path (no "/"); written as
  *   [ItemStore] tells — a page says only what it shows. WHAT THE SCREEN DOES NOT SHOW IS NOT WRITTEN, NOR DOWNLOADED
  *   (user, 2026-11-13): no page fetched on its own, the one download [refresh] the user presses for; what the site's

@@ -16,6 +16,7 @@ import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemRepository
+import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
@@ -120,10 +121,7 @@ class SourceStore(
      */
     val writing = ReentrantLock()
 
-    /** What the writes of the source's items tell the application: at once, or of a batch together. */
-    val told = WritesTold(source.id, events)
-
-    val items = ItemRepository(dbs.source.dsl) { ids -> told.itemsChanged(ids) }
+    val items = ItemRepository(dbs.source.dsl) { ids -> events.publishEvent(ItemsChanged(source.id, ids.toList())) }
     val pictures = PictureRepository(dbs.source.dsl)
     val files = PictureFiles(folder)
     val reviews = ReviewRepository(dbs.source.dsl)

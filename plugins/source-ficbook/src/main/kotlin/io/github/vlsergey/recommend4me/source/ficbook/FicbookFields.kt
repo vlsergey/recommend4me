@@ -128,10 +128,10 @@ internal class FicbookFields(private val items: ItemStore) {
         internal val AUTHOR_ID = Regex("^/authors/([^/?#]+)")
 
         /** The fandom of the original works. */
-        const val ORIGINALS = "no_fandom/originals"
+        private const val ORIGINALS = "no_fandom/originals"
 
         /** The statuses of the site, by the class of their label and by its text, to the standard ones. */
-        val STATUSES =
+        private val STATUSES =
             mapOf(
                 "in-progress" to Books.Status.IN_PROGRESS,
                 "в процессе" to Books.Status.IN_PROGRESS,
