@@ -8,7 +8,7 @@ import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
-import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, lineVerdict, sameTextVerdict, sameValueVerdict, siteVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
+import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, sameTextVerdict, sameValueVerdict, siteVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
@@ -58,11 +58,14 @@ const CHARACTERS = "characters";
 /** The facets of what a work is of, made of the site's own line of its characters and pairings: the line stands after them. */
 const OF_THE_LINE = [UNIVERSE, CHARACTERS, "pairings"];
 
-/** A row of the grid: its field, how alike the two are of it, the two values, folded or not. */
+/**
+ * A row of the grid: its field, how alike the two are of it — none of a field the pair is not compared by —, the
+ * two values, folded or not.
+ */
 interface Row {
   key: string;
   name: string;
-  verdict: FieldVerdict;
+  verdict?: FieldVerdict;
   left: ReactNode;
   right: ReactNode;
   /** Long values folded to these lines ([FoldedRow]); none, shown whole. */
@@ -74,15 +77,20 @@ interface Row {
  * site's own line of the characters and pairings after the facets of them, the size, the description — the
  * first work's on the left, the second's on the right, and between them the field's
  * name and how alike the two are, in its colour ([FieldVerdict]), on one line: read across, the left, the
- * verdict, the right. The fields of one work alone — nothing to compare — stand below the rest, under a line
- * of their own: told, not in the way of what is compared. On a narrow screen the name and the verdict stand
- * over the row, the two under them side by side. Of a pair asked whether it is of one series ([ofSeries]), the
- * site says nothing: no colour of it.
+ * verdict, the right. In three groups (user, 2026-11-18: "the site's tags are not compared — the normalized
+ * tags are; what both works have but is not compared goes to a group below"): what the pair is compared by —
+ * the site, the title, the authors, the size, the description and the facets of the pair's layers
+ * ([DuplicatePair.facets]; of a pair of no layers yet, every facet as it is) —; what both works have but the
+ * pair is not compared by — the site's own tags and line, a facet not of its layers —, no verdict; and the
+ * fields of one work alone. On a narrow screen the name and the verdict stand over the row, the two under them
+ * side by side. Of a pair asked whether it is of one series ([ofSeries]), the site says nothing: no colour of it.
  */
 export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; ofSeries?: boolean }) {
   const { t } = useTranslation("duplicate");
   const a = p.first;
   const b = p.second;
+  // The facets the pair is compared by: those of its layers; of a pair of none worked out yet, every one as it is
+  const comparedBy = p.facets ? new Set(p.facets.map((f) => f.key)) : null;
   const facets = facetKeys(p).map((key): Row => {
     const left = a.facets.find((f) => f.key === key);
     const right = b.facets.find((f) => f.key === key);
@@ -96,8 +104,9 @@ export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; o
       // Of the values a work may have one of, whether they meet; of a facet of one value — a status, a kind —,
       // whether it is the same; of the values as the works' screens give them (the window of one pair), how many
       // they share; of any other, how alike by the layers of the pair
-      verdict:
-        left?.allowed || right?.allowed
+      verdict: comparedBy && !comparedBy.has(key)
+        ? undefined
+        : left?.allowed || right?.allowed
           ? allowedVerdict(left?.values ?? [], right?.values ?? [])
           : left?.single || right?.single
             ? sameValueVerdict(left?.values ?? [], right?.values ?? [])
@@ -109,24 +118,23 @@ export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; o
       lines: "line-clamp-2",
     };
   });
-  // The site's own tags, after the tags: shown, never compared
+  // The site's own tags, after the tags: shown, never compared — the normalized tags are
   if ((a.siteTags?.length ?? 0) > 0 || (b.siteTags?.length ?? 0) > 0) {
     const tagsAt = facets.findIndex((r) => r.key === "tags");
     facets.splice(tagsAt < 0 ? facets.length : tagsAt + 1, 0, {
       key: "siteTags",
       name: t("PairGrid.siteTags"),
-      verdict: valuesVerdict(a.siteTags ?? [], b.siteTags ?? []),
       left: (a.siteTags ?? []).map(valueName).join(", ") || null,
       right: (b.siteTags ?? []).map(valueName).join(", ") || null,
       lines: "line-clamp-2",
     });
   }
-  // The site's line of the characters and pairings, after the facets made of it
+  // The site's line of the characters and pairings, after the facets made of it: shown, never compared — the
+  // characters and the pairings made of it are
   const lineAt = facets.reduce((at, r, i) => (OF_THE_LINE.includes(r.key) ? i + 1 : at), 0);
   facets.splice(lineAt, 0, {
     key: "universeLine",
     name: t("PairGrid.universeLine"),
-    verdict: lineVerdict(a.universeLine, b.universeLine),
     left: a.universeLine,
     right: b.universeLine,
     lines: "line-clamp-2",
@@ -173,12 +181,25 @@ export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; o
   ];
   // A field neither work has, no row
   const both = rows.filter((r) => r.left != null && r.right != null);
+  const compared = both.filter((r) => r.verdict != null);
+  const notCompared = both.filter((r) => r.verdict == null);
   const one = rows.filter((r) => (r.left == null) !== (r.right == null));
   return (
     <div className="flex flex-col divide-y rounded-md border">
-      {both.map(row)}
-      {one.length > 0 && <div className="bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">{t("PairGrid.oneSided")}</div>}
+      {compared.map(row)}
+      {notCompared.length > 0 && <GroupHead title={t("PairGrid.notComparedHint2")}>{t("PairGrid.notCompared")}</GroupHead>}
+      {notCompared.map(row)}
+      {one.length > 0 && <GroupHead>{t("PairGrid.oneSided")}</GroupHead>}
       {one.map(row)}
+    </div>
+  );
+}
+
+/** The line a group of rows begins with: what its rows are. */
+function GroupHead({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <div className="bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground" title={title}>
+      {children}
     </div>
   );
 }
@@ -219,7 +240,7 @@ function SiteNames({ names }: { names: string[] }) {
  * A row of a field: the first work's on the left, the name and the verdict in the middle, the second's on
  * the right; a field one work has not, a dash on its side.
  */
-function FieldRow({ name, verdict, left, right }: { name: string; verdict: FieldVerdict; left: ReactNode; right: ReactNode }) {
+function FieldRow({ name, verdict, left, right }: { name: string; verdict?: FieldVerdict; left: ReactNode; right: ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 py-1 md:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)]">
       <Side>{left}</Side>
@@ -234,7 +255,7 @@ function FieldRow({ name, verdict, left, right }: { name: string; verdict: Field
  * on either side for both: what is compared is read whole side by side. Text to select and copy: a press
  * that selects something does not fold.
  */
-function FoldedRow({ name, verdict, left, right, lines }: { name: string; verdict: FieldVerdict; left: ReactNode; right: ReactNode; lines: string }) {
+function FoldedRow({ name, verdict, left, right, lines }: { name: string; verdict?: FieldVerdict; left: ReactNode; right: ReactNode; lines: string }) {
   const { t } = useTranslation("duplicate");
   const [whole, setWhole] = useState(false);
   const side = (content: ReactNode) =>
@@ -261,17 +282,22 @@ function Side({ children }: { children: ReactNode }) {
   return <div className="min-w-0 text-sm text-muted-foreground">{children ?? <span className="text-muted-foreground/60">—</span>}</div>;
 }
 
-/** The middle of a row: the field's name and how alike the two works are of it, in its colour, the hint telling how. */
-function Middle({ name, verdict }: { name: string; verdict: FieldVerdict }) {
+/**
+ * The middle of a row: the field's name and how alike the two works are of it, in its colour, the hint telling how;
+ * of a field the pair is not compared by, its name alone.
+ */
+function Middle({ name, verdict }: { name: string; verdict?: FieldVerdict }) {
   const { t } = useTranslation("duplicate");
   return (
     <div className="col-span-2 order-first flex items-baseline gap-2 md:order-none md:col-span-1 md:justify-center">
       <span className="min-w-0 truncate text-xs text-muted-foreground" title={name}>
         {name}
       </span>
-      <span className={cn("shrink-0 rounded px-1.5 text-xs tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value, ...verdict.values })}>
-        {verdict.shown}
-      </span>
+      {verdict && (
+        <span className={cn("shrink-0 rounded px-1.5 text-xs tabular-nums", TONE_CLASS[verdict.tone])} title={t(verdict.hint, { value: verdict.value, ...verdict.values })}>
+          {verdict.shown}
+        </span>
+      )}
     </div>
   );
 }

@@ -31,8 +31,6 @@ export interface FieldVerdict {
     | "PairGrid.sameSiteHint"
     | "PairGrid.otherSiteHint"
     | "PairGrid.seriesSiteHint"
-    | "PairGrid.sameLineHint"
-    | "PairGrid.otherLineHint"
     | "PairGrid.notComparedHint";
   value?: string;
   /** More values of the hint, by their names. */
@@ -115,16 +113,6 @@ export function sameTextVerdict(first: string | undefined, second: string | unde
   if (!first || !second) return NOTHING;
   const same = first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
   return same ? { tone: "alike", shown: "✓", hint: "PairGrid.sameTextHint" } : { tone: "none", shown: "—", hint: "PairGrid.notMeasuredHint" };
-}
-
-/**
- * The site's own line of the characters and pairings: the same word for word "✓"; else not compared itself — the
- * characters and the pairings made of it are, in their rows.
- */
-export function lineVerdict(first: string | undefined, second: string | undefined): FieldVerdict {
-  if (!first || !second) return NOTHING;
-  const same = first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
-  return same ? { tone: "alike", shown: "✓", hint: "PairGrid.sameLineHint" } : { tone: "none", shown: "—", hint: "PairGrid.otherLineHint" };
 }
 
 /**
