@@ -87,8 +87,8 @@ class TagsByTheirIdsTest {
                 listOf(
                     listOf("w1", "1665"),
                     listOf("w1", "1682"),
+                    // Харассмент and Домогательство, its synonym: one tag
                     listOf("w1", "477"),
-                    listOf("w1", "574"),
                     listOf("w1", "name:Неведомое"),
                     listOf("w2", "1665"),
                     listOf("w2", "19"),

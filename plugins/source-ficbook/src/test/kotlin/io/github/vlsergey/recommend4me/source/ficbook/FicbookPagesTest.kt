@@ -249,11 +249,21 @@ class FicbookPagesTest {
             val context = MemorySourceContext()
             assertEquals(emptyList(), capture(context, wanted.url, "tags-search.json"))
             assertEquals(harassment, context.facetDescriptions.getValue("tag")["477"])
-            // The tag found and its synonyms, asked by either, by their ids: each a tag of its own of the same thing
+            // The tag found by its id, its synonyms by their names — their ids count the synonyms, not the tags: each a
+            // tag of its own of the same thing
             assertEquals("Харассмент", context.facetNames.getValue("tag")["477"])
-            assertEquals("Домогательства", context.facetNames.getValue("tag")["611"])
+            assertEquals("Домогательства", context.facetNames.getValue("tag")["name:Домогательства"])
+            assertNull(context.facetNames.getValue("tag")["611"])
             assertEquals(
-                setOf("574", "575", "576", "611", "3377", "4724").associateWith { "477" },
+                setOf(
+                        "Домогательство",
+                        "Склонение к сексу",
+                        "Дискриминация",
+                        "Домогательства",
+                        "Сексуальное домогательство",
+                        "Приставания",
+                    )
+                    .associate { "name:$it" to "477" },
                 context.facetSynonyms.getValue("tag"),
             )
         }

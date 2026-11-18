@@ -1,12 +1,9 @@
 package db.ficbook
 
 import java.sql.Connection
-import java.util.zip.GZIPInputStream
 import org.flywaydb.core.api.migration.BaseJavaMigration
 import org.flywaydb.core.api.migration.Context
-import org.jsoup.Jsoup
 import org.slf4j.LoggerFactory
-import tools.jackson.databind.json.JsonMapper
 
 private val log = LoggerFactory.getLogger(V4__tags_by_their_ids::class.java)
 
@@ -14,10 +11,11 @@ private val log = LoggerFactory.getLogger(V4__tags_by_their_ids::class.java)
  * A TAG OF FICBOOK IS THE SITE'S ID OF ITS PAGE, ITS NAME AND DESCRIPTION BOUND TO IT (user, 2026-11-18: "a tag is a
  * numeric id to the site; if you do not know the id, you cannot link to the tag's page"). The tags were keyed by their
  * names in lower case — of the site's pages and of the dump alike — and are given their ids, of every work at once: a
- * name is one tag of the site, its id what the kept pages say of it — the links of the tags of the works and the lists
- * first, then the tags the site's search of tags answered, then their synonyms. A name of no id found is keyed by the
- * name alone ("name:"), asked of the site's search later. The other names the site files under a tag are taken away:
- * the kept answers of the search, read again by the parser's version 17, give them by their ids.
+ * name is one tag of the site, its id what the kept pages say of it ([KeptTagIds]) — the links of the tags of the works
+ * and the lists first, then the tags the site's search of tags answered, then the tags they are synonyms of. A name of
+ * no id found is keyed by the name alone ("name:"), asked of the site's search later. The other names the site files
+ * under a tag are taken away: the kept answers of the search, read again by the parser's version 17, give them by their
+ * ids.
  *
  * Run outside a transaction, a portion of the works at a time — by the range of their ids, read in the order of the
  * key, their new keys worked out in memory, written by the key in a batch and kept (user, 2026-11-18: the first form, a
@@ -157,64 +155,6 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
         }
     }
 
-    /**
-     * What the kept pages say the ids of the tags' names are, by the name in lower case: of the links of the tags of
-     * the works and the lists, of the tags' own pages, of the tags the site's search answered, of their synonyms.
-     */
-    internal class KeptTagIds {
-        private val linked = HashMap<String, MutableSet<Long>>()
-        private val found = HashMap<String, MutableSet<Long>>()
-        private val synonyms = HashMap<String, MutableSet<Long>>()
-
-        /** The id of the tag [name]: the one the links give, else the one a search found, else a synonym's. */
-        fun of(name: String): Long? {
-            val key = name.trim().lowercase()
-            return listOf(linked, found, synonyms).firstNotNullOfOrNull { it[key]?.singleOrNull() }
-        }
-
-        fun read(c: Connection) =
-            c.prepareStatement("SELECT url, html FROM captured_page").use { s ->
-                s.executeQuery().use { r ->
-                    while (r.next()) page(
-                        r.getString(1),
-                        GZIPInputStream(r.getBinaryStream(2)).use { String(it.readBytes(), Charsets.UTF_8) },
-                    )
-                }
-            }
-
-        /** One kept page: an answer of the search of tags, a tag's own page, a page of works. */
-        fun page(url: String, html: String) {
-            val path = url.substringAfter("://").substringAfter('/', "").substringBefore('?').let { "/$it" }
-            if (path == "/tags/search") {
-                val tags = runCatching { JSON.readTree(html) }.getOrNull()?.path("data")?.path("tags") ?: return
-                tags.forEach { t ->
-                    add(found, t.path("title").asString(""), t.path("id").asLong(0L))
-                    t.path("synonyms").forEach {
-                        add(synonyms, it.path("title").asString(""), it.path("id").asLong(0L))
-                    }
-                }
-                return
-            }
-            val doc = Jsoup.parse(html)
-            TAG_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { id ->
-                doc.selectFirst("h1.heading")
-                    ?.text()
-                    ?.let { TAG_HEADING.find(it)?.groupValues?.get(1) }
-                    ?.let {
-                        add(found, it, id.toLong())
-                    }
-            }
-            doc.select("a.tag[href]").forEach { a ->
-                TAG_PAGE.matchEntire(a.attr("href"))?.groupValues?.get(1)?.let { add(linked, a.text(), it.toLong()) }
-            }
-        }
-
-        private fun add(to: HashMap<String, MutableSet<Long>>, name: String, id: Long) {
-            val key = name.trim().lowercase()
-            if (key.isNotEmpty() && id > 0) to.getOrPut(key) { HashSet() } += id
-        }
-    }
-
     private companion object {
         /** The works keyed anew at a time. */
         const val PORTION = 5000
@@ -226,13 +166,5 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
 
         /** The key of a tag known by its name alone, as the source writes it ([Ficbook.NAME_KEY]). */
         const val NAME_KEY = "name:"
-
-        val JSON = JsonMapper.builder().build()
-
-        /** A tag's own page, "/tags/1682". */
-        val TAG_PAGE = Regex("/tags/(\\d+)/?")
-
-        /** The heading of a tag's page: the name between the outer quotes. */
-        val TAG_HEADING = Regex("^Метка «(.*)»\\s*-\\s*фанфики")
     }
 }

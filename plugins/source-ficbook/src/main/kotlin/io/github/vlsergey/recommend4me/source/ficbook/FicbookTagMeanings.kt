@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.source.ficbook
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.ItemStore
 import io.github.vlsergey.recommend4me.source.PageText
+import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.NAME_KEY
 import io.github.vlsergey.recommend4me.source.ficbook.Ficbook.Companion.TAG
 import java.net.URI
 import java.net.URLDecoder
@@ -38,9 +39,11 @@ internal class FicbookTagMeanings(private val items: ItemStore) {
 
     /**
      * The answer of the site's search of tags the browser made for the application ([Ficbook.describing]), JSON: the
-     * tags found, each with its id, what it means and its synonyms with their ids. The tag asked — its name in the
-     * address — is the tag of its name, or the one it is a synonym of: the site files a synonym under its tag. Every
-     * one by its id; a tag the site does not describe is left without a description.
+     * tags found, each with its id, what it means and its synonyms. The tag asked — its name in the address — is the
+     * tag of its name, or the one it is a synonym of: the site files a synonym under its tag. The tag by its id; a
+     * synonym by its name alone ([NAME_KEY]): its id in the answer counts the synonyms, not the tags — the synonym
+     * "Titfuck" 1023 of a tag, the tag "Лихтенштейн" 1023 (2026-11-18). A tag the site does not describe is left
+     * without a description.
      */
     fun tagSearch(page: CapturedPage) {
         val asked = asked(page.url)
@@ -50,14 +53,13 @@ internal class FicbookTagMeanings(private val items: ItemStore) {
             found?.firstOrNull { named(it) == asked }
                 ?: found?.firstOrNull { t -> t.path("synonyms").any { named(it) == asked } }
         val id = tag?.let(::idOf) ?: return
-        // The tag and the other names the site files under it, each a tag of its own of the same thing
+        // The tag and the other names the site files under it, each a tag of its own of the same thing, by its name
         val synonyms =
-            tag.path("synonyms").mapNotNull { s -> idOf(s)?.let { it to s.path("title").asString("").trim() } }
-        items.nameFacetValues(TAG, (synonyms + (id to tag.path("title").asString("").trim())).toMap())
-        items.setFacetValueSynonyms(
-            TAG,
-            mapOf(id to synonyms.filter { it.second.isNotEmpty() && it.first != id }.toMap()),
-        )
+            tag.path("synonyms")
+                .mapNotNull { s -> s.path("title").asString("").trim().ifEmpty { null } }
+                .associateBy { NAME_KEY + it }
+        items.nameFacetValues(TAG, synonyms + (id to tag.path("title").asString("").trim()))
+        items.setFacetValueSynonyms(TAG, mapOf(id to synonyms))
         tag.path("description")
             .asString("")
             .trim()
