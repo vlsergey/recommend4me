@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.worklist.ItemRows
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndex
+import io.github.vlsergey.recommend4me.worklist.ListRows
 
 /**
  * The facet a site's facet [def] is compared as: its authors as the normalized authors, a facet of the layer as its
@@ -31,18 +32,9 @@ internal fun comparedAs(def: FacetDef): String? =
  * tags or fandoms are its own words, of no other site.
  */
 internal class ComparedValues(private val s: SourceStore, private val index: ListIndex) {
-    /** Of every facet compared, by its id in the index, the facet it is compared as. */
-    private val families: Map<String, String> =
-        s.schema.facets
-            .filter { it.filter }
-            .mapNotNull { def ->
-                comparedAs(def)?.takeIf { it != AUTHOR_FAMILY }?.let { FeatureNames.facetId(s.source, def) to it }
-            }
-            .toMap()
-
-    /** The values the user ignores, by their names. */
-    private val ignored: Set<String> =
-        s.ignoredTags().flatMapTo(HashSet()) { (facet, keys) -> keys.map { "${familyOf(facet)}:$it" } }
+    private val compared = ComparedFacets(s)
+    private val families = compared.families
+    private val ignored = compared.ignored
 
     private val authorFacet = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR }?.key
 
@@ -118,8 +110,41 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
                 }
             names = named
         }
+    }
+}
 
-        /** The values of every work of the ids, by their places, by their names. */
-        fun named(): Array<List<String>> = Array(numbered.size) { i -> numbered[i].asList().mapNotNull { names[it] } }
+/**
+ * THE FACETS A PAIR IS COMPARED BY, of a site ([ComparedValues]): every facet of the layer and of the standard values
+ * the works are filtered by, by its id in the index, with the facet it is compared as; the values the user ignores.
+ */
+internal class ComparedFacets(private val s: SourceStore) {
+    /** Of every facet compared, by its id in the index, the facet it is compared as. */
+    val families: Map<String, String> =
+        s.schema.facets
+            .filter { it.filter }
+            .mapNotNull { def ->
+                comparedAs(def)?.takeIf { it != AUTHOR_FAMILY }?.let { FeatureNames.facetId(s.source, def) to it }
+            }
+            .toMap()
+
+    /** The values the user ignores, by their names. */
+    val ignored: Set<String> =
+        s.ignoredTags().flatMapTo(HashSet()) { (facet, keys) -> keys.map { "${familyOf(facet)}:$it" } }
+
+    /**
+     * The values compared of the works [ids], by their names, read of the databases as the index is made of them — what
+     * a screen of a pair shows, not of the index (user, 2026-11-18: the screens are of the databases, the search alone
+     * of the index); the authors apart.
+     */
+    fun shown(ids: List<String>): Map<String, List<String>> {
+        val byFacet = ListRows.facetsOf(s, ids)
+        return ids.associateWith { id ->
+            byFacet
+                .flatMap { (facetId, byItem) ->
+                    families[facetId]?.let { family -> byItem[id].orEmpty().map { "$family:$it" } }.orEmpty()
+                }
+                .filter { it !in ignored }
+                .distinct()
+        }
     }
 }

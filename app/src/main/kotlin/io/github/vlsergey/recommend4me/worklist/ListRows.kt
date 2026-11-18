@@ -105,9 +105,10 @@ internal object ListRows {
     /**
      * Of every filter facet of the source, by its filter id, every item's values as the user sees them: the site's, the
      * drafts of the layer, the model's kept of a facet it works out
-     * ([io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]), the user's corrections on top.
+     * ([io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]), the user's corrections on top — what the
+     * index keeps of them, read of the databases: of the items [ids], what a screen shows of a few.
      */
-    private fun facetsOf(s: SourceStore, ids: Collection<String>?): Map<String, Map<String, List<String>>> {
+    fun facetsOf(s: SourceStore, ids: Collection<String>?): Map<String, Map<String, List<String>>> {
         val defs = s.schema.facets.filter { it.filter }
         if (defs.isEmpty()) return emptyMap()
         val site: Map<String, Map<String, List<String>>> =

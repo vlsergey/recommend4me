@@ -82,6 +82,7 @@
   "PairGrid.seriesSiteHint": "Работы одного цикла бывают и на одном сайте, и на разных: о цикле сайт ничего не говорит",
   "PairGrid.site": "Сайт",
   "PairGrid.universeLine": "Персонажи (сайт)",
+  "PairGrid.siteTags": "Теги (сайт)",
   "PairGrid.characters": "Персонажи (норм.)",
   "PairGrid.title": "Название",
   "PairGrid.valuesHint": "Общих значений {{value}}: все общие — зелёный, ни одного — красный, часть — жёлтый",

@@ -6223,12 +6223,18 @@ components:
         universeLine:
           type: string
           description: The characters and pairings as the site writes them, its own line (SourceSchema.universeLine); none of a site without one
+        siteTags:
+          type: array
+          description: The site's own tags of it, by their names - shown beside what is compared, never compared themselves; none of a site without tags
+          items:
+            $ref: '#/components/schemas/DuplicateValue'
         facets:
           type: array
           description: |
             The values of every facet a pair is compared by the work has (DuplicatePair.facets) - as the
-            search compares them: the site's, the drafts, the site's tags by the normalized ones, the
-            user's answers over them, the ignored tags left out; the authors apart (authors)
+            search compares them: the site's, the drafts, the model's kept above its cutoff, the user's
+            answers over them, the ignored tags left out; the authors apart (authors). Read of the
+            databases, as the index of the list the search reads is made of them
           items:
             $ref: '#/components/schemas/DuplicateWorkFacet'
         words:

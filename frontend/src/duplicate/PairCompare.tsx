@@ -109,6 +109,18 @@ export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; o
       lines: "line-clamp-2",
     };
   });
+  // The site's own tags, after the tags: shown, never compared
+  if ((a.siteTags?.length ?? 0) > 0 || (b.siteTags?.length ?? 0) > 0) {
+    const tagsAt = facets.findIndex((r) => r.key === "tags");
+    facets.splice(tagsAt < 0 ? facets.length : tagsAt + 1, 0, {
+      key: "siteTags",
+      name: t("PairGrid.siteTags"),
+      verdict: valuesVerdict(a.siteTags ?? [], b.siteTags ?? []),
+      left: (a.siteTags ?? []).map(valueName).join(", ") || null,
+      right: (b.siteTags ?? []).map(valueName).join(", ") || null,
+      lines: "line-clamp-2",
+    });
+  }
   // The site's line of the characters and pairings, after the facets made of it
   const lineAt = facets.reduce((at, r, i) => (OF_THE_LINE.includes(r.key) ? i + 1 : at), 0);
   facets.splice(lineAt, 0, {

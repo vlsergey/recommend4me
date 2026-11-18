@@ -78,6 +78,7 @@
   "PairGrid.seriesSiteHint": "Dela jednog ciklusa bivaju i na jednom sajtu i na više njih: o ciklusu sajt ne govori ništa",
   "PairGrid.site": "Sajt",
   "PairGrid.universeLine": "Likovi (sajt)",
+  "PairGrid.siteTags": "Tagovi (sajt)",
   "PairGrid.characters": "Likovi (norm.)",
   "PairGrid.title": "Naslov",
   "PairGrid.valuesHint": "Zajedničkih vrednosti {{value}}: sve zeleno, nijedna crveno, deo žuto",

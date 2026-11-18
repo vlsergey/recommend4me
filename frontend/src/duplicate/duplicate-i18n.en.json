@@ -74,6 +74,7 @@
   "PairGrid.seriesSiteHint": "Works of one series are on one site as well as on several: the site tells nothing of a series",
   "PairGrid.site": "Site",
   "PairGrid.universeLine": "Characters (site)",
+  "PairGrid.siteTags": "Tags (site)",
   "PairGrid.characters": "Characters (norm.)",
   "PairGrid.title": "Title",
   "PairGrid.valuesHint": "{{value}} values in common: all green, none red, some yellow",

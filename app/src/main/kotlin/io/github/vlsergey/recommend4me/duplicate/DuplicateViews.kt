@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.api.model.DuplicateValue
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
 import io.github.vlsergey.recommend4me.api.model.DuplicateWorkFacet
 import io.github.vlsergey.recommend4me.author.AuthorKin
+import io.github.vlsergey.recommend4me.contenttype.StandardTags
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -16,8 +17,6 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
-import io.github.vlsergey.recommend4me.worklist.ListIndex
-import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import org.springframework.stereotype.Component
 
 /**
@@ -36,7 +35,7 @@ internal class Described(val work: DuplicateWork, val authors: Set<Long>)
 
 /** THE PAIRS AND THEIR WORKS AS THE USER IS SHOWN THEM: every source's works read in one go. */
 @Component
-class DuplicateViews(private val sizes: WorkSizes, private val indexes: ListIndexes) {
+class DuplicateViews(private val sizes: WorkSizes) {
 
     /** The pairs as the user is shown them: a pair of a work no longer there, none. */
     internal fun pairs(
@@ -101,7 +100,7 @@ class DuplicateViews(private val sizes: WorkSizes, private val indexes: ListInde
             .forEach { (source, own) ->
                 val s = type.source(source) ?: return@forEach
                 val ids = own.map { it.id }
-                val shown = ShownWorks(type, s, ids, sizes, indexes.of(type.id))
+                val shown = ShownWorks(type, s, ids, sizes)
                 ids.forEach { id -> shown.described(id)?.let { out[ItemKey(source, id)] = it } }
             }
         return out
@@ -109,13 +108,7 @@ class DuplicateViews(private val sizes: WorkSizes, private val indexes: ListInde
 }
 
 /** What the pairs show of the works [ids] of one source, read in one go. */
-private class ShownWorks(
-    type: TypeStore,
-    private val s: SourceStore,
-    ids: List<String>,
-    sizes: WorkSizes,
-    index: ListIndex,
-) {
+private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<String>, sizes: WorkSizes) {
     private val heads = s.items.heads(ids)
     private val fields = s.corrections.fieldsOf(ids)
     private val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
@@ -133,9 +126,13 @@ private class ShownWorks(
     private val normalized = s.authors.bindingsOf(s.id)
     private val fandomNames = namesOf(fandomFacet)
 
-    // The values the search compared, of these works alone, of the index: shown by the facet they are compared as, the
-    // authors apart
-    private val values = ids.zip(ComparedValues(s, index).of(ids, emptyList()).named()).toMap()
+    // The values the search compares, of these works alone, read of the databases: shown by the facet they are compared
+    // as, the authors apart
+    private val values = ComparedFacets(s).shown(ids)
+
+    // The site's own tags, shown by their names, not compared: a site's words, of no other site
+    private val tagFacet = s.schema.facets.firstOrNull { it.standard === StandardTags.TAG }?.key
+    private val tagNames = namesOf(tagFacet)
 
     // The names the user gave the values added, by "<the facet compared as>:<value>"
     private val given =
@@ -202,6 +199,10 @@ private class ShownWorks(
                 fandoms = fandomFacet?.let { named(id, it, fandomNames) }.orEmpty(),
                 description = description?.let { shown[it] },
                 universeLine = universeLine?.let { shown[it] }?.takeIf { it.isNotBlank() },
+                siteTags =
+                    tagFacet?.let { f ->
+                        named(id, f, tagNames).map { DuplicateValue(it, null) }.sortedBy { it.name }
+                    },
                 facets = comparedOf(id),
                 words = itemSizes[id]?.words,
                 chars = itemSizes[id]?.chars,
