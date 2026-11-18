@@ -114,12 +114,16 @@ internal class FacetRefits(
         val stop = { workload.stopping }
         val facets = chain.facetsOf(store)
         val started = System.currentTimeMillis()
-        keepOwnModels(store, facets, stop)
+        // What is done, told to the queue: the pass of the models of their own a share of its works, then every facet
+        // a step (user, 2026-11-18: "a progress indicator is needed")
+        val steps = 1.0 + facets.size
+        keepOwnModels(store, facets, stop) { share -> workload.progress(share / steps) }
         val own = System.currentTimeMillis()
         val characters = passes.charactersRead(store)
         val read = System.currentTimeMillis()
         val took =
             facets.indices.map { k ->
+                workload.progress((1 + k) / steps)
                 val began = System.currentTimeMillis()
                 fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
                 "${facets[k].key} ${System.currentTimeMillis() - began}"
@@ -137,16 +141,26 @@ internal class FacetRefits(
 
     /**
      * Of every work, a portion at a time, the values the facets worked out by models of their own give it kept
-     * ([FacetModel], [KeptModelValues]): what the facets of the chain read of them, as of the drafts.
+     * ([FacetModel], [KeptModelValues]): what the facets of the chain read of them, as of the drafts. How much of the
+     * works is done told to [done] after every portion.
      */
-    private fun keepOwnModels(store: SourceStore, facets: List<FacetDef>, stop: () -> Boolean) {
+    private fun keepOwnModels(
+        store: SourceStore,
+        facets: List<FacetDef>,
+        stop: () -> Boolean,
+        done: (share: Double) -> Unit,
+    ) {
         val chained = facets.map { it.key }.toSet()
         val own = store.schema.facets.filter { it.infer && it.key !in chained }
         if (own.isEmpty()) return
+        val works = store.items.count().coerceAtLeast(1)
+        var read = 0
         passes.forEachPortion(store) { ids ->
             if (stop()) throw CancellationException("${store.id}: the models of their own given up: the app stops")
             val known = EveryItemFacets(store.items.facetsOf(ids), store.corrections.facetsOf(ids))
             kept.write(store, ids, known.site, chain.seeded(store, ids, every = known), own)
+            read += ids.size
+            done(read.toDouble() / works)
         }
     }
 
