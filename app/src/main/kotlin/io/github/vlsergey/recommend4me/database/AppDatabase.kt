@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component
  */
 @Component
 class AppDatabase(folder: DataFolder) : DisposableBean {
-    private val database = Database("app", DataFolder.database(folder.root, "app"), "app")
+    /** The file, for a query of it ([DatabaseQueries]). */
+    val database = Database("app", DataFolder.database(folder.root, "app"), "app")
 
     val dsl: DSLContext = database.dsl
 

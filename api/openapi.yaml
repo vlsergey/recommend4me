@@ -40,6 +40,7 @@ tags:
   - name: series
   - name: workload
   - name: launcher
+  - name: database
 
 paths:
   /api/types:
@@ -3094,6 +3095,46 @@ paths:
         '202':
           description: Stopping
 
+  /api/database:
+    get:
+      tags: [database]
+      operationId: listDatabases
+      summary: The names of every database file the application holds open, for a query of one
+      responses:
+        '200':
+          description: The names, as "dictionaries", "ficbook/source", "books/model"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/database/query:
+    post:
+      tags: [database]
+      operationId: queryDatabase
+      summary: A query of one database file while the application runs, written nothing
+      description: |
+        For whoever looks into the data — the owner, an agent: one SELECT (or EXPLAIN, a query of H2) on
+        the file named, in a transaction rolled back after, whatever it did; a statement that is no query
+        is refused by H2 before it runs. At most `limit` rows and a minute of time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatabaseQuery'
+      responses:
+        '200':
+          description: The rows, or the error of the query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseRows'
+        '404':
+          description: No such database
+
 components:
   parameters:
     Type:
@@ -5291,6 +5332,48 @@ components:
             sent again once one of them is filled, however little it grew by it
           items:
             type: string
+
+    DatabaseQuery:
+      type: object
+      required: [database, sql]
+      properties:
+        database:
+          type: string
+          description: The file's name, as GET /api/database lists them
+        sql:
+          type: string
+        limit:
+          type: integer
+          description: The rows answered at most; 1000 when not given, 100000 at most
+          minimum: 1
+          maximum: 100000
+
+    DatabaseRows:
+      type: object
+      required: [columns, rows, truncated]
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          description: Each cell as text; null of SQL's NULL, bytes as their count
+          items:
+            type: array
+            items:
+              type: string
+              nullable: true
+        truncated:
+          type: boolean
+          description: More rows than the limit
+        millis:
+          type: integer
+          format: int64
+        error:
+          type: string
+          description: Why the query failed, as the database said it
+          nullable: true
 
     ExtensionInfo:
       type: object
