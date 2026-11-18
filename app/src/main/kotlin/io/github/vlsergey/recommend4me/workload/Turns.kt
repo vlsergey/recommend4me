@@ -21,7 +21,9 @@ internal class Turns {
     private val lock = ReentrantLock()
 
     /** The application stops: no turn is taken any more ([close]). */
-    @Volatile private var closed = false
+    @Volatile
+    var closed = false
+        private set
 
     /**
      * No turn taken any more: a work waiting or planned is given up as its turn comes, done again at the next start.

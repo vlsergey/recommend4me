@@ -110,7 +110,8 @@ class TagRenaming(
         val scope = tags.scope() ?: return
         // The answers of a merge a stop or a failure left unmoved: moved before anything reads them
         moveMergedAnswers(scope, scope.facet)
-        schedule("start")
+        // What the last run of the application left undone of the naming, planned again
+        workload.resume(NAMING.what) { _, reason -> schedule(reason) }
         // The bindings made before what their entries are a kind of was read: read once, in the background — of the
         // catalogues' sites, not a computation, out of the queue
         background.start("tags-above") { above.readAboveOfBound(scope) }

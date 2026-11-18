@@ -72,11 +72,17 @@ class Duplicates(
         return true
     }
 
-    /** Every type of several sites never searched yet: searched once, in the background. */
+    /**
+     * Every type of several sites never searched yet: searched once, in the background; and what the last run of the
+     * application left undone, planned again.
+     */
     @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.types.filter { it.sources.size > 1 && it.duplicates.search() == null }.forEach { plan(it, "start") }
+        workload.resume("duplicates") { left, reason ->
+            left.work.type?.let(stores::type)?.let { plan(it, reason, left.asked) }
+        }
     }
 
     /**

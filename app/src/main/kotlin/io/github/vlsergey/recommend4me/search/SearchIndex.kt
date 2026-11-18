@@ -64,6 +64,8 @@ class SearchIndex(
      */
     @EventListener(ApplicationReadyEvent::class)
     fun build() {
+        // What the last run left undone of the index: what the start's bringing it to every work does
+        listOf("searchIndex", "searchUpdate").forEach(workload::left)
         if (plugins.search == null) return
         // The scores of another reranker are of another model: read again as asked for
         plugins.reranker()?.let { r -> stores.types.forEach { it.searchScores.keepOnly(r.id) } }

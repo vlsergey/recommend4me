@@ -37,7 +37,10 @@ class PartVectors(
 
     @EventListener(PartsSaved::class) fun partsSaved() = plan("parts")
 
-    @Order(START_ORDER) @EventListener(ApplicationReadyEvent::class) fun start() = plan("start")
+    /** What the last run of the application left undone of it, planned again. */
+    @Order(START_ORDER)
+    @EventListener(ApplicationReadyEvent::class)
+    fun start() = workload.resume(ENCODING.what) { _, reason -> plan(reason) }
 
     /**
      * The parts waiting encoded a PORTION at a time, planned at once for the [reason]: of every source the parts of the

@@ -1,10 +1,13 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
+import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(PairFitting::class.java)
@@ -17,12 +20,18 @@ private val log = LoggerFactory.getLogger(PairFitting::class.java)
  */
 @Component
 class PairFitting(
+    private val stores: Stores,
     private val workload: Workload,
     private val models: PairModels,
     private val answers: PairAnswers,
 ) {
     /** Whether the models of the type are to be fitted again, or being fitted: of the page of models. */
     fun isFitting(type: TypeStore) = workload.due(work(type))
+
+    /** What the last run of the application left undone of it, planned again. */
+    @EventListener(ApplicationReadyEvent::class)
+    fun start() =
+        workload.resume(WHAT) { left, reason -> left.work.type?.let(stores::type)?.let { later(it, 0, reason) } }
 
     /** The models fitted again a few seconds after the last answer. */
     fun afterAnswer(type: TypeStore) = later(type, QUIET_SECONDS, "answer")
@@ -34,7 +43,7 @@ class PairFitting(
     private fun later(type: TypeStore, quiet: Long, reason: String) =
         workload.plan(work(type), Instant.now().plusSeconds(quiet), reason, asked = true) { fitAnew(type) }
 
-    private fun work(type: TypeStore) = Work("duplicatesModel", type = type.id)
+    private fun work(type: TypeStore) = Work(WHAT, type = type.id)
 
     /**
      * The models fitted anew on the pairs kept as they are, and kept, with when and how long: none without a plugin.
@@ -68,5 +77,8 @@ class PairFitting(
     private companion object {
         /** The quiet after the last answer before the models are fitted again. */
         const val QUIET_SECONDS = 3L
+
+        /** The work of fitting the models of the pairs. */
+        const val WHAT = "duplicatesModel"
     }
 }

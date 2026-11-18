@@ -11,7 +11,7 @@ class DataFolder(@Value("\${recommend4me.data-dir}") dir: String) {
 
     val root: Path = Path.of(dir).toAbsolutePath().also { Files.createDirectories(it) }
 
-    /** The application's own database: the settings. */
+    /** The application's own database: the settings, the queue of the computations. */
     val app: Path
         get() = root.resolve("app")
 

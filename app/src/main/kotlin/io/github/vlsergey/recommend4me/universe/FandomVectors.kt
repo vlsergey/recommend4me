@@ -28,7 +28,9 @@ class FandomVectors(
     private val workload: Workload,
     private val events: ApplicationEventPublisher,
 ) {
-    @EventListener(ApplicationReadyEvent::class) fun start() = schedule(START_DELAY_SECONDS, "start")
+    /** What the last run of the application left undone of it, planned again. */
+    @EventListener(ApplicationReadyEvent::class)
+    fun start() = workload.resume(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
 
     /** Works came or changed: their sites' fandoms bound ([FandomNormalization]), maybe new ones. */
     @EventListener(ItemsChanged::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")

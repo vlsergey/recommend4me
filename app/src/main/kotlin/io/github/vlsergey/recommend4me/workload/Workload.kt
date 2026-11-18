@@ -81,18 +81,16 @@ class FinishedWork(
  *
  * AND WHAT IS PLANNED, AND WHY — THE ONE WAY THE BACKGROUND IS SCHEDULED: the works after the changes that ask for them
  * ([plan]) — a grade, an answer, a tag — are planned here with their reasons and what they do, begun here when due
- * ([Plans]); planned again before they begin, they are done once. Of the works nothing is kept but what they are, their
- * times and their reasons, and nothing outlives the process.
- *
- * AND WHAT IS DONE ([WorksDone]): the last works, with how long each took, and of every kind of work how long its last
- * run took: what a work to come is expected to take ([expected]).
+ * ([Plans]); planned again before they begin, they are done once. What a work is, when it is due, since when and why is
+ * kept in the [records] from its plan to its end: a work a stop or a crash left undone is planned again at the next
+ * start by its owner, of its kind ([left]). The runs of the works are kept there too ([WorkRecords.runs],
+ * [WorkRecords.expected]).
  */
 @Component
-class Workload(background: Background = Threads()) {
+class Workload(background: Background = Threads(), private val records: WorkRecords = WorkRecords.NONE) {
     /** Whose turn it is: the works waiting their turn and the thread holding it. */
     private val turns = Turns()
-    private val plans = Plans(turns, background)
-    private val done = WorksDone()
+    private val plans = Plans(turns, background, records)
 
     @Volatile private var current: HeavyWork? = null
 
@@ -132,8 +130,13 @@ class Workload(background: Background = Threads()) {
         Requests.refuseWaiting(work)
         // A work asking for another inside it goes on: the turn is its own
         if (turns.heldHere()) return body()
-        val (entry, own) = turns.enter(work, reasons ?: plans.take(work), joinAlike, asked)
-        return if (own) runOwn(entry, body) else entry.answer()
+        val plan = if (reasons == null) plans.take(work) else null
+        val (entry, own) = turns.enter(work, reasons ?: plan?.reasons.orEmpty(), joinAlike, asked)
+        return try {
+            if (own) runOwn(entry, body) else entry.answer()
+        } finally {
+            plan?.let(plans::ended)
+        }
     }
 
     /**
@@ -165,7 +168,7 @@ class Workload(background: Background = Threads()) {
                 entry.result.completeExceptionally(e)
                 throw e
             } finally {
-                done.add(running, failed, givenUp)
+                records.ran(FinishedWork(running.work, running.since, Instant.now(), running.reasons, failed, givenUp))
             }
         } finally {
             current = null
@@ -174,12 +177,14 @@ class Workload(background: Background = Threads()) {
     }
 
     /**
-     * How long the [work] is expected to take: as long as the last run of its kind; null when none ran since the start.
+     * The works of the kind [what] the last run of the application left undone — planned, waiting or running as it
+     * stopped or crashed: taken by their owner at the start, to plan again.
      */
-    fun expected(work: Work): Long? = done.expected(work)
+    fun left(what: String): List<LeftWork> = records.left(what)
 
-    /** The last works done, the oldest first. */
-    fun finished(): List<FinishedWork> = done.list()
+    /** The works of the kind [what] the last run left undone planned again by [plan]: each for each of its reasons. */
+    fun resume(what: String, plan: (left: LeftWork, reason: String) -> Unit) =
+        left(what).forEach { l -> l.reasons.keys.forEach { plan(l, it) } }
 
     /**
      * The [work] planned for [due] — later than planned before, if put off; when null, as planned before, else at once

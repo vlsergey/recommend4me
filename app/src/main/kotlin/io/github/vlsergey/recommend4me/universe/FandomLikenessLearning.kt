@@ -125,7 +125,9 @@ class FandomLikenessLearning(
 
     // --- In the background ---
 
-    @EventListener(ApplicationReadyEvent::class) fun start() = schedule(START_DELAY_SECONDS, "start")
+    /** What the last run of the application left undone of it, planned again. */
+    @EventListener(ApplicationReadyEvent::class)
+    fun start() = workload.resume(LEARNING) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
 
     @EventListener
     fun related(@Suppress("UNUSED_PARAMETER") event: UniversesRelated) = schedule(QUIET_SECONDS, "universes")

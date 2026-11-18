@@ -79,7 +79,10 @@ internal class FacetRefits(
             s.suggestions.keepOnly(chain.facetsOf(s).map { it.key })
             s.modelValues.keepOnly(s.schema.facets.filter { it.infer }.map { it.key })
         }
-        stores.sources.filter { chain.facetsOf(it).isNotEmpty() }.forEach { planRefresh(it, null, "start") }
+        // What the last run of the application left undone of the fitting, planned again
+        workload.resume("suggesters") { left, reason ->
+            left.work.source?.let(stores::source)?.let { planRefresh(it, null, reason) }
+        }
     }
 
     /**

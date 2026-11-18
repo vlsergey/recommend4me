@@ -64,13 +64,17 @@ class TextVectors(
         planned(event.source, Instant.now().plusSeconds(DELAY_SECONDS), "items", event.ids.size)
     }
 
-    /** Every source gone through on start, each a work of the queue; a source that fails is told in the log. */
+    /**
+     * What the last run of the application left undone, planned again: every text of its source gone through, a work of
+     * the queue; a source that fails is told in the log.
+     */
     @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() =
-        stores.sources.forEach { s ->
-            wholeAsked += s.id
-            planned(s.id, null, "start", 1)
+        workload.resume(WHAT) { left, reason ->
+            val source = left.work.source ?: return@resume
+            wholeAsked += source
+            planned(source, null, reason, 1)
         }
 
     /**

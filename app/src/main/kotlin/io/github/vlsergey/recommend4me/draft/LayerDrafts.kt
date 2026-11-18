@@ -75,14 +75,12 @@ class LayerDrafts(
         redraft(store, lookup, event.ids, facets, names, store.drafts.ofItems(event.ids))
     }
 
-    /**
-     * Every work drafted again after the start: the dictionary or the rules may have changed while the application was
-     * down.
-     */
+    /** What the last run of the application left undone of it, planned again: of every source it drafts. */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() {
-        stores.sources.filter(::drafts).forEach { redraftLater(it.id, "start") }
-    }
+    fun start() =
+        workload.resume(DRAFTING.what) { _, reason ->
+            stores.sources.filter(::drafts).forEach { redraftLater(it.id, reason) }
+        }
 
     /**
      * Every work of the [source] drafted again once the askings are quiet for [QUIET_SECONDS] — a few in a row draft

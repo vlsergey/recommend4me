@@ -23,7 +23,8 @@ private val log = LoggerFactory.getLogger(FandomShownNames::class.java)
 @Component
 class FandomShownNames(private val stores: Stores, private val workload: Workload) {
 
-    @EventListener(ApplicationReadyEvent::class) fun start() = plan("start")
+    /** What the last run of the application left undone of it, planned again. */
+    @EventListener(ApplicationReadyEvent::class) fun start() = workload.resume(WORK.what) { _, reason -> plan(reason) }
 
     @EventListener fun itemsChanged(event: ItemsChanged) = plan(if (event.ids.isEmpty()) "universes" else "items")
 

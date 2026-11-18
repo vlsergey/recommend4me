@@ -129,6 +129,14 @@ wait to see learnt (an answer, a tag) does not. A work of the background waiting
 minutes goes as an asked one (`Turns.AGING`). What is not a computation — reading the sites' pages
 and pictures — stays out of the queue.
 
+**The queue is kept in the application's database, and a start plans nothing "just in case"**
+(user, 2026-11-18): every work planned is a row of `queued_work` till it ends, so a stop or a crash
+leaves it to the next start, where its owner takes it (`Workload.resume`) and plans it again; the
+last runs of every kind are kept in `work_run`, what a work to come is expected to take. A start
+plans a work only of what the data say — an index of another format, a type never searched —
+never every work again in case something changed while the application was down: what changes
+then is a tool or a migration, which asks for what follows itself.
+
 **Nothing of the application starts a thread or a timer of its own: it asks `Background`** — the works of
 the queue begun when due, the jobs of the sites, the rounds done again and again, the loops as long as the
 application runs. In the application these are threads (`background/Threads.kt`, the configuration with

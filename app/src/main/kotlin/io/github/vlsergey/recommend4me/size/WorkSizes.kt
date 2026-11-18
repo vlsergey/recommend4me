@@ -133,8 +133,12 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
 
     // --- The fitting, in the background ---
 
+    /** What the last run of the application left undone of it, planned again. */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() = stores.types.forEach { schedule(it, START_DELAY_SECONDS, "start") }
+    fun start() =
+        workload.resume(FITTING) { left, reason ->
+            left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
+        }
 
     @EventListener fun itemsChanged(event: ItemsChanged) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
 

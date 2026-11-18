@@ -576,7 +576,7 @@ it to the secondary ones.
 
 The drafts are derived data, kept in the type's model database (`layer_draft`), neither the
 site's nor the user's. They are made again when a work is captured or refreshed — before the model
-reads it — and of every work of the type when the dictionary changes and on start; the works whose
+reads it — and of every work of the type when the dictionary changes; the works whose
 drafts changed are read again. A draft is a value the work has (`Chance.draftedFrom`): shown with
 the site's value it came from instead of a chance, found by the search, read by the model as a
 value of the work. The user's answers come first — a draft taken away stays taken away, whatever

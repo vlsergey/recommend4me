@@ -51,9 +51,9 @@ class SearchLearning(
 ) {
     @EventListener fun judged(event: SearchJudged) = plan(event.type, "searchJudged")
 
-    /** On a start: the weights of every type with judgments learnt again — the reranker may be another. */
+    /** What the last run of the application left undone of it, planned again. */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() = stores.types.filter { it.searchJudgments.all().isNotEmpty() }.forEach { plan(it.id, "start") }
+    fun start() = workload.resume("searchWeights") { left, reason -> left.work.type?.let { plan(it, reason) } }
 
     /** The weights of the [type] learnt shortly after the last of a quick series of judgments. */
     private fun plan(type: String, reason: String) =

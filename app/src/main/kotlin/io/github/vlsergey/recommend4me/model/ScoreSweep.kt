@@ -53,9 +53,12 @@ class ScoreSweep(
         plan(type.id, reason)
     }
 
-    /** A sweep the last run of the application left unfinished goes on. */
+    /** A sweep the last run of the application left unfinished goes on: of its state kept, whatever the queue kept. */
     @EventListener(ApplicationReadyEvent::class)
-    fun resume() = stores.types.filter { it.sweep.load() != null }.forEach { plan(it.id, "start") }
+    fun resume() {
+        workload.left(work("").what)
+        stores.types.filter { it.sweep.load() != null }.forEach { plan(it.id, "start") }
+    }
 
     /** Whether a sweep of the [typeId] goes on: some works are not scored by the current model yet. */
     fun sweeping(typeId: String): Boolean = stores.contentType(typeId).sweep.load() != null

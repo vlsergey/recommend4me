@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.ModelValuesChanged
 import io.github.vlsergey.recommend4me.work.WorksRegrouped
+import io.github.vlsergey.recommend4me.workload.Workload
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -19,13 +20,24 @@ import org.springframework.stereotype.Component
  * predictions of a training — its work's values alone —; a regrouping of the works; and the start, of every item.
  */
 @Component
-internal class ListIndexEvents(private val stores: Stores, private val indexing: ListIndexing) {
-
+internal class ListIndexEvents(
+    private val stores: Stores,
+    private val indexing: ListIndexing,
+    private val workload: Workload,
+) {
+    /**
+     * Of every type whose index is of another format, or none, every item; and of what the last run of the application
+     * left undone, every item of its type: of the items it named nothing was kept.
+     */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        stores.types.forEach { type ->
-            indexing.change(type.id, ListIndexing.START) { whole += type.sources.map { it.id } }
-        }
+    fun start() {
+        val left = workload.left(ListIndexing.WORK).mapNotNull { it.work.type }.toSet()
+        stores.types
+            .filter { it.id in left || !indexing.current(it.id) }
+            .forEach { type ->
+                indexing.change(type.id, ListIndexing.START) { whole += type.sources.map { it.id } }
+            }
+    }
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) =

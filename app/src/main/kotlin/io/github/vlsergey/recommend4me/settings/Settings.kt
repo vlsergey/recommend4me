@@ -1,10 +1,8 @@
 package io.github.vlsergey.recommend4me.settings
 
-import io.github.vlsergey.recommend4me.database.Database
+import io.github.vlsergey.recommend4me.database.AppDatabase
 import io.github.vlsergey.recommend4me.database.app.tables.references.SETTING
-import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.source.SourceSettings
-import org.springframework.beans.factory.DisposableBean
 import org.springframework.stereotype.Component
 
 /**
@@ -12,10 +10,8 @@ import org.springframework.stereotype.Component
  * A source's are named `source.<id>.<key>`, a job's state `job.<id>.<key>`.
  */
 @Component
-class Settings(folder: DataFolder) : DisposableBean {
-
-    private val database = Database("app", DataFolder.database(folder.root, "app"), "app")
-    private val db = database.dsl
+class Settings(app: AppDatabase) {
+    private val db = app.dsl
 
     fun get(name: String): String? =
         db.select(SETTING.CONTENT).from(SETTING).where(SETTING.NAME.eq(name)).fetchOne(SETTING.CONTENT)
@@ -48,6 +44,4 @@ class Settings(folder: DataFolder) : DisposableBean {
 
             override fun set(key: String, value: String?) = this@Settings.set("source.$sourceId.$key", value)
         }
-
-    override fun destroy() = database.close()
 }

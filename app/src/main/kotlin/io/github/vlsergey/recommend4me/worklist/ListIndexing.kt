@@ -70,6 +70,9 @@ class ListIndexing(
      */
     fun writeWaiting(typeId: String) = workload.run(Work(WORK, type = typeId)) { write(typeId) }
 
+    /** Whether the index of the content type [typeId] is of this format. */
+    fun current(typeId: String): Boolean = indexes.of(typeId).current()
+
     /** What waits of the content type [typeId] written to its index, and committed. */
     private fun write(typeId: String) {
         val type = stores.type(typeId) ?: return
@@ -135,7 +138,7 @@ class ListIndexing(
 
     companion object {
         /** The work of the queue writing the index of a content type's list. */
-        private const val WORK = "listIndex"
+        const val WORK = "listIndex"
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */
         private const val QUIET_SECONDS = 1L

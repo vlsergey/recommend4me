@@ -313,6 +313,9 @@ class TextTags(
         answered()
     }
 
+    /** What the last run of the application left undone of it, planned again. */
+    @EventListener(ApplicationReadyEvent::class) fun start() = workload.resume(FITTING.what) { _, _ -> answered() }
+
     /** An answer kept ([TagTextAnswered]): the model fitted anew once the answers pause. */
     @EventListener(TagTextAnswered::class)
     fun answered() = workload.plan(FITTING, Instant.now().plusSeconds(QUIET_SECONDS), REASON) { fit() }

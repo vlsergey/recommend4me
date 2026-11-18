@@ -25,10 +25,17 @@ class FandomSiteWorks(private val stores: Stores, private val workload: Workload
     /** The keys of the sites' fandoms waiting to be counted again, by source; taken whole by the work. */
     private val waiting = HashMap<String, MutableSet<String>>()
 
+    /** What the last run of the application left undone of the counting, planned again: of every fandom. */
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
+        val left = workload.left(EVERY) + workload.left(CHANGED)
         if (fandoms() == null) return
-        workload.plan(Work(EVERY), Instant.now(), "start") { countEvery() }
+        left
+            .flatMap { it.reasons.keys }
+            .distinct()
+            .forEach { reason ->
+                workload.plan(Work(EVERY), Instant.now(), reason) { countEvery() }
+            }
     }
 
     @EventListener

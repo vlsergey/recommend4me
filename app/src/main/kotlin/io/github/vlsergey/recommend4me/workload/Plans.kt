@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.background.Later
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CancellationException
+import java.util.concurrent.atomic.AtomicLong
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(Plans::class.java)
@@ -14,14 +15,22 @@ private val log = LoggerFactory.getLogger(Plans::class.java)
  * for it, and what it does — begun here when it is due, among the works waiting their turn ([Turns]). Planned again
  * before it is due, a work is planned once: its reasons summed, its due time the newer, what it does the newer; planned
  * while a work alike waits its turn, not begun, it is that one — it reads the data as they are when it begins. Of every
- * work begun, the thread that waits its turn and runs it is the [background]'s, for the time of the work.
+ * work begun, the thread that waits its turn and runs it is the [background]'s, for the time of the work. Every plan
+ * kept in the [records] from its planning to its end, by its number: a plan of a work running made anew is another.
  */
-internal class Plans(private val turns: Turns, private val background: Background) {
+internal class Plans(private val turns: Turns, private val background: Background, private val records: WorkRecords) {
+    /** The number of the next plan. */
+    private val nextNo = AtomicLong(records.firstPlan)
+
     /** The works planned, by the work; guarded by itself. */
     private val planned = HashMap<Work, Plan>()
 
-    /** A work planned: [task] — what it does, given the place it waits its turn in — once [due]; [timer] its begin. */
-    private class Plan(
+    /**
+     * A work planned, of the number [no]: [task] — what it does, given the place it waits its turn in — once [due];
+     * [timer] its begin.
+     */
+    class Plan(
+        val no: Long,
         val work: Work,
         val due: Instant,
         val since: Instant,
@@ -44,6 +53,7 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
             val now = Instant.now()
             val plan =
                 Plan(
+                    old?.no ?: nextNo.getAndIncrement(),
                     work,
                     due ?: old?.due ?: now,
                     old?.since ?: now,
@@ -52,14 +62,19 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
                     task,
                 )
             planned[work] = plan
+            records.planned(work, plan.no, plan.due, plan.since, plan.reasons, plan.asked)
             val delay = Duration.between(now, plan.due).toMillis().coerceAtLeast(0)
             plan.timer = background.later("workload: $work", Duration.ofMillis(delay)) { begin(plan) }
         }
     }
 
-    /** The [work] begins now, of its caller: no longer planned; the reasons it was planned for, none if it was not. */
-    fun take(work: Work): Map<String, Int> =
-        synchronized(planned) { planned.remove(work) }?.also { it.timer?.cancel() }?.reasons.orEmpty()
+    /** The [work] begins now, of its caller: no longer planned; its plan, none if it was not planned. */
+    fun take(work: Work): Plan? = synchronized(planned) { planned.remove(work) }?.also { it.timer?.cancel() }
+
+    /** The [plan] ended — done, failed or given up for newer data — but not by the stop: its record goes. */
+    fun ended(plan: Plan) {
+        if (!turns.closed) records.ended(plan.work, plan.no)
+    }
 
     /** Whether the [work] is planned. */
     fun has(work: Work): Boolean = synchronized(planned) { work in planned }
@@ -97,6 +112,8 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
             log.info("{} given up for newer data, done again after them: {}", plan.work, e.message)
         } catch (e: Exception) {
             log.warn("{} failed: {}", plan.work, e.message, e)
+        } finally {
+            ended(plan)
         }
     }
 }

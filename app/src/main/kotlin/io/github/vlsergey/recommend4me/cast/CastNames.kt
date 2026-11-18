@@ -37,12 +37,14 @@ class CastNames(
     /** Of every source, its works to encode the casts of; null of every work. Guarded by itself. */
     private val queued = HashMap<String, MutableSet<String>?>()
 
+    /** What the last run of the application left undone of it, planned again: of every work of its source. */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() {
-        val sources = stores.sources.filter(::encodes)
-        synchronized(queued) { sources.forEach { queued[it.id] = null } }
-        sources.forEach { schedule(it.id, START_DELAY_SECONDS, "start") }
-    }
+    fun start() =
+        workload.resume(WHAT) { left, reason ->
+            val source = left.work.source ?: return@resume
+            synchronized(queued) { queued[source] = null }
+            schedule(source, START_DELAY_SECONDS, reason)
+        }
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) {

@@ -15,10 +15,14 @@ import org.springframework.web.bind.annotation.RestController
  * works the user asked for first — what is planned, and why; and one work as it stands, for a screen waiting on it.
  */
 @RestController
-class WorkloadController(private val workload: Workload, private val stores: Stores) : WorkloadApi {
+class WorkloadController(
+    private val workload: Workload,
+    private val records: WorkRecords,
+    private val stores: Stores,
+) : WorkloadApi {
 
     override fun listWorkload(): ResponseEntity<List<QueuedWork>> {
-        val finished = workload.finished().map { it.toApi() }
+        val finished = records.runs().map { it.toApi() }
         val running = listOfNotNull(workload.running()).map { it.toApi(QueuedWork.State.RUNNING) }
         val waiting = workload.waiting().map { it.toApi(QueuedWork.State.WAITING) }
         val planned = workload.planned().map { it.toApi() }
@@ -41,7 +45,7 @@ class WorkloadController(private val workload: Workload, private val stores: Sto
             workload.running()?.takeIf { it.work == work }?.toApi(QueuedWork.State.RUNNING)
                 ?: workload.waiting().firstOrNull { it.work == work }?.toApi(QueuedWork.State.WAITING)
                 ?: workload.planned().firstOrNull { it.work == work }?.toApi()
-                ?: workload.finished().lastOrNull { it.work == work }?.toApi()
+                ?: records.runs().lastOrNull { it.work == work }?.toApi()
         return found?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
     }
 
@@ -69,7 +73,7 @@ class WorkloadController(private val workload: Workload, private val stores: Sto
             labelKey = def?.let { I18nKeys.facetLabel(source!!.id, it) },
             item = work.item,
             since = since.atOffset(ZoneOffset.UTC),
-            expectedMillis = if (state == QueuedWork.State.FINISHED) null else workload.expected(work),
+            expectedMillis = if (state == QueuedWork.State.FINISHED) null else records.expected(work),
             reasons = reasons.map { (key, count) -> WorkReason(key, count) },
         )
     }

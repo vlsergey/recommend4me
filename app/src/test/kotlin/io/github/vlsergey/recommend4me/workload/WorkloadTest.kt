@@ -1,5 +1,8 @@
 package io.github.vlsergey.recommend4me.workload
 
+import io.github.vlsergey.recommend4me.database.AppDatabase
+import io.github.vlsergey.recommend4me.folder.DataFolder
+import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -13,16 +16,33 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.io.TempDir
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.context.request.ServletRequestAttributes
 
 /** What the queue of the computations tells of the works done, running and planned. */
 class WorkloadTest {
+    @TempDir lateinit var folder: Path
+
+    private val opened = ArrayList<AppDatabase>()
+
+    /** The records of the queue made last. */
+    private lateinit var records: QueuedWorks
+
+    /** A queue kept in a database of its own, of the test's folder. */
+    private fun workload(): Workload {
+        val app = AppDatabase(DataFolder(folder.resolve("run${opened.size}").toString())).also { opened += it }
+        records = QueuedWorks(app)
+        return Workload(records = records)
+    }
+
+    @AfterEach fun close() = opened.forEach { it.destroy() }
 
     @Test
     fun `a planned work begins with the reasons it was planned for, and is planned no longer`() {
-        val workload = Workload()
+        val workload = workload()
         val train = Work("train", type = "books")
         val runs = AtomicInteger()
         workload.plan(train, Instant.now().plusSeconds(60), "grade") { runs.incrementAndGet() }
@@ -34,7 +54,7 @@ class WorkloadTest {
         }
         assertTrue(workload.planned().isEmpty())
         assertNull(workload.running())
-        assertEquals(mapOf("grade" to 2, "answer" to 1), workload.finished().single().reasons)
+        assertEquals(mapOf("grade" to 2, "answer" to 1), records.runs().single().reasons)
         // Run by its caller, the plan is not run again
         Thread.sleep(50)
         assertEquals(0, runs.get())
@@ -42,7 +62,7 @@ class WorkloadTest {
 
     @Test
     fun `a work planned again and again before it is due runs once, the newer body, then what it told`() {
-        val workload = Workload()
+        val workload = workload()
         val sizes = Work("workSizes", type = "books")
         val ran = java.util.Collections.synchronizedList(ArrayList<String>())
         val told = CountDownLatch(1)
@@ -62,12 +82,12 @@ class WorkloadTest {
         }
         assertTrue(told.await(5, TimeUnit.SECONDS))
         assertEquals(listOf("body 2", "told body 2"), ran)
-        assertEquals(mapOf("items" to 3), workload.finished().single().reasons)
+        assertEquals(mapOf("items" to 3), records.runs().single().reasons)
     }
 
     @Test
     fun `a work planned while one alike waits its turn is that one, not run twice`() {
-        val workload = Workload()
+        val workload = workload()
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
         val blocker = thread {
@@ -92,18 +112,18 @@ class WorkloadTest {
 
     @Test
     fun `a failure of a planned work is told, the next planned runs all the same`() {
-        val workload = Workload()
+        val workload = workload()
         val done = CountDownLatch(1)
         workload.plan(Work("bad"), null, "start") { error("no") }
         workload.plan(Work("good"), Instant.now().plusMillis(50), "start") { done.countDown() }
         assertTrue(done.await(5, TimeUnit.SECONDS))
-        while (workload.finished().size < 2) Thread.sleep(5)
-        assertEquals(listOf(true, false), workload.finished().map { it.failed })
+        while (records.runs().size < 2) Thread.sleep(5)
+        assertEquals(listOf(true, false), records.runs().map { it.failed })
     }
 
     @Test
     fun `a request of the browser never waits for a computation, nor runs one, as a background thread does`() {
-        val workload = Workload()
+        val workload = workload()
         val ran = AtomicInteger()
         RequestContextHolder.setRequestAttributes(
             ServletRequestAttributes(MockHttpServletRequest("GET", "/api/items/s/1/held-out"))
@@ -128,41 +148,41 @@ class WorkloadTest {
 
     @Test
     fun `the last five works done are told, the oldest first, a failed one marked`() {
-        val workload = Workload()
+        val workload = workload()
         repeat(6) { i -> workload.run(Work("score", type = "t$i"), emptyMap()) {} }
         assertFailsWith<IllegalStateException> { workload.run(Work("score", type = "bad"), emptyMap()) { error("no") } }
-        val done = workload.finished()
+        val done = records.runs()
         assertEquals(listOf("t2", "t3", "t4", "t5", "bad"), done.map { it.work.type })
         assertEquals(listOf(false, false, false, false, true), done.map { it.failed })
     }
 
     @Test
     fun `a work given up for newer data is no failure, and leaves the estimate of its kind as it was`() {
-        val workload = Workload()
+        val workload = workload()
         val suggester = Work("suggester", source = "s", facet = "universe")
         workload.run(suggester, emptyMap()) { Thread.sleep(30) }
-        val estimate = workload.expected(suggester)
+        val estimate = records.expected(suggester)
         assertFailsWith<CancellationException> {
             workload.run(suggester, emptyMap()) { throw CancellationException("newer changes") }
         }
-        val last = workload.finished().last()
+        val last = records.runs().last()
         assertEquals(false to true, last.failed to last.givenUp)
-        assertEquals(estimate, workload.expected(suggester))
+        assertEquals(estimate, records.expected(suggester))
     }
 
     @Test
     fun `a work is expected to take as long as the last run of its kind, of any item`() {
-        val workload = Workload()
-        assertNull(workload.expected(Work("heldOut", source = "s", item = "1")))
+        val workload = workload()
+        assertNull(records.expected(Work("heldOut", source = "s", item = "1")))
         workload.run(Work("heldOut", source = "s", item = "1"), emptyMap()) { Thread.sleep(30) }
-        val expected = workload.expected(Work("heldOut", source = "s", item = "2"))!!
+        val expected = records.expected(Work("heldOut", source = "s", item = "2"))!!
         assertTrue(expected >= 30, "expected $expected ms")
-        assertNull(workload.expected(Work("heldOut", source = "other", item = "2")))
+        assertNull(records.expected(Work("heldOut", source = "other", item = "2")))
     }
 
     @Test
     fun `works alike asked while one waits are that one, its reasons summed`() {
-        val workload = Workload()
+        val workload = workload()
         val held = Work("held", item = "1")
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
@@ -215,7 +235,7 @@ class WorkloadTest {
 
     @Test
     fun `the user's work waits ahead of the background, the running one not stopped, each kind in the order asked`() {
-        val workload = Workload()
+        val workload = workload()
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
         val order = java.util.Collections.synchronizedList(ArrayList<String>())
@@ -260,7 +280,7 @@ class WorkloadTest {
 
     @Test
     fun `a work alike the user asks for while it waits is put ahead with it`() {
-        val workload = Workload()
+        val workload = workload()
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
         val order = java.util.Collections.synchronizedList(ArrayList<String>())
@@ -309,10 +329,10 @@ class WorkloadTest {
 
     @Test
     fun `a work inside another goes on and is not told apart`() {
-        val workload = Workload()
+        val workload = workload()
         workload.run(Work("train", type = "books"), emptyMap()) {
             workload.run(Work("score", type = "books"), emptyMap()) {}
         }
-        assertEquals(listOf("train"), workload.finished().map { it.work.what })
+        assertEquals(listOf("train"), records.runs().map { it.work.what })
     }
 }

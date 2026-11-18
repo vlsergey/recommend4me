@@ -120,8 +120,12 @@ class Manners(
 
     // --- In the background ---
 
+    /** What the last run of the application left undone of it, planned again. */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() = stores.types.forEach { schedule(it, START_DELAY_SECONDS, "start") }
+    fun start() =
+        workload.resume(MAKING) { left, reason ->
+            left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
+        }
 
     @EventListener fun partsSaved(event: PartsSaved) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
 
