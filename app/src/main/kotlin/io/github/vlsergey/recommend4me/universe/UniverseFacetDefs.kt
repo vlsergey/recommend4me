@@ -33,8 +33,12 @@ object UniverseFacetDefs {
                 originalFacet = UniverseFacet.fandomFacet(schema),
                 most = MOST_UNIVERSES,
             ),
+            // The characters, the secondary ones and the pairings filters of the list, in its index: the values the
+            // work
+            // is given — the site's, the model's above its cutoff, the user's word (user, 2026-11-18)
             FacetDef(
                 UniverseFacets.CHARACTERS,
+                filter = true,
                 shared = UniverseFacets.CHARACTERS,
                 searchWeight = 0.8f,
                 infer = true,
@@ -46,6 +50,7 @@ object UniverseFacetDefs {
             // After the main ones: what the work has of those is left out of these
             FacetDef(
                 UniverseFacets.SECONDARY_CHARACTERS,
+                filter = true,
                 shared = UniverseFacets.SECONDARY_CHARACTERS,
                 searchWeight = 0.6f,
                 infer = true,
@@ -55,6 +60,7 @@ object UniverseFacetDefs {
             ),
             FacetDef(
                 UniverseFacets.PAIRINGS,
+                filter = true,
                 shared = UniverseFacets.PAIRINGS,
                 searchWeight = 0.7f,
                 infer = true,

@@ -231,10 +231,23 @@ class ScenarioTest {
             assertThrows<Refused> { list(range = listOf("test.likes=a..2")) }.params,
         )
         assertEquals("A boy finds a dragon egg", items.getItem("test", "w1").body!!.texts.single().content)
-        // The source's filter facet, and the kind, the universe, the language and the age rating the application gives
-        // every book
+        // The source's filter facet, and the kind, the universe, the characters, the pairings, the tags, the language
+        // and the age rating the application gives every book
         val filters = filtersController.listFacets("books").body!!
-        assertEquals(listOf("test.tag", "kind", "universe", "languages", "age-rating"), filters.map { it.id })
+        assertEquals(
+            listOf(
+                "test.tag",
+                "kind",
+                "universe",
+                "characters",
+                "secondary-characters",
+                "pairings",
+                "tags",
+                "languages",
+                "age-rating",
+            ),
+            filters.map { it.id },
+        )
         // The age rating a scale: every value of it in its order, a value no work has too
         val rating = filters.single { it.id == "age-rating" }
         assertEquals(true, rating.ordered)
