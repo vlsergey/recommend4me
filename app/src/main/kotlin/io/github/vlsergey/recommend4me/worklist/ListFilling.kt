@@ -25,8 +25,8 @@ private val log = LoggerFactory.getLogger(ListFilling::class.java)
  * ([Workload.plan] `last`), after the models of its facets are fitted anew or the index made anew. Every item of the
  * source, a portion at a time: the values the models give it made now ([WorkModelValues]), compared with those its
  * document keeps ([ListModelValues]), and of the items whose values changed alone the documents made anew — told to
- * what reads them ([FacetChancesChanged]: the index of the search, the training of the grades). How much is done told
- * to the queue.
+ * what reads them ([FacetChancesChanged]: the training of the grades; never the index of the search, which knows
+ * nothing of the models). How much is done told to the queue.
  */
 @Component
 class ListFilling(

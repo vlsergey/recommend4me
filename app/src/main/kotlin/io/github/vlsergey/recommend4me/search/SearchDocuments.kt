@@ -15,8 +15,6 @@ import io.github.vlsergey.recommend4me.suggestion.TaskPortions
 import io.github.vlsergey.recommend4me.suggestion.WorkChances
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.worklist.ListIndexes
-import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import org.springframework.stereotype.Component
 
 /**
@@ -24,18 +22,15 @@ import org.springframework.stereotype.Component
  * chapters, with the vectors of the texts.
  */
 @Component
-class SearchDocuments(
-    private val plugins: Plugins,
-    private val suggestions: FacetSuggestions,
-    private val lists: ListIndexes,
-) {
+class SearchDocuments(private val plugins: Plugins, private val suggestions: FacetSuggestions) {
 
     /**
      * Of every item of a type, what its document is made of ([SearchDocument.fingerprint]), its chapters and the
      * vectors not read: of every source a portion of [TaskPortions.MOST] items at a time, in the order of their ids —
      * their heads, values, answers and texts, of their texts and chapters their hashes and how their vectors were made
-     * — with the values the models give them as the index of the list keeps them ([ListModelValues]): no model run, no
-     * chance of every work held. The documents of those whose fingerprint changed are made of the same ([documentsOf]).
+     * — of the values the site and the user give them alone: nothing of the models, whose refits never touch the index
+     * of the search (user, 2026-11-18). The documents of those whose fingerprint changed are made of the same
+     * ([documentsOf]).
      */
     fun printsOf(type: TypeStore): TypePrints {
         val prints = HashMap<ItemKey, Long>()
@@ -53,43 +48,39 @@ class SearchDocuments(
     }
 
     /**
-     * The documents of the items [keys] of a type, streamed: read a chunk at a time, of the values the model gives them
-     * as the index of the list keeps them — as their fingerprints were read ([printsOf]) — each source's tree of tags
-     * read once.
+     * The documents of the items [keys] of a type, streamed: read a chunk at a time, of the values the site and the
+     * user give them alone — as their fingerprints were read ([printsOf]) — each source's tree of tags read once.
      */
     fun documentsOf(type: TypeStore, keys: Collection<ItemKey>): Sequence<SearchDocument> = sequence {
         for ((source, list) in keys.groupBy { it.source }) {
             val s = type.sources.firstOrNull { it.id == source } ?: continue
             val hierarchies = s.hierarchies()
             for (chunk in list.map { it.id }.chunked(CHUNK)) yieldAll(
-                documents(s, chunk, kept = true, hierarchies = hierarchies).values
+                documents(s, chunk, models = false, hierarchies = hierarchies).values
             )
         }
     }
 
     /**
-     * What the documents of the items [ids] of a source are made of ([SearchDocument.fingerprint]), their chapters and
-     * vectors not read, with the values the model gives them: the documents of those whose fingerprint changed are made
-     * of the same ([documents]).
+     * What the documents of the items [ids] of a source are made of ([SearchDocument.fingerprint]) in the index of the
+     * search — the values the site and the user give them alone —, their chapters and vectors not read: the documents
+     * of those whose fingerprint changed are made of the same ([documents] of no [models]).
      */
-    fun printsOf(s: SourceStore, ids: List<String>, hierarchies: Map<String, TagHierarchy>): SourcePrints {
-        val made = suggestions.chances(s, ids)
-        val read = Read(s, ids, true, made, hierarchies)
-        return SourcePrints(read.heads.map { (id, head) -> ItemKey(s.id, id) to read.printOf(id, head) }.toMap(), made)
+    fun printsOf(s: SourceStore, ids: List<String>, hierarchies: Map<String, TagHierarchy>): Map<ItemKey, Long> {
+        val read = Read(s, ids, true, null, hierarchies)
+        return read.heads.map { (id, head) -> ItemKey(s.id, id) to read.printOf(id, head) }.toMap()
     }
 
-    /** What the documents of some items of a source are made of ([prints]) and the values the model gives them. */
-    class SourcePrints(val prints: Map<ItemKey, Long>, val chances: WorkChances)
-
-    /** What the documents of every item of a type are made of ([prints]), of the values the model gives them kept. */
+    /** What the documents of every item of a type are made of ([prints]): of the values of the site and the user. */
     class TypePrints(val prints: Map<ItemKey, Long>)
 
     /**
      * The documents of the items [ids] of a source, read in one batch per table: their fields — the chapters read among
      * them — and, with [passages], the passages of the texts searched by meaning and of the chapters: every window of a
-     * text longer than one with its own vector, a shorter one whole with the text's. The values the model gives them of
-     * their [chances], made now of them when not given — as the index of the list keeps them when [kept]; the source's
-     * tree of tags [hierarchies] read now when not given.
+     * text longer than one with its own vector, a shorter one whole with the text's. Of [models], the values the models
+     * give them too, of their [chances], made now of them when not given — what a reader of a few documents reads, the
+     * reranker —; else the site's and the user's alone: the documents of the index of the search, which no refit of the
+     * models touches (user, 2026-11-18). The source's tree of tags [hierarchies] read now when not given.
      *
      * THE WORK'S OWN WORDS ([SearchField.counted]) — every text of it, every chapter, every value its site gives it —
      * are all in it, those not searched of weight 0: a name written in them is the work naming it
@@ -103,16 +94,16 @@ class SearchDocuments(
         passages: Boolean = true,
         chances: WorkChances? = null,
         hierarchies: Map<String, TagHierarchy> = s.hierarchies(),
-        kept: Boolean = false,
+        models: Boolean = true,
     ): Map<ItemKey, SearchDocument> {
-        val read = Read(s, ids, passages, if (kept) null else chances ?: suggestions.chances(s, ids), hierarchies)
+        val read = Read(s, ids, passages, if (models) chances ?: suggestions.chances(s, ids) else null, hierarchies)
         return read.heads.map { (id, head) -> ItemKey(s.id, id) to read.documentOf(id, head) }.toMap()
     }
 
     /**
      * What the documents of the items [ids] of [s] are made of, read in one batch per table. The chapters' texts and
      * the vectors read only for a document made ([documentOf]); the fingerprint ([printOf]) reads their hashes alone.
-     * The values the model gives them of their [chances]; null — as the index of the list keeps them.
+     * The values the model gives them of their [chances]; null — none: the site's and the user's alone.
      */
     private inner class Read(
         private val s: SourceStore,
@@ -125,8 +116,8 @@ class SearchDocuments(
         val heads: Map<String, StoredItem> = s.items.heads(ids)
         private val site = s.items.facetsOf(ids)
         private val facets =
-            if (chances != null) site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
-            else withKept(site, ListModelValues.of(lists.of(s.source.contentType), s.id, ids))
+            if (chances == null) site
+            else site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
 
         /**
          * Every answer of the source: they are few. The names the user gave values are read of all of them — a value
@@ -321,22 +312,6 @@ class SearchDocuments(
     }
 
     companion object {
-        /**
-         * The site's values of the works with the values the models give them as the index of the list keeps them
-         * ([kept]: work to facet to its values beyond the site's own), as [ModelValues.of] gives them.
-         */
-        private fun withKept(
-            site: Map<String, Map<String, List<String>>>,
-            kept: Map<String, Map<String, List<String>>>,
-        ): Map<String, Map<String, List<String>>> = site.mapValues { (id, values) ->
-            val out = LinkedHashMap(values)
-            kept[id]?.forEach { (facet, given) ->
-                val own = values[facet].orEmpty()
-                out[facet] = own + given.filter { it !in own }
-            }
-            out
-        }
-
         /** The items read and indexed at once: memory, not meaning. */
         private const val CHUNK = 500
 

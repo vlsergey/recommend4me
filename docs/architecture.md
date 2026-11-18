@@ -339,9 +339,11 @@ calibrated facet's cutoff) and tells it (`FacetModelsFitted`); the filling (`Lis
 `listValues`, LAST of the queue: after every other work) makes the values the models give every work
 (`WorkModelValues`), a portion at a time, compares them with those its document keeps, and makes
 anew the documents whose values changed, telling them to the search index and the training
-(`FacetChancesChanged`). A work changed is given its values as its document is made; the search
-index's sync of the start reads every document's values of the index of the list
-(`SearchDocuments.printsOf`): no chain run over every work.
+(`FacetChancesChanged`: the training). A work changed is given its values as its document is made.
+THE INDEX OF THE SEARCH KNOWS NOTHING OF THE MODELS (user, 2026-11-18: "the refitting of the models and
+the updating of the computed values must not lead to an update of the full-text search"): its
+documents hold the texts and the values the site and the user give alone (`SearchDocuments`, of no
+`models`); what a reader of a few documents reads — the reranker — is made with the models' values.
 
 EVERY SUGGESTER KEEPS ITS MODEL, AND A WORK IS SCORED BY IT ALONE (user, 2026-11-12):
 `FittedSuggester.model` is made of the task fitted on and kept; `FacetSuggester.scoring` of it and
