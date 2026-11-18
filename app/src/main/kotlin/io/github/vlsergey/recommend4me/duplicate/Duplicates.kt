@@ -86,7 +86,7 @@ class Duplicates(
     fun plan(type: TypeStore, reason: String, asked: Boolean = false): Boolean {
         val work = searching(type)
         // A search running read the works before: asked again, it is done again after it
-        if (workload.ahead(work)) return false
+        if (workload.due(work, running = false)) return false
         workload.plan(work, Instant.now(), reason, asked = asked) { search(type) }
         return true
     }

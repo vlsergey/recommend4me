@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import java.nio.file.Files
 import java.nio.file.Path
+import java.sql.DriverManager
 import java.util.concurrent.TimeUnit
 import org.flywaydb.core.Flyway
 import org.flywaydb.core.api.migration.JavaMigration
@@ -223,6 +224,11 @@ class Database(
             if (live >= FILL_TO_COMPACT) return
             val before = Files.size(mvFile)
             val started = System.currentTimeMillis()
+            // Opened and shut by H2 first: a transaction a stop left unfinished is rolled back by its undo log — the
+            // file written anew renumbers its maps, and an undo log left over then refers to none (2026-11-18: the
+            // model of the books would not open after it)
+            DriverManager.getConnection("jdbc:h2:file:${file.toAbsolutePath().toString().replace('\\', '/')}", "sa", "")
+                .use { it.createStatement().use { s -> s.execute("SHUTDOWN") } }
             MVStoreTool.compact(mvFile.toString(), true)
             log.info(
                 "{}: written anew from {} MB to {} MB in {} s, {} % of its chunks live before",

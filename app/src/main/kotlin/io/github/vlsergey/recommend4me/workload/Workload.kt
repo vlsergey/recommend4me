@@ -97,6 +97,18 @@ class Workload(background: Background = Threads()) {
     @Volatile private var current: HeavyWork? = null
 
     /**
+     * THE APPLICATION STOPS, BEFORE ITS FILES CLOSE: no work planned or waiting begins any more, and the one running is
+     * waited for up to [wait] — never a database closed under a transaction of a work (2026-11-18: a work running on as
+     * the files closed left one unfinished, and the file written anew at the next start would not open).
+     */
+    fun close(wait: Duration) {
+        turns.close()
+        val until = System.nanoTime() + wait.toNanos()
+        while (current != null && System.nanoTime() < until) Thread.sleep(CLOSE_LOOK_MS)
+        current?.let { log.warn("{} still running as the application stops", it.work) }
+    }
+
+    /**
      * Runs [body] once every work asked for before it is done; answers what it answers. Its [reasons]; when null, those
      * of the work planned alike, if any — which it is then, no longer planned. Inside another work it is a part of that
      * one: a work planned alike stays planned, made of changes the running one may have read before.
@@ -200,14 +212,12 @@ class Workload(background: Background = Threads()) {
     /** The works waiting their turn, in the order they will run: those the user asked for first. */
     fun waiting(): List<HeavyWork> = turns.waiting()
 
-    /** Whether the [work] is to be done: planned, waiting its turn or running now — what it makes is not made yet. */
-    fun due(work: Work): Boolean = plans.has(work) || turns.waits(work) || current?.work == work
-
     /**
-     * Whether the [work] is yet to begin: planned, or waiting its turn — not running: one running read the data before,
-     * and is done again once planned so.
+     * Whether the [work] is to be done: planned, waiting its turn or — when [running] counts — running now: what it
+     * makes is not made yet. Not of one running: it read the data before, and is done again once planned so.
      */
-    fun ahead(work: Work): Boolean = plans.has(work) || turns.waits(work)
+    fun due(work: Work, running: Boolean = true): Boolean =
+        plans.has(work) || turns.waits(work) || (running && current?.work == work)
 
     /** The works planned, the soonest due first. */
     fun planned(): List<PlannedWork> = plans.list()
@@ -215,5 +225,8 @@ class Workload(background: Background = Threads()) {
     private companion object {
         /** A wait worth telling in the log. */
         val NOTED: Duration = Duration.ofSeconds(2)
+
+        /** How often the stop looks whether the work running has ended. */
+        const val CLOSE_LOOK_MS = 50L
     }
 }

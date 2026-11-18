@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.workload
 
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.locks.ReentrantLock
@@ -18,6 +19,17 @@ internal class Turns {
      * the turn is free or the waiting change.
      */
     private val lock = ReentrantLock()
+
+    /** The application stops: no turn is taken any more ([close]). */
+    @Volatile private var closed = false
+
+    /**
+     * No turn taken any more: a work waiting or planned is given up as its turn comes, done again at the next start.
+     */
+    fun close() {
+        closed = true
+    }
+
     private val turn = lock.newCondition()
     private var holder: Thread? = null
 
@@ -70,6 +82,7 @@ internal class Turns {
             lock.withLock {
                 try {
                     while (holder != null || next() !== entry) turn.await()
+                    if (closed) throw CancellationException("the application stops")
                     holder = Thread.currentThread()
                     held = entry
                 } finally {
