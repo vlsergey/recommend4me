@@ -11,9 +11,6 @@ import org.springframework.stereotype.Service
 /** The model gave items of a source other values of a facet it works out: what reads them reads them again. */
 data class FacetChancesChanged(val source: String, val ids: List<String>)
 
-/** The values the model gives the items [ids] of a source, kept for the filters ([KeptModelValues]), written anew. */
-data class ModelValuesChanged(val source: String, val ids: List<String>)
-
 /**
  * The chances of works, made in memory when they are read ([FacetSuggestions.chances]): item to facet to value to
  * chance.
@@ -29,7 +26,8 @@ typealias WorkChances = Map<String, Map<String, Map<String, Chance>>>
  * CHANCES OF THE WORKS ARE NOT (user, 2026-10-15): whoever reads works — a page, a card, the search index, the training
  * of the grades — gets them made in memory of those works alone, from their vectors and values, by the models kept
  * ([chances]). Nothing waits for a refit. THE VALUES A WORK IS GIVEN ARE KEPT (user, 2026-11-17), for the filters of
- * the list: a filter over a million works runs no model ([KeptModelValues]).
+ * the list — in the index of the list alone (user, 2026-11-18): a filter over a million works runs no model
+ * ([WorkModelValues]).
  *
  * THE FACETS ARE WORKED OUT IN A CHAIN, in the order of [facetsOf]: each reads as its context the values the site and
  * the user give of every other facet, and the values the model gives of the facets before it, made in the same pass — a

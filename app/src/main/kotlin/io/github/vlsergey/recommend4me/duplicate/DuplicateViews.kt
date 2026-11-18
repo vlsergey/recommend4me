@@ -17,6 +17,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import org.springframework.stereotype.Component
 
 /**
@@ -35,7 +36,7 @@ internal class Described(val work: DuplicateWork, val authors: Set<Long>)
 
 /** THE PAIRS AND THEIR WORKS AS THE USER IS SHOWN THEM: every source's works read in one go. */
 @Component
-class DuplicateViews(private val sizes: WorkSizes) {
+class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexes) {
 
     /** The pairs as the user is shown them: a pair of a work no longer there, none. */
     internal fun pairs(
@@ -100,7 +101,7 @@ class DuplicateViews(private val sizes: WorkSizes) {
             .forEach { (source, own) ->
                 val s = type.source(source) ?: return@forEach
                 val ids = own.map { it.id }
-                val shown = ShownWorks(type, s, ids, sizes)
+                val shown = ShownWorks(type, s, ids, sizes, lists)
                 ids.forEach { id -> shown.described(id)?.let { out[ItemKey(source, id)] = it } }
             }
         return out
@@ -108,7 +109,13 @@ class DuplicateViews(private val sizes: WorkSizes) {
 }
 
 /** What the pairs show of the works [ids] of one source, read in one go. */
-private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<String>, sizes: WorkSizes) {
+private class ShownWorks(
+    type: TypeStore,
+    private val s: SourceStore,
+    ids: List<String>,
+    sizes: WorkSizes,
+    lists: ListIndexes,
+) {
     private val heads = s.items.heads(ids)
     private val fields = s.corrections.fieldsOf(ids)
     private val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
@@ -126,9 +133,9 @@ private class ShownWorks(type: TypeStore, private val s: SourceStore, ids: List<
     private val normalized = s.authors.bindingsOf(s.id)
     private val fandomNames = namesOf(fandomFacet)
 
-    // The values the search compares, of these works alone, read of the databases: shown by the facet they are compared
-    // as, the authors apart
-    private val values = ComparedFacets(s).shown(ids)
+    // The values the search compares, of these works alone, the models' as the index of the list keeps them: shown by
+    // the facet they are compared as, the authors apart
+    private val values = ComparedFacets(s).shown(ids, lists.of(type.id))
 
     // The site's own tags, shown by their names, not compared: a site's words, of no other site
     private val tagFacet = s.schema.facets.firstOrNull { it.standard === StandardTags.TAG }?.key

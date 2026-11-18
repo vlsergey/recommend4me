@@ -2,6 +2,8 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.suggestion.WorkModelValues
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.workload.Work
@@ -31,12 +33,11 @@ class ListWaiting {
  * THE INDEX OF THE LIST KEPT IN STEP WITH THE DATABASES ([ListIndex]), in the queue of the computations — a work of
  * every content type, after a quiet, of every change since the last one at once:
  * - the documents of the items a change names made anew, of every item of their works: their data, the user's answers
- *   and corrections, the values the model gives them
- *   ([ModelValuesChanged][io.github.vlsergey.recommend4me.suggestion.ModelValuesChanged]);
+ *   and corrections, the values the models give them, made now of them ([WorkModelValues]);
  * - of a regrouping of the works, of every item of a work of several before and after;
  * - of a grade, a mark of interest, the predictions of a training, the values of the items' works alone, in place;
- * - on the start, of every item of every source, those gone removed: what was changed while the application was
- *   stopped, or told to no one, found; an index of another format made anew whole.
+ * - of a source whole, every item, those gone removed, the values the models gave them as the index kept them; an index
+ *   of another format made anew whole, its values filled after ([ListFilling]).
  *
  * What waits is the names of the items alone, never their data: the databases are read when the work runs.
  */
@@ -46,6 +47,8 @@ class ListIndexing(
     private val works: Works,
     private val workload: Workload,
     private val indexes: ListIndexes,
+    private val modelValues: WorkModelValues,
+    private val filling: ListFilling,
 ) {
     /** What waits of every content type; taken whole by its writing, under its own lock. */
     private val waiting = HashMap<String, ListWaiting>()
@@ -85,17 +88,10 @@ class ListIndexing(
         if (anew) index.clear()
         val whole = if (anew) type.sources.map { it.id }.toSet() else w.whole
         val named = named(index, clusters, w, whole)
-        var written = 0
-        whole.forEach { sourceId ->
-            val s = type.source(sourceId) ?: return@forEach
-            val rows = ListRows.read(type, s, null, clusters)
-            index.replace(rows)
-            index.keepOnly(sourceId, rows.mapTo(HashSet()) { it.key.id })
-            written += rows.size
-        }
+        var written = whole.sumOf { writeWhole(type, it, index, clusters, anew) }
         named.forEach { (sourceId, ids) ->
             val s = type.source(sourceId) ?: return@forEach
-            val rows = ListRows.read(type, s, ids, clusters)
+            val rows = ListRows.read(type, s, ids, clusters, modelValues.of(s, ids))
             val found = rows.mapTo(HashSet()) { it.key.id }
             index.replace(rows, ids.filter { it !in found }.map { ItemKey(sourceId, it) })
             written += rows.size
@@ -107,6 +103,8 @@ class ListIndexing(
             index.updateValues(ListRows.valuesOf(type, s, keys.map { it.id }).mapKeys { ItemKey(sourceId, it.key) })
         }
         index.commit()
+        // An index made anew has no value the models give: filled last of the queue
+        if (anew) type.sources.forEach { filling.fill(it.id, "listFormat") }
         log.info(
             "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} items' values",
             typeId,
@@ -115,6 +113,26 @@ class ListIndexing(
             written,
             valued.values.sumOf { it.size },
         )
+    }
+
+    /**
+     * Every document of the source [sourceId] made anew, those of the items gone removed: how many were written. The
+     * values the models gave its items as the index kept them — none of an index made [anew]: the filling makes them
+     * after the models.
+     */
+    private fun writeWhole(
+        type: TypeStore,
+        sourceId: String,
+        index: ListIndex,
+        clusters: WorkClusters,
+        anew: Boolean,
+    ): Int {
+        val s = type.source(sourceId) ?: return 0
+        val kept = if (anew) emptyMap() else ListModelValues.ofEvery(index, sourceId)
+        val rows = ListRows.read(type, s, null, clusters, kept)
+        index.replace(rows)
+        index.keepOnly(sourceId, rows.mapTo(HashSet()) { it.key.id })
+        return rows.size
     }
 
     /**

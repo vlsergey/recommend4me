@@ -12,8 +12,8 @@ import io.github.vlsergey.recommend4me.universe.CharactersRead
  * ONE FACET OF A PASS OVER EVERY WORK OF A SOURCE, THE [k]-TH OF ITS CHAIN, A PORTION AT A TIME (user, 2026-11-17: no
  * pass holds more than [TaskPortions.MOST] works): every walk over the works reads every portion anew of the database
  * ([forEach]) — its works ([WorksRead]), the values the model gave the facets before this one as the pass kept them
- * ([FacetChain.keptBefore]), the dictionary's word on the values each work may have ([FacetVocabularies.vocabularyOf]),
- * the works' lines — and lets it go before the next. The walks of a facet: one of the works' values alone, of what the
+ * ([FacetChain.before]), the dictionary's word on the values each work may have ([FacetVocabularies.vocabularyOf]), the
+ * works' lines — and lets it go before the next. The walks of a facet: one of the works' values alone, of what the
  * value side is made of ([counted], [side]); as many as its suggester's fitting needs ([FacetPortions]); one of its
  * chances made and kept ([FacetScoring]).
  */
@@ -44,13 +44,16 @@ internal class FacetPass(
 
     /**
      * Every portion of the works in turn, in the order of their ids; [inputs]: their vectors read and put on the card,
-     * freed once [action] is done with the portion — false: their values alone.
+     * freed once [action] is done with the portion — false: their values alone, but of a facet after the first in the
+     * chain, whose context the facets before it make of the works' inputs ([FacetChain.before]).
      */
     fun forEach(inputs: Boolean, action: (Portion) -> Unit) =
         reading.passes.forEachPortion(store) { ids ->
             checkpoint()
-            reading.passes.worksRead(store, encoder, ids, characters, card = inputs, inputs = inputs).use { read ->
-                val made = reading.chain.keptBefore(store, read, k)
+            val withInputs = inputs || k > 0
+            val passes = reading.passes
+            passes.worksRead(store, encoder, ids, characters, card = withInputs, inputs = withInputs).use { read ->
+                val made = reading.chain.before(store, encoder, read, k)
                 val vocabulary =
                     reading.vocabularies.vocabularyOf(
                         store,

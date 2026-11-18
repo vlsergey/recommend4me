@@ -15,6 +15,8 @@ import io.github.vlsergey.recommend4me.suggestion.TaskPortions
 import io.github.vlsergey.recommend4me.suggestion.WorkChances
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.vector.Vectors
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import org.springframework.stereotype.Component
 
 /**
@@ -22,14 +24,17 @@ import org.springframework.stereotype.Component
  * chapters, with the vectors of the texts.
  */
 @Component
-class SearchDocuments(private val plugins: Plugins, private val suggestions: FacetSuggestions) {
+class SearchDocuments(
+    private val plugins: Plugins,
+    private val suggestions: FacetSuggestions,
+    private val lists: ListIndexes,
+) {
 
     /**
      * Of every item of a type, what its document is made of ([SearchDocument.fingerprint]), its chapters and the
      * vectors not read: of every source a portion of [TaskPortions.MOST] items at a time, in the order of their ids —
      * their heads, values, answers and texts, of their texts and chapters their hashes and how their vectors were made
-     * — with the values the model gives them as the passes of the facets kept them
-     * ([ModelValueRepository][io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]): no model run, no
+     * — with the values the models give them as the index of the list keeps them ([ListModelValues]): no model run, no
      * chance of every work held. The documents of those whose fingerprint changed are made of the same ([documentsOf]).
      */
     fun printsOf(type: TypeStore): TypePrints {
@@ -49,7 +54,7 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
 
     /**
      * The documents of the items [keys] of a type, streamed: read a chunk at a time, of the values the model gives them
-     * as the passes of the facets kept them — as their fingerprints were read ([printsOf]) — each source's tree of tags
+     * as the index of the list keeps them — as their fingerprints were read ([printsOf]) — each source's tree of tags
      * read once.
      */
     fun documentsOf(type: TypeStore, keys: Collection<ItemKey>): Sequence<SearchDocument> = sequence {
@@ -83,8 +88,8 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
      * The documents of the items [ids] of a source, read in one batch per table: their fields — the chapters read among
      * them — and, with [passages], the passages of the texts searched by meaning and of the chapters: every window of a
      * text longer than one with its own vector, a shorter one whole with the text's. The values the model gives them of
-     * their [chances], made now of them when not given — as the passes of the facets kept them when [kept]; the
-     * source's tree of tags [hierarchies] read now when not given.
+     * their [chances], made now of them when not given — as the index of the list keeps them when [kept]; the source's
+     * tree of tags [hierarchies] read now when not given.
      *
      * THE WORK'S OWN WORDS ([SearchField.counted]) — every text of it, every chapter, every value its site gives it —
      * are all in it, those not searched of weight 0: a name written in them is the work naming it
@@ -107,7 +112,7 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
     /**
      * What the documents of the items [ids] of [s] are made of, read in one batch per table. The chapters' texts and
      * the vectors read only for a document made ([documentOf]); the fingerprint ([printOf]) reads their hashes alone.
-     * The values the model gives them of their [chances]; null — as the passes of the facets kept them.
+     * The values the model gives them of their [chances]; null — as the index of the list keeps them.
      */
     private inner class Read(
         private val s: SourceStore,
@@ -121,7 +126,7 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
         private val site = s.items.facetsOf(ids)
         private val facets =
             if (chances != null) site.mapValues { (id, values) -> ModelValues.of(schema, values, chances[id]) }
-            else withKept(site, s.modelValues.ofItems(ids))
+            else withKept(site, ListModelValues.of(lists.of(s.source.contentType), s.id, ids))
 
         /**
          * Every answer of the source: they are few. The names the user gave values are read of all of them — a value
@@ -317,17 +322,17 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
 
     companion object {
         /**
-         * The site's values of the works with the values the model gives them as the passes of the facets kept them
-         * ([kept]: facet to work to its values beyond the site's own), as [ModelValues.of] gives them.
+         * The site's values of the works with the values the models give them as the index of the list keeps them
+         * ([kept]: work to facet to its values beyond the site's own), as [ModelValues.of] gives them.
          */
         private fun withKept(
             site: Map<String, Map<String, List<String>>>,
             kept: Map<String, Map<String, List<String>>>,
         ): Map<String, Map<String, List<String>>> = site.mapValues { (id, values) ->
             val out = LinkedHashMap(values)
-            kept.forEach { (facet, of) ->
+            kept[id]?.forEach { (facet, given) ->
                 val own = values[facet].orEmpty()
-                of[id]?.let { given -> out[facet] = own + given.filter { it !in own } }
+                out[facet] = own + given.filter { it !in own }
             }
             out
         }

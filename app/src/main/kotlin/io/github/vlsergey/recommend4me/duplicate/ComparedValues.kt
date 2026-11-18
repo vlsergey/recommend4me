@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.worklist.ItemRows
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndex
+import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import io.github.vlsergey.recommend4me.worklist.ListRows
 import org.slf4j.LoggerFactory
 
@@ -202,12 +203,12 @@ internal class ComparedFacets(private val s: SourceStore) {
         s.ignoredTags().flatMapTo(HashSet()) { (facet, keys) -> keys.map { "${familyOf(facet)}:$it" } }
 
     /**
-     * The values compared of the works [ids], by their names, read of the databases as the index is made of them — what
-     * a screen of a pair shows, not of the index (user, 2026-11-18: the screens are of the databases, the search alone
-     * of the index); the authors apart.
+     * The values compared of the works [ids], by their names, read of the databases as the index is made of them, the
+     * models' as the index keeps them ([ListModelValues]) — what a screen of a pair shows, not of the index (user,
+     * 2026-11-18: the screens are of the databases, the search alone of the index); the authors apart.
      */
-    fun shown(ids: List<String>): Map<String, List<String>> {
-        val byFacet = ListRows.facetsOf(s, ids)
+    fun shown(ids: List<String>, index: ListIndex): Map<String, List<String>> {
+        val byFacet = ListRows.facetsOf(s, ids, ListModelValues.of(index, s.id, ids))
         return ids.associateWith { id ->
             byFacet
                 .flatMap { (facetId, byItem) ->

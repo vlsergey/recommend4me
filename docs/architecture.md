@@ -147,7 +147,7 @@ THE LIST OF WORKS IS ASKED OF ITS INDEX ALONE (user, 2026-11-17): of a million w
 together of every file at every request was minutes. A Lucene index of every content type
 (`worklist`: `ListIndex`) holds a document of every item — the work it is of, a work of several
 items one row grouped by it; the values of every filter facet as the user sees them (the site's,
-the model's kept in `model_value`, the user's word on top) as terms; every number as a point and
+the models' — kept here alone, apart too (`m:<facet>`, `ListModelValues`) —, the user's word on top) as terms; every number as a point and
 a sorted value; its dates; and what changes of its work without it — graded, the prediction, the
 chance of interest, their product — updated in place. The filters, the orders, the count and the
 page are a query of it; only the cards of the page are read of the databases, by their keys. The
@@ -308,8 +308,8 @@ Without a card the same is made in the main memory.
 The facets the model works out — the kinds, the universes, the main and the secondary characters,
 the pairings, the tags, the languages — are worked out IN A CHAIN, in the order of the schema: each
 reads as its context the values the site and the user give of every other facet, and the values
-the model gives of the facets before it — made in the same reading of a few works, or, of a pass
-over every work, as the same pass kept them (`model_value`, `FacetChain.keptBefore`). A work's characters are those of
+the model gives of the facets before it — made in the same reading, of a pass over every work by
+the models just fitted before it (`FacetChain.before`). A work's characters are those of
 the universes given before them, its pairings pairs of the characters given before them. The
 fitting and the reading follow the same chain, so a facet is judged on what it was fitted on.
 
@@ -332,14 +332,16 @@ suggester's choosing takes every value's cutoff of its score (`SuggestionScores.
 given, the filters, the interface and the extension read that mark, no number of their own. A facet
 learnt of no answer keeps the suggester's chances, likely above one half.
 
-THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17): a filter of the list runs no
-model — of a million works the chain over every work at every request was minutes. Every pass of
-the models of a source's facets, which makes the chances of every work anyway, writes the values
-each work is given beyond the site's own (`model_value`) where they changed (`KeptModelValues`), a
-facet's as its chances are made, a portion at a time; the filters read them with the site's values
-and the user's answers, the facets after it in the chain as their context, the search index's sync
-of the start as every document's values (`SearchDocuments.printsOf`): no chain run over every work. A change of a work, of an answer,
-of a model — the age rating's own included — plans that pass.
+THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17) — IN THE INDEX OF THE LIST
+ALONE, NEVER IN A DATABASE (user, 2026-11-18): a filter of the list runs no model. MAKING THE MODELS
+AND FILLING THE VALUES ARE TWO WORKS: the pass of a source's facets fits their models alone (and a
+calibrated facet's cutoff) and tells it (`FacetModelsFitted`); the filling (`ListFilling`, the work
+`listValues`, LAST of the queue: after every other work) makes the values the models give every work
+(`WorkModelValues`), a portion at a time, compares them with those its document keeps, and makes
+anew the documents whose values changed, telling them to the search index and the training
+(`FacetChancesChanged`). A work changed is given its values as its document is made; the search
+index's sync of the start reads every document's values of the index of the list
+(`SearchDocuments.printsOf`): no chain run over every work.
 
 EVERY SUGGESTER KEEPS ITS MODEL, AND A WORK IS SCORED BY IT ALONE (user, 2026-11-12):
 `FittedSuggester.model` is made of the task fitted on and kept; `FacetSuggester.scoring` of it and

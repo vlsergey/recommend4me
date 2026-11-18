@@ -58,7 +58,7 @@ internal object ListQuery {
     /** The page of [limit] works from [offset] of what is [asked], of the content type [type]. */
     fun page(index: ListIndex, type: TypeStore, asked: ListAsked, offset: Int, limit: Int): ListPage =
         index.searching { s ->
-            val query = query(index, s, type, asked)
+            val query = query(s, type, asked)
             val (total, keys) =
                 when {
                     asked.relevance != null -> byRelevance(s, query, asked.relevance, offset, limit)
@@ -177,7 +177,7 @@ internal object ListQuery {
      * The filters of what is [asked] as one query: the view, the sources, every filter facet and every range of a
      * number — a source that has no such facet or number not limited by it.
      */
-    private fun query(index: ListIndex, s: IndexSearcher, type: TypeStore, asked: ListAsked): Query {
+    private fun query(s: IndexSearcher, type: TypeStore, asked: ListAsked): Query {
         val q = BooleanQuery.Builder().add(MatchAllDocsQuery(), BooleanClause.Occur.MUST)
         when (asked.view) {
             ItemView.RATED -> q.add(NumericDocValuesField.newSlowExactQuery(ListDocuments.GRADED, 1L), FILTER)
@@ -192,7 +192,7 @@ internal object ListQuery {
                         st.schema.facets.any { it.filter && FeatureNames.facetId(st.source, it) == choice.facet }
                     }
                     .map { it.id }
-            if (having.isNotEmpty()) q.add(orElseOf(type, having, facetQuery(index, s, choice)), FILTER)
+            if (having.isNotEmpty()) q.add(orElseOf(type, having, facetQuery(s, choice)), FILTER)
         }
         asked.ranges.forEach { range ->
             val having =
@@ -225,12 +225,12 @@ internal object ListQuery {
      * of any value not hidden — any value some item has but the hidden —; an item of no value unless
      * [FacetChoice.withoutHidden].
      */
-    private fun facetQuery(index: ListIndex, s: IndexSearcher, choice: FacetChoice): Query {
+    private fun facetQuery(s: IndexSearcher, choice: FacetChoice): Query {
         val field = ListDocuments.facetField(choice.facet)
         val values =
             choice.range?.map(::BytesRef)
                 ?: choice.shown?.map(::BytesRef)
-                ?: index.valuesOf(s, choice.facet).filter { it.utf8ToString() !in choice.hidden }
+                ?: ListFacetValues.valuesOf(s, choice.facet).filter { it.utf8ToString() !in choice.hidden }
         val having = if (values.isEmpty()) MatchNoDocsQuery() else TermInSetQuery(field, values)
         if (choice.withoutHidden) return having
         return BooleanQuery.Builder()

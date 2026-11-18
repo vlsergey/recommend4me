@@ -2,8 +2,10 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.item.ItemKey
 import org.apache.lucene.index.LeafReader
+import org.apache.lucene.index.MultiTerms
 import org.apache.lucene.index.Term
 import org.apache.lucene.search.DocIdSetIterator
+import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.TermInSetQuery
 import org.apache.lucene.util.BytesRef
 import org.apache.lucene.util.NumericUtils
@@ -32,6 +34,19 @@ object ListFacetValues {
                 ItemKey.parse(doc.get(ListDocuments.KEY)) to values
             }
         }
+    }
+
+    /** Every value of the filter facet [facetId] some item has, the mark of none left out. */
+    fun valuesOf(searcher: IndexSearcher, facetId: String): List<BytesRef> {
+        val terms = MultiTerms.getTerms(searcher.indexReader, ListDocuments.facetField(facetId)) ?: return emptyList()
+        val out = ArrayList<BytesRef>()
+        val it = terms.iterator()
+        var term = it.next()
+        while (term != null) {
+            if (term.utf8ToString() != ListDocuments.NONE) out += BytesRef.deepCopyOf(term)
+            term = it.next()
+        }
+        return out
     }
 
     /**

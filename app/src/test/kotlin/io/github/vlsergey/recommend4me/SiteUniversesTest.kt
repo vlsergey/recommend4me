@@ -17,6 +17,8 @@ import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.universe.SiteFandomRef
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 
 /**
  * The universes of the site's works: the site's fandoms universes of their own, bound by name, merged and taken out by
@@ -50,6 +53,8 @@ class SiteUniversesTest : SiteTestBase() {
     @AfterEach fun cheapest() = learntBy(null)
 
     /** The universe of the entry U2 of the catalogue, as the test running made it: what its steps read. */
+    @Autowired private lateinit var listIndexes: ListIndexes
+
     private lateinit var u2: String
 
     @Test
@@ -251,10 +256,11 @@ class SiteUniversesTest : SiteTestBase() {
             characters.filter { it.inferred == true }.map { it.key }.toSet(),
             "characters $characters",
         )
-        // Kept for the filters by the pass of the models: the filter of the list runs no model
+        // Kept for the filters in the index of the list, filled after the models: the filter of the list runs no model
+        background.run()
         assertEquals(
             setOf("fake:C1", "fake:C2"),
-            stores.source(site)!!.modelValues.of("characters")["p9"].orEmpty().toSet(),
+            ListModelValues.of(listIndexes.of("books"), site, listOf("p9"))["p9"]?.get("characters").orEmpty().toSet(),
         )
         assertEquals("Pilot", characters.single { it.key == "fake:C1" }.name)
         val pairing = facets.single { it.facet == "pairings" }.propertyValues.single { it.offered != true }

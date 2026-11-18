@@ -7,14 +7,12 @@ import java.nio.file.Path
 import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
-import org.apache.lucene.index.MultiTerms
 import org.apache.lucene.index.Term
 import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
 import org.apache.lucene.store.FSDirectory
-import org.apache.lucene.util.BytesRef
 
 /**
  * THE INDEX OF THE LIST OF WORKS OF ONE CONTENT TYPE (user, 2026-11-17): what the screen of the list is filtered,
@@ -64,6 +62,9 @@ class ListIndex(dir: Path) : AutoCloseable {
     /** The keys of the items of works of several items as written so far: those a regrouping may have moved. */
     fun linked(): List<ItemKey> = keysWith(Term(ListDocuments.LINKED, ListDocuments.YES)).map(ItemKey::parse)
 
+    /** The [block] of a reading of the index as written so far, committed or not. */
+    fun <T> written(block: (DirectoryReader) -> T): T = DirectoryReader.open(writer).use(block)
+
     /**
      * The keys of the documents with the [term], as written so far — what the requests read is not refreshed for it: a
      * writing under way is not shown half done.
@@ -107,19 +108,6 @@ class ListIndex(dir: Path) : AutoCloseable {
         } finally {
             searchers.release(searcher)
         }
-    }
-
-    /** Every value of the filter facet [facetId] some item has, the mark of none left out. */
-    fun valuesOf(searcher: IndexSearcher, facetId: String): List<BytesRef> {
-        val terms = MultiTerms.getTerms(searcher.indexReader, ListDocuments.facetField(facetId)) ?: return emptyList()
-        val out = ArrayList<BytesRef>()
-        val it = terms.iterator()
-        var term = it.next()
-        while (term != null) {
-            if (term.utf8ToString() != ListDocuments.NONE) out += BytesRef.deepCopyOf(term)
-            term = it.next()
-        }
-        return out
     }
 
     override fun close() {

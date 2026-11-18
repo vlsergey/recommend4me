@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import org.slf4j.LoggerFactory
-import org.springframework.context.ApplicationEventPublisher
 
 private val log = LoggerFactory.getLogger(FacetScoring::class.java)
 
@@ -18,61 +17,49 @@ internal class PassModel(
 )
 
 /**
- * THE CHANCES OF EVERY WORK OF A FACET'S PASS MADE BY ITS MODEL KEPT, A PORTION AT A TIME ([FacetSuggester.scoring]),
- * the database refused: every portion's chances put among those before the facet ([FacetChain.keptBefore]) and the
- * values they give written where they changed ([KeptModelValues.write]) — what the facets after it read as their
- * context — the works whose values changed told as each portion is done ([FacetChancesChanged]): their ids alone, never
- * every work's. Of a facet calibrated, the chances of the values open to the model counted ([OpenChances]) and its
- * cutoff kept anew for the next pass.
+ * THE CUTOFF OF A CALIBRATED FACET'S MODEL MADE ANEW OF EVERY WORK'S CHANCES, A PORTION AT A TIME
+ * ([FacetSuggester.scoring]), the database refused: every portion's chances put among those before the facet
+ * ([FacetChain.before]), the chances of the values open to the model counted ([OpenChances]) and its cutoff kept anew
+ * for the next pass — a part of the model. The values the model gives the works are not written here: they are filled
+ * into the index of the list after the models are fitted, last of the queue (user, 2026-11-18). A facet of no
+ * calibration is not walked.
  */
-internal class FacetScoring(private val kept: KeptModelValues, private val events: ApplicationEventPublisher) {
+internal class FacetScoring {
     /** What a walk made, as its log tells it. */
     private class Told {
         var works = 0
-        var changed = 0
         var given = 0L
         var wide = 0
         var most = 0
         var mostOf: String? = null
     }
 
-    /**
-     * Every work of the [pass] scored by the [model] — of a facet of no model, the drafts and the models of their own
-     * alone — and the values given written. Nothing to walk of a facet the source does not work out with no model.
-     */
+    /** Every work of the [pass] scored by the [model], its cutoff made anew; nothing of a model of no calibration. */
     fun walk(pass: FacetPass, model: PassModel?) {
         val facet = pass.facet
         val store = pass.store
-        if (model == null && !facet.infer) return
+        val calibration = model?.calibration ?: return
         val started = System.currentTimeMillis()
-        val open = model?.calibration?.let { OpenChances() }
+        val open = OpenChances()
         val told = Told()
-        pass.forEach(inputs = model != null) { p ->
-            if (model != null) {
-                val data = pass.data(p, model.side)
-                DatabaseRefused.during(FacetChain.computation(store, facet)) {
-                    model.suggester.scoring(model.model, data.task)?.use {
-                        ShownChances.keep(p.made, facet, data, it, calibration = model.calibration)
-                    }
+        pass.forEach(inputs = true) { p ->
+            val data = pass.data(p, model.side)
+            DatabaseRefused.during(FacetChain.computation(store, facet)) {
+                model.suggester.scoring(model.model, data.task)?.use {
+                    ShownChances.keep(p.made, facet, data, it, calibration = calibration)
                 }
-                open?.let { count(it, data, p.made, facet.key) }
             }
+            count(open, data, p.made, facet.key)
             tell(told, p, facet.key)
-            if (facet.infer) {
-                val changed = kept.write(store, p.read.ids, p.read.site, p.made, listOf(facet))
-                told.changed += changed.size
-                if (changed.isNotEmpty()) events.publishEvent(FacetChancesChanged(store.id, changed.toList()))
-            }
         }
-        if (open != null && model?.calibration != null) keepCutoff(pass, open, model.calibration)
+        keepCutoff(pass, open, calibration)
         log.info(
-            "{}: chances of {} of {} works made in {} ms; {} works given other values; {} values given in all, {} " +
-                "works given more than {}, the most {} to {}",
+            "{}: chances of {} of {} works made for its cutoff in {} ms; {} values given in all, {} works given more " +
+                "than {}, the most {} to {}",
             store.id,
             facet.key,
             told.works,
             System.currentTimeMillis() - started,
-            told.changed,
             told.given,
             told.wide,
             MANY_GIVEN,

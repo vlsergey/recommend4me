@@ -8,6 +8,7 @@ import org.apache.lucene.document.Field
 import org.apache.lucene.document.NumericDocValuesField
 import org.apache.lucene.document.SortedDocValuesField
 import org.apache.lucene.document.SortedSetDocValuesField
+import org.apache.lucene.document.StoredField
 import org.apache.lucene.document.StringField
 import org.apache.lucene.util.BytesRef
 
@@ -52,6 +53,17 @@ object ListDocuments {
 
     fun numberField(numberId: String) = "n:$numberId"
 
+    private const val MODEL = "m:"
+
+    /**
+     * The field the values the models give an item of the facet [facet] are kept in, by the facet's key — of every
+     * facet the source works out, a filter or not: the one place they are kept (user, 2026-11-18).
+     */
+    fun modelField(facet: String) = "$MODEL$facet"
+
+    /** The key of the facet of the field of the models' values [name]; null of another field. */
+    fun modelFacetOf(name: String): String? = name.takeIf { it.startsWith(MODEL) }?.substring(MODEL.length)
+
     /** The document of the [row]. */
     fun of(row: ListRow): Document {
         val doc = Document()
@@ -79,6 +91,7 @@ object ListDocuments {
             }
         }
         row.numbers.forEach { (numberId, value) -> doc.add(DoubleField(numberField(numberId), value, Field.Store.NO)) }
+        row.model.forEach { (facet, keys) -> keys.forEach { doc.add(StoredField(modelField(facet), it)) } }
         doc.add(BinaryDocValuesField(TITLE, BytesRef(row.title)))
         return doc
     }

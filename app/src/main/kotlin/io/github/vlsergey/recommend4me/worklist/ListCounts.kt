@@ -23,7 +23,9 @@ object ListCounts {
     fun of(index: ListIndex, facetId: String, sources: Collection<String>): ValueCounts = index.searching { s ->
         val field = ListDocuments.facetField(facetId)
         val counts = HashMap<String, Int>()
-        index.valuesOf(s, facetId).forEach { term -> counts[term.utf8ToString()] = live(s, Term(field, term)) }
+        ListFacetValues.valuesOf(s, facetId).forEach { term ->
+            counts[term.utf8ToString()] = live(s, Term(field, term))
+        }
         ValueCounts(
             counts,
             s.count(TermInSetQuery(ListDocuments.SOURCE, sources.map(::BytesRef))),

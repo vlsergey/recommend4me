@@ -30,7 +30,7 @@ internal class FacetRefitEvents(private val refits: FacetRefits, private val sto
 
     /**
      * A facet's own model fitted again — the age rating — of every source that has the facet: its chances are the
-     * context of the facets after it, and the values the works are shown with, kept ([KeptModelValues]).
+     * context of the facets after it, and the values the works are shown with, filled into the index after it.
      */
     @EventListener
     fun ownModelFitted(event: OwnModelFitted) =

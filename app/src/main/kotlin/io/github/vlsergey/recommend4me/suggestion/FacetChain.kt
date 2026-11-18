@@ -20,9 +20,10 @@ internal typealias MadeChances = HashMap<String, HashMap<String, Map<String, Cha
  * THE CHAIN OF THE FACETS: the chances of works made in memory by the models kept, a facet after another, in the order
  * of [facetsOf] — each reading as its context the values the site and the user give of every other facet and the values
  * the model gives of the facets before it, made in the same reading; of every facet what a work is shown with
- * ([ShownChances.keep]). Nothing waits for a refit, no chance is written of a work (user, 2026-10-15); the values a
- * pass over every work gives are kept for the filters ([KeptModelValues]), and a pass reads those of the facets before
- * the one it works out as it kept them ([keptBefore]): the chain is not made again for every portion.
+ * ([ShownChances.keep]). Nothing waits for a refit, no chance is written of a work (user, 2026-10-15); the values the
+ * models give every work are kept in the index of the list alone ([WorkModelValues],
+ * [io.github.vlsergey.recommend4me.worklist.ListFilling]), and a pass reads those of the facets before the one it works
+ * out made now by their models, just fitted ([before]).
  *
  * EVERY FACET READ, THEN WORKED OUT WITH THE DATABASE REFUSED (user, 2026-11-12): the works are read as the reading
  * begins ([WorksRead]); of every facet its model kept, the dictionary's word on its values ([Vocabulary]) and the
@@ -241,27 +242,13 @@ internal class FacetChain(
 
     /**
      * THE CHANCES OF A PORTION OF A PASS BEFORE ITS [k]-TH FACET: the drafts and the models of their own of the works
-     * of [read] ([seeded]), and of every facet before it in the chain the values the model gave it as this pass kept
-     * them ([KeptModelValues]), each a chance of one, likely — what a facet's context and dictionary read of the facets
-     * before it ([ModelValues.of]), not the chain made again for every portion of every walk.
+     * of [read] ([seeded]), and of every facet before it in the chain its chances made now by its model kept — the one
+     * just fitted by the pass before it ([chain]), the works' inputs read for it: no value of a work kept anywhere but
+     * in the index of the list (user, 2026-11-18). Of the first facet the seeded alone.
      */
-    fun keptBefore(store: SourceStore, read: WorksRead, k: Int): MadeChances {
-        val made = seeded(store, read.ids, read.drafts, EveryItemFacets(read.site, read.corrections))
-        val before = facetsOf(store).take(k).filter { it.infer }.map { it.key }
-        if (before.isEmpty()) return made
-        val kept = store.modelValues.ofItems(read.ids)
-        before.forEach { facet ->
-            kept[facet]?.forEach { (id, values) ->
-                val byFacet = made.getOrPut(id) { HashMap() }
-                val out = LinkedHashMap(byFacet[facet].orEmpty())
-                values.forEach { v ->
-                    out.putIfAbsent(v, Chance(id, facet, v, had = false, chance = 1.0, likely = true))
-                }
-                byFacet[facet] = FewChances(out.values.toTypedArray())
-            }
-        }
-        return made
-    }
+    fun before(store: SourceStore, encoder: TextEncoder, read: WorksRead, k: Int): MadeChances =
+        if (k == 0) seeded(store, read.ids, read.drafts, EveryItemFacets(read.site, read.corrections))
+        else chain(store, encoder, read, k)
 
     /** The works' lines of characters and pairings read for the [facet]; null of a facet that reads none. */
     fun linesOf(store: SourceStore, facet: FacetDef, vocabulary: Vocabulary?, read: WorksRead): SaidLines? =

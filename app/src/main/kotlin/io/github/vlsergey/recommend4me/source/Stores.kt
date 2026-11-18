@@ -44,7 +44,6 @@ import io.github.vlsergey.recommend4me.setvector.SetEmbeddingRepository
 import io.github.vlsergey.recommend4me.setvector.SetVectorRepository
 import io.github.vlsergey.recommend4me.signal.SignalRepository
 import io.github.vlsergey.recommend4me.size.WorkSizeRepository
-import io.github.vlsergey.recommend4me.suggestion.ModelValueRepository
 import io.github.vlsergey.recommend4me.suggestion.SuggestionRepository
 import io.github.vlsergey.recommend4me.suggestion.ValueNameRepository
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
@@ -162,13 +161,6 @@ class SourceStore(
      * in the model database of its content type.
      */
     val drafts = DraftRepository(databases.model(source.contentType), source.id)
-
-    /**
-     * The values the model gives the source's works beyond the site's own, kept for the filters
-     * ([KeptModelValues][io.github.vlsergey.recommend4me.suggestion.KeptModelValues]), in the model database of its
-     * content type.
-     */
-    val modelValues = ModelValueRepository(databases.model(source.contentType), source.id)
 
     val suggestions = SuggestionRepository(databases.model(source.contentType), source.id)
 

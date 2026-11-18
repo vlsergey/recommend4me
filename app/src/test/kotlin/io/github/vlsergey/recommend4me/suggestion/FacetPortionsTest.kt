@@ -12,7 +12,6 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Tag
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.context.ApplicationEventPublisher
 
 /**
  * THE PASS OVER THE FACETS A PORTION AT A TIME (user, 2026-11-17: nothing holds more than ten thousand works): the
@@ -27,10 +26,9 @@ class FacetPortionsTest : SiteTestBase() {
     @AfterEach fun cheapest() = learntBy(null)
 
     @Autowired lateinit var plugins: Plugins
-    @Autowired lateinit var events: ApplicationEventPublisher
     @Autowired private lateinit var chain: FacetChain
     @Autowired private lateinit var vocabularies: FacetVocabularies
-    @Autowired private lateinit var kept: KeptModelValues
+    @Autowired private lateinit var modelValues: WorkModelValues
     @Autowired private lateinit var passes: WorkPasses
     @Autowired lateinit var cards: ObjectProvider<CardSource>
 
@@ -46,7 +44,7 @@ class FacetPortionsTest : SiteTestBase() {
         val store = stores.source("site")!!
         val facets = chain.facetsOf(store)
         val portioned = WorkPasses(stores, plugins, cards, most)
-        val fitting = FacetFitting(FacetReading(portioned, chain, vocabularies), FacetScoring(kept, events))
+        val fitting = FacetFitting(FacetReading(portioned, chain, vocabularies), FacetScoring())
         val encoder = plugins.textEncoder()!!
         inBackground {
             workload.run(Work("portions", source = store.id), mapOf("asked" to 1), joinAlike = false) {
@@ -56,12 +54,16 @@ class FacetPortionsTest : SiteTestBase() {
                 }
             }
         }
+        // The values the models give every work, as the filling of the index makes them of the models kept
+        val given = modelValues.of(store, store.items.keys().map { it.id })
         return Left(
             facets.associate { it.key to store.suggestions.suggester(it.key)?.basis },
             facets.associate { it.key to store.suggestions.scoring(it.key)?.bytes?.toList() },
             facets
                 .filter { it.infer }
-                .associate { f -> f.key to store.modelValues.of(f.key).mapValues { it.value.toSet() } },
+                .associate { f ->
+                    f.key to given.mapNotNull { (id, of) -> of[f.key]?.let { id to it.toSet() } }.toMap()
+                },
         )
     }
 

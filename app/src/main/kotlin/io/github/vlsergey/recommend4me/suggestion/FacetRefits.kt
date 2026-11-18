@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
-import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -33,15 +32,14 @@ private val log = LoggerFactory.getLogger(FacetRefits::class.java)
 internal class FacetRefits(
     private val stores: Stores,
     private val plugins: Plugins,
-    events: ApplicationEventPublisher,
+    private val events: ApplicationEventPublisher,
     private val workload: Workload,
     private val chain: FacetChain,
     vocabularies: FacetVocabularies,
     private val passes: WorkPasses,
-    private val kept: KeptModelValues,
     private val settings: Settings,
 ) {
-    private val fitting = FacetFitting(FacetReading(passes, chain, vocabularies), FacetScoring(kept, events))
+    private val fitting = FacetFitting(FacetReading(passes, chain, vocabularies), FacetScoring())
 
     /**
      * Something the source's models learn from changed — the [reason], a key the interface words, told in the queue of
@@ -80,7 +78,6 @@ internal class FacetRefits(
             val name = "$FACETS${s.id}"
             if (settings.get(name) != facets) {
                 s.suggestions.keepOnly(suggested)
-                s.modelValues.keepOnly(inferred)
                 settings.set(name, facets)
             }
         }
@@ -103,65 +100,36 @@ internal class FacetRefits(
      * ([Workload.stopping]), with a [CancellationException]. How long each step took told to the log.
      *
      * ONE WORK OF THE QUEUE, EVERY WORK READ A PORTION AT A TIME ([WorkPasses.forEachPortion]): no pass holds more than
-     * [TaskPortions.MOST] works (user, 2026-11-17). The values the models of their own give every work kept first; then
-     * a facet after another, each walking the works as often as its value side, its fitting and its chances need
-     * ([FacetFitting]) — the values the model gives of each kept as its chances are made ([KeptModelValues]), and read
-     * by the facets after it as their context: the chain is not made again for every portion. The works whose values
-     * changed are told as each portion is done ([FacetChancesChanged]).
+     * [TaskPortions.MOST] works (user, 2026-11-17). A facet after another, each walking the works as often as its value
+     * side, its fitting and its cutoff need ([FacetFitting]), the facets before it in the chain made now by their
+     * models just fitted ([FacetChain.before]). Only the models are made: the values they give the works are filled
+     * into the index of the list after them, last of the queue ([FacetModelsFitted]; user, 2026-11-18: "split every
+     * such work in two: making new models and filling the works with the new computed data").
      */
     private fun refreshed(store: SourceStore) {
         val encoder = plugins.textEncoder() ?: return
         val stop = { workload.stopping }
         val facets = chain.facetsOf(store)
         val started = System.currentTimeMillis()
-        // What is done, told to the queue: the pass of the models of their own a share of its works, then every facet
-        // a step (user, 2026-11-18: "a progress indicator is needed")
-        val steps = 1.0 + facets.size
-        keepOwnModels(store, facets, stop) { share -> workload.progress(share / steps) }
-        val own = System.currentTimeMillis()
+        // What is done, told to the queue: every facet a step (user, 2026-11-18: "a progress indicator is needed")
+        val steps = facets.size.coerceAtLeast(1).toDouble()
         val characters = passes.charactersRead(store)
         val read = System.currentTimeMillis()
         val took =
             facets.indices.map { k ->
-                workload.progress((1 + k) / steps)
+                workload.progress(k / steps)
                 val began = System.currentTimeMillis()
                 fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
                 "${facets[k].key} ${System.currentTimeMillis() - began}"
             }
         log.info(
-            "{}: the models of every facet fitted in {} ms: the values of the models of their own kept {}, the " +
-                "dictionary's characters read {}, the facets {}",
+            "{}: the models of every facet fitted in {} ms: the dictionary's characters read {}, the facets {}",
             store.id,
             System.currentTimeMillis() - started,
-            own - started,
-            read - own,
+            read - started,
             took,
         )
-    }
-
-    /**
-     * Of every work, a portion at a time, the values the facets worked out by models of their own give it kept
-     * ([FacetModel], [KeptModelValues]): what the facets of the chain read of them, as of the drafts. How much of the
-     * works is done told to [done] after every portion.
-     */
-    private fun keepOwnModels(
-        store: SourceStore,
-        facets: List<FacetDef>,
-        stop: () -> Boolean,
-        done: (share: Double) -> Unit,
-    ) {
-        val chained = facets.map { it.key }.toSet()
-        val own = store.schema.facets.filter { it.infer && it.key !in chained }
-        if (own.isEmpty()) return
-        val works = store.items.count().coerceAtLeast(1)
-        var read = 0
-        passes.forEachPortion(store) { ids ->
-            if (stop()) throw CancellationException("${store.id}: the models of their own given up: the app stops")
-            val known = EveryItemFacets(store.items.facetsOf(ids), store.corrections.facetsOf(ids))
-            kept.write(store, ids, known.site, chain.seeded(store, ids, every = known), own)
-            read += ids.size
-            done(read.toDouble() / works)
-        }
+        events.publishEvent(FacetModelsFitted(store.id))
     }
 
     /**
@@ -180,7 +148,7 @@ internal class FacetRefits(
             null,
             "asked",
             asked = true,
-            // The facets after it in the chain read its values: a pass of every one of them, the values kept with it
+            // The facets after it in the chain read its values: every one of them fitted again, the values filled after
             after = { _: Unit -> changed(store.id, "chances") },
         ) {
             fittedAnew(store, facets, k, encoder)

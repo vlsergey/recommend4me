@@ -27,11 +27,11 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
 
     /**
      * The model of the [k]-th of the [facets] fitted again when what it learns from changed — every setting tried anew
-     * when [anew], the user asked for it ([FacetRefits.searchAnew]) — and every work's chances of it made, the values
-     * they give kept ([KeptModelValues]): the context of the facets after it. [stop] is asked between the portions and
-     * the stages, and by the fitting between its steps: the application stops, and the work is given up with a
-     * [CancellationException] before anything half made is kept. [characters]: the dictionary's characters, read once
-     * for the pass.
+     * when [anew], the user asked for it ([FacetRefits.searchAnew]) — and of a calibrated one its cutoff made of every
+     * work's chances ([FacetScoring]); the values it gives the works filled after ([FacetModelsFitted]). [stop] is
+     * asked between the portions and the stages, and by the fitting between its steps: the application stops, and the
+     * work is given up with a [CancellationException] before anything half made is kept. [characters]: the dictionary's
+     * characters, read once for the pass.
      */
     fun fit(
         store: SourceStore,

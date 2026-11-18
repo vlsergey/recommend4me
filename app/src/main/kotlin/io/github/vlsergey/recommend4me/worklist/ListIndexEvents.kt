@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.cast.CastNamesEncoded
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.interest.InterestChanged
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -7,7 +8,8 @@ import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.model.PredictionsChanged
 import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.suggestion.ModelValuesChanged
+import io.github.vlsergey.recommend4me.suggestion.FacetModelsFitted
+import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
 import io.github.vlsergey.recommend4me.work.WorksRegrouped
 import io.github.vlsergey.recommend4me.workload.Workload
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -23,6 +25,7 @@ import org.springframework.stereotype.Component
 internal class ListIndexEvents(
     private val stores: Stores,
     private val indexing: ListIndexing,
+    private val filling: ListFilling,
     private val workload: Workload,
 ) {
     /**
@@ -45,11 +48,21 @@ internal class ListIndexEvents(
             if (event.ids.isEmpty()) whole += event.source else rows.getOrPut(event.source) { HashSet() } += event.ids
         }
 
+    /** What the models read of the works changed: their documents made anew, of the values they give them now. */
     @EventListener
-    fun modelValuesChanged(event: ModelValuesChanged) =
-        indexing.change(stores.typeOf(event.source).id, "chances") {
+    fun textVectorsChanged(event: TextVectorsChanged) =
+        indexing.change(stores.typeOf(event.source).id, "texts") {
             rows.getOrPut(event.source) { HashSet() } += event.ids
         }
+
+    @EventListener
+    fun castNamesEncoded(event: CastNamesEncoded) =
+        indexing.change(stores.typeOf(event.source).id, "castNames") {
+            rows.getOrPut(event.source) { HashSet() } += event.ids
+        }
+
+    /** The models of a source fitted anew: the values of every work filled, last of the queue. */
+    @EventListener fun modelsFitted(event: FacetModelsFitted) = filling.fill(event.source, "chances")
 
     @EventListener
     fun answered(event: FacetAnswered) =

@@ -40,7 +40,8 @@ class RowValues(val graded: Boolean, val prediction: Double?, val interest: Doub
  * of the list — and its [rank] among the items of the work, the one the work is shown with ([WorkClusters.shown]) 0;
  * its dates, its [values], the values of every filter facet of its source as the user sees them ([facets], by the
  * facet's filter id — the site's, the model's kept, the user's word on top), every number with the user's word on top
- * ([numbers], by the number's id) and its [title] as the user corrected it.
+ * ([numbers], by the number's id), its [title] as the user corrected it, and of every facet the source works out the
+ * values the models give it beyond the site's own ([model], by the facet's key): kept in the index alone.
  */
 class ListRow(
     val key: ItemKey,
@@ -53,6 +54,7 @@ class ListRow(
     val facets: Map<String, List<String>>,
     val numbers: Map<String, Double>,
     val title: String,
+    val model: Map<String, List<String>> = emptyMap(),
 )
 
 /**
@@ -61,8 +63,18 @@ class ListRow(
  */
 internal object ListRows {
 
-    /** The rows of the items [ids] of the source [s] — every item when null —, of the works [clusters] tells. */
-    fun read(type: TypeStore, s: SourceStore, ids: Collection<String>?, clusters: WorkClusters): List<ListRow> {
+    /**
+     * The rows of the items [ids] of the source [s] — every item when null —, of the works [clusters] tells; [model]:
+     * of every item, by the facet's key, the values the models give it beyond the site's own — made now of a few, kept
+     * by the index of a whole source ([ListModelValues]); none of a source not filled yet.
+     */
+    fun read(
+        type: TypeStore,
+        s: SourceStore,
+        ids: Collection<String>?,
+        clusters: WorkClusters,
+        model: Map<String, Map<String, List<String>>>,
+    ): List<ListRow> {
         val heads =
             if (ids == null) s.items.keys()
             else s.items.heads(ids).values.map { ItemKeys(it.id, it.version, it.updatedAt, it.firstSeenAt) }
@@ -70,7 +82,7 @@ internal object ListRows {
         val ratings = s.ratings.all().groupBy { it.itemId }
         val predicted = if (ids == null) type.predictions.predicted(s.id) else type.predictions.predicted(s.id, ids)
         val marks = s.interest.all()
-        val facets = facetsOf(s, ids)
+        val facets = facetsOf(s, ids, model)
         val numbers = numbersOf(s, ids)
         val titles = titlesOf(s, ids)
         return heads.map { h ->
@@ -87,6 +99,7 @@ internal object ListRows {
                 facets = facets.mapValues { (_, byItem) -> byItem[h.id].orEmpty() },
                 numbers = numbers[h.id].orEmpty(),
                 title = titles[h.id].orEmpty(),
+                model = model[h.id].orEmpty(),
             )
         }
     }
@@ -108,12 +121,16 @@ internal object ListRows {
 
     /**
      * Of every filter facet of the source, and of its authors, by its filter id, every item's values as the user sees
-     * them: the site's, the drafts of the layer, the model's kept of a facet it works out
-     * ([io.github.vlsergey.recommend4me.suggestion.ModelValueRepository]), the user's corrections on top — what the
-     * index keeps of them, read of the databases: of the items [ids], what a screen shows of a few. The authors no
-     * filter, kept for the search of duplicates to read of the index, not of the database (user, 2026-11-18).
+     * them: the site's, the drafts of the layer, the models' of a facet it works out ([model]: of every item, by the
+     * facet's key, beyond the site's own), the user's corrections on top — what the index keeps of them: of the items
+     * [ids], what a screen shows of a few. The authors no filter, kept for the search of duplicates to read of the
+     * index, not of the database (user, 2026-11-18).
      */
-    fun facetsOf(s: SourceStore, ids: Collection<String>?): Map<String, Map<String, List<String>>> {
+    fun facetsOf(
+        s: SourceStore,
+        ids: Collection<String>?,
+        model: Map<String, Map<String, List<String>>>,
+    ): Map<String, Map<String, List<String>>> {
         val defs = s.schema.facets.filter { it.filter || it.role == FacetRole.AUTHOR }
         if (defs.isEmpty()) return emptyMap()
         val site: Map<String, Map<String, List<String>>> =
@@ -129,11 +146,11 @@ internal object ListRows {
         // The same keys of a million works held once
         val keys = HashMap<String, String>()
         return defs.associate { def ->
-            val model = if (def.infer) s.modelValues.of(def.key, ids) else emptyMap()
             val drafted = drafts[def.key].orEmpty()
             val byItem = HashMap<String, List<String>>()
-            (site.keys + model.keys + drafted.keys + corrections.keys).forEach { id ->
-                val given = site[id]?.get(def.key).orEmpty() + drafted[id].orEmpty() + model[id].orEmpty()
+            val modelled = if (def.infer) model.filterValues { def.key in it }.keys else emptySet()
+            (site.keys + modelled + drafted.keys + corrections.keys).forEach { id ->
+                val given = site[id]?.get(def.key).orEmpty() + drafted[id].orEmpty() + model[id]?.get(def.key).orEmpty()
                 val shown = shown(def, given, corrections[id])
                 if (shown.isNotEmpty()) byItem[id] = shown.map { keys.getOrPut(it) { it } }
             }
