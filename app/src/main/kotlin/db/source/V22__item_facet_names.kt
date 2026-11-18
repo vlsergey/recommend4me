@@ -4,6 +4,9 @@ import java.sql.Connection
 import java.sql.PreparedStatement
 import org.flywaydb.core.api.migration.BaseJavaMigration
 import org.flywaydb.core.api.migration.Context
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(V22__item_facet_names::class.java)
 
 /**
  * Every value of every work written before the works kept their values' names (V21) given the name the source has of
@@ -29,7 +32,13 @@ class V22__item_facet_names : BaseJavaMigration() {
         val autoCommit = c.autoCommit
         c.autoCommit = false
         try {
-            items.chunked(PORTION).forEach { portion ->
+            val started = System.nanoTime()
+            items.chunked(PORTION).forEachIndexed { i, portion ->
+                // A long start followed in the log (2026-11-18: the file locked by the migration, nothing else tells)
+                if (i % TOLD_EVERY == 0) {
+                    val seconds = (System.nanoTime() - started) / NANOS
+                    log.info("values of {} of {} works named in {} s", i * PORTION, items.size, seconds)
+                }
                 name(c, portion.first(), portion.last(), names)
                 c.commit()
             }
@@ -83,5 +92,10 @@ class V22__item_facet_names : BaseJavaMigration() {
     private companion object {
         /** The works named at a time. */
         const val PORTION = 5000
+
+        /** The portions between two lines of the log of how far the migration is. */
+        const val TOLD_EVERY = 20
+
+        const val NANOS = 1_000_000_000L
     }
 }

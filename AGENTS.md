@@ -177,7 +177,10 @@ the CI run of the full tests on GitHub till it ends, its failure fixed.
 **A new database is made by its schema, an existing one by its migrations**: `schema/<kind>.sql` holds what the
 migrations of `db/<kind>` leave, and an empty file is made by it at once, its history begun at the last migration
 (`database/Schema.kt`). A migration is written as before and its schema with it: `SchemaTest` compares the two and
-writes the schema anew from the migrations when they differ — commit it with them.
+writes the schema anew from the migrations when they differ — commit it with them. **A migration of many rows
+goes a portion at a time, each kept as it is done, and tells the log how far it is every few portions** ("tags of K of
+N works keyed anew in T s"): a start it holds locks the file, and nothing else tells how long it has left (2026-11-18,
+of ficbook's V4 and V22).
 
 **Every test of the application inherits `BaseTest`** and sets nothing of the context of its own — no
 `@TestPropertySource`, no `@Import`, no configuration nested in a test class: Spring starts the application once in a

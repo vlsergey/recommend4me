@@ -86,8 +86,11 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
                 "SELECT item_id, value_key FROM item_facet WHERE item_id BETWEEN ? AND ? AND facet = 'tag' " +
                     "ORDER BY item_id, position"
             )
+        val started = System.nanoTime()
         read.use {
-            items.chunked(PORTION).forEach { portion ->
+            items.chunked(PORTION).forEachIndexed { i, portion ->
+                // A long start followed in the log (2026-11-18: the file locked by the migration, nothing else tells)
+                if (i % TOLD_EVERY == 0) told(i * PORTION, items.size, started)
                 read.setString(1, portion.first())
                 read.setString(2, portion.last())
                 val rows =
@@ -99,6 +102,9 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
             }
         }
     }
+
+    private fun told(done: Int, of: Int, started: Long) =
+        log.info("ficbook: tags of {} of {} works keyed anew in {} s", done, of, (System.nanoTime() - started) / NANOS)
 
     /**
      * The tags of the works [tags] keyed anew by [moves], written in a batch by the key: a work of two names of one tag
@@ -212,6 +218,11 @@ class V4__tags_by_their_ids : BaseJavaMigration() {
     private companion object {
         /** The works keyed anew at a time. */
         const val PORTION = 5000
+
+        /** The portions between two lines of the log of how far the migration is. */
+        const val TOLD_EVERY = 20
+
+        const val NANOS = 1_000_000_000L
 
         /** The key of a tag known by its name alone, as the source writes it ([Ficbook.NAME_KEY]). */
         const val NAME_KEY = "name:"
