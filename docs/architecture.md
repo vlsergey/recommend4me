@@ -75,8 +75,11 @@ author.today and ficbook are never scraped whole. ficbook's catalogue was filled
 every part, collected up to 2024) by a one-time import, not a part of the application (user,
 2026-11-17: one-time work never becomes a part of the application). Of it, the authors and the
 fandoms the dataset gave by their names alone are keyed `name:<name>` (`Ficbook.NAME_KEY`), which the
-site's page replaces later; an author's key of no works whose name a key with works has is then
-merged into it (`UnusedAuthors`, marked `NAME`), a fandom's let go as a twin (`UnusedFandoms`).
+site's page replaces later. The source says so of its authors (`FacetDef.byName`): as soon as a page
+gives an author's own key, the normalized author of the key of the same name is merged into it
+(`NamedAuthors`, marked `NAME`), every work of the dump naming them one author's; a fandom is bound by
+its name to the normalized fandom of the same name anyway, its key of no works let go as a twin
+(`UnusedFandoms`).
 
 A MILLION WORKS ARE ENCODED A PORTION AT A TIME, THE LIKELIEST FIRST (user, 2026-11-17): the texts of
 the works and the chapters wait in the queue of the computations as works of a few minutes each

@@ -45,7 +45,7 @@ class Ficbook : Source {
         SourceSchema(
             facets =
                 listOf(
-                    Books.AUTHOR.asFacet(AUTHOR),
+                    Books.AUTHOR.asFacet(AUTHOR, byName = NAME_KEY),
                     FacetDef(BETA),
                     FacetDef(GAMMA),
                     Books.FANDOM.asFacet(FANDOM),

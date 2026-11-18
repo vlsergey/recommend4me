@@ -73,8 +73,11 @@ class StandardFacet(
     /** The value of the key; null when the facet has no such value, or takes any. */
     fun value(key: String): StandardValue? = values?.firstOrNull { it.key == key }
 
-    /** The source's facet [key] as this one: its role and use are the standard's. */
-    fun asFacet(key: String = this.key) =
+    /**
+     * The source's facet [key] as this one: its role and use are the standard's; [byName] — the prefix of its keys of
+     * values the site gave by their names alone ([FacetDef.byName]).
+     */
+    fun asFacet(key: String = this.key, byName: String? = null) =
         FacetDef(
             key,
             filter = filter,
@@ -87,6 +90,7 @@ class StandardFacet(
             standard = this,
             single = single,
             completable = completable,
+            byName = byName,
         )
 
     /**

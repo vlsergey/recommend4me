@@ -20,8 +20,8 @@ sealed interface MergedBy {
     data class Place(val owner: SiteAuthorRef) : MergedBy
 
     /**
-     * The site gave it by its name alone — a dump of the site — and later the same name a key of its own, no work
-     * having the first any more ([UnusedAuthors]).
+     * The site gave it by its name alone — a dump of the site — and later the same name a key of its own
+     * ([NamedAuthors]).
      */
     data object Name : MergedBy
 }

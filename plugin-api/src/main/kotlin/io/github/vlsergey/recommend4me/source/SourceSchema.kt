@@ -137,6 +137,12 @@ class FacetDef(
      * whatever its cutoff lets through (user, 2026-11-17); null: none.
      */
     val most: Int? = null,
+    /**
+     * The prefix of the keys of values the site gave by their names alone — a dump of it, the site's own keys unknown:
+     * such a key and the site's own key of a value of the name after it are one value ("name:Lorem" and the key of the
+     * author Lorem: one person, the name an account of the site); null: no such keys.
+     */
+    val byName: String? = null,
 )
 
 /**

@@ -18,10 +18,11 @@ internal fun authorFacetOf(s: SourceStore): String? = s.schema.facets.firstOrNul
 /**
  * Every author of every site bound to a normalized author ([AuthorRepository]), at first one of their own — never by
  * the likeness of a name: as the works naming them come, as another site's author lists theirs as a place of theirs
- * ([AuthorPlaces]) — of no work known yet — and at the start whatever was not bound yet.
+ * ([AuthorPlaces]) — of no work known yet — and at the start whatever was not bound yet. The one name the binding goes
+ * by is the one a source says is a key ([NamedAuthors]).
  */
 @Component
-class AuthorBinding(private val stores: Stores) {
+class AuthorBinding(private val stores: Stores, private val named: NamedAuthors) {
 
     /**
      * The [keys] of the source not bound yet bound — a key named twice once; one at a time: two at once would bind one
@@ -36,14 +37,20 @@ class AuthorBinding(private val stores: Stores) {
         log.info("{}: {} authors bound to normalized authors of their own", s.id, fresh.size)
     }
 
-    /** The authors of the works [event] names bound at once, before anything reads the works. */
+    /**
+     * The authors of the works [event] names bound at once, before anything reads the works; those the site gave keys
+     * of now one with the same names it gave alone ([NamedAuthors]).
+     */
     @Order(AFTER_WORKS)
     @EventListener
     fun itemsChanged(event: ItemsChanged) {
         val s = stores.source(event.source) ?: return
         val facet = authorFacetOf(s) ?: return
         val keys = s.items.facetsOf(event.ids).values.flatMap { it[facet].orEmpty() }.toSet()
-        if (keys.isNotEmpty()) bind(s, keys)
+        if (keys.isNotEmpty()) {
+            bind(s, keys)
+            named.merge(s, keys)
+        }
     }
 
     companion object {

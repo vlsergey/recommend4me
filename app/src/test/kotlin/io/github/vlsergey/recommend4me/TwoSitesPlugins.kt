@@ -39,7 +39,7 @@ class TwoSitesPlugins {
         override val homepage = "https://alpha.example"
         override val schema =
             SourceSchema(
-                facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
+                facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet(byName = "name:")),
                 numbers = listOf(StandardNumbers.WORDS.asNumber()),
                 texts = listOf(TextDef("annotation", block = "text:annotation")),
                 reviews = true,
@@ -94,7 +94,7 @@ class TwoSitesPlugins {
         override val homepage = "https://beta.example"
         override val schema =
             SourceSchema(
-                facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet()),
+                facets = listOf(Books.TAG.asFacet(), Books.AUTHOR.asFacet(byName = "name:")),
                 numbers = listOf(StandardNumbers.CHARS.asNumber()),
                 texts = listOf(TextDef("annotation", block = "text:annotation")),
             )
