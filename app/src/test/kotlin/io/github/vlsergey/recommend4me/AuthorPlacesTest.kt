@@ -26,7 +26,7 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         alpha("ap1|Lorem|hay|Lorem ipsum dolor||")
         stores.source("alpha")!!.items.setFacet("ap1", Books.AUTHOR.key, listOf(FacetValue("ap-ann", "Ann")))
         val dictionary = stores.type("books")!!.authors
-        val ann = waitForValue { dictionary.bindingsOf("alpha")["ap-ann"] }
+        val ann = madeInBackground { dictionary.bindingsOf("alpha")["ap-ann"] }
         // Her page lists her page on beta, of no work known yet, and an address of no site
         contexts
             .of("alpha")
@@ -37,7 +37,8 @@ class AuthorPlacesTest : TwoSitesTestBase() {
         // A work of hers on beta: still one with Ann
         beta("ap2|Ipsum|hay|Sit amet consectetur")
         stores.source("beta")!!.items.setFacet("ap2", Books.AUTHOR.key, listOf(FacetValue("ap-bea", "Bea")))
-        assertTrue(waitFor { authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works == 1 })
+        background.run()
+        assertEquals(1, authors.getAuthor("books", ann).body!!.sites.single { it.source == "beta" }.works)
         assertEquals(ann, dictionary.bindingsOf("beta")["ap-bea"])
         val card = authors.getAuthor("books", ann).body!!
         assertNull(card.sites.single { it.source == "alpha" }.mergedBy)

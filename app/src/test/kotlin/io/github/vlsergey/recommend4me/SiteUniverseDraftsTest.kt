@@ -76,8 +76,9 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         assertEquals(UniverseFacets.pairing("fake:C1", "fake:C2"), made.key)
         assertEquals(setOf("Pilot", "Captain"), made.characters.map { it.name }.toSet())
         // The universes drafted of the works kept for the marking in the queue, after the quiet
+        background.run()
         assertTrue(
-            waitFor(60) { toMark(made.key).map { it.item }.containsAll(listOf("g1", "g2")) },
+            toMark(made.key).map { it.item }.containsAll(listOf("g1", "g2")),
             "to mark: ${toMark(made.key).map { it.item }}",
         )
         assertEquals(listOf("Space Pilot & Captain"), toMark(made.key).first { it.item == "g1" }.lines.map { it.line })
@@ -163,6 +164,8 @@ class SiteUniverseDraftsTest : SiteTestBase() {
         // The user takes the pilot away: taken away it stays, whatever the dictionary does
         corrections.correctFacet("site", "g1", FacetCorrection(facet = "characters", added = false, key = "fake:C1"))
         universes.addUniverse(UniverseRef("fake", "U2"))
+        // The works of the universe added drafted again, in the background
+        background.run()
         val removed = assertNotNull(valueOf("g1", "characters", "fake:C1"))
         assertEquals(FacetValueInfo.Corrected.REMOVED, removed.corrected)
         assertNull(removed.draftedFrom)

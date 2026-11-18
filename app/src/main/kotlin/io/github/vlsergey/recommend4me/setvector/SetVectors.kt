@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.setvector
 
+import io.github.vlsergey.recommend4me.background.Background
+import io.github.vlsergey.recommend4me.background.Rounds
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.review.ReviewRepository
 import io.github.vlsergey.recommend4me.source.SourceContexts
@@ -10,7 +12,6 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
 import java.time.Duration
-import java.util.concurrent.Executors
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
@@ -36,8 +37,9 @@ class SetVectors(
     private val contexts: SourceContexts,
     private val events: ApplicationEventPublisher,
     private val workload: Workload,
+    private val background: Background,
 ) {
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "set-vectors").apply { isDaemon = true } }
+    @Volatile private var rounds: Rounds? = null
 
     @Volatile private var stopping = false
 
@@ -59,19 +61,14 @@ class SetVectors(
     @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        worker.execute {
-            while (!stopping && refreshAll()) {
+        rounds =
+            background.every("set-vectors", Duration.ZERO, PAUSE) {
+                if (!stopping) refreshAll()
                 busy = false
-                try {
-                    Thread.sleep(PAUSE.toMillis())
-                } catch (_: InterruptedException) {
-                    return@execute
-                }
             }
-        }
     }
 
-    /** One pass over every type; false when the worker was interrupted, to stop. */
+    /** One pass over every type; false when it was interrupted, to stop. */
     // The worker's loop: whatever fails is told in the log, and the next pass tries again
     @Suppress("TooGenericExceptionCaught")
     private fun refreshAll(): Boolean =
@@ -216,7 +213,7 @@ class SetVectors(
     @PreDestroy
     fun shutdown() {
         stopping = true
-        worker.shutdownNow()
+        rounds?.stop(Duration.ZERO)
     }
 
     companion object {

@@ -1,11 +1,14 @@
 package io.github.vlsergey.recommend4me.picture
 
+import io.github.vlsergey.recommend4me.background.Background
+import io.github.vlsergey.recommend4me.background.Started
 import io.github.vlsergey.recommend4me.encoder.ImageEncoder
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.Stores
 import jakarta.annotation.PreDestroy
+import java.time.Duration
 import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -29,8 +32,9 @@ class PictureAnalysis(
     private val plugins: Plugins,
     contexts: SourceContexts,
     private val recommendations: Recommendations,
+    private val background: Background,
 ) {
-    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "pictures").apply { isDaemon = true } }
+    @Volatile private var worker: Started? = null
     private val downloads =
         Executors.newFixedThreadPool(PARALLEL_DOWNLOADS) { r ->
             Thread(r, "picture-download").apply { isDaemon = true }
@@ -70,29 +74,30 @@ class PictureAnalysis(
     @EventListener(ApplicationReadyEvent::class)
     @Suppress("TooGenericExceptionCaught")
     fun start() {
-        worker.execute {
-            try {
-                stores.sources.forEach { s ->
-                    plugins.imageEncoder()?.let { encoder ->
-                        s.pictures.itemVectors
-                            .itemsWithoutVectors(encoder.id)
-                            .takeIf { it.isNotEmpty() }
-                            ?.let { ids ->
-                                s.pictures.itemVectors.refreshItemVectors(ids, encoder.id)
-                                log.info("{}: vectors of the pictures of {} items made", s.id, ids.size)
-                            }
+        worker =
+            background.endless("pictures") {
+                try {
+                    stores.sources.forEach { s ->
+                        plugins.imageEncoder()?.let { encoder ->
+                            s.pictures.itemVectors
+                                .itemsWithoutVectors(encoder.id)
+                                .takeIf { it.isNotEmpty() }
+                                ?.let { ids ->
+                                    s.pictures.itemVectors.refreshItemVectors(ids, encoder.id)
+                                    log.info("{}: vectors of the pictures of {} items made", s.id, ids.size)
+                                }
+                        }
                     }
+                    startedAt = System.currentTimeMillis()
+                    loop()
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                } catch (e: Exception) {
+                    // The boundary of the background thread: whatever stops the analysis is told, not lost on a thread
+                    // nobody waits for
+                    log.error("the picture analysis stopped", e)
                 }
-                startedAt = System.currentTimeMillis()
-                loop()
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-            } catch (e: Exception) {
-                // The boundary of the background thread: whatever stops the analysis is told, not lost on a thread
-                // nobody waits for
-                log.error("the picture analysis stopped", e)
             }
-        }
     }
 
     /**
@@ -184,9 +189,9 @@ class PictureAnalysis(
     fun shutdown() {
         stopping = true
         signal()
-        worker.shutdownNow()
+        worker?.interrupt()
         downloads.shutdownNow()
-        worker.awaitTermination(SHUTDOWN_SECONDS, TimeUnit.SECONDS)
+        worker?.await(Duration.ofSeconds(SHUTDOWN_SECONDS))
     }
 
     private companion object {

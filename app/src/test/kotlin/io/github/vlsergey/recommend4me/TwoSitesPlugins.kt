@@ -150,8 +150,8 @@ class TwoSitesPlugins {
                 job.progress(k, 3)
             }
             job.found(3)
-            // The rest of a long catalogue: till the user stops it
-            while (!job.cancelled) Thread.sleep(10)
+            // The rest of a long catalogue: till the user stops it — the scenario stops it before it runs
+            check(job.cancelled) { "a job of the whole catalogue of the tests runs till it is stopped" }
             throw JobCancelled()
         }
 

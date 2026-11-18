@@ -26,12 +26,12 @@ class UnusedAuthorsTest : TwoSitesTestBase() {
         alpha.items.setFacet("ua1", Books.AUTHOR.key, listOf(FacetValue("name:Ulla", "Ulla")))
         alpha.items.setFacet("ua2", Books.AUTHOR.key, listOf(FacetValue("name:Ugo", "Ugo")))
         val dictionary = stores.type("books")!!.authors
-        val byName = waitForValue { dictionary.bindingsOf("alpha")["name:Ulla"] }
-        waitForValue { dictionary.bindingsOf("alpha")["name:Ugo"] }
+        val byName = madeInBackground { dictionary.bindingsOf("alpha")["name:Ulla"] }
+        madeInBackground { dictionary.bindingsOf("alpha")["name:Ugo"] }
         // The site's page gives the first work her own key; nothing gives Ugo another
         alpha.items.setFacet("ua1", Books.AUTHOR.key, listOf(FacetValue("ua-ann", "Ulla")))
         alpha.items.setFacet("ua2", Books.AUTHOR.key, emptyList())
-        val ann = waitForValue { dictionary.bindingsOf("alpha")["ua-ann"] }
+        val ann = madeInBackground { dictionary.bindingsOf("alpha")["ua-ann"] }
         assertNotEquals(byName, ann)
 
         assertEquals(1, unused.merge(alpha))

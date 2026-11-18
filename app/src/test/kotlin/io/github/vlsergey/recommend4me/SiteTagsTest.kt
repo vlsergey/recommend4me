@@ -84,8 +84,9 @@ class SiteTagsTest : SiteTestBase() {
      * liked work, then by the user, the answer on the other the tag's now.
      */
     private fun merged(hulls: String, starhulls: String) {
-        // Offered alike: the other tags of the sites, with how alike their names are; the site's own tag of it, merged
-        val similar = tagsApi.listSimilarTags(hulls, null, 0, 50, null, null).body!!.tags
+        // Offered alike: the other tags of the sites, with how alike their names are; the site's own tag of it, merged.
+        // Of the hulls: the other classes' tags are many, in the one application of the tests
+        val similar = tagsApi.listSimilarTags(hulls, "hull", 0, 50, null, null).body!!.tags
         assertTrue(similar.any { it.tag.key == starhulls && it.site == null }, "similar ${similar.map { it.tag.key }}")
         assertEquals(listOf("hulls"), similar.filter { it.site != null }.map { it.site!!.tag })
         // Nothing is merged by itself
@@ -503,8 +504,7 @@ class SiteTagsTest : SiteTestBase() {
         assertEquals(1, tagsApi.keptOutWorks(smugglers).body!!.works)
         assertTrue(tagsApi.keepOutTag(TagKeptOutRequest(smugglers, true)).body!!.keepsOut)
         // Removed in the background, with everything of it
-        val until = System.currentTimeMillis() + WAIT_MS
-        while (store.items.find("ko1") != null && System.currentTimeMillis() < until) Thread.sleep(POLL_MS)
+        background.run()
         assertNull(store.items.find("ko1"))
         // Written again by the site, not kept — nor anything of it written after its tags
         capture("ko2|Kept two|smugglers|Smugglers again|")
@@ -520,7 +520,5 @@ class SiteTagsTest : SiteTestBase() {
 
     private companion object {
         /** How long the removal in the background is waited for, and how often it is looked at. */
-        const val WAIT_MS = 30_000L
-        const val POLL_MS = 50L
     }
 }

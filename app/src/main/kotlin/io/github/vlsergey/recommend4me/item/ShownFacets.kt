@@ -168,11 +168,12 @@ internal class ShownFacets(
         }
 
         /**
-         * The user's word on a value the work is shown with: added, or confirmed when the site or the model gave it —
-         * the model even when the user's answer has since made it the work's own, no longer the model's to give.
+         * The user's word on a value the work is shown with: added, or confirmed when the site, a draft of the site's
+         * word or the model gave it — the model even when the user's answer has since made it the work's own, no longer
+         * the model's to give.
          */
         private fun answerOn(key: String): FacetValueInfo.Corrected? {
-            val given = key in had || own[key]?.likely == true
+            val given = key in had || own[key]?.let { it.likely == true || it.draftedFrom != null } == true
             return when {
                 key !in added -> null
                 given -> FacetValueInfo.Corrected.CONFIRMED

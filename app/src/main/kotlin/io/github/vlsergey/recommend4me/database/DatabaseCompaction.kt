@@ -1,8 +1,9 @@
 package io.github.vlsergey.recommend4me.database
 
+import io.github.vlsergey.recommend4me.background.Background
+import io.github.vlsergey.recommend4me.background.Rounds
 import jakarta.annotation.PreDestroy
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import java.time.Duration
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -11,25 +12,22 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(DatabaseCompaction::class.java)
 
 /**
- * THE FILES COMPACTED WHILE THE APPLICATION RUNS: every [EVERY_MINUTES] minutes each file much of which is unused is
- * compacted for at most [BUDGET_MS] ([Database.compact]) — a big one over several rounds, a little at a time, the
- * writes waiting no longer than that. An idle file is compacted at its closing anyway; this is for the files written
- * all day, the model's above all.
+ * THE FILES COMPACTED WHILE THE APPLICATION RUNS: every [EVERY] each file much of which is unused is compacted for at
+ * most [BUDGET_MS] ([Database.compact]) — a big one over several rounds, a little at a time, the writes waiting no
+ * longer than that. An idle file is compacted at its closing anyway; this is for the files written all day, the model's
+ * above all.
  */
 @Component
-class DatabaseCompaction(private val databases: Databases) {
+class DatabaseCompaction(private val databases: Databases, private val background: Background) {
 
-    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "compaction").apply { isDaemon = true }
-    }
+    @Volatile private var rounds: Rounds? = null
 
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        scheduler.scheduleWithFixedDelay(::compactAll, FIRST_MINUTES, EVERY_MINUTES, TimeUnit.MINUTES)
+        rounds = background.every("compaction", FIRST, EVERY, ::compactAll)
     }
 
-    // A BOUNDARY: an exception let out of a task of the scheduler cancels its every next round, so whatever one file
-    // throws is logged and the next file compacted
+    // A BOUNDARY: whatever one file throws is logged and the next file compacted
     @Suppress("TooGenericExceptionCaught")
     private fun compactAll() {
         databases.all().forEach { db ->
@@ -52,16 +50,16 @@ class DatabaseCompaction(private val databases: Databases) {
         }
     }
 
+    /** No round begun any more, the one under way waited for: before the files close. */
     @PreDestroy
     fun stop() {
-        scheduler.shutdownNow()
-        scheduler.awaitTermination(BUDGET_MS * 2L, TimeUnit.MILLISECONDS)
+        rounds?.stop(Duration.ofMillis(BUDGET_MS * 2L))
     }
 
     companion object {
         /** After the start's own work has settled. */
-        private const val FIRST_MINUTES = 5L
-        private const val EVERY_MINUTES = 15L
+        private val FIRST: Duration = Duration.ofMinutes(5)
+        private val EVERY: Duration = Duration.ofMinutes(15)
 
         /** The longest one file is compacted at a time: its writes wait meanwhile. */
         private const val BUDGET_MS = 20_000

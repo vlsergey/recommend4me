@@ -28,6 +28,7 @@ import io.github.vlsergey.recommend4me.tag.TagsController
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import java.net.InetSocketAddress
 import java.util.Collections
+import kotlin.test.assertNotNull
 import org.junit.jupiter.api.BeforeAll
 import org.springframework.beans.factory.annotation.Autowired
 
@@ -113,9 +114,9 @@ abstract class TwoSitesTestBase : BaseTest() {
     protected fun tagOf(source: String, tag: String) =
         TagRepository.key(stores.type("books")!!.tags.bindings().getValue(SiteTagRef(source, tag)))
 
-    /** Waits for a value that is not null yet. */
-    protected fun <T : Any> waitForValue(read: () -> T?): T {
-        waitFor { read() != null }
-        return read()!!
+    /** A value the background makes: the background run, the value [read]. */
+    protected fun <T : Any> madeInBackground(read: () -> T?): T {
+        background.run()
+        return assertNotNull(read())
     }
 }

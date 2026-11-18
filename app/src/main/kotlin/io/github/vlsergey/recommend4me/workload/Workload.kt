@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.workload
 
-import jakarta.annotation.PreDestroy
+import io.github.vlsergey.recommend4me.background.Background
+import io.github.vlsergey.recommend4me.background.Threads
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CancellationException
@@ -87,10 +88,10 @@ class FinishedWork(
  * run took: what a work to come is expected to take ([expected]).
  */
 @Component
-class Workload {
+class Workload(background: Background = Threads()) {
     /** Whose turn it is: the works waiting their turn and the thread holding it. */
     private val turns = Turns()
-    private val plans = Plans(turns)
+    private val plans = Plans(turns, background)
     private val done = WorksDone()
 
     @Volatile private var current: HeavyWork? = null
@@ -204,8 +205,6 @@ class Workload {
 
     /** The works planned, the soonest due first. */
     fun planned(): List<PlannedWork> = plans.list()
-
-    @PreDestroy fun shutdown() = plans.shutdown()
 
     private companion object {
         /** A wait worth telling in the log. */

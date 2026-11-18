@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.tag
 
+import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.item.SynonymsSet
@@ -7,7 +8,6 @@ import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
-import kotlin.concurrent.thread
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -32,6 +32,7 @@ class TagRenaming(
     private val normalization: TagNormalization,
     private val above: EntriesAbove,
     private val workload: Workload,
+    private val background: Background,
     private val json: JsonMapper,
     /** The languages a tag's entry is asked in, the user's first. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
@@ -112,7 +113,7 @@ class TagRenaming(
         schedule("start")
         // The bindings made before what their entries are a kind of was read: read once, in the background — of the
         // catalogues' sites, not a computation, out of the queue
-        thread(isDaemon = true, name = "tags-above") { above.readAboveOfBound(scope) }
+        background.start("tags-above") { above.readAboveOfBound(scope) }
     }
 
     private companion object {

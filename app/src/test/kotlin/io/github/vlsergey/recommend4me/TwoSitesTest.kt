@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
 import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOffer
 import io.github.vlsergey.recommend4me.api.model.AuthorSaid
+import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
@@ -233,11 +234,13 @@ class TwoSitesTest : TwoSitesTestBase() {
         // Its layers worked out as it is shown, though no search kept it: the same title, the same vector; its values
         // compared as the index of the list keeps them — what each work is given — the same as the search's (below)
         fun pair() = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
-        assertTrue(waitFor { pair().title != null }, "the titles encoded")
+        background.run()
+        assertTrue(pair().title != null, "the titles encoded")
         assertEquals(1.0, pair().title!!.toDouble(), 1e-3)
         keptAsWorkedOut()
-        // The pairs chosen by a title wholly alike, and by the authors: those alone, the two of "The Mill" among them
-        // Every page of them: the other classes' pairs too, in the one application of the tests
+        // The pairs chosen by a title wholly alike, and by the authors: those alone, every one of them. Every page of
+        // them: the other classes' pairs too, in the one application of the tests — whose answers the model of the
+        // pairs is fitted on too, the chance of a pair theirs as much as this scenario's
         fun chosen(authors: Boolean, title: Boolean) =
             generateSequence(0) { it + PAGE }
                 .map { offset ->
@@ -249,10 +252,11 @@ class TwoSitesTest : TwoSitesTestBase() {
                 .takeWhile { it.isNotEmpty() }
                 .flatten()
                 .toList()
-        val sameTitle = chosen(authors = false, title = true)
-        assertTrue(sameTitle.all { it.first.title.trim().equals(it.second.title.trim(), ignoreCase = true) })
-        assertTrue(sameTitle.any { setOf(it.first.item, it.second.item) == setOf("m1", "m2") }, "$sameTitle")
-        assertTrue(sameTitle.size < chosen(authors = false, title = false).size)
+        fun named(p: DuplicatePair) = Triple(p.first.item, p.second.item, p.first.source + p.second.source)
+        val every = chosen(authors = false, title = false)
+        val alike = every.filter { it.first.title.trim().equals(it.second.title.trim(), ignoreCase = true) }
+        assertEquals(alike.map(::named).toSet(), chosen(authors = false, title = true).map(::named).toSet())
+        assertTrue(alike.size < every.size)
         assertTrue(chosen(authors = true, title = false).all { it.sameAuthor })
         assertEquals(404, duplicates.getDuplicatePair("books", "beta", "nothing", "alpha", "m1").statusCode.value())
     }
@@ -264,11 +268,13 @@ class TwoSitesTest : TwoSitesTestBase() {
         // — of the one or the other: a site's tag the model doubts is given or not as the model is fitted
         fun listed() =
             ListFacetValues.of(listIndexes.of("books"), listOf(ItemKey("alpha", "m1"), ItemKey("beta", "m2")))
-        assertTrue(waitFor(120) { listed().values.any { "tags" in it } }, "the tags in the index: ${listed()}")
+        background.run()
+        assertTrue(listed().values.any { "tags" in it }, "the tags in the index: ${listed()}")
         val type = stores.type("books")!!
         val before = type.duplicates.search()?.madeAt
         duplicates.searchDuplicates("books")
-        assertTrue(waitFor(120) { type.duplicates.search()?.madeAt.let { it != null && it != before } }, "searched")
+        background.run()
+        assertTrue(type.duplicates.search()?.madeAt.let { it != null && it != before }, "searched")
         assertTrue(type.duplicates.rarity.of(listOf("tags:${tagOf("alpha", "river")}")).isNotEmpty())
         // Of a pair the search kept — of the works of the other classes too, in the one application of the tests
         val kept = type.duplicates.all().first { it.first.source == "alpha" && it.second.source == "beta" }
@@ -344,9 +350,9 @@ class TwoSitesTest : TwoSitesTestBase() {
         betaItems.setFacet("w2", Books.AUTHOR.key, listOf(FacetValue("anna-b", "Anna B")))
         betaItems.setFacet("w4", Books.AUTHOR.key, listOf(FacetValue("ann", "Ann")))
         val dictionary = stores.type("books")!!.authors
-        val ann = waitForValue { dictionary.bindingsOf("alpha")["ann"] }
-        val annaB = waitForValue { dictionary.bindingsOf("beta")["anna-b"] }
-        val namesake = waitForValue { dictionary.bindingsOf("beta")["ann"] }
+        val ann = madeInBackground { dictionary.bindingsOf("alpha")["ann"] }
+        val annaB = madeInBackground { dictionary.bindingsOf("beta")["anna-b"] }
+        val namesake = madeInBackground { dictionary.bindingsOf("beta")["ann"] }
         assertTrue(ann != namesake, "one name on two sites is no one author")
         offeredByTheirWorks(ann, annaB)
         toldApartOrPartlyOne(ann, annaB)
@@ -384,7 +390,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertEquals("https://beta.example/author/anna-b", offer.second.sites.single().url)
         assertEquals(null, offer.first.sites.single().url)
         betaItems.setFacet("w2", Books.AUTHOR.key, listOf(FacetValue("anna-b", "Anna B"), FacetValue("bob", "Bob")))
-        val bob = waitForValue { dictionary.bindingsOf("beta")["bob"] }
+        val bob = madeInBackground { dictionary.bindingsOf("beta")["bob"] }
         val written = of(ann, annaB)!!.pairs.single().second
         assertEquals(listOf(bob to "Bob"), written.others.map { it.id to it.name })
         assertEquals("https://beta.example/author/bob", written.others.single().url)
@@ -519,19 +525,17 @@ class TwoSitesTest : TwoSitesTestBase() {
         LocaleContextHolder.setLocale(Locale.ENGLISH)
         alpha("q3|Deep water|water|Waves over the reef||")
         // Indexed as the site wrote it first
-        assertTrue(
-            waitFor(60) { items.listItems("books", ItemQuery(search = "water")).body!!.items.any { it.item == "q3" } }
-        )
+        background.run()
+        assertTrue(items.listItems("books", ItemQuery(search = "water")).body!!.items.any { it.item == "q3" })
         corrections.correctFacet("alpha", "q3", FacetCorrection(facet = "tags", added = true, name = "Mermaids"))
+        background.run()
         assertTrue(
-            waitFor(60) {
-                items
-                    .listItems("books", ItemQuery(search = "mermaids", sort = ItemSort.SCORE))
-                    .body!!
-                    .items
-                    .firstOrNull()
-                    ?.item == "q3"
-            },
+            items
+                .listItems("books", ItemQuery(search = "mermaids", sort = ItemSort.SCORE))
+                .body!!
+                .items
+                // Of the works tagged so — the other scenarios' too, in the one application of the tests
+                .any { it.item == "q3" },
             "document ${
                 searchDocuments
                     .documents(stores.source("alpha")!!, listOf("q3"), passages = false)
@@ -548,21 +552,17 @@ class TwoSitesTest : TwoSitesTestBase() {
         alpha("f1|Prints|print|A keeper of prints||")
         alpha("f2|Other prints|print|Prints of another kind||")
         val type = stores.type("books")!!
-        // Of the works as they are now: what the background changes meanwhile is read again
+        // Of the works as the background leaves them
+        background.run()
         var told = ""
-        val alike =
-            waitFor(60) {
-                inBackground {
-                    val read = searchDocuments.printsOf(type)
-                    val keys = read.prints.keys.filter { it.source == "alpha" }
-                    // Each document made apart, as an update makes a few: what one reads of the others is not in it
-                    val made = keys.associateWith { k ->
-                        searchDocuments.documentsOf(type, listOf(k)).single().fingerprint
-                    }
-                    told = "read ${keys.associateWith { read.prints[it] }}, made $made"
-                    keys.isNotEmpty() && made == keys.associateWith { read.prints[it] }
-                }
-            }
+        val alike = inBackground {
+            val read = searchDocuments.printsOf(type)
+            val keys = read.prints.keys.filter { it.source == "alpha" }
+            // Each document made apart, as an update makes a few: what one reads of the others is not in it
+            val made = keys.associateWith { k -> searchDocuments.documentsOf(type, listOf(k)).single().fingerprint }
+            told = "read ${keys.associateWith { read.prints[it] }}, made $made"
+            keys.isNotEmpty() && made == keys.associateWith { read.prints[it] }
+        }
         assertTrue(alike, told)
     }
 
@@ -570,15 +570,14 @@ class TwoSitesTest : TwoSitesTestBase() {
     fun `a search finds the works by their words, the likest first`() {
         alpha("q1|Night watch|watch|A lighthouse keeper watches the night sea||")
         alpha("q2|Gardens|garden|Roses and tulips in a spring garden||")
+        background.run()
         val found =
-            waitFor(60) {
-                items
-                    .listItems("books", ItemQuery(search = "lighthouse keeper", sort = ItemSort.SCORE))
-                    .body!!
-                    .items
-                    .firstOrNull()
-                    ?.item == "q1"
-            }
+            items
+                .listItems("books", ItemQuery(search = "lighthouse keeper", sort = ItemSort.SCORE))
+                .body!!
+                .items
+                .firstOrNull()
+                ?.item == "q1"
         assertTrue(
             found,
             "found ${items.listItems("books", ItemQuery(search = "lighthouse keeper")).body!!.items.map { it.item }}",

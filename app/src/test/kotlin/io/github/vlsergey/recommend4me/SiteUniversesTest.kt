@@ -325,7 +325,7 @@ class SiteUniversesTest : SiteTestBase() {
         inBackground { suggestions.refresh(store) }
         // The candidates wait for nothing: they offer what the weights say now, the work's kept chances
         // are made in the queue of the computations; a value the card gives is never offered beside it
-        settled()
+        background.run()
         val offered = suggestionsApi.getCandidates(site, "nc1", "characters", null, null).body!!
         val given =
             items
@@ -525,11 +525,10 @@ class SiteUniversesTest : SiteTestBase() {
                 .single { it.key == "alternative-history" }
         assertEquals("standard:facet.kind.value.alternative-history", kind.nameKey)
         // Counted of the index of the list, written in the queue a second after the answer
+        background.run()
         assertTrue(
-            waitFor(60) {
-                filtersController.listFilterValues("books", "kind").body!!.propertyValues.any {
-                    it.nameKey == "standard:facet.kind.value.realism"
-                }
+            filtersController.listFilterValues("books", "kind").body!!.propertyValues.any {
+                it.nameKey == "standard:facet.kind.value.realism"
             }
         )
         inBackground { suggestions.refresh(store) }

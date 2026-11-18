@@ -186,7 +186,9 @@ class CatalogueReader(
         val made = if (sets) setVectors.ofWorks(type, linked) else List(linked.size) { emptyMap() }
         val joins = WorkFeatures.joins(type.sources.map { it.source })
         linked.forEachIndexed { w, members ->
-            val name = members.first()
+            // Named as the catalogue names it, by its representative — not by the item that says the most, listed
+            // first: a work named otherwise was read of its representative's vectors alone, those counted twice
+            val name = clusters.representative(members.first())
             merged[name] = WorkFeatures.item(name, members.mapNotNull(itemOf::get), joins)
             val joined = WorkFeatures.vectors(members.mapNotNull { vectors[it] }) + made[w]
             members.forEach(vectors::remove)

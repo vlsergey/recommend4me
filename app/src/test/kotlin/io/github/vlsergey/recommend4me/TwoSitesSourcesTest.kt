@@ -28,26 +28,30 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
 
     @Test
     fun `a scraping job writes the catalogue, remembered running till its end, stopped, goes on after a restart`() {
+        // A job started runs in the background: here, when the test runs it
         assertTrue(jobs.start("beta", SourceMode.SCRAPE_ALL))
-        assertTrue(waitFor { jobs.status("beta").newItems == 3 })
         assertEquals("RUNNING", jobsApi.listJobs().body!!.single { it.source == "beta" }.state.name)
         // One job of a source at a time; no job of a source that has no such mode
         assertTrue(!jobs.start("beta", SourceMode.UPDATES))
         assertTrue(!jobs.start("alpha", SourceMode.UPDATES))
         // Remembered as running: a restart goes on with it
         assertEquals(SourceMode.SCRAPE_ALL, jobs.resumable("beta"))
-        assertNotNull(items.getItem("beta", "s3").body)
 
+        // Stopped by the user: it writes what it read, and stops at its next look
         jobs.cancel("beta")
-        assertTrue(waitFor { jobs.status("beta").state.name == "CANCELLED" })
+        background.run()
+        assertEquals(3, jobs.status("beta").newItems)
+        assertNotNull(items.getItem("beta", "s3").body)
+        assertEquals("CANCELLED", jobs.status("beta").state.name)
         assertNull(jobs.resumable("beta"), "stopped by the user, it waits for the user")
 
         // Left running by the last stop of the application: started again on the start
         settings.set("job.beta.running", SourceMode.SCRAPE_ALL.name)
         jobs.resume()
-        assertTrue(waitFor { jobs.status("beta").state.name == "RUNNING" })
+        assertEquals("RUNNING", jobs.status("beta").state.name)
         jobs.cancel("beta")
-        assertTrue(waitFor { jobs.status("beta").state.name == "CANCELLED" })
+        background.run()
+        assertEquals("CANCELLED", jobs.status("beta").state.name)
 
         // A job of the updates runs to its end and is not remembered
         assertEquals(
@@ -58,7 +62,8 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
                 .state
                 .name,
         )
-        assertTrue(waitFor(120) { jobs.status("beta").state.name == "DONE" }, "state ${jobs.status("beta")}")
+        background.run()
+        assertEquals("DONE", jobs.status("beta").state.name, "state ${jobs.status("beta")}")
         assertEquals(1, jobs.status("beta").newItems)
         assertNull(jobs.resumable("beta"))
         assertNotNull(items.getItem("beta", "u1").body)
@@ -68,7 +73,7 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
     fun `a work graded asks the site for nothing — its page is loaded on the user's press alone`() {
         beta("b5|Deep|depth|Short")
         gradesController.rateItem("beta", "b5", RatingRequest(5))
-        Thread.sleep(500)
+        background.run()
         assertTrue("b5" !in Beta.refreshed)
         gradesController.unrateItem("beta", "b5", null)
     }
@@ -160,7 +165,8 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
         }
         // Planned at once, not waited for: the request answers with the model as it is
         assertEquals(200, model.trainModel("books").statusCode.value())
-        assertTrue(waitFor { model.getModel("books").body!!.trained })
+        background.run()
+        assertTrue(model.getModel("books").body!!.trained)
         val trained = model.getModel("books").body!!
         assertTrue(trained.scorers.any { it.id == "pairwise-logistic" })
         assertEquals("pairwise-logistic", model.chooseScorer("books", ScorerChoice("pairwise-logistic")).body!!.scorer)

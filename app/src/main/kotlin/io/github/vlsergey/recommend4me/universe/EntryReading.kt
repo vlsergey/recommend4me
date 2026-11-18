@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
@@ -27,6 +28,7 @@ class EntryReading(
     private val stores: Stores,
     private val plugins: Plugins,
     private val events: ApplicationEventPublisher,
+    private val background: Background,
     /** The languages the names of universes and characters are asked in, the user's first. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) {
@@ -104,26 +106,21 @@ class EntryReading(
                 it.languages != languages || it.properties != wantedProperties(it.catalogue)
             }
         if (stale.isEmpty()) return
-        Thread(
-                {
-                    stale.forEach { u ->
-                        try {
-                            val key = UniverseKey(u.catalogue, u.id)
-                            read(key, universes.fandoms.entries.charactersRead(key))
-                            stores.types
-                                .filter { it.type.universes }
-                                .flatMap { it.sources }
-                                .forEach { events.publishEvent(ItemsChanged(it.id, emptyList())) }
-                        } catch (e: Exception) {
-                            // A BOUNDARY: an entry asked again of its catalogue's plugin and service in the
-                            // background may fail in any way; the failure is logged and the next entry asked
-                            log.warn("The entry {} was not asked again in {}: {}", u.value, languages, e.message)
-                        }
-                    }
-                },
-                "universes-languages",
-            )
-            .apply { isDaemon = true }
-            .start()
+        background.start("universes-languages") {
+            stale.forEach { u ->
+                try {
+                    val key = UniverseKey(u.catalogue, u.id)
+                    read(key, universes.fandoms.entries.charactersRead(key))
+                    stores.types
+                        .filter { it.type.universes }
+                        .flatMap { it.sources }
+                        .forEach { events.publishEvent(ItemsChanged(it.id, emptyList())) }
+                } catch (e: Exception) {
+                    // A BOUNDARY: an entry asked again of its catalogue's plugin and service in the
+                    // background may fail in any way; the failure is logged and the next entry asked
+                    log.warn("The entry {} was not asked again in {}: {}", u.value, languages, e.message)
+                }
+            }
+        }
     }
 }

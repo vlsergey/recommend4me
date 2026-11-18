@@ -290,13 +290,11 @@ class SiteTest : SiteTestBase() {
         assertTrue(onPage.isNotEmpty() && onPage.all { it.features.isEmpty() }, "on a page $onPage")
         // What a model that had not seen a graded work says is read apart, fitted in the queue: being
         // fitted, the request answers so and does not wait; an ungraded work has none
+        // The works of the background done before: the page asks, and the queue fits it while the page still asks
+        background.run()
         assertEquals(HttpStatus.ACCEPTED, explanationController.getHeldOut(site, "s3").statusCode)
-        var heldOut = explanationController.getHeldOut(site, "s3")
-        val fitted = System.currentTimeMillis() + 30_000
-        while (heldOut.statusCode == HttpStatus.ACCEPTED && System.currentTimeMillis() < fitted) {
-            Thread.sleep(50)
-            heldOut = explanationController.getHeldOut(site, "s3")
-        }
+        background.run()
+        val heldOut = explanationController.getHeldOut(site, "s3")
         assertEquals(HttpStatus.OK, heldOut.statusCode)
         assertTrue(heldOut.body!!.explanation.isNotEmpty())
         assertEquals(HttpStatus.NO_CONTENT, explanationController.getHeldOut(site, "x1").statusCode)
@@ -310,8 +308,8 @@ class SiteTest : SiteTestBase() {
         val again = comparisons.start("books")
         if (again !== comparison)
             assertNotNull(comparison.finishedAt, "a second comparison started while the first was under way")
-        val until = System.currentTimeMillis() + 60_000
-        while (comparison.finishedAt == null && System.currentTimeMillis() < until) Thread.sleep(50)
+        background.run()
+        assertNotNull(comparison.finishedAt)
         assertTrue(comparison.grades > 0, "measured on ${comparison.grades} grades")
         val measured = comparison.scorers.single()
         assertEquals(MeasuringState.DONE, measured.state, measured.error)
@@ -404,11 +402,10 @@ class SiteTest : SiteTestBase() {
         catalogue()
         capture("n1|New one|space|Starships cross the galaxy, pilots fight in orbit near planets|Pilot/Captain")
         val store = stores.source(site)!!
-        // The texts are encoded a few seconds after the capture: that done, its vectors taken away again — the work
+        // The texts are encoded after the capture, in the queue: that done, its vectors taken away again — the work
         // as it is before they are made, nothing to make them again
-        val until = System.currentTimeMillis() + 30_000
+        background.run()
         fun encoded() = store.textVectors.halvesOf(listOf("n1"), "words")
-        while (encoded().isEmpty() && System.currentTimeMillis() < until) Thread.sleep(50)
         encoded().getValue("n1").keys.forEach { store.textVectors.delete("n1", it) }
         // Of no input the model ever learnt of — every work it learnt from had its texts — it can tell nothing: no
         // value given by it, no chance of any, on the page as in the work's details; the site's tag shown all the same

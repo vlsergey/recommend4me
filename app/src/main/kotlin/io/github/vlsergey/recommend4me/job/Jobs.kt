@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.job
 
+import io.github.vlsergey.recommend4me.background.Background
+import io.github.vlsergey.recommend4me.background.Started
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -15,9 +17,6 @@ import jakarta.annotation.PreDestroy
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -69,9 +68,12 @@ class Jobs(
     private val settings: Settings,
     private val textVectors: TextVectors,
     private val recommendations: Recommendations,
+    private val background: Background,
 ) {
     private val runs = ConcurrentHashMap<String, Run>()
-    private val executors = ConcurrentHashMap<String, ExecutorService>()
+
+    /** The threads of the jobs begun, by their source: one at a time a source. */
+    private val begun = ConcurrentHashMap<String, Started>()
 
     @Volatile private var shuttingDown = false
 
@@ -142,11 +144,9 @@ class Jobs(
         if (!startable(sourceId, mode)) return false
         val run = Run(sourceId, mode)
         runs[sourceId] = run
-        val executor =
-            executors.computeIfAbsent(sourceId) {
-                Executors.newSingleThreadExecutor { r -> Thread(r, "job-$sourceId").apply { isDaemon = true } }
-            }
-        executor.execute { run(run) }
+        // Remembered as running from its start: a stop before it begins leaves it to go on after the restart
+        if (mode.resumable) settings.set("job.$sourceId.running", mode.name)
+        begun[sourceId] = background.start("job-$sourceId") { run(run) }
         return true
     }
 
@@ -172,7 +172,6 @@ class Jobs(
     private fun run(run: Run) {
         val store = stores.source(run.sourceId) ?: return
         val whole = run.mode.resumable
-        if (whole) settings.set("job.${run.sourceId}.running", run.mode.name)
         try {
             store.source.scrape(run.mode, contexts.of(store.id), run)
             run.checkCancelled()
@@ -228,11 +227,10 @@ class Jobs(
     fun shutdown() {
         shuttingDown = true
         runs.values.forEach { it.cancelRequested = true }
-        executors.values.forEach { it.shutdown() }
         val until = System.nanoTime() + STOP_WAIT.toNanos()
-        executors.values.forEach { e ->
+        begun.values.forEach { job ->
             val left = until - System.nanoTime()
-            if (left <= 0 || !e.awaitTermination(left, TimeUnit.NANOSECONDS)) e.shutdownNow()
+            if (left <= 0 || !job.await(Duration.ofNanos(left))) job.interrupt()
         }
     }
 

@@ -44,8 +44,8 @@ class SiteScoreSweepTest : SiteTestBase() {
             gradesController.rateItem("site", "s$k", RatingRequest(5))
             gradesController.rateItem("site", "d$k", RatingRequest(1))
         }
-        // The average work is of every work of the type: nothing of the background changes them while it is compared
-        settled()
+        // What the background makes of them made now: nothing changes them while the average work is compared
+        background.run()
         // The first training finds no average work kept: counted of every work once, and kept
         inBackground { recommendations.retrain("books") }
         assertNotNull(type.averageWork.load(basis))

@@ -129,6 +129,13 @@ wait to see learnt (an answer, a tag) does not. A work of the background waiting
 minutes goes as an asked one (`Turns.AGING`). What is not a computation — reading the sites' pages
 and pictures — stays out of the queue.
 
+**Nothing of the application starts a thread or a timer of its own: it asks `Background`** — the works of
+the queue begun when due, the jobs of the sites, the rounds done again and again, the loops as long as the
+application runs. In the application these are threads (`background/Threads.kt`, the configuration with
+`@EnableScheduling`); in the tests nothing runs by itself (`HeldBackground`, `recommend4me.background=held`):
+a test says `background.run()` where the application would have done it by now, and it is done at once,
+whole. No test waits for the background — no `waitFor`, no sleep, no polling (user, 2026-11-18).
+
 ## The speed of a computation before its last digits
 
 In the implementation of an algorithm, speed comes before the precision of the last digits:
@@ -168,7 +175,7 @@ writes the schema anew from the migrations when they differ — commit it with t
 process of the tests, with the cheapest plugins (the naive Bayes suggester). What a scenario needs otherwise it sets as
 the user would — a setting, taken back after. The classes share the application's data: each writes and checks by keys
 of its own, a scenario whose models must be of its own works alone has a site of its own (`SiteSource(id)`), and what
-the background works out is checked after `settled()`.
+the background works out is checked after `background.run()`.
 
 **A class or a file too long is split by meaning, never by its length.** Each new one is about one thing
 — an entity, a step, a purpose the reader names ("the dictionaries of the facets", "the choice of what

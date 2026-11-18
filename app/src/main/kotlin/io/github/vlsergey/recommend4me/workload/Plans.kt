@@ -1,12 +1,10 @@
 package io.github.vlsergey.recommend4me.workload
 
+import io.github.vlsergey.recommend4me.background.Background
+import io.github.vlsergey.recommend4me.background.Later
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CancellationException
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(Plans::class.java)
@@ -16,25 +14,13 @@ private val log = LoggerFactory.getLogger(Plans::class.java)
  * for it, and what it does — begun here when it is due, among the works waiting their turn ([Turns]). Planned again
  * before it is due, a work is planned once: its reasons summed, its due time the newer, what it does the newer; planned
  * while a work alike waits its turn, not begun, it is that one — it reads the data as they are when it begins. Of every
- * work begun, the thread that waits its turn and runs it is one of the queue's own, for the time of the work.
+ * work begun, the thread that waits its turn and runs it is the [background]'s, for the time of the work.
  */
-internal class Plans(private val turns: Turns) {
+internal class Plans(private val turns: Turns, private val background: Background) {
     /** The works planned, by the work; guarded by itself. */
     private val planned = HashMap<Work, Plan>()
 
-    private val timer = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "workload-timer").apply { isDaemon = true }
-    }
-
-    private val count = AtomicInteger()
-    private val runners = Executors.newCachedThreadPool { r ->
-        Thread(r, "workload-${count.incrementAndGet()}").apply { isDaemon = true }
-    }
-
-    /**
-     * A work planned: [task] — what it does, given the place it waits its turn in — once [due]; [timer] the begin
-     * scheduled.
-     */
+    /** A work planned: [task] — what it does, given the place it waits its turn in — once [due]; [timer] its begin. */
     private class Plan(
         val work: Work,
         val due: Instant,
@@ -43,7 +29,7 @@ internal class Plans(private val turns: Turns) {
         val asked: Boolean,
         val task: (Waiter) -> Unit,
     ) {
-        @Volatile var timer: ScheduledFuture<*>? = null
+        @Volatile var timer: Later? = null
     }
 
     /**
@@ -54,7 +40,7 @@ internal class Plans(private val turns: Turns) {
         if (turns.joined(work, reasons, asked)) return
         synchronized(planned) {
             val old = planned.remove(work)
-            old?.timer?.cancel(false)
+            old?.timer?.cancel()
             val now = Instant.now()
             val plan =
                 Plan(
@@ -67,13 +53,13 @@ internal class Plans(private val turns: Turns) {
                 )
             planned[work] = plan
             val delay = Duration.between(now, plan.due).toMillis().coerceAtLeast(0)
-            plan.timer = timer.schedule({ begin(plan) }, delay, TimeUnit.MILLISECONDS)
+            plan.timer = background.later("workload: $work", Duration.ofMillis(delay)) { begin(plan) }
         }
     }
 
     /** The [work] begins now, of its caller: no longer planned; the reasons it was planned for, none if it was not. */
     fun take(work: Work): Map<String, Int> =
-        synchronized(planned) { planned.remove(work) }?.also { it.timer?.cancel(false) }?.reasons.orEmpty()
+        synchronized(planned) { planned.remove(work) }?.also { it.timer?.cancel() }?.reasons.orEmpty()
 
     /** Whether the [work] is planned. */
     fun has(work: Work): Boolean = synchronized(planned) { work in planned }
@@ -85,9 +71,9 @@ internal class Plans(private val turns: Turns) {
             .map { PlannedWork(it.work, it.due, it.since, it.reasons, it.asked) }
 
     /**
-     * The [plan] due: put among the works waiting their turn — or joined to a work alike waiting — and run on a thread
-     * of its own once its turn comes. Nothing of a plan planned again or taken meanwhile. Gone from the plans and among
-     * the waiting at once: never told neither planned nor waiting between.
+     * The [plan] due, on the thread the background begun it on: put among the works waiting their turn — or joined to a
+     * work alike waiting — and run once its turn comes. Nothing of a plan planned again or taken meanwhile. Gone from
+     * the plans and among the waiting at once: never told neither planned nor waiting between.
      */
     private fun begin(plan: Plan) {
         val (entry, own) =
@@ -96,7 +82,7 @@ internal class Plans(private val turns: Turns) {
                 planned.remove(plan.work)
                 turns.enter(plan.work, plan.reasons, joinAlike = true, asked = plan.asked)
             }
-        if (own) runners.execute { run(plan, entry) }
+        if (own) run(plan, entry)
     }
 
     /**
@@ -112,11 +98,5 @@ internal class Plans(private val turns: Turns) {
         } catch (e: Exception) {
             log.warn("{} failed: {}", plan.work, e.message, e)
         }
-    }
-
-    /** The timer and the runners stopped: the application ends. */
-    fun shutdown() {
-        timer.shutdownNow()
-        runners.shutdownNow()
     }
 }
