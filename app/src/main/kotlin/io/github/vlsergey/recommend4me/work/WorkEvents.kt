@@ -30,8 +30,16 @@ class WorkEvents(private val stores: Stores, private val works: Works, private v
     /**
      * Two works merged: each item may stand under a grade and a mark it did not have — no grade or mark given, the user
      * waits for none of it learnt (owner, 2026-11-19: "I ordered nothing", of the training asked after pairs answered).
+     * Of a work merged the user neither graded, marked of interest nor answered on, nothing told: the models learn
+     * nothing of it (owner, 2026-11-20: "the model is worth training again only if the works were marked or graded").
      */
     fun merged(key: ItemKey) {
+        val s = stores.source(key.source) ?: return
+        val marked =
+            s.ratings.ofItem(key.id).isNotEmpty() ||
+                s.interest.ofItem(key.id) != null ||
+                s.corrections.facetsOf(key.id).isNotEmpty()
+        if (!marked) return
         gradesChanged(key, merged = true)
         interestChanged(key, merged = true)
     }
