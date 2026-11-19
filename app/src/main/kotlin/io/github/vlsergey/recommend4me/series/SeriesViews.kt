@@ -186,6 +186,7 @@ class SeriesViews(private val stores: Stores, private val lines: WorkLines, priv
                             key = ref.key,
                             title = page?.title ?: names[ref.key] ?: ref.key,
                             seen = page != null,
+                            stale = page?.stale == true,
                             works = refs.getValue(ref),
                             // Of a series whose page was never seen, its page as the source makes it of the key
                             url = page?.url ?: s.source.valueUrl(facet, ref.key, names[ref.key] ?: ref.key),

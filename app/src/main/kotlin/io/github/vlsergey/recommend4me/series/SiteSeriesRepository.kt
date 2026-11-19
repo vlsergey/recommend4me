@@ -8,7 +8,8 @@ import org.jooq.DSLContext
 
 /**
  * What a site says of one of its series, as its page said it last: its page, title, description, status (a standard
- * status of the works) and dates; null of a field no page showed.
+ * status of the works) and dates; null of a field no page showed. When its page was read last ([seenAt]) and when a
+ * work was last made a work of it otherwise ([workSeenAt]): a page read before is to be visited again ([stale]).
  */
 data class SiteSeries(
     val key: String,
@@ -18,7 +19,13 @@ data class SiteSeries(
     val status: String?,
     val begunAt: Instant?,
     val updatedAt: Instant?,
-)
+    val seenAt: Instant,
+    val workSeenAt: Instant?,
+) {
+    /** Whether a work was made a work of the series after its page was read last: the page did not list it. */
+    val stale: Boolean
+        get() = workSeenAt != null && workSeenAt > seenAt
+}
 
 /**
  * THE SERIES OF ONE SITE, in its source database: what their pages say of them ([SiteSeries]), and the number of a work
@@ -51,6 +58,15 @@ class SiteSeriesRepository(private val db: DSLContext) {
             .execute()
     }
 
+    /**
+     * The works of the series [keys] met — a work made a work of them [now], not by their pages: their pages, read
+     * before, are to be visited again. A series whose page was never read has no row, and is to be visited anyway.
+     */
+    fun worksSeen(keys: Collection<String>, now: Instant) {
+        if (keys.isEmpty()) return
+        db.update(SERIES).set(SERIES.WORK_SEEN_AT, now).where(SERIES.SERIES_KEY.`in`(keys)).execute()
+    }
+
     /** The item's [position] in the series [key], in place of the one before. */
     fun place(key: String, itemId: String, position: Int) {
         val p = SERIES_PLACE
@@ -76,7 +92,17 @@ class SiteSeriesRepository(private val db: DSLContext) {
             .flatMap { chunk -> db.selectFrom(SERIES).where(SERIES.SERIES_KEY.`in`(chunk)).fetch() }
             .associate {
                 it.seriesKey!! to
-                    SiteSeries(it.seriesKey!!, it.url!!, it.title, it.description, it.status, it.begunAt, it.updatedAt)
+                    SiteSeries(
+                        it.seriesKey!!,
+                        it.url!!,
+                        it.title,
+                        it.description,
+                        it.status,
+                        it.begunAt,
+                        it.updatedAt,
+                        it.seenAt!!,
+                        it.workSeenAt,
+                    )
             }
 
     /** The places of the works of the series [keys] the site told: series to item to its number. */

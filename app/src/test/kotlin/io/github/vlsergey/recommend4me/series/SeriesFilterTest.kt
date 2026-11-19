@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.series
 
+import io.github.vlsergey.recommend4me.api.model.SeriesRow
+import io.github.vlsergey.recommend4me.api.model.SeriesSite
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -34,5 +36,19 @@ class SeriesFilterTest {
         assertEquals(listOf("c", "d"), let(SeriesFilter(said = true)))
         assertEquals(listOf("a", "b"), let(SeriesFilter(said = false)))
         assertEquals(listOf("c"), let(SeriesFilter(with = listOf("author.today"), said = true)))
+    }
+
+    @Test
+    fun `of a page of a site to be visited — never read, or read before a work was met elsewhere — or of none`() {
+        fun site(seen: Boolean, stale: Boolean = false) =
+            SeriesSite(source = "ficbook", key = "k", title = "t", seen = seen, stale = stale, works = 1)
+        fun row(key: String, vararg sites: SeriesSite) =
+            SeriesRow(key = key, title = key, sites = sites.toList(), works = 1, said = false)
+        val rows =
+            listOf(row("read", site(true)), row("never", site(false)), row("met", site(true), site(true, stale = true)))
+        fun let(toVisit: Boolean?) = rows.filter(SeriesFilter(toVisit = toVisit)::lets).map { it.key }
+        assertEquals(listOf("read", "never", "met"), let(null))
+        assertEquals(listOf("never", "met"), let(true))
+        assertEquals(listOf("read"), let(false))
     }
 }

@@ -46,5 +46,9 @@
   "Series.sortBy.TITLE": "by title",
   "Series.sortBy.DATE": "by the first chapter's date",
   "Series.sortBy.SIZE": "by size",
-  "Series.firstPublishedHint": "When the first chapter was published: the earliest of every site of the work"
+  "Series.firstPublishedHint": "When the first chapter was published: the earliest of every site of the work",
+  "Series.stale": "The series' page was read before a new work of it was met: it is to be opened again",
+  "SeriesScreen.toVisit": "to visit",
+  "SeriesScreen.toVisitHint": "A site whose page of the series was never opened, or opened before a new work of it was met",
+  "SeriesScreen.onSite": "open the series' page on the site"
 }

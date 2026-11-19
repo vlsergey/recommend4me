@@ -49,5 +49,9 @@
   "Series.sortBy.TITLE": "po naslovu",
   "Series.sortBy.DATE": "po datumu prvog poglavlja",
   "Series.sortBy.SIZE": "po veličini",
-  "Series.firstPublishedHint": "Kada je objavljeno prvo poglavlje: najranije od svih sajtova dela"
+  "Series.firstPublishedHint": "Kada je objavljeno prvo poglavlje: najranije od svih sajtova dela",
+  "Series.stale": "Stranica ciklusa pročitana je pre nego što se u njemu pojavilo novo delo: treba je ponovo otvoriti",
+  "SeriesScreen.toVisit": "treba posetiti",
+  "SeriesScreen.toVisitHint": "Postoji sajt gde stranica ciklusa nije otvarana ili je otvarana pre nego što se u ciklusu pojavilo novo delo",
+  "SeriesScreen.onSite": "otvori stranicu ciklusa na sajtu"
 }

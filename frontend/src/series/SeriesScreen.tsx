@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { EyeOffIcon, LibraryIcon } from "lucide-react";
+import { EyeOffIcon, HistoryIcon, LibraryIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type ContentTypeInfo } from "@/api/client";
 import { RefreshSelect } from "@/components/RefreshSelect";
@@ -29,6 +29,15 @@ const HAS: Has[] = ["any", "yes", "no"];
 /** The filter of the user's word among the filters of the sites. */
 const SAID = "said";
 
+/** The filter of a page of a site to be visited — never read, or read before a work of it was met elsewhere. */
+const TO_VISIT = "toVisit";
+
+/** The filters after those of the sites, each with the words of its name and its hint. */
+const OWN: Record<string, readonly ["SeriesScreen.said" | "SeriesScreen.toVisit", "SeriesScreen.saidHint" | "SeriesScreen.toVisitHint"]> = {
+  [SAID]: ["SeriesScreen.said", "SeriesScreen.saidHint"],
+  [TO_VISIT]: ["SeriesScreen.toVisit", "SeriesScreen.toVisitHint"],
+};
+
 /**
  * THE SCREEN OF THE NORMALIZED SERIES of a content type: every series of every site and the works the
  * user said to be one series, made one by the works they share — the most works first, found by a
@@ -49,6 +58,7 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
     with: sites.filter((s) => of(s) === "yes"),
     without: sites.filter((s) => of(s) === "no"),
     said: of(SAID) === "any" ? undefined : of(SAID) === "yes",
+    toVisit: of(TO_VISIT) === "any" ? undefined : of(TO_VISIT) === "yes",
   };
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -83,10 +93,10 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
         <RefreshSelect every={every} onChange={setEvery} className="ml-auto" />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {[...sites, SAID].map((key) => (
+        {[...sites, SAID, TO_VISIT].map((key) => (
           <div key={key} className="flex items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground" title={key === SAID ? t("SeriesScreen.saidHint") : sourceTitle(key)}>
-              {key === SAID ? t("SeriesScreen.said") : sourceShort(key)}
+            <span className="text-muted-foreground" title={OWN[key] ? t(OWN[key][1]) : sourceTitle(key)}>
+              {OWN[key] ? t(OWN[key][0]) : sourceShort(key)}
             </span>
             <Tabs
               value={of(key)}
@@ -116,18 +126,31 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
               <a href={seriesHref(type.id, s.key)} className="min-w-0 truncate font-medium underline-offset-2 hover:underline" title={t("SeriesScreen.openHint")}>
                 {s.title}
               </a>
-              {s.sites.map((site) => (
-                <span
-                  key={`${site.source}/${site.key}`}
-                  className="inline-flex items-baseline gap-1 text-xs text-muted-foreground"
-                  title={site.seen ? sourceTitle(site.source) : `${sourceTitle(site.source)} — ${t("Series.notSeen")}`}
-                >
-                  {/* A series whose page on the site was never opened: known by the works naming it alone */}
-                  {!site.seen && <EyeOffIcon className="size-3 self-center" aria-label={t("Series.notSeen")} />}
-                  {sourceShort(site.source)}
-                  {site.title !== s.title && `: ${site.title}`}
-                </span>
-              ))}
+              {s.sites.map((site) => {
+                const state = !site.seen ? t("Series.notSeen") : site.stale ? t("Series.stale") : null;
+                const inner = (
+                  <>
+                    {/* A series whose page on the site was never opened: known by the works naming it alone */}
+                    {!site.seen && <EyeOffIcon className="size-3 self-center" aria-label={t("Series.notSeen")} />}
+                    {/* Read before a work of it was met elsewhere: the page did not list it */}
+                    {site.stale && <HistoryIcon className="size-3 self-center" aria-label={t("Series.stale")} />}
+                    {sourceShort(site.source)}
+                    {site.title !== s.title && `: ${site.title}`}
+                  </>
+                );
+                const title = `${sourceTitle(site.source)}${state ? ` — ${state}` : ""}${site.url ? ` — ${t("SeriesScreen.onSite")}` : ""}`;
+                const look = "inline-flex items-baseline gap-1 text-xs text-muted-foreground";
+                // The series' page on the site, to be visited from here
+                return site.url ? (
+                  <a key={`${site.source}/${site.key}`} href={site.url} target="_blank" rel="noreferrer" className={`${look} underline-offset-2 hover:text-foreground hover:underline`} title={title}>
+                    {inner}
+                  </a>
+                ) : (
+                  <span key={`${site.source}/${site.key}`} className={look} title={title}>
+                    {inner}
+                  </span>
+                );
+              })}
               {s.said && (
                 <span className="rounded bg-muted px-1 text-xs text-muted-foreground" title={t("SeriesScreen.saidHint")}>
                   {t("SeriesScreen.said")}

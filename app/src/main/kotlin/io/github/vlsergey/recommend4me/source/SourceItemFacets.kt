@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.source
 
 import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
+import java.time.Instant
 import kotlin.concurrent.withLock
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -16,8 +17,16 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
     private fun <T> write(block: () -> T): T = store.writing.withLock(block)
 
     override fun setFacet(itemId: String, facet: String, values: List<FacetValue>) = write {
+        // A work met as a work of a series it was not of: the series' page, read before, did not list it
+        val newSeries =
+            if (facet != seriesFacet) emptyList()
+            else values.map { it.key } - store.items.facets(itemId)[facet].orEmpty().toSet()
         store.items.setFacet(itemId, facet, standardised(itemId, facet, values))
+        store.series.worksSeen(newSeries, Instant.now())
     }
+
+    /** The source's facet of the series; none of a source without series. */
+    private val seriesFacet = store.schema.facets.firstOrNull { it.role == FacetRole.SERIES }?.key
 
     override fun nameFacetValues(facet: String, names: Map<String, String>) = write {
         val standard = store.schema.facet(facet)?.standard

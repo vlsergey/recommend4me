@@ -16,10 +16,11 @@ class SeriesController(private val views: SeriesViews) : SeriesApi {
         with: List<String>?,
         without: List<String>?,
         said: Boolean?,
+        toVisit: Boolean?,
         offset: Int,
         limit: Int,
     ): ResponseEntity<SeriesPage> =
-        views.page(type, SeriesFilter(search, with.orEmpty(), without.orEmpty(), said), offset, limit)?.let {
+        views.page(type, SeriesFilter(search, with.orEmpty(), without.orEmpty(), said, toVisit), offset, limit)?.let {
             ResponseEntity.ok(it)
         } ?: ResponseEntity.notFound().build()
 

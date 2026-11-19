@@ -350,6 +350,13 @@ class SiteTest : SiteTestBase() {
         captures.capturePage(CaptureRequest("https://$site.example/series/галактика", "Галактика|Starships.|s3,s1"))
         assertEquals(null, items.getItem(site, "s2").body!!.series)
         assertEquals(listOf("s3", "s1"), items.getItem(site, "s1").body!!.series!!.works.map { it.work.item })
+        assertFalse(items.getItem(site, "s1").body!!.series!!.sites.single().stale)
+
+        // A work met of the series after its page was read: the page is to be visited again, till it is
+        capture("s9|Space 9|space|Starships cross the galaxy 9|Pilot/Captain|Галактика")
+        assertTrue(items.getItem(site, "s9").body!!.series!!.sites.single().stale)
+        captures.capturePage(CaptureRequest("https://$site.example/series/галактика", "Галактика|Starships.|s3,s1,s9"))
+        assertFalse(items.getItem(site, "s9").body!!.series!!.sites.single().stale)
 
         // The cards of a list get the works' grades
         gradesController.rateItem(site, "s1", RatingRequest(4))
@@ -390,42 +397,32 @@ class SiteTest : SiteTestBase() {
     }
 
     @Test
-    fun `a work captured just now, its texts not encoded yet, has no chance of the model till they are, and says so`() {
+    fun `a work captured just now has its texts encoded and its chances and expectation made as its page is opened`() {
         // The model of the facets learnt of works that have their texts
         catalogue()
         capture("n1|New one|space|Starships cross the galaxy, pilots fight in orbit near planets|Pilot/Captain")
         val store = stores.source(site)!!
-        // The texts are encoded after the capture, in the queue: that done, its vectors taken away again — the work
-        // as it is before they are made, nothing to make them again
-        background.run()
         fun encoded() = store.textVectors.halvesOf(listOf("n1"), "words")
-        encoded().getValue("n1").keys.forEach { store.textVectors.delete("n1", it) }
-        // Of no input the model ever learnt of — every work it learnt from had its texts — it can tell nothing: no
-        // value given by it, no chance of any, on the page as in the work's details; the site's tag shown all the same
+        // Captured just now: its texts wait for the background
+        assertTrue("n1" !in encoded())
+        // Its page opened: its texts encoded on the spot and kept, it is judged by them at once — on the page as in the
+        // work's details, nothing more to come
         fun worked(facets: List<ItemFacet>) = facets.filter { it.facet == "tags" || it.facet == "pairing" }
-        val unjudgedPage = pages.getPage("https://$site.example/work/n1")
-        val unjudged = items.getItem(site, "n1")
-        // Its chances still to come: the page and the details say so, the interface asking again
-        assertEquals(HttpStatus.ACCEPTED, unjudgedPage.statusCode)
-        assertEquals(HttpStatus.ACCEPTED, unjudged.statusCode)
-        assertTrue(unjudgedPage.body!!.item!!.pending && unjudged.body!!.pending)
-        val page = worked(unjudgedPage.body!!.item!!.facets)
-        val details = worked(unjudged.body!!.allFacets)
-        listOf(page, details).forEach { facets ->
-            val values = facets.flatMap { it.propertyValues }
-            // A tag drafted of the site's tag is no word of the model's
-            val modelled = values.filter { it.draftedFrom == null }
-            assertTrue(modelled.none { it.chance != null || it.inferred == true }, "of the model: $values")
-            assertTrue(values.any { it.key == tag("space") }, "the site's tag: $values")
-        }
-        // Its texts encoded, it is judged by them
-        refresh(store)
-        val judgedPage = pages.getPage("https://$site.example/work/n1")
-        val judged = worked(judgedPage.body!!.item!!.facets)
+        val page = pages.getPage("https://$site.example/work/n1")
+        assertEquals(HttpStatus.OK, page.statusCode)
+        assertTrue("n1" in encoded())
+        val judged = worked(page.body!!.item!!.facets)
         assertTrue(judged.single { it.facet == "tags" }.propertyValues.all { it.chance != null }, "judged $judged")
-        // Nothing more to come
-        assertEquals(HttpStatus.OK, judgedPage.statusCode)
-        assertFalse(judgedPage.body!!.item!!.pending)
-        assertEquals(HttpStatus.OK, items.getItem(site, "n1").statusCode)
+        val details = items.getItem(site, "n1")
+        assertEquals(HttpStatus.OK, details.statusCode)
+        assertTrue(
+            worked(details.body!!.allFacets).single { it.facet == "tags" }.propertyValues.all { it.chance != null }
+        )
+        // Of a model of the grades kept, its expectation made by it, the model untouched
+        val type = stores.typeOf(site)
+        type.models.trainedAt()?.let { trained ->
+            assertTrue(type.predictions.predicted(site, listOf("n1")).containsKey("n1"))
+            assertEquals(trained, type.models.trainedAt())
+        }
     }
 }
