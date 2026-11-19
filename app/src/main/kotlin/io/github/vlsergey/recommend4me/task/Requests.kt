@@ -1,10 +1,10 @@
-package io.github.vlsergey.recommend4me.workload
+package io.github.vlsergey.recommend4me.task
 
 import org.springframework.web.context.request.RequestContextHolder
 
 /**
  * A REQUEST OF THE BROWSER NEVER WAITS FOR A COMPUTATION, NOR RUNS ONE: by the user's word (2026-10-16), the marking
- * and the pages answer at once. A request writes what it was told and plans the works that follow ([Workload.plan]); it
+ * and the pages answer at once. A request writes what it was told and plans the works that follow ([Tasks.plan]); it
  * reads what the works have made so far. The thread serving a request is the one Spring's dispatcher bound the
  * request's attributes to, for the request's time (they are not passed to the threads it starts). A wait asked for on
  * it is a mistake of the code, not of the user: it fails at once, in the tests as on the user's machine, instead of

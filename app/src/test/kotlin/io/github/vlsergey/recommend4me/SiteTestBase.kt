@@ -34,10 +34,10 @@ import io.github.vlsergey.recommend4me.tag.Tags
 import io.github.vlsergey.recommend4me.tag.TagsController
 import io.github.vlsergey.recommend4me.tagtext.TagsByTextController
 import io.github.vlsergey.recommend4me.tagtext.TextTags
+import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseEntriesController
 import io.github.vlsergey.recommend4me.universe.UniversesController
-import io.github.vlsergey.recommend4me.workload.inBackground
 import org.springframework.beans.factory.annotation.Autowired
 
 /**

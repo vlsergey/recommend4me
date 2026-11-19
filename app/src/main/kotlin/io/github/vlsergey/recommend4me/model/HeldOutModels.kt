@@ -1,15 +1,15 @@
 package io.github.vlsergey.recommend4me.model
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.scorer.RankingTask
 import io.github.vlsergey.recommend4me.scorer.Scorer
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
@@ -49,7 +49,7 @@ class HeldOutModels(
     private val kept: KeptModels,
     private val explanations: Explanations,
     private val json: JsonMapper,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     /**
      * Of every work whose page waits for what the model that had not seen it says, when the page last asked: no data,
@@ -62,8 +62,8 @@ class HeldOutModels(
      * there are too few works for folds.
      *
      * Read as kept: the fitting takes seconds, in the queue of the computations, and a request never waits for it
-     * ([io.github.vlsergey.recommend4me.workload.Requests]) — not yet worked out, it is planned, and the request
-     * answers so.
+     * ([io.github.vlsergey.recommend4me.task.Requests]) — not yet worked out, it is planned, and the request answers
+     * so.
      */
     fun heldOut(key: ItemKey): HeldOutRead {
         val type = stores.typeOf(key.source)
@@ -103,9 +103,9 @@ class HeldOutModels(
      */
     private fun planHeldOut(type: TypeStore, key: ItemKey) {
         askedAt[key] = System.currentTimeMillis()
-        val work = Work(WorkKind.HELD_OUT, source = key.source, item = key.id)
-        if (workload.due(work)) return
-        workload.plan(work, Instant.now(), "page", asked = true) {
+        val work = Task(TaskKind.HELD_OUT, source = key.source, item = key.id)
+        if (tasks.due(work)) return
+        tasks.plan(work, Instant.now(), "page", asked = true) {
             val asked = askedAt.remove(key) ?: 0L
             if (System.currentTimeMillis() - asked <= ASKED_LATELY_MS && type.heldOut.explained(key) == null) {
                 val h = fitHeldOut(key)

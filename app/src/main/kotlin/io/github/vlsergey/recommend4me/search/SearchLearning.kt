@@ -1,15 +1,15 @@
 package io.github.vlsergey.recommend4me.search
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.encoder.TextKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -43,7 +43,7 @@ class SearchedLine(val found: SearchResult, val judged: Map<ItemKey, SearchFit>)
 class SearchLearning(
     private val stores: Stores,
     private val search: Search,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val plugins: Plugins,
     private val textVectors: TextVectors,
     /** The user's languages: the lines judged are searched again as the first. */
@@ -53,14 +53,14 @@ class SearchLearning(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WorkKind.SEARCH_WEIGHTS) { left, reason ->
+        tasks.resumption.resumes(TaskKind.SEARCH_WEIGHTS) { left, reason ->
             left.work.type?.let { plan(it, reason) }
         }
     }
 
     /** The weights of the [type] learnt shortly after the last of a quick series of judgments. */
     private fun plan(type: String, reason: String) =
-        workload.plan(Work(WorkKind.SEARCH_WEIGHTS, type = type), Instant.now().plusMillis(QUIET_MS), reason) {
+        tasks.plan(Task(TaskKind.SEARCH_WEIGHTS, type = type), Instant.now().plusMillis(QUIET_MS), reason) {
             stores.type(type)?.let(::learnt)
         }
 

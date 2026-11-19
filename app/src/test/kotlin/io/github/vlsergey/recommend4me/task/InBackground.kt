@@ -1,4 +1,4 @@
-package io.github.vlsergey.recommend4me.workload
+package io.github.vlsergey.recommend4me.task
 
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException

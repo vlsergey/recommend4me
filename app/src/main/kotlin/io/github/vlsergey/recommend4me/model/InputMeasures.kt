@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -8,8 +8,8 @@ import io.github.vlsergey.recommend4me.scorer.RankingTask
 import io.github.vlsergey.recommend4me.scorer.Scorer
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -25,7 +25,7 @@ class InputMeasures(
     private val stores: Stores,
     private val plugins: Plugins,
     private val everyWork: EveryWork,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
 
     /**
@@ -34,8 +34,8 @@ class InputMeasures(
      * there are too few.
      */
     fun measuringInput(typeId: String, interest: Boolean = false): MeasuringInput? =
-        workload.run(
-            Work(WorkKind.SCORERS_INPUT, type = typeId),
+        tasks.run(
+            Task(TaskKind.SCORERS_INPUT, type = typeId),
             mapOf("asked" to 1),
             asked = true,
             joinAlike = false,
@@ -53,7 +53,7 @@ class InputMeasures(
      * confirm. Nothing is kept.
      */
     fun worth(typeId: String): ModelWorth? =
-        workload.run(Work(WorkKind.WORTH, type = typeId), mapOf("asked" to 1), asked = true) {
+        tasks.run(Task(TaskKind.WORTH, type = typeId), mapOf("asked" to 1), asked = true) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId) ?: return@run null
             val p = Prepared.grades(everyWork.training(type)) ?: return@run null
@@ -103,7 +103,7 @@ class InputMeasures(
      * kept. [cautious]: [GroupWeights.tune].
      */
     fun weighing(typeId: String, cautious: Boolean = true): Weighing? =
-        workload.run(Work(WorkKind.WEIGHING, type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) {
+        tasks.run(Task(TaskKind.WEIGHING, type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId)
             val p =

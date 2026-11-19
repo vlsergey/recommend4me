@@ -5,7 +5,7 @@ import io.github.vlsergey.recommend4me.part.PartStore
 import io.github.vlsergey.recommend4me.part.V19__parts_out_of_database
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Duration
 import org.jooq.DSLContext
 import org.springframework.beans.factory.DisposableBean
@@ -26,7 +26,7 @@ class TypeDatabases(val model: Database)
  * open file is a pool of connections, not a copy of its data.
  */
 @Component
-class Databases(folder: DataFolder, plugins: Plugins, private val workload: Workload) : DisposableBean {
+class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) : DisposableBean {
 
     /**
      * The user's preferences, every content type's: the names the user gives the entities of a catalogue, the user's
@@ -96,7 +96,7 @@ class Databases(folder: DataFolder, plugins: Plugins, private val workload: Work
 
     override fun destroy() {
         // No work begun any more, the one running waited for: never a file closed under a transaction of it
-        workload.close(CLOSE_WAIT)
+        tasks.close(CLOSE_WAIT)
         sources.values.forEach {
             listOf(it.source, it.corrections, it.ratings).forEach(Database::close)
             it.parts.close()

@@ -1,9 +1,9 @@
 package io.github.vlsergey.recommend4me.model
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
@@ -47,7 +47,7 @@ class ScorerComparison(val startedAt: Instant, val scorers: List<ScorerMeasure>)
 class ScorerComparisons(
     private val measures: InputMeasures,
     private val plugins: Plugins,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     private val comparisons = ConcurrentHashMap<String, ScorerComparison>()
 
@@ -58,9 +58,9 @@ class ScorerComparisons(
         comparisons.compute(keyOf(typeId, interest)) { _, running ->
             if (running != null && running.finishedAt == null) return@compute running
             ScorerComparison(Instant.now(), plugins.scorers.map { ScorerMeasure(it.id) }).also { c ->
-                workload.plan(
-                    Work(
-                        if (interest) WorkKind.INTEREST_SCORERS_COMPARED else WorkKind.SCORERS_COMPARED,
+                tasks.plan(
+                    Task(
+                        if (interest) TaskKind.INTEREST_SCORERS_COMPARED else TaskKind.SCORERS_COMPARED,
                         type = typeId,
                     ),
                     null,

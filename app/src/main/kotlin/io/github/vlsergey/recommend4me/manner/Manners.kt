@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.manner
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.part.PartMark
 import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
@@ -8,11 +8,11 @@ import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -37,7 +37,7 @@ data class WorkMannerChangeEvent(val type: String, val items: Int)
 class Manners(
     private val stores: Stores,
     private val works: Works,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val events: ApplicationEventPublisher,
 ) {
     /** Of every item of every source of the [type], its manner made again where its texts or the words changed. */
@@ -122,7 +122,7 @@ class Manners(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(MAKING) { left, reason ->
+        tasks.resumption.resumes(MAKING) { left, reason ->
             left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
         }
     }
@@ -140,10 +140,10 @@ class Manners(
     }
 
     private fun schedule(type: TypeStore, delaySeconds: Long, reason: String) =
-        workload.plan(Work(MAKING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { refresh(type) }
+        tasks.plan(Task(MAKING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { refresh(type) }
 
     companion object {
-        val MAKING = WorkKind.MANNERS
+        val MAKING = TaskKind.MANNERS
 
         private const val START_DELAY_SECONDS = 60L
 

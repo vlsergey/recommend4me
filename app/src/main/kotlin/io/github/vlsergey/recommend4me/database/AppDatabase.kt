@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component
 
 /**
  * THE APPLICATION'S OWN DATABASE: its settings ([io.github.vlsergey.recommend4me.settings.Settings]) and the queue of
- * its computations with their last runs ([io.github.vlsergey.recommend4me.workload.QueuedWorks]).
+ * its computations with their last runs ([io.github.vlsergey.recommend4me.task.QueuedTasks]).
  */
 @Component
 class AppDatabase(folder: DataFolder) : DisposableBean {

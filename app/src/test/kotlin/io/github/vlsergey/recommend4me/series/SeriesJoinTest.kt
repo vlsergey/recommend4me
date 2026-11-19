@@ -39,7 +39,7 @@ class SeriesJoinTest {
 
     @Test
     fun `two series of sites sharing a work are one without the word`() {
-        // Work 2 has an item of both: the series one by it
+        // Task 2 has an item of both: the series one by it
         val series = mapOf(1 to "s", 2 to "s")
         val join =
             SeriesJoin(

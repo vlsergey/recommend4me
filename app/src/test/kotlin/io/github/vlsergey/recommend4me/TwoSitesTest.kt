@@ -25,8 +25,8 @@ import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PartData
+import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
-import io.github.vlsergey.recommend4me.workload.inBackground
 import java.time.Instant
 import java.util.Locale
 import kotlin.test.assertEquals

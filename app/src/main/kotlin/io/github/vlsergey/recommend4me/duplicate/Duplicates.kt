@@ -1,16 +1,16 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.WorkEvents
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
@@ -47,7 +47,7 @@ private val log = LoggerFactory.getLogger(Duplicates::class.java)
 class Duplicates(
     private val stores: Stores,
     private val plugins: Plugins,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val workEvents: WorkEvents,
     private val models: PairModels,
     private val answers: PairAnswers,
@@ -61,7 +61,7 @@ class Duplicates(
      * Whether a search of the type is planned or running: the pairs are to come. A fitting after an answer is not told:
      * nothing is read for an answer.
      */
-    fun isSearching(type: TypeStore) = workload.due(searching(type))
+    fun isSearching(type: TypeStore) = tasks.due(searching(type))
 
     /**
      * The plugin of pairs [id] made the type's, and the pairs looked for anew by it, its models fitted with them: the
@@ -75,7 +75,7 @@ class Duplicates(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WorkKind.DUPLICATES) { left, reason ->
+        tasks.resumption.resumes(TaskKind.DUPLICATES) { left, reason ->
             left.work.type?.let(stores::type)?.let { plan(it, reason, left.asked) }
         }
     }
@@ -94,12 +94,12 @@ class Duplicates(
     fun plan(type: TypeStore, reason: String, asked: Boolean = false): Boolean {
         val work = searching(type)
         // A search running read the works before: asked again, it is done again after it
-        if (workload.due(work, running = false)) return false
-        workload.plan(work, Instant.now(), reason, asked = asked) { search(type) }
+        if (tasks.due(work, running = false)) return false
+        tasks.plan(work, Instant.now(), reason, asked = asked) { search(type) }
         return true
     }
 
-    private fun searching(type: TypeStore) = Work(WorkKind.DUPLICATES, type = type.id)
+    private fun searching(type: TypeStore) = Task(TaskKind.DUPLICATES, type = type.id)
 
     /**
      * The search of the type ([TypeSearch]) by the models as the last fitting left them — of one work, and of one
@@ -113,7 +113,7 @@ class Duplicates(
         val said = answers.said(type)
         val search = TypeSearch.read(type, encoder, said, indexes.of(type.id))
         val read = System.currentTimeMillis() - started
-        workload.progress(READ)
+        tasks.progress(READ)
         val kept = models.of(type)
         val found =
             search.found(
@@ -122,10 +122,10 @@ class Duplicates(
                 listOfNotNull(kept?.same ?: model.prior(), kept?.series),
                 cards.getIfAvailable()?.cublas(),
             ) { share ->
-                workload.progress(READ + share * (COMPARED - READ))
+                tasks.progress(READ + share * (COMPARED - READ))
             }
         val compared = System.currentTimeMillis() - started
-        workload.progress(COMPARED)
+        tasks.progress(COMPARED)
         val likely = likely(found.values, said, kept)
         val fitted = PairModels.fit(model, likely, said)
         model.fitted(search.search, listOfNotNull(fitted.same ?: model.prior(), fitted.series))

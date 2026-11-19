@@ -1,13 +1,13 @@
 package io.github.vlsergey.recommend4me.part
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.interest.LikeliestFirst
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
@@ -24,7 +24,7 @@ class PartVectors(
     private val stores: Stores,
     private val plugins: Plugins,
     private val events: ApplicationEventPublisher,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val likeliest: LikeliestFirst,
 ) {
 
@@ -38,7 +38,7 @@ class PartVectors(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(ENCODING.what) { _, reason -> plan(reason) }
+        tasks.resumption.resumes(ENCODING.what) { _, reason -> plan(reason) }
     }
 
     /**
@@ -49,7 +49,7 @@ class PartVectors(
      * — the work failed — is looked for again on the next part saved, or the start.
      */
     private fun plan(reason: String): Unit =
-        workload.plan(ENCODING, null, reason) {
+        tasks.plan(ENCODING, null, reason) {
             try {
                 val encoder = plugins.textEncoder() ?: return@plan
                 val waiting =
@@ -62,7 +62,7 @@ class PartVectors(
                     }
                 val reached = Reached()
                 while (!stopping && encodeSome(reached, portion) > 0) continue
-                if (!stopping && waiting.values.any { it.size > PORTION_WORKS }) workload.again("portion")
+                if (!stopping && waiting.values.any { it.size > PORTION_WORKS }) tasks.again("portion")
             } finally {
                 busy = false
             }
@@ -140,7 +140,7 @@ class PartVectors(
     }
 
     companion object {
-        private val ENCODING = Work(WorkKind.PART_VECTORS)
+        private val ENCODING = Task(TaskKind.PART_VECTORS)
 
         /** Parts per encoder call: a chapter is tens of windows already. */
         private const val BATCH = 8

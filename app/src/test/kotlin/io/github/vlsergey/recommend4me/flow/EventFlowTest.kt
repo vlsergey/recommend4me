@@ -23,7 +23,7 @@ class EventFlowTest {
 
     @Test
     fun `no event or work leads back to itself`() {
-        val inner = flow.edges.filterKeys { it is Node.Event || it is Node.Work }
+        val inner = flow.edges.filterKeys { it is Node.Event || it is Node.Task }
         val rounds = Cycles.of(inner)
         val told = rounds.map { c -> c.joinToString(" -> ") { it.label } }
         if (rounds.isNotEmpty()) fail("Events and works leading back to themselves: $told")

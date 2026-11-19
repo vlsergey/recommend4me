@@ -1,13 +1,13 @@
 package io.github.vlsergey.recommend4me.tag
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemRemoval
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemStore
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
@@ -31,7 +31,7 @@ class KeptOutWorks(
     private val normalization: TagNormalization,
     /** Got when asked for: the removal reads the sources, and the sources' writes ask this. */
     private val removal: ObjectProvider<ItemRemoval>,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     /** The tags whose works are to be removed, in the queue of the computations; guarded by itself. */
     private val tags = LinkedHashSet<String>()
@@ -91,7 +91,7 @@ class KeptOutWorks(
     fun removeKept(scope: TagScope, tag: String) {
         synchronized(tags) { tags += tag }
         // A failure is told in the log by the queue, and the word said again removes what is left
-        workload.plan(REMOVING, null, "tagKeptOut") {
+        tasks.plan(REMOVING, null, "tagKeptOut") {
             synchronized(tags) { tags.toList().also { tags.clear() } }
                 .forEach { t ->
                     val found = keptOfTag(scope, t)
@@ -102,6 +102,6 @@ class KeptOutWorks(
     }
 
     private companion object {
-        val REMOVING = Work(WorkKind.WORKS_KEPT_OUT)
+        val REMOVING = Task(TaskKind.WORKS_KEPT_OUT)
     }
 }

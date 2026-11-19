@@ -11,7 +11,7 @@ import { usePluginNamespaces } from "@/i18n/usePluginNamespaces";
 import { ITEMS } from "@/item/lists";
 import { useRefresh } from "@/lib/useRefresh";
 import { cn } from "@/lib/utils";
-import { WorkQueue } from "@/workload/WorkQueue";
+import { TaskQueue } from "@/task/TaskQueue";
 import { FacetComparisonDialog } from "./FacetComparisonDialog";
 import { GradeModelDetails } from "./GradeModel";
 import { ScorerComparisonDialog } from "./ScorerComparisonDialog";
@@ -19,7 +19,7 @@ import { useModel } from "./useModel";
 
 const modelsKey = (type: string) => ["models", type];
 
-/** How often the models are asked for again till the user chooses ([RefreshSelect]); a work of the queue ended reads them at once besides ([WorkQueue]). */
+/** How often the models are asked for again till the user chooses ([RefreshSelect]); a work of the queue ended reads them at once besides ([TaskQueue]). */
 const EVERY_MS = 5000;
 
 /**
@@ -57,7 +57,7 @@ export function ModelsScreen({ type }: { type: ContentTypeInfo }) {
       </header>
       {models.isLoading && <Loader2Icon className="size-5 animate-spin text-muted-foreground" />}
       {models.isError && <p className="text-sm text-destructive">{t("ModelsScreen.loadError", { error: models.error.message })}</p>}
-      <WorkQueue />
+      <TaskQueue />
       {grade && <GradeCard type={type} m={grade} />}
       {interest && <InterestCard type={type} m={interest} />}
       {pairs && <PairsCard type={type} m={pairs} />}

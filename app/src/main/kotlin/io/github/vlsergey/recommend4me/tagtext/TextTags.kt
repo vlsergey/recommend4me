@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.tagtext
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
@@ -10,9 +10,9 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.tag.TagRepository
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
@@ -99,7 +99,7 @@ class TextTags(
     private val plugins: Plugins,
     databases: Databases,
     private val events: ApplicationEventPublisher,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     private val models = TagTextModelRepository(databases.dictionaries.dsl)
 
@@ -316,12 +316,12 @@ class TextTags(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(FITTING.what) { _, _ -> answered() }
+        tasks.resumption.resumes(FITTING.what) { _, _ -> answered() }
     }
 
     /** An answer kept ([TagTextAnswerEvent]): the model fitted anew once the answers pause. */
     @EventListener(TagTextAnswerEvent::class)
-    fun answered() = workload.plan(FITTING, Instant.now().plusSeconds(QUIET_SECONDS), REASON) { fit() }
+    fun answered() = tasks.plan(FITTING, Instant.now().plusSeconds(QUIET_SECONDS), REASON) { fit() }
 
     /** The model fitted of every source's answers and kept; none while there are not answers of both kinds. */
     fun fit() {
@@ -344,7 +344,7 @@ class TextTags(
         /** The quiet after an answer before the model is fitted: the user answers in a row. */
         const val QUIET_SECONDS = 10L
 
-        val FITTING = Work(WorkKind.TAG_TEXT_MODEL)
+        val FITTING = Task(TaskKind.TAG_TEXT_MODEL)
 
         /** Why the model is fitted, as the queue of the works tells it. */
         const val REASON = "tagByText"

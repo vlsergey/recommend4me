@@ -1,10 +1,10 @@
-package io.github.vlsergey.recommend4me.workload
+package io.github.vlsergey.recommend4me.task
 
-import io.github.vlsergey.recommend4me.api.WorkloadApi
-import io.github.vlsergey.recommend4me.api.model.QueuedWork
-import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.api.model.WorkReason
-import io.github.vlsergey.recommend4me.api.model.WorkReasonKey
+import io.github.vlsergey.recommend4me.api.TasksApi
+import io.github.vlsergey.recommend4me.api.model.QueuedTask
+import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskReason
+import io.github.vlsergey.recommend4me.api.model.TaskReasonKey
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
@@ -17,17 +17,17 @@ import org.springframework.web.bind.annotation.RestController
  * works the user asked for first — what is planned, and why; and one work as it stands, for a screen waiting on it.
  */
 @RestController
-class WorkloadController(
-    private val workload: Workload,
-    private val records: WorkRecords,
+class TasksController(
+    private val tasks: Tasks,
+    private val records: TaskRecords,
     private val stores: Stores,
-) : WorkloadApi {
+) : TasksApi {
 
-    override fun listWorkload(): ResponseEntity<List<QueuedWork>> {
+    override fun listTasks(): ResponseEntity<List<QueuedTask>> {
         val finished = records.runs().map { it.toApi() }
-        val running = listOfNotNull(workload.running()).map { it.toApi(QueuedWork.State.RUNNING) }
-        val waiting = workload.waiting().map { it.toApi(QueuedWork.State.WAITING) }
-        val planned = workload.planned().map { it.toApi() }
+        val running = listOfNotNull(tasks.running()).map { it.toApi(QueuedTask.State.RUNNING) }
+        val waiting = tasks.waiting().map { it.toApi(QueuedTask.State.WAITING) }
+        val planned = tasks.planned().map { it.toApi() }
         return ResponseEntity.ok(finished + running + waiting + planned)
     }
 
@@ -35,39 +35,39 @@ class WorkloadController(
      * The work as it stands: running, waiting, planned — a run to come before the last done —, else the last run of it
      * done; none of a work neither to come nor among the last done.
      */
-    override fun getWork(
-        what: WorkKind,
+    override fun getTask(
+        what: TaskKind,
         type: String?,
         source: String?,
         facet: String?,
         item: String?,
-    ): ResponseEntity<QueuedWork> {
-        val work = Work(what, type, source, facet, item)
+    ): ResponseEntity<QueuedTask> {
+        val work = Task(what, type, source, facet, item)
         val found =
-            workload.running()?.takeIf { it.work == work }?.toApi(QueuedWork.State.RUNNING)
-                ?: workload.waiting().firstOrNull { it.work == work }?.toApi(QueuedWork.State.WAITING)
-                ?: workload.planned().firstOrNull { it.work == work }?.toApi()
+            tasks.running()?.takeIf { it.work == work }?.toApi(QueuedTask.State.RUNNING)
+                ?: tasks.waiting().firstOrNull { it.work == work }?.toApi(QueuedTask.State.WAITING)
+                ?: tasks.planned().firstOrNull { it.work == work }?.toApi()
                 ?: records.runs().lastOrNull { it.work == work }?.toApi()
         return found?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
     }
 
-    private fun FinishedWork.toApi() =
-        queued(work, QueuedWork.State.FINISHED, began, reasons)
+    private fun FinishedTask.toApi() =
+        queued(work, QueuedTask.State.FINISHED, began, reasons)
             .copy(ended = ended.atOffset(ZoneOffset.UTC), failed = failed, givenUp = givenUp)
 
-    private fun PlannedWork.toApi() =
-        queued(work, QueuedWork.State.PLANNED, since, reasons)
+    private fun PlannedTask.toApi() =
+        queued(work, QueuedTask.State.PLANNED, since, reasons)
             .copy(due = due.atOffset(ZoneOffset.UTC), asked = asked.takeIf { it })
 
-    private fun HeavyWork.toApi(state: QueuedWork.State) =
+    private fun RunningTask.toApi(state: QueuedTask.State) =
         queued(work, state, since, reasons)
             .copy(asked = asked.takeIf { it }, progress = progress, step = step?.first, stepOf = step?.second)
 
     /** A work as the page shows it; one not done with how long it is expected to take. */
-    private fun queued(work: Work, state: QueuedWork.State, since: Instant, reasons: Map<String, Int>): QueuedWork {
+    private fun queued(work: Task, state: QueuedTask.State, since: Instant, reasons: Map<String, Int>): QueuedTask {
         val source = work.source?.let(stores::source)
         val def = work.facet?.let { f -> source?.schema?.facets?.firstOrNull { it.key == f } }
-        return QueuedWork(
+        return QueuedTask(
             what = work.what,
             state = state,
             type = work.type ?: source?.type,
@@ -76,8 +76,8 @@ class WorkloadController(
             labelKey = def?.let { I18nKeys.facetLabel(source!!.id, it) },
             item = work.item,
             since = since.atOffset(ZoneOffset.UTC),
-            expectedMillis = if (state == QueuedWork.State.FINISHED) null else records.expected(work),
-            reasons = reasons.map { (key, count) -> WorkReason(WorkReasonKey.forValue(key), count) },
+            expectedMillis = if (state == QueuedTask.State.FINISHED) null else records.expected(work),
+            reasons = reasons.map { (key, count) -> TaskReason(TaskReasonKey.forValue(key), count) },
         )
     }
 }

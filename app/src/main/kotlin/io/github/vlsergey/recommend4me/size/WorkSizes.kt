@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.size
 
 import io.github.vlsergey.recommend4me.api.model.SizeNumber
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
@@ -11,8 +11,8 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.tag.TagChangeEvent
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import kotlin.math.abs
 import org.slf4j.LoggerFactory
@@ -37,7 +37,7 @@ class ItemSize(val words: SizeNumber?, val chars: SizeNumber?)
  * site, its language, its normalized tags and authors, of all its items.
  */
 @Service
-class WorkSizes(private val stores: Stores, private val workload: Workload) {
+class WorkSizes(private val stores: Stores, private val tasks: Tasks) {
 
     /**
      * The sizes of the items [ids] of the source, of their [numbers] with the user's word over them: what the site
@@ -135,7 +135,7 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(FITTING) { left, reason ->
+        tasks.resumption.resumes(FITTING) { left, reason ->
             left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
         }
     }
@@ -160,11 +160,11 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
 
     private fun schedule(type: TypeStore, delaySeconds: Long, reason: String) {
         if (!type.hasSizes()) return
-        workload.plan(Work(FITTING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { fit(type) }
+        tasks.plan(Task(FITTING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { fit(type) }
     }
 
     companion object {
-        val FITTING = WorkKind.WORK_SIZES
+        val FITTING = TaskKind.WORK_SIZES
 
         private const val START_DELAY_SECONDS = 60L
 

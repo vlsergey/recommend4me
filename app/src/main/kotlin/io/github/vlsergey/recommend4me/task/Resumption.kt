@@ -1,6 +1,6 @@
-package io.github.vlsergey.recommend4me.workload
+package io.github.vlsergey.recommend4me.task
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import java.util.concurrent.ConcurrentHashMap
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -15,11 +15,11 @@ import org.springframework.stereotype.Component
  * every one the last run left at its start ([resumeLeft]), of every reason it was planned for. A technical part of the
  * restart, not of what leads to what: the document of the flow (docs/events.md) does not show it.
  */
-class Resumption internal constructor(private val records: WorkRecords) {
-    private val owners = ConcurrentHashMap<WorkKind, (LeftWork, String) -> Unit>()
+class Resumption internal constructor(private val records: TaskRecords) {
+    private val owners = ConcurrentHashMap<TaskKind, (LeftTask, String) -> Unit>()
 
     /** How a work of the kind [what] the last run left is planned again, for each of its reasons: told by its owner. */
-    fun resumes(what: WorkKind, plan: (left: LeftWork, reason: String) -> Unit) {
+    fun resumes(what: TaskKind, plan: (left: LeftTask, reason: String) -> Unit) {
         owners[what] = plan
     }
 
@@ -31,8 +31,8 @@ class Resumption internal constructor(private val records: WorkRecords) {
 
 /** The start of the application: the works the last run left planned again, before the rows nobody took are dropped. */
 @Component
-internal class LeftWorks(private val workload: Workload) {
+internal class LeftTasks(private val tasks: Tasks) {
     @Order(Ordered.LOWEST_PRECEDENCE - 1)
     @EventListener(ApplicationReadyEvent::class)
-    fun resume() = workload.resumption.resumeLeft()
+    fun resume() = tasks.resumption.resumeLeft()
 }

@@ -1,11 +1,11 @@
 package io.github.vlsergey.recommend4me.setvector
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -18,7 +18,7 @@ private val log = LoggerFactory.getLogger(SetDirections::class.java)
  * changes or the catalogue grew; the vectors carry the id of the directions they are of.
  */
 @Component
-class SetDirections(private val members: SetMembers, private val workload: Workload) {
+class SetDirections(private val members: SetMembers, private val tasks: Tasks) {
 
     /**
      * The directions of the kind of sets, fitted on what the catalogue has: on every member while it has no more than
@@ -67,7 +67,7 @@ class SetDirections(private val members: SetMembers, private val workload: Workl
         count: Int,
     ): StoredEmbedding {
         val embedding =
-            workload.run(Work(WorkKind.SET_DIRECTIONS, type = type.id, facet = kind.key), mapOf("catalogueGrew" to 1)) {
+            tasks.run(Task(TaskKind.SET_DIRECTIONS, type = type.id, facet = kind.key), mapOf("catalogueGrew" to 1)) {
                 SetEmbedding.fit(sample, minOf(SetEmbedding.DIRECTIONS, sample.size - 1))
             }
         val id = Vectors.keyOf("${type.id}:${kind.name}:$encoder:${System.nanoTime()}")

@@ -1,11 +1,11 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
@@ -24,7 +24,7 @@ private val log = LoggerFactory.getLogger(FandomLikenessLearning::class.java)
 class FandomLikenessLearning(
     private val stores: Stores,
     private val fandoms: FandomRowsReading,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val cards: ObjectProvider<CardSource>,
 ) {
     /** The kernels of the likeness and the card they were compiled for: compiled once a card. */
@@ -127,7 +127,7 @@ class FandomLikenessLearning(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(LEARNING) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+        tasks.resumption.resumes(LEARNING) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
     }
 
     @EventListener
@@ -139,11 +139,11 @@ class FandomLikenessLearning(
 
     private fun schedule(delaySeconds: Long, reason: String) {
         if (stores.withUniverses().isEmpty()) return
-        workload.plan(Work(LEARNING), Instant.now().plusSeconds(delaySeconds), reason) { learn() }
+        tasks.plan(Task(LEARNING), Instant.now().plusSeconds(delaySeconds), reason) { learn() }
     }
 
     companion object {
-        val LEARNING = WorkKind.FANDOM_LIKENESS
+        val LEARNING = TaskKind.FANDOM_LIKENESS
 
         private const val START_DELAY_SECONDS = 90L
 

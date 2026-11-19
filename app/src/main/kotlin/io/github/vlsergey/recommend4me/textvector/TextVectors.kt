@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.textvector
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.LikeliestFirst
@@ -10,9 +10,9 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -35,15 +35,15 @@ data class SiteItemTextVectorChangeEvent(val source: String, val ids: List<Strin
  * On start every source is gone through; afterwards the items whose texts were written are encoded a few seconds after
  * the last write — the queue of their ids is the only thing kept here.
  *
- * IN THE QUEUE OF THE COMPUTATIONS ([Workload]), one at a time with every other computation of the application; of a
- * great many texts a portion at a time, the likeliest works first ([LikeliestFirst]).
+ * IN THE QUEUE OF THE COMPUTATIONS ([Tasks]), one at a time with every other computation of the application; of a great
+ * many texts a portion at a time, the likeliest works first ([LikeliestFirst]).
  */
 @Service
 class TextVectors(
     private val stores: Stores,
     private val plugins: Plugins,
     private val events: ApplicationEventPublisher,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val windows: TextWindows,
     private val likeliest: LikeliestFirst,
 ) {
@@ -55,35 +55,35 @@ class TextVectors(
 
     /**
      * The items written encoded a few seconds after the last write, a work of their source in the queue, the items kept
-     * waiting in it ([WorkKeys.want]).
+     * waiting in it ([TaskKeys.want]).
      */
     @EventListener
     fun itemsChanged(event: SiteItemWriteEvent) {
-        workload.keys.want(work(event.source), event.ids)
+        tasks.keys.want(work(event.source), event.ids)
         planned(event.source, Instant.now().plusSeconds(DELAY_SECONDS), "items", event.ids.size)
     }
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WHAT) { left, reason ->
+        tasks.resumption.resumes(WHAT) { left, reason ->
             val source = left.work.source ?: return@resumes
             planned(source, null, reason, 1)
         }
     }
 
-    private fun work(source: String) = Work(WHAT, source = source)
+    private fun work(source: String) = Task(WHAT, source = source)
 
     /**
      * The work of the [source] planned for [due] for the [reason]: of the items the queue keeps waiting when it begins
-     * ([WorkKeys.wanted]) — planned again and again, it does all that was asked. A PORTION AT A TIME: of more texts
+     * ([TaskKeys.wanted]) — planned again and again, it does all that was asked. A PORTION AT A TIME: of more texts
      * than a [PORTION], the likeliest works' ([LikeliestFirst]) are encoded, the rest left waiting and planned again as
      * a work of their own — a million works of a dump never hold the queue for hours, a grade and a training go between
      * the portions (user, 2026-11-17).
      */
     private fun planned(source: String, due: Instant?, reason: String, count: Int): Unit =
-        workload.plan(work(source), due, reason, count) {
+        tasks.plan(work(source), due, reason, count) {
             val store = stores.source(source) ?: return@plan 0
-            val taken = workload.keys.wanted(work(source))
+            val taken = tasks.keys.wanted(work(source))
             // Of every text of the source when asked so ([EVERY]): the items left after the portion kept waiting by
             // their ids
             val every = EVERY in taken
@@ -94,9 +94,9 @@ class TextVectors(
                     else -> refreshed(store, taken, { _, _ -> }, { false }, PORTION)
                 }
             val left = encoded.left.toHashSet()
-            if (every) workload.keys.want(work(source), left)
-            workload.keys.done(work(source), taken.filter { it !in left })
-            if (left.isNotEmpty()) workload.again("portion", left.size)
+            if (every) tasks.keys.want(work(source), left)
+            tasks.keys.done(work(source), taken.filter { it !in left })
+            if (left.isNotEmpty()) tasks.again("portion", left.size)
             // How many texts it encoded: what a caller of [refresh] joined to this work waiting gets back
             encoded.done
         }
@@ -113,8 +113,8 @@ class TextVectors(
         progress: (done: Int, total: Int) -> Unit = { _, _ -> },
         cancelled: () -> Boolean = { false },
     ): Int =
-        workload.run(
-            Work(WHAT, source = store.id, item = only?.singleOrNull()),
+        tasks.run(
+            Task(WHAT, source = store.id, item = only?.singleOrNull()),
             mapOf(reason to (only?.size ?: 1)),
             // A batch of ids is its own: another batch of the source is not this one
             joinAlike = only == null || only.size == 1,
@@ -225,15 +225,15 @@ class TextVectors(
 
     /**
      * The vector of a search line as a query; null without a text encoder. THE ONE COMPUTATION ON THE THREAD OF A
-     * REQUEST ([io.github.vlsergey.recommend4me.workload.Requests]): the search of the line asked for is the answer
-     * itself, there is nothing to answer before it; one short line through the encoder, milliseconds, out of the queue.
+     * REQUEST ([io.github.vlsergey.recommend4me.task.Requests]): the search of the line asked for is the answer itself,
+     * there is nothing to answer before it; one short line through the encoder, milliseconds, out of the queue.
      */
     fun query(line: String): FloatArray? =
         plugins.textEncoder()?.encode(listOf(line), io.github.vlsergey.recommend4me.encoder.TextKind.QUERY)?.first()
 
     companion object {
         /** The encoding of the texts of a source, as the queue of the works tells it. */
-        private val WHAT = WorkKind.TEXT_VECTORS
+        private val WHAT = TaskKind.TEXT_VECTORS
 
         /** The key of the queue that asks for every text of the source, not of some of its items. */
         private const val EVERY = ""

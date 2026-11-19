@@ -22,7 +22,7 @@ import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.tag.SiteTagRef
 import io.github.vlsergey.recommend4me.tag.TagRepository
-import io.github.vlsergey.recommend4me.workload.inBackground
+import io.github.vlsergey.recommend4me.task.inBackground
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull

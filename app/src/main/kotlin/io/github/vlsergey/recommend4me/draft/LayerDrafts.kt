@@ -1,17 +1,17 @@
 package io.github.vlsergey.recommend4me.draft
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.universe.DictionaryLookup
 import io.github.vlsergey.recommend4me.universe.LayerDraft
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -32,7 +32,7 @@ private val log = LoggerFactory.getLogger(LayerDrafts::class.java)
  *
  * Made again when the work is captured or refreshed — before anything reads it — and, of every work of the type, when
  * the dictionary or the universes change and on start — these in the background, in the queue of the computations
- * ([Workload]), never on the thread of the start or of a request: the works whose drafts changed are then read again as
+ * ([Tasks]), never on the thread of the start or of a request: the works whose drafts changed are then read again as
  * any changed work is.
  *
  * A draft is a value the work is given, marked so
@@ -43,7 +43,7 @@ private val log = LoggerFactory.getLogger(LayerDrafts::class.java)
 class LayerDrafts(
     private val stores: Stores,
     private val events: ApplicationEventPublisher,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
 
     /**
@@ -77,7 +77,7 @@ class LayerDrafts(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(DRAFTING.what) { _, reason ->
+        tasks.resumption.resumes(DRAFTING.what) { _, reason ->
             stores.sources.filter(::drafts).forEach { redraftLater(it.id, reason) }
         }
     }
@@ -88,14 +88,14 @@ class LayerDrafts(
      */
     private fun redraftLater(source: String, reason: String) {
         synchronized(redrafted) { redrafted += source }
-        workload.plan(DRAFTING, Instant.now().plusSeconds(QUIET_SECONDS), reason, after = ::told) { redrafted() }
+        tasks.plan(DRAFTING, Instant.now().plusSeconds(QUIET_SECONDS), reason, after = ::told) { redrafted() }
     }
 
     /**
      * Every work of the sources planned drafted again now, in the queue of the computations: what the background does
      * after the quiet.
      */
-    fun redraftPlanned() = told(workload.run(DRAFTING) { redrafted() })
+    fun redraftPlanned() = told(tasks.run(DRAFTING) { redrafted() })
 
     /** Every work of the sources planned drafted again; of each, the works whose drafts changed. */
     @Suppress("TooGenericExceptionCaught")
@@ -210,7 +210,7 @@ class LayerDrafts(
     }
 
     companion object {
-        val DRAFTING = Work(WorkKind.LAYER_DRAFTS)
+        val DRAFTING = Task(TaskKind.LAYER_DRAFTS)
 
         /**
          * The place of the drafting among the listeners of a change of works: after the sites' tags are bound

@@ -15,11 +15,11 @@ import io.github.vlsergey.recommend4me.api.model.UniverseRelationRequest
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.universe.SiteFandomRef
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.ListModelValues
-import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals

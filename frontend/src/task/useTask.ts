@@ -4,7 +4,7 @@ import { api } from "@/api/client";
 import type { components } from "@/api/schema";
 
 /** A work of the queue by its name, as the queue names it: what it does, and what it is of. */
-export type WorkName = { what: components["schemas"]["WorkKind"]; type?: string; source?: string; facet?: string; item?: string };
+export type TaskName = { what: components["schemas"]["TaskKind"]; type?: string; source?: string; facet?: string; item?: string };
 
 /** How often the state of a work not done is asked for again: a few bytes. */
 const EVERY_MS = 3000;
@@ -15,14 +15,14 @@ const EVERY_MS = 3000;
  * than the last done before the asking has ended; [onEnd] once it has, the screen reading what it made
  * then, not while it runs. [busy]: a run of it is to come.
  */
-export function useWork(work: WorkName, onEnd: () => void) {
+export function useTask(work: TaskName, onEnd: () => void) {
   // The end of the last run done when the user asked for a new one: till another ends, the run asked for is to come
   // (between planned and waiting the work may stand nowhere for a moment); null — nothing asked
   const [awaited, setAwaited] = useState<string | undefined | null>(null);
   const state = useQuery({
     queryKey: ["work", work.what, work.type, work.source, work.facet, work.item],
     queryFn: async () => {
-      const result = await api.GET("/api/workload/work", { params: { query: work } });
+      const result = await api.GET("/api/tasks/task", { params: { query: work } });
       if (result.response.status === 404) return null;
       if (!result.data) throw new Error(result.response.statusText || String(result.response.status));
       return result.data;

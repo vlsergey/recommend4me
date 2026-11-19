@@ -29,7 +29,7 @@ internal sealed interface Step {
     /** An object of the class [type] made. */
     data class Made(val type: String) : Step
 
-    /** A kind of work of the queue named ([io.github.vlsergey.recommend4me.api.model.WorkKind]). */
+    /** A kind of work of the queue named ([io.github.vlsergey.recommend4me.api.model.TaskKind]). */
     data class Kind(val kind: String) : Step
 
     /** A field read, [write]n. */
@@ -119,7 +119,7 @@ internal class CodeRead(val classes: Map<String, ClassRead>) {
     companion object {
         private const val PACKAGE = "io/github/vlsergey/recommend4me/"
         private const val LISTENER = "Lorg/springframework/context/event/EventListener;"
-        private const val WORK_KIND = "${PACKAGE}api/model/WorkKind"
+        private const val WORK_KIND = "${PACKAGE}api/model/TaskKind"
         private const val FUNCTIONS = "kotlin/jvm/functions/Function"
         private const val INTRINSICS = "kotlin/jvm/internal/Intrinsics"
 

@@ -18,7 +18,7 @@ import { PairJournal } from "./PairJournal";
 import { afterWord, sharing } from "./pairWorks";
 import { RELATED, VERDICTS, type Verdict } from "./verdicts";
 import { useRefresh } from "@/lib/useRefresh";
-import { useWork } from "@/workload/useWork";
+import { useTask } from "@/task/useTask";
 import { cn } from "@/lib/utils";
 
 /** How many pairs a page shows, and how many more each "more" adds. */
@@ -100,7 +100,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const queryClient = useQueryClient();
   // The search, a work of the queue: its state read again while it is to come, the pairs read once it has ended —
   // never while it runs (user, 2026-11-07)
-  const search = useWork({ what: "duplicates", type: type.id }, () => queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) }));
+  const search = useTask({ what: "duplicates", type: type.id }, () => queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) }));
   const searching = search.busy;
   /** When the last word was kept ([settle]): a list read that began before it may not have it. */
   const wordKept = useRef(0);

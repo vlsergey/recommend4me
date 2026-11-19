@@ -1,11 +1,11 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.model.MeasuringState
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
@@ -41,7 +41,7 @@ class FacetComparison(val startedAt: Instant, val methods: List<MethodMeasure>) 
 class FacetComparisons(
     private val suggestions: FacetSuggestions,
     private val plugins: Plugins,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     private val comparisons = ConcurrentHashMap<String, FacetComparison>()
 
@@ -51,8 +51,8 @@ class FacetComparisons(
         comparisons.compute(keyOf(store, facet)) { _, running ->
             if (running != null && running.finishedAt == null) return@compute running
             FacetComparison(Instant.now(), plugins.suggesters.map { MethodMeasure(it.id) }).also { c ->
-                workload.plan(
-                    Work(WorkKind.METHODS_COMPARED, source = store.id, facet = facet),
+                tasks.plan(
+                    Task(TaskKind.METHODS_COMPARED, source = store.id, facet = facet),
                     null,
                     "asked",
                     asked = true,

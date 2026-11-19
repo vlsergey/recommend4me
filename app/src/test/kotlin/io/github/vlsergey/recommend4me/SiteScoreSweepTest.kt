@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me
 
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.model.AverageWork
 import io.github.vlsergey.recommend4me.model.Averages
@@ -9,8 +9,8 @@ import io.github.vlsergey.recommend4me.model.NumberSpread
 import io.github.vlsergey.recommend4me.model.Predicted
 import io.github.vlsergey.recommend4me.model.SweepState
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.inBackground
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.inBackground
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.abs
@@ -54,7 +54,7 @@ class SiteScoreSweepTest : SiteTestBase() {
         // The sweep in one go: every work scored, a prediction of an item gone removed, the average work counted
         // along kept
         type.predictions.write(listOf(ItemKey("site", "zz-gone") to Predicted(5.0, null)))
-        inBackground { workload.run(Work(WorkKind.SCORE)) { inOneGo() } }
+        inBackground { tasks.run(Task(TaskKind.SCORE)) { inOneGo() } }
         val inOneGo = type.predictions.predicted("site")
         assertEquals(stores.source("site")!!.items.keys().map { it.id }.toSet(), inOneGo.keys)
         val swept = assertNotNull(type.averageWork.load(basis))
@@ -97,7 +97,7 @@ class SiteScoreSweepTest : SiteTestBase() {
         var restarted: SweepState? = null
         var before: SweepState? = null
         inBackground {
-            workload.run(Work(WorkKind.SCORE)) {
+            tasks.run(Task(TaskKind.SCORE)) {
                 type.predictions.remove("site", items)
                 val model = type.models.trainedAt()!!
                 type.sweep.save(SweepState(model, basis, Instant.now(), 0, 0, null))
@@ -127,7 +127,7 @@ class SiteScoreSweepTest : SiteTestBase() {
         // The same model in turns as in one go
         val (again, turned) =
             inBackground {
-                workload.run(Work(WorkKind.SCORE)) {
+                tasks.run(Task(TaskKind.SCORE)) {
                     inOneGo()
                     // Of the works the pass scores: the graded are the training's
                     val graded = stores.source("site")!!.ratings.all().map { it.itemId }.toSet()

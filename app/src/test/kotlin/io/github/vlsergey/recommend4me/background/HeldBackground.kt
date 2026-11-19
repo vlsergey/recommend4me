@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.background
 
-import io.github.vlsergey.recommend4me.workload.inBackground
+import io.github.vlsergey.recommend4me.task.inBackground
 import java.time.Duration
 
 /**

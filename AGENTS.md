@@ -62,7 +62,7 @@ goes through one path — `FittedSuggester.model` is whatever a suggester needs 
 core keeps those bytes and scores every work by them (`FacetSuggester.scoring`), whatever is in them;
 `ModelMeta.averages` tells what the average work is, and `CatalogueReader.gradedWorks` takes it. A computation that serves one engine
 alone is planned by that engine: it listens to the application's events and puts its work in the queue
-(`Workload.plan`). Branching on data — a null of "every work", an empty list — is not branching on a
+(`Tasks.plan`). Branching on data — a null of "every work", an empty list — is not branching on a
 plugin.
 
 ## A facet is scored by its model kept, with the database refused
@@ -124,15 +124,15 @@ of the data it wrote is described where that data is read.
 ## A request never waits for a computation
 
 A request of the browser never waits for the queue of the computations, nor runs a computation:
-`Workload.run` fails on the thread of a request (`workload/Requests.kt`), in the tests as on the
-user's machine. A request writes what it was told, plans the work that follows (`Workload.plan`) and
+`Tasks.run` fails on the thread of a request (`task/Requests.kt`), in the tests as on the
+user's machine. A request writes what it was told, plans the work that follows (`Tasks.plan`) and
 answers with what there is — what the works made and kept, with a mark that more is coming (202,
 `pending`), the interface asking again till it is there. A test standing for the background runs it
 in `inBackground` (the thread of a Spring test is bound to a request). The one computation of a
 request is the vector of the line searched for (`TextVectors.query`): the search is the answer, one
 short line through the encoder.
 
-**`Workload.plan` is the one way the background is scheduled**: a work, when it is due, why, and what
+**`Tasks.plan` is the one way the background is scheduled**: a work, when it is due, why, and what
 it does — no executor or timer of a component's own. Planned again before it begins, a work is done
 once; planned while one alike waits its turn, it is that one. A work the user waits for on the screen
 (`asked`: a grade, a press) goes ahead of the background; a change of the user's the user does not
@@ -141,11 +141,11 @@ minutes goes as an asked one (`Turns.AGING`). What is not a computation — read
 and pictures — stays out of the queue.
 
 **The queue is kept in the application's database, and a start plans nothing "just in case"**
-(user, 2026-11-18): every work planned is a row of `queued_work` till it ends, so a stop or a crash
-leaves it to the next start, where its owner takes it (`Workload.resume`) and plans it again; the
-last runs of every kind are kept in `work_run`, what a work to come is expected to take. **What a
+(user, 2026-11-18): every work planned is a row of `queued_task` till it ends, so a stop or a crash
+leaves it to the next start, where its owner takes it (`Tasks.resume`) and plans it again; the
+last runs of every kind are kept in `task_run`, what a work to come is expected to take. **What a
 work is to be done of — the items, the fandoms its owner names — is kept with it** (`queued_key`,
-`Workload.keys`: `want` as the change comes, `wanted` as the work begins, `done` once written), never
+`Tasks.keys`: `want` as the change comes, `wanted` as the work begins, `done` once written), never
 in the memory alone: a work resumed does what was asked, not everything because what was asked was
 lost (owner, 2026-11-19: "the queue is kept in the database: nothing is to be run at a start just
 because it is a start"). A start plans a work only of what the data say — an index of another
@@ -160,8 +160,8 @@ application and the plugins' API (`flow/CodeRead`, `flow/EventFlow`) and writes 
 when the flow changed — commit it with the change: a new arrow is a change of behaviour, seen in the
 diff. The code is written so the flow can be read of it:
 - an event is an object of a class some `@EventListener` listens to, made where it is told;
-- a work is planned by `Workload.plan` or run by `Workload.run`, its `WorkKind` named in the method
-  that plans it — directly, in a field of a `Work` or a `WorkKind`, or by a method giving one — its
+- a work is planned by `Tasks.plan` or run by `Tasks.run`, its `TaskKind` named in the method
+  that plans it — directly, in a field of a `Task` or a `TaskKind`, or by a method giving one — its
   body the lambda made right before; a place whose kind is named nowhere so fails the test;
 - a lambda handed to an object's constructor runs where that object calls a function value;
 - a call of a method of an interface of the plugins' API may run the plugin, which may call back
@@ -176,12 +176,12 @@ interest, a field the user answered on (`WorkFieldChangeEvent`), its grouping, i
 reviews — and the dictionaries and the models by their own names (`TagChangeEvent`,
 `FieldModelFitEvent`). Never an event named by the work of the code that tells it.
 
-**Every kind of work and every reason of the queue is a value of the API** (`WorkKind`,
-`WorkReasonKey` in `api/openapi.yaml`): `Work.what` is a `WorkKind`, a reason planned that the API
+**Every kind of work and every reason of the queue is a value of the API** (`TaskKind`,
+`TaskReasonKey` in `api/openapi.yaml`): `Work.what` is a `TaskKind`, a reason planned that the API
 does not list fails as it is planned, and the interface words them by the typed translation — a word
 missing in any language fails the build of the interface (owner, 2026-11-19: "a missing translation
 must be caught as the interface is built"). A new kind or reason is added to the API and to the
-words of `workload` together.
+words of `task` together.
 
 **Nothing of the application starts a thread or a timer of its own: it asks `Background`** — the works of
 the queue begun when due, the jobs of the sites, the rounds done again and again, the loops as long as the

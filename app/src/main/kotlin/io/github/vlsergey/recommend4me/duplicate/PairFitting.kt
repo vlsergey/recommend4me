@@ -1,10 +1,10 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -20,16 +20,16 @@ private val log = LoggerFactory.getLogger(PairFitting::class.java)
 @Component
 class PairFitting(
     private val stores: Stores,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val models: PairModels,
     private val answers: PairAnswers,
 ) {
     /** Whether the models of the type are to be fitted again, or being fitted: of the page of models. */
-    fun isFitting(type: TypeStore) = workload.due(work(type))
+    fun isFitting(type: TypeStore) = tasks.due(work(type))
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WHAT) { left, reason ->
+        tasks.resumption.resumes(WHAT) { left, reason ->
             left.work.type?.let(stores::type)?.let { later(it, 0, reason) }
         }
     }
@@ -42,9 +42,9 @@ class PairFitting(
 
     /** The models fitted again [quiet] seconds from now, unless asked again meanwhile — then from that asking. */
     private fun later(type: TypeStore, quiet: Long, reason: String) =
-        workload.plan(work(type), Instant.now().plusSeconds(quiet), reason, asked = true) { fitAnew(type) }
+        tasks.plan(work(type), Instant.now().plusSeconds(quiet), reason, asked = true) { fitAnew(type) }
 
-    private fun work(type: TypeStore) = Work(WHAT, type = type.id)
+    private fun work(type: TypeStore) = Task(WHAT, type = type.id)
 
     /**
      * The models fitted anew on the pairs kept as they are, and kept, with when and how long: none without a plugin.
@@ -80,6 +80,6 @@ class PairFitting(
         const val QUIET_SECONDS = 3L
 
         /** The work of fitting the models of the pairs. */
-        val WHAT = WorkKind.DUPLICATES_MODEL
+        val WHAT = TaskKind.DUPLICATES_MODEL
     }
 }

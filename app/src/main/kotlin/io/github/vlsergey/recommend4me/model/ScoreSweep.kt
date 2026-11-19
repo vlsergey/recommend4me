@@ -1,17 +1,17 @@
 package io.github.vlsergey.recommend4me.model
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
 import io.github.vlsergey.recommend4me.worklist.ListFilling
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import io.github.vlsergey.recommend4me.worklist.ListPasses
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -46,7 +46,7 @@ class ScoreSweep(
     private val scoring: Scoring,
     private val kept: KeptModels,
     private val likenesses: Likenesses,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val works: Works,
     private val lists: ListIndexes,
     private val filling: ListFilling,
@@ -64,7 +64,7 @@ class ScoreSweep(
     // What the last run of the application left undone of it: planned again by the queue at its start — a pass under
     // way goes on of its state kept
     init {
-        workload.resumption.resumes(WorkKind.SCORE) { left, reason -> left.work.type?.let { plan(it, reason) } }
+        tasks.resumption.resumes(TaskKind.SCORE) { left, reason -> left.work.type?.let { plan(it, reason) } }
     }
 
     /** Whether a pass of the [typeId] goes on: some works are not scored by the current model yet. */
@@ -72,7 +72,7 @@ class ScoreSweep(
 
     /** The pass of the [typeId] run to its end now, on the caller's thread, turn after turn: for the tests. */
     fun sweepNow(typeId: String) {
-        while (sweeping(typeId)) workload.run(work(typeId), mapOf("asked" to 1)) { step(typeId) }
+        while (sweeping(typeId)) tasks.run(work(typeId), mapOf("asked" to 1)) { step(typeId) }
     }
 
     /**
@@ -162,11 +162,11 @@ class ScoreSweep(
     }
 
     /**
-     * The pass goes on in its next turn from where it stands [now]: the work planned again after it ([Workload.again]).
+     * The pass goes on in its next turn from where it stands [now]: the work planned again after it ([Tasks.again]).
      */
     private fun keep(type: TypeStore, now: SweepState) {
         type.sweep.save(now)
-        workload.again("sweep")
+        tasks.again("sweep")
     }
 
     /**
@@ -190,7 +190,7 @@ class ScoreSweep(
 
     /** The next turn of the pass of the [typeId] planned, at once — last of the queue. */
     private fun plan(typeId: String, reason: String) =
-        workload.plan(work(typeId), null, reason, last = true) { step(typeId) }
+        tasks.plan(work(typeId), null, reason, last = true) { step(typeId) }
 
     private companion object {
         /**
@@ -203,7 +203,7 @@ class ScoreSweep(
         /** The works a portion of the pass takes (owner, 2026-11-19: "taking 1k unrated works at a time"). */
         const val PORTION = 1000
 
-        fun work(typeId: String) = Work(WorkKind.SCORE, type = typeId)
+        fun work(typeId: String) = Task(TaskKind.SCORE, type = typeId)
 
         /** When the model of the grades of the [type] kept was trained; the beginning of time of none. */
         fun trainedAt(type: TypeStore): Instant = type.models.trainedAt() ?: Instant.EPOCH

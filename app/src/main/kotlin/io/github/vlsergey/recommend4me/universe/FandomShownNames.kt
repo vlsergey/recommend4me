@@ -1,10 +1,10 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
@@ -21,18 +21,18 @@ private val log = LoggerFactory.getLogger(FandomShownNames::class.java)
  * bind new fandoms.
  */
 @Component
-class FandomShownNames(private val stores: Stores, private val workload: Workload) {
+class FandomShownNames(private val stores: Stores, private val tasks: Tasks) {
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WORK.what) { _, reason -> plan(reason) }
+        tasks.resumption.resumes(WORK.what) { _, reason -> plan(reason) }
     }
 
     @EventListener fun itemsChanged(event: WorkChangeEvent) = plan(if (event.ids.isEmpty()) "universes" else "items")
 
     private fun plan(reason: String) {
         if (stores.types.none { it.type.universes }) return
-        workload.plan(WORK, Instant.now().plusSeconds(QUIET_SECONDS), reason) { keep() }
+        tasks.plan(WORK, Instant.now().plusSeconds(QUIET_SECONDS), reason) { keep() }
     }
 
     /** Every universe's name worked out now, those that changed kept. */
@@ -59,7 +59,7 @@ class FandomShownNames(private val stores: Stores, private val workload: Workloa
     }
 
     private companion object {
-        val WORK = Work(WorkKind.FANDOM_NAMES)
+        val WORK = Task(TaskKind.FANDOM_NAMES)
 
         /**
          * The quiet after a change before the names are worked out again: the changes of an import's batches at once.

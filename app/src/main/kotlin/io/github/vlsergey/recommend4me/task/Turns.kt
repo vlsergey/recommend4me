@@ -1,4 +1,4 @@
-package io.github.vlsergey.recommend4me.workload
+package io.github.vlsergey.recommend4me.task
 
 import java.time.Duration
 import java.time.Instant
@@ -9,9 +9,9 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * WHOSE TURN IT IS, of the works of the [Workload]: the works waiting their turn, in the order they are asked — those
- * the user asked for first, and a work of the background waiting longer than [AGING] counted among them ([order]) — and
- * the thread holding the turn. A work alike one still waiting joins it instead of waiting a second time.
+ * WHOSE TURN IT IS, of the works of the [Tasks]: the works waiting their turn, in the order they are asked — those the
+ * user asked for first, and a work of the background waiting longer than [AGING] counted among them ([order]) — and the
+ * thread holding the turn. A work alike one still waiting joins it instead of waiting a second time.
  */
 internal class Turns {
     /**
@@ -49,7 +49,7 @@ internal class Turns {
      * added to that one's, and that one put ahead when [asked]. The waiter, and whether it is the caller's own.
      */
     fun enter(
-        work: Work,
+        work: Task,
         reasons: Map<String, Int>,
         joinAlike: Boolean,
         asked: Boolean,
@@ -64,12 +64,12 @@ internal class Turns {
      * Whether a work alike the [work] waits its turn, not begun: then the [work] is that one — its [reasons] added to
      * it, put ahead when [asked] — and need not be done again: it reads the data as they are when it begins.
      */
-    fun joined(work: Work, reasons: Map<String, Int>, asked: Boolean): Boolean = lock.withLock {
+    fun joined(work: Task, reasons: Map<String, Int>, asked: Boolean): Boolean = lock.withLock {
         joinedTo(work, reasons, asked) != null
     }
 
     /** The work alike the [work] still waiting, joined by it as [joined] tells; none. Under [lock]. */
-    private fun joinedTo(work: Work, reasons: Map<String, Int>, asked: Boolean): Waiter? {
+    private fun joinedTo(work: Task, reasons: Map<String, Int>, asked: Boolean): Waiter? {
         val alike = waiting.firstOrNull { it.joinable && it.work == work } ?: return null
         alike.reasons = merged(alike.reasons, reasons)
         if (asked && !alike.asked) {
@@ -117,12 +117,12 @@ internal class Turns {
      * The works waiting their turn, in the order they will run: those the user asked for and those waiting longer than
      * [AGING] first.
      */
-    fun waiting(): List<HeavyWork> = lock.withLock {
-        waiting.sortedWith(order(Instant.now())).map { HeavyWork(it.work, it.since, it.reasons, it.asked) }
+    fun waiting(): List<RunningTask> = lock.withLock {
+        waiting.sortedWith(order(Instant.now())).map { RunningTask(it.work, it.since, it.reasons, it.asked) }
     }
 
     /** Whether the [work] waits its turn, or holds it. */
-    fun waits(work: Work): Boolean = lock.withLock { held?.work == work || waiting.any { it.work == work } }
+    fun waits(work: Task): Boolean = lock.withLock { held?.work == work || waiting.any { it.work == work } }
 
     /**
      * Whose turn comes next: of the works the user asked for and those waiting too long the longest waiting, else of
@@ -165,7 +165,7 @@ internal class Turns {
  * callers wait for its [result].
  */
 internal class Waiter(
-    val work: Work,
+    val work: Task,
     val since: Instant,
     @Volatile var reasons: Map<String, Int>,
     val joinable: Boolean,

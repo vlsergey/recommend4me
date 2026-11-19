@@ -1,16 +1,16 @@
 package io.github.vlsergey.recommend4me.search
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
@@ -24,7 +24,7 @@ private val log = LoggerFactory.getLogger(SearchIndex::class.java)
  * background when the plugin's index is not of its format or holds nothing ([SearchProvider.current]) — of a plugin
  * that keeps it between the runs, only what changed written again ([SearchProvider.sync]); an item written since it was
  * indexed is indexed again in the background too, shortly after the writes go quiet — a search never waits for it, it
- * searches the index as it is. The items waiting are kept in the queue ([WorkKeys.want]): a stop leaves them to the
+ * searches the index as it is. The items waiting are kept in the queue ([TaskKeys.want]): a stop leaves them to the
  * next start, which indexes them and nothing more (owner, 2026-11-19: "nothing is to be run at a start just because it
  * is a start" — the index of the books, 16 minutes, was brought to every work at every start).
  */
@@ -33,7 +33,7 @@ class SearchIndex(
     private val stores: Stores,
     private val plugins: Plugins,
     private val documents: SearchDocuments,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     private val sources = SourceCatchUp(documents)
 
@@ -51,16 +51,16 @@ class SearchIndex(
      */
     private fun queue(source: String, ids: Collection<String>, reason: String) {
         val type = stores.typeOf(source).id
-        workload.keys.want(updating(type), if (ids.isEmpty()) listOf(whole(source)) else ids.map { keyOf(source, it) })
+        tasks.keys.want(updating(type), if (ids.isEmpty()) listOf(whole(source)) else ids.map { keyOf(source, it) })
         planUpdate(type, Instant.now().plusMillis(UPDATE_QUIET_MS), reason)
     }
 
     private fun planUpdate(type: String, due: Instant, reason: String) =
-        workload.plan(updating(type), due, reason) { stores.type(type)?.let(::catchUp) }
+        tasks.plan(updating(type), due, reason) { stores.type(type)?.let(::catchUp) }
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(UPDATING) { left, reason ->
+        tasks.resumption.resumes(UPDATING) { left, reason ->
             left.work.type?.let { planUpdate(it, Instant.now(), reason) }
         }
     }
@@ -78,21 +78,21 @@ class SearchIndex(
         stores.types
             .filter { !provider.current(it.id) }
             .forEach { type ->
-                workload.keys.want(updating(type.id), type.sources.map { whole(it.id) })
+                tasks.keys.want(updating(type.id), type.sources.map { whole(it.id) })
                 planUpdate(type.id, Instant.now(), "searchFormat")
             }
     }
 
     /**
      * The items written since they were indexed, indexed now, in the queue of the computations: those the queue keeps
-     * waiting ([WorkKeys.wanted]), done once written. Of every source of the type waiting whole, the index brought to
+     * waiting ([TaskKeys.wanted]), done once written. Of every source of the type waiting whole, the index brought to
      * every work at once ([SearchProvider.sync][io.github.vlsergey.recommend4me.search.SearchProvider.sync]): of a
      * plugin that keeps it between the runs, only what changed written again, the works gone removed.
      */
     private fun catchUp(type: TypeStore) {
         val provider = plugins.search ?: return
         val work = updating(type.id)
-        val asked = workload.keys.wanted(work)
+        val asked = tasks.keys.wanted(work)
         if (asked.isEmpty()) return
         val started = System.currentTimeMillis()
         val written =
@@ -101,7 +101,7 @@ class SearchIndex(
                 provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys) }
                 prints.prints.size
             } else written(provider, type, asked)
-        workload.keys.done(work, asked)
+        tasks.keys.done(work, asked)
         log.info(
             "{}: the search index caught up with {} works written, {} documents made again, in {} ms",
             type.id,
@@ -124,7 +124,7 @@ class SearchIndex(
         }
 
     private companion object {
-        val UPDATING = WorkKind.SEARCH_UPDATE
+        val UPDATING = TaskKind.SEARCH_UPDATE
 
         /** The key of an item waiting in the queue: its source and its id. */
         const val SEP = '\t'
@@ -132,7 +132,7 @@ class SearchIndex(
         /** The id that stands for every item of its source. */
         const val WHOLE = ""
 
-        fun updating(type: String) = Work(UPDATING, type = type)
+        fun updating(type: String) = Task(UPDATING, type = type)
 
         fun keyOf(source: String, id: String) = "$source$SEP$id"
 

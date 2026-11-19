@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
-import io.github.vlsergey.recommend4me.api.model.WorkStep
+import io.github.vlsergey.recommend4me.api.model.TaskStep
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemKeys
 import io.github.vlsergey.recommend4me.laps.Laps
@@ -11,8 +11,8 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.workload.Workload
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -31,7 +31,7 @@ class EveryWork(
     private val plugins: Plugins,
     private val works: Works,
     private val likenesses: Likenesses,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
 
     /**
@@ -41,7 +41,7 @@ class EveryWork(
      */
     fun training(type: TypeStore, withLikeness: Boolean = true): Catalogue {
         val average = averageOf(type)
-        workload.progress(0.0, WorkStep.READ_GRADED)
+        tasks.progress(0.0, TaskStep.READ_GRADED)
         val interest = interestOf(type)
         return reader.gradedWorks(type, average.averages, interest.keys, ratingsOf(type), interest) { graded ->
             if (withLikeness) likenesses.forTraining(type, average.pictureCenter, graded) else likenesses.stored(type)
@@ -62,7 +62,7 @@ class EveryWork(
      * million and a half works read a portion at a time, begun anew at every start of the application).
      */
     private fun gradedAverage(type: TypeStore): AverageWork {
-        workload.progress(0.0, WorkStep.AVERAGE)
+        tasks.progress(0.0, TaskStep.AVERAGE)
         val started = System.currentTimeMillis()
         val count = AverageCount(plugins.textEncoder(), plugins.imageEncoder(), type.embeddings.ids())
         val clusters = works.of(type)

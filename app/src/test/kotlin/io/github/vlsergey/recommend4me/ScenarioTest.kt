@@ -34,8 +34,8 @@ import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.TextDef
+import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.worklist.ListIndexing
-import io.github.vlsergey.recommend4me.workload.inBackground
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

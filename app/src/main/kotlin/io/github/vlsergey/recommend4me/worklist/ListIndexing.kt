@@ -1,15 +1,15 @@
 package io.github.vlsergey.recommend4me.worklist
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.WorkModelValues
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -30,7 +30,7 @@ class ListWaiting {
     /** Whether works were merged or split. */
     var regrouped = false
 
-    /** What waits as the queue keeps it ([WorkKeys.want]): a key of every name. */
+    /** What waits as the queue keeps it ([TaskKeys.want]): a key of every name. */
     fun keys(): List<String> =
         rows.flatMap { (source, ids) -> ids.map { "$ROW$SEP$source$SEP$it" } } +
             whole.map { "$WHOLE$SEP$it" } +
@@ -76,17 +76,17 @@ class ListWaiting {
 class ListIndexing(
     private val stores: Stores,
     private val works: Works,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val indexes: ListIndexes,
     private val modelValues: WorkModelValues,
 ) {
     /**
-     * What the [change] names added to what waits of the content type [typeId] — kept in the queue ([WorkKeys.want]): a
+     * What the [change] names added to what waits of the content type [typeId] — kept in the queue ([TaskKeys.want]): a
      * stop leaves it to the next start — and its writing planned, for the [reason] the interface words
      * ([ListIndexEvents]).
      */
     fun change(typeId: String, reason: String, change: ListWaiting.() -> Unit) {
-        workload.keys.want(work(typeId), ListWaiting().apply(change).keys())
+        tasks.keys.want(work(typeId), ListWaiting().apply(change).keys())
         plan(typeId, reason)
     }
 
@@ -95,22 +95,22 @@ class ListIndexing(
         // The user's own action the list is looked at for, and an index never made — an empty list — go ahead of the
         // background's works
         val asked = reason in USERS || (reason == FORMAT && !indexes.of(typeId).current())
-        workload.plan(work(typeId), Instant.now().plusSeconds(QUIET_SECONDS), reason, asked = asked) { write(typeId) }
+        tasks.plan(work(typeId), Instant.now().plusSeconds(QUIET_SECONDS), reason, asked = asked) { write(typeId) }
     }
 
-    private fun work(typeId: String) = Work(WORK, type = typeId)
+    private fun work(typeId: String) = Task(WORK, type = typeId)
 
     // What the last run of the application left undone of it: planned again by the queue at its start — what it named
     // the queue kept
     init {
-        workload.resumption.resumes(WORK) { left, reason -> left.work.type?.let { plan(it, reason) } }
+        tasks.resumption.resumes(WORK) { left, reason -> left.work.type?.let { plan(it, reason) } }
     }
 
     /**
      * What waits of the content type [typeId] written now, in the queue, for a caller that waits for it — what stands
-     * for the background in a test ([io.github.vlsergey.recommend4me.workload.inBackground]).
+     * for the background in a test ([io.github.vlsergey.recommend4me.task.inBackground]).
      */
-    fun writeWaiting(typeId: String) = workload.run(work(typeId)) { write(typeId) }
+    fun writeWaiting(typeId: String) = tasks.run(work(typeId)) { write(typeId) }
 
     /** Whether the index of the content type [typeId] is of this format. */
     fun current(typeId: String): Boolean = indexes.of(typeId).current()
@@ -118,7 +118,7 @@ class ListIndexing(
     /** What waits of the content type [typeId] written to its index, and committed. */
     private fun write(typeId: String) {
         val type = stores.type(typeId) ?: return
-        val taken = workload.keys.wanted(work(typeId))
+        val taken = tasks.keys.wanted(work(typeId))
         if (taken.isEmpty()) return
         val w = ListWaiting.of(taken)
         val started = System.currentTimeMillis()
@@ -145,7 +145,7 @@ class ListIndexing(
             index.update(values.entries.associate { (id, v) -> ItemKey(sourceId, id) to ListDocuments.valueFields(v) })
         }
         index.commit()
-        workload.keys.done(work(typeId), taken)
+        tasks.keys.done(work(typeId), taken)
         log.info(
             "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} items' values",
             typeId,
@@ -197,7 +197,7 @@ class ListIndexing(
 
     companion object {
         /** The work of the queue writing the index of a content type's list. */
-        val WORK = WorkKind.LIST_INDEX
+        val WORK = TaskKind.LIST_INDEX
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */
         private const val QUIET_SECONDS = 1L

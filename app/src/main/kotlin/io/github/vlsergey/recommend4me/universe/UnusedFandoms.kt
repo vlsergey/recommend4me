@@ -1,11 +1,11 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -27,11 +27,11 @@ private val log = LoggerFactory.getLogger(UnusedFandoms::class.java)
  * A site's fandom of no works in a universe with others of other names stays.
  */
 @Component
-class UnusedFandoms(private val stores: Stores, private val workload: Workload) {
+class UnusedFandoms(private val stores: Stores, private val tasks: Tasks) {
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(LETTING_GO.what) { _, reason -> plan(reason) }
+        tasks.resumption.resumes(LETTING_GO.what) { _, reason -> plan(reason) }
     }
 
     /**
@@ -45,13 +45,13 @@ class UnusedFandoms(private val stores: Stores, private val workload: Workload) 
     }
 
     private fun plan(reason: String) =
-        workload.plan(LETTING_GO, Instant.now().plus(QUIET), reason) {
+        tasks.plan(LETTING_GO, Instant.now().plus(QUIET), reason) {
             val gone = letGo()
             if (gone > 0) log.info("{} sites' fandoms of no work let go of", gone)
         }
 
     private companion object {
-        val LETTING_GO = Work(WorkKind.FANDOMS_LET_GO)
+        val LETTING_GO = Task(TaskKind.FANDOMS_LET_GO)
 
         /** The quiet after the last works written: a crawl's pages written at once, the fandoms read once after. */
         val QUIET: Duration = Duration.ofMinutes(10)

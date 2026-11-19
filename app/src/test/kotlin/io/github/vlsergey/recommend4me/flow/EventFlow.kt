@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.flow
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import org.springframework.asm.Type
 
 /** What the flow goes through: a thing from outside, an event of the application, a work of the queue. */
@@ -27,8 +27,8 @@ internal sealed interface Node : Comparable<Node> {
         override val rank = 2
     }
 
-    /** A work of the queue, by its kind ([io.github.vlsergey.recommend4me.api.model.WorkKind]). */
-    data class Work(override val label: String) : Node {
+    /** A work of the queue, by its kind ([io.github.vlsergey.recommend4me.api.model.TaskKind]). */
+    data class Task(override val label: String) : Node {
         override val rank = 3
     }
 }
@@ -40,13 +40,13 @@ internal sealed interface Node : Comparable<Node> {
  * service: which outer event leads to which inner events, and to the planning of which background works").
  *
  * READ SO, the code is written so (AGENTS.md): an event is an object of a class some `@EventListener` listens to, made
- * where it is told; a work is planned by `Workload.plan` or run by `Workload.run`, its [WorkKind] named in the method
- * that plans it — or in a method it calls that gives a `Work`, a field of a `Work` it reads — and its body the lambda
- * made right before; a method handed a `Work` to plan is a planner too, the kind named by its callers. A call goes to
- * the method named and to every one overriding it; a lambda not a work's body is taken as run where it is made. A place
+ * where it is told; a work is planned by `Tasks.plan` or run by `Tasks.run`, its [TaskKind] named in the method that
+ * plans it — or in a method it calls that gives a `Task`, a field of a `Task` it reads — and its body the lambda made
+ * right before; a method handed a `Task` to plan is a planner too, the kind named by its callers. A call goes to the
+ * method named and to every one overriding it; a lambda not a work's body is taken as run where it is made. A place
  * planning a work whose kind is named nowhere so is told ([unnamed]): the code is to name it.
  *
- * [WorkKind]: io.github.vlsergey.recommend4me.api.model.WorkKind
+ * [TaskKind]: io.github.vlsergey.recommend4me.api.model.TaskKind
  */
 internal class EventFlow(private val code: CodeRead) {
     /** The events: the classes of the application some listener listens to. */
@@ -56,7 +56,7 @@ internal class EventFlow(private val code: CodeRead) {
             .filter { it.startsWith(PACKAGE) }
             .toSet()
 
-    /** Of every field of a `Work` or a `WorkKind`, the kinds of work it is made of. */
+    /** Of every field of a `Task` or a `TaskKind`, the kinds of work it is made of. */
     private val fieldKinds: Map<String, Set<String>> = run {
         val out = HashMap<String, MutableSet<String>>()
         code.classes.values.forEach { c ->
@@ -65,7 +65,7 @@ internal class EventFlow(private val code: CodeRead) {
                 m.steps.forEach { s ->
                     when {
                         s is Step.Kind -> pending += s.kind
-                        // A field made of another: `val WORK = Work(WHAT)`, WHAT a kind
+                        // A field made of another: `val WORK = Task(WHAT)`, WHAT a kind
                         s is Step.Field && !s.write && s.desc in NAMING ->
                             pending += out["${s.owner}.${s.name}"].orEmpty()
                         s is Step.Field && s.write && s.desc in NAMING -> {
@@ -79,7 +79,7 @@ internal class EventFlow(private val code: CodeRead) {
         out
     }
 
-    /** Of every method giving a `Work` or a `WorkKind`, the kinds of the works it may give. */
+    /** Of every method giving a `Task` or a `TaskKind`, the kinds of the works it may give. */
     private val given = HashMap<MethodKey, Set<String>>()
 
     private fun givenBy(key: MethodKey, seen: MutableSet<MethodKey> = HashSet()): Set<String> =
@@ -87,7 +87,7 @@ internal class EventFlow(private val code: CodeRead) {
             ?: if (!seen.add(key)) emptySet()
             else code.method(key)?.let { kindsOf(it.steps, seen) }.orEmpty().also { given[key] = it }
 
-    /** The kinds the [steps] name: directly, by a field of a `Work`, by a method giving one. */
+    /** The kinds the [steps] name: directly, by a field of a `Task`, by a method giving one. */
     private fun kindsOf(steps: List<Step>, seen: MutableSet<MethodKey> = HashSet()): Set<String> =
         steps
             .flatMap { s ->
@@ -106,7 +106,7 @@ internal class EventFlow(private val code: CodeRead) {
         val at: Int,
         val kinds: Set<String>,
         val lambdas: List<MethodKey>,
-        /** Whether it runs the work now ([Workload.run]) rather than plans it: inside a work of the kind, that work. */
+        /** Whether it runs the work now ([Tasks.run]) rather than plans it: inside a work of the kind, that work. */
         val runs: Boolean,
     )
 
@@ -132,7 +132,7 @@ internal class EventFlow(private val code: CodeRead) {
     private val hidden = HashSet<MethodKey>()
 
     init {
-        // The methods handed a Work that plan it are planners too: the kind named by their callers
+        // The methods handed a Task that plan it are planners too: the kind named by their callers
         val planning = HashSet<MethodKey>()
         val methods = code.classes.values.flatMap { it.methods.values }
         fun isPlanner(key: MethodKey) =
@@ -151,7 +151,7 @@ internal class EventFlow(private val code: CodeRead) {
                 if (own.any { (_, steps) -> kindsOf(steps).isEmpty() }) grew = planning.add(m.key) || grew
             }
         }
-        // A step handing a planner its work: a call of it, or a lambda of it made — a lambda given a Work it captured
+        // A step handing a planner its work: a call of it, or a lambda of it made — a lambda given a Task it captured
         fun hands(s: Step) = (s is Step.Call && isPlanner(s.target)) || (s is Step.Lambda && s.body in planning)
         // The kinds every planner of the application is handed, by its callers — of a caller a planner, its own
         val handed = HashMap<MethodKey, MutableSet<String>>()
@@ -226,7 +226,7 @@ internal class EventFlow(private val code: CodeRead) {
 
     /** Every event and every kind of work there is: the events listened to, every kind of the API. */
     val nodes: Set<Node> by lazy {
-        events.map { Node.Event(simple(it)) }.toSet<Node>() + WorkKind.entries.map { Node.Work(it.value) }
+        events.map { Node.Event(simple(it)) }.toSet<Node>() + TaskKind.entries.map { Node.Task(it.value) }
     }
 
     /** Every edge of the flow: what each thing leads to directly. */
@@ -246,7 +246,7 @@ internal class EventFlow(private val code: CodeRead) {
             }
             if (REST in c.annotations) requests(c).forEach { from(Node.Request(it.key.name), it.key) }
         }
-        bodies.forEach { (body, kinds) -> kinds.forEach { from(Node.Work(value(it)), body) } }
+        bodies.forEach { (body, kinds) -> kinds.forEach { from(Node.Task(value(it)), body) } }
         loops.forEach { (body, name) -> from(Node.Outside(name), body) }
         out.filterValues { it.isNotEmpty() }
     }
@@ -266,7 +266,7 @@ internal class EventFlow(private val code: CodeRead) {
 
     /**
      * What running [start] — of [self] — leads to: the events made, the works planned; not into a work's body or a
-     * listener. A work run of its own kind inside it is that work itself ([Workload.run] inside its own turn).
+     * listener. A work run of its own kind inside it is that work itself ([Tasks.run] inside its own turn).
      */
     private fun reached(start: MethodKey, self: Node): Set<Node> {
         val walk = Walk(self, start)
@@ -286,7 +286,7 @@ internal class EventFlow(private val code: CodeRead) {
         // A place planning a work: the work, not what the planner runs
         val site = sites[m.key to i]
         if (site != null) {
-            site.kinds.map { Node.Work(value(it)) }.filterNot { site.runs && it == walk.self }.forEach { out += it }
+            site.kinds.map { Node.Task(value(it)) }.filterNot { site.runs && it == walk.self }.forEach { out += it }
             return
         }
         when (s) {
@@ -340,20 +340,20 @@ internal class EventFlow(private val code: CodeRead) {
     companion object {
         private const val PACKAGE = "io/github/vlsergey/recommend4me/"
         private const val API = "${PACKAGE}api/"
-        private const val WORKLOAD = "${PACKAGE}workload/Workload"
+        private const val WORKLOAD = "${PACKAGE}task/Tasks"
         private const val BACKGROUND = "${PACKAGE}background/Background"
-        private const val RESUMPTION = "${PACKAGE}workload/Resumption"
-        private const val WORK_DESC = "L${PACKAGE}workload/Work;"
+        private const val RESUMPTION = "${PACKAGE}task/Resumption"
+        private const val WORK_DESC = "L${PACKAGE}task/Task;"
 
-        /** What names a kind of work: a `Work`, a `WorkKind` — kept in a field, given by a method. */
-        private val NAMING = setOf(WORK_DESC, "L${PACKAGE}api/model/WorkKind;")
+        /** What names a kind of work: a `Task`, a `TaskKind` — kept in a field, given by a method. */
+        private val NAMING = setOf(WORK_DESC, "L${PACKAGE}api/model/TaskKind;")
         private const val READY = "org/springframework/boot/context/event/ApplicationReadyEvent"
         private const val REST = "Lorg/springframework/web/bind/annotation/RestController;"
         const val START = "start"
         private const val INSTANCE = "INSTANCE"
 
         /** The queue's own classes: its planning and running, not followed. */
-        private val INTERNAL = setOf(WORKLOAD, "${PACKAGE}workload/Plans", "${PACKAGE}workload/Turns")
+        private val INTERNAL = setOf(WORKLOAD, "${PACKAGE}task/Plans", "${PACKAGE}task/Turns")
 
         /** The queue's methods that plan or run a work. */
         private val PLAN = setOf("plan", "run")
@@ -370,6 +370,6 @@ internal class EventFlow(private val code: CodeRead) {
         private fun simple(name: String) = name.substringAfterLast('/').substringAfterLast('$')
 
         /** A kind of work by its value, as the interface words it: "TAG_VECTORS" is "tagVectors". */
-        private fun value(kind: String): String = WorkKind.valueOf(kind).value
+        private fun value(kind: String): String = TaskKind.valueOf(kind).value
     }
 }

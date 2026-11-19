@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -8,11 +8,11 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.TaskPortions
 import io.github.vlsergey.recommend4me.suggestion.WorkModelValues
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -38,7 +38,7 @@ data class RatedWorkValueFillEvent(val type: String, val source: String)
 class ListFilling(
     private val stores: Stores,
     private val works: Works,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val indexes: ListIndexes,
     private val modelValues: WorkModelValues,
     private val events: ApplicationEventPublisher,
@@ -46,19 +46,19 @@ class ListFilling(
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
         // Of a work a source of before, that source
-        workload.resumption.resumes(WORK) { left, reason ->
+        tasks.resumption.resumes(WORK) { left, reason ->
             left.work.source?.let { fill(it, reason) } ?: left.work.type?.let { plan(it, reason) }
         }
     }
 
     /**
      * The values of the rated works of the [source] filled anew, for the [reason] the interface tells: the source kept
-     * waiting in the queue ([WorkKeys.want]) — ONE WORK OF THE TYPE, of every source of it waiting, not a work a
+     * waiting in the queue ([TaskKeys.want]) — ONE WORK OF THE TYPE, of every source of it waiting, not a work a
      * source.
      */
     fun fill(source: String, reason: String, last: Boolean = false) {
         val type = stores.typeOf(source).id
-        workload.keys.want(filling(type), listOf(source))
+        tasks.keys.want(filling(type), listOf(source))
         plan(type, reason, last)
     }
 
@@ -66,13 +66,13 @@ class ListFilling(
      * The filling of the sources of the [type] waiting planned, for the [reason]; [last]: after the background's works.
      */
     private fun plan(type: String, reason: String, last: Boolean = false) =
-        workload.plan(filling(type), Instant.now(), reason, last = last) {
-            val taken = workload.keys.wanted(filling(type))
+        tasks.plan(filling(type), Instant.now(), reason, last = last) {
+            val taken = tasks.keys.wanted(filling(type))
             taken.forEach(::filled)
-            workload.keys.done(filling(type), taken)
+            tasks.keys.done(filling(type), taken)
         }
 
-    private fun filling(type: String) = Work(WORK, type = type)
+    private fun filling(type: String) = Task(WORK, type = type)
 
     private fun filled(source: String) {
         val s = stores.source(source) ?: return
@@ -86,7 +86,7 @@ class ListFilling(
             rated.chunked(TaskPortions.MOST).forEachIndexed { k, ids ->
                 val known = EveryItemFacets(s.items.facetsOf(ids), s.corrections.facetsOf(ids))
                 changed += write(type, s, index, clusters, modelValues.of(s, ids, known), ids)
-                workload.progress(minOf(1.0, (k + 1.0) * TaskPortions.MOST / rated.size.coerceAtLeast(1)))
+                tasks.progress(minOf(1.0, (k + 1.0) * TaskPortions.MOST / rated.size.coerceAtLeast(1)))
             }
             log.info(
                 "{}: the values the models give {} rated works filled in {} ms, {} of them other than kept",
@@ -137,7 +137,7 @@ class ListFilling(
 
     companion object {
         /** The work of the queue filling the values of a source's rated works into the index. */
-        val WORK = WorkKind.LIST_VALUES
+        val WORK = TaskKind.LIST_VALUES
 
         /** The values of every facet as sets: their order is no change. */
         private fun asSets(values: Map<String, List<String>>?): Map<String, Set<String>> =

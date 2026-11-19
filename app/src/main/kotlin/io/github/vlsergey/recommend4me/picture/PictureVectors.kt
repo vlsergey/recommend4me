@@ -1,14 +1,14 @@
 package io.github.vlsergey.recommend4me.picture
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.encoder.ImageEncoder
 import io.github.vlsergey.recommend4me.encoder.PreparedPicture
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.nio.file.Files
 import java.time.Duration
 import java.time.Instant
@@ -23,8 +23,8 @@ private val log = LoggerFactory.getLogger(PictureVectors::class.java)
 /**
  * THE PICTURES DOWNLOADED ANALYSED BY THE PICTURE ENCODER, A WORK OF THE QUEUE (owner, 2026-11-19: "no loop in the
  * background"): of the works whose pictures were downloaded ([SiteItemPictureDownloadEvent]) — kept waiting in the
- * queue ([WorkKeys]) — every picture's original read from the disk, decoded, prepared and encoded, [BATCH] at a time, a
- * [PORTION] a turn, a tail planned again after it ([Workload.again]); its vector kept, its original deleted unless its
+ * queue ([TaskKeys]) — every picture's original read from the disk, decoded, prepared and encoded, [BATCH] at a time, a
+ * [PORTION] a turn, a tail planned again after it ([Tasks.again]); its vector kept, its original deleted unless its
  * work keeps it (graded [PictureService.KEEP_FROM] or more), the works told ([SiteItemPictureAnalysisEvent]). A picture
  * no reader decodes is a lasting failure.
  */
@@ -32,20 +32,20 @@ private val log = LoggerFactory.getLogger(PictureVectors::class.java)
 class PictureVectors(
     private val stores: Stores,
     private val plugins: Plugins,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val events: ApplicationEventPublisher,
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WorkKind.PICTURE_VECTORS) { _, reason -> plan(reason) }
+        tasks.resumption.resumes(TaskKind.PICTURE_VECTORS) { _, reason -> plan(reason) }
     }
 
     /** Whether pictures are to be analysed. */
-    fun running(): Boolean = workload.due(WORK)
+    fun running(): Boolean = tasks.due(WORK)
 
     @EventListener
     fun downloaded(event: SiteItemPictureDownloadEvent) {
-        workload.keys.want(WORK, event.ids.map { "${event.source}$SEP$it" })
+        tasks.keys.want(WORK, event.ids.map { "${event.source}$SEP$it" })
         plan("pictures", event.ids.size)
     }
 
@@ -56,19 +56,19 @@ class PictureVectors(
         val waiting =
             stores.sources.flatMap { s -> s.pictures.queue.itemsDownloaded(encoder.id).map { "${s.id}$SEP$it" } }
         if (waiting.isEmpty()) return
-        workload.keys.want(WORK, waiting)
+        tasks.keys.want(WORK, waiting)
         plan("pictures", waiting.size)
     }
 
     private fun plan(reason: String, count: Int = 1) =
-        workload.plan(WORK, Instant.now().plus(QUIET), reason, count) { analysed() }
+        tasks.plan(WORK, Instant.now().plus(QUIET), reason, count) { analysed() }
 
     /**
      * The pictures of the works waiting analysed, a [PORTION] at most; of a tail left, the work planned again after it.
      */
     private fun analysed() {
         val encoder = plugins.imageEncoder() ?: return
-        val taken = workload.keys.wanted(WORK)
+        val taken = tasks.keys.wanted(WORK)
         if (taken.isEmpty()) return
         var room = PORTION
         val done = ArrayList<String>()
@@ -85,8 +85,8 @@ class PictureVectors(
                 events.publishEvent(SiteItemPictureAnalysisEvent(source, now.map { it.itemId }.distinct()))
             }
         }
-        workload.keys.done(WORK, done)
-        if (done.size < taken.size) workload.again("portion")
+        tasks.keys.done(WORK, done)
+        if (done.size < taken.size) tasks.again("portion")
     }
 
     /** The [pictures] of the source [s] decoded, prepared and encoded, their vectors kept. */
@@ -142,7 +142,7 @@ class PictureVectors(
     }
 
     private companion object {
-        val WORK = Work(WorkKind.PICTURE_VECTORS)
+        val WORK = Task(TaskKind.PICTURE_VECTORS)
 
         /** Pictures per encoder run. */
         const val BATCH = 64

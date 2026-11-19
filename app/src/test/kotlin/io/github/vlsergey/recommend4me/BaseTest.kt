@@ -4,7 +4,7 @@ import io.github.vlsergey.recommend4me.background.HeldBackground
 import io.github.vlsergey.recommend4me.source.Source
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.CountingSuggester
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Tasks
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.TestInfo
 import org.springframework.beans.factory.annotation.Autowired
@@ -39,7 +39,7 @@ import org.springframework.test.context.TestPropertySource
 abstract class BaseTest {
     @Autowired lateinit var stores: Stores
 
-    @Autowired lateinit var workload: Workload
+    @Autowired lateinit var tasks: Tasks
 
     /**
      * The background of the tests: nothing of it runs by itself. A test says [HeldBackground.run] where the application

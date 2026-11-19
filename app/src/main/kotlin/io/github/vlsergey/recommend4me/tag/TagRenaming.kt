@@ -1,13 +1,13 @@
 package io.github.vlsergey.recommend4me.tag
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -32,18 +32,18 @@ class TagRenaming(
     private val tags: Tags,
     private val normalization: TagNormalization,
     private val above: EntriesAbove,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val background: Background,
     private val json: JsonMapper,
     /** The languages a tag's entry is asked in, the user's first. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) {
     /** Every tag counted now and what is shown of it kept. */
-    fun rename(scope: TagScope, facet: String) = workload.run(NAMING) { renamed(scope, facet) }
+    fun rename(scope: TagScope, facet: String) = tasks.run(NAMING) { renamed(scope, facet) }
 
     private fun renamed(scope: TagScope, facet: String) {
         val started = System.currentTimeMillis()
-        val counted = workload.run(Work(WorkKind.TAGS_COUNTED)) { TagCounting(scope, facet, normalization).counted() }
+        val counted = tasks.run(Task(TaskKind.TAGS_COUNTED)) { TagCounting(scope, facet, normalization).counted() }
         val n = tags.naming(scope, counted)
         val stats = n.stats
         // Of the application's working: the user's own name is shown over it, not kept in it
@@ -68,7 +68,7 @@ class TagRenaming(
     }
 
     /** Whether the names, the works and the offers of the tags are planned, waiting or worked out now. */
-    fun due(): Boolean = workload.due(NAMING)
+    fun due(): Boolean = tasks.due(NAMING)
 
     /**
      * The tags changed by the user's word: THE WORD WRITTEN AND ANSWERED AT ONCE — the marking waits for nothing that
@@ -87,7 +87,7 @@ class TagRenaming(
     fun schedule(reason: String) =
         // Planned till it begins: the offers read meanwhile are told to be worked out anew. A failure is told in the
         // log, and the next change plans it again
-        workload.plan(NAMING, Instant.now().plusSeconds(RENAME_DELAY_SECONDS), reason) {
+        tasks.plan(NAMING, Instant.now().plusSeconds(RENAME_DELAY_SECONDS), reason) {
             tags.scope()?.let { scope ->
                 normalization.bindNew()
                 renamed(scope, scope.facet)
@@ -106,7 +106,7 @@ class TagRenaming(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(NAMING.what) { _, reason -> schedule(reason) }
+        tasks.resumption.resumes(NAMING.what) { _, reason -> schedule(reason) }
     }
 
     /** The start: what a stop left of the tags finished. */
@@ -123,7 +123,7 @@ class TagRenaming(
 
     private companion object {
         /** The names of the tags worked out and their works counted, as the queue of the works tells it. */
-        val NAMING = Work(WorkKind.TAGS_NAMED)
+        val NAMING = Task(TaskKind.TAGS_NAMED)
 
         /**
          * The quiet after the last change before the names are worked out again: a page is sent several times as it

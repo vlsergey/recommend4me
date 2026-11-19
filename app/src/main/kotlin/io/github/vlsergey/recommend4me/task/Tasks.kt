@@ -1,8 +1,8 @@
-package io.github.vlsergey.recommend4me.workload
+package io.github.vlsergey.recommend4me.task
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.api.model.WorkReasonKey
-import io.github.vlsergey.recommend4me.api.model.WorkStep
+import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskReasonKey
+import io.github.vlsergey.recommend4me.api.model.TaskStep
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.background.Threads
 import java.time.Duration
@@ -11,14 +11,14 @@ import java.util.concurrent.CancellationException
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
-private val log = LoggerFactory.getLogger(Workload::class.java)
+private val log = LoggerFactory.getLogger(Tasks::class.java)
 
 /**
- * What a work does — [what], a key the interface words as "workload.<what>" — and of what: a content type, a source, a
+ * What a work does — [what], a key the interface words as "tasks.<what>" — and of what: a content type, a source, a
  * facet, a work. Two works alike are the same work: planned twice, it is planned once.
  */
-data class Work(
-    val what: WorkKind,
+data class Task(
+    val what: TaskKind,
     val type: String? = null,
     val source: String? = null,
     val facet: String? = null,
@@ -30,17 +30,17 @@ data class Work(
 
 /**
  * A work waiting or running: since when, and why — the changes that asked for it, by the key the interface words as
- * "workload.reason.<key>", each with how many times it came — and whether the user's action in the interface asked for
- * it ([asked]: it waits ahead of the background).
+ * "tasks.reason.<key>", each with how many times it came — and whether the user's action in the interface asked for it
+ * ([asked]: it waits ahead of the background).
  */
-class HeavyWork(val work: Work, val since: Instant, val reasons: Map<String, Int>, val asked: Boolean = false) {
-    /** Of a work that tells it ([Workload.progress]), how much of it is done: a share; none of one that does not. */
+class RunningTask(val work: Task, val since: Instant, val reasons: Map<String, Int>, val asked: Boolean = false) {
+    /** Of a work that tells it ([Tasks.progress]), how much of it is done: a share; none of one that does not. */
     @Volatile var progress: Double? = null
 
     /** Of a work of several steps, the step it is at, and the key of the words of what the step is of. */
-    @Volatile var step: Pair<WorkStep, String?>? = null
+    @Volatile var step: Pair<TaskStep, String?>? = null
 
-    /** Of a work that left a tail ([Workload.again]): why it goes on, how many times. */
+    /** Of a work that left a tail ([Tasks.again]): why it goes on, how many times. */
     @Volatile var again: Pair<String, Int>? = null
 }
 
@@ -48,8 +48,8 @@ class HeavyWork(val work: Work, val since: Instant, val reasons: Map<String, Int
  * A work planned for later: when it is due (it may be put off by newer changes), since when it is planned, why, and
  * whether the user asked for it.
  */
-class PlannedWork(
-    val work: Work,
+class PlannedTask(
+    val work: Task,
     val due: Instant,
     val since: Instant,
     val reasons: Map<String, Int>,
@@ -60,8 +60,8 @@ class PlannedWork(
  * A work done: when it began and ended, why it ran, whether it failed — or was [givenUp]: newer data came while it ran,
  * and it is done again on them (a [CancellationException]), no failure.
  */
-class FinishedWork(
-    val work: Work,
+class FinishedTask(
+    val work: Task,
     val began: Instant,
     val ended: Instant,
     val reasons: Map<String, Int>,
@@ -93,16 +93,16 @@ class FinishedWork(
  * ([plan]) — a grade, an answer, a tag — are planned here with their reasons and what they do, begun here when due
  * ([Plans]); planned again before they begin, they are done once. What a work is, when it is due, since when and why is
  * kept in the [records] from its plan to its end: a work a stop or a crash left undone is planned again at the next
- * start by its owner, of its kind ([left]). The runs of the works are kept there too ([WorkRecords.runs],
- * [WorkRecords.expected]).
+ * start by its owner, of its kind ([left]). The runs of the works are kept there too ([TaskRecords.runs],
+ * [TaskRecords.expected]).
  */
 @Component
-class Workload(background: Background = Threads(), private val records: WorkRecords = WorkRecords.NONE) {
+class Tasks(background: Background = Threads(), private val records: TaskRecords = TaskRecords.NONE) {
     /** Whose turn it is: the works waiting their turn and the thread holding it. */
     private val turns = Turns()
     private val plans = Plans(turns, background, records)
 
-    @Volatile private var current: HeavyWork? = null
+    @Volatile private var current: RunningTask? = null
 
     /**
      * THE APPLICATION STOPS, BEFORE ITS FILES CLOSE: no work planned or waiting begins any more, and the one running is
@@ -124,14 +124,14 @@ class Workload(background: Background = Threads(), private val records: WorkReco
      * ALIKE WORKS ARE ONE: asked while a work alike still waits its turn, it is not queued a second time — the caller
      * waits for that one and answers what it answers, its reasons added to it; it begins on the data as they are then,
      * the newer change too. A work alike already running is not joined: it read the data before the change, so the work
-     * is queued again. A caller whose work is more than its [Work] tells — a batch of its own ids — passes [joinAlike]
+     * is queued again. A caller whose work is more than its [Task] tells — a batch of its own ids — passes [joinAlike]
      * false.
      *
      * [asked]: the user's action in the interface asked for it — it waits ahead of every work that was not; a work
      * alike it joins is put ahead with it.
      */
     fun <T> run(
-        work: Work,
+        work: Task,
         reasons: Map<String, Int>? = null,
         joinAlike: Boolean = true,
         asked: Boolean = false,
@@ -159,7 +159,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
         try {
             val waited = Duration.between(entry.since, Instant.now())
             if (waited > NOTED) log.info("{} waited {} s for the works before it", entry.work, waited.toSeconds())
-            val running = HeavyWork(entry.work, Instant.now(), entry.reasons, entry.asked)
+            val running = RunningTask(entry.work, Instant.now(), entry.reasons, entry.asked)
             current = running
             var failed = true
             var givenUp = false
@@ -185,7 +185,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
                 entry.result.completeExceptionally(e)
                 throw e
             } finally {
-                records.ran(FinishedWork(running.work, running.since, Instant.now(), running.reasons, failed, givenUp))
+                records.ran(FinishedTask(running.work, running.since, Instant.now(), running.reasons, failed, givenUp))
             }
         } finally {
             current = null
@@ -195,9 +195,9 @@ class Workload(background: Background = Threads(), private val records: WorkReco
 
     /**
      * What each work of the queue is to be done of — the items, the fandoms its owner names — kept with it till done
-     * ([WorkKeys]): a stop leaves them to the work planned again at the next start.
+     * ([TaskKeys]): a stop leaves them to the work planned again at the next start.
      */
-    val keys = WorkKeys(records)
+    val keys = TaskKeys(records)
 
     /** The works the last run left undone planned again, at the start, by how their owners told ([Resumption]). */
     val resumption = Resumption(records)
@@ -210,7 +210,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
      * again before it begins, the newer [body] is the one run. A failure of either is told in the log.
      */
     fun <T> plan(
-        work: Work,
+        work: Task,
         due: Instant?,
         reason: String,
         count: Int = 1,
@@ -219,7 +219,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
         after: (T) -> Unit = {},
         body: () -> T,
     ): Unit =
-        plans.plan(work, due, mapOf(WorkReasonKey.forValue(reason).value to count), asked, last) { entry ->
+        plans.plan(work, due, mapOf(TaskReasonKey.forValue(reason).value to count), asked, last) { entry ->
             // A tail left: the same work planned again, of the same body, after it — a continuation, not a new cause
             after(runOwn(entry, body) { (why, n) -> plan(work, null, why, n, asked, last, after, body) })
         }
@@ -231,7 +231,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
      * its state). Of a work run, not planned ([run]), nothing: its caller goes on itself.
      */
     fun again(reason: String, count: Int = 1) {
-        current?.again = WorkReasonKey.forValue(reason).value to count
+        current?.again = TaskReasonKey.forValue(reason).value to count
     }
 
     /**
@@ -240,7 +240,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
      * a facet), when the step tells it (owner, 2026-11-19: "the training runs for minutes, and what is inside is not
      * clear").
      */
-    fun progress(share: Double, step: WorkStep? = null, of: String? = null) {
+    fun progress(share: Double, step: TaskStep? = null, of: String? = null) {
         current?.let { w ->
             w.progress = share.coerceIn(0.0, 1.0)
             if (step != null) w.step = step to of
@@ -255,20 +255,20 @@ class Workload(background: Background = Threads(), private val records: WorkReco
         get() = turns.closed
 
     /** The work running now, none when idle. */
-    fun running(): HeavyWork? = current
+    fun running(): RunningTask? = current
 
     /** The works waiting their turn, in the order they will run: those the user asked for first. */
-    fun waiting(): List<HeavyWork> = turns.waiting()
+    fun waiting(): List<RunningTask> = turns.waiting()
 
     /**
      * Whether the [work] is to be done: planned, waiting its turn or — when [running] counts — running now: what it
      * makes is not made yet. Not of one running: it read the data before, and is done again once planned so.
      */
-    fun due(work: Work, running: Boolean = true): Boolean =
+    fun due(work: Task, running: Boolean = true): Boolean =
         plans.has(work) || turns.waits(work) || (running && current?.work == work)
 
     /** The works planned, the soonest due first. */
-    fun planned(): List<PlannedWork> = plans.list()
+    fun planned(): List<PlannedTask> = plans.list()
 
     private companion object {
         /** A wait worth telling in the log. */

@@ -1,13 +1,13 @@
 package io.github.vlsergey.recommend4me.tag
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import kotlin.math.sqrt
 import org.slf4j.LoggerFactory
@@ -32,11 +32,11 @@ class TagVectors(
     private val normalization: TagNormalization,
     private val plugins: Plugins,
     private val phrases: PhraseVectors,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+        tasks.resumption.resumes(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
     }
 
     @EventListener(TagChangeEvent::class) fun tagsChanged() = schedule(QUIET_SECONDS, "tags")
@@ -55,7 +55,7 @@ class TagVectors(
      * A failure is told in the log, and the next change plans it again.
      */
     private fun schedule(delaySeconds: Long, reason: String) =
-        workload.plan(VECTORS, Instant.now().plusSeconds(delaySeconds), reason) { fill() }
+        tasks.plan(VECTORS, Instant.now().plusSeconds(delaySeconds), reason) { fill() }
 
     /** Makes the vector of every tag that has none by the encoder in use; how many were made. */
     fun fill(): Int =
@@ -97,7 +97,7 @@ class TagVectors(
         private const val KEEP = 500
 
         /** The making of the vectors, as the queue of the works tells it. */
-        private val VECTORS = Work(WorkKind.TAG_VECTORS)
+        private val VECTORS = Task(TaskKind.TAG_VECTORS)
 
         /** [v] of unit length; null of a vector of nought. */
         fun unit(v: FloatArray): FloatArray? {

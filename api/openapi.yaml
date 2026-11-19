@@ -38,7 +38,7 @@ tags:
   - name: duplicates
   - name: authors
   - name: series
-  - name: workload
+  - name: tasks
   - name: launcher
   - name: database
 
@@ -2508,7 +2508,7 @@ paths:
       summary: Plans the training of the content type's models at once, after the works before it in the queue
       description: |
         A request never waits for a computation: the training is planned and runs in the background,
-        the queue of the computations tells it (listWorkload).
+        the queue of the computations tells it (listTasks).
       parameters:
         - $ref: '#/components/parameters/Type'
       responses:
@@ -2584,10 +2584,10 @@ paths:
         '404':
           description: No such type
 
-  /api/workload:
+  /api/tasks:
     get:
-      tags: [workload]
-      operationId: listWorkload
+      tags: [tasks]
+      operationId: listTasks
       summary: >
         The queue of the computations of every content type, one at a time: the last works done, the work running,
         those waiting their turn, and those planned after the changes that asked for them - each with why, and how
@@ -2602,12 +2602,12 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/QueuedWork'
+                  $ref: '#/components/schemas/QueuedTask'
 
-  /api/workload/work:
+  /api/tasks/task:
     get:
-      tags: [workload]
-      operationId: getWork
+      tags: [tasks]
+      operationId: getTask
       summary: >
         One work of the queue as it stands, named as the queue names it ("what" and what it is of): running, waiting or
         planned, else the last run of it done - read again while it is not done, what it makes read once it is
@@ -2616,7 +2616,7 @@ paths:
           in: query
           required: true
           schema:
-            $ref: '#/components/schemas/WorkKind'
+            $ref: '#/components/schemas/TaskKind'
         - name: type
           in: query
           schema:
@@ -2639,7 +2639,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QueuedWork'
+                $ref: '#/components/schemas/QueuedTask'
         '404':
           description: Neither to come nor among the last works done
 
@@ -4839,13 +4839,13 @@ components:
           additionalProperties:
             type: string
 
-    QueuedWork:
+    QueuedTask:
       type: object
       description: A background work running, waiting or planned
       required: [what, state, since, reasons]
       properties:
         what:
-          $ref: '#/components/schemas/WorkKind'
+          $ref: '#/components/schemas/TaskKind'
         state:
           type: string
           enum: [FINISHED, RUNNING, WAITING, PLANNED]
@@ -4904,7 +4904,7 @@ components:
             Of a work running that tells it, how much of it is done, a share from 0 to 1 - its end foreseen by the
             pace so far; left out of a work that does not tell it
         step:
-          $ref: '#/components/schemas/WorkStep'
+          $ref: '#/components/schemas/TaskStep'
         stepOf:
           type: string
           description: >
@@ -4914,12 +4914,12 @@ components:
           type: array
           description: The changes that asked for it, each with how many times it came
           items:
-            $ref: '#/components/schemas/WorkReason'
+            $ref: '#/components/schemas/TaskReason'
 
-    WorkKind:
+    TaskKind:
       type: string
       description: >
-        What a work of the queue does: a key the interface words ("workload:What.<kind>") - every kind listed, its
+        What a work of the queue does: a key the interface words ("task:What.<kind>") - every kind listed, its
         words checked as the interface is built
       enum:
           - castNames
@@ -4960,10 +4960,10 @@ components:
           - worksKeptOut
           - worth
 
-    WorkStep:
+    TaskStep:
       type: string
       description: >
-        The step a work running of several is at: a key the interface words ("workload:Step.<step>") - every step
+        The step a work running of several is at: a key the interface words ("task:Step.<step>") - every step
         listed, its words checked as the interface is built
       enum:
         - average
@@ -4974,10 +4974,10 @@ components:
         - readCharacters
         - fitFacet
 
-    WorkReasonKey:
+    TaskReasonKey:
       type: string
       description: >
-        Why a work of the queue is planned: a key the interface words ("workload:Reason.<key>") - every reason
+        Why a work of the queue is planned: a key the interface words ("task:Reason.<key>") - every reason
         listed, its words checked as the interface is built
       enum:
           - answer
@@ -5022,12 +5022,12 @@ components:
           - uncounted
           - universes
 
-    WorkReason:
+    TaskReason:
       type: object
       required: [key, count]
       properties:
         key:
-          $ref: '#/components/schemas/WorkReasonKey'
+          $ref: '#/components/schemas/TaskReasonKey'
         count:
           type: integer
           format: int32

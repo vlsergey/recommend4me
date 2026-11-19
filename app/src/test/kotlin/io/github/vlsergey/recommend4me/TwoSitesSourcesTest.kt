@@ -185,7 +185,7 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
     fun `the model of a type — trained on demand, its scorer chosen, an unknown scorer refused`() {
         (1..8).forEach { k ->
             alpha(
-                "m$k|Work $k|${if (k % 2 == 0) "sea" else "land"}" +
+                "m$k|Task $k|${if (k % 2 == 0) "sea" else "land"}" +
                     "|${if (k % 2 == 0) "Ships and storms at sea" else "Fields and farms on land"} $k||"
             )
             gradesController.rateItem("alpha", "m$k", RatingRequest(if (k % 2 == 0) 5 else 1))

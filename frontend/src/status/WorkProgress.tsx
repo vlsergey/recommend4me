@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, unwrap, type WorkStatus } from "@/api/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { compact, duration, number } from "@/i18n/format";
-import { useWorkloadRefresh } from "@/workload/WorkQueue";
+import { useTasksRefresh } from "@/task/TaskQueue";
 import { workLabel } from "./labels";
 
 const ICON: Record<string, LucideIcon> = {
@@ -19,7 +19,7 @@ const ICON: Record<string, LucideIcon> = {
  * again as often as the queue of the computations, as the user chose there: it has no heading of its own.
  */
 export function WorkProgress() {
-  const [every] = useWorkloadRefresh();
+  const [every] = useTasksRefresh();
   const status = useQuery({
     queryKey: ["status"],
     queryFn: async () => unwrap(await api.GET("/api/status")),

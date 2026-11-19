@@ -7,8 +7,8 @@ import io.github.vlsergey.recommend4me.api.model.MarkVerdict
 import io.github.vlsergey.recommend4me.api.model.MarkingOrder
 import io.github.vlsergey.recommend4me.api.model.UniverseEntryBinding
 import io.github.vlsergey.recommend4me.api.model.UniverseRef
+import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
-import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull

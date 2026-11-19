@@ -1,12 +1,12 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -25,12 +25,12 @@ private val log = LoggerFactory.getLogger(FandomVectors::class.java)
 class FandomVectors(
     private val stores: Stores,
     private val phrases: PhraseVectors,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val events: ApplicationEventPublisher,
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+        tasks.resumption.resumes(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
     }
 
     /** Works came or changed: their sites' fandoms bound ([FandomNormalization]), maybe new ones. */
@@ -42,7 +42,7 @@ class FandomVectors(
      */
     private fun schedule(delaySeconds: Long, reason: String) {
         if (sites().isEmpty()) return
-        workload.plan(
+        tasks.plan(
             VECTORS,
             Instant.now().plusSeconds(delaySeconds),
             reason,
@@ -83,6 +83,6 @@ class FandomVectors(
         const val QUIET_SECONDS = 10L
 
         /** The making of the vectors, as the queue of the works tells it. */
-        val VECTORS = Work(WorkKind.FANDOM_VECTORS)
+        val VECTORS = Task(TaskKind.FANDOM_VECTORS)
     }
 }

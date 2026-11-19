@@ -127,7 +127,7 @@ export type HierarchyOffer = Schemas["HierarchyOffer"];
 export type HierarchyOffers = Schemas["HierarchyOffers"];
 export type ModelState = Schemas["ModelState"];
 export type ModelTrial = Schemas["ModelTrial"];
-export type QueuedWork = Schemas["QueuedWork"];
+export type QueuedTask = Schemas["QueuedTask"];
 export type FacetComparison = Schemas["FacetComparison"];
 export type MethodQuality = Schemas["MethodQuality"];
 

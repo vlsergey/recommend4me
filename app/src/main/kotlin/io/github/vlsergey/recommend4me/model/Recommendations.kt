@@ -1,15 +1,15 @@
 package io.github.vlsergey.recommend4me.model
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.api.model.WorkStep
+import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskStep
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
@@ -37,7 +37,7 @@ class Recommendations(
     private val everyWork: EveryWork,
     private val works: Works,
     private val settings: Settings,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val kept: KeptModels,
     private val fitting: ModelFitting,
     private val sweep: ScoreSweep,
@@ -51,13 +51,13 @@ class Recommendations(
 
     /**
      * Training is running now. One planned after a change, or waiting its turn in the queue of the computations, is
-     * not: the queue tells it ([Workload]), and the model shows no spinner meanwhile.
+     * not: the queue tells it ([Tasks]), and the model shows no spinner meanwhile.
      */
     fun training(type: String): Boolean = type in trainingNow
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WorkKind.TRAIN) { left, reason ->
+        tasks.resumption.resumes(TaskKind.TRAIN) { left, reason ->
             left.work.type?.let { scheduleRetrain(it, reason, byUser = left.asked, asked = left.asked) }
         }
     }
@@ -68,7 +68,7 @@ class Recommendations(
      * facet of every source, the reranker's likeness chunk after chunk, the pictures — comes in long streams: learnt
      * after a minute of quiet, or twice the last training, never later than [MAX_WAIT_MS] after the first of the
      * stream; a training of the user's change is never put off by it. The [reason] — a key the interface words — is
-     * told in the queue of the works ([Workload.plan]) till the training begins.
+     * told in the queue of the works ([Tasks.plan]) till the training begins.
      *
      * [asked]: the user waits for this training — a grade, the mark of interest, the button (user, 2026-11-07) — and it
      * goes ahead of the background's works. A change of the user's the user does not wait to see learnt — an answer, a
@@ -85,7 +85,7 @@ class Recommendations(
         val now = System.currentTimeMillis()
         val work = trainingWork(type)
         pending.compute(type) { _, old ->
-            val waiting = old?.takeIf { workload.due(work) }
+            val waiting = old?.takeIf { tasks.due(work) }
             val due =
                 when {
                     !byUser && waiting?.byUser == true -> waiting.due
@@ -96,7 +96,7 @@ class Recommendations(
                             (waiting?.firstAt ?: now) + MAX_WAIT_MS,
                         )
                 }
-            workload.plan(work, Instant.ofEpochMilli(due), reason, asked = asked) { retrain(type, asked) }
+            tasks.plan(work, Instant.ofEpochMilli(due), reason, asked = asked) { retrain(type, asked) }
             if (!byUser && waiting?.byUser == true) waiting else PendingTraining(waiting?.firstAt ?: now, due, byUser)
         }
     }
@@ -116,7 +116,7 @@ class Recommendations(
      * ([ScoreSweep.begin]) and not waited for.
      */
     fun retrain(typeId: String, asked: Boolean = false): ModelSummary =
-        workload.run(trainingWork(typeId), asked = asked) {
+        tasks.run(trainingWork(typeId), asked = asked) {
             val type = stores.contentType(typeId)
             trainingNow += typeId
             try {
@@ -124,10 +124,10 @@ class Recommendations(
                 // Its steps told to the queue, each begun at its share of a training as long trainings went
                 val catalogue = everyWork.training(type)
                 val loaded = System.currentTimeMillis()
-                workload.progress(GRADES_FROM, WorkStep.FIT_GRADES)
+                tasks.progress(GRADES_FROM, TaskStep.FIT_GRADES)
                 val model = fitting.grades(catalogue)
                 // Of no use without the scores it multiplies
-                workload.progress(INTEREST_FROM, WorkStep.FIT_INTEREST)
+                tasks.progress(INTEREST_FROM, TaskStep.FIT_INTEREST)
                 val interest = if (model != null) fitting.interest(catalogue) else null
                 lastTraining[typeId] = System.currentTimeMillis() - started
                 log.info(
@@ -139,7 +139,7 @@ class Recommendations(
                 )
                 // The rated works scored at once, of the works the training read; the others by the fourth stage —
                 // their values filled by it of no model too
-                workload.progress(SCORING_FROM, WorkStep.SCORE_RATED)
+                tasks.progress(SCORING_FROM, TaskStep.SCORE_RATED)
                 if (model != null) scoring.score(catalogue, model, interest)
                 sweep.begin(type, "trained")
             } finally {
@@ -225,6 +225,6 @@ class Recommendations(
         private const val INTEREST_FROM = 0.7
         private const val SCORING_FROM = 0.85
 
-        private fun trainingWork(typeId: String) = Work(WorkKind.TRAIN, type = typeId)
+        private fun trainingWork(typeId: String) = Task(TaskKind.TRAIN, type = typeId)
     }
 }

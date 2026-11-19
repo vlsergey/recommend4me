@@ -1,15 +1,15 @@
 package io.github.vlsergey.recommend4me.setvector
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -25,8 +25,8 @@ private val log = LoggerFactory.getLogger(SetVectorMaking::class.java)
  * 2026-11-19: "no loop in the background in the code: a work that sees it has a tail plans itself again"; "where did
  * the missing ones come from — why is it not a consequence of an outer event?"): a set grows of an event alone — the
  * works' reviews written, their texts' windows made, their pictures analysed — and those works are kept waiting in the
- * queue ([WorkKeys]), made a portion at a time, the graded works first, then from the top of the recommendations down;
- * a tail left planned again after it ([Workload.again]), its bound the sets made already. Every set of a type is made
+ * queue ([TaskKeys]), made a portion at a time, the graded works first, then from the top of the recommendations down;
+ * a tail left planned again after it ([Tasks.again]), its bound the sets made already. Every set of a type is made
  * again when the encoder of the directions kept is not the one in use.
  *
  * THE DIRECTIONS ARE FITTED ONCE per content type, on a sample of its catalogue, and kept ([SetDirections]); the
@@ -39,15 +39,15 @@ class SetVectorMaking(
     private val directions: SetDirections,
     private val contexts: SourceContexts,
     private val events: ApplicationEventPublisher,
-    private val workload: Workload,
+    private val tasks: Tasks,
 ) {
     /** Whether the vectors of some type's sets are to be made. */
-    fun running(): Boolean = stores.types.any { workload.due(work(it.id)) }
+    fun running(): Boolean = stores.types.any { tasks.due(work(it.id)) }
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
         // Of a work of a source of before (app V4), every work of the source waiting
-        workload.resumption.resumes(WorkKind.SET_VECTORS) { left, reason ->
+        tasks.resumption.resumes(TaskKind.SET_VECTORS) { left, reason ->
             left.work.type?.let { plan(it, reason) } ?: left.work.source?.let { whole(it, reason) }
         }
     }
@@ -75,14 +75,14 @@ class SetVectorMaking(
                     encoder != null && kept != null && kept != encoder
                 }
             if (!other) return@forEach
-            workload.keys.want(work(type.id), type.sources.map { "${it.id}$SEP$WHOLE" })
+            tasks.keys.want(work(type.id), type.sources.map { "${it.id}$SEP$WHOLE" })
             plan(type.id, "setsGrew")
         }
 
     /** Every work of the [source] waiting, the making planned. */
     private fun whole(source: String, reason: String) {
         val type = stores.typeOf(source).id
-        workload.keys.want(work(type), listOf("$source$SEP$WHOLE"))
+        tasks.keys.want(work(type), listOf("$source$SEP$WHOLE"))
         plan(type, reason)
     }
 
@@ -90,21 +90,21 @@ class SetVectorMaking(
     private fun grew(source: String, ids: Collection<String>, reason: String) {
         if (ids.isEmpty()) return
         val type = stores.typeOf(source).id
-        workload.keys.want(work(type), ids.map { "$source$SEP$it" })
+        tasks.keys.want(work(type), ids.map { "$source$SEP$it" })
         plan(type, reason, ids.size)
     }
 
     private fun plan(type: String, reason: String, count: Int = 1) =
-        workload.plan(work(type), Instant.now().plus(QUIET), reason, count) { made(type) }
+        tasks.plan(work(type), Instant.now().plus(QUIET), reason, count) { made(type) }
 
     /**
      * The vectors of the sets of the works waiting made, a [PORTION] of each source and kind at most: of a tail left,
-     * the work planned again after it, the works waiting kept ([Workload.again]) — the sets made already its bound.
+     * the work planned again after it, the works waiting kept ([Tasks.again]) — the sets made already its bound.
      */
     private fun made(typeId: String) {
         val type = stores.type(typeId) ?: return
         val work = work(typeId)
-        val taken = workload.keys.wanted(work)
+        val taken = tasks.keys.wanted(work)
         if (taken.isEmpty()) return
         val asked = taken.groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) })
         val turn = Turn()
@@ -119,7 +119,7 @@ class SetVectorMaking(
         }
         // The model learns the new vectors as they come, a portion at a time
         if (turn.made > 0) events.publishEvent(SiteItemSetVectorChangeEvent(typeId, turn.made))
-        if (turn.tail) workload.again("portion") else workload.keys.done(work, taken)
+        if (turn.tail) tasks.again("portion") else tasks.keys.done(work, taken)
     }
 
     /** What a turn of the work made, and whether it left a tail. */
@@ -188,6 +188,6 @@ class SetVectorMaking(
         private const val SEP = '\t'
         private const val WHOLE = ""
 
-        private fun work(type: String) = Work(WorkKind.SET_VECTORS, type = type)
+        private fun work(type: String) = Task(TaskKind.SET_VECTORS, type = type)
     }
 }

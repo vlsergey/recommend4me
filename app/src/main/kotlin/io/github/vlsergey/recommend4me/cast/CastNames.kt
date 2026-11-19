@@ -1,14 +1,14 @@
 package io.github.vlsergey.recommend4me.cast
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskKeys
+import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -24,26 +24,26 @@ data class SiteItemCastEncodeEvent(val source: String, val ids: List<String>)
  * THE TEXTS OF THE SAID CASTS ENCODED, IN THE BACKGROUND: of every work whose line changed, the texts every way of
  * reading the casts asks for ([CastReader.encoded]) — the names, the pairings written so — encoded and kept as the
  * short texts are ([PhraseVectors]), a text once, after a quiet; the works waiting kept in the queue. In the queue of
- * the computations ([Workload]), never on the thread of a request: the models read the vectors kept alone
- * ([CastReading]). The queue of the works waiting is the only thing kept here.
+ * the computations ([Tasks]), never on the thread of a request: the models read the vectors kept alone ([CastReading]).
+ * The queue of the works waiting is the only thing kept here.
  */
 @Component
 class CastNames(
     private val stores: Stores,
     private val plugins: Plugins,
     private val phrases: PhraseVectors,
-    private val workload: Workload,
+    private val tasks: Tasks,
     private val events: ApplicationEventPublisher,
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        workload.resumption.resumes(WHAT) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+        tasks.resumption.resumes(WHAT) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
     }
 
     @EventListener
     fun itemsChanged(event: SiteItemWriteEvent) {
         val store = stores.source(event.source)?.takeIf(::encodes) ?: return
-        workload.keys.want(WORK, event.ids.map { "${store.id}$SEP$it" })
+        tasks.keys.want(WORK, event.ids.map { "${store.id}$SEP$it" })
         schedule(QUIET_SECONDS, "items")
     }
 
@@ -52,11 +52,11 @@ class CastNames(
         WorkCasts.facetOf(store) != null && plugins.castReaders.isNotEmpty()
 
     /**
-     * The works the queue keeps waiting ([WorkKeys.wanted]) — of every source, one work — encoded after [delaySeconds]
+     * The works the queue keeps waiting ([TaskKeys.wanted]) — of every source, one work — encoded after [delaySeconds]
      * of quiet; whatever reads them again told out of the queue, it plans its own work.
      */
     private fun schedule(delaySeconds: Long, reason: String) =
-        workload.plan(
+        tasks.plan(
             WORK,
             Instant.now().plusSeconds(delaySeconds),
             reason,
@@ -66,13 +66,13 @@ class CastNames(
                 }
             },
         ) {
-            val taken = workload.keys.wanted(WORK)
+            val taken = tasks.keys.wanted(WORK)
             val encoded =
                 taken
                     .groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) })
                     .mapNotNull { (source, ids) -> stores.source(source)?.let { source to encode(it, ids) } }
                     .toMap()
-            workload.keys.done(WORK, taken)
+            tasks.keys.done(WORK, taken)
             encoded
         }
 
@@ -103,10 +103,10 @@ class CastNames(
     }
 
     private companion object {
-        val WHAT = WorkKind.CAST_NAMES
+        val WHAT = TaskKind.CAST_NAMES
 
         /** One work of every source: their works told apart by their keys ("<source>\t<id>"). */
-        val WORK = Work(WHAT)
+        val WORK = Task(WHAT)
 
         const val SEP = '\t'
 

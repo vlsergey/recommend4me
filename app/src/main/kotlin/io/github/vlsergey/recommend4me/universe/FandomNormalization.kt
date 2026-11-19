@@ -1,12 +1,12 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.workload.Work
-import io.github.vlsergey.recommend4me.workload.Workload
+import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.context.event.EventListener
@@ -25,7 +25,7 @@ private val log = LoggerFactory.getLogger(FandomNormalization::class.java)
  * ([FandomRepository.calculatedName]): the name of its sites' fandom of the most works.
  */
 @Component
-class FandomNormalization(private val stores: Stores, private val workload: Workload) {
+class FandomNormalization(private val stores: Stores, private val tasks: Tasks) {
 
     /** The fandoms whose names wait to be worked out again ([renameLater]); taken whole by the work. */
     private val toRename = HashSet<Long>()
@@ -67,7 +67,7 @@ class FandomNormalization(private val stores: Stores, private val workload: Work
      */
     fun renameLater(ids: Collection<Long>) {
         synchronized(toRename) { toRename += ids }
-        workload.plan(RENAME, Instant.now(), "universes") {
+        tasks.plan(RENAME, Instant.now(), "universes") {
             val ids = synchronized(toRename) { toRename.toList().also { toRename.clear() } }
             val fandoms = fandoms()
             if (fandoms != null && ids.isNotEmpty()) rename(fandoms, sites(), ids.filter(fandoms::exists))
@@ -160,6 +160,6 @@ class FandomNormalization(private val stores: Stores, private val workload: Work
         const val FIRST = -100
 
         /** The names of fandoms worked out again ([renameLater]). */
-        private val RENAME = Work(WorkKind.FANDOM_RENAME)
+        private val RENAME = Task(TaskKind.FANDOM_RENAME)
     }
 }

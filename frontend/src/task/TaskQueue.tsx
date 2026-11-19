@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, ClockIcon, ListOrderedIcon, Loader2Icon, PauseIcon, RotateCcwIcon, UserIcon, XIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { api, unwrap, type QueuedWork } from "@/api/client";
+import { api, unwrap, type QueuedTask } from "@/api/client";
 import { RefreshSelect } from "@/components/RefreshSelect";
 import { typeTitle } from "@/contenttype/types";
 import { ago, duration, formatTime, number } from "@/i18n/format";
@@ -17,8 +17,8 @@ const EVERY_MS = 2000;
  * How often the queue of the computations is read again, as the user chose in its heading: the
  * background work in the header ([WorkProgress]), which has no heading of its own, reads as often.
  */
-export function useWorkloadRefresh(): [number, (ms: number) => void] {
-  return useRefresh("workload.refresh", EVERY_MS);
+export function useTasksRefresh(): [number, (ms: number) => void] {
+  return useRefresh("tasks.refresh", EVERY_MS);
 }
 
 /**
@@ -28,13 +28,13 @@ export function useWorkloadRefresh(): [number, (ms: number) => void] {
  * expected to take — as long as the last run of its kind. Each with why: a grade changed, the user
  * answered on a tag, the pictures came… and how many times each.
  */
-export function WorkQueue() {
-  const { t } = useTranslation("workload");
+export function TaskQueue() {
+  const { t } = useTranslation("task");
   const queryClient = useQueryClient();
-  const [every, setEvery] = useWorkloadRefresh();
+  const [every, setEvery] = useTasksRefresh();
   const queue = useQuery({
-    queryKey: ["workload"],
-    queryFn: async () => unwrap(await api.GET("/api/workload")),
+    queryKey: ["tasks"],
+    queryFn: async () => unwrap(await api.GET("/api/tasks")),
     refetchInterval: every || false,
   });
   const works = queue.data ?? [];
@@ -48,12 +48,12 @@ export function WorkQueue() {
   return (
     <section className="flex flex-col gap-2 rounded-lg border bg-card p-4">
       <h2 className="flex items-center gap-2 font-semibold">
-        <ListOrderedIcon className="size-4" /> {t("WorkQueue.title")}
+        <ListOrderedIcon className="size-4" /> {t("TaskQueue.title")}
         <RefreshSelect every={every} onChange={setEvery} className="ml-auto" />
       </h2>
-      <p className="text-xs text-muted-foreground">{t("WorkQueue.hint")}</p>
-      {queue.isError && <p className="text-sm text-destructive">{t("WorkQueue.loadError", { error: queue.error.message })}</p>}
-      {queue.isSuccess && works.length === 0 && <p className="text-sm text-muted-foreground">{t("WorkQueue.empty")}</p>}
+      <p className="text-xs text-muted-foreground">{t("TaskQueue.hint")}</p>
+      {queue.isError && <p className="text-sm text-destructive">{t("TaskQueue.loadError", { error: queue.error.message })}</p>}
+      {queue.isSuccess && works.length === 0 && <p className="text-sm text-muted-foreground">{t("TaskQueue.empty")}</p>}
       {works.length > 0 && (
         <ul className="flex flex-col divide-y text-sm">
           {works.map((w, i) => (
@@ -67,8 +67,8 @@ export function WorkQueue() {
 }
 
 /** A work: its state, what it does and of what, why, and its times. */
-function WorkRow({ w }: { w: QueuedWork }) {
-  const { t } = useTranslation("workload");
+function WorkRow({ w }: { w: QueuedTask }) {
+  const { t } = useTranslation("task");
   const of = [w.type && typeTitle(w.type), w.source && sourceTitle(w.source), w.facet && (w.labelKey ? label(w.labelKey) : w.facet), w.item && `#${w.item}`].filter(
     Boolean,
   );
@@ -77,15 +77,15 @@ function WorkRow({ w }: { w: QueuedWork }) {
       <State w={w} />
       {w.asked && (
         // Asked for by the user's action in the interface: it goes ahead of the background's works
-        <span className="flex items-center gap-1 text-xs text-foreground" title={t("WorkQueue.asked.hint")}>
-          <UserIcon className="size-3.5" /> {t("WorkQueue.asked")}
+        <span className="flex items-center gap-1 text-xs text-foreground" title={t("TaskQueue.asked.hint")}>
+          <UserIcon className="size-3.5" /> {t("TaskQueue.asked")}
         </span>
       )}
       <span className="font-medium">{t(`What.${w.what}`)}</span>
       {of.length > 0 && <span className="text-muted-foreground">{of.join(" · ")}</span>}
       {w.reasons.length > 0 && (
         <span className="text-muted-foreground">
-          {t("WorkQueue.because")} {w.reasons.map((r) => `${t(`Reason.${r.key}`)}${r.count > 1 ? ` ×${number(r.count)}` : ""}`).join(", ")}
+          {t("TaskQueue.because")} {w.reasons.map((r) => `${t(`Reason.${r.key}`)}${r.count > 1 ? ` ×${number(r.count)}` : ""}`).join(", ")}
         </span>
       )}
       <span className="ml-auto text-xs text-muted-foreground tabular-nums">
@@ -100,35 +100,35 @@ function WorkRow({ w }: { w: QueuedWork }) {
  * it is expected to end. Waiting: since when, and how long it will take. Planned: when it is due —
  * one past due waits for the work before it — and how long it will take.
  */
-function Times({ w }: { w: QueuedWork }) {
-  const { t } = useTranslation("workload");
+function Times({ w }: { w: QueuedTask }) {
+  const { t } = useTranslation("task");
   const since = new Date(w.since).getTime();
   // Left out comes as null at run time, whatever the type says
   const expectedMillis = w.expectedMillis ?? undefined;
-  const expected = expectedMillis !== undefined ? t("WorkQueue.expected", { span: span(expectedMillis, t) }) : t("WorkQueue.noEstimate");
+  const expected = expectedMillis !== undefined ? t("TaskQueue.expected", { span: span(expectedMillis, t) }) : t("TaskQueue.noEstimate");
   switch (w.state) {
     case "FINISHED":
       // A work done says when it ended; without that, no span
-      return t("WorkQueue.finished", { time: formatTime(w.ended), span: w.ended ? span(new Date(w.ended).getTime() - since, t) : "" });
+      return t("TaskQueue.finished", { time: formatTime(w.ended), span: w.ended ? span(new Date(w.ended).getTime() - since, t) : "" });
     case "RUNNING": {
       // The step a work of several is at, and what it is of: "fitting the field Genre"
       const step = w.step ? [t(`Step.${w.step}`), w.stepOf && label(w.stepOf)].filter(Boolean).join(" ") : undefined;
-      const began = [t("WorkQueue.began", { time: formatTime(w.since), span: span(Date.now() - since, t) }), step].filter(Boolean).join(" · ");
+      const began = [t("TaskQueue.began", { time: formatTime(w.since), span: span(Date.now() - since, t) }), step].filter(Boolean).join(" · ");
       // A work that tells how much of it is done: the share, and its end by the pace so far
       const done = w.progress ?? undefined;
       if (done !== undefined && done > 0) {
         const elapsed = Date.now() - since;
         const left = (elapsed * (1 - done)) / done;
-        return `${began} · ${t("WorkQueue.progress", { percent: Math.floor(done * 100) })} · ${t("WorkQueue.endsIn", { span: span(left, t) })}`;
+        return `${began} · ${t("TaskQueue.progress", { percent: Math.floor(done * 100) })} · ${t("TaskQueue.endsIn", { span: span(left, t) })}`;
       }
-      if (expectedMillis === undefined) return `${began} · ${t("WorkQueue.noEstimate")}`;
+      if (expectedMillis === undefined) return `${began} · ${t("TaskQueue.noEstimate")}`;
       const left = since + expectedMillis - Date.now();
-      return `${began} · ${left > 0 ? t("WorkQueue.endsIn", { span: span(left, t) }) : t("WorkQueue.longer", { span: span(expectedMillis, t) })}`;
+      return `${began} · ${left > 0 ? t("TaskQueue.endsIn", { span: span(left, t) }) : t("TaskQueue.longer", { span: span(expectedMillis, t) })}`;
     }
     case "WAITING":
-      return `${t("WorkQueue.waiting", { when: ago(w.since) })} · ${expected}`;
+      return `${t("TaskQueue.waiting", { when: ago(w.since) })} · ${expected}`;
     case "PLANNED": {
-      const due = w.due && new Date(w.due).getTime() > Date.now() ? t("WorkQueue.due", { when: ago(w.due) }) : t("WorkQueue.overdue");
+      const due = w.due && new Date(w.due).getTime() > Date.now() ? t("TaskQueue.due", { when: ago(w.due) }) : t("TaskQueue.overdue");
       return `${due} · ${expected}`;
     }
   }
@@ -143,17 +143,17 @@ function span(millis: number, t: (key: "Span.seconds" | "Span.minutesSeconds", o
 }
 
 /** The state of a work as a mark: done, failed or given up for newer data, computing now, waiting its turn, planned. */
-function State({ w }: { w: QueuedWork }) {
-  const { t } = useTranslation("workload");
+function State({ w }: { w: QueuedTask }) {
+  const { t } = useTranslation("task");
   const look = w.failed
-    ? { icon: <XIcon className="size-3.5" />, text: t("WorkQueue.state.FAILED"), hint: t("WorkQueue.state.FAILED.hint"), className: "bg-destructive/15 text-destructive" }
+    ? { icon: <XIcon className="size-3.5" />, text: t("TaskQueue.state.FAILED"), hint: t("TaskQueue.state.FAILED.hint"), className: "bg-destructive/15 text-destructive" }
     : w.givenUp
-    ? { icon: <RotateCcwIcon className="size-3.5" />, text: t("WorkQueue.state.GIVEN_UP"), hint: t("WorkQueue.state.GIVEN_UP.hint"), className: "bg-muted text-muted-foreground" }
+    ? { icon: <RotateCcwIcon className="size-3.5" />, text: t("TaskQueue.state.GIVEN_UP"), hint: t("TaskQueue.state.GIVEN_UP.hint"), className: "bg-muted text-muted-foreground" }
     : {
-        FINISHED: { icon: <CheckIcon className="size-3.5" />, text: t("WorkQueue.state.FINISHED"), hint: t("WorkQueue.state.FINISHED.hint"), className: "bg-muted text-muted-foreground" },
-        RUNNING: { icon: <Loader2Icon className="size-3.5 animate-spin" />, text: t("WorkQueue.state.RUNNING"), hint: t("WorkQueue.state.RUNNING.hint"), className: "bg-yes/15 text-yes" },
-        WAITING: { icon: <PauseIcon className="size-3.5" />, text: t("WorkQueue.state.WAITING"), hint: t("WorkQueue.state.WAITING.hint"), className: "bg-maybe/15 text-maybe" },
-        PLANNED: { icon: <ClockIcon className="size-3.5" />, text: t("WorkQueue.state.PLANNED"), hint: t("WorkQueue.state.PLANNED.hint"), className: "bg-muted text-muted-foreground" },
+        FINISHED: { icon: <CheckIcon className="size-3.5" />, text: t("TaskQueue.state.FINISHED"), hint: t("TaskQueue.state.FINISHED.hint"), className: "bg-muted text-muted-foreground" },
+        RUNNING: { icon: <Loader2Icon className="size-3.5 animate-spin" />, text: t("TaskQueue.state.RUNNING"), hint: t("TaskQueue.state.RUNNING.hint"), className: "bg-yes/15 text-yes" },
+        WAITING: { icon: <PauseIcon className="size-3.5" />, text: t("TaskQueue.state.WAITING"), hint: t("TaskQueue.state.WAITING.hint"), className: "bg-maybe/15 text-maybe" },
+        PLANNED: { icon: <ClockIcon className="size-3.5" />, text: t("TaskQueue.state.PLANNED"), hint: t("TaskQueue.state.PLANNED.hint"), className: "bg-muted text-muted-foreground" },
       }[w.state];
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium", look.className)} title={look.hint}>

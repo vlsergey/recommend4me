@@ -14,7 +14,7 @@ import io.github.vlsergey.recommend4me.contenttype.Books
 import io.github.vlsergey.recommend4me.model.MeasuringState
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
-import io.github.vlsergey.recommend4me.workload.inBackground
+import io.github.vlsergey.recommend4me.task.inBackground
 import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

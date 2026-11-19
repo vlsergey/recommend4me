@@ -7,8 +7,8 @@ import io.github.vlsergey.recommend4me.api.model.TagRelationRequest
 import io.github.vlsergey.recommend4me.part.Paragraphs
 import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.source.SourceStore
+import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.vector.Vectors
-import io.github.vlsergey.recommend4me.workload.inBackground
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test

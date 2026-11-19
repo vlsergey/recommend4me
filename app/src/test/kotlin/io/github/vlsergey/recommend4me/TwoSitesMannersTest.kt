@@ -32,7 +32,7 @@ class TwoSitesMannersTest : TwoSitesTestBase() {
     /** A work of the site alpha by the [author], of the [texts] as its chapters, of none when empty. */
     private fun work(id: String, author: String, vararg texts: String) {
         val context = contexts.of("alpha")
-        context.items.upsert(ItemHead(id, "https://alpha.example/work/$id", "Work $id"), Instant.now())
+        context.items.upsert(ItemHead(id, "https://alpha.example/work/$id", "Task $id"), Instant.now())
         context.items.setFacet(id, Books.AUTHOR.key, listOf(FacetValue(author, author)))
         if (texts.isNotEmpty())
             context.items.saveParts(id, texts.mapIndexed { k, t -> PartData("p$k", k, "Chapter $k", t) })
