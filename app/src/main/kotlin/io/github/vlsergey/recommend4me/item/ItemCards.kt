@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.api.model.SiteSaid
 import io.github.vlsergey.recommend4me.api.model.TextRange
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
+import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.search.SearchFit
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -124,10 +125,17 @@ class ItemCards(
     }
 
     /**
-     * Of the items [members], every one's own values on its site and its chances of the [wanted] facets (all when
-     * null): read once a source, one chain of the models for all of its items.
+     * THE ITEMS OF A WORK READ ONCE (owner, 2026-11-19: "read only the two works, read their facets, give them to the
+     * models"): of the items [members] — every item of one work, of the screen of a work and of the site's page alike —
+     * every one's own values on its site and its chances of the [wanted] facets (all when null): read once a source,
+     * one chain of the models for all of its items; every step told to [laps].
      */
-    fun membersRead(type: TypeStore, members: Collection<ItemKey>, wanted: Collection<String>?): MembersRead {
+    fun membersRead(
+        type: TypeStore,
+        members: Collection<ItemKey>,
+        wanted: Collection<String>?,
+        laps: Laps = Laps(),
+    ): MembersRead {
         val facets = HashMap<ItemKey, Map<String, List<String>>>()
         val chances = HashMap<ItemKey, Map<String, Map<String, Chance>>>()
         members
@@ -136,7 +144,11 @@ class ItemCards(
                 val s = type.source(source) ?: return@forEach
                 val ids = items.map { it.id }
                 s.items.facetsOf(ids).forEach { (id, f) -> facets[ItemKey(source, id)] = f }
-                val made = if (wanted == null) suggestions.chances(s, ids) else suggestions.chancesOf(s, ids, wanted)
+                val within = laps.within("$source:")
+                val made =
+                    if (wanted == null) suggestions.chances(s, ids, laps = within)
+                    else suggestions.chancesOf(s, ids, wanted)
+                laps.restart()
                 made.forEach { (id, c) -> chances[ItemKey(source, id)] = c }
             }
         return MembersRead(facets, chances)

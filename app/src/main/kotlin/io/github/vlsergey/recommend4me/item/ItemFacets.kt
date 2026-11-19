@@ -21,11 +21,17 @@ interface ItemFacets {
     /** How many items have each value of a facet, as the site gives them. */
     fun valueUses(facet: String): Map<String, Int>
 
+    /**
+     * Whether any item has a value of the facet: one row of its index asked — of ficbook's kinds, not a count of 1.4
+     * million values at every scoring of a facet ([valueUses]; 2026-11-19, half a second a page of the extension).
+     */
+    fun anyOf(facet: String): Boolean
+
     /** How many items have each of the [keys] of the facet: key to items, a key of none left out. */
     fun valueUsesOf(facet: String, keys: Collection<String>): Map<String, Int>
 
-    /** The facets of one item: facet to keys in order. */
-    fun facets(itemId: String): Map<String, List<String>>
+    /** The facets of one item: facet to keys in order ([facetsOf] of it alone). */
+    fun facets(itemId: String): Map<String, List<String>> = facetsOf(listOf(itemId))[itemId].orEmpty()
 
     /**
      * The facets of the items [ids]: item to facet to keys in order. By their ids, a batch of them ([ITEM_BATCH]) a
@@ -109,6 +115,8 @@ internal class ItemFacetRepository(
             .groupBy(ITEM_FACET.VALUE_KEY)
             .fetchMap({ it.value1()!! }, { it.value2()!! })
 
+    override fun anyOf(facet: String): Boolean = db.fetchExists(ITEM_FACET, ITEM_FACET.FACET.eq(facet))
+
     override fun valueUsesOf(facet: String, keys: Collection<String>): Map<String, Int> =
         keys
             .distinct()
@@ -121,14 +129,6 @@ internal class ItemFacetRepository(
                     .fetch { it.value1()!! to it.value2()!! }
             }
             .toMap()
-
-    override fun facets(itemId: String): Map<String, List<String>> =
-        db.select(ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
-            .from(ITEM_FACET)
-            .where(ITEM_FACET.ITEM_ID.eq(itemId))
-            .orderBy(ITEM_FACET.FACET, ITEM_FACET.POSITION)
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! })
 
     override fun facetsOf(ids: Collection<String>): Map<String, Map<String, List<String>>> {
         val asked = ids.toHashSet()

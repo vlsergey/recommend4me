@@ -96,13 +96,14 @@ class PagesController(
         val wanted =
             decor?.facets.orEmpty().map { it.facet }.toSet() +
                 schema.facets.filter { it.suggest || it.infer }.map { it.key }
-        // Its chances made now in memory, once for the suggestions and the values both
-        val chances = suggestions.chances(store, listOf(itemId), laps = laps.within("chances:"))[itemId].orEmpty()
-        laps.restart()
+        // Every item of the work read once, its chances made now in memory — one chain of the models a source — for
+        // the suggestions and the values both, as the screen of a work reads them
+        val members = cards.membersRead(type, clusters.members(key), null, laps.within("chances "))
+        val chances = members.chances[key].orEmpty()
         val suggested = suggestions.ofItem(store, itemId, chances).map { it.toApi(store) }
         laps.lap("suggestions")
         // The values of the work, of every item of it, as the web interface shows them
-        val work = cards.ofWork(type, clusters, key, store.items.facets(itemId), chances)
+        val work = cards.ofWork(type, clusters, key, members.facets[key].orEmpty(), chances, read = members)
         laps.lap("work's items")
         val (site, workChances) = work
         val corrections = store.corrections.facetsOf(itemId)

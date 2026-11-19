@@ -258,7 +258,7 @@ internal class FacetChain(
         casts.asked(store, facet, vocabulary)?.let { it.said(read.casts(it)) }
 
     /** Whether the site gives values of the [facet], told of every work of the source as the model was fitted. */
-    fun siteGives(store: SourceStore, facet: FacetDef): Boolean = store.items.valueUses(facet.key).isNotEmpty()
+    fun siteGives(store: SourceStore, facet: FacetDef): Boolean = store.items.anyOf(facet.key)
 
     companion object {
         /** Bytes in a kilobyte: the size of the model kept, as the laps tell it. */
