@@ -78,6 +78,17 @@ class FicbookDecorTest {
     @Test
     fun `an author's own page tells the author`() {
         assertEquals("1000001", source.authorOf("https://ficbook.net/authors/1000001"))
+        val uuid = "0189dad5-3b41-7037-905e-a4d06d778b07"
+        assertEquals(uuid, source.authorOf("https://ficbook.net/authors/$uuid"))
         assertEquals(null, source.authorOf("https://ficbook.net/readfic/1"))
+    }
+
+    @Test
+    fun `an author's page of the older kind, by the account's name, is the author known by the name`() {
+        assertEquals("name:Мышилла", source.authorOf("https://ficbook.net/authors/Мышилла"))
+        assertEquals("name:Свежий ветер", source.authorOf("http://ficbook.net/authors/Свежий ветер"))
+        val encoded = "%D0%9C%D1%8B%D1%88%D0%B8%D0%BB%D0%BB%D0%B0"
+        assertEquals("name:Мышилла", source.authorOf("https://ficbook.net/authors/$encoded"))
+        assertEquals("name:A+B", source.authorOf("https://ficbook.net/authors/A+B"))
     }
 }

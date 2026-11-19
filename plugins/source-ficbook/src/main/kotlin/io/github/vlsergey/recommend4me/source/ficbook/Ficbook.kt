@@ -22,6 +22,7 @@ import io.github.vlsergey.recommend4me.source.TextDef
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.source.WantedPage
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
+import java.net.URLDecoder
 import java.net.URLEncoder
 
 /**
@@ -142,8 +143,16 @@ class Ficbook : Source {
                 else -> null
             }
 
-    /** An author of the site by their own page, "https://ficbook.net/authors/2492122". */
-    override fun authorOf(url: String): String? = AUTHOR_PAGE.find(url)?.groupValues?.get(1)
+    /**
+     * An author of the site by their own page, "https://ficbook.net/authors/2492122". An address of the site's older
+     * kind names the account — "https://ficbook.net/authors/Мышилла", as the places of the authors on other sites still
+     * give them — and is the author known by the name, as the dump gave them: "name:Мышилла" ([NAME_KEY]).
+     */
+    override fun authorOf(url: String): String? =
+        AUTHOR_PAGE.find(url)?.groupValues?.get(1)?.let { key ->
+            if (AUTHOR_ID.matches(key)) key
+            else NAME_KEY + runCatching { URLDecoder.decode(key.replace("+", "%2B"), Charsets.UTF_8) }.getOrDefault(key)
+        }
 
     override fun itemIdOf(url: String): String? = ITEM_ADDRESS.find(url)?.groupValues?.get(1)
 
@@ -199,6 +208,9 @@ class Ficbook : Source {
 
         /** An author's own page: their key. */
         private val AUTHOR_PAGE = Regex("^https?://(?:www\\.)?ficbook\\.net/authors/([^/?#]+)")
+
+        /** The site's own key of an author: a number, or of the newer accounts a UUID. */
+        private val AUTHOR_ID = Regex("\\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
         const val ID = "ficbook"
         const val BASE = "https://ficbook.net"
