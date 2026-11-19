@@ -39,13 +39,6 @@ internal class FacetData(
 ) {
     companion object {
         /**
-         * How much a drafted value the user has not confirmed weighs in what the model learns, against 1 of a value the
-         * site or the user gives ([SuggestionTask.draftWeight]): a draft is the dictionary matched to the site's tags —
-         * likely, but no one's word.
-         */
-        const val DRAFT_WEIGHT = 0.5
-
-        /**
          * THE TASK OF THE WORKS OF [read] — their inputs, values, context are read of them alone — judged among the
          * values of the [side] of a pass, of their names, groups and texts and of its context's columns, or of the
          * scoring kept ([kept]): its values those of the scoring, in its order, without names, groups or texts of them

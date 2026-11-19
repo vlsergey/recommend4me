@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
+import io.github.vlsergey.recommend4me.draft.WorkDrafts
 import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.interest.InterestMark
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -133,14 +134,16 @@ internal object ListRows {
     ): Map<String, Map<String, List<String>>> {
         val defs = s.schema.facets.filter { it.filter || it.role == FacetRole.AUTHOR }
         if (defs.isEmpty()) return emptyMap()
+        // The site's facets the tags are drafted of read with them (TagDrafts)
+        val draftedOf = s.schema.facets.mapNotNull { it.examplesFrom }.toSet()
         val site: Map<String, Map<String, List<String>>> =
-            if (ids == null) siteOfEvery(s, defs.map { it.key }.toSet()) else s.items.facetsOf(ids)
+            if (ids == null) siteOfEvery(s, defs.map { it.key }.toSet() + draftedOf) else s.items.facetsOf(ids)
         val corrections =
             if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
         // The drafts of the layer — the site's words bound to the layer's values, a site's tag to a tag — given as the
         // model's are, before any model is fitted
         val drafts = HashMap<String, HashMap<String, MutableList<String>>>()
-        (if (ids == null) s.drafts.all() else s.drafts.ofItems(ids)).forEach { (id, own) ->
+        (if (ids == null) WorkDrafts.ofEvery(s, site) else WorkDrafts.of(s, ids, site)).forEach { (id, own) ->
             own.forEach { d -> drafts.getOrPut(d.facet) { HashMap() }.getOrPut(id) { ArrayList() } += d.key }
         }
         // The same keys of a million works held once

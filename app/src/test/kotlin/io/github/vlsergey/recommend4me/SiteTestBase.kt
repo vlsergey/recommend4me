@@ -183,19 +183,30 @@ abstract class SiteTestBase : BaseTest() {
                 "|Starships cross the galaxy, pilots fight in orbit near distant planets|Pilot/Captain"
         )
         capture("x1|Lost fleet||Pilots of starships lost beyond the galaxy fight near planets|")
-        // The user's tags of some works the site left untagged: where the work's tags part from the
-        // site's, the model learns what the texts say of them
-        listOf(5, 10, 15).forEach { k ->
-            listOf("space", "ships").forEach {
-                corrections.correctFacet(site, "s$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
-            }
-            listOf("dragons", "magic").forEach {
-                corrections.correctFacet(site, "d$k", FacetCorrection(facet = "tags", added = true, key = tag(it)))
-            }
-        }
+        usersWord()
         val store = stores.source(site)!!
         refresh(store)
         inBackground { suggestions.refresh(store) }
+    }
+
+    /**
+     * The user's tags of the works of the [catalogue] but the first of each kind, all of them named: the model learns
+     * of the user's word alone — what the texts say of the values the user gave and of those the user said the work has
+     * not. Every work of its kind's first tag, two of three of its second.
+     */
+    private fun usersWord() {
+        (1 until WORKS_OF_A_KIND).forEach { k ->
+            tagged("s$k", if (k % 3 == 0) listOf("space") else listOf("space", "ships"))
+            tagged("d$k", if (k % 3 == 0) listOf("dragons") else listOf("dragons", "magic"))
+        }
+    }
+
+    /** The work [id] said by the user to have the [tags] and no other. */
+    private fun tagged(id: String, tags: List<String>) {
+        tags.forEach {
+            corrections.correctFacet(site, id, FacetCorrection(facet = "tags", added = true, key = tag(it)))
+        }
+        corrections.completeFacet(site, id, "tags")
     }
 
     /** The facets of the work [id]. */

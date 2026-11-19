@@ -45,29 +45,36 @@ internal class FacetPass(
     /**
      * Every portion of the works in turn, in the order of their ids; [inputs]: their vectors read and put on the card,
      * freed once [action] is done with the portion — false: their values alone, but of a facet after the first in the
-     * chain, whose context the facets before it make of the works' inputs ([FacetChain.before]).
+     * chain, whose context the facets before it make of the works' inputs ([FacetChain.before]). Of the works [only],
+     * when given: the works the model learns of, not every one.
      */
-    fun forEach(inputs: Boolean, action: (Portion) -> Unit) =
-        reading.passes.forEachPortion(store) { ids ->
-            checkpoint()
-            val withInputs = inputs || k > 0
-            val passes = reading.passes
-            passes.worksRead(store, encoder, ids, characters, card = withInputs, inputs = withInputs).use { read ->
-                val made = reading.chain.before(store, encoder, read, k)
-                val vocabulary =
-                    reading.vocabularies.vocabularyOf(
-                        store,
-                        facet,
-                        read.ids,
-                        made,
-                        characters,
-                        read.answers,
-                        light = true,
-                        site = read.site,
-                    )
-                action(Portion(read, made, vocabulary, reading.chain.linesOf(store, facet, vocabulary, read)))
-            }
+    fun forEach(inputs: Boolean, only: Collection<String>? = null, action: (Portion) -> Unit) {
+        val portion = { ids: List<String> -> read(ids, inputs, action) }
+        val passes = reading.passes
+        if (only == null) passes.forEachPortion(store, portion) else passes.forEachPortion(only, portion)
+    }
+
+    /** The portion of the works [ids], read and handed to [action]. */
+    private fun read(ids: List<String>, inputs: Boolean, action: (Portion) -> Unit) {
+        checkpoint()
+        val withInputs = inputs || k > 0
+        val passes = reading.passes
+        passes.worksRead(store, encoder, ids, characters, card = withInputs, inputs = withInputs).use { read ->
+            val made = reading.chain.before(store, encoder, read, k)
+            val vocabulary =
+                reading.vocabularies.vocabularyOf(
+                    store,
+                    facet,
+                    read.ids,
+                    made,
+                    characters,
+                    read.answers,
+                    light = true,
+                    site = read.site,
+                )
+            action(Portion(read, made, vocabulary, reading.chain.linesOf(store, facet, vocabulary, read)))
         }
+    }
 
     /** THE WALK OF THE WORKS' VALUES ALONE: what every work tells of the value side of the facet ([ValueCount]). */
     fun counted(): ValueCount {
@@ -87,7 +94,7 @@ internal class FacetPass(
      * side and of every answer of the source ([answers]).
      */
     fun side(counted: ValueCount, answers: List<FacetCorrection>): ValueSide {
-        val vocabulary = reading.vocabularies.valueSide(store, facet, characters, answers, counted.pairings)
+        val vocabulary = reading.vocabularies.valueSide(store, facet, characters, counted.pairings)
         return ValueSide.of(store, facet, encoder, counted, vocabulary, answers, store.hierarchies()[facet.key])
     }
 

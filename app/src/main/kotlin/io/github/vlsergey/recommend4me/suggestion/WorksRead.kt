@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.cast.CastAsked
 import io.github.vlsergey.recommend4me.cast.SaidCast
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
+import io.github.vlsergey.recommend4me.draft.WorkDrafts
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.matrix.Cublas
@@ -53,7 +54,7 @@ internal class WorksRead(
      * reading read.
      */
     val answers: Answers by lazy { Answers(corrections, complete) }
-    val drafts: Map<String, List<LayerDraft>> = store.drafts.ofItems(this.ids)
+    val drafts: Map<String, List<LayerDraft>> = WorkDrafts.of(store, this.ids, site)
     val inputs: List<InputBlock> =
         if (withInputs) inputs(store, this.ids, encoder, imageEncoder, sets, card) else emptyList()
 

@@ -12,9 +12,9 @@ import java.util.IdentityHashMap
  * THE VALUE SIDE OF A PASS OVER A FACET ([TaskPortions.values]), alike for every portion of its works: the [values]
  * chosen from — every value the site, the drafts, the site's examples or the user give any work, and every value the
  * dictionary knows besides — with the vectors of their names ([names]), their [groupings], the names they go by as
- * texts ([hints], [hintTexts]); how much a value a work lacks weighs ([lackWeight]); the columns of the context
- * ([contextKeys]: of a value more than one work has alone); the fingerprint of the whole facet ([basis]). Made of a
- * walk over every work ([ValueCount]) before the portions are read for the fitting.
+ * texts ([hints], [hintTexts]); the columns of the context ([contextKeys]: of a value more than one work has alone);
+ * the fingerprint of the whole facet ([basis]). Made of a walk over every work ([ValueCount]) before the portions are
+ * read for the fitting.
  */
 internal class ValueSide(
     val values: List<String>,
@@ -22,7 +22,6 @@ internal class ValueSide(
     val groupings: List<ValueGrouping>,
     val hints: List<NameHint>,
     val hintTexts: Matrix,
-    val lackWeight: Double,
     val contextKeys: List<String>,
     val basis: Long,
 ) {
@@ -49,10 +48,11 @@ internal class ValueSide(
             context = emptyList(),
             contextKeys = contextKeys,
             groupings = groupings,
-            lackWeight = lackWeight,
+            // The user's word alone is learnt: a value said nothing of weighs nought, a draft is an input
+            lackWeight = 0.0,
             hints = hints,
             hintTexts = hintTexts,
-            draftWeight = FacetData.DRAFT_WEIGHT,
+            draftWeight = 0.0,
         )
 
     companion object {
@@ -84,7 +84,6 @@ internal class ValueSide(
                 groupings,
                 hints,
                 hintTexts,
-                vocabulary?.lackWeight ?: 1.0,
                 counted.contextKeys(),
                 FacetBasis.of(counted.print, values, groupings, hintNames, hierarchy, counted.castSignature()),
             )

@@ -225,12 +225,16 @@ class SiteUniversesTest : SiteTestBase() {
             listOf("fake:C1", "fake:C2").forEach {
                 corrections.correctFacet(site, "p$k", FacetCorrection(facet = "characters", added = true, key = it))
             }
+            // No other: the model learns of the user's word alone, the other characters of the universe its noes
+            corrections.completeFacet(site, "p$k", "characters")
             corrections.correctFacet(
                 site,
                 "p$k",
                 FacetCorrection(facet = "pairings", added = true, key = "pair:fake:C1|fake:C2"),
             )
         }
+        // And of some works of no universe: none — what the model learns of the knights' texts
+        repeat(6) { k -> corrections.completeFacet(site, "q$k", "characters") }
         val store = stores.source(site)!!
         refresh(store)
         inBackground { suggestions.refresh(store) }

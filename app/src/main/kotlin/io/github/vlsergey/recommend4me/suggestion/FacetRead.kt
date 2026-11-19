@@ -61,7 +61,7 @@ internal class FacetRead(
         val index = side?.index ?: ValueIndex(values)
         val task = task(values, index, owned, context, inputs, cast?.named)
         laps.lap("task: made")
-        val held = held(task, index, owned)
+        val held = held(owned, index)
         laps.lap("task: held")
         return FacetData(
             ids,
@@ -111,18 +111,17 @@ internal class FacetRead(
         val answers =
             if (hierarchy == null) corrections else corrections.mapValues { hierarchy.expand(facet.key, it.value) }
         val within = hierarchy?.let { mapOf(facet.key to it) }.orEmpty()
-        // The examples are the facet's values as far as the model learns, the user's answers over
-        // them — the facet the user corrects; the site's facet they come from is among the item's inputs
-        // And the drafts of the layer ([LayerDrafts][io.github.vlsergey.recommend4me.draft.LayerDrafts]): values
-        // the item has unless the user said otherwise, learnt from with less weight ([FacetData.DRAFT_WEIGHT]) — they
-        // are no one's word
+        // THE USER'S WORD ALONE IS WHAT THE MODEL LEARNS (user, 2026-11-19: "the site does not train the model";
+        // "the site's markup is the input, the user's markup the output"): of every work the values the user said it
+        // has, with what they say of the tags above and under them. What the site gives the work — of the facet
+        // itself, its examples of another — and the drafts of the layer
+        // ([LayerDrafts][io.github.vlsergey.recommend4me.draft.LayerDrafts]) are inputs of its pairs ([examplesOf])
         val drafted =
             read.drafts
                 .mapValues { (_, list) -> list.filter { it.facet == facet.key }.map { it.key } }
                 .filterValues { it.isNotEmpty() }
-        val learnt = learnt(read.site, drafted)
         val corrected = ids.associateWith { id ->
-            TagHierarchy.corrected(learnt[id].orEmpty(), corrections[id].orEmpty(), within, store.singleFacets)
+            TagHierarchy.corrected(emptyMap(), corrections[id].orEmpty(), within, store.singleFacets)
         }
         // An item whose values of the facet are all named: every other value rejected by the user's word
         val allNamed = BooleanArray(ids.size) { facet.key in read.complete[ids[it]].orEmpty() }
@@ -157,25 +156,6 @@ internal class FacetRead(
     )
 
     /**
-     * The values each work learns from: the site's, and of the facet the site's examples ([FacetAsked.examples]) and
-     * the drafts of the layer ([drafted]) besides.
-     */
-    private fun learnt(site: Map<String, Facets>, drafted: Map<String, List<String>>): Map<String, Facets> {
-        val examples = asked.examples
-        if (examples == null && drafted.isEmpty()) return site
-        return HashMap(site).also { all ->
-            ids.forEach { id ->
-                val own = examples?.invoke(id).orEmpty() + drafted[id].orEmpty()
-                if (own.isNotEmpty())
-                    all[id] =
-                        HashMap(site[id].orEmpty()).apply {
-                            this[facet.key] = (this[facet.key].orEmpty() + own).distinct().toMutableList()
-                        }
-            }
-        }
-    }
-
-    /**
      * The inputs of the works. A facet the site gives values of has them as its labels: its own line on the site is
      * those values written out, no input of it — as the facet is none of its own context — whether the site gives
      * values of it told of every work, as the model was fitted, not of the works read ([FacetAsked.siteGives]).
@@ -205,20 +185,29 @@ internal class FacetRead(
         val assigned = ofEvery(ids.size) { i -> index.of(owned.corrected[ids[i]]?.get(facet.key).orEmpty()) }
         laps.lap("task: assigned")
         val confirmed = ofEvery(ids.size) { i -> answered(index, owned, i, added = true) }
+        // Of a facet of one value a work, the one the user said the work has says it has none other
+        val single = facet.key in store.singleFacets
         val rejected =
             ofEvery(ids.size) { i ->
-                if (owned.allNamed[i])
+                if (owned.allNamed[i] || (single && assigned[i].isNotEmpty()))
                     assigned[i].toHashSet().let { own -> values.indices.filter { it !in own }.toIntArray() }
                 else answered(index, owned, i, added = false)
             }
         laps.lap("task: answered")
         val (allowedOf, barredOf) = limits(index)
+        // What the site and the dictionary say of the work, inputs of its pairs: the site's values of the facet, its
+        // examples of another facet, the values its line names, the drafts
         val examplesOf =
             ofEvery(ids.size) { i ->
-                index.of(asked.examples?.invoke(ids[i]).orEmpty() + named?.get(i).orEmpty())
+                val id = ids[i]
+                index.of(
+                    read.site[id]?.get(facet.key).orEmpty() +
+                        asked.examples?.invoke(id).orEmpty() +
+                        named?.get(i).orEmpty() +
+                        owned.drafted[id].orEmpty()
+                )
             }
-        val draftsOf = ofEvery(ids.size) { i -> index.of(owned.drafted[ids[i]].orEmpty()) }
-        laps.lap("task: examples and drafts")
+        laps.lap("task: examples")
         return SuggestionTask(
             itemIds = ids,
             inputs = inputs,
@@ -232,10 +221,11 @@ internal class FacetRead(
             allowed = allowedOf,
             barred = barredOf,
             groupings = side?.groupings.orEmpty(),
-            lackWeight = side?.lackWeight ?: 1.0,
+            // A value the user said nothing of is no word: of a work not said all named, none learnt of it
+            lackWeight = 0.0,
             examples = examplesOf,
-            drafts = draftsOf,
-            draftWeight = FacetData.DRAFT_WEIGHT,
+            drafts = List(ids.size) { IntArray(0) },
+            draftWeight = 0.0,
             hints = side?.hints.orEmpty(),
             hintTexts = side?.hintTexts ?: Matrix(0, 0),
         )
@@ -265,22 +255,23 @@ internal class FacetRead(
         return allowedOf to barredOf
     }
 
-    /** The item's own values: neither the site's examples nor the drafts. */
-    private fun held(task: SuggestionTask, index: ValueIndex, owned: Owned): List<IntArray> =
-        if (asked.examples == null && owned.drafted.isEmpty()) task.assigned
-        else
-            ofEvery(ids.size) { i ->
-                val id = ids[i]
-                index.of(
-                    TagHierarchy.corrected(
-                            read.site[id].orEmpty(),
-                            read.corrections[id].orEmpty(),
-                            owned.within,
-                            store.singleFacets,
-                        )[facet.key]
-                        .orEmpty()
-                )
-            }
+    /**
+     * The values a work has of the facet: the site's own, the user's answers over them — what the site gives of another
+     * facet and the drafts are given as drafts ([FacetChain.seeded]), shown and filled as the user's word leaves them.
+     */
+    private fun held(owned: Owned, index: ValueIndex): List<IntArray> =
+        ofEvery(ids.size) { i ->
+            val id = ids[i]
+            index.of(
+                TagHierarchy.corrected(
+                        read.site[id].orEmpty(),
+                        read.corrections[id].orEmpty(),
+                        owned.within,
+                        store.singleFacets,
+                    )[facet.key]
+                    .orEmpty()
+            )
+        }
 }
 
 /**

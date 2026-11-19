@@ -1,6 +1,5 @@
 package io.github.vlsergey.recommend4me.suggestion
 
-import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -40,19 +39,13 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
 
     /**
      * THE VALUE SIDE OF THE FACET'S DICTIONARY of a pass over every work ([ValueSide]): the values known with the text
-     * of their names, their groups, the names they go by and the values each name is judged among, how much a value a
-     * work lacks weighs — nothing of a work. [pairings]: of a facet of pairings, every pair of characters any work may
-     * have, of the walk over every work; [answers]: every answer of the source. Null of a facet of no dictionary.
+     * of their names, their groups, the names they go by and the values each name is judged among — nothing of a work.
+     * [pairings]: of a facet of pairings, every pair of characters any work may have, of the walk over every work. Null
+     * of a facet of no dictionary.
      */
-    fun valueSide(
-        store: SourceStore,
-        facet: FacetDef,
-        characters: CharactersRead,
-        answers: List<FacetCorrection>,
-        pairings: Set<String>,
-    ): Vocabulary? =
+    fun valueSide(store: SourceStore, facet: FacetDef, characters: CharactersRead, pairings: Set<String>): Vocabulary? =
         universes.valueSide(store, facet, characters, pairings)
-            ?: examplesFrom(store, facet)?.let { everyExample(store, facet, it, answers) }
+            ?: examplesFrom(store, facet)?.let { everyExample(store, it) }
 
     /** The sites' facet the [facet] is learnt from ([FacetDef.examplesFrom]); null of a facet learnt from none. */
     private fun examplesFrom(store: SourceStore, facet: FacetDef): FacetDef? =
@@ -79,35 +72,10 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
 
     /**
      * Of a facet learnt from the sites' facet [from], what a fitting learns from beside the works: every normalized tag
-     * of the type with its name, and how much a value the site lacks weighs.
-     *
-     * A value the site lacks says little of the work: authors leave out most tags that fit. How little, the user's
-     * [answers] tell — of the values the site did not give a work, the share the user rejected rather than confirmed,
-     * by the rule of succession: as much as a lacking value weighs as a value the work has not. Of the works answered
-     * on alone their site's values read.
+     * of the type with its name.
      */
-    private fun everyExample(
-        store: SourceStore,
-        facet: FacetDef,
-        from: FacetDef,
-        answers: List<FacetCorrection>,
-    ): Vocabulary {
-        val bindings = store.tags.bindings()
-        val values = tagsOf(store, from, bindings)
-        val bound = HashMap<String, Long>()
-        bindings.forEach { (ref, tag) -> if (ref.source == store.id) bound[ref.tag] = tag }
-        val own = facetAnswers(answers, facet).map { it.itemId }.distinct()
-        val examples =
-            store.items.facetsOf(own).mapValues { (_, facets) ->
-                facets[from.key].orEmpty().mapNotNull { bound[it]?.let(TagRepository::key) }.toSet()
-            }
-        val answered = facetAnswers(answers, facet).filter { it.key !in examples[it.itemId].orEmpty() }
-        val denied = answered.count { !it.added }
-        return Vocabulary(values, allowed = null, lackWeight = (denied + 1.0) / (answered.size + 2.0))
-    }
-
-    /** The [answers] on the [facet]. */
-    private fun facetAnswers(answers: List<FacetCorrection>, facet: FacetDef) = answers.filter { it.facet == facet.key }
+    private fun everyExample(store: SourceStore, from: FacetDef): Vocabulary =
+        Vocabulary(tagsOf(store, from, store.tags.bindings()), allowed = null)
 
     /**
      * Every normalized tag a site's tag of the type is bound to, of every source of the type, with its name: a tag is

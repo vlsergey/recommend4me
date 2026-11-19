@@ -15,11 +15,10 @@ import io.github.vlsergey.recommend4me.onnx.Onnx
  * ([ScoredPortions]).
  *
  * EVERY ITEM IS JUDGED BY A MODEL THAT DID NOT LEARN FROM IT. The items fall into [FOLDS] folds by their ids; a model
- * is fitted on the items of all folds but one, and judges the items of that one. What the site or the user said of a
- * work does not vouch for itself: a value the site gave it that nothing else supports comes out unlikely, and an answer
- * on a work does not move its own chances — the next likeliest are offered after it. The scores the folds of the chosen
- * setting give the values the user answered on are handed over with the fitting ([FittedSuggester.heldOut]): what the
- * application calibrates the chances by.
+ * is fitted on the items of all folds but one, and judges the items of that one. What a work's labels say of it does
+ * not vouch for itself: an answer on a work does not move its own chances — the next likeliest are offered after it.
+ * The scores the folds of the chosen setting give the values the user answered on are handed over with the fitting
+ * ([FittedSuggester.heldOut]): what the application calibrates the chances by.
  *
  * NO NUMBER OF THE MODEL IS CHOSEN BY HAND: the penalty is chosen among the penalties from [STRONGEST] down by the
  * held-out loss of every fold summed — the strongest penalty within one standard error of the least —, every penalty's

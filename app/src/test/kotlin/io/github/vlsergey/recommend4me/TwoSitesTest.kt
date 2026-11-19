@@ -275,7 +275,8 @@ class TwoSitesTest : TwoSitesTestBase() {
         duplicates.searchDuplicates("books")
         background.run()
         assertTrue(type.duplicates.search()?.madeAt.let { it != null && it != before }, "searched")
-        assertTrue(type.duplicates.rarity.of(listOf("tags:${tagOf("alpha", "river")}")).isNotEmpty())
+        val river = "tags:${tagOf("alpha", "river")}"
+        assertTrue(type.duplicates.rarity.of(listOf(river)).isNotEmpty(), "$river of the index's ${listed()}")
         // Of a pair the search kept — of the works of the other classes too, in the one application of the tests
         val kept = type.duplicates.all().first { it.first.source == "alpha" && it.second.source == "beta" }
         val worked =

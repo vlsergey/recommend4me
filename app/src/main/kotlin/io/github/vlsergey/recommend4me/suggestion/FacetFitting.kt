@@ -75,16 +75,21 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
         val side = pass.side(counted, store.corrections.allFacets())
         val read = System.currentTimeMillis() - started
         checkpoint()
-        val portions = FacetPortions(pass, side, counted.works)
+        val works = FacetPortions.answered(store, facet.key)
+        val portions = FacetPortions(pass, side, works)
         // The task kept in files when asked for, a portion a file: its fitting made again and measured apart
         System.getenv(TASKS_FOLDER)?.let { dir -> keepTasks(store, facet, portions, dir) }
-        val model = if (side.values.isEmpty()) null else modelOf(store, facet, suggester, portions, side, stop, anew)
+        // Of no work answered on, nothing to learn of: the works' values are the site's and the drafts' alone
+        val model =
+            if (side.values.isEmpty() || works.isEmpty()) null
+            else modelOf(store, facet, suggester, portions, side, stop, anew)
         checkpoint()
         log.info(
-            "{}: {} of {} works and {} values read in {} ms, its model {} in {} ms",
+            "{}: {} of {} works, {} of them answered on, and {} values read in {} ms, its model {} in {} ms",
             store.id,
             facet.key,
             counted.works,
+            works.size,
             side.values.size,
             read,
             if (model == null) "none" else "made",

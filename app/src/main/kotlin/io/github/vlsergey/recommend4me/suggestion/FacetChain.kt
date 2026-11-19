@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.cast.CastReading
 import io.github.vlsergey.recommend4me.cast.SaidLines
 import io.github.vlsergey.recommend4me.database.DatabaseRefused
+import io.github.vlsergey.recommend4me.draft.WorkDrafts
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.laps.Laps
@@ -210,7 +211,7 @@ internal class FacetChain(
     fun seeded(
         store: SourceStore,
         ids: Collection<String>,
-        drafts: Map<String, List<LayerDraft>> = store.drafts.ofItems(ids),
+        drafts: Map<String, List<LayerDraft>> = WorkDrafts.of(store, ids),
         every: EveryItemFacets? = null,
     ): MadeChances {
         val made = MadeChances()

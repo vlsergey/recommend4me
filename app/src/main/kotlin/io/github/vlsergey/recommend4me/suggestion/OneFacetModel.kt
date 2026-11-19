@@ -17,9 +17,9 @@ internal class OneFacetModel(
     private val passes: WorkPasses,
 ) {
     /**
-     * Everything the suggesters of the facet learn from, as a pass fits them: every work a portion at a time
-     * ([FacetPortions]), the facets before it of the values the last pass kept — what a comparison of them fits every
-     * one on ([FacetComparisons]); null when the source has no such facet or nothing to read with.
+     * Everything the suggesters of the facet learn from, as a pass fits them: every work answered on, a portion at a
+     * time ([FacetPortions]), the facets before it of the values the last pass kept — what a comparison of them fits
+     * every one on ([FacetComparisons]); null when the source has no such facet or nothing to read with.
      */
     fun task(store: SourceStore, facetKey: String): TaskPortions? {
         val facets = chain.facetsOf(store)
@@ -29,7 +29,8 @@ internal class OneFacetModel(
         val reading = FacetReading(passes, chain, vocabularies)
         val pass = FacetPass(store, facets[k], k, encoder, passes.charactersRead(store), reading) {}
         val counted = pass.counted()
-        return FacetPortions(pass, pass.side(counted, store.corrections.allFacets()), counted.works)
+        val side = pass.side(counted, store.corrections.allFacets())
+        return FacetPortions(pass, side, FacetPortions.answered(store, facetKey))
     }
 
     /**

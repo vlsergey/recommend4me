@@ -77,6 +77,10 @@ internal class WorkPasses(
         } while (keys.size == most)
     }
 
+    /** The works [ids], [most] of them at a time in the order of their ids: a few works of a pass, not every one. */
+    fun forEachPortion(ids: Collection<String>, action: (List<String>) -> Unit) =
+        ids.distinct().sorted().chunked(most).forEach(action)
+
     /** The characters of the dictionary of the [store]'s type, for one operation to read once ([CharactersRead]). */
     fun charactersRead(store: SourceStore) = CharactersRead(stores.typeOf(store.id).universes)
 }

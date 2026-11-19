@@ -281,12 +281,15 @@ and the pair's own features (the site gives the value as an example, the common 
 the work's texts name a character or two of them in one paragraph is NO FEATURE: no model reads the
 search index, which the ranking of the works never waits for. The texts are counted of one work
 when its candidates are asked for — "…" of the characters and the pairings offers the two likeliest
-and the two the texts name most, three times at least. It is learnt by the weighted logistic loss over every pair: a value the work has
-weighs 1, one the user rejected 1, one it merely lacks less (the rule of succession over the
-user's answers), one it may not have at all and every value of a work with none of the facet
-nought. Every work is judged by a model that did not learn from it (five folds by the work's id),
-so a value the site gave it that nothing else supports comes out unlikely, and an answer on a
-work does not move its own chances. The penalty is chosen by the held-out loss — the strongest
+and the two the texts name most, three times at least. IT LEARNS OF THE USER'S WORD ALONE (owner,
+2026-11-19: "the site's markup is the input, the user's markup the output"): of the works the user
+answered on of the facet, by the weighted logistic loss over their pairs — a value the user said
+the work has weighs 1, one the user said it has not 1, of a work said all named every other value
+1, labelled nought; a value the user said nothing of nought. What the site gives a work, of the
+facet or as its examples, and the drafts of the dictionary are inputs of its pairs, never labels:
+the model learns of the user's answers how far the site is right. Every work is judged by a model
+that did not learn from it (five folds by the work's id), so an answer on a work does not move
+its own chances. The penalty is chosen by the held-out loss — the strongest
 penalty within one standard error of the least; gone on from the state fitted last, the penalty
 chosen then, the two beside it and the strongest, whose model is all but the values' base rates —
 a choice gone where every model holds out worse than that walks back from it. No fitting holds

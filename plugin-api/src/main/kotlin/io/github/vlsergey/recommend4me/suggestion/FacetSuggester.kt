@@ -157,7 +157,11 @@ class SuggestionTask(
     val values: Matrix,
     /** The key of every value, in the order of [values]: what is learnt of a value is kept by it. */
     val valueKeys: List<String>,
-    /** The values each item has now: the site's, with the user's corrections applied. */
+    /**
+     * The values each item has, as far as the model learns: of the application, those the user said it has — the site's
+     * word is no learning of the model, an input of it ([examples]; user, 2026-11-19: "the site's markup is the input,
+     * the user's markup the output").
+     */
     val assigned: List<IntArray>,
     /** The values the user said the item has: added by hand or accepted when suggested. */
     val confirmed: List<IntArray>,
@@ -179,7 +183,8 @@ class SuggestionTask(
     /**
      * How much a value an item lacks counts as one it does not have, against 1 for one it has and one the user
      * rejected: 1 when an item's values are all it has; less when they are what a site happened to write — a tag the
-     * site has raises the chance of the work's tag, its absence says little of the work.
+     * site has raises the chance of the work's tag, its absence says little of the work; nought when a value the item
+     * was told nothing of is no word at all — of the application, whose items' values are the user's word alone.
      */
     val lackWeight: Double = 1.0,
     /**
@@ -209,7 +214,10 @@ class SuggestionTask(
      * not 1.
      */
     val drafts: List<IntArray> = List(assigned.size) { IntArray(0) },
-    /** How much a drafted value the user has not confirmed weighs, against 1 of a value the site or the user gives. */
+    /**
+     * How much a drafted value the user has not confirmed weighs, against 1 of a value the site or the user gives;
+     * nought: a draft is no learning.
+     */
     val draftWeight: Double = 1.0,
     /**
      * Of each item, the values of its [allowed] it may not have after all — of a work's secondary characters, its main
@@ -276,11 +284,11 @@ class SuggestionTask(
         ) {
             "A grouping not of the $valueCount values"
         }
-        require(lackWeight > 0 && lackWeight <= 1) { "A lacking value weighs $lackWeight" }
+        require(lackWeight >= 0 && lackWeight <= 1) { "A lacking value weighs $lackWeight" }
         require(examples.size == itemCount) { "$itemCount items, ${examples.size} lists of examples" }
         require(drafts.size == itemCount) { "$itemCount items, ${drafts.size} lists of drafts" }
         require(barred.size == itemCount) { "$itemCount items, ${barred.size} lists of the barred" }
-        require(draftWeight > 0 && draftWeight <= 1) { "A drafted value weighs $draftWeight" }
+        require(draftWeight >= 0 && draftWeight <= 1) { "A drafted value weighs $draftWeight" }
         require(hintTexts.rows == hints.size) { "${hints.size} names, ${hintTexts.rows} texts of them" }
         // Every array of values checked once, however many names share it
         val among = hints.mapTo(Collections.newSetFromMap(IdentityHashMap())) { it.among }

@@ -63,7 +63,6 @@ class SiteTest : SiteTestBase() {
         assertEquals("$site:facet.pairing", item.facets.single { it.facet == "pairing" }.labelKey)
         assertEquals("standard:facet.tags", item.facets.single { it.facet == "tags" }.labelKey)
         tagsOfItsKind(item)
-        pairingOfItsKind(item)
         siteTagsShown()
         tagsCorrected()
         tagsAddedByName()
@@ -83,7 +82,7 @@ class SiteTest : SiteTestBase() {
         assertEquals(tag("space"), likeliest?.key, "given $given")
         assertTrue(given.none { it.key == tag("dragons") && it.offered != true }, "given $given")
         // Beside what it is given, the likeliest others are offered: three the site does not give, at least
-        assertEquals(3, given.count { it.corrected == null }, "given $given")
+        assertTrue(given.count { it.corrected == null } >= 3, "given $given")
         // Asked for more: every other value of the facet, the likeliest first — the offered ones
         // among them, beyond them those whose chances are not kept
         val more = suggestionsApi.getCandidates(site, "x1", "tags", null, null).body!!
@@ -97,18 +96,6 @@ class SiteTest : SiteTestBase() {
             "none the work is given: $more",
         )
         assertTrue(more.zipWithNext().all { (a, b) -> a.chance!! >= b.chance!! }, "the likeliest first: $more")
-    }
-
-    /** The pairing of its kind given to the work [item] at once, marked as the model's, the likeliest of all. */
-    private fun pairingOfItsKind(item: PageItem) {
-        // The pairing of its kind is given to it at once, marked as the model's, the likeliest of all. Not
-        // alone: the crossovers have the other kind's too, and the fittings set off in the background — of
-        // another test of the class too — may give it a chance of its own
-        val pairings = item.facets.single { it.facet == "pairing" }.propertyValues
-        val pairing = assertNotNull(pairings.find { it.key == "pilot/captain" }, "pairings $pairings")
-        assertEquals(true, pairing.inferred)
-        assertTrue(pairing.chance!! > 0.5, "the chance ${pairing.chance}")
-        assertTrue(pairings.all { it === pairing || (it.chance ?: 0.0) < pairing.chance!! }, "the likeliest: $pairings")
     }
 
     /** The site's tags its word, shown as they are; of the work's, the site's mistaken one the least likely. */
@@ -426,7 +413,9 @@ class SiteTest : SiteTestBase() {
         val details = worked(unjudged.body!!.allFacets)
         listOf(page, details).forEach { facets ->
             val values = facets.flatMap { it.propertyValues }
-            assertTrue(values.none { it.chance != null || it.inferred == true }, "of the model: $values")
+            // A tag drafted of the site's tag is no word of the model's
+            val modelled = values.filter { it.draftedFrom == null }
+            assertTrue(modelled.none { it.chance != null || it.inferred == true }, "of the model: $values")
             assertTrue(values.any { it.key == tag("space") }, "the site's tag: $values")
         }
         // Its texts encoded, it is judged by them

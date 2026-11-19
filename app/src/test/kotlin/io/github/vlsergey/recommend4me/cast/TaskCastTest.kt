@@ -88,7 +88,7 @@ class TaskCastTest {
         count.add(rows.take(1))
         count.add(rows.drop(1))
         assertEquals(listOf("a", "b"), count.keys())
-        val side = ValueSide(emptyList(), Matrix(0, 0), emptyList(), emptyList(), Matrix(0, 0), 1.0, count.keys(), 0L)
+        val side = ValueSide(emptyList(), Matrix(0, 0), emptyList(), emptyList(), Matrix(0, 0), count.keys(), 0L)
         assertEquals(listOf(listOf(0, 1), listOf(0), listOf(1)), side.columnsOf(rows).map { it.toList() })
         assertEquals(listOf("a", "b", "c"), TaskContext.ofKeys(rows).keys)
     }

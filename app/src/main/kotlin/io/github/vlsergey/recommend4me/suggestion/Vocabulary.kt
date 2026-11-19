@@ -44,8 +44,6 @@ internal class Vocabulary(
      * The values the site gives each item as examples of the facet ([FacetDef.examplesFrom]); null for a facet without.
      */
     val examples: ((String) -> List<String>)? = null,
-    /** How much a value an item lacks counts as one it has not ([SuggestionTask.lackWeight]). */
-    val lackWeight: Double = 1.0,
     /**
      * Every name each value goes by, each a text that names it ([NameHint]); none for a facet whose values are not
      * named in texts.
