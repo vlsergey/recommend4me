@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.workload
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.api.model.WorkReasonKey
+import io.github.vlsergey.recommend4me.api.model.WorkStep
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.background.Threads
 import java.time.Duration
@@ -35,6 +36,9 @@ data class Work(
 class HeavyWork(val work: Work, val since: Instant, val reasons: Map<String, Int>, val asked: Boolean = false) {
     /** Of a work that tells it ([Workload.progress]), how much of it is done: a share; none of one that does not. */
     @Volatile var progress: Double? = null
+
+    /** Of a work of several steps, the step it is at, and the key of the words of what the step is of. */
+    @Volatile var step: Pair<WorkStep, String?>? = null
 }
 
 /**
@@ -224,10 +228,15 @@ class Workload(background: Background = Threads(), private val records: WorkReco
 
     /**
      * How much of the work running now is done, told by it as it goes: a share (user, 2026-11-18: "a report of the
-     * progress in per cents").
+     * progress in per cents"); of a work of several steps, the [step] it is at — of [of], a key of words (the label of
+     * a facet), when the step tells it (owner, 2026-11-19: "the training runs for minutes, and what is inside is not
+     * clear").
      */
-    fun progress(share: Double) {
-        current?.progress = share.coerceIn(0.0, 1.0)
+    fun progress(share: Double, step: WorkStep? = null, of: String? = null) {
+        current?.let { w ->
+            w.progress = share.coerceIn(0.0, 1.0)
+            if (step != null) w.step = step to of
+        }
     }
 
     /**

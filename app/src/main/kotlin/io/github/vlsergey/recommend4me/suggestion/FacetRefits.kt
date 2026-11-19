@@ -1,7 +1,9 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.WorkStep
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
+import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -114,11 +116,12 @@ internal class FacetRefits(
         val started = System.currentTimeMillis()
         // What is done, told to the queue: every facet a step (user, 2026-11-18: "a progress indicator is needed")
         val steps = facets.size.coerceAtLeast(1).toDouble()
+        workload.progress(0.0, WorkStep.READ_CHARACTERS)
         val characters = passes.charactersRead(store)
         val read = System.currentTimeMillis()
         val took =
             facets.indices.map { k ->
-                workload.progress(k / steps)
+                workload.progress(k / steps, WorkStep.FIT_FACET, I18nKeys.facetLabel(store.id, facets[k]))
                 val began = System.currentTimeMillis()
                 fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
                 "${facets[k].key} ${System.currentTimeMillis() - began}"

@@ -111,7 +111,9 @@ function Times({ w }: { w: QueuedWork }) {
       // A work done says when it ended; without that, no span
       return t("WorkQueue.finished", { time: formatTime(w.ended), span: w.ended ? span(new Date(w.ended).getTime() - since, t) : "" });
     case "RUNNING": {
-      const began = t("WorkQueue.began", { time: formatTime(w.since), span: span(Date.now() - since, t) });
+      // The step a work of several is at, and what it is of: "fitting the field Genre"
+      const step = w.step ? [t(`Step.${w.step}`), w.stepOf && label(w.stepOf)].filter(Boolean).join(" ") : undefined;
+      const began = [t("WorkQueue.began", { time: formatTime(w.since), span: span(Date.now() - since, t) }), step].filter(Boolean).join(" · ");
       // A work that tells how much of it is done: the share, and its end by the pace so far
       const done = w.progress ?? undefined;
       if (done !== undefined && done > 0) {

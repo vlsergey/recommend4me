@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.WorkStep
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -122,10 +123,13 @@ class Recommendations(
             trainingNow += typeId
             try {
                 val started = System.currentTimeMillis()
+                // Its steps told to the queue, each begun at its share of a training as long trainings went
                 val catalogue = everyWork.training(type)
                 val loaded = System.currentTimeMillis()
+                workload.progress(GRADES_FROM, WorkStep.FIT_GRADES)
                 val model = fitting.grades(catalogue)
                 // Of no use without the scores it multiplies
+                workload.progress(INTEREST_FROM, WorkStep.FIT_INTEREST)
                 val interest = if (model != null) fitting.interest(catalogue) else null
                 lastTraining[typeId] = System.currentTimeMillis() - started
                 log.info(
@@ -137,6 +141,7 @@ class Recommendations(
                 )
                 // The rated works scored at once, of the works the training read; the others by the fourth stage —
                 // their values filled by it of no model too
+                workload.progress(SCORING_FROM, WorkStep.SCORE_RATED)
                 if (model != null) scoring.score(catalogue, model, interest)
                 sweep.begin(type, "trained")
             } finally {
@@ -216,6 +221,11 @@ class Recommendations(
 
         /** The setting of when the user's grades of the type last changed: a model trained before is stale. */
         fun gradesChangedAt(typeId: String) = "model.$typeId.gradesChangedAt"
+
+        /** The shares of a training its steps begin at: the reading of the graded works first, from nought. */
+        private const val GRADES_FROM = 0.4
+        private const val INTEREST_FROM = 0.7
+        private const val SCORING_FROM = 0.85
 
         private fun trainingWork(typeId: String) = Work(WorkKind.TRAIN, type = typeId)
     }

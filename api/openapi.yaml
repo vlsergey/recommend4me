@@ -4903,6 +4903,13 @@ components:
           description: >
             Of a work running that tells it, how much of it is done, a share from 0 to 1 - its end foreseen by the
             pace so far; left out of a work that does not tell it
+        step:
+          $ref: '#/components/schemas/WorkStep'
+        stepOf:
+          type: string
+          description: >
+            What the step is of, when it tells it: a key of words the interface words (the label of a facet) - left out
+            of a step of the whole work
         reasons:
           type: array
           description: The changes that asked for it, each with how many times it came
@@ -4956,6 +4963,20 @@ components:
           - workSizes
           - worksKeptOut
           - worth
+
+    WorkStep:
+      type: string
+      description: >
+        The step a work running of several is at: a key the interface words ("workload:Step.<step>") - every step
+        listed, its words checked as the interface is built
+      enum:
+        - average
+        - readGraded
+        - fitGrades
+        - fitInterest
+        - scoreRated
+        - readCharacters
+        - fitFacet
 
     WorkReasonKey:
       type: string
