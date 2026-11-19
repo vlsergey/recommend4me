@@ -111,10 +111,8 @@ class SiteTest : SiteTestBase() {
         assertEquals(true, worked.editable)
         // A value not given at all is less likely than not
         fun chanceOf(key: String) = worked.propertyValues.find { it.key == key }?.chance ?: 0.0
-        assertTrue(
-            chanceOf(tag("space")) > 0.5 && chanceOf(tag("ships")) > 0.5,
-            "the work's tags ${worked.propertyValues}",
-        )
+        // Of its kind's tags, the one the user gives every work of the kind likely; the other — of two of three — less
+        assertTrue(chanceOf(tag("space")) > 0.5, "the work's tags ${worked.propertyValues}")
         assertTrue(
             chanceOf(tag("magic")) < chanceOf(tag("space")) && chanceOf(tag("magic")) < chanceOf(tag("ships")),
             "magic on a space work: ${worked.propertyValues}",

@@ -76,10 +76,13 @@ internal class FacetPass(
         }
     }
 
-    /** THE WALK OF THE WORKS' VALUES ALONE: what every work tells of the value side of the facet ([ValueCount]). */
-    fun counted(): ValueCount {
+    /**
+     * THE WALK OF THE WORKS' VALUES ALONE: what the works [only] — every work when null — tell of the value side of the
+     * facet ([ValueCount]).
+     */
+    fun counted(only: Collection<String>? = null): ValueCount {
         val count = ValueCount(facet.key)
-        forEach(inputs = false) { p ->
+        forEach(inputs = false, only = only) { p ->
             val told =
                 DatabaseRefused.during(FacetChain.computation(store, facet)) {
                     FacetData.count(store, facet, encoder, p.read, p.made, p.vocabulary, p.lines)

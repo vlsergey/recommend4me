@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.database.DatabaseRefused
+import io.github.vlsergey.recommend4me.source.SourceStore
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(FacetScoring::class.java)
@@ -17,8 +18,8 @@ internal class PassModel(
 )
 
 /**
- * THE CUTOFF OF A CALIBRATED FACET'S MODEL MADE ANEW OF EVERY WORK'S CHANCES, A PORTION AT A TIME
- * ([FacetSuggester.scoring]), the database refused: every portion's chances put among those before the facet
+ * THE CUTOFF OF A CALIBRATED FACET'S MODEL MADE ANEW OF THE CHANCES OF THE WORKS RATED AND ANSWERED ON, A PORTION AT A
+ * TIME ([FacetSuggester.scoring]), the database refused: every portion's chances put among those before the facet
  * ([FacetChain.before]), the chances of the values open to the model counted ([OpenChances]) and its cutoff kept anew
  * for the next pass — a part of the model. The values the model gives the works are not written here: they are filled
  * into the index of the list after the models are fitted, last of the queue (user, 2026-11-18). A facet of no
@@ -42,7 +43,9 @@ internal class FacetScoring {
         val started = System.currentTimeMillis()
         val open = OpenChances()
         val told = Told()
-        pass.forEach(inputs = true) { p ->
+        // Of the works the user rated or answered on of the facet: the works the user looks at, not every one (owner,
+        // 2026-11-19: no walk over every work of a source to make its models)
+        pass.forEach(inputs = true, only = rated(store) + FacetPortions.answered(store, facet.key)) { p ->
             val data = pass.data(p, model.side)
             DatabaseRefused.during(FacetChain.computation(store, facet)) {
                 model.suggester.scoring(model.model, data.task)?.use {
@@ -119,6 +122,10 @@ internal class FacetScoring {
     }
 
     private companion object {
+        /** The works of the [store] the user graded or marked of interest. */
+        fun rated(store: SourceStore): Set<String> =
+            store.ratings.all().mapTo(HashSet()) { it.itemId }.apply { addAll(store.interest.all().keys) }
+
         /**
          * How many values given to one work the log of a pass counts the works above: a sign of a model gone wide, not
          * a rule.
