@@ -71,7 +71,7 @@ internal class FacetRefits(
         tasks.plan(refreshing(type), due, reason) {
             val work = refreshing(type)
             val taken = tasks.keys.wanted(work)
-            val sources = stores.typeOf(type).sources.filter { it.id in taken }
+            val sources = stores.type(type)?.sources.orEmpty().filter { it.id in taken }
             sources.forEachIndexed { i, s -> refreshed(s, i, sources.size) }
             tasks.keys.done(work, taken)
         }

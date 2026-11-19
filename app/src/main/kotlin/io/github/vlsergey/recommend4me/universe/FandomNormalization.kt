@@ -27,8 +27,11 @@ private val log = LoggerFactory.getLogger(FandomNormalization::class.java)
 @Component
 class FandomNormalization(private val stores: Stores, private val tasks: Tasks) {
 
-    /** The fandoms whose names wait to be worked out again ([renameLater]); taken whole by the work. */
-    private val toRename = HashSet<Long>()
+    // What the last run of the application left undone of it: planned again by the queue at its start, of the fandoms
+    // the queue kept
+    init {
+        tasks.resumption.resumes(TaskKind.RENAME_FANDOMS) { _, reason -> planRename(reason) }
+    }
 
     /** Every source of every type with universes that has the site's fandoms, with the key of that facet. */
     private fun sites(): List<Pair<SourceStore, String>> =
@@ -63,16 +66,24 @@ class FandomNormalization(private val stores: Stores, private val tasks: Tasks) 
     /**
      * The names of the fandoms [ids] worked out again in the queue of the computations: counting the works of their
      * sites' fandoms reads every work of a large one — seconds of a fandom of a hundred thousand works — which no
-     * request waits for (user, 2026-11-17: a merging of universes took 15 s). Those gone by then are left out.
+     * request waits for (user, 2026-11-17: a merging of universes took 15 s). Those gone by then are left out. The
+     * fandoms waiting kept in the queue ([io.github.vlsergey.recommend4me.task.TaskKeys]): a stop leaves them to the
+     * next start.
      */
     fun renameLater(ids: Collection<Long>) {
-        synchronized(toRename) { toRename += ids }
-        tasks.plan(RENAME, Instant.now(), "universes") {
-            val ids = synchronized(toRename) { toRename.toList().also { toRename.clear() } }
+        tasks.keys.want(RENAME, ids.map { it.toString() })
+        planRename("universes")
+    }
+
+    /** The names of the fandoms waiting worked out again, planned for the [reason]. */
+    private fun planRename(reason: String) =
+        tasks.plan(RENAME, Instant.now(), reason) {
+            val taken = tasks.keys.wanted(RENAME)
+            val ids = taken.mapNotNull { it.toLongOrNull() }
             val fandoms = fandoms()
             if (fandoms != null && ids.isNotEmpty()) rename(fandoms, sites(), ids.filter(fandoms::exists))
+            tasks.keys.done(RENAME, taken)
         }
-    }
 
     /**
      * The site's fandoms [keysOf] gives of every source bound, the ones not bound yet; the normalized fandoms they were
