@@ -41,9 +41,18 @@ class PairFitting(
     /** The models fitted again now, as the user asked. */
     fun now(type: TypeStore) = later(type, 0, "asked")
 
-    /** The models fitted again [quiet] seconds from now, unless asked again meanwhile — then from that asking. */
+    /**
+     * The models fitted again [quiet] seconds from now, unless asked again meanwhile — then from that asking: first of
+     * all when the user pressed for it, of the user's change after an answer (owner, 2026-11-19: "do I wait for
+     * anything after marking the duplicates? I wait only if I pressed some buttons like 'find the duplicates anew'").
+     */
     private fun later(type: TypeStore, quiet: Long, reason: String) =
-        tasks.plan(work(type), Instant.now().plusSeconds(quiet), reason, priority = TaskPriority.ASKED) {
+        tasks.plan(
+            work(type),
+            Instant.now().plusSeconds(quiet),
+            reason,
+            priority = if (reason == "asked") TaskPriority.ASKED else TaskPriority.USER,
+        ) {
             fitAnew(type)
         }
 
