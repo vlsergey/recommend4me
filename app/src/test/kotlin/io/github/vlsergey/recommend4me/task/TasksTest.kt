@@ -345,35 +345,18 @@ class TasksTest {
     }
 
     @Test
-    fun `a work of the background waiting longer than the aging goes as one the user asked for`() {
-        val now = Instant.now()
-        val old =
-            Waiter(
-                Task(TaskKind.ENCODE_SITE_ITEM_TEXTS),
-                now.minus(Turns.AGING).minusSeconds(1),
-                emptyMap(),
-                true,
-                TaskPriority.BACKGROUND,
-            )
-        val asked = Waiter(Task(TaskKind.FIT_GRADE_MODELS), now.minusSeconds(1), emptyMap(), true, TaskPriority.ASKED)
-        val young =
-            Waiter(Task(TaskKind.ENCODE_TAG_NAMES), now.minusSeconds(2), emptyMap(), true, TaskPriority.BACKGROUND)
-        assertEquals(listOf(old, asked, young), listOf(young, asked, old).sortedWith(Turns.order(now)))
-    }
-
-    @Test
-    fun `the tasks go by their priorities, those over the other works after all, however long they waited`() {
+    fun `the tasks go by their priorities alone, however long one of a lower one waited`() {
         val now = Instant.now()
         fun waiter(what: TaskKind, waited: Long, priority: TaskPriority, works: WorkScope? = null) =
             Waiter(Task(what, works = works), now.minusSeconds(waited), emptyMap(), true, priority)
-        val other = waiter(TaskKind.PREDICT_WORKS, Turns.AGING.seconds + 60, TaskPriority.OTHER_WORKS, WorkScope.OTHER)
+        val other = waiter(TaskKind.PREDICT_WORKS, HOUR, TaskPriority.OTHER_WORKS, WorkScope.OTHER)
         val marked = waiter(TaskKind.PREDICT_WORKS, 4, TaskPriority.MARKED_WORKS, WorkScope.MARKED)
-        val background = waiter(TaskKind.ENCODE_TAG_NAMES, 3, TaskPriority.BACKGROUND)
+        val background = waiter(TaskKind.ENCODE_TAG_NAMES, HOUR, TaskPriority.BACKGROUND)
         val user = waiter(TaskKind.WRITE_LIST_INDEX, 2, TaskPriority.USER)
         val asked = waiter(TaskKind.FIT_GRADE_MODELS, 1, TaskPriority.ASKED)
         assertEquals(
             listOf(asked, user, background, marked, other),
-            listOf(other, marked, background, user, asked).sortedWith(Turns.order(now)),
+            listOf(other, marked, background, user, asked).sortedWith(Turns.ORDER),
         )
     }
 
@@ -435,5 +418,10 @@ class TasksTest {
             tasks.run(Task(TaskKind.PREDICT_WORKS, type = "books"), emptyMap()) {}
         }
         assertEquals(listOf(TaskKind.FIT_GRADE_MODELS), records.runs().map { it.work.what })
+    }
+
+    private companion object {
+        /** A wait of an hour, in seconds: longer than any a task of a higher priority makes. */
+        const val HOUR = 3600L
     }
 }

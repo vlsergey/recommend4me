@@ -2,7 +2,7 @@
   "Priority.asked": "čekate ga",
   "Priority.asked.hint": "Čekate ga na ekranu: ide pre svih drugih izračunavanja, ali ne prekida ono koje radi",
   "Priority.background": "pozadinsko",
-  "Priority.background.hint": "Po izmeni podataka: posle vaših izmena; čekajući duže od dva minuta, ide kao ono što čekate",
+  "Priority.background.hint": "Po izmeni podataka: posle vaših izmena",
   "Priority.markedWorks": "označena dela",
   "Priority.markedWorks.hint": "Po delima koja ste označili ili ocenili, po hiljadu odjednom: posle pozadinskih",
   "Priority.otherWorks": "ostala dela",

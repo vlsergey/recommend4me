@@ -100,8 +100,8 @@ class FinishedTask(
  * Reentrant: a work asking for another inside it goes on. Taken before any lock of its own — a lock held while waiting
  * here would hold up whoever runs.
  *
- * A work of the background waiting longer than [Turns.AGING] goes as one the user asked for: a stream of the user's
- * works never keeps the background waiting for ever.
+ * The works wait by their priorities alone ([Turns.ORDER]): a work of a lower one waits as long as works of a higher
+ * one come.
  *
  * AND WHAT IS PLANNED, AND WHY — THE ONE WAY THE BACKGROUND IS SCHEDULED: the works after the changes that ask for them
  * ([plan]) — a grade, an answer, a tag — are planned here with their reasons and what they do, begun here when due

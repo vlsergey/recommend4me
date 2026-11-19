@@ -143,8 +143,8 @@ and rated ones apart from the rest (`Task.works`), going a thousand at a time in
 expected grade, from the cursor where they left (`TaskCursor`, `Tasks.again`), the other works after
 every other task. A task planned by a running one, or by what it told, inherits its priority
 (`InheritedPriority`, a `ScopedValue`) unless it names one; planned again, a task goes after those of
-its priority planned before. A task waiting longer than two minutes goes as an asked one
-(`Turns.AGING`), but one over the other works. What is not a computation — reading the sites' pages
+its priority planned before. The tasks wait by their priorities alone, however long a task of a
+lower one waits (owner, 2026-11-19: no two minutes). What is not a computation — reading the sites' pages
 and pictures — stays out of the queue.
 
 **The queue is kept in the application's database, and a start plans nothing "just in case"**

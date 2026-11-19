@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.task
 
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
-import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
@@ -10,8 +9,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * WHOSE TURN IT IS, of the works of the [Tasks]: the works waiting their turn, by their priorities — a work waiting
- * longer than [AGING] counted among those the user asked for, but a work over the other works ([order]) — of one
+ * WHOSE TURN IT IS, of the works of the [Tasks]: the works waiting their turn, by their priorities ([ORDER]), of one
  * priority in the order they are asked; and the thread holding the turn. A work alike one still waiting joins it
  * instead of waiting a second time.
  */
@@ -119,9 +117,9 @@ internal class Turns {
         turn.signalAll()
     }
 
-    /** The works waiting their turn, in the order they will run ([order]). */
+    /** The works waiting their turn, in the order they will run ([ORDER]). */
     fun waiting(): List<RunningTask> = lock.withLock {
-        waiting.sortedWith(order(Instant.now())).map {
+        waiting.sortedWith(ORDER).map {
             RunningTask(it.work, it.since, it.reasons, it.priority, it.cursor)
         }
     }
@@ -130,28 +128,15 @@ internal class Turns {
     fun waits(work: Task): Boolean = lock.withLock { held?.work == work || waiting.any { it.work == work } }
 
     /** Whose turn comes next ([order]). Under [lock]. */
-    private fun next(): Waiter? = waiting.minWithOrNull(order(Instant.now()))
+    private fun next(): Waiter? = waiting.minWithOrNull(ORDER)
 
     companion object {
         /**
-         * How long a work of the background waits before it goes as one the user asked for (user, 2026-11-15): the
-         * trainings the user's answers asked for, one after another while the user marks, kept the works of the
-         * background waiting for 14 minutes — the texts of a work just read, its page waiting on them, among them.
+         * The order of the turns: by the priorities ([TaskPriority]) alone, however long a task of a lower one waits
+         * (owner, 2026-11-19: "we remove the condition and the logic of the 2 minutes") — of one priority the longest
+         * waiting first: a task planned again goes after those of its priority planned before it.
          */
-        val AGING: Duration = Duration.ofMinutes(2)
-
-        /**
-         * The order of the turns at [now]: by the priorities ([TaskPriority]), a work waiting longer than [AGING] among
-         * those the user asked for — but a work over the other works, after every other task however long it waits
-         * (user, 2026-11-18: the works' values filled "lower in priority than every other action") — of one priority
-         * the longest waiting first: a task planned again goes after those of its priority planned before it.
-         */
-        fun order(now: Instant): Comparator<Waiter> =
-            compareBy<Waiter> {
-                    val aged = it.priority != TaskPriority.OTHER_WORKS && Duration.between(it.since, now) > AGING
-                    if (aged) TaskPriority.ASKED.ordinal else it.priority.ordinal
-                }
-                .thenBy { it.since }
+        val ORDER: Comparator<Waiter> = compareBy<Waiter> { it.priority.ordinal }.thenBy { it.since }
 
         /** The reasons [a] and [b] together, each counted as many times as both tell it. */
         fun merged(a: Map<String, Int>, b: Map<String, Int>): Map<String, Int> =

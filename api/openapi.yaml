@@ -4975,8 +4975,7 @@ components:
         Where a task of the queue waits, the first first: asked - the user waits for it on the screen; user - of a
         change of the user's not waited for; background - of every other change; markedWorks - over the works marked
         or rated; otherWorks - over every other work, after every other task. A task planned by another, or by what
-        it told, has its priority unless it names one; a task waiting long goes as an asked one, those over the other
-        works never
+        it told, has its priority unless it names one; the tasks wait by their priorities alone
       enum:
         - asked
         - user

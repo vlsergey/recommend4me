@@ -2,7 +2,7 @@
   "Priority.asked": "you wait for it",
   "Priority.asked.hint": "You wait for it on the screen: it goes ahead of every other computation, never stopping the one running",
   "Priority.background": "background",
-  "Priority.background.hint": "Of a change of the data: after your changes; waiting more than two minutes, it goes as one you wait for",
+  "Priority.background.hint": "Of a change of the data: after your changes",
   "Priority.markedWorks": "marked works",
   "Priority.markedWorks.hint": "Over the works you marked or rated, a thousand at a time: after the background",
   "Priority.otherWorks": "other works",
