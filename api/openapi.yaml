@@ -4972,7 +4972,7 @@ components:
     TaskPriority:
       type: string
       description: >
-        Where a task of the queue waits, the first first: asked - the user waits for it on the screen; user - of a
+        Where a task of the queue waits, the first first: asked - of the user's action, its result wanted on the screen at once; user - of a
         change of the user's not waited for; background - of every other change; markedWorks - over the works marked
         or rated; otherWorks - over every other work, after every other task. A task planned by another, or by what
         it told, has its priority unless it names one; the tasks wait by their priorities alone

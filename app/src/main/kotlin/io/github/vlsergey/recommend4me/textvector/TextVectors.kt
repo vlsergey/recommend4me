@@ -77,14 +77,14 @@ class TextVectors(
     }
 
     /**
-     * Of every type whose index of the list never saw the encoder of now, every work's texts encoded again — what the
-     * data say, nothing for the start itself.
+     * Of every type whose index of the list has its vectors by another encoder than the one of now, every work's texts
+     * encoded again — what the data say, nothing for the start itself.
      */
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         val encoder = plugins.textEncoder() ?: return
         stores.types
-            .filter { lists.of(it.id).stages.since(vectorsBy(encoder.id)) == null }
+            .filter { !madeBy(lists.of(it.id), encoder) }
             .forEach { type -> WorkScope.entries.forEach { plan(type.id, it, "encoder", TaskCursor.FIRST) } }
     }
 
@@ -283,11 +283,11 @@ class TextVectors(
 }
 
 /**
- * Since when the vectors of the [index] are to be made by the [encoder]: an encoder the index never saw is told now —
- * every vector made before it is of another.
+ * Since when the vectors of the [index] are to be made by the [encoder]: an encoder other than the one they were made
+ * by last — never seen, or seen before another — is told now: every vector made before it is of another.
  */
 private fun vectorsSince(index: ListIndex, encoder: TextEncoder): Long {
-    if (index.stages.since(vectorsBy(encoder.id)) == null) {
+    if (!madeBy(index, encoder)) {
         val now = System.currentTimeMillis()
         index.stages.changed(VECTORS_SINCE, now)
         index.stages.changed(vectorsBy(encoder.id), now)
@@ -296,8 +296,15 @@ private fun vectorsSince(index: ListIndex, encoder: TextEncoder): Long {
     return index.stages.since(VECTORS_SINCE) ?: 1L
 }
 
+/**
+ * Whether the vectors of the [index] are made by the [encoder] since they were last told to be made anew: the encoder
+ * was told then, not before another (the encoder of the tests changed and changed back).
+ */
+private fun madeBy(index: ListIndex, encoder: TextEncoder): Boolean =
+    index.stages.since(vectorsBy(encoder.id)).let { it != null && it == index.stages.since(VECTORS_SINCE) }
+
 /** What the index of the list tells of since when the vectors are to be made by the encoder of now. */
 private const val VECTORS_SINCE = "vectors"
 
-/** What the index of the list tells of since when it has seen the encoder [id]. */
+/** What the index of the list tells of since when the vectors were made by the encoder [id], when it was last told. */
 private fun vectorsBy(id: String) = "vectorsBy:$id"

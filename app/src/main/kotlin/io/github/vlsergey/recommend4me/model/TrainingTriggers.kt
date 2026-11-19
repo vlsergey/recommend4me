@@ -37,17 +37,19 @@ class TrainingTriggers(
     fun gradesChanged(event: WorkGradeChangeEvent) {
         settings.set(Recommendations.gradesChangedAt(event.type), System.currentTimeMillis().toString())
         heldOuts.forget(event.source, event.itemId)
-        // The user waits to see a grade learnt (user, 2026-11-07)
-        recommendations.scheduleRetrain(event.type, "grade", asked = true)
+        // The user waits to see a grade learnt (user, 2026-11-07); works merged are the user's change, not waited for
+        if (event.merged) recommendations.scheduleRetrain(event.type, "regrouped")
+        else recommendations.scheduleRetrain(event.type, "grade", asked = true)
     }
 
     @EventListener
     fun marksChanged(event: SiteItemMarkChangeEvent) = recommendations.scheduleRetrain(event.type, "mark")
 
-    /** The user's mark of interest, as a grade: the user waits to see it learnt. */
+    /** The user's mark of interest, as a grade: the user waits to see it learnt — not of works merged. */
     @EventListener
     fun interestChanged(event: WorkInterestChangeEvent) =
-        recommendations.scheduleRetrain(event.type, "interest", asked = true)
+        if (event.merged) recommendations.scheduleRetrain(event.type, "regrouped")
+        else recommendations.scheduleRetrain(event.type, "interest", asked = true)
 
     /** Tags merged, or put above and under others: the works' tags, features of the works, changed. */
     @EventListener fun tagsChanged(event: TagChangeEvent) = recommendations.scheduleRetrain(event.type, "tags")

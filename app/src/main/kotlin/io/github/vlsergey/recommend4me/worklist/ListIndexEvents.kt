@@ -64,11 +64,19 @@ internal class ListIndexEvents(
 
     @EventListener
     fun gradesChanged(event: WorkGradeChangeEvent) =
-        values.change(event.type, "grade", listOf(ItemKey(event.source, event.itemId)))
+        values.change(
+            event.type,
+            if (event.merged) "regrouped" else "grade",
+            listOf(ItemKey(event.source, event.itemId)),
+        )
 
     @EventListener
     fun interestChanged(event: WorkInterestChangeEvent) =
-        values.change(event.type, "interest", listOf(ItemKey(event.source, event.itemId)))
+        values.change(
+            event.type,
+            if (event.merged) "regrouped" else "interest",
+            listOf(ItemKey(event.source, event.itemId)),
+        )
 
     @EventListener
     fun predictionsChanged(event: WorkPredictionChangeEvent) = values.change(event.type, "models", event.keys)

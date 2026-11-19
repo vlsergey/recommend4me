@@ -22,5 +22,13 @@ object Interest {
         if (chance != null) score.coerceAtLeast(0.0) * chance else score
 }
 
-/** The user marked or unmarked a work of a content type as interesting. */
-data class WorkInterestChangeEvent(val type: String, val source: String, val itemId: String)
+/**
+ * The mark of interest of a work of a content type changed: the user marked or unmarked it — or its item now stands
+ * under the mark of another work it was [merged] with.
+ */
+data class WorkInterestChangeEvent(
+    val type: String,
+    val source: String,
+    val itemId: String,
+    val merged: Boolean = false,
+)

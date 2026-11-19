@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, ClockIcon, ListOrderedIcon, Loader2Icon, PauseIcon, RotateCcwIcon, UserIcon, XIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, ListOrderedIcon, Loader2Icon, PauseIcon, RotateCcwIcon, XIcon, ZapIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { api, unwrap, type QueuedTask } from "@/api/client";
@@ -90,13 +90,13 @@ function WorkRow({ w }: { w: QueuedTask }) {
   return (
     <li className={cn("flex flex-wrap items-baseline gap-x-3 gap-y-1 py-1.5", w.state === "FINISHED" && "opacity-70")}>
       <State w={w} />
-      {w.priority && (
-        // Where it waits: the user's first, the works over the other works after every other task
+      {w.priority && !w.works && (
+        // Where it waits: the user's first, the background after; of a task over a scope of works its scope tells it
         <span
           className={cn("flex items-center gap-1 text-xs", w.priority === "asked" ? "text-foreground" : "text-muted-foreground")}
           title={t(`Priority.${w.priority}.hint`)}
         >
-          {w.priority === "asked" && <UserIcon className="size-3.5" />} {t(`Priority.${w.priority}`)}
+          {w.priority === "asked" && <ZapIcon className="size-3.5" />} {t(`Priority.${w.priority}`)}
         </span>
       )}
       <span className="font-medium">{t(`What.${w.what}`)}</span>
