@@ -3,9 +3,6 @@ package io.github.vlsergey.recommend4me.author
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
-import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(AuthorPlaces::class.java)
@@ -42,30 +39,6 @@ class AuthorPlaces(private val stores: Stores, private val binding: AuthorBindin
         stores.sources
             .filter { it.id != owner.source }
             .firstNotNullOfOrNull { s -> s.source.authorOf(url)?.let { SiteAuthorRef(s.id, it) } }
-
-    /**
-     * Every place kept, of every author: what each address is read anew — a source may know more of its addresses than
-     * it did — and whatever they make one merged. After the authors are bound ([AuthorBinding.start]).
-     */
-    @Order(AuthorBinding.BEFORE_READERS + 1)
-    @EventListener(ApplicationReadyEvent::class)
-    // A step of the start: whatever fails is told in the log, and the authors stay as they were
-    @Suppress("TooGenericExceptionCaught")
-    fun start() {
-        try {
-            val authors = stores.types.firstOrNull()?.authors ?: return
-            val places = authors.places.all()
-            val read = places.map { p ->
-                val now = placeOf(p.owner, p.url)
-                if (now != p.place) authors.places.resolve(p.owner, p.url, now)
-                p.copy(place = now)
-            }
-            bind(read.flatMap { listOfNotNull(it.owner, it.place) })
-            merge(authors)
-        } catch (e: Exception) {
-            log.error("The places of the authors were not read", e)
-        }
-    }
 
     /**
      * Every two authors of the sites a place of one is the other: their normalized authors merged — the place's into

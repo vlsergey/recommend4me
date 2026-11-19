@@ -64,8 +64,5 @@ class AuthorBinding(private val stores: Stores, private val named: NamedAuthors)
     companion object {
         /** Among the listeners of changed items: after the works are bound (-200), before the rest reads them. */
         private const val AFTER_WORKS = -100
-
-        /** Among the steps of the start: before every step that reads the authors. */
-        const val BEFORE_READERS = -10
     }
 }
