@@ -7,16 +7,18 @@ import org.apache.lucene.index.Term
 import org.apache.lucene.search.DocIdSetIterator
 
 /**
- * WHEN THE TASKS OVER THE WORKS LAST DID AN ITEM'S DOCUMENT (docs/computations.md, 9 and 10): its fields computed by
- * the models ([fieldsAt]), its grade and interest expected ([predictedAt]), its document of the search written
- * ([textsAt]) — milliseconds, nought of never. A stage is to be done again of an item done before what it depends on
- * changed: the models of its source's fields, the model of the grades, the index of the search made anew ([WorkStage]).
- * A document made anew of a changed item is of the stages its writer did — every other to be done.
+ * WHEN THE TASKS OVER THE WORKS LAST DID AN ITEM'S DOCUMENT (docs/computations.md, 9 and 10): the vectors of its site's
+ * text fields made by the encoder ([vectorsAt]), its fields computed by the models ([fieldsAt]), its grade and interest
+ * expected ([predictedAt]), its document of the search written ([textsAt]) — milliseconds, nought of never. A stage is
+ * to be done again of an item done before what it depends on changed: the models of its source's fields, the model of
+ * the grades, the index of the search made anew ([WorkStage]). A document made anew of a changed item is of the stages
+ * its writer did — every other to be done.
  */
-data class WorkStages(val fieldsAt: Long, val predictedAt: Long, val textsAt: Long) {
+data class WorkStages(val vectorsAt: Long, val fieldsAt: Long, val predictedAt: Long, val textsAt: Long) {
     /** The stages as the fields of a document, updated in place. */
     fun fields() =
         arrayOf(
+            NumericDocValuesField(ListDocuments.VECTORS_AT, vectorsAt),
             NumericDocValuesField(ListDocuments.FIELDS_AT, fieldsAt),
             NumericDocValuesField(ListDocuments.PREDICTED_AT, predictedAt),
             NumericDocValuesField(ListDocuments.TEXTS_AT, textsAt),
@@ -24,7 +26,7 @@ data class WorkStages(val fieldsAt: Long, val predictedAt: Long, val textsAt: Lo
 
     companion object {
         /** Of no stage done. */
-        val NONE = WorkStages(0, 0, 0)
+        val NONE = WorkStages(0, 0, 0, 0)
 
         /** Of the items [ids] of the [source], the stages kept, as written so far; an item of no document left out. */
         fun of(index: ListIndex, source: String, ids: Collection<String>): Map<String, WorkStages> =
@@ -45,8 +47,9 @@ data class WorkStages(val fieldsAt: Long, val predictedAt: Long, val textsAt: Lo
                     }
                     val fields = WorkStage.entries.map { DocValues.getNumeric(r, it.field) }
                     found.forEach { (doc, id) ->
-                        val at = fields.map { if (it.advanceExact(doc)) it.longValue() else 0L }
-                        out[id] = WorkStages(at[0], at[1], at[2])
+                        // The stages in the order of their fields
+                        val at = fields.map { if (it.advanceExact(doc)) it.longValue() else 0L }.iterator()
+                        out[id] = WorkStages(at.next(), at.next(), at.next(), at.next())
                     }
                 }
                 out
@@ -56,6 +59,7 @@ data class WorkStages(val fieldsAt: Long, val predictedAt: Long, val textsAt: Lo
 
 /** A stage of the tasks over the works, and the field of a document that tells when it was done. */
 enum class WorkStage(val field: String) {
+    VECTORS(ListDocuments.VECTORS_AT),
     FIELDS(ListDocuments.FIELDS_AT),
     PREDICTED(ListDocuments.PREDICTED_AT),
     TEXTS(ListDocuments.TEXTS_AT);
@@ -63,4 +67,7 @@ enum class WorkStage(val field: String) {
     /** The items [keys] of the [index] done of this stage [at] — in place, a document of none left as it is. */
     fun done(index: ListIndex, keys: Collection<ItemKey>, at: Long) =
         index.update(keys.associateWith { arrayOf(NumericDocValuesField(field, at)) })
+
+    /** The items [keys] of the [index] to be done of this stage again: what it was done of changed. */
+    fun again(index: ListIndex, keys: Collection<ItemKey>) = done(index, keys, 0L)
 }

@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.setvector
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
 import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -9,7 +10,6 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskKeys
 import io.github.vlsergey.recommend4me.task.Tasks
-import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -55,8 +55,8 @@ class SetVectorMaking(
     /** The works written: their sets of reviews may have grown. */
     @EventListener fun itemsWritten(event: SiteItemWriteEvent) = grew(event.source, event.ids, "items")
 
-    /** The windows of the works' texts made: their sets of chapters may have grown. */
-    @EventListener fun textsEncoded(event: SiteItemTextVectorChangeEvent) = grew(event.source, event.ids, "texts")
+    /** The windows of the works' chapters made: their sets of chapters may have grown. */
+    @EventListener fun chaptersEncoded(event: SiteItemChapterVectorChangeEvent) = grew(event.source, event.ids, "parts")
 
     /** The works' pictures analysed: their sets of screenshots may have grown. */
     @EventListener fun picturesAnalysed(event: SiteItemPictureAnalysisEvent) = grew(event.source, event.ids, "pictures")

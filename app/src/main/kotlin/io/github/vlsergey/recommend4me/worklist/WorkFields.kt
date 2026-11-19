@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.suggestion.WorkModelValues
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.Tasks
+import io.github.vlsergey.recommend4me.textvector.WorkTextVectorFillEvent
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import org.slf4j.LoggerFactory
@@ -74,6 +75,11 @@ class WorkFields(
         index.commit()
         WorkScope.entries.forEach { plan(type.id, it, "chances", TaskCursor.FIRST) }
     }
+
+    /** The vectors of the site's text fields of works made: their fields computed from the first of them on. */
+    @EventListener
+    fun vectorsMade(event: WorkTextVectorFillEvent) =
+        event.from.forEach { (scope, from) -> plan(event.type, scope, "texts", from) }
 
     /** The fields of the works of the [scope] of the [typeId] planned, for the [reason], from the [cursor] on. */
     fun plan(typeId: String, scope: WorkScope, reason: String, cursor: TaskCursor) =
@@ -164,7 +170,9 @@ class WorkFields(
         if (other.isNotEmpty()) {
             val stages = WorkStages.of(index, s.id, other)
             index.replace(
-                ListRows.read(type, s, other, clusters, fresh) { WorkStages(at, 0, stages[it]?.textsAt ?: 0) }
+                ListRows.read(type, s, other, clusters, fresh) {
+                    WorkStages(stages[it]?.vectorsAt ?: 0, at, 0, stages[it]?.textsAt ?: 0)
+                }
             )
         }
         return other.size

@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.suggestion.WorkModelValues
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.TaskKeys
@@ -20,6 +19,13 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(ListIndexing::class.java)
+
+/**
+ * The documents of works of the [type] written anew, every stage of the tasks over the works to be done of them again,
+ * the vectors of their site's text fields first — of each of the works from where ([from]); of an index made [anew]
+ * whole.
+ */
+data class WorkDocumentWriteEvent(val type: String, val from: Map<WorkScope, TaskCursor>, val anew: Boolean = false)
 
 /** What is to be written of a content type's index: the names of what changed since the last writing. */
 class ListWaiting {
@@ -63,10 +69,11 @@ class ListWaiting {
  * THE INDEX OF THE LIST KEPT IN STEP WITH THE DATABASES ([ListIndex]), in the queue of the computations — a work of
  * every content type, after a quiet, of every change since the last one at once:
  * - the documents of the items a change names made anew, of every item of their works: their data, the user's answers
- *   and corrections, the values the models give them, made now of them ([WorkModelValues]);
+ *   and corrections, the values the models gave them as the index kept them;
  * - of a regrouping of the works, of every item of a work of several before and after;
- * - of a source whole, every item, those gone removed, the values the models gave them as the index kept them; an index
- *   of another format made anew whole, the tasks over the works following it ([WorkFields]).
+ * - of a source whole, every item, those gone removed; an index of another format made anew whole. Of every document
+ *   made anew every stage of the tasks over the works is to be done again, the vectors of the site's text fields first:
+ *   told ([WorkDocumentWriteEvent]).
  *
  * What waits is the names of the items alone, never their data: the databases are read when the work runs.
  */
@@ -76,8 +83,6 @@ class ListIndexing(
     private val works: Works,
     private val tasks: Tasks,
     private val indexes: ListIndexes,
-    private val modelValues: WorkModelValues,
-    private val fields: WorkFields,
     private val events: ApplicationEventPublisher,
 ) {
     /**
@@ -143,9 +148,9 @@ class ListIndexing(
         }
         index.commit()
         tasks.keys.done(work(typeId), taken)
-        if (from.isNotEmpty()) events.publishEvent(WorkFieldFillEvent(typeId, from))
-        // Of a source written whole, every work's fields to be computed, of the models as they are
-        if (whole.isNotEmpty()) WorkScope.entries.forEach { fields.plan(typeId, it, reasonOf(anew), TaskCursor.FIRST) }
+        // Of a source written whole, every work from the first
+        val told = if (whole.isEmpty()) from else WorkScope.entries.associateWith { TaskCursor.FIRST }
+        if (told.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, told, anew))
         log.info(
             "{}: the index of the list written in {} ms: {} sources whole, {} items made anew",
             typeId,
@@ -156,9 +161,9 @@ class ListIndexing(
     }
 
     /**
-     * The documents of the items [ids] of the source [s] made anew, those of the items gone removed: their fields
-     * computed now, their expectation and their document of the search to be made again — of each scope from the first
-     * of them on, kept in [from]. How many were written.
+     * The documents of the items [ids] of the source [s] made anew, those of the items gone removed: the values the
+     * models gave them as the index kept them, every stage to be done again — of each scope from the first of them on,
+     * kept in [from]. How many were written.
      */
     private fun writeNamed(
         type: TypeStore,
@@ -168,8 +173,7 @@ class ListIndexing(
         clusters: WorkClusters,
         from: MutableMap<WorkScope, TaskCursor>,
     ): Int {
-        val fieldsAt = System.currentTimeMillis()
-        val rows = ListRows.read(type, s, ids, clusters, modelValues.of(s, ids)) { WorkStages(fieldsAt, 0, 0) }
+        val rows = ListRows.read(type, s, ids, clusters, ListModelValues.of(index, s.id, ids))
         val found = rows.mapTo(HashSet()) { it.key.id }
         index.replace(rows, ids.filter { it !in found }.map { ItemKey(s.id, it) })
         rows.forEach { r ->
@@ -228,9 +232,6 @@ class ListIndexing(
 
         /** The reason of an index of another format, or none: made anew whole. */
         const val FORMAT = "listFormat"
-
-        /** The reason the fields of a source written whole are computed for: an index made [anew], or its items. */
-        private fun reasonOf(anew: Boolean) = if (anew) FORMAT else "items"
 
         /** The reasons that are the user's own actions: their writing goes ahead of the background's works. */
         private val USERS = setOf("answer")

@@ -132,9 +132,10 @@ class ListIndex(dir: Path) : AutoCloseable {
         /** How the documents are made ([ListDocuments]): an index of another made anew whole. */
         /**
          * 9 — the user's mark and the stages of the tasks over the works ([ListDocuments.MARKED], [WorkStages]); 10 —
-         * the same, made anew: a commit of the stages' times told 9 of documents written before it.
+         * the same, made anew: a commit of the stages' times told 9 of documents written before it; 11 — the vectors of
+         * the site's text fields a stage too ([WorkStage.VECTORS]).
          */
-        const val FORMAT = 10
+        const val FORMAT = 11
         private const val FORMAT_KEY = "format"
 
         /** The memory the writer gathers documents in before it writes them out. */

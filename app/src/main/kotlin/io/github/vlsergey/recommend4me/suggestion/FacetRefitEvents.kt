@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.cast.SiteItemCastEncodeEvent
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
+import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import org.springframework.context.event.EventListener
@@ -19,6 +20,9 @@ internal class FacetRefitEvents(private val refits: FacetRefits, private val sto
     @EventListener fun itemsChanged(event: WorkChangeEvent) = refits.changed(event.source, "items")
 
     @EventListener fun textVectorsChanged(event: SiteItemTextVectorChangeEvent) = refits.changed(event.source, "texts")
+
+    @EventListener
+    fun chapterVectorsChanged(event: SiteItemChapterVectorChangeEvent) = refits.changed(event.source, "parts")
 
     @EventListener fun partsSaved(event: SiteItemChapterChangeEvent) = refits.changed(event.source, "parts")
 

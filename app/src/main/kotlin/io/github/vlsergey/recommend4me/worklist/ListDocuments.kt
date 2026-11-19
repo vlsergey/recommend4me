@@ -36,9 +36,11 @@ object ListDocuments {
     const val MARKED = "marked"
 
     /**
-     * When the tasks over the works last did the item ([WorkStages]): its fields computed, its grade and interest
-     * expected, its document of the search written — milliseconds, nought of never; updated in place.
+     * When the tasks over the works last did the item ([WorkStages]): the vectors of its site's text fields made, its
+     * fields computed, its grade and interest expected, its document of the search written — milliseconds, nought of
+     * never; updated in place.
      */
+    const val VECTORS_AT = "vectorsAt"
     const val FIELDS_AT = "fieldsAt"
     const val PREDICTED_AT = "predictedAt"
     const val TEXTS_AT = "textsAt"

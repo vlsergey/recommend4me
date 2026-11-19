@@ -6,12 +6,14 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
-import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import io.github.vlsergey.recommend4me.vector.Vectors
 import jakarta.annotation.PreDestroy
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
+
+/** The vectors of the windows of the chapters of these items of a source were written. */
+data class SiteItemChapterVectorChangeEvent(val source: String, val ids: List<String>)
 
 /**
  * The text of every part of every work read, encoded window by window in the background: a vector for every few hundred
@@ -96,7 +98,7 @@ class PartVectors(
                 s.parts.windows.saveVectors(part.itemId, part.partId, encoder.windowsId, part.hash, windows[i])
             }
             // The works searched by the meaning of their chapters' windows: indexed again with them
-            events.publishEvent(SiteItemTextVectorChangeEvent(s.id, todo.map { it.itemId }.distinct()))
+            events.publishEvent(SiteItemChapterVectorChangeEvent(s.id, todo.map { it.itemId }.distinct()))
             done += todo.size
         }
         stores.sources.forEach { s ->

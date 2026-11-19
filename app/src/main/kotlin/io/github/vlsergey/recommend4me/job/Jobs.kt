@@ -12,7 +12,6 @@ import io.github.vlsergey.recommend4me.source.SourceMode
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.job
 import io.github.vlsergey.recommend4me.source.resumable
-import io.github.vlsergey.recommend4me.textvector.TextVectors
 import jakarta.annotation.PreDestroy
 import java.time.Duration
 import java.time.Instant
@@ -66,7 +65,6 @@ class Jobs(
     private val stores: Stores,
     private val contexts: SourceContexts,
     private val settings: Settings,
-    private val textVectors: TextVectors,
     private val recommendations: Recommendations,
     private val background: Background,
 ) {
@@ -120,7 +118,6 @@ class Jobs(
         override fun checkpoint() {
             try {
                 val store = stores.source(sourceId) ?: return
-                textVectors.refresh(store, "crawl", cancelled = { cancelRequested })
                 recommendations.retrain(store.type)
             } catch (e: Exception) {
                 log.warn("{}: checkpoint failed: {}", sourceId, e.message)
@@ -176,14 +173,6 @@ class Jobs(
             store.source.scrape(run.mode, contexts.of(store.id), run)
             run.checkCancelled()
             if (whole) settings.set("job.${run.sourceId}.running", null)
-            run.phase("vectors")
-            textVectors.refresh(
-                store,
-                "crawl",
-                progress = { done, total -> run.progress(done, total) },
-                cancelled = { run.cancelRequested },
-            )
-            run.checkCancelled()
             run.phase("scoring")
             recommendations.retrain(store.type)
             run.update { it.copy(state = JobState.DONE, finishedAt = Instant.now()) }

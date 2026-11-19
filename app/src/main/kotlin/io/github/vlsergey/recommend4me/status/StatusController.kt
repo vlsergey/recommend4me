@@ -30,7 +30,7 @@ class StatusController(
             Status(
                 listOf(
                     WorkStatus("pictures", p.analyzed, p.total, p.running, p.failed, p.perMinute),
-                    WorkStatus("texts", 0, 0, textVectors.running()),
+                    WorkStatus("texts", 0, 0, textVectors.running),
                     WorkStatus("parts", 0, 0, parts.running()),
                     WorkStatus("sets", 0, 0, sets.running()),
                 )

@@ -6,9 +6,9 @@ import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.model.WorkPredictionChangeEvent
+import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -42,10 +42,13 @@ internal class ListIndexEvents(
             if (event.ids.isEmpty()) whole += event.source else rows.getOrPut(event.source) { HashSet() } += event.ids
         }
 
-    /** What the models read of the works changed: their documents made anew, of the values they give them now. */
+    /**
+     * The windows of the works' chapters encoded: what the models and the search read of them changed — their documents
+     * made anew, every stage of them to be done again.
+     */
     @EventListener
-    fun textVectorsChanged(event: SiteItemTextVectorChangeEvent) =
-        indexing.change(stores.typeOf(event.source).id, "texts") {
+    fun chaptersEncoded(event: SiteItemChapterVectorChangeEvent) =
+        indexing.change(stores.typeOf(event.source).id, "parts") {
             rows.getOrPut(event.source) { HashSet() } += event.ids
         }
 

@@ -38,6 +38,7 @@ import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseEntriesController
 import io.github.vlsergey.recommend4me.universe.UniversesController
+import io.github.vlsergey.recommend4me.worklist.ListIndexing
 import org.springframework.beans.factory.annotation.Autowired
 
 /**
@@ -83,6 +84,7 @@ abstract class SiteTestBase : BaseTest() {
     @Autowired lateinit var pages: PagesController
     @Autowired lateinit var suggestionsApi: SuggestionsController
     @Autowired lateinit var textVectors: TextVectors
+    @Autowired lateinit var listIndexing: ListIndexing
     @Autowired lateinit var suggestions: FacetSuggestions
     @Autowired lateinit var universes: UniversesController
     @Autowired lateinit var universeEntries: UniverseEntriesController
@@ -105,11 +107,13 @@ abstract class SiteTestBase : BaseTest() {
         captures.capturePage(CaptureRequest("https://$site.example/work/${body.substringBefore('|')}", body))
 
     /**
-     * The texts' vectors made, and what the background makes of the tags made now: their works counted and kept
-     * ([TagRenaming.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
+     * The texts' vectors made of the works the list holds, and what the background makes of the tags made now: their
+     * works counted and kept ([TagRenaming.rename]), their vectors ([TagVectors]) — the screen of the tags reads them.
      */
     protected fun refresh(store: SourceStore) = inBackground {
-        textVectors.refresh(store, "asked")
+        // The texts' vectors follow the documents of the list written
+        listIndexing.writeWaiting(store.type)
+        textVectors.encodeNow(store.type)
         tagService.scope()?.let { tagRenaming.rename(it, it.facet) }
         tagVectors.fill()
     }

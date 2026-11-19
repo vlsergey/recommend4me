@@ -5020,6 +5020,7 @@ components:
           - correction
           - crawl
           - dictionary
+          - encoder
           - fandomVectors
           - fandoms
           - fields

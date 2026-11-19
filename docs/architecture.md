@@ -347,14 +347,15 @@ a source's facets fits their models alone (and a calibrated facet's cutoff) and 
 the others' after every other task, a thousand works a turn, the highest predicted first, from where
 the turn before left (`NextWorks`, `TaskCursor`): the fields the models give (`WorkFields`, the task
 `fillWorkFields`) — made (`WorkModelValues`), compared with those the documents keep, the documents
-whose values changed made anew —, the expected grade and interest (`WorkPredictions`, `predictWorks`)
+whose values changed made anew —, after the vectors of the site's text fields (`TextVectors`,
+`encodeSiteItemTexts`; of a work the user waits on, at once), the expected grade and interest (`WorkPredictions`, `predictWorks`)
 and the documents of the search (`WorkTexts`, `indexWorkTexts`), each planning the next of the works
 it did (`WorkFieldFillEvent`, `WorkPredictionFillEvent`). When each stage was last done of an item is
 kept in its document (`WorkStages`); a stage is done again of the documents done before what it
-depends on changed. The fields of the marked and rated works all computed, the models of the grade
+depends on changed. A document made anew of a changed work keeps its fields of before, every stage
+of it to be done again, the vectors first (`WorkDocumentWriteEvent`). The fields of the marked and rated works all computed, the models of the grade
 and of interest are made of them (`RatedWorkValueFillEvent`), their values read of the index of the
-list, no chain run (`CatalogueReader.gradedWorks`). A work changed is given its fields as its document
-is made.
+list, no chain run (`CatalogueReader.gradedWorks`).
 THE INDEX OF THE SEARCH KNOWS NOTHING OF THE MODELS (user, 2026-11-18: "the refitting of the models and
 the updating of the computed values must not lead to an update of the full-text search"): its
 documents hold the texts and the values the site and the user give alone (`SearchDocuments`, of no
