@@ -258,6 +258,45 @@ class FicbookPagesTest {
     }
 
     @Test
+    fun `the site's search of fandoms, asked by the browser of a fandom known by its name, names and describes them`() {
+        val asked = source.describing("fandom", listOf("name:Dragon Ball"))
+        assertEquals(listOf(Ficbook.fandomSearch("Dragon Ball")), asked.map { it.url })
+        assertEquals(
+            mapOf(
+                "show_empty" to "1",
+                "show_originals" to "1",
+                "show_universes" to "0",
+                "page" to "1",
+                "q" to "Dragon Ball",
+            ),
+            asked.single().form,
+        )
+        val context = MemorySourceContext()
+        assertEquals(emptyList(), capture(context, asked.single().url, "fandoms-search.json"))
+        // Every fandom found, of any group, by its group and slug, as the works name it
+        assertEquals(
+            mapOf(
+                "anime_and_manga/doragon_b__ru" to "Dragon Ball",
+                "games/dragon_ball_heroes" to "Dragon ball heroes",
+                "games/dragon_ball_fighterz" to "Dragon Ball FighterZ",
+                "anime_and_manga/dragon_ball_multiverse" to "Dragon ball multiverse",
+            ),
+            context.facetNames.getValue("fandom"),
+        )
+        // Described as its own page's heading says what it is of; one the answer says nothing of is not
+        val described = context.facetDescriptions.getValue("fandom")
+        assertEquals(
+            "Драконий жемчуг / Драгонболл / Аниме и манга, 1984-2024",
+            described["anime_and_manga/doragon_b__ru"],
+        )
+        assertNull(described["anime_and_manga/dragon_ball_multiverse"])
+        // An answer that is no JSON of the search: nothing said
+        val other = MemorySourceContext()
+        source.capture(CapturedPage(Ficbook.fandomSearch("x"), "<html></html>", now), other)
+        assertNull(other.facetNames["fandom"])
+    }
+
+    @Test
     fun `the site's search of tags, asked by the browser, says what the tag means — of its own name or a synonym`() {
         val harassment =
             "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."
