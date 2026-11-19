@@ -88,7 +88,9 @@ class PagesController(
     private fun item(store: SourceStore, itemId: String, decor: PageDecor?, laps: Laps): PageItem? {
         val key = ItemKey(store.id, itemId)
         val type = stores.typeOf(store.id)
-        val summary = cards.cards(type, listOf(key)).firstOrNull() ?: return null
+        // Which items are one work: of this work alone, read once for the whole page
+        val clusters = works.ofKeys(type, listOf(key))
+        val summary = cards.cards(type, listOf(key), clusters = clusters).firstOrNull() ?: return null
         laps.lap("card")
         val schema = store.schema
         val wanted =
@@ -100,7 +102,6 @@ class PagesController(
         val suggested = suggestions.ofItem(store, itemId, chances).map { it.toApi(store) }
         laps.lap("suggestions")
         // The values of the work, of every item of it, as the web interface shows them
-        val clusters = works.of(type)
         val work = cards.ofWork(type, clusters, key, store.items.facets(itemId), chances)
         laps.lap("work's items")
         val (site, workChances) = work

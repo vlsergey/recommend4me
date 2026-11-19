@@ -130,7 +130,7 @@ class ItemDetailsReader(
     fun read(key: ItemKey): ItemDetails? {
         val store = stores.source(key.source) ?: return null
         val type = stores.typeOf(key.source)
-        val clusters = works.of(type)
+        val clusters = works.ofKeys(type, listOf(key))
         val members = cards.membersRead(type, clusters.members(key), null)
         return cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull()?.let { summary ->
             details(store, type, key, summary, clusters, members)

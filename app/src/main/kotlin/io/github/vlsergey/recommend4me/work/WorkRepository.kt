@@ -102,21 +102,32 @@ class WorkRepository(private val db: DSLContext) {
             ?.value1()
 
     /**
-     * The normalized works of [sources] of several items, with their items in the order the work is shown by them:
-     * those with a value it is shown by first ([SITE_WORK.SHOWN_FIRST], a finished book's), then the one that says the
-     * most of it ([SITE_WORK.FULLNESS]), those alike by their keys.
+     * The normalized works of [sources] of several items — of the items [keys] alone when given — with their items in
+     * the order the work is shown by them: those with a value it is shown by first ([SITE_WORK.SHOWN_FIRST], a finished
+     * book's), then the one that says the most of it ([SITE_WORK.FULLNESS]), those alike by their keys.
      *
      * The works of several items read first, by themselves, not as a subquery of the second read: H2 makes such a
      * subquery again for every row whenever anything was written to the database since it last made it — while the
      * background writes, a read of a second grew to one of a minute and more, and the extension's panel waited for it.
+     * Of [keys], their works by the index of the items: of one work's page two reads of a few rows, not a grouping of
+     * every binding of every site (2026-11-19: half a second a reading of every work of several, twice a page of the
+     * extension).
      */
-    fun groups(sources: Collection<String>): Map<Long, List<ItemKey>> {
+    fun groups(sources: Collection<String>, keys: Collection<ItemKey>? = null): Map<Long, List<ItemKey>> {
         val several =
-            db.select(SITE_WORK.NORMALIZED)
-                .from(SITE_WORK)
-                .groupBy(SITE_WORK.NORMALIZED)
-                .having(DSL.count().gt(1))
-                .fetchSet { it.value1()!! }
+            if (keys == null)
+                db.select(SITE_WORK.NORMALIZED)
+                    .from(SITE_WORK)
+                    .groupBy(SITE_WORK.NORMALIZED)
+                    .having(DSL.count().gt(1))
+                    .fetchSet { it.value1()!! }
+            else
+                keys.distinct().chunked(BATCH).flatMapTo(HashSet()) { chunk ->
+                    db.select(SITE_WORK.NORMALIZED)
+                        .from(SITE_WORK)
+                        .where(DSL.row(SITE_WORK.SOURCE, SITE_WORK.ITEM).`in`(chunk.map { DSL.row(it.source, it.id) }))
+                        .fetch { it.value1()!! }
+                }
         if (several.isEmpty()) return emptyMap()
         // Their items by the index of the works, a thousand works a query: not every binding of every site read and
         // picked from — of a million and a half items, seconds a reading of every work of several (2026-11-18)
@@ -136,6 +147,7 @@ class WorkRepository(private val db: DSLContext) {
             }
             .sortedWith(SHOWN_ORDER)
             .groupBy({ it.value1()!! }, { ItemKey(it.value2()!!, it.value3()!!) })
+            .filterValues { it.size > 1 }
     }
 
     /** The items of the [source] bound to a work, never measured for the order it is shown by them. */

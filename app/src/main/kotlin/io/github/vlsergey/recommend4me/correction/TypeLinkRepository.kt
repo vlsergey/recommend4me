@@ -31,6 +31,9 @@ class TypeLinkRepository(
     /** Every work of several items: its items. */
     fun groups(): List<List<ItemKey>> = works.groups(sources).values.toList()
 
+    /** The works of several items of the items [keys] alone: their items. */
+    fun groupsOf(keys: Collection<ItemKey>): List<List<ItemKey>> = works.groups(sources, keys).values.toList()
+
     /** The two items one work: their works merged, the smaller id kept, a word between them gone. */
     fun link(a: ItemKey, b: ItemKey, now: Instant) {
         val before = word(a, b, now)

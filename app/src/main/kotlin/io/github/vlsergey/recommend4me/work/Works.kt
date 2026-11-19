@@ -60,6 +60,12 @@ class Works(private val stores: Stores) {
     fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
 
     /**
+     * Which items of the [type] are one work, of the works of the items [keys] alone: what a request of a few works
+     * asks — by the indexes of the bindings, no reading of every work of several.
+     */
+    fun ofKeys(type: TypeStore, keys: Collection<ItemKey>): WorkClusters = WorkClusters.of(type.links.groupsOf(keys))
+
+    /**
      * The order a work of several items is shown by them, of each of the items [ids] of the source, kept with its
      * binding ([WorkRepository.measured]): whether the site gives it a value the work is shown by first
      * ([StandardValue.shownFirst] — a finished book), then how much it says of the work — the characters of its texts,
