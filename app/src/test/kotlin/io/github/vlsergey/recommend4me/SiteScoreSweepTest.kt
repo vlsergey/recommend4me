@@ -23,9 +23,9 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 
 /**
- * The training and the sweep of the scores apart: a training reads the graded works alone with the average work kept,
- * the sweep scores every work in turns of the queue from where it stopped, counts the average work along, and begins
- * again by a new model.
+ * The training and the fourth stage apart: a training reads the graded works alone with the average work kept and
+ * scores them, the fourth stage scores the other works in turns of the queue, the highest predicted first, of the works
+ * its pass has not done, counts the average work along, and begins a pass anew by a new model.
  */
 class SiteScoreSweepTest : SiteTestBase() {
     @Autowired lateinit var everyWork: EveryWork
@@ -92,24 +92,26 @@ class SiteScoreSweepTest : SiteTestBase() {
     }
 
     /**
-     * The sweep in turns of one portion of a few works each, every turn going on from where the one before stopped: the
-     * predictions and the average work as in one go. A model trained between two turns begins it again from the first
-     * work. The turns inside a work of the queue of their own: none planned by them, nor any other work, runs between.
+     * The pass in turns of one portion of a few works each, every turn going on with the works the pass has not done:
+     * the predictions and the average work as in one go. A model trained between two turns begins a pass anew. The
+     * turns inside a work of the queue of their own: none planned by them, nor any other work, runs between.
      */
     private fun inTurns(items: Set<String>) {
-        val cursors = ArrayList<String?>()
+        val scoredSoFar = ArrayList<Int>()
         var restarted: SweepState? = null
+        var before: SweepState? = null
         val full = inBackground {
             workload.run(Work("sweepInTurns")) {
                 type.predictions.remove("site", items)
                 val model = type.models.trainedAt()!!
-                type.sweep.save(SweepState(model, basis, null, Instant.now(), 0, 0, null))
+                type.sweep.save(SweepState(model, basis, Instant.now(), 0, 0, null))
                 repeat(2) {
                     scoreSweep.step("books", Duration.ZERO, PORTION)
-                    cursors += type.sweep.load()!!.at?.after
+                    scoredSoFar += type.sweep.load()!!.scored
                 }
                 // Another model trained: the sweep under way, of the model before, begins again from the first work
                 val under = type.sweep.load()!!
+                before = under
                 recommendations.retrain("books")
                 assertNotEquals(model, type.models.trainedAt())
                 type.sweep.save(under)
@@ -119,10 +121,11 @@ class SiteScoreSweepTest : SiteTestBase() {
                 everyWork.averageWork(type)
             }
         }
-        assertTrue(cursors.zipWithNext().all { (a, b) -> a != null && b != null && a < b }, "cursors $cursors")
+        assertTrue(scoredSoFar.zipWithNext().all { (a, b) -> a > 0 && b > a }, "scored $scoredSoFar")
         assertEquals(type.models.trainedAt(), restarted!!.model)
-        assertEquals(cursors.first(), restarted!!.at?.after)
-        assertEquals(PORTION, restarted!!.scored)
+        // A pass anew: begun since the one under way, of its first portion alone
+        assertTrue(restarted!!.began > before!!.began, "a pass anew")
+        assertTrue(restarted!!.scored in 1..scoredSoFar.first(), "scored ${restarted!!.scored}")
         // Of the new model every work scored, the average work as the full pass counts it
         assertEquals(items, type.predictions.predicted("site").keys)
         assertAlike(full, type.averageWork.load(basis)!!)
@@ -131,11 +134,13 @@ class SiteScoreSweepTest : SiteTestBase() {
             inBackground {
                 workload.run(Work("sweepInTurns")) {
                     inOneGo()
-                    val again = type.predictions.predicted("site")
+                    // Of the works the pass scores: the graded are the training's
+                    val graded = stores.source("site")!!.ratings.all().map { it.itemId }.toSet()
+                    val again = type.predictions.predicted("site").filterKeys { it !in graded }
                     type.predictions.remove("site", again.keys)
-                    type.sweep.save(SweepState(type.models.trainedAt()!!, basis, null, Instant.now(), 0, 0, null))
+                    type.sweep.save(SweepState(type.models.trainedAt()!!, basis, Instant.now(), 0, 0, null))
                     while (scoreSweep.sweeping("books")) scoreSweep.step("books", Duration.ZERO, PORTION)
-                    again to type.predictions.predicted("site")
+                    again to type.predictions.predicted("site").filterKeys { it !in graded }
                 }
             }
         assertEquals(again.keys, turned.keys)
@@ -172,7 +177,7 @@ class SiteScoreSweepTest : SiteTestBase() {
     private companion object {
         const val CLOSE = 1e-4
 
-        /** The works of a turn of the sweep in turns. */
+        /** The works of a turn of the pass in turns. */
         const val PORTION = 7
     }
 }

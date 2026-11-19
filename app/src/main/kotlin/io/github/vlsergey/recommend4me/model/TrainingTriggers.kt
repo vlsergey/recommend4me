@@ -8,8 +8,8 @@ import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.setvector.SetVectorsChanged
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.suggestion.FacetChancesChanged
 import io.github.vlsergey.recommend4me.tag.TagsChanged
+import io.github.vlsergey.recommend4me.worklist.RatedValuesFilled
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -55,10 +55,13 @@ class TrainingTriggers(
         recommendations.scheduleRetrain(event.type, "answer")
     }
 
-    /** The model gave works other pairings, characters: features of the works. */
+    /**
+     * The values the models give the rated works filled into the index of the list after the models of the fields were
+     * made (the second stage of four, docs/computations.md): the models of the grades made of them next, the third.
+     */
     @EventListener
-    fun chancesChanged(event: FacetChancesChanged) =
-        recommendations.scheduleRetrain(stores.typeOf(event.source).id, "chances", byUser = false)
+    fun ratedValuesFilled(event: RatedValuesFilled) =
+        recommendations.scheduleRetrain(event.type, "chances", byUser = false)
 
     @EventListener
     fun setVectorsChanged(event: SetVectorsChanged) {

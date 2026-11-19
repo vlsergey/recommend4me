@@ -19,10 +19,10 @@ private val log = LoggerFactory.getLogger(EveryWork::class.java)
 
 /**
  * EVERY WORK OF A CONTENT TYPE READ AS THE MODEL READS IT, NEVER ALL AT ONCE: a type of a million works — ficbook's
- * dump — held whole was more than the memory (2026-11-17). The sweep of the scores reads them a [PORTION] at a time
- * from where it stopped ([portions], [ScoreSweep]); a training reads the works it learns of alone ([training]) with the
- * average work as the last sweep counted it and kept ([AverageWorkRepository]) — counted of every work as it streams
- * past ([averageWork]) only when none is kept, nothing of a work kept once counted.
+ * dump — held whole was more than the memory (2026-11-17). The fourth stage reads the works of the items it is given, a
+ * thousand at a time ([ofKeys], [ScoreSweep]); a training reads the works it learns of alone ([training]) with the
+ * average work as the last pass counted it and kept ([AverageWorkRepository]) — counted of every work as it streams
+ * past, a [PORTION] at a time ([averageWork]), only when none is kept, nothing of a work kept once counted.
  */
 @Component
 class EveryWork(
@@ -70,10 +70,9 @@ class EveryWork(
         }
         val read = System.currentTimeMillis()
         var counted = 0
-        Pass(type, likenesses.stored(type), seen = null, vectors = false).walk(null) { portion ->
+        Pass(type, likenesses.stored(type), seen = null, vectors = false).walk { portion ->
             count.addAll(portion)
             counted += portion.catalogue.items.size
-            true
         }
         return count.made().also {
             log.info(
@@ -88,20 +87,24 @@ class EveryWork(
     }
 
     /**
-     * EVERY WORK OF THE [type] FROM [from] ON (from the first when null), a [portion] of works at a time, each with all
-     * its items, till [action] answers false: the memory of a portion alone in use whatever the number of the works. A
-     * portion's vectors are read as it is scored ([Catalogue.vectorsOfMany]), [seen] told of every one, the likeness to
-     * the marks by [likeness]. Answers where the walk stopped — the portion to go on from — or null when every work was
-     * read.
+     * The works of the items [keys] of the [type] — of several sources, each with all its items — a portion of each
+     * source in turn handed to [action], the values the models give its items made with it ([WorkPortion.given]): what
+     * the fourth stage scores and fills ([ScoreSweep]). The likeness to the marks by [likeness], [seen] told of every
+     * vector read.
      */
-    internal fun portions(
+    internal fun ofKeys(
         type: TypeStore,
         likeness: TypeLikeness,
-        from: PortionCursor?,
+        keys: Collection<ItemKey>,
         seen: VectorSeen? = null,
-        portion: Int = PORTION,
-        action: (WorkPortion) -> Boolean,
-    ): PortionCursor? = Pass(type, likeness, seen, vectors = true, portion).walk(from, action)
+        action: (WorkPortion) -> Unit,
+    ) {
+        val pass = Pass(type, likeness, seen, vectors = true, keys.size)
+        keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+            val s = type.source(source) ?: return@forEach
+            pass.portion(s, s.items.keysOf(ids))?.let(action)
+        }
+    }
 
     /**
      * One pass over every work of the [type]: what every portion of it reads alike, read once. Of a pass that reads no
@@ -122,26 +125,18 @@ class EveryWork(
         private val none = Averages(emptyMap(), emptyMap())
 
         /**
-         * The portions from [from] on — of the sources in their order, of each the items in the order of their ids
-         * ([ItemKeyList.keysAfter]) — handed to [action] till it answers false; where the walk stopped, null at the
-         * end.
+         * Every portion — of the sources in their order, of each the items in the order of their ids
+         * ([ItemKeyList.keysAfter]) — handed to [action].
          */
-        fun walk(from: PortionCursor?, action: (WorkPortion) -> Boolean): PortionCursor? {
-            // A source gone since the walk stopped: from the first again
-            val first = from?.let { at -> type.sources.indexOfFirst { it.id == at.source } }?.takeIf { it >= 0 }
-            var after = if (first == null) null else from?.after
-            for (i in (first ?: 0) until type.sources.size) {
-                val s = type.sources[i]
+        fun walk(action: (WorkPortion) -> Unit) {
+            type.sources.forEach { s ->
+                var after: String? = null
                 do {
                     val keys = s.items.keysAfter(after, size)
                     after = keys.lastOrNull()?.id ?: after
-                    val more = keys.size == size
-                    val next = if (more) PortionCursor(s.id, after) else type.sources.getOrNull(i + 1)?.let(::start)
-                    if (portion(s, keys)?.let(action) == false) return next
-                } while (more)
-                after = null
+                    portion(s, keys)?.let(action)
+                } while (keys.size == size)
             }
-            return null
         }
 
         /**
@@ -161,19 +156,24 @@ class EveryWork(
                     .mapNotNull { (source, ids) -> type.source(source)?.let { source to it.items.facetsOf(ids) } }
                     .toMap()
             laps.lap("values", members.size)
+            val given = HashMap<ItemKey, Map<String, List<String>>>()
             val items = idsOf.flatMap { (source, ids) ->
                 val of = type.source(source) ?: return@flatMap emptyList()
                 // The items of the works of several of other sites, or further in this one, read by their ids
                 val heads = ids.mapNotNull { if (source == s.id) own[it] else null }.takeIf { it.size == ids.size }
                 val read = values[source]
-                reader.readItems(
-                    of,
-                    severalSources,
-                    series,
-                    heads ?: of.items.keysOf(ids),
-                    laps.within("$source:"),
-                    read,
-                )
+                val told = HashMap<String, Map<String, List<String>>>()
+                reader
+                    .readItems(
+                        of,
+                        severalSources,
+                        series,
+                        heads ?: of.items.keysOf(ids),
+                        laps.within("$source:"),
+                        read,
+                        given = told,
+                    )
+                    .also { told.forEach { (id, v) -> given[ItemKey(source, id)] = v } }
             }
             laps.restart()
             val manners = TypeManners.of(type, clusters, members, values)
@@ -197,30 +197,27 @@ class EveryWork(
                 )
             laps.lap("works of several", linked.size)
             log.info("{}/{}: a portion of {} works read in ms: {}", type.id, s.id, catalogue.items.size, laps)
-            return WorkPortion(catalogue, items.associateBy { it.key }, manners)
+            return WorkPortion(catalogue, items.associateBy { it.key }, manners, given)
         }
     }
 
     companion object {
         /**
-         * The works read at a time by [portions]: of a million works a few hundred megabytes in use, each a few hundred
-         * values and numbers, and their vectors a chunk at a time as they are scored.
+         * The works read at a time by the count of the average work ([averageWork]): of a million works a few hundred
+         * megabytes in use, each a few hundred values and numbers.
          */
         const val PORTION = 10_000
     }
 }
 
 /**
- * Where a walk over every work stopped ([EveryWork.portions]): the [source] it goes on with, and the last id of its
- * items read ([after]; none of a source not begun).
+ * A PORTION OF THE WORKS of a content type as [EveryWork] reads them: the works' [catalogue], each item of them as read
+ * of its own site ([own]), the manners of the works, and of every item the values the models gave it beyond its site's
+ * own as they were made for the portion ([given]: what the index of the list keeps of it).
  */
-data class PortionCursor(val source: String, val after: String?)
-
-/** The beginning of the source [s]. */
-private fun start(s: SourceStore) = PortionCursor(s.id, null)
-
-/**
- * A PORTION OF THE WORKS of a content type as [EveryWork.portions] reads them: the works' [catalogue], each item of
- * them as read of its own site ([own]), and the manners of the works.
- */
-class WorkPortion(val catalogue: Catalogue, val own: Map<ItemKey, CatalogueItem>, val manners: TypeManners)
+class WorkPortion(
+    val catalogue: Catalogue,
+    val own: Map<ItemKey, CatalogueItem>,
+    val manners: TypeManners,
+    val given: Map<ItemKey, Map<String, List<String>>> = emptyMap(),
+)

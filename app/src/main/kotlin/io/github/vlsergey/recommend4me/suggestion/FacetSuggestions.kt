@@ -8,9 +8,6 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import org.springframework.stereotype.Service
 
-/** The model gave items of a source other values of a facet it works out: what reads them reads them again. */
-data class FacetChancesChanged(val source: String, val ids: List<String>)
-
 /**
  * The chances of works, made in memory when they are read ([FacetSuggestions.chances]): item to facet to value to
  * chance.

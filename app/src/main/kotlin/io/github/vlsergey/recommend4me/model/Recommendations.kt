@@ -41,6 +41,7 @@ class Recommendations(
     private val kept: KeptModels,
     private val fitting: ModelFitting,
     private val sweep: ScoreSweep,
+    private val scoring: Scoring,
 ) {
     private val trainingNow = ConcurrentHashMap.newKeySet<String>()
     private val pending = ConcurrentHashMap<String, PendingTraining>()
@@ -124,7 +125,7 @@ class Recommendations(
                 val loaded = System.currentTimeMillis()
                 val model = fitting.grades(catalogue)
                 // Of no use without the scores it multiplies
-                if (model != null) fitting.interest(catalogue)
+                val interest = if (model != null) fitting.interest(catalogue) else null
                 lastTraining[typeId] = System.currentTimeMillis() - started
                 log.info(
                     "{}: retrained in {} ms: read {}, trained {}",
@@ -133,7 +134,10 @@ class Recommendations(
                     loaded - started,
                     System.currentTimeMillis() - loaded,
                 )
-                if (model != null) sweep.begin(type, "trained")
+                // The rated works scored at once, of the works the training read; the others by the fourth stage —
+                // their values filled by it of no model too
+                if (model != null) scoring.score(catalogue, model, interest)
+                sweep.begin(type, "trained")
             } finally {
                 trainingNow -= typeId
             }

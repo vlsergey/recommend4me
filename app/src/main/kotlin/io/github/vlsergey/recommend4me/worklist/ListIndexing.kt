@@ -100,7 +100,8 @@ class ListIndexing(
             w.values.filter { it.source !in whole && named[it.source]?.contains(it.id) != true }.groupBy { it.source }
         valued.forEach { (sourceId, keys) ->
             val s = type.source(sourceId) ?: return@forEach
-            index.updateValues(ListRows.valuesOf(type, s, keys.map { it.id }).mapKeys { ItemKey(sourceId, it.key) })
+            val values = ListRows.valuesOf(type, s, keys.map { it.id })
+            index.update(values.entries.associate { (id, v) -> ItemKey(sourceId, id) to ListDocuments.valueFields(v) })
         }
         index.commit()
         // An index made anew has no value the models give: filled last of the queue

@@ -17,13 +17,20 @@ it. A new requirement is added here when it is given. The queue that runs them i
 | 7 | The values a field's model offers are those of the dictionary of the type and of the works it learns of — not those every work of the source happens to have: no walk over every work to count them. The cutoff of a calibrated field is worked out of the works rated and those the model learns of, not of every work. | 2026-11-19, of these two and of the order of the work ("first the labels of the user's word alone, then these, then the four stages"): "do it" |
 | 4 | A new way of fitting is a plugin of its own, chosen by the application's defaults and the instance's settings; an improvement that works always is made unconditionally. | 2026-11-19: "I hope you make all of this as different plugins and simply change the defaults of the application, and the settings chosen in my instance. Unless it is an improvement that always works: those can be turned on unconditionally" |
 
+## Ours, agreed
+
+The owner agreed to them as a whole (2026-11-19: "do it, do it", of the plan of the four stages that named them).
+
+| # | Choice | Where |
+|---|---|---|
+| a | The stages follow each other by themselves: the end of the first of a source (`FacetModelsFitted`) plans the second of it, the second (`RatedValuesFilled`) the third of its type, the third the fourth; what starts the first stays as it is (the user's answers, the sites' data). | `ListIndexEvents`, `TrainingTriggers`, `Recommendations.retrain` |
+| b | A grade or a mark of interest starts the third stage at once: the work's values are those its document was made with as it changed. | `TrainingTriggers` |
+| c | A fourth stage begun anew — a model of the grades made again — leaves the one under way: a pass anew from the highest predicted work. The works done in a pass are marked in their documents with the pass (when it began), the next thousand asked of those not marked: the order of the predictions written meanwhile does not move the pass. A turn takes one portion at least, more for a minute. | `ListPasses`, `ScoreSweep` |
+| d | The average work the model of the grades reads is counted along the fourth stage — every work not graded as it is scored, the graded as the pass begins — and kept at its end for the next third. | `ScoreSweep` |
+| e | The fourth stage replaces the sweep of the scores over every work and the filling of every work's values; the third reads the values of the rated works of the index of the list, not by the models' chain, and scores the rated works itself. | `ScoreSweep`, `ListFilling`, `CatalogueReader.gradedWorks` |
+
 ## Ours, not agreed
 
 | # | Choice | Where |
 |---|---|---|
-| a | The stages follow each other by themselves: the end of the first of a source plans the second of its type, the second the third, the third the fourth; what starts the first stays as it is (the user's answers, the sites' data). | — |
-| b | A grade or a mark of interest of a work with no other change starts at the second stage, of that work alone, then the third. | — |
-| c | A fourth stage begun anew — a model of the grades made again — leaves the one under way: it begins from the highest predicted work again. The works done in a pass are marked in their documents with the pass, the next thousand asked of those not marked: the order of the predictions written meanwhile does not move the pass. | — |
-| d | The average work the model of the grades reads is counted along the fourth stage and the second, of every work, kept at the end of the fourth for the next third. | — |
 | i | Of the pairings the values are still counted of every work: a pairing is a pair of a work's characters, of no dictionary. | `FacetFitting` |
-| e | The fourth stage replaces the sweep of the scores (`ScoreSweep`) and the filling of the values (`ListFilling`); the third reads the values of the rated works from the index of the list, not by the models' chain. | — |

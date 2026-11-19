@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.worklist.ListDocuments.KEY
 import io.github.vlsergey.recommend4me.worklist.ListDocuments.SOURCE
 import java.nio.file.Path
+import org.apache.lucene.document.Field
 import org.apache.lucene.index.DirectoryReader
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
@@ -20,8 +21,7 @@ import org.apache.lucene.store.FSDirectory
  * works. A document of every item ([ListRow]): its key and source, the work it is of — a work of several items one row,
  * grouped by it —, the values of every filter facet as terms, every number as a point and a sorted value, its dates,
  * and what changes of its work without the item — graded, the prediction, the chance of interest, their product — as
- * values updated in place ([updateValues]): a training writes the prediction of every work without a document made
- * anew.
+ * values updated in place ([update]): a training writes the prediction of every work without a document made anew.
  *
  * The databases are the truth: the index is made of them ([ListIndexing]) and made anew whole when it is of another
  * [FORMAT]. Written in the queue of the computations alone, one writing at a time; read by any request.
@@ -87,10 +87,11 @@ class ListIndex(dir: Path) : AutoCloseable {
         }
 
     /**
-     * Of every item of [values], what changes of its work without it, written in place; an item of no document none.
+     * Of every item of [fields], the doc values written in place — what changes of its work without it
+     * ([ListDocuments.valueFields]), the pass of the fourth stage done ([ListPasses]); an item of no document none.
      */
-    fun updateValues(values: Map<ItemKey, RowValues>) {
-        values.forEach { (key, v) -> writer.updateDocValues(Term(KEY, key.toString()), *ListDocuments.valueFields(v)) }
+    fun update(fields: Map<ItemKey, Array<out Field>>) {
+        fields.forEach { (key, of) -> writer.updateDocValues(Term(KEY, key.toString()), *of) }
     }
 
     /** What was written made what the requests read, and kept. */
@@ -117,7 +118,8 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     companion object {
         /** How the documents are made ([ListDocuments]): an index of another made anew whole. */
-        const val FORMAT = 7
+        /** 8 — the pass of the fourth stage of every document ([ListDocuments.PASS]). */
+        const val FORMAT = 8
         private const val FORMAT_KEY = "format"
 
         /** The memory the writer gathers documents in before it writes them out. */

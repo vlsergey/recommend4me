@@ -342,13 +342,18 @@ given, the filters, the interface and the extension read that mark, no number of
 learnt of no answer keeps the suggester's chances, likely above one half.
 
 THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17) — IN THE INDEX OF THE LIST
-ALONE, NEVER IN A DATABASE (user, 2026-11-18): a filter of the list runs no model. MAKING THE MODELS
-AND FILLING THE VALUES ARE TWO WORKS: the pass of a source's facets fits their models alone (and a
-calibrated facet's cutoff) and tells it (`FacetModelsFitted`); the filling (`ListFilling`, the work
-`listValues`, LAST of the queue: after every other work) makes the values the models give every work
-(`WorkModelValues`), a portion at a time, compares them with those its document keeps, and makes
-anew the documents whose values changed, telling them to the search index and the training
-(`FacetChancesChanged`: the training). A work changed is given its values as its document is made.
+ALONE, NEVER IN A DATABASE (user, 2026-11-18): a filter of the list runs no model. THE MODELS AND THE
+VALUES GO IN FOUR STAGES (owner, 2026-11-19, `docs/computations.md`): (1) the pass of a source's
+facets fits their models alone (and a calibrated facet's cutoff) and tells it (`FacetModelsFitted`);
+(2) the values the models give the source's rated works — graded or marked of interest — are made
+(`WorkModelValues`), compared with those their documents keep, and the documents whose values
+changed made anew (`ListFilling`, the work `listValues`), told (`RatedValuesFilled`); (3) the models
+of the grade and of interest are made of the rated works, their values read of the index of the
+list, no chain run (`CatalogueReader.gradedWorks`), and the rated works scored by them; (4) last of
+the queue, the works not graded, a thousand at a time, the highest predicted first, not done by the
+pass under way (`ListPasses`, `ScoreSweep`): of each portion the chain of the models run once, the
+work scored of it and its values written where they changed (`ListFilling.written`), every item
+marked with the pass. A work changed is given its values as its document is made.
 THE INDEX OF THE SEARCH KNOWS NOTHING OF THE MODELS (user, 2026-11-18: "the refitting of the models and
 the updating of the computed values must not lead to an update of the full-text search"): its
 documents hold the texts and the values the site and the user give alone (`SearchDocuments`, of no
@@ -394,10 +399,9 @@ the works:
 - as often as its suggester's fitting needs, of the same value side (`FacetPortions`), unless the
   model kept was fitted on the same basis; the calibration of what the folds said of the works the
   user answered on, by their ids;
-- once to make every work's chances by the model kept (`FacetScoring`): the values given written
-  where they changed and the works whose values changed told as each portion is done
-  (`FacetChancesChanged`, ids alone), the chances of the values open to the model counted into a
-  bounded histogram, of which the facet's cutoff is worked out for the next pass (`OpenChances`).
+- of a calibrated facet, once to make the chances of the works rated and answered on by the model
+  kept (`FacetScoring`): the chances of the values open to the model counted into a bounded
+  histogram, of which the facet's cutoff is worked out for the next pass (`OpenChances`).
 The context of a facet is read of the values the facets before it gave, as the same pass kept them:
 the chain is not made again for every portion of every walk. Fitted anew from scratch at the user's
 asking, a facet reads them as the last pass kept them.

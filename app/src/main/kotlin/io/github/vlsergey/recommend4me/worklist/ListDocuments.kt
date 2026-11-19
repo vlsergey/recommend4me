@@ -32,6 +32,12 @@ object ListDocuments {
     const val INTEREST = "interest"
     const val EXPECTED = "expected"
 
+    /**
+     * The pass of the fourth stage that last scored the item's work and filled its values ([ListPasses]): updated in
+     * place, nought of none.
+     */
+    const val PASS = "pass"
+
     /** The item's title as the user corrected it: of the doc values, what the search of duplicates reads. */
     const val TITLE = "title"
 
@@ -78,6 +84,8 @@ object ListDocuments {
         if (row.linked) doc.add(StringField(LINKED, YES, Field.Store.NO))
         doc.add(NumericDocValuesField(UPDATED, row.updatedAt.toEpochMilli()))
         doc.add(NumericDocValuesField(ADDED, row.firstSeenAt.toEpochMilli()))
+        // Of no pass yet: the document made anew is scored and filled by the pass under way
+        doc.add(NumericDocValuesField(PASS, 0L))
         valueFields(row.values).forEach(doc::add)
         row.facets.forEach { (facetId, keys) ->
             val field = facetField(facetId)

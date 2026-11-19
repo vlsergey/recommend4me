@@ -5,20 +5,26 @@ import java.time.Instant
 import org.jooq.DSLContext
 
 /**
- * Where a sweep of the scores over every work stands ([ScoreSweep]): the [model] it scores by, as when it was trained;
- * the [basis] of the vectors the average work is counted of ([AverageWork.basis]); the next portion of the works ([at]:
- * none of a sweep just begun); since when it goes, how many items it scored and how many of their predictions changed;
- * the sums of the average work counted so far ([AverageCount.pack]; none of a sweep just begun).
+ * Where a pass of the fourth stage stands ([ScoreSweep]): the [model] it scores by, as when it was trained; the [basis]
+ * of the vectors the average work is counted of ([AverageWork.basis]); since when it goes — the pass the index of the
+ * list marks the works done with ([pass]) —, how many items it scored and how many of their predictions changed; the
+ * sums of the average work counted so far ([AverageCount.pack]; none of a pass just begun).
  */
 class SweepState(
     val model: Instant,
     val basis: String,
-    val at: PortionCursor?,
     val began: Instant,
     val scored: Int,
     val changed: Int,
     val counted: ByteArray?,
-)
+) {
+    /**
+     * The pass the index of the list marks the works done with
+     * ([ListDocuments.PASS][io.github.vlsergey.recommend4me.worklist.ListDocuments.PASS]): when it began.
+     */
+    val pass: Long
+        get() = began.toEpochMilli()
+}
 
 /** Where the sweep of the scores of a content type stands, in its model database: one row while one goes on. */
 class ScoreSweepRepository(private val db: DSLContext) {
@@ -27,8 +33,6 @@ class ScoreSweepRepository(private val db: DSLContext) {
         db.select(
                 SCORE_SWEEP.MODEL_TRAINED_AT,
                 SCORE_SWEEP.BASIS,
-                SCORE_SWEEP.SOURCE,
-                SCORE_SWEEP.AFTER_ID,
                 SCORE_SWEEP.BEGAN_AT,
                 SCORE_SWEEP.SCORED,
                 SCORE_SWEEP.CHANGED,
@@ -40,11 +44,10 @@ class ScoreSweepRepository(private val db: DSLContext) {
                 SweepState(
                     it.value1()!!,
                     it.value2()!!,
-                    it.value3()?.let { source -> PortionCursor(source, it.value4()) },
+                    it.value3()!!,
+                    it.value4()!!,
                     it.value5()!!,
-                    it.value6()!!,
-                    it.value7()!!,
-                    it.value8(),
+                    it.value6(),
                 )
             }
 
@@ -54,8 +57,6 @@ class ScoreSweepRepository(private val db: DSLContext) {
             .set(SCORE_SWEEP.ID, ONE)
             .set(SCORE_SWEEP.MODEL_TRAINED_AT, state.model)
             .set(SCORE_SWEEP.BASIS, state.basis)
-            .set(SCORE_SWEEP.SOURCE, state.at?.source)
-            .set(SCORE_SWEEP.AFTER_ID, state.at?.after)
             .set(SCORE_SWEEP.BEGAN_AT, state.began)
             .set(SCORE_SWEEP.SCORED, state.scored)
             .set(SCORE_SWEEP.CHANGED, state.changed)
@@ -63,8 +64,6 @@ class ScoreSweepRepository(private val db: DSLContext) {
             .onDuplicateKeyUpdate()
             .set(SCORE_SWEEP.MODEL_TRAINED_AT, state.model)
             .set(SCORE_SWEEP.BASIS, state.basis)
-            .set(SCORE_SWEEP.SOURCE, state.at?.source)
-            .set(SCORE_SWEEP.AFTER_ID, state.at?.after)
             .set(SCORE_SWEEP.BEGAN_AT, state.began)
             .set(SCORE_SWEEP.SCORED, state.scored)
             .set(SCORE_SWEEP.CHANGED, state.changed)

@@ -25,6 +25,8 @@ import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import java.time.Instant
 import kotlin.math.ln1p
 import kotlin.math.max
@@ -108,13 +110,15 @@ class CatalogueReader(
     private val likenesses: Likenesses,
     private val suggestions: FacetSuggestions,
     private val setVectors: SetVectors,
+    private val lists: ListIndexes,
 ) {
 
     /**
      * THE GRADED WORKS ALONE, each with all its items, and [also]: what a fitting on the rows of the grades reads, and
-     * no other work — their facets and numbers read of them, their chances made of them alone by the models kept
-     * ([io.github.vlsergey.recommend4me.suggestion.FacetSuggester.scoring]), their vectors by their keys. The
-     * [averages] are the caller's, of the model it goes by; the likeness to the marks as made for the model kept.
+     * no other work — their facets and numbers read of them, the values the models gave them as the index of the list
+     * keeps them — written there of the rated works before the models of the grades are made (owner, 2026-11-19: the
+     * second stage of four, [docs/computations.md]) —, their vectors by their keys. The [averages] are the caller's, of
+     * the model it goes by; the likeness to the marks as made for the model kept.
      */
     fun gradedWorks(type: TypeStore, averages: Averages, also: Collection<ItemKey> = emptyList()): Catalogue =
         gradedWorks(type, averages, also, ratingsOf(type), interestOf(type)) { likenesses.asMade(type, it) }
@@ -135,11 +139,15 @@ class CatalogueReader(
         val wanted = (ratings.map { it.key } + also).flatMapTo(HashSet()) { clusters.members(it) }
         val of = wanted.groupBy({ it.source }, { it.id })
         val series = TypeSeries.read(type)
+        val index = lists.of(type.id)
         val items =
             type.sources.flatMap { s ->
                 of[s.id]
                     ?.toHashSet()
-                    ?.let { ids -> readItems(s, type.sources.size > 1, series, s.items.keysOf(ids)) }
+                    ?.let { ids ->
+                        val kept = ListModelValues.of(index, s.id, ids)
+                        readItems(s, type.sources.size > 1, series, s.items.keysOf(ids), kept = kept)
+                    }
                     .orEmpty()
             }
         val vectors = TypeManners.of(type, clusters, wanted).with(vectorsOfMany(type, wanted.toList()), wanted)
@@ -223,6 +231,13 @@ class CatalogueReader(
         laps: Laps = Laps(),
         /** The site's values of the items, read already by the operation: not read again. */
         read: Map<String, Map<String, List<String>>>? = null,
+        /**
+         * The values the models gave the items beyond the site's own as the index of the list keeps them
+         * ([ListModelValues]): no model run of them; null — made now by the chain of the models kept.
+         */
+        kept: Map<String, Map<String, List<String>>>? = null,
+        /** Told, of every item, the values the chain run now gave it beyond the site's own: what the index keeps. */
+        given: MutableMap<String, Map<String, List<String>>>? = null,
     ): List<CatalogueItem> {
         val ids = heads.map { it.id }
         val facetIds = s.schema.facets.filter { it.feature }.associate { it.key to FeatureNames.facetId(s.source, it) }
@@ -231,16 +246,20 @@ class CatalogueReader(
         laps.lap("facets", facets.size)
         val facetCorrections = s.corrections.facetsOf(ids)
         laps.lap("corrections", facetCorrections.size)
-        // The values the model gives the items of the facets it works out: made now of them, in one pass
+        // The values the model gives the items of the facets it works out: made now of them, in one pass — unless kept
         val chances =
-            suggestions.chancesOf(
-                s,
-                ids,
-                s.schema.facets.filter { it.infer && it.feature }.map { it.key },
-                laps.within("chances:"),
-                // The values and the answers of the items read above: not read again by the chain
-                EveryItemFacets(facets, facetCorrections),
-            )
+            if (kept != null) emptyMap()
+            else
+                suggestions.chancesOf(
+                    s,
+                    ids,
+                    // Of every facet the source works out when its values are told: the index of the list keeps them
+                    // all
+                    s.schema.facets.filter { it.infer && (it.feature || given != null) }.map { it.key },
+                    laps.within("chances:"),
+                    // The values and the answers of the items read above: not read again by the chain
+                    EveryItemFacets(facets, facetCorrections),
+                )
         laps.restart()
         val numberDefs = s.schema.numbers.filter { it.feature }.associateBy { it.key }
         val numbers = s.items.numbersOf(ids).mapValues { (_, own) -> own.filterKeys { it in numberDefs } }
@@ -257,7 +276,10 @@ class CatalogueReader(
             names.getOrPut(facetId) { HashMap() }.getOrPut(key) { FeatureNames.facet(facetId, key) }
         val source = "source:${s.id}"
         val made = heads.map { k ->
-            val base = ModelValues.of(s.schema, facets[k.id].orEmpty(), chances[k.id])
+            val site = facets[k.id].orEmpty()
+            val base =
+                if (kept != null) withKept(site, kept[k.id].orEmpty())
+                else ModelValues.of(s.schema, site, chances[k.id]).also { given?.put(k.id, beyond(it, site)) }
             val corrected = TagHierarchy.corrected(base, facetCorrections[k.id].orEmpty(), hierarchies, s.singleFacets)
             val categorical = categoricalOf(corrected, facetIds, ignored, ::feature)
             if (severalSources) categorical += source
@@ -456,6 +478,17 @@ private fun numericOf(
             FeatureNames.number(FeatureNames.numberId(s.source, def)) to CatalogueReader.transform(def.scale, value)
         }
         .toMap()
+
+/** The [site]'s values of an item with those the models gave it beyond them, [kept]. */
+private fun withKept(site: Map<String, List<String>>, kept: Map<String, List<String>>): Map<String, List<String>> =
+    if (kept.isEmpty()) site
+    else HashMap(site).apply { kept.forEach { (facet, values) -> merge(facet, values) { a, b -> (a + b).distinct() } } }
+
+/** Of the [values] of an item, those beyond its [site]'s own, by facet: what the models gave it. */
+private fun beyond(values: Map<String, List<String>>, site: Map<String, List<String>>): Map<String, List<String>> =
+    values
+        .mapValues { (facet, list) -> site[facet].orEmpty().toHashSet().let { own -> list.filter { it !in own } } }
+        .filterValues { it.isNotEmpty() }
 
 /** Every grade of the [type]. */
 internal fun ratingsOf(type: TypeStore): List<TypedRating> =
