@@ -230,10 +230,10 @@ application {
     applicationName = "recommend4me"
     mainClass = "io.github.vlsergey.recommend4me.launcher.LauncherKt"
     // 12 GB: the pages H2 keeps of every source's file, up to a gigabyte each (Databases.SOURCE_CACHE_MB), beside the
-    // 4-5 GB the rest takes. Off the heap 20 GB, not the heap's 12 the JVM allows by default: the search of the
-    // duplicates holds every work's rows of trigrams of five texts in half precision, a kilobyte a text — of the
-    // 1.4 million works of ficbook 1.4 GB each — and ran out at 12 (2026-11-20)
-    applicationDefaultJvmArgs = jvmFlags + listOf("-Xmx12g", "-XX:MaxDirectMemorySize=20g")
+    // 4-5 GB the rest takes; off the heap as much, the JVM's default. An OutOfMemoryError the JVM raises of the heap
+    // leaves its dump in data\ (run.bat starts in the repository, the folder kept out of git): what took the memory is
+    // read of it. Not of the memory off the heap: that one Java's own code raises, and no dump holds it
+    applicationDefaultJvmArgs = jvmFlags + listOf("-Xmx12g", "-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=data")
 }
 
 distributions {

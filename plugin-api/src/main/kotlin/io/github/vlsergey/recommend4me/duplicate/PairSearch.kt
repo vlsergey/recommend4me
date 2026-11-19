@@ -127,26 +127,13 @@ class PairSearch(
         }
         val title = Lexical.of(dot(x.titles, y.titles), x.titleLengths[i], y.titleLengths[j])
         val authored = x.authorLengths[i] > 0f && y.authorLengths[j] > 0f
-        val facets = FloatArray(families.size)
-        var p = 0
-        var q = 0
-        while (p < x.values[i].size && q < y.values[j].size) {
-            val s = x.values[i][p]
-            val t = y.values[j][q]
-            when {
-                s == t -> facets[familyOf[s]] += x.weights[i][p++] * y.weights[j][q++]
-                s < t -> p++
-                else -> q++
-            }
-        }
-        val both = x.facets[i] and y.facets[j]
         return PairLayers(
             title = title.alike,
             description =
                 if (descriptionsCompared(a, b) && x.described[i] && y.described[j]) dot(x.descriptions, y.descriptions)
                 else null,
             size = size(x, i, y, j),
-            facets = families.indices.filter { both and (1L shl it) != 0L }.associate { families[it] to facets[it] },
+            facets = facets(x, i, y, j),
             sameAuthor = y.authors[j].any { it in x.authors[i] },
             site = x.source,
             otherSite = y.source,
@@ -164,6 +151,27 @@ class PairSearch(
                     .associateWith { dot(x.letters[it.ordinal], y.letters[it.ordinal]) },
             partlySameAuthor = y.authors[j].none { it in x.authors[i] } && y.authors[j].any { it in x.kin[i] },
         )
+    }
+
+    /**
+     * Of every facet both have, by its name, how alike their values are: of every value both have, the product of its
+     * weights, summed.
+     */
+    private fun facets(x: SiteWorks, i: Int, y: SiteWorks, j: Int): Map<String, Float> {
+        val facets = FloatArray(families.size)
+        var p = 0
+        var q = 0
+        while (p < x.values[i].size && q < y.values[j].size) {
+            val s = x.values[i][p]
+            val t = y.values[j][q]
+            when {
+                s == t -> facets[familyOf[s]] += x.weights[i][p++] * y.weights[j][q++]
+                s < t -> p++
+                else -> q++
+            }
+        }
+        val both = x.facets[i] and y.facets[j]
+        return families.indices.filter { both and (1L shl it) != 0L }.associate { families[it] to facets[it] }
     }
 
     /**
