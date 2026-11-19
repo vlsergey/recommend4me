@@ -154,6 +154,7 @@ erDiagram
         TIMESTAMPTZ begun_at "null"
         TIMESTAMPTZ updated_at "null"
         TIMESTAMPTZ seen_at
+        TIMESTAMPTZ work_seen_at "null"
     }
     series_place {
         VARCHAR series_key PK
