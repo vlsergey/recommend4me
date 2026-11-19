@@ -119,6 +119,28 @@ class FicbookPagesTest {
         assertEquals(emptyList(), context.facets.getValue(work)["beta"].orEmpty())
     }
 
+    /** A translation's translator and co-translators are its authors, as the site marks them; its beta not. */
+    @Test
+    fun `a translation's translators are its authors`() {
+        fun person(id: String, name: String, mark: String) =
+            """<div class="d-flex align-items-center gap-8"> <div class="d-flex flex-column align-items-start gap-4 text-n1"> <span class="d-inline-flex align-items-center flex-wrap gap-4"> <a href="/authors/$id" class="word-break">$name</a> </span> <span class="ds-badge ds-badge-regular">$mark</span> </div> </div>"""
+        val html =
+            Jsoup.parse(page("readfic.html"))
+                .also { d ->
+                    val people = d.selectFirst(".fanfic-hat section.flex-wrap")!!
+                    people.children().remove()
+                    people
+                        .append(person("101", "Lorem", "переводчик"))
+                        .append(person("102", "Ipsum", "сопереводчик"))
+                        .append(person("103", "Dolor", "бета"))
+                }
+                .outerHtml()
+        val context = MemorySourceContext()
+        source.capture(CapturedPage("https://ficbook.net/readfic/$work", html, now), context)
+        assertEquals(listOf("101", "102"), context.facets.getValue(work)["author"])
+        assertEquals(listOf("103"), context.facets.getValue(work)["beta"])
+    }
+
     /**
      * A work's page as the site shows it to a user logged in ([loggedIn]): the buttons of its header as they are on the
      * site, pressed or not.

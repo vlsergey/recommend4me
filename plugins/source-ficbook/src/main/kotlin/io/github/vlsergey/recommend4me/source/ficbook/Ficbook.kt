@@ -106,9 +106,10 @@ class Ficbook : Source {
      * of them. 13: what a fandom's own page says it is of. 14: the co-authors of a work's header, authors of it as its
      * author is. 15: its betas and gammas, facets of their own. 16: the betas and the gammas written anew, people of
      * the site bound as they are written (V3). 17: a tag by its id, its name and description bound to it (V4). 18: a
-     * synonym of a tag by its name, its id counting the synonyms, not the tags (V5).
+     * synonym of a tag by its name, its id counting the synonyms, not the tags (V5). 19: the translators of a
+     * translation its authors, as the site marks them.
      */
-    override val parserVersion = 18
+    override val parserVersion = 19
 
     override val signals =
         listOf(

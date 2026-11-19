@@ -287,8 +287,12 @@ class FicbookPages(private val context: SourceContext) {
         /** An author's list of series: "/authors/3093607/series". */
         private val AUTHOR_SERIES = Regex("/authors/[^/]+/series/?")
 
-        /** The marks of a work's header of its authors, in their order: the author and the co-authors. */
-        private val AUTHORS = listOf("автор", "соавтор")
+        /**
+         * The marks of a work's header of its authors, in their order: the author and the co-authors; of a translation,
+         * the translator and the co-translators, whom the site marks as its authors (itemprop=author) — the author of
+         * the original is a block of its own (2026-11-19).
+         */
+        private val AUTHORS = listOf("автор", "соавтор", "переводчик", "сопереводчик")
 
         /** The marks of a work's header of the people who read it before its readers, not its authors: their facets. */
         private val EDITORS = mapOf("бета" to BETA, "гамма" to GAMMA)
