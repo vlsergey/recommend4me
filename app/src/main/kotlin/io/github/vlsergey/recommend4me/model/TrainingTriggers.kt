@@ -37,19 +37,19 @@ class TrainingTriggers(
     fun gradesChanged(event: WorkGradeChangeEvent) {
         settings.set(Recommendations.gradesChangedAt(event.type), System.currentTimeMillis().toString())
         heldOuts.forget(event.source, event.itemId)
-        // The user waits to see a grade learnt (user, 2026-11-07); works merged are the user's change, not waited for
-        if (event.merged) recommendations.scheduleRetrain(event.type, "regrouped")
-        else recommendations.scheduleRetrain(event.type, "grade", asked = true)
+        // The user's change, learnt soon, first only of a press (owner, 2026-11-19: first only "the button 'find the
+        // duplicates anew' and the choice of the model; the button 'train'; a page of a graded work opened; the buttons
+        // of the page of the models; a field's model searched anew")
+        recommendations.scheduleRetrain(event.type, if (event.merged) "regrouped" else "grade")
     }
 
     @EventListener
     fun marksChanged(event: SiteItemMarkChangeEvent) = recommendations.scheduleRetrain(event.type, "mark")
 
-    /** The user's mark of interest, as a grade: the user waits to see it learnt — not of works merged. */
+    /** The user's mark of interest, as a grade: the user's change, learnt soon. */
     @EventListener
     fun interestChanged(event: WorkInterestChangeEvent) =
-        if (event.merged) recommendations.scheduleRetrain(event.type, "regrouped")
-        else recommendations.scheduleRetrain(event.type, "interest", asked = true)
+        recommendations.scheduleRetrain(event.type, if (event.merged) "regrouped" else "interest")
 
     /** Tags merged, or put above and under others: the works' tags, features of the works, changed. */
     @EventListener fun tagsChanged(event: TagChangeEvent) = recommendations.scheduleRetrain(event.type, "tags")
@@ -100,7 +100,7 @@ class TrainingTriggers(
     fun trainIfMissing() {
         stores.types.forEach { t ->
             if (kept.load(t) == null && t.sources.any { it.ratings.count() > 0 }) {
-                recommendations.scheduleRetrain(t.id, "noModel", asked = true)
+                recommendations.scheduleRetrain(t.id, "noModel", byUser = false)
             }
         }
     }

@@ -98,13 +98,15 @@ class ListIndexing(
     /** The writing of what waits of the content type [typeId] planned, for the [reason]; nothing added to it. */
     fun plan(typeId: String, reason: String) {
         // The user's own action the list is looked at for, and an index never made — an empty list — go ahead of the
-        // background's works
-        val asked = reason in USERS || (reason == FORMAT && !indexes.of(typeId).current())
+        // background's works: of the user's change, first only of a press (owner, 2026-11-19: first only "the button
+        // 'find the duplicates anew' and the choice of the model; the button 'train'; a page of a graded work opened;
+        // the buttons of the page of the models; a field's model searched anew")
+        val users = reason in USERS || (reason == FORMAT && !indexes.of(typeId).current())
         tasks.plan(
             work(typeId),
             Instant.now().plusSeconds(QUIET_SECONDS),
             reason,
-            priority = TaskPriority.ASKED.takeIf { asked },
+            priority = TaskPriority.USER.takeIf { users },
         ) {
             write(typeId)
         }

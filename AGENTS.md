@@ -135,7 +135,8 @@ short line through the encoder.
 **`Tasks.plan` is the one way the background is scheduled**: a work, when it is due, why, and what
 it does — no executor or timer of a component's own. Planned again before it begins, a work is done
 once; planned while one alike waits its turn, it is that one. **A task has a priority** (`TaskPriority`,
-owner, 2026-11-19), the first first: `asked` — the user waits for it on the screen (a grade, a press);
+owner, 2026-11-19), the first first: `asked` — the user pressed for it (find the duplicates anew, train, the buttons of the page of the
+models, a field's model searched anew) or opened the page of a graded work (owner, 2026-11-19: no other);
 `user` — of a change of the user's the user does not wait to see learnt (an answer, a tag: named so by
 the task's owner — a request's thread is no sign, the pages a site's reading sends are requests too);
 `background`; `markedWorks` and `otherWorks` — the tasks over the works, the marked

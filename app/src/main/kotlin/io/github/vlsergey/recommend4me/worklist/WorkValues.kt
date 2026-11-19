@@ -36,12 +36,12 @@ class WorkValues(private val stores: Stores, private val tasks: Tasks, private v
 
     /** The writing of the values waiting of the content type [typeId] planned, for the [reason]. */
     private fun plan(typeId: String, reason: String) =
-        // A grade, a mark of interest: the user's own action the list is looked at for
+        // A grade, a mark of interest: the user's own change, ahead of the background
         tasks.plan(
             work(typeId),
             Instant.now().plusSeconds(QUIET_SECONDS),
             reason,
-            priority = TaskPriority.ASKED.takeIf { reason in USERS },
+            priority = TaskPriority.USER.takeIf { reason in USERS },
         ) {
             write(typeId)
         }
