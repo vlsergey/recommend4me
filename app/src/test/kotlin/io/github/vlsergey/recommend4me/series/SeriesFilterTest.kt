@@ -36,6 +36,10 @@ class SeriesFilterTest {
         assertEquals(listOf("c", "d"), let(SeriesFilter(said = true)))
         assertEquals(listOf("a", "b"), let(SeriesFilter(said = false)))
         assertEquals(listOf("c"), let(SeriesFilter(with = listOf("author.today"), said = true)))
+        // By how many sites have it: none of the user's word alone, one, two
+        assertEquals(listOf("a", "b", "c"), let(SeriesFilter(minSites = 1)))
+        assertEquals(listOf("b"), let(SeriesFilter(minSites = 2)))
+        assertEquals(emptyList(), let(SeriesFilter(minSites = 3)))
     }
 
     @Test

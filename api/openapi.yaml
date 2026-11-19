@@ -808,6 +808,12 @@ paths:
             of it was met elsewhere (SeriesSite.stale) - or those with none (false)
           schema:
             type: boolean
+        - name: minSites
+          in: query
+          description: Only those with a series of this many sites at least; 0, every one
+          schema:
+            type: integer
+            default: 0
         - name: offset
           in: query
           schema:

@@ -32,6 +32,9 @@ const SAID = "said";
 /** The filter of a page of a site to be visited — never read, or read before a work of it was met elsewhere. */
 const TO_VISIT = "toVisit";
 
+/** The choices of how many sites a series is of at least: 0, every one. */
+const MIN_SITES = [0, 1, 2, 3, 4];
+
 /** The filters after those of the sites, each with the words of its name and its hint. */
 const OWN: Record<string, readonly ["SeriesScreen.said" | "SeriesScreen.toVisit", "SeriesScreen.saidHint" | "SeriesScreen.toVisitHint"]> = {
   [SAID]: ["SeriesScreen.said", "SeriesScreen.saidHint"],
@@ -54,11 +57,14 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
   const [has, setHas] = usePref<Record<string, Has>>(`series.has.${type.id}`, {});
   const sites = type.sources.filter((s) => s.facets.some((f) => f.role === "SERIES")).map((s) => s.id);
   const of = (key: string): Has => has[key] ?? "any";
+  // How many sites a series is of at least, kept in the browser by the type
+  const [minSites, setMinSites] = usePref<number>(`series.minSites.${type.id}`, 0);
   const filter = {
     with: sites.filter((s) => of(s) === "yes"),
     without: sites.filter((s) => of(s) === "no"),
     said: of(SAID) === "any" ? undefined : of(SAID) === "yes",
     toVisit: of(TO_VISIT) === "any" ? undefined : of(TO_VISIT) === "yes",
+    minSites: minSites || undefined,
   };
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -115,6 +121,26 @@ export function SeriesScreen({ type }: { type: ContentTypeInfo }) {
             </Tabs>
           </div>
         ))}
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-muted-foreground" title={t("SeriesScreen.minSitesHint")}>
+            {t("SeriesScreen.minSites")}
+          </span>
+          <Tabs
+            value={String(minSites)}
+            onValueChange={(v) => {
+              setMinSites(Number(v));
+              setLimit(PAGE);
+            }}
+          >
+            <TabsList>
+              {MIN_SITES.map((n) => (
+                <TabsTrigger key={n} value={String(n)}>
+                  {n}+
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
       {list.isLoading && <p className="text-sm text-muted-foreground">{t("SeriesScreen.loading")}</p>}
       {list.isError && <p className="text-sm text-destructive">{t("SeriesScreen.failed", { error: list.error.message })}</p>}

@@ -53,5 +53,7 @@
   "Series.stale": "Stranica ciklusa pročitana je pre nego što se u njemu pojavilo novo delo: treba je ponovo otvoriti",
   "SeriesScreen.toVisit": "treba posetiti",
   "SeriesScreen.toVisitHint": "Postoji sajt gde stranica ciklusa nije otvarana ili je otvarana pre nego što se u ciklusu pojavilo novo delo",
-  "SeriesScreen.onSite": "otvori stranicu ciklusa na sajtu"
+  "SeriesScreen.onSite": "otvori stranicu ciklusa na sajtu",
+  "SeriesScreen.minSites": "sajtova",
+  "SeriesScreen.minSitesHint": "Na koliko sajtova ciklus postoji, najmanje"
 }

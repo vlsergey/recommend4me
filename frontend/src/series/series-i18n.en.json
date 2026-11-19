@@ -50,5 +50,7 @@
   "Series.stale": "The series' page was read before a new work of it was met: it is to be opened again",
   "SeriesScreen.toVisit": "to visit",
   "SeriesScreen.toVisitHint": "A site whose page of the series was never opened, or opened before a new work of it was met",
-  "SeriesScreen.onSite": "open the series' page on the site"
+  "SeriesScreen.onSite": "open the series' page on the site",
+  "SeriesScreen.minSites": "sites",
+  "SeriesScreen.minSitesHint": "On how many sites the series is, at least"
 }

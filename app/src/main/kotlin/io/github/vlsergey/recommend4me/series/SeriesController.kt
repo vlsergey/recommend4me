@@ -17,12 +17,13 @@ class SeriesController(private val views: SeriesViews) : SeriesApi {
         without: List<String>?,
         said: Boolean?,
         toVisit: Boolean?,
+        minSites: Int,
         offset: Int,
         limit: Int,
     ): ResponseEntity<SeriesPage> =
-        views.page(type, SeriesFilter(search, with.orEmpty(), without.orEmpty(), said, toVisit), offset, limit)?.let {
-            ResponseEntity.ok(it)
-        } ?: ResponseEntity.notFound().build()
+        views
+            .page(type, SeriesFilter(search, with.orEmpty(), without.orEmpty(), said, toVisit, minSites), offset, limit)
+            ?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
 
     override fun getSeries(type: String, key: String): ResponseEntity<SeriesDetails> =
         views.one(type, key)?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()
