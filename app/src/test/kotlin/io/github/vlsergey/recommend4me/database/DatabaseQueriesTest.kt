@@ -14,6 +14,8 @@ class DatabaseQueriesTest : BaseTest() {
 
     @Autowired lateinit var queries: DatabaseQueries
 
+    @Autowired lateinit var databases: Databases
+
     private fun query(sql: String, limit: Int? = null, database: String = "dictionaries") =
         queries.queryDatabase(DatabaseQuery(database, sql, limit))
 
@@ -41,6 +43,14 @@ class DatabaseQueriesTest : BaseTest() {
     fun `nothing is written by it, a statement that is no query refused`() {
         assertNotNull(query("CREATE TABLE query_written(x INT)").body!!.error)
         assertNotNull(query("SELECT * FROM query_written").body!!.error)
+    }
+
+    /** H2 keeps a statement's time on its session: the pool's next one asking gets it with none. */
+    @Test
+    fun `a query leaves its session with no time limit`() {
+        query("SELECT 1")
+        val left = databases.dictionaries.dsl.connectionResult { c -> c.createStatement().use { it.queryTimeout } }
+        assertEquals(0, left)
     }
 
     @Test

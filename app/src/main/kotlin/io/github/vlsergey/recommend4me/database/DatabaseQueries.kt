@@ -59,6 +59,9 @@ class DatabaseQueries(private val databases: Databases, private val app: AppData
         } finally {
             c.rollback()
             c.autoCommit = autoCommit
+            // H2 sets the time of a statement on its session, which the pool gives the next one asking: a query of the
+            // start kept a minute so and was cut off (2026-11-19) — the session given back with none
+            c.createStatement().use { it.queryTimeout = 0 }
         }
     }
 
