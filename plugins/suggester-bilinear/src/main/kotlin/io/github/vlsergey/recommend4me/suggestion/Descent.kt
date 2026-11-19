@@ -84,7 +84,7 @@ internal class Descent(
                 val steps = maxOf(1, owed.roundToInt())
                 owed -= steps
                 assigned = assigned || portion.assigned.any { it.isNotEmpty() }
-                val problem = Problem(withHints(portion, offset), design, BilinearSuggester.FOLDS, z)
+                val problem = Problem(withHints(portions, portion, offset), design, BilinearSuggester.FOLDS, z)
                 problem.markSeen(seen)
                 Ensemble(problem, rank, lambdas, folds, card, point, timing).use { ensemble ->
                     if (last) ensemble.heldOut(held, unseen, ::unseenOutside)
@@ -112,41 +112,48 @@ internal class Descent(
     /** The values no item outside the [fold] has, of the items the walks passed. */
     private fun unseenOutside(fold: Int): BooleanArray = BooleanArray(m) { !seen[fold][it] }
 
-    /**
-     * The [portion], its items from the [offset]th of the walk, with its share of the names of the values: those whose
-     * place among them is the place of its items among every item.
-     */
-    private fun withHints(portion: SuggestionTask, offset: Long): SuggestionTask {
-        val h = values.hints.size
-        val to = ((offset + portion.itemCount) * h / portions.items).toInt().coerceAtMost(h)
-        val from = (offset * h / portions.items).toInt().coerceAtMost(to)
-        val texts = if (to > from) values.hintTexts.gather(IntArray(to - from) { from + it }) else Matrix(0, 0)
-        return SuggestionTask(
-            portion.itemIds,
-            portion.inputs,
-            portion.values,
-            portion.valueKeys,
-            portion.assigned,
-            portion.confirmed,
-            portion.rejected,
-            portion.context,
-            portion.contextKeys,
-            portion.allowed,
-            portion.groupings,
-            portion.lackWeight,
-            portion.examples,
-            values.hints.subList(from, to),
-            texts,
-            portion.drafts,
-            portion.draftWeight,
-            portion.barred,
-        )
-    }
+    companion object {
+        /**
+         * The [portion] of the [portions], its items from the [offset]th of the walk, with its share of the names of
+         * the values: those whose place among them is the place of its items among every item.
+         */
+        fun withHints(portions: TaskPortions, portion: SuggestionTask, offset: Long): SuggestionTask {
+            val values = portions.values
+            val h = values.hints.size
+            val to = ((offset + portion.itemCount) * h / portions.items).toInt().coerceAtMost(h)
+            val from = (offset * h / portions.items).toInt().coerceAtMost(to)
+            val texts = if (to > from) values.hintTexts.gather(IntArray(to - from) { from + it }) else Matrix(0, 0)
+            return SuggestionTask(
+                portion.itemIds,
+                portion.inputs,
+                portion.values,
+                portion.valueKeys,
+                portion.assigned,
+                portion.confirmed,
+                portion.rejected,
+                portion.context,
+                portion.contextKeys,
+                portion.allowed,
+                portion.groupings,
+                portion.lackWeight,
+                portion.examples,
+                values.hints.subList(from, to),
+                texts,
+                portion.drafts,
+                portion.draftWeight,
+                portion.barred,
+            )
+        }
 
-    /** Where the [ensemble] made its products, as the log tells it. */
-    private fun placeOf(ensemble: Ensemble): String =
-        (if (ensemble.featuresOnCard) "the items' features on the card (cuBLAS)" else "on the processor (OpenBLAS)") +
-            (if (ensemble.pairsOnCardUsed) ", the pairs and names on the card" else "")
+        private const val ON_CARD = "the items' features on the card (cuBLAS)"
+        private const val ON_PROCESSOR = "on the processor (OpenBLAS)"
+
+        /** Where the [ensemble] made its products, as the log tells it. */
+        fun placeOf(ensemble: Ensemble): String {
+            val features = if (ensemble.featuresOnCard) ON_CARD else ON_PROCESSOR
+            return features + if (ensemble.pairsOnCardUsed) ", the pairs and names on the card" else ""
+        }
+    }
 }
 
 /**

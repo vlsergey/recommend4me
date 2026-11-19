@@ -241,6 +241,14 @@ internal class Bilinear(private val p: Problem, val rank: Int) {
         val mean: Double
             get() = if (weight > 0) loss / weight else Double.MAX_VALUE
 
+        /** Every sum back to nought: a fitting given up for another. */
+        fun clear() {
+            weight = 0.0
+            loss = 0.0
+            squares = 0.0
+            weights = 0.0
+        }
+
         fun add(w: Double, l: Double) {
             weight += w
             loss += w * l

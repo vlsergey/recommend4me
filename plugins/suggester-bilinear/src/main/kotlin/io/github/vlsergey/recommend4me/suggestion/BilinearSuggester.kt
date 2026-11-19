@@ -25,6 +25,11 @@ import io.github.vlsergey.recommend4me.onnx.Onnx
  * held-out loss of every fold summed — the strongest penalty within one standard error of the least —, every penalty's
  * every fold descending together, in the same walks.
  *
+ * TWO SUGGESTERS OF THE SAME MODEL, by how a facet of no more works than a portion holds is fitted ([whole]):
+ * "bilinear-1" descends it a portion at a time as any other ([Descent]: Adam); "bilinear-2" searches every model's
+ * minimum over its works whole ([WholeSearch]: L-BFGS) — of author.today's tags a held-out loss of 0.0007 where the
+ * descent held 0.002 at its best, in a tenth of the time (2026-11-19). A facet of more works the two descend alike.
+ *
  * A REFIT GOES ON FROM THE STATE FITTED LAST: its weights carried to the facet as it is now, by the keys of the
  * features and the values, its layout's scales kept, and the penalty chosen again beside the last one — three walks
  * where a fitting from scratch takes five to eight. From scratch only the first time, or when the last state does not
@@ -33,18 +38,23 @@ import io.github.vlsergey.recommend4me.onnx.Onnx
 class BilinearSuggester
 internal constructor(
     /** The runtime whose libraries of the card the products go through, when there is one: on the processor without. */
-    private val onnx: Onnx?
+    private val onnx: Onnx?,
+    /** Whether a facet of no more works than a portion holds is searched over them whole ([WholeSearch]). */
+    internal val whole: Boolean = false,
 ) : FacetSuggester {
     constructor() : this(null)
 
-    override val id = "bilinear-1"
+    /** The suggester of the facets of a portion's works searched over them whole ([whole]). */
+    constructor(whole: Boolean) : this(null, whole)
+
+    override val id = if (whole) "bilinear-2" else "bilinear-1"
 
     override fun fit(portions: TaskPortions, previous: FittedSuggester?, stop: () -> Boolean): FittedSuggester? {
         if (portions.values.valueCount == 0 || portions.items == 0) return null
         // GONE ON FROM THE STATE FITTED LAST: a few answers or works more move the optimum a little, and the walk to it
         // from the last is short
         val last = (previous as? FittedBilinear)?.takeIf { it.folds.size == FOLDS && it.rank == RANK }
-        return PortionFitting(portions, last, onnx?.cudaLibraries()?.let(Cublas::open), stop).fitted()
+        return PortionFitting(portions, last, onnx?.cudaLibraries()?.let(Cublas::open), whole, stop).fitted()
     }
 
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? =

@@ -287,14 +287,20 @@ user's answers), one it may not have at all and every value of a work with none 
 nought. Every work is judged by a model that did not learn from it (five folds by the work's id),
 so a value the site gave it that nothing else supports comes out unlikely, and an answer on a
 work does not move its own chances. The penalty is chosen by the held-out loss — the strongest
-penalty within one standard error of the least. No fitting holds more than a portion of ten
-thousand works: the model descends a portion at a time (Adam, every penalty's every fold in one
-product), walking the portions a few times — from scratch once to see them (the input blocks are
-the portions' own: the value side has no work and tells none), three to six to descend, once to
-score them by the model kept; gone on from the state fitted last, twice and once, unless the works
-have a block its layout does not know. The steps are by the works: a facet of a few works, every
-step its whole gradient, takes up to three times as many as one of a portion of ten thousand —
-six hundred leave a few works' optimum unreached.
+penalty within one standard error of the least; gone on from the state fitted last, the penalty
+chosen then, the two beside it and the strongest, whose model is all but the values' base rates —
+a choice gone where every model holds out worse than that walks back from it. No fitting holds
+more than a portion of ten thousand works. Two suggesters of the model differ in a facet of no
+more works than a portion holds: `bilinear-2`, the default, fits it over them whole — every
+model's minimum searched by L-BFGS (`WholeSearch`, every penalty's folds in one product a step);
+of author.today's tags a held-out loss of 0.0007 where the descent over portions held 0.002 at
+its best, in a tenth of the time —, `bilinear-1` descends it as any other. A facet of more
+descends a portion at a time (Adam, every penalty's every fold in one product), walking the portions a few times — from
+scratch once to see them (the input blocks are the portions' own: the value side has no work and
+tells none), three to six to descend, once to score them by the model kept; gone on from the
+state fitted last, twice and once, unless the works have a block its layout does not know. The
+descent overshoots at the weak penalties (of the same tags 0.85 at λ = 1e-5), and the held-out
+loss chooses a stronger one.
 
 An input block holds the rows of the works that have it alone (`InputBlock`: the vectors and the
 work of each row), as the products read them — of the 75 630 works of fanfics.me the notes are of

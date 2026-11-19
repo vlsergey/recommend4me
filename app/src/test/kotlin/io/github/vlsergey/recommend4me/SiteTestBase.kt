@@ -53,8 +53,8 @@ abstract class SiteTestBase : BaseTest() {
         const val WORKS_OF_A_KIND = 20
         const val TOLD_OTHERWISE = 12
 
-        /** The bilinear suggester of the facets, by its id. */
-        const val BILINEAR = "bilinear-1"
+        /** The bilinear suggester of the facets, by its id: the application's own ([Plugins.DEFAULT_SUGGESTER]). */
+        const val BILINEAR = "bilinear-2"
     }
 
     @Autowired lateinit var settings: Settings

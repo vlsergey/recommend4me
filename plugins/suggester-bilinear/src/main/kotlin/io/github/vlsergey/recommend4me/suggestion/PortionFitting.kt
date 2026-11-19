@@ -20,6 +20,11 @@ internal class PortionFitting(
     private val portions: TaskPortions,
     private val last: FittedBilinear?,
     private val card: Cublas?,
+    /**
+     * Whether a facet of no more items than a portion holds is searched over them whole ([WholeSearch]) rather than
+     * descended a portion at a time ([Descent]): the suggester's own way ([BilinearSuggester.whole]).
+     */
+    private val whole: Boolean,
     private val stop: () -> Boolean,
 ) {
     private val values = portions.values
@@ -44,7 +49,7 @@ internal class PortionFitting(
         if (known != null)
             try {
                 val plan = Plan.goneOn((portions.items + TaskPortions.MOST - 1) / TaskPortions.MOST, portions.items)
-                walks = plan.walks + 1
+                walks = 1
                 return descended(known, null, penaltiesTried(), plan)?.let { kept(known, it) }
             } catch (e: UnknownBlock) {
                 log.info("{}: the items seen anew", e.message)
@@ -52,7 +57,7 @@ internal class PortionFitting(
             }
         val survey = Survey.of(portions, stop)
         val plan = Plan.fromScratch(survey.portions, portions.items)
-        walks += 1 + plan.walks + 1
+        walks += 2
         val descended = if (survey.assigned == 0) null else descended(survey.design, survey, penaltiesTried(), plan)
         return descended?.let { kept(survey.design, it) }
     }
@@ -108,28 +113,66 @@ internal class PortionFitting(
                 ?.takeIf { theta -> theta.any { it != 0f } } ?: layout.start(k + 1L, used, survey?.common ?: 0f)
         // Model q: the penalty q / folds, the fold q % folds
         val starts = List(count) { q -> start(lambdas[q / folds], q % folds) }
-        val descent =
-            Descent(
-                portions,
-                design,
-                rank,
-                FloatArray(count) { lambdas[it / folds].toFloat() },
-                IntArray(count) { it % folds },
-                card,
-                plan,
-                layoutCarried = survey == null,
-                stop = stop,
-            )
-        val held = List(lambdas.size) { Bilinear.Held() }
-        val unseen = List(lambdas.size) { Bilinear.Held() }
-        descent.run(starts, List(count) { held[it / folds] }, List(count) { unseen[it / folds] })
+        val models = Models(lambdas, starts, layout)
+        // Of no more items than a portion holds — of the survey's one portion, or the last state's — every model
+        // searched over them whole; else the descent over the portions
+        val alone = survey == null || survey.portions == 1
+        if (whole && alone && portions.items <= TaskPortions.MOST)
+            searchedWhole(design, survey, models)?.let {
+                return it.tried
+            }
+        val descent = Descent(portions, design, rank, models.penalties, models.ofFold, card, plan, survey == null, stop)
+        descent.run(starts, models.heldOf, models.unseenOf)
+        walks += plan.walks
         where = descent.where
         timing = descent.timing.told()
-        return if (!descent.assigned) null
-        else
-            lambdas.mapIndexed { j, lambda ->
-                Tried(lambda, held[j], unseen[j], List(folds) { layout.weights(descent.point.take(j * folds + it)) })
-            }
+        return if (!descent.assigned) null else models.tried(descent.point)
+    }
+
+    /**
+     * Every one of the [models] searched over the items whole ([WholeSearch]) on the [design]; null when they came in
+     * more than one portion after all, their sums held out back to nought for the descent.
+     */
+    private fun searchedWhole(design: Design, survey: Survey?, models: Models): Searched? =
+        try {
+            val search =
+                WholeSearch(portions, design, rank, models.penalties, models.ofFold, card, survey == null, stop)
+            search.run(models.starts, models.heldOf, models.unseenOf)
+            walks += 1
+            where = search.where
+            timing = search.timing.told()
+            Searched(if (search.assigned) models.tried(search.point) else null)
+        } catch (e: NotWhole) {
+            log.info("{}: descended over the portions", e.message)
+            walks += 1
+            models.cleared()
+            null
+        }
+
+    /** What a search of the items whole made: what every penalty held out, null when no item has a value. */
+    private class Searched(val tried: List<Tried>?)
+
+    /**
+     * The models of a fitting of [lambdas] and [starts]: model q of the penalty q / folds and the fold q % folds, every
+     * penalty's sums of what its folds held out of every pair ([held]) and of the values unseen ([unseen]).
+     */
+    private inner class Models(val lambdas: List<Double>, val starts: List<FloatArray>, val layout: ModelLayout) {
+        private val f = this@PortionFitting.folds
+        private val count = lambdas.size * f
+        val penalties = FloatArray(count) { lambdas[it / f].toFloat() }
+        val ofFold = IntArray(count) { it % f }
+        private val held = List(lambdas.size) { Bilinear.Held() }
+        private val unseen = List(lambdas.size) { Bilinear.Held() }
+        val heldOf = List(count) { held[it / f] }
+        val unseenOf = List(count) { unseen[it / f] }
+
+        /** Every sum held out back to nought. */
+        fun cleared() = (held + unseen).forEach { it.clear() }
+
+        /** What every penalty held out and its folds' weights of the [point]. */
+        fun tried(point: EnsemblePoint): List<Tried> = lambdas.mapIndexed { j, lambda ->
+            Tried(lambda, held[j], unseen[j], List(f) { layout.weights(point.take(j * f + it)) })
+        }
     }
 
     /**
@@ -174,13 +217,19 @@ internal class PortionFitting(
 
     /**
      * The penalties tried: every one of the grid when fitted from scratch; gone on from the [last] state, its penalty
-     * and the two beside it on the grid — the choice moves with the data, a step at a time.
+     * and the two beside it on the grid — the choice moves with the data, a step at a time — and the strongest besides,
+     * whose model is all but the values' base rates: of a choice gone where every model held out worse than it — the
+     * descent over the portions overshooting at the weak penalties — the next is the strongest, and the refits walk
+     * back from there (2026-11-19: of author.today's tags λ = 1e-7 chosen of 1e-6 and 1e-7 at a held-out loss of 0.42,
+     * a hundred times the base rates', every refit after the same).
      */
     private fun penaltiesTried(): List<Double> {
         val l = last ?: return GRID
-        return GRID.indices
-            .minBy { abs(ln(GRID[it] / l.lambda)) }
-            .let { at -> GRID.subList(maxOf(0, at - 1), minOf(GRID.size, at + 2)) }
+        val beside =
+            GRID.indices
+                .minBy { abs(ln(GRID[it] / l.lambda)) }
+                .let { at -> GRID.subList(maxOf(0, at - 1), minOf(GRID.size, at + 2)) }
+        return (listOf(GRID.first()) + beside).distinct()
     }
 
     /**

@@ -157,7 +157,7 @@ class Plugins(
 
     companion object {
         const val DEFAULT_SCORER = "pairwise-logistic"
-        const val DEFAULT_SUGGESTER = "bilinear-1"
+        const val DEFAULT_SUGGESTER = "bilinear-2"
 
         /** The setting a facet's suggester is named by. */
         fun suggesterSetting(source: String, facet: String) = "suggester.$source.$facet"
