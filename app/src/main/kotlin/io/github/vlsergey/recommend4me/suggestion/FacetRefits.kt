@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.workload.Work
+import io.github.vlsergey.recommend4me.workload.WorkKeys
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import java.util.concurrent.CancellationException
@@ -54,17 +55,26 @@ internal class FacetRefits(
     fun changed(source: String, reason: String) {
         val store = stores.source(source) ?: return
         if (chain.facetsOf(store).isEmpty()) return
-        val work = refreshing(source)
+        val work = refreshing(store.type)
+        // The source kept waiting in the queue: of every source of the type one work, of the sources changed
+        workload.keys.want(work, listOf(store.id))
         val due = if (workload.planned().any { it.work == work }) null else Instant.now().plusSeconds(DELAY_SECONDS)
-        planRefresh(store, due, reason)
+        planRefresh(store.type, due, reason)
     }
 
     /**
-     * The refresh of every facet of the [store] planned for [due] for the [reason] — whole in the queue of the
-     * computations, the works read with it, a portion at a time.
+     * The refresh of the facets of every source of the [type] the queue keeps waiting ([WorkKeys.wanted]), planned for
+     * [due] for the [reason] — ONE WORK OF THE TYPE, the models of every field of its works (owner, 2026-11-19: not a
+     * work a source), whole in the queue of the computations, the works read with it, a portion at a time.
      */
-    private fun planRefresh(store: SourceStore, due: Instant?, reason: String) =
-        workload.plan(refreshing(store.id), due, reason) { refreshed(store) }
+    private fun planRefresh(type: String, due: Instant?, reason: String) =
+        workload.plan(refreshing(type), due, reason) {
+            val work = refreshing(type)
+            val taken = workload.keys.wanted(work)
+            val sources = stores.typeOf(type).sources.filter { it.id in taken }
+            sources.forEachIndexed { i, s -> refreshed(s, i, sources.size) }
+            workload.keys.done(work, taken)
+        }
 
     /**
      * On the start: what was worked out of facets a source no longer has the model work on forgotten — only when its
@@ -84,9 +94,10 @@ internal class FacetRefits(
                 settings.set(name, facets)
             }
         }
-        // What the last run of the application left undone of the fitting, planned again
+        // What the last run of the application left undone of the fitting, planned again: of a work a source of before,
+        // that source
         workload.resume(WorkKind.SUGGESTERS) { left, reason ->
-            left.work.source?.let(stores::source)?.let { planRefresh(it, null, reason) }
+            left.work.source?.let { changed(it, reason) } ?: left.work.type?.let { planRefresh(it, null, reason) }
         }
     }
 
@@ -96,7 +107,7 @@ internal class FacetRefits(
      * its own, never joined to the background's alike.
      */
     fun refresh(store: SourceStore) =
-        workload.run(refreshing(store.id), mapOf("asked" to 1), joinAlike = false) { refreshed(store) }
+        workload.run(refreshing(store.type), mapOf("asked" to 1), joinAlike = false) { refreshed(store, 0, 1) }
 
     /**
      * The model of every facet of the [store] fitted again, down the chain; given up only as the application stops
@@ -109,19 +120,23 @@ internal class FacetRefits(
      * into the index of the list after them, last of the queue ([FacetModelsFitted]; user, 2026-11-18: "split every
      * such work in two: making new models and filling the works with the new computed data").
      */
-    private fun refreshed(store: SourceStore) {
+    private fun refreshed(store: SourceStore, of: Int, sources: Int) {
         val encoder = plugins.textEncoder() ?: return
         val stop = { workload.stopping }
         val facets = chain.facetsOf(store)
         val started = System.currentTimeMillis()
         // What is done, told to the queue: every facet a step (user, 2026-11-18: "a progress indicator is needed")
         val steps = facets.size.coerceAtLeast(1).toDouble()
-        workload.progress(0.0, WorkStep.READ_CHARACTERS)
+        workload.progress(of.toDouble() / sources, WorkStep.READ_CHARACTERS)
         val characters = passes.charactersRead(store)
         val read = System.currentTimeMillis()
         val took =
             facets.indices.map { k ->
-                workload.progress(k / steps, WorkStep.FIT_FACET, I18nKeys.facetLabel(store.id, facets[k]))
+                workload.progress(
+                    (of + k / steps) / sources,
+                    WorkStep.FIT_FACET,
+                    I18nKeys.facetLabel(store.id, facets[k]),
+                )
                 val began = System.currentTimeMillis()
                 fitting.fit(store, facets, k, plugins.suggester(store.id, facets[k].key), encoder, characters, stop)
                 "${facets[k].key} ${System.currentTimeMillis() - began}"
@@ -186,8 +201,8 @@ internal class FacetRefits(
          */
         private const val START_ORDER = 4
 
-        /** The refresh of the facets of the source, as the queue of the works tells it planned and running. */
-        private fun refreshing(source: String) = Work(WorkKind.SUGGESTERS, source = source)
+        /** The refresh of the facets of the type's sources, as the queue of the works tells it planned and running. */
+        private fun refreshing(type: String) = Work(WorkKind.SUGGESTERS, type = type)
 
         /** The fitting anew of a facet of the source ([searchAnew]), as the queue of the works tells it. */
         private fun fittingAnew(store: SourceStore, facetKey: String) =
