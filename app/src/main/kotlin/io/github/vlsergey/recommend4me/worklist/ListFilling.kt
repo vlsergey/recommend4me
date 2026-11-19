@@ -137,7 +137,7 @@ class ListFilling(
 
     companion object {
         /** The work of the queue filling the values of a source's rated works into the index. */
-        val WORK = TaskKind.LIST_VALUES
+        val WORK = TaskKind.FILL_RATED_WORK_VALUES
 
         /** The values of every facet as sets: their order is no change. */
         private fun asSets(values: Map<String, List<String>>?): Map<String, Set<String>> =

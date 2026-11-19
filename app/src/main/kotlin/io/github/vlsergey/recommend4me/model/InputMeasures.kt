@@ -35,7 +35,7 @@ class InputMeasures(
      */
     fun measuringInput(typeId: String, interest: Boolean = false): MeasuringInput? =
         tasks.run(
-            Task(TaskKind.SCORERS_INPUT, type = typeId),
+            Task(TaskKind.READ_SCORER_INPUT, type = typeId),
             mapOf("asked" to 1),
             asked = true,
             joinAlike = false,
@@ -53,7 +53,7 @@ class InputMeasures(
      * confirm. Nothing is kept.
      */
     fun worth(typeId: String): ModelWorth? =
-        tasks.run(Task(TaskKind.WORTH, type = typeId), mapOf("asked" to 1), asked = true) {
+        tasks.run(Task(TaskKind.MEASURE_PART_WORTH, type = typeId), mapOf("asked" to 1), asked = true) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId) ?: return@run null
             val p = Prepared.grades(everyWork.training(type)) ?: return@run null
@@ -103,7 +103,7 @@ class InputMeasures(
      * kept. [cautious]: [GroupWeights.tune].
      */
     fun weighing(typeId: String, cautious: Boolean = true): Weighing? =
-        tasks.run(Task(TaskKind.WEIGHING, type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) {
+        tasks.run(Task(TaskKind.WEIGH_PARTS, type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId)
             val p =

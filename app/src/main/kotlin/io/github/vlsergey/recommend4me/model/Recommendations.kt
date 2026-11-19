@@ -57,7 +57,7 @@ class Recommendations(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        tasks.resumption.resumes(TaskKind.TRAIN) { left, reason ->
+        tasks.resumption.resumes(TaskKind.FIT_GRADE_MODELS) { left, reason ->
             left.work.type?.let { scheduleRetrain(it, reason, byUser = left.asked, asked = left.asked) }
         }
     }
@@ -225,6 +225,6 @@ class Recommendations(
         private const val INTEREST_FROM = 0.7
         private const val SCORING_FROM = 0.85
 
-        private fun trainingWork(typeId: String) = Task(TaskKind.TRAIN, type = typeId)
+        private fun trainingWork(typeId: String) = Task(TaskKind.FIT_GRADE_MODELS, type = typeId)
     }
 }

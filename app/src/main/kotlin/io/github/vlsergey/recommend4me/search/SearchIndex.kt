@@ -124,7 +124,7 @@ class SearchIndex(
         }
 
     private companion object {
-        val UPDATING = TaskKind.SEARCH_UPDATE
+        val UPDATING = TaskKind.UPDATE_SEARCH_INDEX
 
         /** The key of an item waiting in the queue: its source and its id. */
         const val SEP = '\t'

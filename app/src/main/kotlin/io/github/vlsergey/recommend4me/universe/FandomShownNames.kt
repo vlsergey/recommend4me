@@ -59,7 +59,7 @@ class FandomShownNames(private val stores: Stores, private val tasks: Tasks) {
     }
 
     private companion object {
-        val WORK = Task(TaskKind.FANDOM_NAMES)
+        val WORK = Task(TaskKind.NAME_FANDOMS)
 
         /**
          * The quiet after a change before the names are worked out again: the changes of an import's batches at once.

@@ -140,7 +140,7 @@ class PartVectors(
     }
 
     companion object {
-        private val ENCODING = Task(TaskKind.PART_VECTORS)
+        private val ENCODING = Task(TaskKind.ENCODE_SITE_ITEM_CHAPTERS)
 
         /** Parts per encoder call: a chapter is tens of windows already. */
         private const val BATCH = 8

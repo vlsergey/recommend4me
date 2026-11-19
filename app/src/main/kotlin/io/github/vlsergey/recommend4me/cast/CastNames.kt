@@ -103,7 +103,7 @@ class CastNames(
     }
 
     private companion object {
-        val WHAT = TaskKind.CAST_NAMES
+        val WHAT = TaskKind.ENCODE_SITE_ITEM_CASTS
 
         /** One work of every source: their works told apart by their keys ("<source>\t<id>"). */
         val WORK = Task(WHAT)

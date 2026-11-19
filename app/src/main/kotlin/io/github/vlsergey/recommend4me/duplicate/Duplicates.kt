@@ -75,7 +75,7 @@ class Duplicates(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        tasks.resumption.resumes(TaskKind.DUPLICATES) { left, reason ->
+        tasks.resumption.resumes(TaskKind.SEARCH_DUPLICATES) { left, reason ->
             left.work.type?.let(stores::type)?.let { plan(it, reason, left.asked) }
         }
     }
@@ -99,7 +99,7 @@ class Duplicates(
         return true
     }
 
-    private fun searching(type: TypeStore) = Task(TaskKind.DUPLICATES, type = type.id)
+    private fun searching(type: TypeStore) = Task(TaskKind.SEARCH_DUPLICATES, type = type.id)
 
     /**
      * The search of the type ([TypeSearch]) by the models as the last fitting left them — of one work, and of one

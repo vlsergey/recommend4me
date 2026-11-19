@@ -100,7 +100,7 @@ export function DuplicatesScreen({ type }: { type: ContentTypeInfo }) {
   const queryClient = useQueryClient();
   // The search, a work of the queue: its state read again while it is to come, the pairs read once it has ended —
   // never while it runs (user, 2026-11-07)
-  const search = useTask({ what: "duplicates", type: type.id }, () => queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) }));
+  const search = useTask({ what: "searchDuplicates", type: type.id }, () => queryClient.invalidateQueries({ queryKey: duplicatesKey(type.id) }));
   const searching = search.busy;
   /** When the last word was kept ([settle]): a list read that began before it may not have it. */
   const wordKept = useRef(0);

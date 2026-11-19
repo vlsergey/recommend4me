@@ -103,7 +103,7 @@ class HeldOutModels(
      */
     private fun planHeldOut(type: TypeStore, key: ItemKey) {
         askedAt[key] = System.currentTimeMillis()
-        val work = Task(TaskKind.HELD_OUT, source = key.source, item = key.id)
+        val work = Task(TaskKind.FIT_HELD_OUT_MODEL, source = key.source, item = key.id)
         if (tasks.due(work)) return
         tasks.plan(work, Instant.now(), "page", asked = true) {
             val asked = askedAt.remove(key) ?: 0L

@@ -67,7 +67,10 @@ class SetDirections(private val members: SetMembers, private val tasks: Tasks) {
         count: Int,
     ): StoredEmbedding {
         val embedding =
-            tasks.run(Task(TaskKind.SET_DIRECTIONS, type = type.id, facet = kind.key), mapOf("catalogueGrew" to 1)) {
+            tasks.run(
+                Task(TaskKind.FIT_SET_DIRECTIONS, type = type.id, facet = kind.key),
+                mapOf("catalogueGrew" to 1),
+            ) {
                 SetEmbedding.fit(sample, minOf(SetEmbedding.DIRECTIONS, sample.size - 1))
             }
         val id = Vectors.keyOf("${type.id}:${kind.name}:$encoder:${System.nanoTime()}")

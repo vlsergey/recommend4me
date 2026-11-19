@@ -64,7 +64,7 @@ class ScoreSweep(
     // What the last run of the application left undone of it: planned again by the queue at its start — a pass under
     // way goes on of its state kept
     init {
-        tasks.resumption.resumes(TaskKind.SCORE) { left, reason -> left.work.type?.let { plan(it, reason) } }
+        tasks.resumption.resumes(TaskKind.SCORE_WORKS) { left, reason -> left.work.type?.let { plan(it, reason) } }
     }
 
     /** Whether a pass of the [typeId] goes on: some works are not scored by the current model yet. */
@@ -203,7 +203,7 @@ class ScoreSweep(
         /** The works a portion of the pass takes (owner, 2026-11-19: "taking 1k unrated works at a time"). */
         const val PORTION = 1000
 
-        fun work(typeId: String) = Task(TaskKind.SCORE, type = typeId)
+        fun work(typeId: String) = Task(TaskKind.SCORE_WORKS, type = typeId)
 
         /** When the model of the grades of the [type] kept was trained; the beginning of time of none. */
         fun trainedAt(type: TypeStore): Instant = type.models.trainedAt() ?: Instant.EPOCH

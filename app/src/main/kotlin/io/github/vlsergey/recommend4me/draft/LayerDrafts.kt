@@ -210,7 +210,7 @@ class LayerDrafts(
     }
 
     companion object {
-        val DRAFTING = Task(TaskKind.LAYER_DRAFTS)
+        val DRAFTING = Task(TaskKind.DRAFT_WORK_LAYER)
 
         /**
          * The place of the drafting among the listeners of a change of works: after the sites' tags are bound

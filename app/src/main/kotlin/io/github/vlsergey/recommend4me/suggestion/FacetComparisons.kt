@@ -52,7 +52,7 @@ class FacetComparisons(
             if (running != null && running.finishedAt == null) return@compute running
             FacetComparison(Instant.now(), plugins.suggesters.map { MethodMeasure(it.id) }).also { c ->
                 tasks.plan(
-                    Task(TaskKind.METHODS_COMPARED, source = store.id, facet = facet),
+                    Task(TaskKind.COMPARE_FIELD_METHODS, source = store.id, facet = facet),
                     null,
                     "asked",
                     asked = true,

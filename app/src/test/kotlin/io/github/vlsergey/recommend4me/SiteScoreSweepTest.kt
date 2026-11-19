@@ -54,7 +54,7 @@ class SiteScoreSweepTest : SiteTestBase() {
         // The sweep in one go: every work scored, a prediction of an item gone removed, the average work counted
         // along kept
         type.predictions.write(listOf(ItemKey("site", "zz-gone") to Predicted(5.0, null)))
-        inBackground { tasks.run(Task(TaskKind.SCORE)) { inOneGo() } }
+        inBackground { tasks.run(Task(TaskKind.SCORE_WORKS)) { inOneGo() } }
         val inOneGo = type.predictions.predicted("site")
         assertEquals(stores.source("site")!!.items.keys().map { it.id }.toSet(), inOneGo.keys)
         val swept = assertNotNull(type.averageWork.load(basis))
@@ -97,7 +97,7 @@ class SiteScoreSweepTest : SiteTestBase() {
         var restarted: SweepState? = null
         var before: SweepState? = null
         inBackground {
-            tasks.run(Task(TaskKind.SCORE)) {
+            tasks.run(Task(TaskKind.SCORE_WORKS)) {
                 type.predictions.remove("site", items)
                 val model = type.models.trainedAt()!!
                 type.sweep.save(SweepState(model, basis, Instant.now(), 0, 0, null))
@@ -127,7 +127,7 @@ class SiteScoreSweepTest : SiteTestBase() {
         // The same model in turns as in one go
         val (again, turned) =
             inBackground {
-                tasks.run(Task(TaskKind.SCORE)) {
+                tasks.run(Task(TaskKind.SCORE_WORKS)) {
                     inOneGo()
                     // Of the works the pass scores: the graded are the training's
                     val graded = stores.source("site")!!.ratings.all().map { it.itemId }.toSet()

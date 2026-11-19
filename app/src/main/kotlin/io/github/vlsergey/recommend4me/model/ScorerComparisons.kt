@@ -60,7 +60,7 @@ class ScorerComparisons(
             ScorerComparison(Instant.now(), plugins.scorers.map { ScorerMeasure(it.id) }).also { c ->
                 tasks.plan(
                     Task(
-                        if (interest) TaskKind.INTEREST_SCORERS_COMPARED else TaskKind.SCORERS_COMPARED,
+                        if (interest) TaskKind.COMPARE_INTEREST_SCORERS else TaskKind.COMPARE_GRADE_SCORERS,
                         type = typeId,
                     ),
                     null,

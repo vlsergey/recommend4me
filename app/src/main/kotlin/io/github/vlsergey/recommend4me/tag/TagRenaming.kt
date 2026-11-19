@@ -43,7 +43,7 @@ class TagRenaming(
 
     private fun renamed(scope: TagScope, facet: String) {
         val started = System.currentTimeMillis()
-        val counted = tasks.run(Task(TaskKind.TAGS_COUNTED)) { TagCounting(scope, facet, normalization).counted() }
+        val counted = tasks.run(Task(TaskKind.COUNT_TAGS)) { TagCounting(scope, facet, normalization).counted() }
         val n = tags.naming(scope, counted)
         val stats = n.stats
         // Of the application's working: the user's own name is shown over it, not kept in it
@@ -123,7 +123,7 @@ class TagRenaming(
 
     private companion object {
         /** The names of the tags worked out and their works counted, as the queue of the works tells it. */
-        val NAMING = Task(TaskKind.TAGS_NAMED)
+        val NAMING = Task(TaskKind.NAME_TAGS)
 
         /**
          * The quiet after the last change before the names are worked out again: a page is sent several times as it

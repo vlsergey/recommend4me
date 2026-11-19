@@ -197,7 +197,7 @@ class ListIndexing(
 
     companion object {
         /** The work of the queue writing the index of a content type's list. */
-        val WORK = TaskKind.LIST_INDEX
+        val WORK = TaskKind.WRITE_LIST_INDEX
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */
         private const val QUIET_SECONDS = 1L

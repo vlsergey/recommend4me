@@ -48,7 +48,11 @@ class FacetPortionsTest : SiteTestBase() {
         val fitting = FacetFitting(FacetReading(portioned, chain, vocabularies), FacetScoring())
         val encoder = plugins.textEncoder()!!
         inBackground {
-            tasks.run(Task(TaskKind.PART_VECTORS, source = store.id), mapOf("asked" to 1), joinAlike = false) {
+            tasks.run(
+                Task(TaskKind.ENCODE_SITE_ITEM_CHAPTERS, source = store.id),
+                mapOf("asked" to 1),
+                joinAlike = false,
+            ) {
                 facets.indices.forEach { k ->
                     val suggester = plugins.suggester(store.id, facets[k].key)
                     fitting.fit(store, facets, k, suggester, encoder, passes.charactersRead(store), { false }, true)

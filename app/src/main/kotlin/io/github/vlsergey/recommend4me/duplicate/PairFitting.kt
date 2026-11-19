@@ -80,6 +80,6 @@ class PairFitting(
         const val QUIET_SECONDS = 3L
 
         /** The work of fitting the models of the pairs. */
-        val WHAT = TaskKind.DUPLICATES_MODEL
+        val WHAT = TaskKind.FIT_DUPLICATE_MODEL
     }
 }

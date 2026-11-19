@@ -78,7 +78,7 @@ internal class FacetRefits(
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
         // Of a work a source of before, that source
-        tasks.resumption.resumes(TaskKind.SUGGESTERS) { left, reason ->
+        tasks.resumption.resumes(TaskKind.FIT_FIELD_MODELS) { left, reason ->
             left.work.source?.let { changed(it, reason) } ?: left.work.type?.let { planRefresh(it, null, reason) }
         }
     }
@@ -197,10 +197,10 @@ internal class FacetRefits(
         private const val DELAY_SECONDS = 5L
 
         /** The refresh of the facets of the type's sources, as the queue of the works tells it planned and running. */
-        private fun refreshing(type: String) = Task(TaskKind.SUGGESTERS, type = type)
+        private fun refreshing(type: String) = Task(TaskKind.FIT_FIELD_MODELS, type = type)
 
         /** The fitting anew of a facet of the source ([searchAnew]), as the queue of the works tells it. */
         private fun fittingAnew(store: SourceStore, facetKey: String) =
-            Task(TaskKind.SUGGESTER_ANEW, source = store.id, facet = facetKey)
+            Task(TaskKind.SEARCH_FIELD_MODEL_ANEW, source = store.id, facet = facetKey)
     }
 }

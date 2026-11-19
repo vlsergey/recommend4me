@@ -164,7 +164,7 @@ class WorkSizes(private val stores: Stores, private val tasks: Tasks) {
     }
 
     companion object {
-        val FITTING = TaskKind.WORK_SIZES
+        val FITTING = TaskKind.MEASURE_WORK_SIZES
 
         private const val START_DELAY_SECONDS = 60L
 

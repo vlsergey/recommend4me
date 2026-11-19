@@ -344,7 +344,7 @@ class TextTags(
         /** The quiet after an answer before the model is fitted: the user answers in a row. */
         const val QUIET_SECONDS = 10L
 
-        val FITTING = Task(TaskKind.TAG_TEXT_MODEL)
+        val FITTING = Task(TaskKind.FIT_TAG_TEXT_MODEL)
 
         /** Why the model is fitted, as the queue of the works tells it. */
         const val REASON = "tagByText"

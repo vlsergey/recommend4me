@@ -44,7 +44,7 @@ class TasksTest {
     @Test
     fun `a planned work begins with the reasons it was planned for, and is planned no longer`() {
         val tasks = tasks()
-        val train = Task(TaskKind.TRAIN, type = "books")
+        val train = Task(TaskKind.FIT_GRADE_MODELS, type = "books")
         val runs = AtomicInteger()
         tasks.plan(train, Instant.now().plusSeconds(60), "grade") { runs.incrementAndGet() }
         tasks.plan(train, null, "grade") { runs.incrementAndGet() }
@@ -64,7 +64,7 @@ class TasksTest {
     @Test
     fun `a work planned again and again before it is due runs once, the newer body, then what it told`() {
         val tasks = tasks()
-        val sizes = Task(TaskKind.WORK_SIZES, type = "books")
+        val sizes = Task(TaskKind.MEASURE_WORK_SIZES, type = "books")
         val ran = java.util.Collections.synchronizedList(ArrayList<String>())
         val told = CountDownLatch(1)
         repeat(3) { i ->
@@ -92,13 +92,13 @@ class TasksTest {
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
         val blocker = thread {
-            tasks.run(Task(TaskKind.TRAIN, type = "t"), emptyMap()) {
+            tasks.run(Task(TaskKind.FIT_GRADE_MODELS, type = "t"), emptyMap()) {
                 started.countDown()
                 release.await()
             }
         }
         started.await()
-        val vectors = Task(TaskKind.TAG_VECTORS)
+        val vectors = Task(TaskKind.ENCODE_TAG_NAMES)
         val runs = AtomicInteger()
         tasks.plan(vectors, null, "start") { runs.incrementAndGet() }
         while (tasks.waiting().isEmpty()) Thread.sleep(5)
@@ -115,8 +115,8 @@ class TasksTest {
     fun `a failure of a planned work is told, the next planned runs all the same`() {
         val tasks = tasks()
         val done = CountDownLatch(1)
-        tasks.plan(Task(TaskKind.MANNERS), null, "start") { error("no") }
-        tasks.plan(Task(TaskKind.WORK_SIZES), Instant.now().plusMillis(50), "start") { done.countDown() }
+        tasks.plan(Task(TaskKind.MAKE_WORK_MANNERS), null, "start") { error("no") }
+        tasks.plan(Task(TaskKind.MEASURE_WORK_SIZES), Instant.now().plusMillis(50), "start") { done.countDown() }
         assertTrue(done.await(5, TimeUnit.SECONDS))
         while (records.runs().size < 2) Thread.sleep(5)
         assertEquals(listOf(true, false), records.runs().map { it.failed })
@@ -131,28 +131,32 @@ class TasksTest {
         )
         try {
             assertFailsWith<IllegalStateException> {
-                tasks.run(Task(TaskKind.HELD_OUT, source = "s", item = "1"), emptyMap()) { ran.incrementAndGet() }
+                tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) {
+                    ran.incrementAndGet()
+                }
             }
             assertEquals(0, ran.get())
             assertTrue(tasks.waiting().isEmpty())
             // The request's attributes are not passed to a thread it starts: the background runs it
             inBackground {
-                tasks.run(Task(TaskKind.HELD_OUT, source = "s", item = "1"), emptyMap()) { ran.incrementAndGet() }
+                tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) {
+                    ran.incrementAndGet()
+                }
             }
             assertEquals(1, ran.get())
         } finally {
             RequestContextHolder.resetRequestAttributes()
         }
-        tasks.run(Task(TaskKind.HELD_OUT, source = "s", item = "1"), emptyMap()) { ran.incrementAndGet() }
+        tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) { ran.incrementAndGet() }
         assertEquals(2, ran.get())
     }
 
     @Test
     fun `the last five works done are told, the oldest first, a failed one marked`() {
         val tasks = tasks()
-        repeat(6) { i -> tasks.run(Task(TaskKind.SCORE, type = "t$i"), emptyMap()) {} }
+        repeat(6) { i -> tasks.run(Task(TaskKind.SCORE_WORKS, type = "t$i"), emptyMap()) {} }
         assertFailsWith<IllegalStateException> {
-            tasks.run(Task(TaskKind.SCORE, type = "bad"), emptyMap()) { error("no") }
+            tasks.run(Task(TaskKind.SCORE_WORKS, type = "bad"), emptyMap()) { error("no") }
         }
         val done = records.runs()
         assertEquals(listOf("t2", "t3", "t4", "t5", "bad"), done.map { it.work.type })
@@ -162,7 +166,7 @@ class TasksTest {
     @Test
     fun `a work given up for newer data is no failure, and leaves the estimate of its kind as it was`() {
         val tasks = tasks()
-        val suggester = Task(TaskKind.SUGGESTERS, source = "s", facet = "universe")
+        val suggester = Task(TaskKind.FIT_FIELD_MODELS, source = "s", facet = "universe")
         tasks.run(suggester, emptyMap()) { Thread.sleep(30) }
         val estimate = records.expected(suggester)
         assertFailsWith<CancellationException> {
@@ -176,21 +180,21 @@ class TasksTest {
     @Test
     fun `a work is expected to take as long as the last run of its kind, of any item`() {
         val tasks = tasks()
-        assertNull(records.expected(Task(TaskKind.HELD_OUT, source = "s", item = "1")))
-        tasks.run(Task(TaskKind.HELD_OUT, source = "s", item = "1"), emptyMap()) { Thread.sleep(30) }
-        val expected = records.expected(Task(TaskKind.HELD_OUT, source = "s", item = "2"))!!
+        assertNull(records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1")))
+        tasks.run(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "1"), emptyMap()) { Thread.sleep(30) }
+        val expected = records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "s", item = "2"))!!
         assertTrue(expected >= 30, "expected $expected ms")
-        assertNull(records.expected(Task(TaskKind.HELD_OUT, source = "other", item = "2")))
+        assertNull(records.expected(Task(TaskKind.FIT_HELD_OUT_MODEL, source = "other", item = "2")))
     }
 
     @Test
     fun `works alike asked while one waits are that one, its reasons summed`() {
         val tasks = tasks()
-        val held = Task(TaskKind.TAG_VECTORS, item = "1")
+        val held = Task(TaskKind.ENCODE_TAG_NAMES, item = "1")
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
         val blocker = thread {
-            tasks.run(Task(TaskKind.TRAIN, type = "t"), emptyMap()) {
+            tasks.run(Task(TaskKind.FIT_GRADE_MODELS, type = "t"), emptyMap()) {
                 started.countDown()
                 release.await()
             }
@@ -243,10 +247,10 @@ class TasksTest {
         val started = CountDownLatch(1)
         val order = java.util.Collections.synchronizedList(ArrayList<String>())
         val blocker = thread {
-            tasks.run(Task(TaskKind.TRAIN, type = "t"), emptyMap()) {
+            tasks.run(Task(TaskKind.FIT_GRADE_MODELS, type = "t"), emptyMap()) {
                 started.countDown()
                 release.await()
-                order += "train"
+                order += "fitGradeModels"
             }
         }
         started.await()
@@ -260,22 +264,25 @@ class TasksTest {
                     .also { while (tasks.waiting().size < waiting) Thread.sleep(5) }
             val all =
                 listOf(
-                    ask(TaskKind.MANNERS, false, 1),
-                    ask(TaskKind.WORK_SIZES, false, 2),
-                    ask(TaskKind.SEARCH_UPDATE, true, 3),
-                    ask(TaskKind.HELD_OUT, true, 4),
+                    ask(TaskKind.MAKE_WORK_MANNERS, false, 1),
+                    ask(TaskKind.MEASURE_WORK_SIZES, false, 2),
+                    ask(TaskKind.UPDATE_SEARCH_INDEX, true, 3),
+                    ask(TaskKind.FIT_HELD_OUT_MODEL, true, 4),
                 )
             // The page of the queue tells the order they will run in, the asked ones marked
             assertEquals(
-                listOf("searchUpdate", "heldOut", "manners", "workSizes"),
+                listOf("updateSearchIndex", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),
                 tasks.waiting().map { it.work.what.value },
             )
             assertEquals(listOf(true, true, false, false), tasks.waiting().map { it.asked })
-            assertTrue(tasks.running()!!.work.what == TaskKind.TRAIN && !tasks.running()!!.asked)
+            assertTrue(tasks.running()!!.work.what == TaskKind.FIT_GRADE_MODELS && !tasks.running()!!.asked)
             release.countDown()
             all.forEach { it.get(5, TimeUnit.SECONDS) }
             blocker.join()
-            assertEquals(listOf("train", "searchUpdate", "heldOut", "manners", "workSizes"), order)
+            assertEquals(
+                listOf("fitGradeModels", "updateSearchIndex", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),
+                order,
+            )
         } finally {
             callers.shutdownNow()
         }
@@ -288,7 +295,7 @@ class TasksTest {
         val started = CountDownLatch(1)
         val order = java.util.Collections.synchronizedList(ArrayList<String>())
         val blocker = thread {
-            tasks.run(Task(TaskKind.TRAIN, type = "t"), emptyMap()) {
+            tasks.run(Task(TaskKind.FIT_GRADE_MODELS, type = "t"), emptyMap()) {
                 started.countDown()
                 release.await()
             }
@@ -298,27 +305,27 @@ class TasksTest {
         try {
             val first =
                 CompletableFuture.supplyAsync(
-                    { tasks.run(Task(TaskKind.SET_VECTORS), emptyMap()) { order += "other" } },
+                    { tasks.run(Task(TaskKind.MAKE_SITE_ITEM_SET_VECTORS), emptyMap()) { order += "other" } },
                     callers,
                 )
             while (tasks.waiting().size < 1) Thread.sleep(5)
-            val duplicates = Task(TaskKind.DUPLICATES, type = "t")
+            val duplicates = Task(TaskKind.SEARCH_DUPLICATES, type = "t")
             val background =
                 CompletableFuture.supplyAsync(
-                    { tasks.run(duplicates, mapOf("start" to 1)) { order += "duplicates" } },
+                    { tasks.run(duplicates, mapOf("start" to 1)) { order += "searchDuplicates" } },
                     callers,
                 )
             while (tasks.waiting().size < 2) Thread.sleep(5)
             val pressed =
                 CompletableFuture.supplyAsync(
-                    { tasks.run(duplicates, mapOf("asked" to 1), asked = true) { order += "duplicates" } },
+                    { tasks.run(duplicates, mapOf("asked" to 1), asked = true) { order += "searchDuplicates" } },
                     callers,
                 )
             while (tasks.waiting().firstOrNull()?.work != duplicates) Thread.sleep(5)
             release.countDown()
             listOf(first, background, pressed).forEach { it.get(5, TimeUnit.SECONDS) }
             blocker.join()
-            assertEquals(listOf("duplicates", "other"), order)
+            assertEquals(listOf("searchDuplicates", "other"), order)
         } finally {
             callers.shutdownNow()
         }
@@ -327,9 +334,16 @@ class TasksTest {
     @Test
     fun `a work of the background waiting longer than the aging goes as one the user asked for`() {
         val now = Instant.now()
-        val old = Waiter(Task(TaskKind.TEXT_VECTORS), now.minus(Turns.AGING).minusSeconds(1), emptyMap(), true, false)
-        val asked = Waiter(Task(TaskKind.TRAIN), now.minusSeconds(1), emptyMap(), true, true)
-        val young = Waiter(Task(TaskKind.TAG_VECTORS), now.minusSeconds(2), emptyMap(), true, false)
+        val old =
+            Waiter(
+                Task(TaskKind.ENCODE_SITE_ITEM_TEXTS),
+                now.minus(Turns.AGING).minusSeconds(1),
+                emptyMap(),
+                true,
+                false,
+            )
+        val asked = Waiter(Task(TaskKind.FIT_GRADE_MODELS), now.minusSeconds(1), emptyMap(), true, true)
+        val young = Waiter(Task(TaskKind.ENCODE_TAG_NAMES), now.minusSeconds(2), emptyMap(), true, false)
         assertEquals(listOf(old, asked, young), listOf(young, asked, old).sortedWith(Turns.order(now)))
     }
 
@@ -337,18 +351,25 @@ class TasksTest {
     fun `a work that goes last waits after the whole background, however long it waited`() {
         val now = Instant.now()
         val last =
-            Waiter(Task(TaskKind.LIST_VALUES), now.minus(Turns.AGING).minusSeconds(60), emptyMap(), true, false, true)
-        val young = Waiter(Task(TaskKind.TAG_VECTORS), now.minusSeconds(1), emptyMap(), true, false)
-        val asked = Waiter(Task(TaskKind.TRAIN), now, emptyMap(), true, true)
+            Waiter(
+                Task(TaskKind.FILL_RATED_WORK_VALUES),
+                now.minus(Turns.AGING).minusSeconds(60),
+                emptyMap(),
+                true,
+                false,
+                true,
+            )
+        val young = Waiter(Task(TaskKind.ENCODE_TAG_NAMES), now.minusSeconds(1), emptyMap(), true, false)
+        val asked = Waiter(Task(TaskKind.FIT_GRADE_MODELS), now, emptyMap(), true, true)
         assertEquals(listOf(asked, young, last), listOf(last, young, asked).sortedWith(Turns.order(now)))
     }
 
     @Test
     fun `a work inside another goes on and is not told apart`() {
         val tasks = tasks()
-        tasks.run(Task(TaskKind.TRAIN, type = "books"), emptyMap()) {
-            tasks.run(Task(TaskKind.SCORE, type = "books"), emptyMap()) {}
+        tasks.run(Task(TaskKind.FIT_GRADE_MODELS, type = "books"), emptyMap()) {
+            tasks.run(Task(TaskKind.SCORE_WORKS, type = "books"), emptyMap()) {}
         }
-        assertEquals(listOf(TaskKind.TRAIN), records.runs().map { it.work.what })
+        assertEquals(listOf(TaskKind.FIT_GRADE_MODELS), records.runs().map { it.work.what })
     }
 }

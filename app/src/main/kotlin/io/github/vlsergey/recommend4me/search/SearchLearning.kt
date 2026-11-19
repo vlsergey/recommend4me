@@ -53,14 +53,14 @@ class SearchLearning(
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        tasks.resumption.resumes(TaskKind.SEARCH_WEIGHTS) { left, reason ->
+        tasks.resumption.resumes(TaskKind.FIT_SEARCH_WEIGHTS) { left, reason ->
             left.work.type?.let { plan(it, reason) }
         }
     }
 
     /** The weights of the [type] learnt shortly after the last of a quick series of judgments. */
     private fun plan(type: String, reason: String) =
-        tasks.plan(Task(TaskKind.SEARCH_WEIGHTS, type = type), Instant.now().plusMillis(QUIET_MS), reason) {
+        tasks.plan(Task(TaskKind.FIT_SEARCH_WEIGHTS, type = type), Instant.now().plusMillis(QUIET_MS), reason) {
             stores.type(type)?.let(::learnt)
         }
 

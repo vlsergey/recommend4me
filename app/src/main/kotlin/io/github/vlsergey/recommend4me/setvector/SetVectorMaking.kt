@@ -47,7 +47,7 @@ class SetVectorMaking(
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
         // Of a work of a source of before (app V4), every work of the source waiting
-        tasks.resumption.resumes(TaskKind.SET_VECTORS) { left, reason ->
+        tasks.resumption.resumes(TaskKind.MAKE_SITE_ITEM_SET_VECTORS) { left, reason ->
             left.work.type?.let { plan(it, reason) } ?: left.work.source?.let { whole(it, reason) }
         }
     }
@@ -188,6 +188,6 @@ class SetVectorMaking(
         private const val SEP = '\t'
         private const val WHOLE = ""
 
-        private fun work(type: String) = Task(TaskKind.SET_VECTORS, type = type)
+        private fun work(type: String) = Task(TaskKind.MAKE_SITE_ITEM_SET_VECTORS, type = type)
     }
 }

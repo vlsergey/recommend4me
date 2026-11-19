@@ -51,7 +51,7 @@ class UnusedFandoms(private val stores: Stores, private val tasks: Tasks) {
         }
 
     private companion object {
-        val LETTING_GO = Task(TaskKind.FANDOMS_LET_GO)
+        val LETTING_GO = Task(TaskKind.LET_GO_UNUSED_FANDOMS)
 
         /** The quiet after the last works written: a crawl's pages written at once, the fandoms read once after. */
         val QUIET: Duration = Duration.ofMinutes(10)

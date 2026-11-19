@@ -143,7 +143,7 @@ class Manners(
         tasks.plan(Task(MAKING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { refresh(type) }
 
     companion object {
-        val MAKING = TaskKind.MANNERS
+        val MAKING = TaskKind.MAKE_WORK_MANNERS
 
         private const val START_DELAY_SECONDS = 60L
 

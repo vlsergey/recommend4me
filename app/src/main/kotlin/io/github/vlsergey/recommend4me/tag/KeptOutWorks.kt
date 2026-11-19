@@ -102,6 +102,6 @@ class KeptOutWorks(
     }
 
     private companion object {
-        val REMOVING = Task(TaskKind.WORKS_KEPT_OUT)
+        val REMOVING = Task(TaskKind.KEEP_OUT_WORKS)
     }
 }

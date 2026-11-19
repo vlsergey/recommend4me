@@ -92,7 +92,7 @@ class FandomSiteWorks(private val stores: Stores, private val tasks: Tasks) {
 
     private companion object {
         /** The works of the sites' fandoms waiting counted: of the works written, of those not counted yet. */
-        val CHANGED = TaskKind.FANDOM_SITE_WORKS_CHANGED
+        val CHANGED = TaskKind.COUNT_FANDOM_WORKS
         val CHANGING = Task(CHANGED)
 
         /** The key of a site's fandom waiting in the queue: its source and its key. */

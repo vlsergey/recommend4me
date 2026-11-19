@@ -83,6 +83,6 @@ class FandomVectors(
         const val QUIET_SECONDS = 10L
 
         /** The making of the vectors, as the queue of the works tells it. */
-        val VECTORS = Task(TaskKind.FANDOM_VECTORS)
+        val VECTORS = Task(TaskKind.ENCODE_FANDOM_NAMES)
     }
 }

@@ -160,6 +160,6 @@ class FandomNormalization(private val stores: Stores, private val tasks: Tasks) 
         const val FIRST = -100
 
         /** The names of fandoms worked out again ([renameLater]). */
-        private val RENAME = Task(TaskKind.FANDOM_RENAME)
+        private val RENAME = Task(TaskKind.RENAME_FANDOMS)
     }
 }

@@ -176,6 +176,10 @@ interest, a field the user answered on (`WorkFieldChangeEvent`), its grouping, i
 reviews — and the dictionaries and the models by their own names (`TagChangeEvent`,
 `FieldModelFitEvent`). Never an event named by the work of the code that tells it.
 
+**A kind of task of the queue is named by what it does to what: a verb and its object**, the entity named
+where there is one (owner, 2026-11-19: "searchWeights -> ...?"): `fitSearchWeights`, `encodeSiteItemTexts`,
+`makeSiteItemSetVectors`, `scoreWorks`, `countFandomWorks`.
+
 **Every kind of work and every reason of the queue is a value of the API** (`TaskKind`,
 `TaskReasonKey` in `api/openapi.yaml`): `Work.what` is a `TaskKind`, a reason planned that the API
 does not list fails as it is planned, and the interface words them by the typed translation — a word

@@ -97,7 +97,7 @@ class TagVectors(
         private const val KEEP = 500
 
         /** The making of the vectors, as the queue of the works tells it. */
-        private val VECTORS = Task(TaskKind.TAG_VECTORS)
+        private val VECTORS = Task(TaskKind.ENCODE_TAG_NAMES)
 
         /** [v] of unit length; null of a vector of nought. */
         fun unit(v: FloatArray): FloatArray? {

@@ -33,10 +33,10 @@ class ModelMeasurings(private val measures: InputMeasures, private val tasks: Ta
     fun weighingOf(typeId: String): Measuring<Weighing>? = weighing[typeId]
 
     fun measureWorth(typeId: String): Measuring<ModelWorth> =
-        start(worth, Task(TaskKind.WORTH, type = typeId)) { measures.worth(typeId) }
+        start(worth, Task(TaskKind.MEASURE_PART_WORTH, type = typeId)) { measures.worth(typeId) }
 
     fun measureWeighing(typeId: String, cautious: Boolean): Measuring<Weighing> =
-        start(weighing, Task(TaskKind.WEIGHING, type = typeId)) { measures.weighing(typeId, cautious) }
+        start(weighing, Task(TaskKind.WEIGH_PARTS, type = typeId)) { measures.weighing(typeId, cautious) }
 
     /**
      * The measuring [work] of [body] planned at once, the user's; its failure told by the queue, the measuring ended.

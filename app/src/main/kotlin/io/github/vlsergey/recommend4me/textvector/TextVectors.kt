@@ -233,7 +233,7 @@ class TextVectors(
 
     companion object {
         /** The encoding of the texts of a source, as the queue of the works tells it. */
-        private val WHAT = TaskKind.TEXT_VECTORS
+        private val WHAT = TaskKind.ENCODE_SITE_ITEM_TEXTS
 
         /** The key of the queue that asks for every text of the source, not of some of its items. */
         private const val EVERY = ""

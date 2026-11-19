@@ -143,7 +143,7 @@ class FandomLikenessLearning(
     }
 
     companion object {
-        val LEARNING = TaskKind.FANDOM_LIKENESS
+        val LEARNING = TaskKind.FIT_FANDOM_LIKENESS
 
         private const val START_DELAY_SECONDS = 90L
 

@@ -37,7 +37,7 @@ class PictureVectors(
 ) {
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
-        tasks.resumption.resumes(TaskKind.PICTURE_VECTORS) { _, reason -> plan(reason) }
+        tasks.resumption.resumes(TaskKind.ANALYSE_SITE_ITEM_PICTURES) { _, reason -> plan(reason) }
     }
 
     /** Whether pictures are to be analysed. */
@@ -142,7 +142,7 @@ class PictureVectors(
     }
 
     private companion object {
-        val WORK = Task(TaskKind.PICTURE_VECTORS)
+        val WORK = Task(TaskKind.ANALYSE_SITE_ITEM_PICTURES)
 
         /** Pictures per encoder run. */
         const val BATCH = 64
