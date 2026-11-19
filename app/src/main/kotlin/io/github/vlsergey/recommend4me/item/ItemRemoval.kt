@@ -1,9 +1,8 @@
 package io.github.vlsergey.recommend4me.item
 
-import io.github.vlsergey.recommend4me.model.Recommendations
-import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.work.Works
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
@@ -23,7 +22,7 @@ private val log = LoggerFactory.getLogger(ItemRemoval::class.java)
 @Component
 class ItemRemoval(
     private val stores: Stores,
-    private val recommendations: Recommendations,
+    private val works: Works,
     private val events: ApplicationEventPublisher,
 ) {
 
@@ -37,7 +36,9 @@ class ItemRemoval(
     /** The work [key] of the [store] removed, with everything of it in every database. */
     private fun removeFrom(store: SourceStore, key: ItemKey) {
         val type = stores.typeOf(key.source)
+        // Of its work, before the item goes: whether it is graded, the items of it left
         val graded = store.ratings.ofItem(key.id).isNotEmpty()
+        val remaining = works.of(type).members(key).filter { it != key }
         // The files of its pictures first: their names are in the rows that go with the work
         store.files.delete(store.pictures.sync(key.id, emptyList()))
         store.items.remove(key.id)
@@ -53,8 +54,6 @@ class ItemRemoval(
         type.searchJudgments.forget(key)
         type.searchScores.forget(key)
         log.info("{}: {} removed from the library, with everything of it", key.source, key.id)
-        events.publishEvent(WorkChangeEvent(key.source, listOf(key.id)))
-        if (graded) events.publishEvent(WorkGradeChangeEvent(type.id, key.source, key.id))
-        recommendations.scheduleRetrain(type.id, "removal")
+        events.publishEvent(SiteItemRemoveEvent(type.id, key.source, key.id, remaining, graded))
     }
 }

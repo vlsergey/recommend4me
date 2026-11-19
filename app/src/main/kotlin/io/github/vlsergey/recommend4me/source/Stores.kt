@@ -17,7 +17,6 @@ import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemRepository
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
-import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
@@ -121,12 +120,10 @@ class SourceStore(
      */
     val writing = ReentrantLock()
 
-    // What the site says written: the bindings of what it said first, then everything that reads the works again
+    // What the site says written: told as such, the works of the items changed told by their binding after it
+    // ([io.github.vlsergey.recommend4me.work.Works])
     val items =
-        ItemRepository(dbs.source.dsl) { ids ->
-            events.publishEvent(SiteItemWriteEvent(source.id, ids.toList()))
-            events.publishEvent(WorkChangeEvent(source.id, ids.toList()))
-        }
+        ItemRepository(dbs.source.dsl) { ids -> events.publishEvent(SiteItemWriteEvent(source.id, ids.toList())) }
     val pictures = PictureRepository(dbs.source.dsl)
     val files = PictureFiles(folder)
     val reviews = ReviewRepository(dbs.source.dsl)

@@ -2,7 +2,9 @@ package io.github.vlsergey.recommend4me.work
 
 import io.github.vlsergey.recommend4me.contenttype.StandardValue
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.item.SiteItemRemoveEvent
 import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -10,7 +12,9 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
+import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
@@ -55,7 +59,7 @@ class WorkClusters(private val clusters: Map<ItemKey, List<ItemKey>>) {
 }
 
 @Component
-class Works(private val stores: Stores) {
+class Works(private val stores: Stores, private val events: ApplicationEventPublisher) {
     /** The works of several items of a content type, across its sources and within each. */
     fun of(type: TypeStore): WorkClusters = WorkClusters.of(type.links.groups())
 
@@ -113,6 +117,28 @@ class Works(private val stores: Stores) {
         val s = stores.source(event.source) ?: return
         bind(s, s.items.heads(event.ids).mapValues { it.value.version })
         measure(s, event.ids)
+    }
+
+    /**
+     * The works of the items written changed: told after every binding of the items — to their works, tags, fandoms,
+     * authors — the last of the listeners of the writing, so whatever reads the works reads them bound. A site's item
+     * written is the site's word; a work changed follows of it (owner, 2026-11-19: "a page read again leads to the item
+     * written, and that to the work changed").
+     */
+    @Order(Ordered.LOWEST_PRECEDENCE)
+    @EventListener
+    fun written(event: SiteItemWriteEvent) = events.publishEvent(WorkChangeEvent(event.source, event.ids))
+
+    /**
+     * A site's item removed: its work read again — of the items left of other sites, the work changed; of none, gone —
+     * and the item itself, its documents taken out.
+     */
+    @EventListener
+    fun removed(event: SiteItemRemoveEvent) {
+        events.publishEvent(WorkChangeEvent(event.source, listOf(event.itemId)))
+        event.remaining.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+            events.publishEvent(WorkChangeEvent(source, ids))
+        }
     }
 
     /**

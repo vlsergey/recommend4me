@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
+import io.github.vlsergey.recommend4me.item.SiteItemRemoveEvent
 import io.github.vlsergey.recommend4me.manner.WorkMannerChangeEvent
 import io.github.vlsergey.recommend4me.mark.SiteItemMarkChangeEvent
 import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
@@ -65,6 +66,16 @@ class TrainingTriggers(
     @EventListener
     fun ratedValuesFilled(event: RatedWorkValueFillEvent) =
         recommendations.scheduleRetrain(event.type, "chances", byUser = false)
+
+    /**
+     * A site's item removed: of a graded work, the training's work changed — an item fewer, or the work gone with its
+     * last item — learnt again; its grade is the work's, unchanged.
+     */
+    @EventListener
+    fun removed(event: SiteItemRemoveEvent) {
+        heldOuts.forget(event.source, event.itemId)
+        if (event.graded) recommendations.scheduleRetrain(event.type, "removal")
+    }
 
     /** The works' pictures analysed: features of the works, learnt as they come. */
     @EventListener
