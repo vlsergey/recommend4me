@@ -26,6 +26,30 @@ class CalibrationTest {
         assertNull(Calibration.fit(List(50) { Answered("v", it / 10f, false) }))
     }
 
+    /** Of answers whose curve is one stretch — every score as likely — none: a likely value is not told by them. */
+    @Test
+    fun `none of a curve of one stretch`() {
+        // A no above every yes: pooled, the curve is one stretch
+        assertNull(Calibration.fit(List(20) { Answered("v", it / 10f, it < 19) }))
+    }
+
+    /**
+     * A value of a few answers all of one word among many values: a finite shift, drawn to the facet's curve — its
+     * chance at a low score not made all but certain (2026-11-19: of author.today's tags of two yeses each, slopes of
+     * 10⁷, every work given them).
+     */
+    @Test
+    fun `a value of few answers all of one word is drawn to the facet's curve`() {
+        val common = (1..30).flatMap { v -> answers("v$v", 40, v) { Calibration.sigmoid(it.toDouble()) } }
+        val yeses = (1..20).flatMap { v -> List(2) { Answered("yes$v", 1f + it, true) } }
+        val noes = (1..20).flatMap { v -> List(2) { Answered("no$v", -1f - it, false) } }
+        val c = assertNotNull(Calibration.fit(common + yeses + noes))
+        val low = c.chance("yes1", -3f)
+        assertTrue(low < 0.5, "a value of two yeses at a low score: $low")
+        val high = c.chance("no1", 3f)
+        assertTrue(high > 0.5, "a value of two noes at a high score: $high")
+    }
+
     /** A suggester too sure of itself: the facet's curve gives the share of yeses a score has. */
     @Test
     fun `the facet's curve is monotone and true to the answers`() {

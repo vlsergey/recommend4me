@@ -15,8 +15,11 @@ internal object ValueShifts {
     /** The values' shifts of the [answered], [x] the log-odds of an answer by the facet's curve; none of no answer. */
     fun of(answered: List<Answered>, x: (Answered) -> Double): Map<String, Calibration.Shift> {
         val byValue = answered.groupBy { it.value }.mapValues { (_, list) -> list.map { x(it) to it.yes } }
-        // Of every value of two answers or more, its own estimate and how much its answers leave it uncertain
-        val own = byValue.values.filter { it.size >= 2 }.map { fit(it, LOOSE, LOOSE) }
+        // Of every value of two answers or more, its own estimate and how much its answers leave it uncertain — by
+        // Firth's, finite of answers all of one word, as most of a few are: of the most likely alone such a value's
+        // shift was ever larger, its variance with it, and the spread of the values as large as it — none drawn to the
+        // facet's curve, every value of two yeses given to every work (2026-11-19: author.today's tags, slopes of 10⁷)
+        val own = byValue.values.filter { it.size >= 2 }.map { Firth.fit(it) }
         val slopeSpread = spread(own.map { (it.slope - 1) to it.slopeVariance })
         val shiftSpread = spread(own.map { it.shift to it.shiftVariance })
         if (slopeSpread == 0.0 && shiftSpread == 0.0) return emptyMap()
@@ -27,7 +30,7 @@ internal object ValueShifts {
     }
 
     /** A value's estimate: its slope and shift, and the variance of each the answers leave. */
-    private class Fitted(val slope: Double, val shift: Double, val slopeVariance: Double, val shiftVariance: Double)
+    internal class Fitted(val slope: Double, val shift: Double, val slopeVariance: Double, val shiftVariance: Double)
 
     /**
      * The spread of the values about the facet's curve, of their [estimates] — each its distance from it and the
@@ -110,9 +113,6 @@ internal object ValueShifts {
             }
         }
     }
-
-    /** The variance of a value's own estimate: drawn to the facet's curve so little it is all but its own. */
-    private const val LOOSE = 1e6
 
     private const val STEPS = 30
 

@@ -129,9 +129,11 @@ class Calibration(
          * 3 — every calibration of 1 or 2 read as none: of the answers it was learnt of most were no word of the user's
          * (aff's universes 44 912 of 439 works, every universe a no of a work said to have none), the cutoffs at the
          * very top or bottom; 4 — every one kept read as none: under the lowest score answered every value came out
-         * likely; 5 — of the noes of a work all named; 6 — the lowest score answered kept.
+         * likely; 5 — of the noes of a work all named; 6 — the lowest score answered kept; 7 — every one kept read as
+         * none: a value's shift of answers all of one word was unbounded, and so the spread of the values (a value's
+         * own estimate by Firth's since, [Firth]), a curve of one stretch kept.
          */
-        private const val VERSION = 6
+        private const val VERSION = 7
 
         /** The chance of a facet learnt of no answer: one half, as a suggester's own. */
         private const val NONE_LEARNT = 0.5
@@ -156,13 +158,15 @@ class Calibration(
             }
 
         /**
-         * Learnt of the [answered]: null of none, or of answers all of one word — of yeses alone every score is as
-         * likely, the curve flat, and every value would be given: what tells a likely value from an unlikely one is
-         * learnt of both.
+         * Learnt of the [answered]: null of none, or of answers all of one word, or of a curve of one stretch — every
+         * score as likely, the curve flat, and every value would be given: what tells a likely value from an unlikely
+         * one is learnt of both, and of a higher score than a lower.
          */
         fun fit(answered: List<Answered>, threshold: Double = NONE_LEARNT): Calibration? {
-            if (answered.none { it.yes } || answered.all { it.yes }) return null
             val (scores, chances) = FacetCurve.of(answered)
+            // Of a curve of one stretch every score as likely, as of answers all of one word: its cutoff its one
+            // chance, every value likely (2026-11-19: ao3's tags, 187 answers, every work given the most)
+            if (scores.size < 2 || answered.none { it.yes } || answered.all { it.yes }) return null
             val facet = Calibration(scores, chances, emptyMap(), NONE_LEARNT, answered.size)
             val own = ValueShifts.of(answered) { a -> logit(facet.curve(a.score)) }
             return Calibration(scores, chances, own, threshold, answered.size, answered.minOf { it.score })
