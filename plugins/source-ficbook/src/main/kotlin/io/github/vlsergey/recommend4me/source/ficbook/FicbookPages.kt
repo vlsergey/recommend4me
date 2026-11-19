@@ -42,17 +42,10 @@ class FicbookPages(private val context: SourceContext) {
 
     fun read(page: CapturedPage): List<String> {
         val path = runCatching { URI(page.url).path }.getOrDefault("")
-        // The answers of the site's searches, no pages of works
-        when (path) {
-            TAG_SEARCH -> meanings.tagSearch(page)
-            FANDOM_SEARCH -> fandoms.search(page)
-            else -> return html(page, path)
+        if (path == TAG_SEARCH) {
+            meanings.tagSearch(page)
+            return emptyList()
         }
-        return emptyList()
-    }
-
-    /** A page of the site: the works it gives or tells of, and what it says of its tags, fandoms and series. */
-    private fun html(page: CapturedPage, path: String): List<String> {
         val doc = Jsoup.parse(page.html, page.url)
         val touched = LinkedHashSet<String>()
         touched += cards(doc, page.capturedAt)
@@ -306,9 +299,6 @@ class FicbookPages(private val context: SourceContext) {
 
         /** The site's search of tags ([Ficbook.tagSearch]). */
         private const val TAG_SEARCH = "/tags/search"
-
-        /** The site's search of fandoms ([Ficbook.fandomSearch]). */
-        private const val FANDOM_SEARCH = "/fandoms/search"
 
         /**
          * What the site puts into the text of a part that is not the text: the promotion of another work, put by its

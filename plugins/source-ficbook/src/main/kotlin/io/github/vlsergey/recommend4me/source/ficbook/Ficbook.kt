@@ -89,8 +89,7 @@ class Ficbook : Source {
         listOf(
             Regex(
                 "https://ficbook\\.net/" +
-                    "(readfic|fanfiction|fandoms/search|tags|authors|collections|series|pairings|find" +
-                    "|find-fanfics[^/?#]*" +
+                    "(readfic|fanfiction|tags|authors|collections|series|pairings|find|find-fanfics[^/?#]*" +
                     "|popular-fanfics[^/?#]*|recommendation|home/[^?#]*)([/?#].*)?"
             )
         )
@@ -176,9 +175,7 @@ class Ficbook : Source {
      * A tag by its own page, which says what it means; one known by its name alone ([NAME_KEY]) by the site's search of
      * tags, the one its page of all the tags asks — by the name, answering the tag's id, its description and its
      * synonyms, read by [FicbookPages]: the address carries the name, the answer known by it. A fandom by its own page,
-     * whose heading says what it is of; one known by its name alone by the site's search of fandoms, the one its form
-     * of a fandom asks — by the name, answering the fandoms of every group whose names hold it, each with its address
-     * and what it is of.
+     * whose heading says what it is of.
      */
     override fun describing(facet: String, tags: List<String>): List<WantedPage> =
         when (facet) {
@@ -188,12 +185,8 @@ class Ficbook : Source {
                     if (name != key) WantedPage(tagSearch(name), mapOf("title" to name))
                     else WantedPage("$BASE/tags/$key")
                 }
-            FANDOM ->
-                tags.map { key ->
-                    val name = key.removePrefix(NAME_KEY)
-                    if (name != key) WantedPage(fandomSearch(name), FANDOM_SEARCH_FORM + ("q" to name))
-                    else WantedPage("$BASE/fanfiction/$key")
-                }
+            // A fandom known by its name alone has no page known
+            FANDOM -> tags.filterNot { it.startsWith(NAME_KEY) }.map { WantedPage("$BASE/fanfiction/$it") }
             else -> emptyList()
         }
 
@@ -215,19 +208,6 @@ class Ficbook : Source {
 
         /** The site's search of tags by a tag's name, posted with the name as "title": the name in the address too. */
         fun tagSearch(name: String) = "$BASE/tags/search?title=${URLEncoder.encode(name, Charsets.UTF_8)}"
-
-        /**
-         * The site's search of fandoms by a fandom's name, of every group at once, posted with the name as "q": the
-         * name in the address too.
-         */
-        fun fandomSearch(name: String) = "$BASE/fandoms/search?q=${URLEncoder.encode(name, Charsets.UTF_8)}"
-
-        /**
-         * What the search of fandoms is posted with besides the name, as the site's own form posts it: the fandoms of
-         * no works and the originals too, no universes, the first page.
-         */
-        private val FANDOM_SEARCH_FORM =
-            mapOf("show_empty" to "1", "show_originals" to "1", "show_universes" to "0", "page" to "1")
 
         const val AUTHOR = "author"
 
