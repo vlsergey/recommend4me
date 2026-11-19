@@ -2,7 +2,7 @@ package io.github.vlsergey.recommend4me.draft
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -59,7 +59,7 @@ class LayerDrafts(
      */
     @Order(ORDER)
     @EventListener
-    fun itemsChanged(event: ItemsChanged) {
+    fun itemsChanged(event: WorkChangeEvent) {
         val store = stores.source(event.source)?.takeIf(::drafts) ?: return
         if (event.ids.isEmpty()) {
             redraftLater(store.id, "dictionary")
@@ -115,7 +115,7 @@ class LayerDrafts(
 
     /** Told once out of the queue — whatever reads the works again plans its own work — the works [changed]. */
     private fun told(changed: List<Pair<String, List<String>>>) = changed.forEach { (source, ids) ->
-        if (ids.isNotEmpty()) events.publishEvent(ItemsChanged(source, ids))
+        if (ids.isNotEmpty()) events.publishEvent(WorkChangeEvent(source, ids))
     }
 
     /**

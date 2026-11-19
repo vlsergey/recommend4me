@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.model.Recommendations
-import io.github.vlsergey.recommend4me.rating.GradesChanged
+import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import org.slf4j.LoggerFactory
@@ -53,8 +53,8 @@ class ItemRemoval(
         type.searchJudgments.forget(key)
         type.searchScores.forget(key)
         log.info("{}: {} removed from the library, with everything of it", key.source, key.id)
-        events.publishEvent(ItemsChanged(key.source, listOf(key.id)))
-        if (graded) events.publishEvent(GradesChanged(type.id, key.source, key.id))
+        events.publishEvent(WorkChangeEvent(key.source, listOf(key.id)))
+        if (graded) events.publishEvent(WorkGradeChangeEvent(type.id, key.source, key.id))
         recommendations.scheduleRetrain(type.id, "removal")
     }
 }

@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.cast
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(CastNames::class.java)
 
 /** The texts of the casts of these works of a source were encoded: the models that read them read them anew. */
-data class CastNamesEncoded(val source: String, val ids: List<String>)
+data class SiteItemCastEncodeEvent(val source: String, val ids: List<String>)
 
 /**
  * THE TEXTS OF THE SAID CASTS ENCODED, IN THE BACKGROUND: of every work whose line changed, the texts every way of
@@ -41,7 +41,7 @@ class CastNames(
     }
 
     @EventListener
-    fun itemsChanged(event: SiteItemsWritten) {
+    fun itemsChanged(event: SiteItemWriteEvent) {
         val store = stores.source(event.source)?.takeIf(::encodes) ?: return
         workload.keys.want(WORK, event.ids.map { "${store.id}$SEP$it" })
         schedule(QUIET_SECONDS, "items")
@@ -62,7 +62,7 @@ class CastNames(
             reason,
             after = { encoded: Map<String, List<String>> ->
                 encoded.forEach { (source, ids) ->
-                    if (ids.isNotEmpty()) events.publishEvent(CastNamesEncoded(source, ids))
+                    if (ids.isNotEmpty()) events.publishEvent(SiteItemCastEncodeEvent(source, ids))
                 }
             },
         ) {

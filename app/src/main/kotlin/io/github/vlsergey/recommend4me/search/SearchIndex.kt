@@ -1,13 +1,13 @@
 package io.github.vlsergey.recommend4me.search
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.correction.FacetAnswered
+import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
+import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.WorkKeys
 import io.github.vlsergey.recommend4me.workload.Workload
@@ -37,12 +37,12 @@ class SearchIndex(
 ) {
     private val sources = SourceCatchUp(documents)
 
-    @EventListener fun itemsChanged(event: ItemsChanged) = queue(event.source, event.ids, "items")
+    @EventListener fun itemsChanged(event: WorkChangeEvent) = queue(event.source, event.ids, "items")
 
-    @EventListener fun vectorsChanged(event: TextVectorsChanged) = queue(event.source, event.ids, "texts")
+    @EventListener fun vectorsChanged(event: SiteItemTextVectorChangeEvent) = queue(event.source, event.ids, "texts")
 
     /** The user's answer on a work's value: the work is found by what the user said it has. */
-    @EventListener fun answered(event: FacetAnswered) = queue(event.source, listOf(event.itemId), "answer")
+    @EventListener fun answered(event: WorkFieldChangeEvent) = queue(event.source, listOf(event.itemId), "answer")
 
     /**
      * The items written are indexed again in the background, in the queue of the computations, shortly after the last

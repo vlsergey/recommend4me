@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
@@ -130,6 +130,6 @@ class Universes(
 
     /** The dictionary is what the model chooses from: every source that reads it is worked out again. */
     private fun dictionaryChanged(scope: Scope) {
-        scope.sources.forEach { events.publishEvent(ItemsChanged(it.id, emptyList())) }
+        scope.sources.forEach { events.publishEvent(WorkChangeEvent(it.id, emptyList())) }
     }
 }

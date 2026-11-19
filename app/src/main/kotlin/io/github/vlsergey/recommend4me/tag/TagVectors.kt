@@ -2,8 +2,8 @@ package io.github.vlsergey.recommend4me.tag
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
-import io.github.vlsergey.recommend4me.item.ItemsChanged
-import io.github.vlsergey.recommend4me.item.SynonymsSet
+import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.workload.Work
@@ -39,16 +39,16 @@ class TagVectors(
         workload.resumption.resumes(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
     }
 
-    @EventListener(TagsChanged::class) fun tagsChanged() = schedule(QUIET_SECONDS, "tags")
+    @EventListener(TagChangeEvent::class) fun tagsChanged() = schedule(QUIET_SECONDS, "tags")
 
     /** Works came or changed: their sites' tags bound to tags ([TagNormalization]), maybe new ones. */
-    @EventListener(ItemsChanged::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")
+    @EventListener(WorkChangeEvent::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")
 
     /**
      * A site named the synonyms of its tags: bound to their tags at once ([TagNormalization]), each a name more of its
      * tag.
      */
-    @EventListener(SynonymsSet::class) fun synonymsSet() = schedule(QUIET_SECONDS, "synonyms")
+    @EventListener(SiteTagSynonymChangeEvent::class) fun synonymsSet() = schedule(QUIET_SECONDS, "synonyms")
 
     /**
      * The vectors made after the quiet, in the queue of the works; the [reason], a key the interface words, told there.

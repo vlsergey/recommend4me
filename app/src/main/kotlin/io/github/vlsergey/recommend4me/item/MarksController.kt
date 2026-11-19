@@ -4,7 +4,7 @@ import io.github.vlsergey.recommend4me.api.MarksApi
 import io.github.vlsergey.recommend4me.api.model.Mark
 import io.github.vlsergey.recommend4me.api.model.MatchFeedbackRequest
 import io.github.vlsergey.recommend4me.mark.MarkKind
-import io.github.vlsergey.recommend4me.mark.MarksChanged
+import io.github.vlsergey.recommend4me.mark.SiteItemMarkChangeEvent
 import io.github.vlsergey.recommend4me.mark.ThingRef
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -19,7 +19,7 @@ private fun badMark(mark: Int) = Refusal.BAD_MARK.refuse(HttpStatus.BAD_REQUEST,
 
 /**
  * The user's marks of a work's pictures and reviews, given and taken back, and the user's word on a match of a mark;
- * every change told ([MarksChanged]).
+ * every change told ([SiteItemMarkChangeEvent]).
  */
 @RestController
 class MarksController(private val stores: Stores, private val events: ApplicationEventPublisher) : MarksApi {
@@ -74,7 +74,7 @@ class MarksController(private val stores: Stores, private val events: Applicatio
 
     /** The change of the marks of the [store]'s content type told; answered with no content. */
     private fun marked(store: SourceStore): ResponseEntity<Unit> {
-        events.publishEvent(MarksChanged(store.type))
+        events.publishEvent(SiteItemMarkChangeEvent(store.type))
         return ResponseEntity.noContent().build()
     }
 }

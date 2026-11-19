@@ -131,11 +131,11 @@ class FandomLikenessLearning(
     }
 
     @EventListener
-    fun related(@Suppress("UNUSED_PARAMETER") event: UniversesRelated) = schedule(QUIET_SECONDS, "universes")
+    fun related(@Suppress("UNUSED_PARAMETER") event: FandomRelationChangeEvent) = schedule(QUIET_SECONDS, "universes")
 
     /** New names or descriptions of the sites' fandoms encoded: more to learn of. */
     @EventListener
-    fun encoded(@Suppress("UNUSED_PARAMETER") event: FandomVectorsMade) = schedule(QUIET_SECONDS, "fandomVectors")
+    fun encoded(@Suppress("UNUSED_PARAMETER") event: FandomVectorChangeEvent) = schedule(QUIET_SECONDS, "fandomVectors")
 
     private fun schedule(delaySeconds: Long, reason: String) {
         if (stores.withUniverses().isEmpty()) return

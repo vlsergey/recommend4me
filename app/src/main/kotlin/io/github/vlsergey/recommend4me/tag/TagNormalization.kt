@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.tag
 
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
-import io.github.vlsergey.recommend4me.item.SynonymsSet
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -75,7 +75,7 @@ class TagNormalization(private val stores: Stores) {
      */
     @Order(FIRST)
     @EventListener
-    fun itemsChanged(event: SiteItemsWritten) {
+    fun itemsChanged(event: SiteItemWriteEvent) {
         val scope = scope() ?: return
         val source = scope.source(event.source)
         val f = source?.let { siteFacetOf(it, scope.facet) }
@@ -86,7 +86,7 @@ class TagNormalization(private val stores: Stores) {
 
     /** The synonyms a site named bound at once: the tags' names and vectors made of them next. */
     @Order(FIRST)
-    @EventListener(SynonymsSet::class)
+    @EventListener(SiteTagSynonymChangeEvent::class)
     fun synonymsSet() {
         val scope = scope() ?: return
         bind(scope) { _, _ -> emptySet() }

@@ -1,12 +1,12 @@
 package io.github.vlsergey.recommend4me.setvector
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
-import io.github.vlsergey.recommend4me.picture.PicturesAnalysed
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.picture.SiteItemPictureAnalysisEvent
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
+import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.WorkKeys
 import io.github.vlsergey.recommend4me.workload.Workload
@@ -53,13 +53,13 @@ class SetVectorMaking(
     }
 
     /** The works written: their sets of reviews may have grown. */
-    @EventListener fun itemsWritten(event: SiteItemsWritten) = grew(event.source, event.ids, "items")
+    @EventListener fun itemsWritten(event: SiteItemWriteEvent) = grew(event.source, event.ids, "items")
 
     /** The windows of the works' texts made: their sets of chapters may have grown. */
-    @EventListener fun textsEncoded(event: TextVectorsChanged) = grew(event.source, event.ids, "texts")
+    @EventListener fun textsEncoded(event: SiteItemTextVectorChangeEvent) = grew(event.source, event.ids, "texts")
 
     /** The works' pictures analysed: their sets of screenshots may have grown. */
-    @EventListener fun picturesAnalysed(event: PicturesAnalysed) = grew(event.source, event.ids, "pictures")
+    @EventListener fun picturesAnalysed(event: SiteItemPictureAnalysisEvent) = grew(event.source, event.ids, "pictures")
 
     /**
      * Of every type whose sets' directions were fitted by another encoder than the one in use — a model of the pictures
@@ -118,7 +118,7 @@ class SetVectorMaking(
             }
         }
         // The model learns the new vectors as they come, a portion at a time
-        if (turn.made > 0) events.publishEvent(SetVectorsChanged(typeId, turn.made))
+        if (turn.made > 0) events.publishEvent(SiteItemSetVectorChangeEvent(typeId, turn.made))
         if (turn.tail) workload.again("portion") else workload.keys.done(work, taken)
     }
 

@@ -23,4 +23,4 @@ object Interest {
 }
 
 /** The user marked or unmarked a work of a content type as interesting. */
-data class InterestChanged(val type: String, val source: String, val itemId: String)
+data class WorkInterestChangeEvent(val type: String, val source: String, val itemId: String)

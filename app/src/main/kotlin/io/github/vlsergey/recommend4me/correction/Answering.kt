@@ -61,12 +61,12 @@ class Answering(private val events: ApplicationEventPublisher) {
     /**
      * An answer on the work's [facets]: [change] written, and nothing else — nothing of the work read back. The models
      * of the facets, the search and the model of the grades read the user's answers: fitted, indexed and learnt anew in
-     * the background ([FacetAnswered]).
+     * the background ([WorkFieldChangeEvent]).
      */
     fun answered(store: SourceStore, item: String, facets: Collection<String>, change: () -> Unit) {
         val started = System.currentTimeMillis()
         change()
-        facets.forEach { events.publishEvent(FacetAnswered(store.type, store.id, item, it)) }
+        facets.forEach { events.publishEvent(WorkFieldChangeEvent(store.type, store.id, item, it)) }
         log.info(
             "{}: an answer on {} of {} written in {} ms",
             store.id,

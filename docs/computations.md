@@ -24,7 +24,7 @@ The owner agreed to them as a whole (2026-11-19: "do it, do it", of the plan of 
 
 | # | Choice | Where |
 |---|---|---|
-| a | The stages follow each other by themselves: the end of the first of a source (`FacetModelsFitted`) plans the second of it, the second (`RatedValuesFilled`) the third of its type, the third the fourth; what starts the first stays as it is (the user's answers, the sites' data). | `ListIndexEvents`, `TrainingTriggers`, `Recommendations.retrain` |
+| a | The stages follow each other by themselves: the end of the first of a source (`FieldModelFitEvent`) plans the second of it, the second (`RatedWorkValueFillEvent`) the third of its type, the third the fourth; what starts the first stays as it is (the user's answers, the sites' data). | `ListIndexEvents`, `TrainingTriggers`, `Recommendations.retrain` |
 | b | A grade or a mark of interest starts the third stage at once: the work's values are those its document was made with as it changed. | `TrainingTriggers` |
 | c | A fourth stage begun anew — a model of the grades made again — leaves the one under way: a pass anew from the highest predicted work. The works done in a pass are marked in their documents with the pass (when it began), the next thousand asked of those not marked: the order of the predictions written meanwhile does not move the pass. A turn takes one portion at least, more for a minute. | `ListPasses`, `ScoreSweep` |
 | d | The average work the model of the grades reads is counted along the fourth stage — every work not graded as it is scored, the graded as the pass begins — and kept at its end for the next third. | `ScoreSweep` |

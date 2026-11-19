@@ -168,6 +168,14 @@ diff. The code is written so the flow can be read of it:
   every method of what it is handed: hand a plugin no more than it needs (a context that writes
   only where the plugin is to write).
 
+**An event is named by the entity it is of, what of it, and what befell it: `<Entity><What><Change>Event`**
+(owner, 2026-11-19: "every event of it named: WorkTagChangeEvent, WorkFandomChangeEvent, etc."). The
+entity is the one the data is of (see "A work is a normalized work"): `Work…` of the work — its grade,
+interest, a field the user answered on (`WorkFieldChangeEvent`), its grouping, its prediction —
+`SiteItem…` of a site's item — its writing, chapters, pictures, texts, sets, cast, the marks on its
+reviews — and the dictionaries and the models by their own names (`TagChangeEvent`,
+`FieldModelFitEvent`). Never an event named by the work of the code that tells it.
+
 **Every kind of work and every reason of the queue is a value of the API** (`WorkKind`,
 `WorkReasonKey` in `api/openapi.yaml`): `Work.what` is a `WorkKind`, a reason planned that the API
 does not list fails as it is planned, and the interface words them by the typed translation — a word

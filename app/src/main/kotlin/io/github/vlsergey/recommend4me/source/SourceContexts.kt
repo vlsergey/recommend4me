@@ -3,7 +3,7 @@ package io.github.vlsergey.recommend4me.source
 import io.github.vlsergey.recommend4me.author.AuthorPlaces
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemRemoval
-import io.github.vlsergey.recommend4me.picture.PicturesListed
+import io.github.vlsergey.recommend4me.picture.SiteItemPictureListEvent
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.tag.KeptOutWorks
 import java.nio.file.Path
@@ -121,7 +121,7 @@ class SourceContexts(
 
         override fun setPictures(itemId: String, urls: List<String?>) {
             write { store.files.delete(store.pictures.sync(itemId, urls)) }
-            events.publishEvent(PicturesListed(store.id))
+            events.publishEvent(SiteItemPictureListEvent(store.id))
         }
     }
 }

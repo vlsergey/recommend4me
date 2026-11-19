@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.source
 
-import io.github.vlsergey.recommend4me.item.SynonymsSet
+import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
 import kotlin.concurrent.withLock
 import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
@@ -38,7 +38,7 @@ internal class SourceItemFacets(private val store: SourceStore, private val even
     override fun setFacetValueSynonyms(facet: String, synonyms: Map<String, Map<String, String>>) {
         if (synonyms.isEmpty()) return
         write { store.items.setFacetValueSynonyms(facet, synonyms) }
-        events.publishEvent(SynonymsSet(store.id, facet))
+        events.publishEvent(SiteTagSynonymChangeEvent(store.id, facet))
     }
 
     /**

@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(ListFilling::class.java)
 
 /** The values of the rated works of a [source] of the [type] filled into the list index: the third stage next. */
-data class RatedValuesFilled(val type: String, val source: String)
+data class RatedWorkValueFillEvent(val type: String, val source: String)
 
 /**
  * THE VALUES THE MODELS GIVE THE WORKS, FILLED INTO THE INDEX OF THE LIST (user, 2026-11-18: "split every such work in
@@ -30,9 +30,9 @@ data class RatedValuesFilled(val type: String, val source: String)
  *
  * THE SECOND STAGE ([fill]): after the models of a source's facets are fitted anew, of every work of the source the
  * user graded or marked of interest the values the models give it made now ([WorkModelValues]), compared with those its
- * document keeps ([ListModelValues]), the documents of those that changed made anew; told after ([RatedValuesFilled]):
- * the models of the grades are made of these values next. A few works — the user's — not every one: the works not rated
- * are filled by the fourth stage, a thousand at a time ([written]).
+ * document keeps ([ListModelValues]), the documents of those that changed made anew; told after
+ * ([RatedWorkValueFillEvent]): the models of the grades are made of these values next. A few works — the user's — not
+ * every one: the works not rated are filled by the fourth stage, a thousand at a time ([written]).
  */
 @Component
 class ListFilling(
@@ -96,7 +96,7 @@ class ListFilling(
                 changed,
             )
         }
-        events.publishEvent(RatedValuesFilled(type.id, source))
+        events.publishEvent(RatedWorkValueFillEvent(type.id, source))
     }
 
     /**

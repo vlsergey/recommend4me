@@ -16,8 +16,8 @@ import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemRepository
-import io.github.vlsergey.recommend4me.item.ItemsChanged
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
@@ -57,9 +57,9 @@ import io.github.vlsergey.recommend4me.universe.UniverseFacetDefs
 import io.github.vlsergey.recommend4me.universe.UniverseNames
 import io.github.vlsergey.recommend4me.universe.UniverseRepository
 import io.github.vlsergey.recommend4me.work.TypeWorks
+import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
 import io.github.vlsergey.recommend4me.work.WorkPairJournal
 import io.github.vlsergey.recommend4me.work.WorkRepository
-import io.github.vlsergey.recommend4me.work.WorksRegrouped
 import java.nio.file.Path
 import java.util.concurrent.locks.ReentrantLock
 import org.springframework.beans.factory.annotation.Value
@@ -124,8 +124,8 @@ class SourceStore(
     // What the site says written: the bindings of what it said first, then everything that reads the works again
     val items =
         ItemRepository(dbs.source.dsl) { ids ->
-            events.publishEvent(SiteItemsWritten(source.id, ids.toList()))
-            events.publishEvent(ItemsChanged(source.id, ids.toList()))
+            events.publishEvent(SiteItemWriteEvent(source.id, ids.toList()))
+            events.publishEvent(WorkChangeEvent(source.id, ids.toList()))
         }
     val pictures = PictureRepository(dbs.source.dsl)
     val files = PictureFiles(folder)
@@ -258,7 +258,8 @@ class SourceStore(
     val tags = TagRepository(databases.dictionaries.dsl)
 
     /** The normalized authors: the authors of every site bound to them. */
-    val authors = AuthorRepository(databases.dictionaries.dsl) { events.publishEvent(WorksRegrouped(contentType.id)) }
+    val authors =
+        AuthorRepository(databases.dictionaries.dsl) { events.publishEvent(WorkGroupChangeEvent(contentType.id)) }
 
     /**
      * The facets of one value ([FacetDef.single][io.github.vlsergey.recommend4me.source.FacetDef.single]): a value the
@@ -297,7 +298,7 @@ class TypeStore(
         get() = type.id
 
     /** Told of the user's every word that puts works, series or authors together or apart. */
-    private val regrouped = { events.publishEvent(WorksRegrouped(type.id)) }
+    private val regrouped = { events.publishEvent(WorkGroupChangeEvent(type.id)) }
 
     /** The normalized works of the type's items. */
     val works = TypeWorks(WorkRepository(databases.dictionaries.dsl), sources.map { it.id })

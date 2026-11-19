@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.model.UniverseRelation
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -76,7 +76,7 @@ class FandomEditing(
         sources().forEach { s ->
             val moved = s.corrections.moveFacetValues(UniverseFacet.KEY, listOf(gone), FandomRepository.value(into))
             val told = moved + s.drafts.itemsOf(UniverseFacet.KEY, gone)
-            if (told.isNotEmpty()) events.publishEvent(ItemsChanged(s.id, told.toList()))
+            if (told.isNotEmpty()) events.publishEvent(WorkChangeEvent(s.id, told.toList()))
         }
     }
 
@@ -151,7 +151,7 @@ class FandomEditing(
      */
     private fun changed(renamed: List<Long>) {
         if (renamed.isNotEmpty()) normalization.renameLater(renamed)
-        sources().forEach { events.publishEvent(ItemsChanged(it.id, emptyList())) }
-        events.publishEvent(UniversesRelated)
+        sources().forEach { events.publishEvent(WorkChangeEvent(it.id, emptyList())) }
+        events.publishEvent(FandomRelationChangeEvent)
     }
 }

@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.workload.Work
@@ -39,7 +39,7 @@ class UnusedFandoms(private val stores: Stores, private val workload: Workload) 
      * the queue, not at every start (owner, 2026-11-19: "nothing is to be run at a start just because it is a start").
      */
     @EventListener
-    fun itemsWritten(event: SiteItemsWritten) {
+    fun itemsWritten(event: SiteItemWriteEvent) {
         val s = stores.source(event.source) ?: return
         if (UniverseFacet.fandomFacet(s.schema) != null) plan("items")
     }

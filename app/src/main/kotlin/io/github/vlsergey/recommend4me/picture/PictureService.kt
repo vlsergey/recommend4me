@@ -3,7 +3,7 @@ package io.github.vlsergey.recommend4me.picture
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Grades
-import io.github.vlsergey.recommend4me.rating.GradesChanged
+import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -54,7 +54,7 @@ class PictureService(
      * The pictures of the work changed hands, or its grades changed: keep or drop its originals, and look at the queue.
      */
     @EventListener
-    fun gradesChanged(event: GradesChanged) {
+    fun gradesChanged(event: WorkGradeChangeEvent) {
         val store = stores.source(event.source) ?: return
         if (!keepsOriginals(store, event.itemId)) store.files.delete(store.pictures.forgetOriginals(event.itemId))
         else downloads.begin()

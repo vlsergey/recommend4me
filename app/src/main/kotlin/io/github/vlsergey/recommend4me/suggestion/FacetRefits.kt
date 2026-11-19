@@ -118,7 +118,7 @@ internal class FacetRefits(
      * [TaskPortions.MOST] works (user, 2026-11-17). A facet after another, each walking the works as often as its value
      * side, its fitting and its cutoff need ([FacetFitting]), the facets before it in the chain made now by their
      * models just fitted ([FacetChain.before]). Only the models are made: the values they give the works are filled
-     * into the index of the list after them, last of the queue ([FacetModelsFitted]; user, 2026-11-18: "split every
+     * into the index of the list after them, last of the queue ([FieldModelFitEvent]; user, 2026-11-18: "split every
      * such work in two: making new models and filling the works with the new computed data").
      */
     private fun refreshed(store: SourceStore, of: Int, sources: Int) {
@@ -149,7 +149,7 @@ internal class FacetRefits(
             read - started,
             took,
         )
-        events.publishEvent(FacetModelsFitted(store.id))
+        events.publishEvent(FieldModelFitEvent(store.id))
     }
 
     /**

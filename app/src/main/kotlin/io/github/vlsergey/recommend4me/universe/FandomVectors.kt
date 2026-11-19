@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
@@ -34,7 +34,7 @@ class FandomVectors(
     }
 
     /** Works came or changed: their sites' fandoms bound ([FandomNormalization]), maybe new ones. */
-    @EventListener(ItemsChanged::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")
+    @EventListener(WorkChangeEvent::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")
 
     /**
      * The vectors made after the quiet, in the queue of the works; the [reason], a key the interface words, told there.
@@ -46,7 +46,7 @@ class FandomVectors(
             VECTORS,
             Instant.now().plusSeconds(delaySeconds),
             reason,
-            after = { made: Int -> if (made > 0) events.publishEvent(FandomVectorsMade) },
+            after = { made: Int -> if (made > 0) events.publishEvent(FandomVectorChangeEvent) },
         ) {
             fill()
         }

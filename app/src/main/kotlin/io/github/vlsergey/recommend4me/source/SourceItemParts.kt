@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.source
 
-import io.github.vlsergey.recommend4me.part.PartsSaved
+import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import kotlin.concurrent.withLock
 import org.springframework.context.ApplicationEventPublisher
 
@@ -12,7 +12,7 @@ internal class SourceItemParts(private val store: SourceStore, private val event
     ItemPartStore {
     override fun saveParts(itemId: String, parts: List<PartData>) {
         store.writing.withLock { store.parts.save(itemId, parts) }
-        if (parts.any { it.content != null }) events.publishEvent(PartsSaved(store.id))
+        if (parts.any { it.content != null }) events.publishEvent(SiteItemChapterChangeEvent(store.id))
     }
 
     override fun parts(itemId: String): Map<String, Boolean> =

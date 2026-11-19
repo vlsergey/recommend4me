@@ -32,7 +32,7 @@ class Scoring(
     fun score(catalogue: Catalogue, model: TrainedModel, interest: TrainedInterest?): PortionScored {
         val predicted = scored(catalogue, model, interest)
         val written = catalogue.type.predictions.write(predicted)
-        if (written.isNotEmpty()) events.publishEvent(PredictionsChanged(catalogue.type.id, written))
+        if (written.isNotEmpty()) events.publishEvent(WorkPredictionChangeEvent(catalogue.type.id, written))
         return PortionScored(predicted.size, written.size)
     }
 
@@ -52,7 +52,7 @@ class Scoring(
                 val removed = ids.filter { it !in left }
                 if (removed.isNotEmpty()) {
                     type.predictions.remove(source, removed)
-                    events.publishEvent(PredictionsChanged(type.id, removed.map { ItemKey(source, it) }))
+                    events.publishEvent(WorkPredictionChangeEvent(type.id, removed.map { ItemKey(source, it) }))
                     gone += removed.size
                 }
             } while (ids.size == PAGE)
@@ -97,7 +97,7 @@ class Scoring(
         val prediction = Predicted(model.score(input), kept.loadInterest(type)?.chances(listOf(input))?.single())
         val members = works.ofKeys(type, listOf(key)).members(key)
         members.forEach { type.predictions.save(it, prediction) }
-        events.publishEvent(PredictionsChanged(type.id, members))
+        events.publishEvent(WorkPredictionChangeEvent(type.id, members))
     }
 
     /** The input of the work of one item as the model reads it now; [stored]: the type's likeness to the marks. */

@@ -1,16 +1,16 @@
 package io.github.vlsergey.recommend4me.worklist
 
-import io.github.vlsergey.recommend4me.cast.CastNamesEncoded
-import io.github.vlsergey.recommend4me.correction.FacetAnswered
-import io.github.vlsergey.recommend4me.interest.InterestChanged
+import io.github.vlsergey.recommend4me.cast.SiteItemCastEncodeEvent
+import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
+import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemsChanged
-import io.github.vlsergey.recommend4me.model.PredictionsChanged
-import io.github.vlsergey.recommend4me.rating.GradesChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
+import io.github.vlsergey.recommend4me.model.WorkPredictionChangeEvent
+import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.suggestion.FacetModelsFitted
-import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
-import io.github.vlsergey.recommend4me.work.WorksRegrouped
+import io.github.vlsergey.recommend4me.suggestion.FieldModelFitEvent
+import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
+import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -42,41 +42,43 @@ internal class ListIndexEvents(
             }
 
     @EventListener
-    fun itemsChanged(event: ItemsChanged) =
+    fun itemsChanged(event: WorkChangeEvent) =
         indexing.change(stores.typeOf(event.source).id, "items") {
             if (event.ids.isEmpty()) whole += event.source else rows.getOrPut(event.source) { HashSet() } += event.ids
         }
 
     /** What the models read of the works changed: their documents made anew, of the values they give them now. */
     @EventListener
-    fun textVectorsChanged(event: TextVectorsChanged) =
+    fun textVectorsChanged(event: SiteItemTextVectorChangeEvent) =
         indexing.change(stores.typeOf(event.source).id, "texts") {
             rows.getOrPut(event.source) { HashSet() } += event.ids
         }
 
     @EventListener
-    fun castNamesEncoded(event: CastNamesEncoded) =
+    fun castNamesEncoded(event: SiteItemCastEncodeEvent) =
         indexing.change(stores.typeOf(event.source).id, "castNames") {
             rows.getOrPut(event.source) { HashSet() } += event.ids
         }
 
     /** The models of a source fitted anew: the values of every work filled, last of the queue. */
-    @EventListener fun modelsFitted(event: FacetModelsFitted) = filling.fill(event.source, "chances")
+    @EventListener fun modelsFitted(event: FieldModelFitEvent) = filling.fill(event.source, "chances")
 
     @EventListener
-    fun answered(event: FacetAnswered) =
+    fun answered(event: WorkFieldChangeEvent) =
         indexing.change(event.type, "answer") { rows.getOrPut(event.source) { HashSet() } += event.itemId }
 
     @EventListener
-    fun gradesChanged(event: GradesChanged) =
+    fun gradesChanged(event: WorkGradeChangeEvent) =
         indexing.change(event.type, "grade") { values += ItemKey(event.source, event.itemId) }
 
     @EventListener
-    fun interestChanged(event: InterestChanged) =
+    fun interestChanged(event: WorkInterestChangeEvent) =
         indexing.change(event.type, "interest") { values += ItemKey(event.source, event.itemId) }
 
     @EventListener
-    fun predictionsChanged(event: PredictionsChanged) = indexing.change(event.type, "models") { values += event.keys }
+    fun predictionsChanged(event: WorkPredictionChangeEvent) =
+        indexing.change(event.type, "models") { values += event.keys }
 
-    @EventListener fun regrouped(event: WorksRegrouped) = indexing.change(event.type, "regrouped") { regrouped = true }
+    @EventListener
+    fun regrouped(event: WorkGroupChangeEvent) = indexing.change(event.type, "regrouped") { regrouped = true }
 }

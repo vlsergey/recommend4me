@@ -9,7 +9,7 @@ import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.model.Recommendations
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.source.FacetDef
@@ -119,7 +119,7 @@ class CorrectionsController(
 ) : CorrectionsApi {
 
     private fun corrected(store: SourceStore, item: String): ResponseEntity<ItemDetails> {
-        events.publishEvent(ItemsChanged(store.id, listOf(item)))
+        events.publishEvent(WorkChangeEvent(store.id, listOf(item)))
         recommendations.scheduleRetrain(store.type, "correction")
         // Its chances made of the change as the work is read
         return details.read(ItemKey(store.id, item))?.let { ResponseEntity.ok(it) } ?: ResponseEntity.notFound().build()

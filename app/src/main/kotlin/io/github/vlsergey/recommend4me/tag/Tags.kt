@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.tag
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.rating.Grades
 import io.github.vlsergey.recommend4me.work.WorkClusters
@@ -19,7 +19,7 @@ class Uses {
 }
 
 /** The user merged, named, linked or told apart tags of a content type: what the works have changed. */
-data class TagsChanged(val type: String)
+data class TagChangeEvent(val type: String)
 
 /** A site's tag bound to a normalized tag: its source, the site's key of it, its name there, its works. */
 class TagVariant(val site: SiteTagRef, val name: String, val uses: Uses)
@@ -306,9 +306,9 @@ class Tags(
     /** The works [items] read again — their chances, their search — and the model of the grades trained again. */
     fun told(scope: TagScope, items: Collection<ItemKey>) {
         items.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
-            events.publishEvent(ItemsChanged(source, ids))
+            events.publishEvent(WorkChangeEvent(source, ids))
         }
-        scope.types.forEach { events.publishEvent(TagsChanged(it)) }
+        scope.types.forEach { events.publishEvent(TagChangeEvent(it)) }
     }
 
     companion object {

@@ -123,7 +123,7 @@ class TagEditing(
         scope.tags.ignore(id, ignored)
         log.info("{}: tag {} {}", scope.id, id, if (ignored) "ignored" else "no longer ignored")
         // The model alone reads it otherwise: the works, their names and the search are as they were
-        scope.types.forEach { events.publishEvent(TagsChanged(it)) }
+        scope.types.forEach { events.publishEvent(TagChangeEvent(it)) }
         return tags.one(scope, facet, tag)
     }
 

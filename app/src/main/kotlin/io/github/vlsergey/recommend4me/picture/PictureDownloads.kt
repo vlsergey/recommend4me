@@ -22,12 +22,13 @@ private val log = LoggerFactory.getLogger(PictureDownloads::class.java)
 /**
  * THE PICTURES OF THE WORKS DOWNLOADED — AN OUTER BATCH, NOT A LOOP (owner, 2026-11-19: "no loop in the background";
  * reading a site is an outer batch work making an event, which leads to the rest): begun by a site's page listing its
- * pictures ([PicturesListed]), a grade that keeps a work's originals ([begin]), the start when a picture waits; it
- * downloads while some picture is to be downloaded — every picture of the graded works first, then from the top of the
- * recommendations down ([NextPictures]), [WINDOW] at a time side by side — and ends. Every picture downloaded is kept
- * on disk, its preview and its original, and told ([PicturesDownloaded]): the analysis is a work of the queue
- * ([PictureVectors]). A download that failed is tried again a second after, then twice as late every time, without end
- * (user, 2026-10-21): the batch begun again at the first such time, once — no thread waiting meanwhile.
+ * pictures ([SiteItemPictureListEvent]), a grade that keeps a work's originals ([begin]), the start when a picture
+ * waits; it downloads while some picture is to be downloaded — every picture of the graded works first, then from the
+ * top of the recommendations down ([NextPictures]), [WINDOW] at a time side by side — and ends. Every picture
+ * downloaded is kept on disk, its preview and its original, and told ([SiteItemPictureDownloadEvent]): the analysis is
+ * a work of the queue ([PictureVectors]). A download that failed is tried again a second after, then twice as late
+ * every time, without end (user, 2026-10-21): the batch begun again at the first such time, once — no thread waiting
+ * meanwhile.
  */
 @Component
 class PictureDownloads(
@@ -57,7 +58,7 @@ class PictureDownloads(
         get() = batch != null
 
     /** A site's page listed pictures of its works. */
-    @EventListener(PicturesListed::class) fun listed() = begin()
+    @EventListener(SiteItemPictureListEvent::class) fun listed() = begin()
 
     /** A picture waits to be downloaded — what the data say: the batch begun. */
     @EventListener(ApplicationReadyEvent::class)
@@ -104,7 +105,7 @@ class PictureDownloads(
         fetched
             .filter { it.original != null }
             .groupBy({ it.job.store.id }, { it.job.picture.itemId })
-            .forEach { (source, ids) -> events.publishEvent(PicturesDownloaded(source, ids.distinct())) }
+            .forEach { (source, ids) -> events.publishEvent(SiteItemPictureDownloadEvent(source, ids.distinct())) }
         return true
     }
 

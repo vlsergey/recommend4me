@@ -4,13 +4,13 @@ import io.github.vlsergey.recommend4me.api.model.SizeNumber
 import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.Corrected
-import io.github.vlsergey.recommend4me.correction.FacetAnswered
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
-import io.github.vlsergey.recommend4me.part.PartsSaved
+import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
+import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.tag.TagsChanged
+import io.github.vlsergey.recommend4me.tag.TagChangeEvent
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
@@ -141,19 +141,20 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
     }
 
     @EventListener
-    fun itemsChanged(event: SiteItemsWritten) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
-
-    @EventListener fun partsSaved(event: PartsSaved) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
+    fun itemsChanged(event: SiteItemWriteEvent) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
 
     @EventListener
-    fun answered(event: FacetAnswered) {
+    fun partsSaved(event: SiteItemChapterChangeEvent) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
+
+    @EventListener
+    fun answered(event: WorkFieldChangeEvent) {
         val s = stores.source(event.source) ?: return
         if (event.facet == StandardLanguages.KEY || event.facet in s.tagFacets)
             schedule(stores.typeOf(event.source), QUIET_SECONDS, "answer")
     }
 
     @EventListener
-    fun tagsChanged(event: TagsChanged) {
+    fun tagsChanged(event: TagChangeEvent) {
         stores.type(event.type)?.let { schedule(it, QUIET_SECONDS, "tags") }
     }
 

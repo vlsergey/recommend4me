@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.tagtext
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.correction.FacetAnswered
+import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.part.Paragraph
@@ -27,7 +27,7 @@ private val log = LoggerFactory.getLogger(TextTags::class.java)
 /**
  * A user's answer on a tag offered by a paragraph was kept: the model of the closeness is fitted anew after the quiet.
  */
-data class TagTextAnswered(val source: String)
+data class TagTextAnswerEvent(val source: String)
 
 /**
  * A tag offered by the text: its key, closeness, chance when the model is fitted, the paragraph quoted, and the address
@@ -257,9 +257,9 @@ class TextTags(
             )
             if (verdict == TagTextVerdict.YES) {
                 store.corrections.setFacet(itemId, facet, key, true, null, now)
-                events.publishEvent(FacetAnswered(store.type, store.id, itemId, facet))
+                events.publishEvent(WorkFieldChangeEvent(store.type, store.id, itemId, facet))
             }
-            events.publishEvent(TagTextAnswered(store.id))
+            events.publishEvent(TagTextAnswerEvent(store.id))
         }
         return held != null
     }
@@ -319,8 +319,8 @@ class TextTags(
         workload.resumption.resumes(FITTING.what) { _, _ -> answered() }
     }
 
-    /** An answer kept ([TagTextAnswered]): the model fitted anew once the answers pause. */
-    @EventListener(TagTextAnswered::class)
+    /** An answer kept ([TagTextAnswerEvent]): the model fitted anew once the answers pause. */
+    @EventListener(TagTextAnswerEvent::class)
     fun answered() = workload.plan(FITTING, Instant.now().plusSeconds(QUIET_SECONDS), REASON) { fit() }
 
     /** The model fitted of every source's answers and kept; none while there are not answers of both kinds. */

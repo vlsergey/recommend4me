@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component
 /**
  * The models of a source's facets were fitted anew ([FacetRefits]): the values they give every work are to be filled.
  */
-data class FacetModelsFitted(val source: String)
+data class FieldModelFitEvent(val source: String)
 
 /**
  * THE VALUES THE MODELS GIVE THE WORKS, made now and kept nowhere but in the index of the list (user, 2026-11-18: "the

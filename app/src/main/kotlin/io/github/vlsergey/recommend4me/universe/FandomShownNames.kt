@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
@@ -28,7 +28,7 @@ class FandomShownNames(private val stores: Stores, private val workload: Workloa
         workload.resumption.resumes(WORK.what) { _, reason -> plan(reason) }
     }
 
-    @EventListener fun itemsChanged(event: ItemsChanged) = plan(if (event.ids.isEmpty()) "universes" else "items")
+    @EventListener fun itemsChanged(event: WorkChangeEvent) = plan(if (event.ids.isEmpty()) "universes" else "items")
 
     private fun plan(reason: String) {
         if (stores.types.none { it.type.universes }) return

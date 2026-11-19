@@ -3,9 +3,9 @@ package io.github.vlsergey.recommend4me.tag
 import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemsChanged
-import io.github.vlsergey.recommend4me.item.SynonymsSet
-import io.github.vlsergey.recommend4me.rating.GradesChanged
+import io.github.vlsergey.recommend4me.item.SiteTagSynonymChangeEvent
+import io.github.vlsergey.recommend4me.item.WorkChangeEvent
+import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
@@ -94,15 +94,15 @@ class TagRenaming(
             }
         }
 
-    @EventListener(GradesChanged::class) fun gradesChanged() = schedule("grade")
+    @EventListener(WorkGradeChangeEvent::class) fun gradesChanged() = schedule("grade")
 
-    @EventListener(ItemsChanged::class) fun itemsChanged() = schedule("items")
+    @EventListener(WorkChangeEvent::class) fun itemsChanged() = schedule("items")
 
     /**
      * A synonym is a site's tag of its own, bound to the tag of the value it is a synonym of ([TagNormalization]),
      * shown as a variant of it.
      */
-    @EventListener(SynonymsSet::class) fun synonymsSet() = schedule("synonyms")
+    @EventListener(SiteTagSynonymChangeEvent::class) fun synonymsSet() = schedule("synonyms")
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {

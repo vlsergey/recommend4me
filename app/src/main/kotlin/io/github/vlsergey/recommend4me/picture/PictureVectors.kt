@@ -22,11 +22,11 @@ private val log = LoggerFactory.getLogger(PictureVectors::class.java)
 
 /**
  * THE PICTURES DOWNLOADED ANALYSED BY THE PICTURE ENCODER, A WORK OF THE QUEUE (owner, 2026-11-19: "no loop in the
- * background"): of the works whose pictures were downloaded ([PicturesDownloaded]) — kept waiting in the queue
- * ([WorkKeys]) — every picture's original read from the disk, decoded, prepared and encoded, [BATCH] at a time, a
+ * background"): of the works whose pictures were downloaded ([SiteItemPictureDownloadEvent]) — kept waiting in the
+ * queue ([WorkKeys]) — every picture's original read from the disk, decoded, prepared and encoded, [BATCH] at a time, a
  * [PORTION] a turn, a tail planned again after it ([Workload.again]); its vector kept, its original deleted unless its
- * work keeps it (graded [PictureService.KEEP_FROM] or more), the works told ([PicturesAnalysed]). A picture no reader
- * decodes is a lasting failure.
+ * work keeps it (graded [PictureService.KEEP_FROM] or more), the works told ([SiteItemPictureAnalysisEvent]). A picture
+ * no reader decodes is a lasting failure.
  */
 @Component
 class PictureVectors(
@@ -44,7 +44,7 @@ class PictureVectors(
     fun running(): Boolean = workload.due(WORK)
 
     @EventListener
-    fun downloaded(event: PicturesDownloaded) {
+    fun downloaded(event: SiteItemPictureDownloadEvent) {
         workload.keys.want(WORK, event.ids.map { "${event.source}$SEP$it" })
         plan("pictures", event.ids.size)
     }
@@ -82,7 +82,7 @@ class PictureVectors(
             done += ids.filter { it !in later }.map { "$source$SEP$it" }
             if (s != null && now.isNotEmpty()) {
                 now.chunked(BATCH).forEach { analysed(s, it, encoder) }
-                events.publishEvent(PicturesAnalysed(source, now.map { it.itemId }.distinct()))
+                events.publishEvent(SiteItemPictureAnalysisEvent(source, now.map { it.itemId }.distinct()))
             }
         }
         workload.keys.done(WORK, done)

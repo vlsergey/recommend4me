@@ -5,4 +5,4 @@ package io.github.vlsergey.recommend4me.work
  * of it — or merged two normalized authors or took an author of a site out of one: what is made of the groups of the
  * works (the manners of the authors and of the series) is to be made again.
  */
-data class WorksRegrouped(val type: String)
+data class WorkGroupChangeEvent(val type: String)

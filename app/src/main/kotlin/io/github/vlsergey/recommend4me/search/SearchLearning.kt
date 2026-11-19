@@ -33,11 +33,11 @@ class SearchedLine(val found: SearchResult, val judged: Map<ItemKey, SearchFit>)
 }
 
 /**
- * WHAT A SEARCH LEARNS OF THE USER'S JUDGMENTS LEARNT ANEW whenever the user judges a snippet shown ([SearchJudged]) —
- * shortly after the judgments go quiet — and on a start, in the queue of the computations: the correction of the
- * closeness by meaning ([QueryShift]) of the lines' vectors and the snippets judged; then every line judged searched
- * again with it and the reranker, and the weights of the features of its works ([SearchWeights]) learnt of the works
- * shown with a snippet judged. Both kept; a search reads them, it never waits for them.
+ * WHAT A SEARCH LEARNS OF THE USER'S JUDGMENTS LEARNT ANEW whenever the user judges a snippet shown
+ * ([SearchJudgmentEvent]) — shortly after the judgments go quiet — and on a start, in the queue of the computations:
+ * the correction of the closeness by meaning ([QueryShift]) of the lines' vectors and the snippets judged; then every
+ * line judged searched again with it and the reranker, and the weights of the features of its works ([SearchWeights])
+ * learnt of the works shown with a snippet judged. Both kept; a search reads them, it never waits for them.
  */
 @Component
 class SearchLearning(
@@ -49,7 +49,7 @@ class SearchLearning(
     /** The user's languages: the lines judged are searched again as the first. */
     @Value("\${recommend4me.languages:ru,en}") private val languages: List<String>,
 ) {
-    @EventListener fun judged(event: SearchJudged) = plan(event.type, "searchJudged")
+    @EventListener fun judged(event: SearchJudgmentEvent) = plan(event.type, "searchJudged")
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {

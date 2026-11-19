@@ -9,7 +9,7 @@ import io.github.vlsergey.recommend4me.api.model.SearchQuality
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetValues
 import io.github.vlsergey.recommend4me.search.SearchFit
-import io.github.vlsergey.recommend4me.search.SearchJudged
+import io.github.vlsergey.recommend4me.search.SearchJudgmentEvent
 import io.github.vlsergey.recommend4me.search.SearchSnippet
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -53,7 +53,7 @@ class SearchController(
             Instant.now(),
         )
         // The order of what a search finds is learnt of the judgments again, in the background
-        events.publishEvent(SearchJudged(type))
+        events.publishEvent(SearchJudgmentEvent(type))
         return ResponseEntity.noContent().build()
     }
 

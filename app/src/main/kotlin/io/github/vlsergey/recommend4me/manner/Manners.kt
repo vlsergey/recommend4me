@@ -1,16 +1,16 @@
 package io.github.vlsergey.recommend4me.manner
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.part.PartMark
-import io.github.vlsergey.recommend4me.part.PartsSaved
+import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import io.github.vlsergey.recommend4me.series.TypeSeries
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
+import io.github.vlsergey.recommend4me.work.WorkGroupChangeEvent
 import io.github.vlsergey.recommend4me.work.Works
-import io.github.vlsergey.recommend4me.work.WorksRegrouped
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
@@ -22,7 +22,7 @@ import org.springframework.stereotype.Service
 private val log = LoggerFactory.getLogger(Manners::class.java)
 
 /** The manners of this many items of a content type were made again: the model may want to learn them. */
-data class MannersChanged(val type: String, val items: Int)
+data class WorkMannerChangeEvent(val type: String, val items: Int)
 
 /**
  * THE MANNER OF EVERY ITEM WITH A TEXT, AND OF EVERY NORMALIZED AUTHOR AND SERIES ([MannerGroups]), made in the queue
@@ -56,7 +56,7 @@ class Manners(
         val gone = texts.entries.sumOf { (s, own) -> (s.manner.made().keys - own.keys).also(s.manner::remove).size }
         val groups = MannerGroups.refresh(type, works.of(type), TypeSeries.read(type))
         if (made + gone + groups > 0) {
-            events.publishEvent(MannersChanged(type.id, made + gone + groups))
+            events.publishEvent(WorkMannerChangeEvent(type.id, made + gone + groups))
             log.info(
                 "{}: the manners of {} items made{}, of {} taken away, of {} authors and series made or taken away, " +
                     "of {} items with a text, in {} ms",
@@ -127,14 +127,15 @@ class Manners(
         }
     }
 
-    @EventListener fun partsSaved(event: PartsSaved) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
+    @EventListener
+    fun partsSaved(event: SiteItemChapterChangeEvent) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
 
     /** An item's authors or series may have changed: the manners of the authors and the series with them. */
     @EventListener
-    fun itemsChanged(event: SiteItemsWritten) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
+    fun itemsChanged(event: SiteItemWriteEvent) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
 
     @EventListener
-    fun regrouped(event: WorksRegrouped) {
+    fun regrouped(event: WorkGroupChangeEvent) {
         stores.type(event.type)?.let { schedule(it, QUIET_SECONDS, "regrouped") }
     }
 

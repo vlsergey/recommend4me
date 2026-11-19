@@ -218,7 +218,7 @@ every work only when none is kept, or the encoders or the directions of the sets
 (`AverageWork.basis`). Its end begins the sweep (`ScoreSweep`, the work `score`, never asked): every
 work read a portion of ten thousand at a time in the order of the sources and of their items' ids
 (`EveryWork.portions`), scored by the model kept, the predictions that changed written and told
-(`PredictionsChanged`), and the average work counted along — every vector of an item as the scoring
+(`WorkPredictionChangeEvent`), and the average work counted along — every vector of an item as the scoring
 reads it, every work's features (`AverageCount`). A turn of the sweep goes on for a minute and plans
 the next one where it stopped: whatever waits in the queue goes between. Where it stands — the
 model it scores by, the next portion, the sums counted so far — is kept in the model database
@@ -247,7 +247,7 @@ text, a work's own the mean of its items' — and of every normalized series is 
 (`group_manner`, `MannerGroups`), with the hash of what it was made of: the words, the works and
 the texts of their items. It is made again in the same computation when that changes — a text
 read, an item written (its authors, its series), the user's word that puts works, series or
-authors together or apart (`WorksRegrouped`, told by the repositories of the dictionaries).
+authors together or apart (`WorkGroupChangeEvent`, told by the repositories of the dictionaries).
 
 The model reads three blocks of it (`TypeManners`): the work's own (`manner:work`), its normalized
 authors' kept ones (`manner:author`, of several the mean) and its normalized series' kept one
@@ -343,10 +343,10 @@ learnt of no answer keeps the suggester's chances, likely above one half.
 THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17) — IN THE INDEX OF THE LIST
 ALONE, NEVER IN A DATABASE (user, 2026-11-18): a filter of the list runs no model. THE MODELS AND THE
 VALUES GO IN FOUR STAGES (owner, 2026-11-19, `docs/computations.md`): (1) the pass of a source's
-facets fits their models alone (and a calibrated facet's cutoff) and tells it (`FacetModelsFitted`);
+facets fits their models alone (and a calibrated facet's cutoff) and tells it (`FieldModelFitEvent`);
 (2) the values the models give the source's rated works — graded or marked of interest — are made
 (`WorkModelValues`), compared with those their documents keep, and the documents whose values
-changed made anew (`ListFilling`, the work `listValues`), told (`RatedValuesFilled`); (3) the models
+changed made anew (`ListFilling`, the work `listValues`), told (`RatedWorkValueFillEvent`); (3) the models
 of the grade and of interest are made of the rated works, their values read of the index of the
 list, no chain run (`CatalogueReader.gradedWorks`), and the rated works scored by them; (4) last of
 the queue, the works not graded, a thousand at a time, the highest predicted first, not done by the

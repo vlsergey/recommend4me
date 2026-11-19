@@ -35,30 +35,30 @@ flowchart LR
     o_reparse(("reparse"))
     o_start(("start"))
     o_universes_languages(("universes-languages"))
-    e_CastNamesEncoded["CastNamesEncoded"]
-    e_FacetAnswered["FacetAnswered"]
-    e_FacetModelsFitted["FacetModelsFitted"]
-    e_FandomVectorsMade["FandomVectorsMade"]
-    e_GradesChanged["GradesChanged"]
-    e_InterestChanged["InterestChanged"]
-    e_ItemsChanged["ItemsChanged"]
-    e_MannersChanged["MannersChanged"]
-    e_MarksChanged["MarksChanged"]
-    e_PartsSaved["PartsSaved"]
-    e_PicturesAnalysed["PicturesAnalysed"]
-    e_PicturesDownloaded["PicturesDownloaded"]
-    e_PicturesListed["PicturesListed"]
-    e_PredictionsChanged["PredictionsChanged"]
-    e_RatedValuesFilled["RatedValuesFilled"]
-    e_SearchJudged["SearchJudged"]
-    e_SetVectorsChanged["SetVectorsChanged"]
-    e_SiteItemsWritten["SiteItemsWritten"]
-    e_SynonymsSet["SynonymsSet"]
-    e_TagTextAnswered["TagTextAnswered"]
-    e_TagsChanged["TagsChanged"]
-    e_TextVectorsChanged["TextVectorsChanged"]
-    e_UniversesRelated["UniversesRelated"]
-    e_WorksRegrouped["WorksRegrouped"]
+    e_FandomRelationChangeEvent["FandomRelationChangeEvent"]
+    e_FandomVectorChangeEvent["FandomVectorChangeEvent"]
+    e_FieldModelFitEvent["FieldModelFitEvent"]
+    e_RatedWorkValueFillEvent["RatedWorkValueFillEvent"]
+    e_SearchJudgmentEvent["SearchJudgmentEvent"]
+    e_SiteItemCastEncodeEvent["SiteItemCastEncodeEvent"]
+    e_SiteItemChapterChangeEvent["SiteItemChapterChangeEvent"]
+    e_SiteItemMarkChangeEvent["SiteItemMarkChangeEvent"]
+    e_SiteItemPictureAnalysisEvent["SiteItemPictureAnalysisEvent"]
+    e_SiteItemPictureDownloadEvent["SiteItemPictureDownloadEvent"]
+    e_SiteItemPictureListEvent["SiteItemPictureListEvent"]
+    e_SiteItemSetVectorChangeEvent["SiteItemSetVectorChangeEvent"]
+    e_SiteItemTextVectorChangeEvent["SiteItemTextVectorChangeEvent"]
+    e_SiteItemWriteEvent["SiteItemWriteEvent"]
+    e_SiteTagSynonymChangeEvent["SiteTagSynonymChangeEvent"]
+    e_TagChangeEvent["TagChangeEvent"]
+    e_TagTextAnswerEvent["TagTextAnswerEvent"]
+    e_WorkChangeEvent["WorkChangeEvent"]
+    e_WorkFieldChangeEvent["WorkFieldChangeEvent"]
+    e_WorkGradeChangeEvent["WorkGradeChangeEvent"]
+    e_WorkGroupChangeEvent["WorkGroupChangeEvent"]
+    e_WorkInterestChangeEvent["WorkInterestChangeEvent"]
+    e_WorkMannerChangeEvent["WorkMannerChangeEvent"]
+    e_WorkPredictionChangeEvent["WorkPredictionChangeEvent"]
     w_castNames{{"castNames"}}
     w_duplicates{{"duplicates"}}
     w_duplicatesModel{{"duplicatesModel"}}
@@ -96,40 +96,40 @@ flowchart LR
     w_workSizes{{"workSizes"}}
     w_worksKeptOut{{"worksKeptOut"}}
     w_worth{{"worth"}}
-    o_job__ --> e_GradesChanged
-    o_job__ --> e_ItemsChanged
-    o_job__ --> e_PartsSaved
-    o_job__ --> e_PicturesListed
-    o_job__ --> e_SiteItemsWritten
-    o_job__ --> e_SynonymsSet
-    o_job__ --> e_WorksRegrouped
+    o_job__ --> e_SiteItemChapterChangeEvent
+    o_job__ --> e_SiteItemPictureListEvent
+    o_job__ --> e_SiteItemWriteEvent
+    o_job__ --> e_SiteTagSynonymChangeEvent
+    o_job__ --> e_WorkChangeEvent
+    o_job__ --> e_WorkGradeChangeEvent
+    o_job__ --> e_WorkGroupChangeEvent
     o_job__ --> w_score
     o_job__ --> w_textVectors
     o_job__ --> w_train
-    o_pictures --> e_GradesChanged
-    o_pictures --> e_ItemsChanged
-    o_pictures --> e_PartsSaved
-    o_pictures --> e_PicturesDownloaded
-    o_pictures --> e_PicturesListed
-    o_pictures --> e_SiteItemsWritten
-    o_pictures --> e_SynonymsSet
-    o_pictures --> e_WorksRegrouped
+    o_pictures --> e_SiteItemChapterChangeEvent
+    o_pictures --> e_SiteItemPictureDownloadEvent
+    o_pictures --> e_SiteItemPictureListEvent
+    o_pictures --> e_SiteItemWriteEvent
+    o_pictures --> e_SiteTagSynonymChangeEvent
+    o_pictures --> e_WorkChangeEvent
+    o_pictures --> e_WorkGradeChangeEvent
+    o_pictures --> e_WorkGroupChangeEvent
     o_pictures --> w_train
-    o_reparse --> e_GradesChanged
-    o_reparse --> e_ItemsChanged
-    o_reparse --> e_PartsSaved
-    o_reparse --> e_PicturesListed
-    o_reparse --> e_SiteItemsWritten
-    o_reparse --> e_SynonymsSet
-    o_reparse --> e_WorksRegrouped
+    o_reparse --> e_SiteItemChapterChangeEvent
+    o_reparse --> e_SiteItemPictureListEvent
+    o_reparse --> e_SiteItemWriteEvent
+    o_reparse --> e_SiteTagSynonymChangeEvent
+    o_reparse --> e_WorkChangeEvent
+    o_reparse --> e_WorkGradeChangeEvent
+    o_reparse --> e_WorkGroupChangeEvent
     o_reparse --> w_train
-    o_start --> e_GradesChanged
-    o_start --> e_ItemsChanged
-    o_start --> e_PartsSaved
-    o_start --> e_PicturesListed
-    o_start --> e_SiteItemsWritten
-    o_start --> e_SynonymsSet
-    o_start --> e_WorksRegrouped
+    o_start --> e_SiteItemChapterChangeEvent
+    o_start --> e_SiteItemPictureListEvent
+    o_start --> e_SiteItemWriteEvent
+    o_start --> e_SiteTagSynonymChangeEvent
+    o_start --> e_WorkChangeEvent
+    o_start --> e_WorkGradeChangeEvent
+    o_start --> e_WorkGroupChangeEvent
     o_start --> w_duplicates
     o_start --> w_fandomSiteWorksChanged
     o_start --> w_listIndex
@@ -139,83 +139,83 @@ flowchart LR
     o_start --> w_setVectors
     o_start --> w_tagTextModel
     o_start --> w_train
-    o_universes_languages --> e_ItemsChanged
-    e_CastNamesEncoded --> w_listIndex
-    e_CastNamesEncoded --> w_suggesters
-    e_FacetAnswered --> w_listIndex
-    e_FacetAnswered --> w_searchUpdate
-    e_FacetAnswered --> w_suggesters
-    e_FacetAnswered --> w_train
-    e_FacetAnswered --> w_workSizes
-    e_FacetModelsFitted --> w_listValues
-    e_FandomVectorsMade --> w_fandomLikeness
-    e_GradesChanged --> w_listIndex
-    e_GradesChanged --> w_tagsNamed
-    e_GradesChanged --> w_train
-    e_InterestChanged --> w_listIndex
-    e_InterestChanged --> w_train
-    e_ItemsChanged --> w_fandomNames
-    e_ItemsChanged --> w_fandomVectors
-    e_ItemsChanged --> w_layerDrafts
-    e_ItemsChanged --> w_listIndex
-    e_ItemsChanged --> w_searchUpdate
-    e_ItemsChanged --> w_suggesters
-    e_ItemsChanged --> w_tagVectors
-    e_ItemsChanged --> w_tagsNamed
-    e_MannersChanged --> w_train
-    e_MarksChanged --> w_train
-    e_PartsSaved --> w_manners
-    e_PartsSaved --> w_partVectors
-    e_PartsSaved --> w_suggesters
-    e_PartsSaved --> w_workSizes
-    e_PicturesAnalysed --> w_setVectors
-    e_PicturesAnalysed --> w_train
-    e_PicturesDownloaded --> w_pictureVectors
-    e_PredictionsChanged --> w_listIndex
-    e_RatedValuesFilled --> w_train
-    e_SearchJudged --> w_searchWeights
-    e_SetVectorsChanged --> w_train
-    e_SiteItemsWritten --> e_WorksRegrouped
-    e_SiteItemsWritten --> w_castNames
-    e_SiteItemsWritten --> w_fandomRename
-    e_SiteItemsWritten --> w_fandomSiteWorksChanged
-    e_SiteItemsWritten --> w_fandomsLetGo
-    e_SiteItemsWritten --> w_manners
-    e_SiteItemsWritten --> w_setVectors
-    e_SiteItemsWritten --> w_textVectors
-    e_SiteItemsWritten --> w_workSizes
-    e_SynonymsSet --> w_tagVectors
-    e_SynonymsSet --> w_tagsNamed
-    e_TagTextAnswered --> w_tagTextModel
-    e_TagsChanged --> w_tagVectors
-    e_TagsChanged --> w_train
-    e_TagsChanged --> w_workSizes
-    e_TextVectorsChanged --> w_listIndex
-    e_TextVectorsChanged --> w_searchUpdate
-    e_TextVectorsChanged --> w_setVectors
-    e_TextVectorsChanged --> w_suggesters
-    e_UniversesRelated --> w_fandomLikeness
-    e_WorksRegrouped --> w_listIndex
-    e_WorksRegrouped --> w_manners
-    w_castNames --> e_CastNamesEncoded
-    w_fandomVectors --> e_FandomVectorsMade
+    o_universes_languages --> e_WorkChangeEvent
+    e_FandomRelationChangeEvent --> w_fandomLikeness
+    e_FandomVectorChangeEvent --> w_fandomLikeness
+    e_FieldModelFitEvent --> w_listValues
+    e_RatedWorkValueFillEvent --> w_train
+    e_SearchJudgmentEvent --> w_searchWeights
+    e_SiteItemCastEncodeEvent --> w_listIndex
+    e_SiteItemCastEncodeEvent --> w_suggesters
+    e_SiteItemChapterChangeEvent --> w_manners
+    e_SiteItemChapterChangeEvent --> w_partVectors
+    e_SiteItemChapterChangeEvent --> w_suggesters
+    e_SiteItemChapterChangeEvent --> w_workSizes
+    e_SiteItemMarkChangeEvent --> w_train
+    e_SiteItemPictureAnalysisEvent --> w_setVectors
+    e_SiteItemPictureAnalysisEvent --> w_train
+    e_SiteItemPictureDownloadEvent --> w_pictureVectors
+    e_SiteItemSetVectorChangeEvent --> w_train
+    e_SiteItemTextVectorChangeEvent --> w_listIndex
+    e_SiteItemTextVectorChangeEvent --> w_searchUpdate
+    e_SiteItemTextVectorChangeEvent --> w_setVectors
+    e_SiteItemTextVectorChangeEvent --> w_suggesters
+    e_SiteItemWriteEvent --> e_WorkGroupChangeEvent
+    e_SiteItemWriteEvent --> w_castNames
+    e_SiteItemWriteEvent --> w_fandomRename
+    e_SiteItemWriteEvent --> w_fandomSiteWorksChanged
+    e_SiteItemWriteEvent --> w_fandomsLetGo
+    e_SiteItemWriteEvent --> w_manners
+    e_SiteItemWriteEvent --> w_setVectors
+    e_SiteItemWriteEvent --> w_textVectors
+    e_SiteItemWriteEvent --> w_workSizes
+    e_SiteTagSynonymChangeEvent --> w_tagVectors
+    e_SiteTagSynonymChangeEvent --> w_tagsNamed
+    e_TagChangeEvent --> w_tagVectors
+    e_TagChangeEvent --> w_train
+    e_TagChangeEvent --> w_workSizes
+    e_TagTextAnswerEvent --> w_tagTextModel
+    e_WorkChangeEvent --> w_fandomNames
+    e_WorkChangeEvent --> w_fandomVectors
+    e_WorkChangeEvent --> w_layerDrafts
+    e_WorkChangeEvent --> w_listIndex
+    e_WorkChangeEvent --> w_searchUpdate
+    e_WorkChangeEvent --> w_suggesters
+    e_WorkChangeEvent --> w_tagVectors
+    e_WorkChangeEvent --> w_tagsNamed
+    e_WorkFieldChangeEvent --> w_listIndex
+    e_WorkFieldChangeEvent --> w_searchUpdate
+    e_WorkFieldChangeEvent --> w_suggesters
+    e_WorkFieldChangeEvent --> w_train
+    e_WorkFieldChangeEvent --> w_workSizes
+    e_WorkGradeChangeEvent --> w_listIndex
+    e_WorkGradeChangeEvent --> w_tagsNamed
+    e_WorkGradeChangeEvent --> w_train
+    e_WorkGroupChangeEvent --> w_listIndex
+    e_WorkGroupChangeEvent --> w_manners
+    e_WorkInterestChangeEvent --> w_listIndex
+    e_WorkInterestChangeEvent --> w_train
+    e_WorkMannerChangeEvent --> w_train
+    e_WorkPredictionChangeEvent --> w_listIndex
+    w_castNames --> e_SiteItemCastEncodeEvent
+    w_fandomVectors --> e_FandomVectorChangeEvent
     w_interestScorersCompared --> w_scorersInput
-    w_listValues --> e_RatedValuesFilled
-    w_manners --> e_MannersChanged
-    w_partVectors --> e_TextVectorsChanged
-    w_pictureVectors --> e_PicturesAnalysed
-    w_score --> e_PredictionsChanged
+    w_listValues --> e_RatedWorkValueFillEvent
+    w_manners --> e_WorkMannerChangeEvent
+    w_partVectors --> e_SiteItemTextVectorChangeEvent
+    w_pictureVectors --> e_SiteItemPictureAnalysisEvent
+    w_score --> e_WorkPredictionChangeEvent
     w_scorersCompared --> w_scorersInput
-    w_setVectors --> e_SetVectorsChanged
+    w_setVectors --> e_SiteItemSetVectorChangeEvent
     w_setVectors --> w_setDirections
     w_suggesterAnew --> w_suggesters
-    w_suggesters --> e_FacetModelsFitted
+    w_suggesters --> e_FieldModelFitEvent
     w_tagsNamed --> w_tagsCounted
-    w_textVectors --> e_TextVectorsChanged
-    w_train --> e_PredictionsChanged
+    w_textVectors --> e_SiteItemTextVectorChangeEvent
+    w_train --> e_WorkPredictionChangeEvent
     w_train --> w_score
-    w_worksKeptOut --> e_GradesChanged
-    w_worksKeptOut --> e_ItemsChanged
+    w_worksKeptOut --> e_WorkChangeEvent
+    w_worksKeptOut --> e_WorkGradeChangeEvent
     w_worksKeptOut --> w_train
 ```
 
@@ -223,72 +223,72 @@ flowchart LR
 
 | Request | Events | Works |
 |---|---|---|
-| `addUniverse` | ItemsChanged | — |
-| `answerAuthors` | WorksRegrouped | — |
-| `answerDuplicate` | GradesChanged, InterestChanged | duplicatesModel |
-| `answerMarking` | FacetAnswered | — |
-| `answerTagByText` | FacetAnswered, TagTextAnswered | — |
-| `bindSiteFandom` | ItemsChanged, UniversesRelated | fandomRename |
-| `bindSiteTag` | ItemsChanged, TagsChanged | tagsNamed |
-| `bindTagEntry` | ItemsChanged, TagsChanged | — |
-| `bindUniverseEntry` | ItemsChanged | — |
-| `cancelJob` | GradesChanged, ItemsChanged, PartsSaved, PicturesListed, SiteItemsWritten, SynonymsSet, WorksRegrouped | train |
-| `capturePage` | GradesChanged, ItemsChanged, PartsSaved, PicturesListed, SiteItemsWritten, SynonymsSet, WorksRegrouped | train |
+| `addUniverse` | WorkChangeEvent | — |
+| `answerAuthors` | WorkGroupChangeEvent | — |
+| `answerDuplicate` | WorkGradeChangeEvent, WorkInterestChangeEvent | duplicatesModel |
+| `answerMarking` | WorkFieldChangeEvent | — |
+| `answerTagByText` | TagTextAnswerEvent, WorkFieldChangeEvent | — |
+| `bindSiteFandom` | FandomRelationChangeEvent, WorkChangeEvent | fandomRename |
+| `bindSiteTag` | TagChangeEvent, WorkChangeEvent | tagsNamed |
+| `bindTagEntry` | TagChangeEvent, WorkChangeEvent | — |
+| `bindUniverseEntry` | WorkChangeEvent | — |
+| `cancelJob` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkGroupChangeEvent | train |
+| `capturePage` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkGroupChangeEvent | train |
 | `chooseFacetCast` | — | suggesterAnew |
 | `chooseFacetMethod` | — | suggesterAnew |
 | `chooseInterestScorer` | — | train |
 | `choosePairMethod` | — | duplicates |
 | `chooseScorer` | — | train |
-| `chooseUniverseCharacters` | ItemsChanged | — |
-| `chooseUniverseClass` | ItemsChanged | — |
-| `chooseUniverseEntry` | ItemsChanged | — |
-| `completeFacet` | FacetAnswered | — |
-| `correctFacet` | FacetAnswered, ItemsChanged, TagsChanged | tagsNamed |
-| `correctField` | ItemsChanged | train |
-| `createTagAbove` | ItemsChanged, TagsChanged | tagsNamed |
+| `chooseUniverseCharacters` | WorkChangeEvent | — |
+| `chooseUniverseClass` | WorkChangeEvent | — |
+| `chooseUniverseEntry` | WorkChangeEvent | — |
+| `completeFacet` | WorkFieldChangeEvent | — |
+| `correctFacet` | TagChangeEvent, WorkChangeEvent, WorkFieldChangeEvent | tagsNamed |
+| `correctField` | WorkChangeEvent | train |
+| `createTagAbove` | TagChangeEvent, WorkChangeEvent | tagsNamed |
 | `fitPairModels` | — | duplicatesModel |
 | `getExplanation` | — | heldOut |
 | `getHeldOut` | — | heldOut |
-| `getPicture` | GradesChanged, ItemsChanged, PartsSaved, PicturesListed, SiteItemsWritten, SynonymsSet, WorksRegrouped | train |
-| `giveMatchFeedback` | MarksChanged | — |
-| `ignoreTag` | TagsChanged | — |
-| `judgeSearch` | SearchJudged | — |
+| `getPicture` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkGroupChangeEvent | train |
+| `giveMatchFeedback` | SiteItemMarkChangeEvent | — |
+| `ignoreTag` | TagChangeEvent | — |
+| `judgeSearch` | SearchJudgmentEvent | — |
 | `keepOutTag` | — | worksKeptOut |
-| `linkItem` | GradesChanged, InterestChanged, ItemsChanged | train |
+| `linkItem` | WorkChangeEvent, WorkGradeChangeEvent, WorkInterestChangeEvent | train |
 | `listHierarchyOffers` | — | tagsNamed |
-| `listJobs` | GradesChanged, ItemsChanged, PartsSaved, PicturesListed, SiteItemsWritten, SynonymsSet, WorksRegrouped | train |
-| `markInterest` | InterestChanged | — |
-| `markPicture` | MarksChanged | — |
-| `markReview` | MarksChanged | — |
+| `listJobs` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkGroupChangeEvent | train |
+| `markInterest` | WorkInterestChangeEvent | — |
+| `markPicture` | SiteItemMarkChangeEvent | — |
+| `markReview` | SiteItemMarkChangeEvent | — |
 | `measurePartWorth` | — | worth |
 | `measureWeighing` | — | weighing |
-| `nameTag` | ItemsChanged, TagsChanged | — |
-| `nameUniverse` | ItemsChanged, UniversesRelated | fandomRename |
-| `nameUniverseEntry` | ItemsChanged | — |
-| `rateItem` | GradesChanged | — |
-| `refreshItem` | GradesChanged, ItemsChanged, PartsSaved, PicturesListed, PredictionsChanged, SiteItemsWritten, SynonymsSet, WorksRegrouped | train |
-| `refreshTagEntries` | ItemsChanged, TagsChanged | — |
-| `refreshUniverse` | ItemsChanged | — |
-| `relateTags` | ItemsChanged, TagsChanged | tagsNamed |
-| `relateUniverses` | ItemsChanged, UniversesRelated | fandomRename |
-| `removeItem` | GradesChanged, ItemsChanged | train |
-| `resetUniverseClass` | ItemsChanged | — |
-| `resetUniverseEntry` | ItemsChanged | — |
+| `nameTag` | TagChangeEvent, WorkChangeEvent | — |
+| `nameUniverse` | FandomRelationChangeEvent, WorkChangeEvent | fandomRename |
+| `nameUniverseEntry` | WorkChangeEvent | — |
+| `rateItem` | WorkGradeChangeEvent | — |
+| `refreshItem` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkGroupChangeEvent, WorkPredictionChangeEvent | train |
+| `refreshTagEntries` | TagChangeEvent, WorkChangeEvent | — |
+| `refreshUniverse` | WorkChangeEvent | — |
+| `relateTags` | TagChangeEvent, WorkChangeEvent | tagsNamed |
+| `relateUniverses` | FandomRelationChangeEvent, WorkChangeEvent | fandomRename |
+| `removeItem` | WorkChangeEvent, WorkGradeChangeEvent | train |
+| `resetUniverseClass` | WorkChangeEvent | — |
+| `resetUniverseEntry` | WorkChangeEvent | — |
 | `searchDuplicates` | — | duplicates |
 | `searchFacetModel` | — | suggesterAnew |
 | `startFacetComparison` | — | methodsCompared |
-| `startJob` | GradesChanged, ItemsChanged, PartsSaved, PicturesListed, SiteItemsWritten, SynonymsSet, WorksRegrouped | train |
+| `startJob` | SiteItemChapterChangeEvent, SiteItemPictureListEvent, SiteItemWriteEvent, SiteTagSynonymChangeEvent, WorkChangeEvent, WorkGradeChangeEvent, WorkGroupChangeEvent | train |
 | `startScorerComparison` | — | interestScorersCompared, scorersCompared |
-| `takeOutSiteAuthor` | WorksRegrouped | — |
+| `takeOutSiteAuthor` | WorkGroupChangeEvent | — |
 | `trainModel` | — | train |
 | `unanswerDuplicate` | — | duplicatesModel |
-| `unanswerMarking` | FacetAnswered | — |
-| `uncompleteFacet` | FacetAnswered | — |
-| `uncorrectFacet` | FacetAnswered | — |
-| `uncorrectField` | ItemsChanged | train |
-| `undoDuplicateWord` | GradesChanged, InterestChanged | duplicatesModel |
-| `unlinkItem` | ItemsChanged | train |
-| `unmarkInterest` | InterestChanged | — |
-| `unmarkPicture` | MarksChanged | — |
-| `unmarkReview` | MarksChanged | — |
-| `unrateItem` | GradesChanged | — |
+| `unanswerMarking` | WorkFieldChangeEvent | — |
+| `uncompleteFacet` | WorkFieldChangeEvent | — |
+| `uncorrectFacet` | WorkFieldChangeEvent | — |
+| `uncorrectField` | WorkChangeEvent | train |
+| `undoDuplicateWord` | WorkGradeChangeEvent, WorkInterestChangeEvent | duplicatesModel |
+| `unlinkItem` | WorkChangeEvent | train |
+| `unmarkInterest` | WorkInterestChangeEvent | — |
+| `unmarkPicture` | SiteItemMarkChangeEvent | — |
+| `unmarkReview` | SiteItemMarkChangeEvent | — |
+| `unrateItem` | WorkGradeChangeEvent | — |

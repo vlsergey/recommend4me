@@ -1,7 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
 import io.github.vlsergey.recommend4me.api.model.WorkKind
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -45,7 +45,7 @@ class FandomNormalization(private val stores: Stores, private val workload: Work
      */
     @Order(FIRST)
     @EventListener
-    fun itemsChanged(event: SiteItemsWritten) {
+    fun itemsChanged(event: SiteItemWriteEvent) {
         val fandoms = fandoms() ?: return
         val keys =
             sites()

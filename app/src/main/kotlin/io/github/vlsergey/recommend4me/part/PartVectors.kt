@@ -4,7 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.interest.LikeliestFirst
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
+import io.github.vlsergey.recommend4me.textvector.SiteItemTextVectorChangeEvent
 import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
@@ -34,7 +34,7 @@ class PartVectors(
 
     fun running(): Boolean = busy
 
-    @EventListener(PartsSaved::class) fun partsSaved() = plan("parts")
+    @EventListener(SiteItemChapterChangeEvent::class) fun partsSaved() = plan("parts")
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
@@ -96,7 +96,7 @@ class PartVectors(
                 s.parts.windows.saveVectors(part.itemId, part.partId, encoder.windowsId, part.hash, windows[i])
             }
             // The works searched by the meaning of their chapters' windows: indexed again with them
-            events.publishEvent(TextVectorsChanged(s.id, todo.map { it.itemId }.distinct()))
+            events.publishEvent(SiteItemTextVectorChangeEvent(s.id, todo.map { it.itemId }.distinct()))
             done += todo.size
         }
         stores.sources.forEach { s ->

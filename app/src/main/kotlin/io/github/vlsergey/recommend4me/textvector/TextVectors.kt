@@ -5,7 +5,7 @@ import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.LikeliestFirst
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.SiteItemsWritten
+import io.github.vlsergey.recommend4me.item.SiteItemWriteEvent
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service
 private val log = LoggerFactory.getLogger(TextVectors::class.java)
 
 /** The vectors of the texts of these items of a source were written or dropped. */
-data class TextVectorsChanged(val source: String, val ids: List<String>)
+data class SiteItemTextVectorChangeEvent(val source: String, val ids: List<String>)
 
 /**
  * Vectors of the items' texts — those the model reads
@@ -58,7 +58,7 @@ class TextVectors(
      * waiting in it ([WorkKeys.want]).
      */
     @EventListener
-    fun itemsChanged(event: SiteItemsWritten) {
+    fun itemsChanged(event: SiteItemWriteEvent) {
         workload.keys.want(work(event.source), event.ids)
         planned(event.source, Instant.now().plusSeconds(DELAY_SECONDS), "items", event.ids.size)
     }
@@ -144,7 +144,8 @@ class TextVectors(
             val scan = TextScan(store, only, encoder.id)
             val gone = scan.gone()
             gone.forEach { (id, key) -> store.textVectors.delete(id, key) }
-            if (gone.isNotEmpty()) events.publishEvent(TextVectorsChanged(store.id, gone.map { it.first }.distinct()))
+            if (gone.isNotEmpty())
+                events.publishEvent(SiteItemTextVectorChangeEvent(store.id, gone.map { it.first }.distinct()))
             return encoded(store, encoder, scan.todo, progress, cancelled, portion)
         } finally {
             if (only == null) flag.set(false)
@@ -192,7 +193,7 @@ class TextVectors(
                 store,
                 batch.filterIndexed { i, _ -> vectors[i] != null }.map { Triple(it.itemId, it.key, it.text) },
             )
-            events.publishEvent(TextVectorsChanged(store.id, batch.map { it.itemId }.distinct()))
+            events.publishEvent(SiteItemTextVectorChangeEvent(store.id, batch.map { it.itemId }.distinct()))
             done += batch.size
             progress(done, ordered.size)
         }
