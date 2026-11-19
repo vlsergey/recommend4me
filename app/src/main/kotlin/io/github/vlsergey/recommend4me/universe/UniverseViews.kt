@@ -83,7 +83,8 @@ class UniverseViews(
                 ref.source,
                 ref.key,
                 name,
-                works[ref] ?: 0,
+                // Null while not counted yet: never a nought it does not know ([FandomSiteWorks])
+                works[ref],
                 s.store.source.valueUrl(s.facet, ref.key, name),
                 described[ref]?.takeIf { it.isNotBlank() },
             )
@@ -93,7 +94,7 @@ class UniverseViews(
             dictionary
                 .sitesOf(id)
                 .mapNotNull { site(it, described) }
-                .sortedWith(compareByDescending<UniverseSite> { it.works }.thenBy { it.name })
+                .sortedWith(compareByDescending<UniverseSite> { it.works ?: -1 }.thenBy { it.name })
 
         fun name(id: Long): String = names[FandomRepository.value(id)] ?: "#$id"
     }
@@ -106,7 +107,7 @@ class UniverseViews(
         val described = r.universes.shown.descriptions(r.dictionary.values, r.dictionary)
         return r.dictionary.fandoms.keys
             .map { info(r, it, described) }
-            .sortedWith(compareByDescending<UniverseInfo> { it.works }.thenBy { it.name.lowercase() })
+            .sortedWith(compareByDescending<UniverseInfo> { it.works ?: -1 }.thenBy { it.name.lowercase() })
     }
 
     /**
@@ -139,7 +140,7 @@ class UniverseViews(
             propertyEntries = entries.map(::entryInfo),
             characters = row.characters,
             characterCount = if (row.characters) entries.sumOf { it.characters } else 0,
-            works = sites.sumOf { it.works },
+            works = worksOf(sites),
             parents = r.dictionary.parentsOf(id).map(FandomRepository::value),
             children = r.dictionary.childrenOf(id).map(FandomRepository::value),
             ownName = row.name,
@@ -213,7 +214,7 @@ class UniverseViews(
                 value = FandomRepository.value(other),
                 name = r.name(other),
                 sites = sites,
-                works = sites.sumOf { it.works },
+                works = worksOf(sites),
                 similarity = likeness.toFloat(),
                 relation = relation(other),
             )
@@ -239,3 +240,7 @@ class UniverseViews(
         }
     }
 }
+
+/** The works of a universe's [sites]' fandoms; null while one of them is not counted yet. */
+private fun worksOf(sites: List<UniverseSite>): Int? =
+    if (sites.any { it.works == null }) null else sites.sumOf { it.works ?: 0 }

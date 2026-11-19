@@ -140,7 +140,7 @@ function Header({ type, universe: u }: { type: ContentTypeInfo; universe: Univer
           title={t("UniverseCard.worksHint")}
         >
           <LibraryIcon className="size-3.5" />
-          {t("UniverseCard.works", { count: u.works })}
+          {u.works == null ? t("UniverseCard.worksUncounted") : t("UniverseCard.works", { count: u.works })}
         </a>
         <AsyncButton
           size="sm"
@@ -183,7 +183,7 @@ function Sites({ type, universe: u }: { type: ContentTypeInfo; universe: Univers
           <li key={`${s.source}/${s.key}`} className="flex flex-wrap items-center gap-2 px-3 py-1.5">
             <span className="text-xs text-muted-foreground">{sourceTitle(s.source)}</span>
             <SiteFandomName site={s} className="font-medium" />
-            <span className="text-xs text-muted-foreground tabular-nums">{t("UniverseCard.works", { count: s.works })}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{s.works == null ? t("UniverseCard.worksUncounted") : t("UniverseCard.works", { count: s.works })}</span>
             {/* What the site says the fandom is of, under its name */}
             {s.description && <span className="order-last basis-full text-xs text-muted-foreground">{s.description}</span>}
             {u.sites.length > 1 && (

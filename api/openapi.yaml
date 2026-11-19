@@ -6657,7 +6657,8 @@ components:
           description: The entries of its entries kept as characters
         works:
           type: integer
-          description: The works of its sites' fandoms on the sites
+          nullable: true
+          description: The works of its sites' fandoms on the sites; null while one of them is not counted yet
         parents:
           type: array
           description: The universes it is under, by their values
@@ -6684,7 +6685,8 @@ components:
           description: The fandom's name on the site; its key when the site gave none
         works:
           type: integer
-          description: The works of the fandom the source has
+          nullable: true
+          description: The works of the fandom the source has; null while it is not counted yet
         url:
           type: string
           description: The fandom's page on the site, when the source tells it
@@ -6823,6 +6825,8 @@ components:
             $ref: '#/components/schemas/UniverseSite'
         works:
           type: integer
+          nullable: true
+          description: The works of its sites' fandoms on the sites; null while one of them is not counted yet
         similarity:
           type: number
           format: float

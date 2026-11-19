@@ -25,17 +25,18 @@ class FandomSiteWorks(private val stores: Stores, private val workload: Workload
     /** The keys of the sites' fandoms waiting to be counted again, by source; taken whole by the work. */
     private val waiting = HashMap<String, MutableSet<String>>()
 
-    /** What the last run of the application left undone of the counting, planned again: of every fandom. */
+    /**
+     * What the last run of the application left undone of the counting, planned again: of every fandom; and of every
+     * fandom when one bound is not counted yet — what the data say, not a counting "just in case" (owner, 2026-11-19:
+     * every universe showed 0 works, none of the sites' fandoms ever counted).
+     */
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         val left = workload.left(EVERY) + workload.left(CHANGED)
-        if (fandoms() == null) return
-        left
-            .flatMap { it.reasons.keys }
-            .distinct()
-            .forEach { reason ->
-                workload.plan(Work(EVERY), Instant.now(), reason) { countEvery() }
-            }
+        val fandoms = fandoms() ?: return
+        val reasons = left.flatMap { it.reasons.keys }.toMutableSet()
+        if (fandoms.sites.uncounted()) reasons += UNCOUNTED
+        reasons.forEach { reason -> workload.plan(Work(EVERY), Instant.now(), reason) { countEvery() } }
     }
 
     @EventListener
@@ -101,6 +102,9 @@ class FandomSiteWorks(private val stores: Stores, private val workload: Workload
          */
         const val EVERY = "fandomSiteWorks"
         const val CHANGED = "fandomSiteWorksChanged"
+
+        /** Why every fandom is counted at a start: one bound is not counted yet. */
+        const val UNCOUNTED = "uncounted"
 
         /** The quiet after a change of the works before their fandoms are counted: an import's batches at once. */
         const val QUIET_SECONDS = 30L

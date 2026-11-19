@@ -186,6 +186,7 @@
   "UniverseCard.untie": "Ukloni vezu",
   "UniverseCard.wikidataPage": "Stranica u Vikipodacima",
   "UniverseCard.worksHint": "Otvori ova dela u spisku dela: filter univerzuma samo na ovaj, ostali filteri kao što su bili",
+  "UniverseCard.worksUncounted": "dela još nisu prebrojana",
   "UniverseCard.works_few": "{{count, number}} dela",
   "UniverseCard.works_one": "{{count, number}} delo",
   "UniverseCard.works_other": "{{count, number}} dela",

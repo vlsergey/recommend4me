@@ -172,7 +172,7 @@ function UniverseList({
                   </span>
                 );
               })}
-              <span className="tabular-nums">{t("UniverseList.works", { count: u.works })}</span>
+              <span className="tabular-nums">{u.works == null ? t("UniverseCard.worksUncounted") : t("UniverseList.works", { count: u.works })}</span>
             </span>
           </li>
         ))}

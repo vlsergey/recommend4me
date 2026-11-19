@@ -160,7 +160,7 @@ export function SimilarUniverses({ type, universe: u }: { type: ContentTypeInfo;
                       {site.description && <span> — {site.description}</span>}
                     </span>
                   ))}
-                  <span className="tabular-nums">· {t("UniverseCard.works", { count: s.works })}</span>
+                  <span className="tabular-nums">· {s.works == null ? t("UniverseCard.worksUncounted") : t("UniverseCard.works", { count: s.works })}</span>
                   {(relation === "DESCENDANT" || relation === "ANCESTOR") && <span>· {t(`SimilarUniverses.relation.${relation}`)}</span>}
                 </div>
               </div>

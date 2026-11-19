@@ -182,6 +182,7 @@
   "UniverseCard.untie": "Take the link back",
   "UniverseCard.wikidataPage": "Page in Wikidata",
   "UniverseCard.worksHint": "Open these works in the list of works: the universe filter set to this one alone, the other filters as they were",
+  "UniverseCard.worksUncounted": "works not counted yet",
   "UniverseCard.works_one": "{{count, number}} work",
   "UniverseCard.works_other": "{{count, number}} works",
   "UniverseList.boundHint": "Bound to Wikidata",
