@@ -1,11 +1,15 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.workload.Work
+import io.github.vlsergey.recommend4me.workload.Workload
+import java.time.Duration
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(UnusedFandoms::class.java)
@@ -23,19 +27,33 @@ private val log = LoggerFactory.getLogger(UnusedFandoms::class.java)
  * A site's fandom of no works in a universe with others of other names stays.
  */
 @Component
-class UnusedFandoms(private val stores: Stores) {
+class UnusedFandoms(private val stores: Stores, private val workload: Workload) {
 
-    /** At the start, the sites' fandoms bound first ([FandomNormalization.start]), before anything reads them. */
-    @Order(FandomNormalization.BEFORE_READING + 1)
+    /** What the last run of the application left undone of it, planned again. */
     @EventListener(ApplicationReadyEvent::class)
-    // The start of the application: whatever fails is told in the log, and the fandoms stay as they were
-    @Suppress("TooGenericExceptionCaught")
-    fun start() {
-        try {
-            letGo()
-        } catch (e: Exception) {
-            log.error("The unused fandoms were not let go of", e)
+    fun start() = workload.resume(LETTING_GO.what) { _, reason -> plan(reason) }
+
+    /**
+     * The works of a site with fandoms written: a fandom may be no work's any more — let go of after a long quiet, in
+     * the queue, not at every start (owner, 2026-11-19: "nothing is to be run at a start just because it is a start").
+     */
+    @EventListener
+    fun itemsWritten(event: SiteItemsWritten) {
+        val s = stores.source(event.source) ?: return
+        if (UniverseFacet.fandomFacet(s.schema) != null) plan("items")
+    }
+
+    private fun plan(reason: String) =
+        workload.plan(LETTING_GO, Instant.now().plus(QUIET), reason) {
+            val gone = letGo()
+            if (gone > 0) log.info("{} sites' fandoms of no work let go of", gone)
         }
+
+    private companion object {
+        val LETTING_GO = Work("fandomsLetGo")
+
+        /** The quiet after the last works written: a crawl's pages written at once, the fandoms read once after. */
+        val QUIET: Duration = Duration.ofMinutes(10)
     }
 
     /** Every unused site's fandom let go of — with its universe, or alone; how many. */

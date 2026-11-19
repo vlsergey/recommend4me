@@ -8,7 +8,6 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -38,15 +37,6 @@ class FandomNormalization(private val stores: Stores, private val workload: Work
             .mapNotNull { s -> UniverseFacet.fandomFacet(s.schema)?.let { s to it } }
 
     private fun fandoms(): FandomRepository? = stores.types.firstOrNull { it.type.universes }?.universes?.fandoms
-
-    /** Every site's fandom not bound yet bound now, every fandom's name worked out again; how many bound. */
-    fun bindNew(): Int {
-        val fandoms = fandoms() ?: return 0
-        val sites = sites()
-        val made = bind(fandoms, sites) { s, f -> s.items.valueUses(f).keys }
-        rename(fandoms, sites, null)
-        return made.size
-    }
 
     /**
      * The site's fandoms of the works [event] names bound at once, before anything reads the works: a work captured is
@@ -164,25 +154,9 @@ class FandomNormalization(private val stores: Stores, private val workload: Work
             }
     }
 
-    /** Before anything reads the universes: every site's fandom not bound yet bound. */
-    @Order(BEFORE_READING)
-    @EventListener(ApplicationReadyEvent::class)
-    // The start of the application: whatever fails is told in the log, and the fandoms are bound as works come
-    @Suppress("TooGenericExceptionCaught")
-    fun start() {
-        try {
-            bindNew()
-        } catch (e: Exception) {
-            log.error("The fandoms were not normalized", e)
-        }
-    }
-
     companion object {
         /** Before every other listener of the works: their sites' fandoms are bound before anything reads them. */
         const val FIRST = -100
-
-        /** Of the start, before anything reads the universes. */
-        const val BEFORE_READING = -10
 
         /** The names of fandoms worked out again ([renameLater]). */
         private val RENAME = Work("fandomRename")

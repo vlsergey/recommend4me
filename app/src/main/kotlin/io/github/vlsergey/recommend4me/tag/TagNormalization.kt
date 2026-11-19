@@ -8,7 +8,6 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -197,27 +196,11 @@ class TagNormalization(private val stores: Stores) {
         }
     }
 
-    /** Before anything reads the tags: every site's tag not bound yet bound. */
-    @Order(BEFORE_READING)
-    @EventListener(ApplicationReadyEvent::class)
-    // The start of the application: whatever fails is told in the log, and the tags are bound as works come
-    @Suppress("TooGenericExceptionCaught")
-    fun start() {
-        try {
-            bindNew()
-        } catch (e: Exception) {
-            log.error("The tags were not normalized", e)
-        }
-    }
-
     companion object {
         /** Before every other listener of the works: their sites' tags are bound before anything reads them. */
         const val FIRST = -100
 
-        /** Of the start, before anything reads the tags ([TagRenaming.start] after it). */
-        const val BEFORE_READING = -10
-
-        /** Of the start, right after the tags are normalized ([start]). */
+        /** Of the start, before the other readers of the tags. */
         const val AFTER_NORMALIZATION = -5
     }
 }

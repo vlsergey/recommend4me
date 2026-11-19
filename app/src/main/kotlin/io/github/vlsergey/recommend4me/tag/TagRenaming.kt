@@ -103,7 +103,7 @@ class TagRenaming(
      */
     @EventListener(SynonymsSet::class) fun synonymsSet() = schedule("synonyms")
 
-    /** After the tags are normalized on start ([TagNormalization.start]). */
+    /** The start: what a stop left of the tags finished, what the queue left planned again. */
     @Order(TagNormalization.AFTER_NORMALIZATION)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
