@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.scorer.RankingTask
@@ -102,7 +103,7 @@ class HeldOutModels(
      */
     private fun planHeldOut(type: TypeStore, key: ItemKey) {
         askedAt[key] = System.currentTimeMillis()
-        val work = Work("heldOut", source = key.source, item = key.id)
+        val work = Work(WorkKind.HELD_OUT, source = key.source, item = key.id)
         if (workload.due(work)) return
         workload.plan(work, Instant.now(), "page", asked = true) {
             val asked = askedAt.remove(key) ?: 0L

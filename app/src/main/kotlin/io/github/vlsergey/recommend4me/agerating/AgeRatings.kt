@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.agerating
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.contenttype.AgeRating
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.database.Databases
@@ -119,7 +120,7 @@ class AgeRatings(
     }
 
     companion object {
-        val FITTING = Work("ageRatingModel")
+        val FITTING = Work(WorkKind.AGE_RATING_MODEL)
 
         private const val START_DELAY_SECONDS = 60L
         private const val QUIET_SECONDS = 60L

@@ -81,11 +81,11 @@ function WorkRow({ w }: { w: QueuedWork }) {
           <UserIcon className="size-3.5" /> {t("WorkQueue.asked")}
         </span>
       )}
-      <span className="font-medium">{label(`workload:What.${w.what}`)}</span>
+      <span className="font-medium">{t(`What.${w.what}`)}</span>
       {of.length > 0 && <span className="text-muted-foreground">{of.join(" · ")}</span>}
       {w.reasons.length > 0 && (
         <span className="text-muted-foreground">
-          {t("WorkQueue.because")} {w.reasons.map((r) => `${label(`workload:Reason.${r.key}`)}${r.count > 1 ? ` ×${number(r.count)}` : ""}`).join(", ")}
+          {t("WorkQueue.because")} {w.reasons.map((r) => `${t(`Reason.${r.key}`)}${r.count > 1 ? ` ×${number(r.count)}` : ""}`).join(", ")}
         </span>
       )}
       <span className="ml-auto text-xs text-muted-foreground tabular-nums">

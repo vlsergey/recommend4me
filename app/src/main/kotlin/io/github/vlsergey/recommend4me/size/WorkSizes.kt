@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.size
 
 import io.github.vlsergey.recommend4me.api.model.SizeNumber
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
@@ -163,7 +164,7 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
     }
 
     companion object {
-        const val FITTING = "workSizes"
+        val FITTING = WorkKind.WORK_SIZES
 
         private const val START_DELAY_SECONDS = 60L
 

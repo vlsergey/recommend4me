@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.part
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.interest.LikeliestFirst
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.Stores
@@ -141,7 +142,7 @@ class PartVectors(
     }
 
     companion object {
-        private val ENCODING = Work("partVectors")
+        private val ENCODING = Work(WorkKind.PART_VECTORS)
 
         /** Parts per encoder call: a chapter is tens of windows already. */
         private const val BATCH = 8

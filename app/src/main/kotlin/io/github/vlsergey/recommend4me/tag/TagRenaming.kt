@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.tag
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
@@ -42,7 +43,7 @@ class TagRenaming(
 
     private fun renamed(scope: TagScope, facet: String) {
         val started = System.currentTimeMillis()
-        val counted = workload.run(Work("tagsCounted")) { TagCounting(scope, facet, normalization).counted() }
+        val counted = workload.run(Work(WorkKind.TAGS_COUNTED)) { TagCounting(scope, facet, normalization).counted() }
         val n = tags.naming(scope, counted)
         val stats = n.stats
         // Of the application's working: the user's own name is shown over it, not kept in it
@@ -119,7 +120,7 @@ class TagRenaming(
 
     private companion object {
         /** The names of the tags worked out and their works counted, as the queue of the works tells it. */
-        val NAMING = Work("tagsNamed")
+        val NAMING = Work(WorkKind.TAGS_NAMED)
 
         /**
          * The quiet after the last change before the names are worked out again: a page is sent several times as it

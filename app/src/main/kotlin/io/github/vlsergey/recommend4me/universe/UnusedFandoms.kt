@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -50,7 +51,7 @@ class UnusedFandoms(private val stores: Stores, private val workload: Workload) 
         }
 
     private companion object {
-        val LETTING_GO = Work("fandomsLetGo")
+        val LETTING_GO = Work(WorkKind.FANDOMS_LET_GO)
 
         /** The quiet after the last works written: a crawl's pages written at once, the fandoms read once after. */
         val QUIET: Duration = Duration.ofMinutes(10)

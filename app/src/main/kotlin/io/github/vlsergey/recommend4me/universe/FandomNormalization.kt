@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -159,6 +160,6 @@ class FandomNormalization(private val stores: Stores, private val workload: Work
         const val FIRST = -100
 
         /** The names of fandoms worked out again ([renameLater]). */
-        private val RENAME = Work("fandomRename")
+        private val RENAME = Work(WorkKind.FANDOM_RENAME)
     }
 }

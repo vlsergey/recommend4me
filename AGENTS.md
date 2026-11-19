@@ -153,6 +153,13 @@ format or not brought to every work (`SearchProvider.current`), a type never sea
 every work again in case something changed while the application was down: what changes then is a
 tool or a migration, which asks for what follows itself.
 
+**Every kind of work and every reason of the queue is a value of the API** (`WorkKind`,
+`WorkReasonKey` in `api/openapi.yaml`): `Work.what` is a `WorkKind`, a reason planned that the API
+does not list fails as it is planned, and the interface words them by the typed translation — a word
+missing in any language fails the build of the interface (owner, 2026-11-19: "a missing translation
+must be caught as the interface is built"). A new kind or reason is added to the API and to the
+words of `workload` together.
+
 **Nothing of the application starts a thread or a timer of its own: it asks `Background`** — the works of
 the queue begun when due, the jobs of the sites, the rounds done again and again, the loops as long as the
 application runs. In the application these are threads (`background/Threads.kt`, the configuration with

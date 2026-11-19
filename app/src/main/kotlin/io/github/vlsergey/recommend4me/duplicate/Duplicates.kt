@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.CardSource
@@ -80,7 +81,7 @@ class Duplicates(
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.types.filter { it.sources.size > 1 && it.duplicates.search() == null }.forEach { plan(it, "start") }
-        workload.resume("duplicates") { left, reason ->
+        workload.resume(WorkKind.DUPLICATES) { left, reason ->
             left.work.type?.let(stores::type)?.let { plan(it, reason, left.asked) }
         }
     }
@@ -97,7 +98,7 @@ class Duplicates(
         return true
     }
 
-    private fun searching(type: TypeStore) = Work("duplicates", type = type.id)
+    private fun searching(type: TypeStore) = Work(WorkKind.DUPLICATES, type = type.id)
 
     /**
      * The search of the type ([TypeSearch]) by the models as the last fitting left them — of one work, and of one

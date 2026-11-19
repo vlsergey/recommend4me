@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -203,7 +204,7 @@ class ScoreSweep(
         /** The works a portion of the pass takes (owner, 2026-11-19: "taking 1k unrated works at a time"). */
         const val PORTION = 1000
 
-        fun work(typeId: String) = Work("score", type = typeId)
+        fun work(typeId: String) = Work(WorkKind.SCORE, type = typeId)
 
         /** When the model of the grades of the [type] kept was trained; the beginning of time of none. */
         fun trainedAt(type: TypeStore): Instant = type.models.trainedAt() ?: Instant.EPOCH

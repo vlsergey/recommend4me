@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.search
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemsChanged
@@ -135,8 +136,8 @@ class SearchIndex(
     }
 
     private companion object {
-        const val BUILDING = "searchIndex"
-        const val UPDATING = "searchUpdate"
+        val BUILDING = WorkKind.SEARCH_INDEX
+        val UPDATING = WorkKind.SEARCH_UPDATE
 
         /** The key of an item waiting in the queue: its source and its id. */
         const val SEP = '\t'

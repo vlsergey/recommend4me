@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.workload.Work
@@ -79,6 +80,6 @@ class PairFitting(
         const val QUIET_SECONDS = 3L
 
         /** The work of fitting the models of the pairs. */
-        const val WHAT = "duplicatesModel"
+        val WHAT = WorkKind.DUPLICATES_MODEL
     }
 }

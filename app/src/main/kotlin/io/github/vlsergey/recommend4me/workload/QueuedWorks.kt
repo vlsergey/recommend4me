@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.workload
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.database.AppDatabase
 import io.github.vlsergey.recommend4me.database.app.tables.references.QUEUED_KEY
 import io.github.vlsergey.recommend4me.database.app.tables.references.QUEUED_WORK
@@ -37,7 +38,7 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
     ) {
         db.insertInto(QUEUED_WORK)
             .set(QUEUED_WORK.WORK_KEY, key(work))
-            .set(QUEUED_WORK.WHAT, work.what)
+            .set(QUEUED_WORK.WHAT, work.what.value)
             .set(QUEUED_WORK.TYPE_ID, work.type)
             .set(QUEUED_WORK.SOURCE_ID, work.source)
             .set(QUEUED_WORK.FACET, work.facet)
@@ -64,7 +65,7 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
         val kind = key(run.work.copy(item = null))
         db.insertInto(WORK_RUN)
             .set(WORK_RUN.KIND_KEY, kind)
-            .set(WORK_RUN.WHAT, run.work.what)
+            .set(WORK_RUN.WHAT, run.work.what.value)
             .set(WORK_RUN.TYPE_ID, run.work.type)
             .set(WORK_RUN.SOURCE_ID, run.work.source)
             .set(WORK_RUN.FACET, run.work.facet)
@@ -91,9 +92,11 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
             .orderBy(WORK_RUN.ENDED.desc(), WORK_RUN.ID.desc())
             .limit(TOLD_RUNS)
             .fetch()
-            .map { r ->
+            // A run of a kind no longer done is not told
+            .mapNotNull { r ->
+                val what = kindOf(r.what!!) ?: return@mapNotNull null
                 FinishedWork(
-                    Work(r.what!!, r.typeId, r.sourceId, r.facet, r.item),
+                    Work(what, r.typeId, r.sourceId, r.facet, r.item),
                     r.began!!,
                     r.ended!!,
                     parsed(r.reasons!!),
@@ -115,15 +118,15 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
         return last.sumOf { Duration.between(it.value1()!!, it.value2()!!).toMillis() } / last.size
     }
 
-    override fun left(what: String): List<LeftWork> {
+    override fun left(what: WorkKind): List<LeftWork> {
         val rows =
-            db.selectFrom(QUEUED_WORK).where(QUEUED_WORK.WHAT.eq(what), QUEUED_WORK.PLAN_NO.lt(firstPlan)).fetch()
+            db.selectFrom(QUEUED_WORK).where(QUEUED_WORK.WHAT.eq(what.value), QUEUED_WORK.PLAN_NO.lt(firstPlan)).fetch()
         if (rows.isEmpty()) return emptyList()
         db.deleteFrom(QUEUED_WORK)
             .where(QUEUED_WORK.WORK_KEY.`in`(rows.map { it.workKey }), QUEUED_WORK.PLAN_NO.lt(firstPlan))
             .execute()
         return rows.map { r ->
-            LeftWork(Work(r.what!!, r.typeId, r.sourceId, r.facet, r.item), parsed(r.reasons!!), r.asked!!)
+            LeftWork(Work(what, r.typeId, r.sourceId, r.facet, r.item), parsed(r.reasons!!), r.asked!!)
         }
     }
 
@@ -194,7 +197,10 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
         const val PLANS_A_MILLI = 1000L
 
         fun key(work: Work): String =
-            listOf(work.what, work.type, work.source, work.facet, work.item).joinToString("\t") { it.orEmpty() }
+            listOf(work.what.value, work.type, work.source, work.facet, work.item).joinToString("\t") { it.orEmpty() }
+
+        /** The kind of a work kept by its value; none of a kind no longer done. */
+        fun kindOf(value: String): WorkKind? = WorkKind.entries.firstOrNull { it.value == value }
 
         fun told(reasons: Map<String, Int>): String = reasons.entries.joinToString(",") { "${it.key}=${it.value}" }
 

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -114,7 +115,7 @@ class ListFilling(
 
     companion object {
         /** The work of the queue filling the values of a source's rated works into the index. */
-        const val WORK = "listValues"
+        val WORK = WorkKind.LIST_VALUES
 
         /** The values of every facet as sets: their order is no change. */
         private fun asSets(values: Map<String, List<String>>?): Map<String, Set<String>> =

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -216,6 +217,6 @@ class Recommendations(
         /** The setting of when the user's grades of the type last changed: a model trained before is stale. */
         fun gradesChangedAt(typeId: String) = "model.$typeId.gradesChangedAt"
 
-        private fun trainingWork(typeId: String) = Work("train", type = typeId)
+        private fun trainingWork(typeId: String) = Work(WorkKind.TRAIN, type = typeId)
     }
 }

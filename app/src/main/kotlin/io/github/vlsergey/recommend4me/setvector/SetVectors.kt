@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.setvector
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.background.Rounds
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -153,7 +154,7 @@ class SetVectors(
         val todo = contexts.of(s.id).itemsInOrder().filter { it in todoSet }
         totalNow += todo.size
         log.info("{}: making {} vectors of {} items", s.id, kind.key, todo.size)
-        workload.run(Work("setVectors", source = s.id, facet = kind.key), mapOf("setsGrew" to todo.size)) {
+        workload.run(Work(WorkKind.SET_VECTORS, source = s.id, facet = kind.key), mapOf("setsGrew" to todo.size)) {
             for (ids in todo.chunked(CHUNK)) {
                 if (stopping) break
                 save(s, kind, embedding, have, ids)

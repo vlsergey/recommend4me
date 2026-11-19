@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
@@ -32,10 +33,10 @@ class ModelMeasurings(private val measures: InputMeasures, private val workload:
     fun weighingOf(typeId: String): Measuring<Weighing>? = weighing[typeId]
 
     fun measureWorth(typeId: String): Measuring<ModelWorth> =
-        start(worth, Work("worth", type = typeId)) { measures.worth(typeId) }
+        start(worth, Work(WorkKind.WORTH, type = typeId)) { measures.worth(typeId) }
 
     fun measureWeighing(typeId: String, cautious: Boolean): Measuring<Weighing> =
-        start(weighing, Work("weighing", type = typeId)) { measures.weighing(typeId, cautious) }
+        start(weighing, Work(WorkKind.WEIGHING, type = typeId)) { measures.weighing(typeId, cautious) }
 
     /**
      * The measuring [work] of [body] planned at once, the user's; its failure told by the queue, the measuring ended.

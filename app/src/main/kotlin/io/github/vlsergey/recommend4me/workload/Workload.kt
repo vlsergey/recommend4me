@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.workload
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
+import io.github.vlsergey.recommend4me.api.model.WorkReasonKey
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.background.Threads
 import java.time.Duration
@@ -15,13 +17,14 @@ private val log = LoggerFactory.getLogger(Workload::class.java)
  * facet, a work. Two works alike are the same work: planned twice, it is planned once.
  */
 data class Work(
-    val what: String,
+    val what: WorkKind,
     val type: String? = null,
     val source: String? = null,
     val facet: String? = null,
     val item: String? = null,
 ) {
-    override fun toString() = listOfNotNull(type, source, facet, item).joinToString("/").ifEmpty { "all" } + ": " + what
+    override fun toString() =
+        listOfNotNull(type, source, facet, item).joinToString("/").ifEmpty { "all" } + ": " + what.value
 }
 
 /**
@@ -192,10 +195,10 @@ class Workload(background: Background = Threads(), private val records: WorkReco
      * The works of the kind [what] the last run of the application left undone — planned, waiting or running as it
      * stopped or crashed: taken by their owner at the start, to plan again.
      */
-    fun left(what: String): List<LeftWork> = records.left(what)
+    fun left(what: WorkKind): List<LeftWork> = records.left(what)
 
     /** The works of the kind [what] the last run left undone planned again by [plan]: each for each of its reasons. */
-    fun resume(what: String, plan: (left: LeftWork, reason: String) -> Unit) =
+    fun resume(what: WorkKind, plan: (left: LeftWork, reason: String) -> Unit) =
         left(what).forEach { l -> l.reasons.keys.forEach { plan(l, it) } }
 
     /**
@@ -214,7 +217,10 @@ class Workload(background: Background = Threads(), private val records: WorkReco
         last: Boolean = false,
         after: (T) -> Unit = {},
         body: () -> T,
-    ) = plans.plan(work, due, mapOf(reason to count), asked, last) { entry -> after(runOwn(entry, body)) }
+    ) =
+        plans.plan(work, due, mapOf(WorkReasonKey.forValue(reason).value to count), asked, last) { entry ->
+            after(runOwn(entry, body))
+        }
 
     /**
      * How much of the work running now is done, told by it as it goes: a share (user, 2026-11-18: "a report of the

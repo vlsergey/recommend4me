@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.textvector
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.LikeliestFirst
@@ -237,7 +238,7 @@ class TextVectors(
 
     companion object {
         /** The encoding of the texts of a source, as the queue of the works tells it. */
-        private const val WHAT = "textVectors"
+        private val WHAT = WorkKind.TEXT_VECTORS
 
         /** The key of the queue that asks for every text of the source, not of some of its items. */
         private const val EVERY = ""

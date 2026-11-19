@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.search
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.encoder.TextKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -53,11 +54,11 @@ class SearchLearning(
 
     /** What the last run of the application left undone of it, planned again. */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() = workload.resume("searchWeights") { left, reason -> left.work.type?.let { plan(it, reason) } }
+    fun start() = workload.resume(WorkKind.SEARCH_WEIGHTS) { left, reason -> left.work.type?.let { plan(it, reason) } }
 
     /** The weights of the [type] learnt shortly after the last of a quick series of judgments. */
     private fun plan(type: String, reason: String) =
-        workload.plan(Work("searchWeights", type = type), Instant.now().plusMillis(QUIET_MS), reason) {
+        workload.plan(Work(WorkKind.SEARCH_WEIGHTS, type = type), Instant.now().plusMillis(QUIET_MS), reason) {
             stores.type(type)?.let(::learnt)
         }
 

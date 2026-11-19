@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.workload
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import java.time.Instant
 
 /** A work the last run of the application left undone: planned, waiting its turn or running; why, and if asked. */
@@ -32,7 +33,7 @@ interface WorkRecords {
     fun expected(work: Work): Long?
 
     /** The works of the kind [what] the last run of the application left undone: taken, kept no more. */
-    fun left(what: String): List<LeftWork>
+    fun left(what: WorkKind): List<LeftWork>
 
     /**
      * The [keys] the [work] is to be done of — the items, the fandoms its owner names — kept till they are [done]: a
@@ -68,7 +69,7 @@ interface WorkRecords {
 
         override fun expected(work: Work): Long? = null
 
-        override fun left(what: String): List<LeftWork> = emptyList()
+        override fun left(what: WorkKind): List<LeftWork> = emptyList()
 
         override fun want(work: Work, keys: Collection<String>) {
             synchronized(this.keys) { this.keys.getOrPut(work) { LinkedHashSet() } += keys }

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -142,7 +143,7 @@ class FandomLikenessLearning(
     }
 
     companion object {
-        const val LEARNING = "fandomLikeness"
+        val LEARNING = WorkKind.FANDOM_LIKENESS
 
         private const val START_DELAY_SECONDS = 90L
 

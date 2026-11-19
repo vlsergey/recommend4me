@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.manner
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.part.PartMark
 import io.github.vlsergey.recommend4me.part.PartsSaved
@@ -142,7 +143,7 @@ class Manners(
         workload.plan(Work(MAKING, type = type.id), Instant.now().plusSeconds(delaySeconds), reason) { refresh(type) }
 
     companion object {
-        const val MAKING = "manners"
+        val MAKING = WorkKind.MANNERS
 
         private const val START_DELAY_SECONDS = 60L
 

@@ -2,7 +2,9 @@ package io.github.vlsergey.recommend4me.workload
 
 import io.github.vlsergey.recommend4me.api.WorkloadApi
 import io.github.vlsergey.recommend4me.api.model.QueuedWork
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.api.model.WorkReason
+import io.github.vlsergey.recommend4me.api.model.WorkReasonKey
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.source.Stores
 import java.time.Instant
@@ -34,7 +36,7 @@ class WorkloadController(
      * done; none of a work neither to come nor among the last done.
      */
     override fun getWork(
-        what: String,
+        what: WorkKind,
         type: String?,
         source: String?,
         facet: String?,
@@ -74,7 +76,7 @@ class WorkloadController(
             item = work.item,
             since = since.atOffset(ZoneOffset.UTC),
             expectedMillis = if (state == QueuedWork.State.FINISHED) null else records.expected(work),
-            reasons = reasons.map { (key, count) -> WorkReason(key, count) },
+            reasons = reasons.map { (key, count) -> WorkReason(WorkReasonKey.forValue(key), count) },
         )
     }
 }

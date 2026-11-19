@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.setvector
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.vector.Vectors
@@ -66,7 +67,7 @@ class SetDirections(private val members: SetMembers, private val workload: Workl
         count: Int,
     ): StoredEmbedding {
         val embedding =
-            workload.run(Work("setDirections", type = type.id, facet = kind.key), mapOf("catalogueGrew" to 1)) {
+            workload.run(Work(WorkKind.SET_DIRECTIONS, type = type.id, facet = kind.key), mapOf("catalogueGrew" to 1)) {
                 SetEmbedding.fit(sample, minOf(SetEmbedding.DIRECTIONS, sample.size - 1))
             }
         val id = Vectors.keyOf("${type.id}:${kind.name}:$encoder:${System.nanoTime()}")

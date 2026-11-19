@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.SiteTestBase
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.workload.Work
@@ -47,7 +48,7 @@ class FacetPortionsTest : SiteTestBase() {
         val fitting = FacetFitting(FacetReading(portioned, chain, vocabularies), FacetScoring())
         val encoder = plugins.textEncoder()!!
         inBackground {
-            workload.run(Work("portions", source = store.id), mapOf("asked" to 1), joinAlike = false) {
+            workload.run(Work(WorkKind.PART_VECTORS, source = store.id), mapOf("asked" to 1), joinAlike = false) {
                 facets.indices.forEach { k ->
                     val suggester = plugins.suggester(store.id, facets[k].key)
                     fitting.fit(store, facets, k, suggester, encoder, passes.charactersRead(store), { false }, true)

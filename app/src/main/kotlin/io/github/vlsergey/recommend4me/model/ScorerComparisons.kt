@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
@@ -58,7 +59,10 @@ class ScorerComparisons(
             if (running != null && running.finishedAt == null) return@compute running
             ScorerComparison(Instant.now(), plugins.scorers.map { ScorerMeasure(it.id) }).also { c ->
                 workload.plan(
-                    Work(if (interest) "interestScorersCompared" else "scorersCompared", type = typeId),
+                    Work(
+                        if (interest) WorkKind.INTEREST_SCORERS_COMPARED else WorkKind.SCORERS_COMPARED,
+                        type = typeId,
+                    ),
                     null,
                     "asked",
                     asked = true,

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -82,6 +83,6 @@ class FandomVectors(
         const val QUIET_SECONDS = 10L
 
         /** The making of the vectors, as the queue of the works tells it. */
-        val VECTORS = Work("fandomVectors")
+        val VECTORS = Work(WorkKind.FANDOM_VECTORS)
     }
 }

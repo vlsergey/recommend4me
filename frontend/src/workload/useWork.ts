@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
+import type { components } from "@/api/schema";
 
 /** A work of the queue by its name, as the queue names it: what it does, and what it is of. */
-export type WorkName = { what: string; type?: string; source?: string; facet?: string; item?: string };
+export type WorkName = { what: components["schemas"]["WorkKind"]; type?: string; source?: string; facet?: string; item?: string };
 
 /** How often the state of a work not done is asked for again: a few bytes. */
 const EVERY_MS = 3000;

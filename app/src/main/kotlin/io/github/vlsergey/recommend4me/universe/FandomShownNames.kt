@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.workload.Work
@@ -57,7 +58,7 @@ class FandomShownNames(private val stores: Stores, private val workload: Workloa
     }
 
     private companion object {
-        val WORK = Work("fandomNames")
+        val WORK = Work(WorkKind.FANDOM_NAMES)
 
         /**
          * The quiet after a change before the names are worked out again: the changes of an import's batches at once.

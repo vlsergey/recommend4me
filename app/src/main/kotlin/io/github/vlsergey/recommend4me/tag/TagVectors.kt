@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.tag
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.item.SynonymsSet
@@ -96,7 +97,7 @@ class TagVectors(
         private const val KEEP = 500
 
         /** The making of the vectors, as the queue of the works tells it. */
-        private val VECTORS = Work("tagVectors")
+        private val VECTORS = Work(WorkKind.TAG_VECTORS)
 
         /** [v] of unit length; null of a vector of nought. */
         fun unit(v: FloatArray): FloatArray? {

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.tag
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemRemoval
 import io.github.vlsergey.recommend4me.source.FacetValue
@@ -101,6 +102,6 @@ class KeptOutWorks(
     }
 
     private companion object {
-        val REMOVING = Work("worksKeptOut")
+        val REMOVING = Work(WorkKind.WORKS_KEPT_OUT)
     }
 }

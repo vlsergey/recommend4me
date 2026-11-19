@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.model.MeasuringState
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -50,7 +51,12 @@ class FacetComparisons(
         comparisons.compute(keyOf(store, facet)) { _, running ->
             if (running != null && running.finishedAt == null) return@compute running
             FacetComparison(Instant.now(), plugins.suggesters.map { MethodMeasure(it.id) }).also { c ->
-                workload.plan(Work("methodsCompared", source = store.id, facet = facet), null, "asked", asked = true) {
+                workload.plan(
+                    Work(WorkKind.METHODS_COMPARED, source = store.id, facet = facet),
+                    null,
+                    "asked",
+                    asked = true,
+                ) {
                     run(store, facet, c)
                 }
             }

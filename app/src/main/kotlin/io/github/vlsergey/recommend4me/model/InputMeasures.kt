@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -33,7 +34,12 @@ class InputMeasures(
      * there are too few.
      */
     fun measuringInput(typeId: String, interest: Boolean = false): MeasuringInput? =
-        workload.run(Work("scorersInput", type = typeId), mapOf("asked" to 1), asked = true, joinAlike = false) {
+        workload.run(
+            Work(WorkKind.SCORERS_INPUT, type = typeId),
+            mapOf("asked" to 1),
+            asked = true,
+            joinAlike = false,
+        ) {
             val catalogue = everyWork.training(stores.contentType(typeId))
             val p = (if (interest) Prepared.interest(catalogue) else Prepared.grades(catalogue)) ?: return@run null
             MeasuringInput(p.task, p.xFor, p.grades.size)
@@ -47,7 +53,7 @@ class InputMeasures(
      * confirm. Nothing is kept.
      */
     fun worth(typeId: String): ModelWorth? =
-        workload.run(Work("worth", type = typeId), mapOf("asked" to 1), asked = true) {
+        workload.run(Work(WorkKind.WORTH, type = typeId), mapOf("asked" to 1), asked = true) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId) ?: return@run null
             val p = Prepared.grades(everyWork.training(type)) ?: return@run null
@@ -97,7 +103,7 @@ class InputMeasures(
      * kept. [cautious]: [GroupWeights.tune].
      */
     fun weighing(typeId: String, cautious: Boolean = true): Weighing? =
-        workload.run(Work("weighing", type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) {
+        workload.run(Work(WorkKind.WEIGHING, type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId)
             val p =

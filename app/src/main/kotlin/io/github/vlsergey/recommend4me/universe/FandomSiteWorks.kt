@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -107,8 +108,8 @@ class FandomSiteWorks(private val stores: Stores, private val workload: Workload
          * The works of every site's fandom counted; of those of the works changed, another work: neither replaces the
          * other.
          */
-        const val EVERY = "fandomSiteWorks"
-        const val CHANGED = "fandomSiteWorksChanged"
+        val EVERY = WorkKind.FANDOM_SITE_WORKS
+        val CHANGED = WorkKind.FANDOM_SITE_WORKS_CHANGED
         val CHANGING = Work(CHANGED)
 
         /** The key of a site's fandom waiting in the queue: its source and its key. */

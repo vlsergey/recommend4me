@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.tagtext
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.database.Databases
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
@@ -341,7 +342,7 @@ class TextTags(
         /** The quiet after an answer before the model is fitted: the user answers in a row. */
         const val QUIET_SECONDS = 10L
 
-        val FITTING = Work("tagTextModel")
+        val FITTING = Work(WorkKind.TAG_TEXT_MODEL)
 
         /** Why the model is fitted, as the queue of the works tells it. */
         const val REASON = "tagByText"

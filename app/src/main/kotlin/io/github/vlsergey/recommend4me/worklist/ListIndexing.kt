@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -193,7 +194,7 @@ class ListIndexing(
 
     companion object {
         /** The work of the queue writing the index of a content type's list. */
-        const val WORK = "listIndex"
+        val WORK = WorkKind.LIST_INDEX
 
         /** The quiet after a change before the index is written: the changes of a moment written at once. */
         private const val QUIET_SECONDS = 1L

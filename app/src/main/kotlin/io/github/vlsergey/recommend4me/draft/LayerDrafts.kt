@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.draft
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemsChanged
 import io.github.vlsergey.recommend4me.source.FacetValue
@@ -210,7 +211,7 @@ class LayerDrafts(
     }
 
     companion object {
-        val DRAFTING = Work("layerDrafts")
+        val DRAFTING = Work(WorkKind.LAYER_DRAFTS)
 
         /**
          * The place of the drafting among the listeners of a change of works: after the sites' tags are bound

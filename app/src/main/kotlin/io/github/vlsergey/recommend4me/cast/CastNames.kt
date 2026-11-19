@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.cast
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -102,7 +103,7 @@ class CastNames(
     }
 
     private companion object {
-        const val WHAT = "castNames"
+        val WHAT = WorkKind.CAST_NAMES
 
         /** One work of every source: their works told apart by their keys ("<source>\t<id>"). */
         val WORK = Work(WHAT)

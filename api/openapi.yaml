@@ -2616,7 +2616,7 @@ paths:
           in: query
           required: true
           schema:
-            type: string
+            $ref: '#/components/schemas/WorkKind'
         - name: type
           in: query
           schema:
@@ -4845,8 +4845,7 @@ components:
       required: [what, state, since, reasons]
       properties:
         what:
-          type: string
-          description: What it does, a key the interface words as "workload.<what>"
+          $ref: '#/components/schemas/WorkKind'
         state:
           type: string
           enum: [FINISHED, RUNNING, WAITING, PLANNED]
@@ -4910,13 +4909,108 @@ components:
           items:
             $ref: '#/components/schemas/WorkReason'
 
+    WorkKind:
+      type: string
+      description: >
+        What a work of the queue does: a key the interface words ("workload:What.<kind>") - every kind listed, its
+        words checked as the interface is built
+      enum:
+          - ageRatingModel
+          - castNames
+          - duplicates
+          - duplicatesModel
+          - fandomLikeness
+          - fandomNames
+          - fandomRename
+          - fandomSiteWorks
+          - fandomSiteWorksChanged
+          - fandomVectors
+          - fandomsLetGo
+          - heldOut
+          - interestScorersCompared
+          - layerDrafts
+          - listIndex
+          - listValues
+          - manners
+          - methodsCompared
+          - partVectors
+          - score
+          - scorersCompared
+          - scorersInput
+          - searchIndex
+          - searchUpdate
+          - searchWeights
+          - setDirections
+          - setVectors
+          - suggesterAnew
+          - suggesters
+          - tagOffers
+          - tagTextModel
+          - tagVectors
+          - tagsCounted
+          - tagsNamed
+          - textVectors
+          - train
+          - weighing
+          - workChances
+          - workSizes
+          - worksKeptOut
+          - worth
+
+    WorkReasonKey:
+      type: string
+      description: >
+        Why a work of the queue is planned: a key the interface words ("workload:Reason.<key>") - every reason
+        listed, its words checked as the interface is built
+      enum:
+          - answer
+          - asked
+          - castNames
+          - catalogueGrew
+          - chances
+          - correction
+          - crawl
+          - dictionary
+          - fandomVectors
+          - fandoms
+          - grade
+          - interest
+          - items
+          - listFormat
+          - manner
+          - mark
+          - models
+          - newData
+          - noModel
+          - notFitted
+          - page
+          - pageRead
+          - parts
+          - pictures
+          - portion
+          - regrouped
+          - removal
+          - searchFormat
+          - searchJudged
+          - setVectors
+          - setsGrew
+          - start
+          - sweep
+          - synonyms
+          - tagByText
+          - tagKeptOut
+          - tags
+          - texts
+          - trained
+          - uncounted
+          - universes
+
     WorkReason:
       type: object
       required: [key, count]
       properties:
         key:
-          type: string
-          description: A key the interface words as "workload.reason.<key>"
+          $ref: '#/components/schemas/WorkReasonKey'
         count:
           type: integer
           format: int32

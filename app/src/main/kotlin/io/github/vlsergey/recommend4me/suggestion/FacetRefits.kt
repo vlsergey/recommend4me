@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.api.model.WorkKind
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
@@ -82,7 +83,7 @@ internal class FacetRefits(
             }
         }
         // What the last run of the application left undone of the fitting, planned again
-        workload.resume("suggesters") { left, reason ->
+        workload.resume(WorkKind.SUGGESTERS) { left, reason ->
             left.work.source?.let(stores::source)?.let { planRefresh(it, null, reason) }
         }
     }
@@ -183,10 +184,10 @@ internal class FacetRefits(
         private const val START_ORDER = 4
 
         /** The refresh of the facets of the source, as the queue of the works tells it planned and running. */
-        private fun refreshing(source: String) = Work("suggesters", source = source)
+        private fun refreshing(source: String) = Work(WorkKind.SUGGESTERS, source = source)
 
         /** The fitting anew of a facet of the source ([searchAnew]), as the queue of the works tells it. */
         private fun fittingAnew(store: SourceStore, facetKey: String) =
-            Work("suggesterAnew", source = store.id, facet = facetKey)
+            Work(WorkKind.SUGGESTER_ANEW, source = store.id, facet = facetKey)
     }
 }
