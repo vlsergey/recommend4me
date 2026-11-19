@@ -164,6 +164,12 @@ class Workload(background: Background = Threads(), private val records: WorkReco
                 entry.result.completeExceptionally(e)
                 throw e
             } catch (e: Throwable) {
+                // Of the application stopping — its files closed under the work — the work is given up, not failed: it
+                // stays in the queue and is done at the next start (owner, 2026-11-19: "errors in the queue")
+                if (turns.closed) {
+                    failed = false
+                    givenUp = true
+                }
                 // A RELAY, NOT A CATCH: whatever the work throws is handed to the callers joined to it and thrown on
                 entry.result.completeExceptionally(e)
                 throw e

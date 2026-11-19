@@ -2,12 +2,9 @@ package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.encoder.ImageEncoder
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
-import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.setvector.SetKind
-import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
-import io.github.vlsergey.recommend4me.textvector.TextVectors
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -100,10 +97,9 @@ fun interface VectorSeen {
 
 /**
  * THE AVERAGE WORK COUNTED AS EVERY WORK STREAMS PAST, nothing of a work kept once it is counted: every vector of an
- * item as it is read ([seen]) — of every source in one pass of each kind ([read]), or as a sweep of the scores reads a
- * portion's — and every work's features as a portion of them is read ([add]): its blocks of the manners, its numbers,
- * its categorical features. A catalogue of a million works is counted in the memory of its sums, and the sums go from
- * one turn of a sweep to its next as bytes ([pack]).
+ * item as it is read ([seen]) — as a sweep of the scores reads a portion's — and every work's features as a portion of
+ * them is read ([add]): its blocks of the manners, its numbers, its categorical features. A catalogue of a million
+ * works is counted in the memory of its sums, and the sums go from one turn of a sweep to its next as bytes ([pack]).
  */
 internal class AverageCount(
     private val textEncoder: TextEncoder?,
@@ -116,29 +112,6 @@ internal class AverageCount(
     private val numbers = HashMap<String, NumberSum>()
     private val features = HashMap<String, Int>()
     private var works = 0
-
-    /** Every vector of the source [s]: of its texts, its pictures and its sets, each kind's time a lap of [laps]. */
-    fun read(s: SourceStore, laps: Laps) {
-        var count = 0
-        fun put(block: String, v: FloatArray, picture: Boolean) {
-            count++
-            seen(block, v, picture)
-        }
-        if (textEncoder != null) {
-            // The title and the site's lines too: every text that has vectors
-            val blocks = TextVectors.blocks(s.id, s.schema).mapValues { it.value.first }
-            s.textVectors.forEach(textEncoder.id, blocks.keys) { _, key, v -> put(blocks.getValue(key), v, false) }
-            laps.lap("text vectors", count)
-        }
-        if (imageEncoder != null) {
-            count = 0
-            s.pictures.itemVectors.forEachItemVector(imageEncoder.id) { _, block, v -> put(block, v, true) }
-            laps.lap("picture vectors", count)
-        }
-        count = 0
-        s.setVectors.forEach(embeddings) { _, key, v -> put(key, v, false) }
-        laps.lap("set vectors", count)
-    }
 
     /** A vector of an item, read by whoever reads it — the scoring of a portion, chunks of it side by side. */
     @Synchronized

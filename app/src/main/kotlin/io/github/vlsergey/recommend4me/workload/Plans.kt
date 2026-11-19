@@ -121,7 +121,9 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
         } catch (e: CancellationException) {
             log.info("{} given up for newer data, done again after them: {}", plan.work, e.message)
         } catch (e: Exception) {
-            log.warn("{} failed: {}", plan.work, e.message, e)
+            if (turns.closed)
+                log.info("{} stopped with the application, done at the next start: {}", plan.work, e.message)
+            else log.warn("{} failed: {}", plan.work, e.message, e)
         } finally {
             ended(plan)
         }

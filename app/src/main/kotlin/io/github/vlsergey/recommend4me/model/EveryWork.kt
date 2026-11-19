@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemKeyList
 import io.github.vlsergey.recommend4me.item.ItemKeys
 import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.likeness.Likenesses
@@ -21,8 +20,8 @@ private val log = LoggerFactory.getLogger(EveryWork::class.java)
  * EVERY WORK OF A CONTENT TYPE READ AS THE MODEL READS IT, NEVER ALL AT ONCE: a type of a million works — ficbook's
  * dump — held whole was more than the memory (2026-11-17). The fourth stage reads the works of the items it is given, a
  * thousand at a time ([ofKeys], [ScoreSweep]); a training reads the works it learns of alone ([training]) with the
- * average work as the last pass counted it and kept ([AverageWorkRepository]) — counted of every work as it streams
- * past, a [PORTION] at a time ([averageWork]), only when none is kept, nothing of a work kept once counted.
+ * average work as the last pass counted it and kept ([AverageWorkRepository]) — of the graded works alone when none is
+ * kept ([averageOf]), nothing of a work kept once counted.
  */
 @Component
 class EveryWork(
@@ -47,41 +46,33 @@ class EveryWork(
 
     /**
      * The average work of the [type] as the last sweep of the scores counted it, of the vectors as they are made now
-     * ([AverageWork.basis]); when none is kept — the first training, the encoders changed — counted now of every work
-     * ([averageWork]) and kept.
+     * ([AverageWork.basis]); when none is kept — the first training, the encoders changed — of the graded works alone
+     * ([gradedAverage]): the sweep the training begins counts every work's and keeps it ([ScoreSweep]).
      */
-    fun averageOf(type: TypeStore): AverageWork {
-        val basis = AverageWork.basis(plugins, type)
-        return type.averageWork.load(basis) ?: averageWork(type).also { type.averageWork.save(it, basis) }
-    }
+    fun averageOf(type: TypeStore): AverageWork =
+        type.averageWork.load(AverageWork.basis(plugins, type)) ?: gradedAverage(type)
 
     /**
-     * THE AVERAGE WORK OF THE [type], counted of every work as it streams past: the vectors of every source in one pass
-     * of each kind, every work's features and manners a portion at a time ([portions]) — no vectors of a portion read,
-     * nor the sets of its works of several items made.
+     * The average work of the graded works of the [type] alone, as the sweep counts them when it begins ([ScoreSweep]):
+     * never counted of every work inside a training (owner, 2026-11-19: the training of the grades ran for hours, a
+     * million and a half works read a portion at a time, begun anew at every start of the application).
      */
-    fun averageWork(type: TypeStore): AverageWork {
+    private fun gradedAverage(type: TypeStore): AverageWork {
         val started = System.currentTimeMillis()
         val count = AverageCount(plugins.textEncoder(), plugins.imageEncoder(), type.embeddings.ids())
-        type.sources.forEach { s ->
-            val laps = Laps()
-            count.read(s, laps)
-            log.info("{}/{}: the vectors of every work counted in ms: {}", type.id, s.id, laps)
-        }
-        val read = System.currentTimeMillis()
-        var counted = 0
-        Pass(type, likenesses.stored(type), seen = null, vectors = false).walk { portion ->
-            count.addAll(portion)
-            counted += portion.catalogue.items.size
+        val clusters = works.of(type)
+        val graded = ratingsOf(type).map { clusters.representative(it.key) }.distinct()
+        ofKeys(type, likenesses.stored(type), graded, count) { read ->
+            count.addAll(read)
+            // Their vectors read as a scoring reads them: told to the count as they are
+            read.catalogue.vectorsOfMany(read.catalogue.items.map { it.key })
         }
         return count.made().also {
             log.info(
-                "{}: the average work counted of {} works in {} ms: the vectors {}, the works {}",
+                "{}: no average work kept, counted of {} graded works in {} ms",
                 type.id,
-                counted,
+                graded.size,
                 System.currentTimeMillis() - started,
-                read - started,
-                System.currentTimeMillis() - read,
             )
         }
     }
@@ -99,23 +90,18 @@ class EveryWork(
         seen: VectorSeen? = null,
         action: (WorkPortion) -> Unit,
     ) {
-        val pass = Pass(type, likeness, seen, vectors = true, keys.size)
+        val pass = Pass(type, likeness, seen)
         keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
             val s = type.source(source) ?: return@forEach
             pass.portion(s, s.items.keysOf(ids))?.let(action)
         }
     }
 
-    /**
-     * One pass over every work of the [type]: what every portion of it reads alike, read once. Of a pass that reads no
-     * [vectors], the works of several items are read without theirs, their sets not made.
-     */
+    /** One reading of the works of a [type] by their keys: what every portion of it reads alike, read once. */
     private inner class Pass(
         private val type: TypeStore,
         private val likeness: TypeLikeness,
         private val seen: VectorSeen?,
-        private val vectors: Boolean,
-        private val size: Int = PORTION,
     ) {
         private val severalSources = type.sources.size > 1
         private val ratings = ratingsOf(type)
@@ -123,21 +109,6 @@ class EveryWork(
         private val clusters = works.of(type)
         private val series = TypeSeries.read(type)
         private val none = Averages(emptyMap(), emptyMap())
-
-        /**
-         * Every portion — of the sources in their order, of each the items in the order of their ids
-         * ([ItemKeyList.keysAfter]) — handed to [action].
-         */
-        fun walk(action: (WorkPortion) -> Unit) {
-            type.sources.forEach { s ->
-                var after: String? = null
-                do {
-                    val keys = s.items.keysAfter(after, size)
-                    after = keys.lastOrNull()?.id ?: after
-                    portion(s, keys)?.let(action)
-                } while (keys.size == size)
-            }
-        }
 
         /**
          * The works the items [keys] of the source [s] name, each with all its items; null when they name none — every
@@ -180,7 +151,7 @@ class EveryWork(
             laps.lap("manners")
             // The vectors of the works of several items read now: a work's are made of all of its items'
             val linked = members.filter(clusters::linked)
-            val read = if (vectors) manners.with(reader.vectorsOfMany(type, linked, seen), linked) else emptyMap()
+            val read = manners.with(reader.vectorsOfMany(type, linked, seen), linked)
             val catalogue =
                 reader.catalogue(
                     type,
@@ -193,20 +164,12 @@ class EveryWork(
                     clusters,
                     manners,
                     seen,
-                    sets = vectors,
+                    sets = true,
                 )
             laps.lap("works of several", linked.size)
             log.info("{}/{}: a portion of {} works read in ms: {}", type.id, s.id, catalogue.items.size, laps)
             return WorkPortion(catalogue, items.associateBy { it.key }, manners, given)
         }
-    }
-
-    companion object {
-        /**
-         * The works read at a time by the count of the average work ([averageWork]): of a million works a few hundred
-         * megabytes in use, each a few hundred values and numbers.
-         */
-        const val PORTION = 10_000
     }
 }
 

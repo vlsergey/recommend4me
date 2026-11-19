@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.model.AverageWork
 import io.github.vlsergey.recommend4me.model.Averages
-import io.github.vlsergey.recommend4me.model.EveryWork
 import io.github.vlsergey.recommend4me.model.NumberSpread
 import io.github.vlsergey.recommend4me.model.Predicted
 import io.github.vlsergey.recommend4me.model.SweepState
@@ -28,7 +27,6 @@ import org.springframework.beans.factory.annotation.Autowired
  * its pass has not done, counts the average work along, and begins a pass anew by a new model.
  */
 class SiteScoreSweepTest : SiteTestBase() {
-    @Autowired lateinit var everyWork: EveryWork
     @Autowired lateinit var plugins: Plugins
 
     private val type
@@ -46,25 +44,22 @@ class SiteScoreSweepTest : SiteTestBase() {
         }
         // What the background makes of them made now: nothing changes them while the average work is compared
         background.run()
-        // The first training finds no average work kept: counted of every work once, and kept
+        // A training keeps no average work: of none kept it counts the graded works' alone — never a pass over every
+        // work inside a training; the sweep it begins keeps every work's
+        val kept = type.averageWork.load(basis)
         inBackground { recommendations.retrain("books") }
-        assertNotNull(type.averageWork.load(basis))
+        val after = type.averageWork.load(basis)
+        if (kept == null) assertNull(after) else assertAlike(kept, assertNotNull(after))
         // The sweep in one go: every work scored, a prediction of an item gone removed, the average work counted
-        // along kept, as the full pass counts it
+        // along kept
         type.predictions.write(listOf(ItemKey("site", "zz-gone") to Predicted(5.0, null)))
-        val full = inBackground {
-            workload.run(Work("sweepInOneGo")) {
-                inOneGo()
-                everyWork.averageWork(type)
-            }
-        }
+        inBackground { workload.run(Work("sweepInOneGo")) { inOneGo() } }
         val inOneGo = type.predictions.predicted("site")
         assertEquals(stores.source("site")!!.items.keys().map { it.id }.toSet(), inOneGo.keys)
         val swept = assertNotNull(type.averageWork.load(basis))
-        assertAlike(full, swept)
 
         trainedWithTheAverageKept(swept)
-        inTurns(inOneGo.keys)
+        inTurns(inOneGo.keys, swept)
     }
 
     /**
@@ -96,11 +91,11 @@ class SiteScoreSweepTest : SiteTestBase() {
      * the predictions and the average work as in one go. A model trained between two turns begins a pass anew. The
      * turns inside a work of the queue of their own: none planned by them, nor any other work, runs between.
      */
-    private fun inTurns(items: Set<String>) {
+    private fun inTurns(items: Set<String>, full: AverageWork) {
         val scoredSoFar = ArrayList<Int>()
         var restarted: SweepState? = null
         var before: SweepState? = null
-        val full = inBackground {
+        inBackground {
             workload.run(Work("sweepInTurns")) {
                 type.predictions.remove("site", items)
                 val model = type.models.trainedAt()!!
@@ -118,7 +113,6 @@ class SiteScoreSweepTest : SiteTestBase() {
                 scoreSweep.step("books", Duration.ZERO, PORTION)
                 restarted = type.sweep.load()
                 while (scoreSweep.sweeping("books")) scoreSweep.step("books", Duration.ZERO, PORTION)
-                everyWork.averageWork(type)
             }
         }
         assertTrue(scoredSoFar.zipWithNext().all { (a, b) -> a > 0 && b > a }, "scored $scoredSoFar")
@@ -126,7 +120,7 @@ class SiteScoreSweepTest : SiteTestBase() {
         // A pass anew: begun since the one under way, of its first portion alone
         assertTrue(restarted!!.began > before!!.began, "a pass anew")
         assertTrue(restarted!!.scored in 1..scoredSoFar.first(), "scored ${restarted!!.scored}")
-        // Of the new model every work scored, the average work as the full pass counts it
+        // Of the new model every work scored, the average work as the pass in one go counts it
         assertEquals(items, type.predictions.predicted("site").keys)
         assertAlike(full, type.averageWork.load(basis)!!)
         // The same model in turns as in one go
