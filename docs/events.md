@@ -33,7 +33,6 @@ flowchart LR
     o_job__(("job-*"))
     o_pictures(("pictures"))
     o_reparse(("reparse"))
-    o_set_vectors(("set-vectors"))
     o_start(("start"))
     o_universes_languages(("universes-languages"))
     e_CastNamesEncoded["CastNamesEncoded"]
@@ -46,6 +45,7 @@ flowchart LR
     e_MannersChanged["MannersChanged"]
     e_MarksChanged["MarksChanged"]
     e_PartsSaved["PartsSaved"]
+    e_PicturesAnalysed["PicturesAnalysed"]
     e_PicturesListed["PicturesListed"]
     e_PredictionsChanged["PredictionsChanged"]
     e_RatedValuesFilled["RatedValuesFilled"]
@@ -107,6 +107,7 @@ flowchart LR
     o_pictures --> e_GradesChanged
     o_pictures --> e_ItemsChanged
     o_pictures --> e_PartsSaved
+    o_pictures --> e_PicturesAnalysed
     o_pictures --> e_PicturesListed
     o_pictures --> e_SiteItemsWritten
     o_pictures --> e_SynonymsSet
@@ -120,9 +121,6 @@ flowchart LR
     o_reparse --> e_SynonymsSet
     o_reparse --> e_WorksRegrouped
     o_reparse --> w_train
-    o_set_vectors --> e_SetVectorsChanged
-    o_set_vectors --> w_setDirections
-    o_set_vectors --> w_setVectors
     o_start --> e_GradesChanged
     o_start --> e_ItemsChanged
     o_start --> e_PartsSaved
@@ -135,6 +133,7 @@ flowchart LR
     o_start --> w_listIndex
     o_start --> w_listValues
     o_start --> w_searchUpdate
+    o_start --> w_setVectors
     o_start --> w_tagTextModel
     o_start --> w_train
     o_universes_languages --> e_ItemsChanged
@@ -166,6 +165,7 @@ flowchart LR
     e_PartsSaved --> w_partVectors
     e_PartsSaved --> w_suggesters
     e_PartsSaved --> w_workSizes
+    e_PicturesAnalysed --> w_setVectors
     e_PredictionsChanged --> w_listIndex
     e_RatedValuesFilled --> w_train
     e_SearchJudged --> w_searchWeights
@@ -176,6 +176,7 @@ flowchart LR
     e_SiteItemsWritten --> w_fandomSiteWorksChanged
     e_SiteItemsWritten --> w_fandomsLetGo
     e_SiteItemsWritten --> w_manners
+    e_SiteItemsWritten --> w_setVectors
     e_SiteItemsWritten --> w_textVectors
     e_SiteItemsWritten --> w_workSizes
     e_SynonymsSet --> w_tagVectors
@@ -186,6 +187,7 @@ flowchart LR
     e_TagsChanged --> w_workSizes
     e_TextVectorsChanged --> w_listIndex
     e_TextVectorsChanged --> w_searchUpdate
+    e_TextVectorsChanged --> w_setVectors
     e_TextVectorsChanged --> w_suggesters
     e_UniversesRelated --> w_fandomLikeness
     e_WorksRegrouped --> w_listIndex
@@ -199,6 +201,7 @@ flowchart LR
     w_score --> e_PredictionsChanged
     w_scorersCompared --> w_scorersInput
     w_setVectors --> e_SetVectorsChanged
+    w_setVectors --> w_setDirections
     w_suggesterAnew --> w_suggesters
     w_suggesters --> e_FacetModelsFitted
     w_tagsNamed --> w_tagsCounted

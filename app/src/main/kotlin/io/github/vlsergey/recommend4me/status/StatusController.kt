@@ -5,7 +5,7 @@ import io.github.vlsergey.recommend4me.api.model.Status
 import io.github.vlsergey.recommend4me.api.model.WorkStatus
 import io.github.vlsergey.recommend4me.part.PartVectors
 import io.github.vlsergey.recommend4me.picture.PictureService
-import io.github.vlsergey.recommend4me.setvector.SetVectors
+import io.github.vlsergey.recommend4me.setvector.SetVectorMaking
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
@@ -21,7 +21,7 @@ class StatusController(
     private val pictures: PictureService,
     private val textVectors: TextVectors,
     private val parts: PartVectors,
-    private val sets: SetVectors,
+    private val sets: SetVectorMaking,
 ) : StatusApi {
 
     override fun getStatus(): ResponseEntity<Status> {
@@ -32,7 +32,7 @@ class StatusController(
                     WorkStatus("pictures", p.analyzed, p.total, p.running, p.failed, p.perMinute),
                     WorkStatus("texts", 0, 0, textVectors.running()),
                     WorkStatus("parts", 0, 0, parts.running()),
-                    WorkStatus("sets", sets.done, sets.total, sets.running()),
+                    WorkStatus("sets", 0, 0, sets.running()),
                 )
             )
         )

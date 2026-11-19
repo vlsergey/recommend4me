@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Component
@@ -33,6 +34,7 @@ class PictureAnalysis(
     contexts: SourceContexts,
     private val recommendations: Recommendations,
     private val background: Background,
+    private val events: ApplicationEventPublisher,
 ) {
     @Volatile private var worker: Started? = null
     private val downloads =
@@ -150,6 +152,10 @@ class PictureAnalysis(
         doneSinceStart.addAndGet(done.analysed)
         done.made.forEach { (type, n) -> stream.sinceRetrain.merge(type, n, Int::plus) }
         batch.forEach { stream.inFlight -= it.job.key }
+        // The works whose pictures were analysed: their sets of screenshots may have grown
+        batch.groupBy({ it.job.store.id }, { it.job.picture.itemId }).forEach { (source, ids) ->
+            events.publishEvent(PicturesAnalysed(source, ids.distinct()))
+        }
         retrainDue(stream.sinceRetrain)
     }
 
