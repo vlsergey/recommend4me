@@ -104,7 +104,7 @@ class Recommendations(
                             (waiting?.firstAt ?: now) + MAX_WAIT_MS,
                         )
                 }
-            tasks.plan(work, Instant.ofEpochMilli(due), reason, priority = TaskPriority.ASKED.takeIf { asked }) {
+            tasks.plan(work, Instant.ofEpochMilli(due), reason, priority = priorityOf(asked, byUser)) {
                 retrain(type, asked)
             }
             if (!byUser && waiting?.byUser == true) waiting else PendingTraining(waiting?.firstAt ?: now, due, byUser)
@@ -116,6 +116,17 @@ class Recommendations(
      * works before it; the request that asked does not wait for it ([Requests]).
      */
     fun trainSoon(type: String) = scheduleRetrain(type, "asked", asked = true, quietMs = 0)
+
+    /**
+     * The priority of a training the user waits for ([asked]), of a change of the user's not waited for ([byUser]),
+     * else of the background.
+     */
+    private fun priorityOf(asked: Boolean, byUser: Boolean): TaskPriority? =
+        when {
+            asked -> TaskPriority.ASKED
+            byUser -> TaskPriority.USER
+            else -> null
+        }
 
     /** A training scheduled: since the first change it waits on, when it is due, and whether it is of the user's. */
     private class PendingTraining(val firstAt: Long, val due: Long, val byUser: Boolean)

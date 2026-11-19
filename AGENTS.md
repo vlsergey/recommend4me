@@ -136,8 +136,9 @@ short line through the encoder.
 it does — no executor or timer of a component's own. Planned again before it begins, a work is done
 once; planned while one alike waits its turn, it is that one. **A task has a priority** (`TaskPriority`,
 owner, 2026-11-19), the first first: `asked` — the user waits for it on the screen (a grade, a press);
-`user` — of a change of the user's the user does not wait to see learnt (an answer, a tag: planned on a
-request's thread); `background`; `markedWorks` and `otherWorks` — the tasks over the works, the marked
+`user` — of a change of the user's the user does not wait to see learnt (an answer, a tag: named so by
+the task's owner — a request's thread is no sign, the pages a site's reading sends are requests too);
+`background`; `markedWorks` and `otherWorks` — the tasks over the works, the marked
 and rated ones apart from the rest (`Task.works`), going a thousand at a time in the order of the
 expected grade, from the cursor where they left (`TaskCursor`, `Tasks.again`), the other works after
 every other task. A task planned by a running one, or by what it told, inherits its priority
