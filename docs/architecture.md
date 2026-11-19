@@ -293,12 +293,11 @@ its own chances. The penalty is chosen by the held-out loss — the strongest
 penalty within one standard error of the least; gone on from the state fitted last, the penalty
 chosen then, the two beside it and the strongest, whose model is all but the values' base rates —
 a choice gone where every model holds out worse than that walks back from it. No fitting holds
-more than a portion of ten thousand works. Two suggesters of the model differ in a facet of no
-more works than a portion holds: `bilinear-2`, the default, fits it over them whole — every
+more than a portion of ten thousand works. A facet of no more works than a portion holds is
+fitted over them whole (`bilinear-2`, the one version of the model since 2026-11-19): every
 model's minimum searched by L-BFGS (`WholeSearch`, every penalty's folds in one product a step);
 of author.today's tags a held-out loss of 0.0007 where the descent over portions held 0.002 at
-its best, in a tenth of the time —, `bilinear-1` descends it as any other. A facet of more
-descends a portion at a time (Adam, every penalty's every fold in one product), walking the portions a few times — from
+its best, in a tenth of the time. A facet of more descends a portion at a time (Adam, every penalty's every fold in one product), walking the portions a few times — from
 scratch once to see them (the input blocks are the portions' own: the value side has no work and
 tells none), three to six to descend, once to score them by the model kept; gone on from the
 state fitted last, twice and once, unless the works have a block its layout does not know. The

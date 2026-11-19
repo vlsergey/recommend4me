@@ -12,7 +12,4 @@ class BilinearSuggesterAutoConfiguration {
      * card.
      */
     @Bean fun bilinearSuggester(onnx: Onnx): FacetSuggester = BilinearSuggester(onnx)
-
-    /** The same model, a facet of a portion's works searched over them whole ([BilinearSuggester.whole]). */
-    @Bean fun wholeBilinearSuggester(onnx: Onnx): FacetSuggester = BilinearSuggester(onnx, whole = true)
 }

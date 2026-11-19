@@ -20,11 +20,6 @@ internal class PortionFitting(
     private val portions: TaskPortions,
     private val last: FittedBilinear?,
     private val card: Cublas?,
-    /**
-     * Whether a facet of no more items than a portion holds is searched over them whole ([WholeSearch]) rather than
-     * descended a portion at a time ([Descent]): the suggester's own way ([BilinearSuggester.whole]).
-     */
-    private val whole: Boolean,
     private val stop: () -> Boolean,
 ) {
     private val values = portions.values
@@ -117,7 +112,7 @@ internal class PortionFitting(
         // Of no more items than a portion holds — of the survey's one portion, or the last state's — every model
         // searched over them whole; else the descent over the portions
         val alone = survey == null || survey.portions == 1
-        if (whole && alone && portions.items <= TaskPortions.MOST)
+        if (alone && portions.items <= TaskPortions.MOST)
             searchedWhole(design, survey, models)?.let {
                 return it.tried
             }

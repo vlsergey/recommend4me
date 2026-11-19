@@ -12,7 +12,9 @@ import io.github.vlsergey.recommend4me.onnx.Onnx
  * of a million works (user, 2026-11-17). A walk over the portions reads every work anew, so a fitting walks them a few
  * times ([PortionFitting]): from scratch once to see them ([Survey]), a few times to descend ([Descent]: every model's
  * points moved by the gradient of a portion at a time, [Plan]), and once to score them by the model kept
- * ([ScoredPortions]).
+ * ([ScoredPortions]). A facet of no more works than a portion holds is fitted over them whole instead: every model's
+ * minimum searched by L-BFGS ([WholeSearch]) — of author.today's tags a held-out loss of 0.0007 where the descent held
+ * 0.002 at its best, in a tenth of the time (2026-11-19).
  *
  * EVERY ITEM IS JUDGED BY A MODEL THAT DID NOT LEARN FROM IT. The items fall into [FOLDS] folds by their ids; a model
  * is fitted on the items of all folds but one, and judges the items of that one. What a work's labels say of it does
@@ -24,10 +26,8 @@ import io.github.vlsergey.recommend4me.onnx.Onnx
  * held-out loss of every fold summed — the strongest penalty within one standard error of the least —, every penalty's
  * every fold descending together, in the same walks.
  *
- * TWO SUGGESTERS OF THE SAME MODEL, by how a facet of no more works than a portion holds is fitted ([whole]):
- * "bilinear-1" descends it a portion at a time as any other ([Descent]: Adam); "bilinear-2" searches every model's
- * minimum over its works whole ([WholeSearch]: L-BFGS) — of author.today's tags a held-out loss of 0.0007 where the
- * descent held 0.002 at its best, in a tenth of the time (2026-11-19). A facet of more works the two descend alike.
+ * ONE VERSION (owner, 2026-11-19: "merge bilinear into one version"): "bilinear-2", the one that searched a portion's
+ * works whole beside "bilinear-1", which descended them as any other.
  *
  * A REFIT GOES ON FROM THE STATE FITTED LAST: its weights carried to the facet as it is now, by the keys of the
  * features and the values, its layout's scales kept, and the penalty chosen again beside the last one — three walks
@@ -37,23 +37,18 @@ import io.github.vlsergey.recommend4me.onnx.Onnx
 class BilinearSuggester
 internal constructor(
     /** The runtime whose libraries of the card the products go through, when there is one: on the processor without. */
-    private val onnx: Onnx?,
-    /** Whether a facet of no more works than a portion holds is searched over them whole ([WholeSearch]). */
-    internal val whole: Boolean = false,
+    private val onnx: Onnx?
 ) : FacetSuggester {
     constructor() : this(null)
 
-    /** The suggester of the facets of a portion's works searched over them whole ([whole]). */
-    constructor(whole: Boolean) : this(null, whole)
-
-    override val id = if (whole) "bilinear-2" else "bilinear-1"
+    override val id = "bilinear-2"
 
     override fun fit(portions: TaskPortions, previous: FittedSuggester?, stop: () -> Boolean): FittedSuggester? {
         if (portions.values.valueCount == 0 || portions.items == 0) return null
         // GONE ON FROM THE STATE FITTED LAST: a few answers or works more move the optimum a little, and the walk to it
         // from the last is short
         val last = (previous as? FittedBilinear)?.takeIf { it.folds.size == FOLDS && it.rank == RANK }
-        return PortionFitting(portions, last, onnx?.cudaLibraries()?.let(Cublas::open), whole, stop).fitted()
+        return PortionFitting(portions, last, onnx?.cudaLibraries()?.let(Cublas::open), stop).fitted()
     }
 
     override fun unpack(bytes: ByteArray, task: SuggestionTask): FittedSuggester? =

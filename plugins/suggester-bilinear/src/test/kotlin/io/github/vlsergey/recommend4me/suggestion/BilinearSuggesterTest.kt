@@ -65,11 +65,6 @@ class BilinearSuggesterTest {
     fun `a value goes with the texts that point its way, every item judged by a model that did not learn from it`() =
         goesWithTexts(BilinearSuggester())
 
-    /** The same of the facet of a portion's works searched over them whole ("bilinear-2"). */
-    @Test
-    fun `searched whole, a value goes with the texts that point its way`() =
-        goesWithTexts(BilinearSuggester(whole = true))
-
     private fun goesWithTexts(suggester: BilinearSuggester) {
         val task = task(300, wrong = 5)
         val fitted = assertNotNull(suggester.fit(whole(task)))
@@ -367,11 +362,6 @@ class BilinearSuggesterTest {
     fun `gone on from the last state with more items, the model judges as one fitted from scratch`() =
         goneOnAsFromScratch(BilinearSuggester())
 
-    /** The same of the facet of a portion's works searched over them whole ("bilinear-2"). */
-    @Test
-    fun `searched whole, gone on from the last state the model judges as one fitted from scratch`() =
-        goneOnAsFromScratch(BilinearSuggester(whole = true))
-
     private fun goneOnAsFromScratch(suggester: BilinearSuggester) {
         val small = task(240)
         val last = assertNotNull(suggester.fit(whole(small)))
@@ -445,11 +435,6 @@ class BilinearSuggesterTest {
     @Test
     fun `the values the user answered on are scored by the model of the fold that held their item out`() =
         heldOutAsKept(BilinearSuggester(), SCORE_32)
-
-    /** The same of the facet of a portion's works searched over them whole ("bilinear-2"). */
-    @Test
-    fun `searched whole, the values answered on are scored by the model of the fold that held their item out`() =
-        heldOutAsKept(BilinearSuggester(whole = true), SCORE_32)
 
     @Test
     fun `of a task in several portions, the values answered on are scored as the model kept scores them`() =
@@ -651,8 +636,12 @@ class BilinearSuggesterTest {
          */
         const val WALKS_FROM_SCRATCH = 8
 
-        /** The walks of a fitting gone on from the last state: descending twice, scoring once. */
-        const val WALKS_GONE_ON = 3
+        /**
+         * The walks of a fitting gone on from the last state: the search of the items whole tried — of no more items
+         * than a portion holds, cut here in several, given up at the second ([NotWhole]) —, descending twice, scoring
+         * once.
+         */
+        const val WALKS_GONE_ON = 4
 
         /** The collections of the garbage a portion held by nothing is waited for, and the pause between them. */
         const val COLLECTIONS = 10
