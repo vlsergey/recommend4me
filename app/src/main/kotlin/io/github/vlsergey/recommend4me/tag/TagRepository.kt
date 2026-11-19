@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.tag
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_TAG
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_TAG
 import java.time.Instant
@@ -55,16 +56,37 @@ class TagRepository(private val db: DSLContext) {
 
     /** Every site's tag and the normalized tag it is bound to. */
     fun bindings(): Map<SiteTagRef, Long> =
-        db.select(SITE_TAG.SOURCE, SITE_TAG.TAG, SITE_TAG.NORMALIZED).from(SITE_TAG).fetch().associate {
-            SiteTagRef(it.value1()!!, it.value2()!!) to it.value3()!!
-        }
+        WholeReadRefused.check("every binding of the sites' tags")
+            .let { _ -> db }
+            .select(SITE_TAG.SOURCE, SITE_TAG.TAG, SITE_TAG.NORMALIZED)
+            .from(SITE_TAG)
+            .fetch()
+            .associate { SiteTagRef(it.value1()!!, it.value2()!!) to it.value3()!! }
 
     /** The site's tags of one [source] and the normalized tags they are bound to: site's key to id. */
     fun bindingsOf(source: String): Map<String, Long> =
-        db.select(SITE_TAG.TAG, SITE_TAG.NORMALIZED)
+        WholeReadRefused.check("every binding of the tags of $source")
+            .let { _ -> db }
+            .select(SITE_TAG.TAG, SITE_TAG.NORMALIZED)
             .from(SITE_TAG)
             .where(SITE_TAG.SOURCE.eq(source))
             .fetchMap({ it.value1()!! }, { it.value2()!! })
+
+    /**
+     * The normalized tags the site's tags [tags] of the [source] are bound to: those of a few works, by the index of
+     * the bindings — not every binding of the source ([bindingsOf]).
+     */
+    fun bindingsOf(source: String, tags: Collection<String>): Map<String, Long> =
+        tags
+            .distinct()
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(SITE_TAG.TAG, SITE_TAG.NORMALIZED)
+                    .from(SITE_TAG)
+                    .where(SITE_TAG.SOURCE.eq(source), SITE_TAG.TAG.`in`(chunk))
+                    .fetch { it.value1()!! to it.value2()!! }
+            }
+            .toMap()
 
     /** A new normalized tag, named by the user when [name] is given; its id. */
     fun create(name: String? = null): Long =
@@ -124,6 +146,9 @@ class TagRepository(private val db: DSLContext) {
     companion object {
         /** A normalized tag as a value of the works' tags: its id written out. */
         fun key(id: Long): String = id.toString()
+
+        /** The tags asked by one query: the length of its list, not a meaning. */
+        private const val BATCH = 1000
 
         /** The id of a value of the works' tags; null for one that is no normalized tag. */
         fun idOf(key: String): Long? = key.toLongOrNull()

@@ -50,7 +50,22 @@ internal object PairingVocabulary {
      * characters of the dictionary "A / B" naming no other pairing of either of them, grouped by their sexes and by the
      * characters themselves.
      */
-    fun valueSide(store: SourceStore, type: TypeStore, characters: CharactersRead, pairings: Set<String>): Vocabulary {
+    fun valueSide(store: SourceStore, type: TypeStore, characters: CharactersRead, pairings: Set<String>): Vocabulary =
+        sideOf(store, pairings, UniverseFacet.sexes(type.universes, characters))
+
+    /**
+     * The value side of the [pairings] alone, their characters of the universes the operation read already
+     * ([CharactersRead]): what the values a model was not made of are scored by ([KeptValues]).
+     */
+    fun sideOf(store: SourceStore, characters: CharactersRead, pairings: Set<String>): Vocabulary {
+        val members = pairings.flatMap { p -> UniverseFacet.members(p)?.toList().orEmpty() }.toSet()
+        val sexes = HashMap<String, CharacterSex>(UniverseFacet.ORIGINAL_SEXES)
+        characters.ofValues(members).forEach { (v, c) -> c.sex?.let { sexes[v] = it } }
+        return sideOf(store, pairings, sexes)
+    }
+
+    /** The value side of the [pairings], their characters of the [sexes]. */
+    private fun sideOf(store: SourceStore, pairings: Set<String>, sexes: Map<String, CharacterSex>): Vocabulary {
         val values = namesOf(store, pairings)
         val ofTwoKnown = values.filterKeys { p ->
             UniverseFacet.members(p)?.toList()?.none { it in UniverseFacet.ORIGINAL_CHARACTERS } == true
@@ -63,7 +78,7 @@ internal object PairingVocabulary {
             paired = true,
             // Their names alone are what the model reads; shown with the sign of their characters' sexes
             // ([UniverseNames])
-            groupings = groupings(UniverseFacet.sexes(type.universes, characters)),
+            groupings = groupings(sexes),
         )
     }
 
@@ -161,7 +176,7 @@ internal object PairingVocabulary {
         val universes = WorkUniverses.universesOf(answers, made)
         val own = universes.values.flatten().toSet()
         val known = HashMap<String, List<String>>()
-        val dictionary = type.universes.dictionary()
+        val dictionary = type.universes.dictionaryOf(own)
         val wanted = own.flatMap(dictionary::characterEntries).distinct()
         read.read(wanted)
         wanted.forEach { u -> read.of(u).forEach { known[UniverseFacet.valueOf(u.catalogue, it.id)] = it.names } }

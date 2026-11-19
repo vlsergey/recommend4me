@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
+
 /**
  * THE NORMALIZED FANDOMS AS ONE OPERATION READS THEM ([load]), handed to every part of it and never kept past it: every
  * fandom, the sites' fandoms bound to each, the entries of the catalogue each is bound to, and one under another.
@@ -92,12 +94,22 @@ private constructor(
     }
 
     companion object {
+        /**
+         * The dictionary of the fandoms [ids] alone, of the values a few works name (owner, 2026-11-19: "by the ids you
+         * load their names of the dictionary"): their rows and their entries, by their ids — no site's fandom bound to
+         * them, none above or under them. What the characters of a work's universes are read by.
+         */
+        fun ofFandoms(fandoms: FandomRepository, ids: Collection<Long>): FandomDictionary =
+            FandomDictionary(fandoms.rowsOf(ids), emptyMap(), fandoms.entries.ofMany(ids), emptyMap())
+
         fun load(fandoms: FandomRepository): FandomDictionary =
-            FandomDictionary(
-                fandoms.all().associateBy { it.id },
-                fandoms.sites.bindings(),
-                fandoms.entries.all(),
-                fandoms.relations.parents(),
-            )
+            WholeReadRefused.check("the dictionary of the fandoms").let {
+                FandomDictionary(
+                    fandoms.all().associateBy { it.id },
+                    fandoms.sites.bindings(),
+                    fandoms.entries.all(),
+                    fandoms.relations.parents(),
+                )
+            }
     }
 }

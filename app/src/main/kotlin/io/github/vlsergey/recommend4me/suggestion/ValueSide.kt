@@ -149,7 +149,8 @@ internal class ValueCount(facet: String) {
         context.add(counted.context)
         castTexts += counted.castTexts
         this.castReader = castReader
-        if (vocabulary?.paired == true) vocabulary.allowed?.let { of -> read.ids.forEach { pairings += of(it) } }
+        if (vocabulary?.paired == true)
+            vocabulary.allowed?.let { of -> read.ids.forEach { pairings += of(it).orEmpty() } }
         print.add(read)
     }
 

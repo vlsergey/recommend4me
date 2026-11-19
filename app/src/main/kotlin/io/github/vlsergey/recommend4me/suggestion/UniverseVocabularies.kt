@@ -84,6 +84,22 @@ internal class UniverseVocabularies(private val stores: Stores) {
         }
     }
 
+    /**
+     * The value side of the [values] alone of a facet of the universes, of what the operation read already: what the
+     * values a model was not made of are scored by ([KeptValues]) — no dictionary read whole. Null of a facet of none.
+     */
+    fun sideOf(store: SourceStore, facet: FacetDef, characters: CharactersRead, values: Set<String>): Vocabulary? {
+        if (!stores.typeOf(store.id).type.universes) return null
+        return when (facet.key) {
+            UniverseFacets.KIND -> Vocabulary(UniverseFacet.KINDS, null)
+            UniverseFacets.UNIVERSE -> Vocabulary(store.names(facet.key, values), null)
+            UniverseFacets.CHARACTERS,
+            UniverseFacets.SECONDARY_CHARACTERS -> CharacterVocabulary.sideOf(characters, values)
+            UniverseFacets.PAIRINGS -> PairingVocabulary.sideOf(store, characters, values)
+            else -> null
+        }
+    }
+
     /** The vocabulary of the universes: every universe of the dictionary, but none of a work of no universe. */
     private fun universes(
         store: SourceStore,
@@ -101,11 +117,10 @@ internal class UniverseVocabularies(private val stores: Stores) {
         // NO NAME OF IT LOOKED FOR IN THE WORK'S WORDS (user, 2026-10-16): the universe is told by the
         // work's texts, its tags and its other values; the names below are what the fitting learns from.
         // Of the works read, the universes' keys alone: not every universe's characters read to count them
+        // Of the works read, the model's own values the candidates — every universe it knows, scored, the likeliest
+        // shown: no dictionary read (owner, 2026-11-19: "take the likeliest, and of them the allowed")
+        if (light) return Vocabulary(emptyMap(), allowed = { id -> if (original(id)) emptySet() else null })
         val dictionary = type.universes.dictionary()
-        if (light) {
-            val keys = dictionary.values
-            return Vocabulary(emptyMap(), allowed = { id -> if (original(id)) emptySet() else keys })
-        }
         val all = type.universes.shown.of(null, dictionary)
         return Vocabulary(
             all,

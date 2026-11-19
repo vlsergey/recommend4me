@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
+
 /**
  * THE ENTRIES OF THE DICTIONARY'S UNIVERSES AS ONE OPERATION READS THEM: every universe's read at its first need and
  * once, the names the user gave read once for them all — handed to every part of the operation that wants them, of
@@ -41,9 +43,26 @@ class CharactersRead(private val universes: UniverseRepository) {
             missing.forEach { read[it] = found[it].orEmpty() }
         }
 
+    /**
+     * Of the universes read so far, the characters [values] ("<catalogue>:<id>") kept among them: what the values a
+     * work may have are told by, of its universes read already — no universe read again, none read whole.
+     */
+    fun ofValues(values: Set<String>): Map<String, UniverseCharacter> =
+        synchronized(read) {
+            val out = HashMap<String, UniverseCharacter>()
+            read.forEach { (u, entries) ->
+                entries.forEach { e ->
+                    val value = UniverseFacet.valueOf(u.catalogue, e.character.id)
+                    if (e.included && value in values) out[value] = e.character
+                }
+            }
+            out
+        }
+
     /** Every universe of the dictionary read at once. */
     fun every() =
         synchronized(read) {
+            WholeReadRefused.check("every universe's characters")
             if (whole) return@synchronized
             universes.entries.ofUniverses(null, local).forEach { (key, entries) -> read.putIfAbsent(key, entries) }
             whole = true

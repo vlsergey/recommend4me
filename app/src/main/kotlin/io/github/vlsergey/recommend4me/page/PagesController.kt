@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.api.model.PageItem
 import io.github.vlsergey.recommend4me.api.model.PagePicture
 import io.github.vlsergey.recommend4me.api.model.PageView
 import io.github.vlsergey.recommend4me.api.model.ReviewDecorInfo
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.item.ItemCards
 import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -79,7 +80,7 @@ class PagesController(
     private fun item(store: SourceStore, itemId: String, decor: PageDecor?): PageItem? {
         val laps = Laps()
         val started = System.currentTimeMillis()
-        val made = item(store, itemId, decor, laps)
+        val made = WholeReadRefused.during("the page's work ${store.id}/$itemId") { item(store, itemId, decor, laps) }
         val took = System.currentTimeMillis() - started
         log.info("{}/{}: the page's work made in {} ms: {}", store.id, itemId, took, laps)
         return made

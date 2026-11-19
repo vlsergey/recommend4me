@@ -75,6 +75,17 @@ the dictionary's word, the works' lines — and makes them inside `DatabaseRefus
 asked for there fails at once. A new step of a computation of the facets reads what it needs before it,
 never inside it.
 
+## A work's card reads that work alone
+
+The card of a work — the extension's page (`PagesController.item`) and the screen of a work
+(`ItemDetailsReader.read`) — reads the work's own items, their facets and the values of their own ids, runs them
+through the chain of the models, and reads the names of the candidates it gives by their ids (owner, 2026-11-19: "an
+attempt to load ALL the values of any dictionary while loading the card of one work must fail"). It is made inside
+`WholeReadRefused.during`: a reading of a whole dictionary or of every binding there — of the fandoms, the universes'
+characters, the tags' bindings, a facet's every value, every work of several items — fails at once. A new step of a
+card reads by keys (`bindingsOf(source, keys)`, `dictionaryOf(values)`, `CharactersRead.ofValues`); a value the model
+does not know is told by what the work's own universes read already (`FacetVocabularies.sideOf`).
+
 ## A work is a normalized work; a site's item is what a site says of it
 
 Every item of every site is bound to a normalized work (`work/WorkRepository.kt`), at first one of its

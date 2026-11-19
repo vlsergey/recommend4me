@@ -95,7 +95,7 @@ class Scoring(
         val model = kept.load(type) ?: return
         val input = inputOf(type, key, likenesses.stored(type)) ?: return
         val prediction = Predicted(model.score(input), kept.loadInterest(type)?.chances(listOf(input))?.single())
-        val members = works.of(type).members(key)
+        val members = works.ofKeys(type, listOf(key)).members(key)
         members.forEach { type.predictions.save(it, prediction) }
         events.publishEvent(PredictionsChanged(type.id, members))
     }
@@ -114,7 +114,7 @@ class Scoring(
                 TypedRating(item.key, it.version, it.grade, it.ratedAt)
             }
         val previous = CatalogueReader.previousGradesOfCurrentVersions(ratings) { item.version }[item.key]
-        val members = read?.members ?: works.of(type).members(key)
+        val members = read?.members ?: works.ofKeys(type, listOf(key)).members(key)
         val likeness = members.map { likenesses.of(type, it, stored) }.filter { it.isNotEmpty() }
         return CatalogueReader.inputOf(
             item,

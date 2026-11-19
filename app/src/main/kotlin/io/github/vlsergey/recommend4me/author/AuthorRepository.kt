@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.author
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_AUTHOR
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_AUTHOR_DISTINCT
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_AUTHOR_ENTRY
@@ -53,7 +54,9 @@ class AuthorRepository(
 
     /** The authors of the [source] and the normalized authors they are bound to: the site's key to the id. */
     fun bindingsOf(source: String): Map<String, Long> =
-        db.select(SITE_AUTHOR.AUTHOR, SITE_AUTHOR.NORMALIZED)
+        WholeReadRefused.check("every binding of the authors of $source")
+            .let { _ -> db }
+            .select(SITE_AUTHOR.AUTHOR, SITE_AUTHOR.NORMALIZED)
             .from(SITE_AUTHOR)
             .where(SITE_AUTHOR.SOURCE.eq(source))
             .fetchMap({ it.value1()!! }, { it.value2()!! })

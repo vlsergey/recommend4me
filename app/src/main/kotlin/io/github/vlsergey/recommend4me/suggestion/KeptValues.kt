@@ -31,7 +31,7 @@ internal class KeptValues(val keys: List<String>, val names: Matrix?, val groupi
             val known = own.toHashSet()
             val beyond =
                 vocabulary?.allowed?.let { allowed ->
-                    read.ids.flatMapTo(LinkedHashSet()) { allowed(it) }.filter { it !in known }
+                    read.ids.flatMapTo(LinkedHashSet()) { allowed(it).orEmpty() }.filter { it !in known }
                 }
             return if (beyond.isNullOrEmpty()) KeptValues(own, null, emptyList())
             else withNew(store, facet, own, beyond, read, vocabularies, encoder)
@@ -49,7 +49,7 @@ internal class KeptValues(val keys: List<String>, val names: Matrix?, val groupi
         ): KeptValues {
             val keys = own + beyond
             // The dictionary's word on the new values: the texts of their names and their groups
-            val side = vocabularies.valueSide(store, facet, read.characters, beyond.toSet())
+            val side = vocabularies.sideOf(store, facet, read.characters, beyond.toSet())
             val corrections = read.corrections.values.flatten()
             val made =
                 ValueNames.matrix(

@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.FANDOM_SITE
 import java.time.Instant
 import org.jooq.DSLContext
@@ -12,9 +13,28 @@ class FandomSites(private val db: DSLContext) {
 
     /** Every site's fandom and the normalized fandom it is bound to. */
     fun bindings(): Map<SiteFandomRef, Long> =
-        db.select(FANDOM_SITE.SOURCE, FANDOM_SITE.SITE_KEY, FANDOM_SITE.FANDOM).from(FANDOM_SITE).fetch().associate {
-            SiteFandomRef(it.value1()!!, it.value2()!!) to it.value3()!!
-        }
+        WholeReadRefused.check("every binding of the sites' fandoms")
+            .let { _ -> db }
+            .select(FANDOM_SITE.SOURCE, FANDOM_SITE.SITE_KEY, FANDOM_SITE.FANDOM)
+            .from(FANDOM_SITE)
+            .fetch()
+            .associate { SiteFandomRef(it.value1()!!, it.value2()!!) to it.value3()!! }
+
+    /**
+     * The normalized fandoms the site's fandoms [keys] of the [source] are bound to: those of a few works, by the index
+     * of the bindings.
+     */
+    fun bindingsOf(source: String, keys: Collection<String>): Map<String, Long> =
+        keys
+            .distinct()
+            .chunked(BATCH)
+            .flatMap { chunk ->
+                db.select(FANDOM_SITE.SITE_KEY, FANDOM_SITE.FANDOM)
+                    .from(FANDOM_SITE)
+                    .where(FANDOM_SITE.SOURCE.eq(source), FANDOM_SITE.SITE_KEY.`in`(chunk))
+                    .fetch { it.value1()!! to it.value2()!! }
+            }
+            .toMap()
 
     /** The normalized fandom [site] is bound to; null of one not bound yet. */
     fun fandomOf(site: SiteFandomRef): Long? =
@@ -70,3 +90,6 @@ class FandomSites(private val db: DSLContext) {
         const val KEY_WIDTH = 500
     }
 }
+
+/** The keys asked by one query: the length of its list, not a meaning. */
+private const val BATCH = 1000

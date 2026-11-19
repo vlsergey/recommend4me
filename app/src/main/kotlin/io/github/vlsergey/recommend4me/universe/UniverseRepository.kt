@@ -98,6 +98,10 @@ class UniverseRepository(
     /** The universes as one operation reads them. */
     fun dictionary(): FandomDictionary = FandomDictionary.load(fandoms)
 
+    /** The dictionary of the universes [values] alone ([FandomDictionary.ofFandoms]): of a few works'. */
+    fun dictionaryOf(values: Collection<String>): FandomDictionary =
+        FandomDictionary.ofFandoms(fandoms, values.mapNotNull(FandomRepository::idOf))
+
     /** The names and the descriptions the universes are shown by. */
     val shown = FandomNames(names, fandoms, ::dictionary)
 

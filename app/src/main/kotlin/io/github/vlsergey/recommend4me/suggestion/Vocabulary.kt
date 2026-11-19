@@ -25,7 +25,8 @@ internal class Named(val names: Map<String, List<String>>, val without: Set<Stri
  */
 internal class Vocabulary(
     val values: Map<String, String>,
-    val allowed: ((String) -> Set<String>)?,
+    /** The values each item may have; null of an item that may have any — of the vocabulary's, of the model's. */
+    val allowed: ((String) -> Set<String>?)?,
     /**
      * The names a work's own words are looked for by in the index ([SearchProvider.mentions]) ([Named]): null for a
      * work not counted. [valuesOf]: the values a name found is of. Of the candidates of one work and of the passages

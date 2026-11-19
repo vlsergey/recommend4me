@@ -19,6 +19,7 @@ import io.github.vlsergey.recommend4me.api.model.WorkSite
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.model.ContributionGroup
 import io.github.vlsergey.recommend4me.model.Details
@@ -127,15 +128,17 @@ class ItemDetailsReader(
      * The work as the dialog shows it, its chances made now in memory ([FacetSuggestions.chances]): of every item of
      * the work in one chain a source, for its card and its form alike.
      */
-    fun read(key: ItemKey): ItemDetails? {
-        val store = stores.source(key.source) ?: return null
-        val type = stores.typeOf(key.source)
-        val clusters = works.ofKeys(type, listOf(key))
-        val members = cards.membersRead(type, clusters.members(key), null)
-        return cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull()?.let { summary ->
-            details(store, type, key, summary, clusters, members)
+    fun read(key: ItemKey): ItemDetails? =
+        WholeReadRefused.during("the screen of the work $key") {
+            stores.source(key.source)?.let { store ->
+                val type = stores.typeOf(key.source)
+                val clusters = works.ofKeys(type, listOf(key))
+                val members = cards.membersRead(type, clusters.members(key), null)
+                cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull()?.let { summary ->
+                    details(store, type, key, summary, clusters, members)
+                }
+            }
         }
-    }
 
     /**
      * The facets of the work of [key] as its screen shows them — the site's values, the drafts, the user's answers, the

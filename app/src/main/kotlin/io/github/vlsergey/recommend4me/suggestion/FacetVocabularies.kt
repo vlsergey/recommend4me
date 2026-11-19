@@ -47,6 +47,16 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
         universes.valueSide(store, facet, characters, pairings)
             ?: examplesFrom(store, facet)?.let { everyExample(store, it) }
 
+    /**
+     * The value side of the [values] alone, of what the operation read already: what the values a model was not made of
+     * are scored by ([KeptValues]) — their names and groups, no dictionary read whole (owner, 2026-11-19: "an attempt
+     * to load ALL the values of any dictionary while loading the card of one work must fail"). Null of a facet of no
+     * dictionary.
+     */
+    fun sideOf(store: SourceStore, facet: FacetDef, characters: CharactersRead, values: Set<String>): Vocabulary? =
+        universes.sideOf(store, facet, characters, values)
+            ?: examplesFrom(store, facet)?.let { Vocabulary(store.names(facet.key, values), allowed = null) }
+
     /** The sites' facet the [facet] is learnt from ([FacetDef.examplesFrom]); null of a facet learnt from none. */
     private fun examplesFrom(store: SourceStore, facet: FacetDef): FacetDef? =
         store.schema.facets.firstOrNull { it.key == facet.examplesFrom }
@@ -61,9 +71,9 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
         ids: Collection<String>,
         site: Map<String, Map<String, List<String>>>?,
     ): Vocabulary {
-        val bound = store.tags.bindingsOf(store.id)
         val own = HashMap<String, List<String>>()
         val values = site ?: store.items.facetsOf(ids)
+        val bound = store.tags.bindingsOf(store.id, ids.flatMap { values[it]?.get(from.key).orEmpty() })
         ids.forEach { id ->
             own[id] = values[id]?.get(from.key).orEmpty().mapNotNull { bound[it]?.let(TagRepository::key) }.distinct()
         }

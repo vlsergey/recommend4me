@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.correction.FacetCorrection
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.encoder.TextKind
 import io.github.vlsergey.recommend4me.matrix.Matrix
@@ -62,6 +63,7 @@ internal object ValueNames {
                 corrections.filter { it.facet == facet && it.name != null }.associate { it.key to it.name!! } +
                 known
         // Of a few values — one item's — those alone read; of every value, the facet's whole
+        if (values.size > FEW_NAMES) WholeReadRefused.check("every name of the values of $facet")
         val stored = store.valueNames.of(facet, encoder.id, values.takeIf { it.size <= FEW_NAMES })
         val out = HashMap<String, FloatArray>()
         val todo = ArrayList<Pair<String, String>>()

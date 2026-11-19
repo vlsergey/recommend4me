@@ -41,19 +41,20 @@ class SitesSay(private val plugins: Plugins) {
             )
         }
         val bySource = read.map { it.store }.distinctBy { it.id }
-        val bound = bySource.associate { it.id to it.tags.bindingsOf(it.id) }
-        // The universes the sites' fandoms are bound to, read once: of every source, the site's key to the universe
-        val universes = type.universes.fandoms.sites.bindings()
+        // Of every source, the bindings of the values its items of the work have alone: their tags, their fandoms
+        fun valuesOf(s: SourceStore) = read.filter { it.store.id == s.id }.flatMap { it.facets.values.flatten() }
+        val bound = bySource.associate { it.id to it.tags.bindingsOf(it.id, valuesOf(it)) }
+        // The universes the sites' fandoms are bound to: of every source, the site's key to the universe
         val fandoms = bySource.associate { s ->
+            val facet = UniverseFacet.fandomFacet(s.schema)
             s.id to
-                if (UniverseFacet.fandomFacet(s.schema) == null) emptyMap()
-                else
-                    universes
-                        .filterKeys { it.source == s.id }
-                        .entries
-                        .associate {
-                            it.key.key to setOf(FandomRepository.value(it.value))
-                        }
+                if (facet == null) emptyMap()
+                else {
+                    val keys = read.filter { it.store.id == s.id }.flatMap { it.facets[facet].orEmpty() }
+                    type.universes.fandoms.sites.bindingsOf(s.id, keys).mapValues {
+                        setOf(FandomRepository.value(it.value))
+                    }
+                }
         }
         return fields.associate { field ->
             val speaking = read.any { m ->

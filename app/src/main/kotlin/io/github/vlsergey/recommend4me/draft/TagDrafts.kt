@@ -18,11 +18,11 @@ internal object TagDrafts {
     fun of(store: SourceStore, site: Map<String, Map<String, List<String>>>): Map<String, List<LayerDraft>> {
         val drafted = store.schema.facets.mapNotNull { f -> f.examplesFrom?.let { from -> f.key to from } }
         if (drafted.isEmpty() || site.isEmpty()) return emptyMap()
-        val bound = store.tags.bindingsOf(store.id)
         val out = HashMap<String, MutableList<LayerDraft>>()
         drafted.forEach { (facet, from) ->
             val keys = HashSet<String>()
             site.values.forEach { keys += it[from].orEmpty() }
+            val bound = store.tags.bindingsOf(store.id, keys)
             val names = store.items.facetNames(from, keys)
             site.forEach { (id, facets) ->
                 facets[from].orEmpty().forEach { siteKey ->

@@ -111,7 +111,7 @@ internal class FacetAsked(
     /** Whether the site gives values of the facet, told of every work, as the model was fitted. */
     val siteGives: Boolean,
 ) {
-    val allowed: ((String) -> Set<String>)?
+    val allowed: ((String) -> Set<String>?)?
         get() = vocabulary?.allowed
 
     val barred: ((String) -> Set<String>)?

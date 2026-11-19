@@ -66,6 +66,21 @@ internal object CharacterVocabulary {
     fun valueSide(type: TypeStore, characters: CharactersRead): Vocabulary =
         valueSideOf(read(type, null, emptyMap(), characters))
 
+    /**
+     * The value side of the characters [values] alone, of the universes the operation read already ([CharactersRead]):
+     * what the values a model was not made of are scored by ([KeptValues]) — their names and their sexes.
+     */
+    fun sideOf(characters: CharactersRead, values: Set<String>): Vocabulary {
+        val found = characters.ofValues(values)
+        val names = found.mapValues { it.value.names }
+        val sexes = HashMap<String, CharacterSex>(UniverseFacet.ORIGINAL_SEXES)
+        found.forEach { (v, c) -> c.sex?.let { sexes[v] = it } }
+        val shown =
+            UniverseFacet.ORIGINAL_CHARACTERS.filterKeys { it in values } +
+                names.mapValues { it.value.joinToString(" / ") }
+        return valueSideOf(Characters(emptyMap(), shown, names, sexes))
+    }
+
     /** The values of the [dictionary] read, the names they go by, the rivals of each name, their sexes. */
     private fun valueSideOf(dictionary: Characters): Vocabulary =
         Vocabulary(
@@ -96,15 +111,15 @@ internal object CharacterVocabulary {
         universes: Map<String, List<String>>,
         characters: CharactersRead,
     ): Characters {
-        // The entries of every universe whose characters are read: of the works' universes, or of every one
-        val dictionary = type.universes.dictionary()
+        // The entries of every universe whose characters are read: of the works' universes — of their ids alone —, or
+        // of every one
         val read =
-            if (ids == null) dictionary.withCharacters()
-            else
-                ids.flatMap { universes[it].orEmpty() }
-                    .toSet()
-                    .associateWith(dictionary::characterEntries)
-                    .filterValues { it.isNotEmpty() }
+            if (ids == null) type.universes.dictionary().withCharacters()
+            else {
+                val own = ids.flatMap { universes[it].orEmpty() }.toSet()
+                val dictionary = type.universes.dictionaryOf(own)
+                own.associateWith(dictionary::characterEntries).filterValues { it.isNotEmpty() }
+            }
         val ofUniverse = HashMap<String, Set<String>>()
         val values = HashMap<String, String>(UniverseFacet.ORIGINAL_CHARACTERS)
         val names = HashMap<String, List<String>>()

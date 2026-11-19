@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.work
 
 import io.github.vlsergey.recommend4me.database.SourceItems
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.NORMALIZED_WORK
 import io.github.vlsergey.recommend4me.database.dictionaries.tables.references.SITE_WORK
 import io.github.vlsergey.recommend4me.item.ItemKey
@@ -116,7 +117,9 @@ class WorkRepository(private val db: DSLContext) {
     fun groups(sources: Collection<String>, keys: Collection<ItemKey>? = null): Map<Long, List<ItemKey>> {
         val several =
             if (keys == null)
-                db.select(SITE_WORK.NORMALIZED)
+                WholeReadRefused.check("every work of several items")
+                    .let { _ -> db }
+                    .select(SITE_WORK.NORMALIZED)
                     .from(SITE_WORK)
                     .groupBy(SITE_WORK.NORMALIZED)
                     .having(DSL.count().gt(1))

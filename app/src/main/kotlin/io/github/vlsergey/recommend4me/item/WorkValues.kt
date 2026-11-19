@@ -40,8 +40,16 @@ internal class SitesGive {
         layer: List<FacetDef>,
     ) {
         val defs = layer.mapNotNull { def -> s.schema.facets.firstOrNull { it.key == def.key } }
-        val bound = if (defs.any { it.examplesFrom != null }) s.tags.bindingsOf(s.id) else emptyMap()
         val facets = s.items.facetsOf(items.map { it.id })
+        val from = defs.mapNotNull { it.examplesFrom }.toSet()
+        val bound =
+            if (from.isEmpty()) emptyMap()
+            else {
+                val tags = items.flatMap { m ->
+                    (if (m == key) site else facets[m.id].orEmpty()).filterKeys { it in from }.values.flatten()
+                }
+                s.tags.bindingsOf(s.id, tags)
+            }
         items.forEach { m ->
             val theirs = if (m == key) site else facets[m.id].orEmpty()
             defs.forEach { def -> add(source, def, theirs, bound) }

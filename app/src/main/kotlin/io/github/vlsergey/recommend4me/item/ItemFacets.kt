@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.item
 
+import io.github.vlsergey.recommend4me.database.WholeReadRefused
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_FACET
@@ -109,7 +110,9 @@ internal class ItemFacetRepository(
     }
 
     override fun valueUses(facet: String): Map<String, Int> =
-        db.select(ITEM_FACET.VALUE_KEY, DSL.count())
+        WholeReadRefused.check("every value of the facet $facet")
+            .let { _ -> db }
+            .select(ITEM_FACET.VALUE_KEY, DSL.count())
             .from(ITEM_FACET)
             .where(ITEM_FACET.FACET.eq(facet))
             .groupBy(ITEM_FACET.VALUE_KEY)

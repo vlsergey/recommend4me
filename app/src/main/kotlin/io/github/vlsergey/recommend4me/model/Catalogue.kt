@@ -323,7 +323,7 @@ class CatalogueReader(
      * is no such item.
      */
     fun work(type: TypeStore, key: ItemKey, read: ReadWork? = null): CatalogueItem? {
-        val members = (read?.members ?: works.of(type).members(key)).sortedBy { it.toString() }
+        val members = (read?.members ?: works.ofKeys(type, listOf(key)).members(key)).sortedBy { it.toString() }
         if (members.size == 1) return item(type, key, read?.chances?.get(key))
         val own = members.mapNotNull { item(type, it, read?.chances?.get(it)) }
         return own.takeIf { it.isNotEmpty() }
@@ -338,11 +338,11 @@ class CatalogueReader(
     fun vectors(
         type: TypeStore,
         key: ItemKey,
-        members: List<ItemKey> = works.of(type).members(key),
+        members: List<ItemKey> = works.ofKeys(type, listOf(key)).members(key),
     ): Map<String, FloatArray> {
         val read = vectorsOfMany(type, members)
         return WorkFeatures.vectors(members.mapNotNull { read[it] }) +
-            TypeManners.of(type, works.of(type), members).blocks(key)
+            TypeManners.of(type, works.ofKeys(type, members), members).blocks(key)
     }
 
     /**
