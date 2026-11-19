@@ -333,4 +333,24 @@ class KnnSuggesterTest {
         val again = assertNotNull(KnnSuggester().scoring(model, more)).of(rows)
         rows.indices.forEach { r -> assertTrue(again[r].contentEquals(chances[r]), "w${rows[r]}") }
     }
+
+    @Test
+    fun `a value known only had is no chance of a work its nearest say nothing of, one known lacked too its share`() {
+        // Of two works, the first said to have the value 0 and nothing else; the second to have 0 and lack 1
+        val labels =
+            Labels(
+                2,
+                floatArrayOf(0f, 0f),
+                emptyList(),
+                intArrayOf(-1, -1),
+                arrayOf(intArrayOf(0), intArrayOf(0, 1)),
+                arrayOf(floatArrayOf(1f), floatArrayOf(1f, 1f)),
+                arrayOf(floatArrayOf(1f), floatArrayOf(1f, 0f)),
+            )
+        val share = doubleArrayOf(1.0, 0.5)
+        // No neighbour of any likeness: the value known only had drawn towards none, the other towards its share
+        val chances = labels.chances(intArrayOf(), floatArrayOf(), share, 5) { true }
+        assertEquals(0f, chances[0])
+        assertEquals(0.5f, chances[1])
+    }
 }

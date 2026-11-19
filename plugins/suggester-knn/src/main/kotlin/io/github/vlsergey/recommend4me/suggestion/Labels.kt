@@ -88,7 +88,8 @@ internal class Labels(
     /**
      * THE CHANCE OF EVERY VALUE of a work whose nearest works are [rows] — the nearest first, alike by [likeness] — of
      * its [k] nearest that [usable] allows (those of the other folds, of a held-out one): the weighted share labelled 1
-     * of their pairs with the value, each by its likeness, drawn towards the value's [share] among all by [PRIOR].
+     * of their pairs with the value, each by its likeness, drawn towards the value's [share] among all by [PRIOR] — of
+     * a value known lacked by some works; of one known only had, towards none.
      */
     fun chances(
         rows: IntArray,
@@ -116,7 +117,13 @@ internal class Labels(
             }
             t++
         }
-        return FloatArray(m) { v -> ((one[v] + PRIOR * share[v]) / (all[v] + PRIOR)).toFloat() }
+        // The share of a value drawn towards only when the works know it lacked too: of a value said only to be had —
+        // no work said all named without it — the share is 1, and every work no neighbour says anything of had it at
+        // full chance (owner, 2026-11-19: ten unrelated universes at 100% of a work of no annotation)
+        return FloatArray(m) { v ->
+            val prior = share[v].takeIf { it < 1.0 } ?: 0.0
+            ((one[v] + PRIOR * prior) / (all[v] + PRIOR)).toFloat()
+        }
     }
 
     fun write(out: DataOutputStream) {
