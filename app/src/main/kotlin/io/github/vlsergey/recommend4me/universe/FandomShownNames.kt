@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
@@ -24,8 +23,10 @@ private val log = LoggerFactory.getLogger(FandomShownNames::class.java)
 @Component
 class FandomShownNames(private val stores: Stores, private val workload: Workload) {
 
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class) fun start() = workload.resume(WORK.what) { _, reason -> plan(reason) }
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(WORK.what) { _, reason -> plan(reason) }
+    }
 
     @EventListener fun itemsChanged(event: ItemsChanged) = plan(if (event.ids.isEmpty()) "universes" else "items")
 

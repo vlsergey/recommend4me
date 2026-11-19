@@ -9,10 +9,8 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import jakarta.annotation.PreDestroy
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
 
 /**
@@ -38,10 +36,10 @@ class PartVectors(
 
     @EventListener(PartsSaved::class) fun partsSaved() = plan("parts")
 
-    /** What the last run of the application left undone of it, planned again. */
-    @Order(START_ORDER)
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() = workload.resume(ENCODING.what) { _, reason -> plan(reason) }
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(ENCODING.what) { _, reason -> plan(reason) }
+    }
 
     /**
      * The parts waiting encoded a PORTION at a time, planned at once for the [reason]: of every source the parts of the
@@ -64,7 +62,7 @@ class PartVectors(
                     }
                 val reached = Reached()
                 while (!stopping && encodeSome(reached, portion) > 0) continue
-                if (!stopping && waiting.values.any { it.size > PORTION_WORKS }) plan("portion")
+                if (!stopping && waiting.values.any { it.size > PORTION_WORKS }) workload.again("portion")
             } finally {
                 busy = false
             }
@@ -152,8 +150,5 @@ class PartVectors(
 
         /** The works of a source whose parts one work of the queue encodes: minutes of the card, not days. */
         private const val PORTION_WORKS = 50
-
-        /** Its step of the start: after the texts' vectors begin (3), before the sets' vectors (6). */
-        private const val START_ORDER = 5
     }
 }

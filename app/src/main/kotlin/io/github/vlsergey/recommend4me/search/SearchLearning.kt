@@ -13,7 +13,6 @@ import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
@@ -52,9 +51,12 @@ class SearchLearning(
 ) {
     @EventListener fun judged(event: SearchJudged) = plan(event.type, "searchJudged")
 
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() = workload.resume(WorkKind.SEARCH_WEIGHTS) { left, reason -> left.work.type?.let { plan(it, reason) } }
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(WorkKind.SEARCH_WEIGHTS) { left, reason ->
+            left.work.type?.let { plan(it, reason) }
+        }
+    }
 
     /** The weights of the [type] learnt shortly after the last of a quick series of judgments. */
     private fun plan(type: String, reason: String) =

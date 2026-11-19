@@ -15,7 +15,6 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
@@ -121,12 +120,12 @@ class Manners(
 
     // --- In the background ---
 
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        workload.resume(MAKING) { left, reason ->
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(MAKING) { left, reason ->
             left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
         }
+    }
 
     @EventListener fun partsSaved(event: PartsSaved) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
 

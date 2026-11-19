@@ -13,8 +13,6 @@ import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
-import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 
 private val log = LoggerFactory.getLogger(Recommendations::class.java)
@@ -57,6 +55,13 @@ class Recommendations(
      */
     fun training(type: String): Boolean = type in trainingNow
 
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(WorkKind.TRAIN) { left, reason ->
+            left.work.type?.let { scheduleRetrain(it, reason, byUser = left.asked, asked = left.asked) }
+        }
+    }
+
     /**
      * Retrains after a change. A change of the user's ([byUser]: a grade, a mark, a tag, an answer) is learnt shortly
      * after the last of a quick series of them. A change the background work makes — the suggester's chances of every
@@ -70,13 +75,6 @@ class Recommendations(
      * tag, a mark on a picture — is learnt in its turn among the background's (user, 2026-11-15): the trainings after
      * every answer, one after another while the user marks, kept the background waiting for 14 minutes.
      */
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        workload.resume(trainingWork("").what) { left, reason ->
-            left.work.type?.let { scheduleRetrain(it, reason, byUser = left.asked, asked = left.asked) }
-        }
-
     fun scheduleRetrain(
         type: String,
         reason: String,

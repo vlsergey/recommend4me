@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
@@ -30,9 +29,10 @@ private val log = LoggerFactory.getLogger(UnusedFandoms::class.java)
 @Component
 class UnusedFandoms(private val stores: Stores, private val workload: Workload) {
 
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() = workload.resume(LETTING_GO.what) { _, reason -> plan(reason) }
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(LETTING_GO.what) { _, reason -> plan(reason) }
+    }
 
     /**
      * The works of a site with fandoms written: a fandom may be no work's any more — let go of after a long quiet, in

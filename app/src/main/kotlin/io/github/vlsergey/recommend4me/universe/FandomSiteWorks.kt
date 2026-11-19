@@ -18,29 +18,30 @@ private val log = LoggerFactory.getLogger(FandomSiteWorks::class.java)
 /**
  * THE WORKS OF EVERY SITE'S FANDOM, COUNTED IN THE QUEUE AND KEPT ([FandomSites.works]) — what the screens of the
  * universes show and sort by, read, never counted at a request (user, 2026-11-17: a universe's screen counted the
- * values of every item of every site, 5 s). Counted whole when a site's fandom bound is not counted yet; then, a quiet
- * after the works of a site change, of the fandoms of those works alone, kept waiting in the queue ([WorkKeys.want]). A
- * work that leaves a fandom leaves its count one too high till its fandom is counted again.
+ * values of every item of every site, 5 s). Counted of the fandoms waiting, kept in the queue ([WorkKeys.want]): those
+ * of the works of a site written, a quiet after; those bound and not counted yet, at the start. A work that leaves a
+ * fandom leaves its count one too high till its fandom is counted again.
  */
 @Component
 class FandomSiteWorks(private val stores: Stores, private val workload: Workload) {
 
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(CHANGED) { _, reason -> planChanged(reason) }
+    }
+
     /**
-     * What the last run of the application left undone of the counting, planned again: of every fandom; and of every
-     * fandom when one bound is not counted yet — what the data say, not a counting "just in case" (owner, 2026-11-19:
-     * every universe showed 0 works, none of the sites' fandoms ever counted).
+     * The sites' fandoms bound and not counted yet, counted — what the data say, not a counting "just in case" (owner,
+     * 2026-11-19: every universe showed 0 works, none of the sites' fandoms ever counted): kept waiting in the queue as
+     * those of the works written are.
      */
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        val left = workload.left(EVERY) + workload.left(CHANGED)
-        val fandoms = fandoms() ?: return
-        left.filter { it.work.what == EVERY }.flatMap { it.reasons.keys }.distinct().forEach(::planEvery)
-        if (fandoms.sites.uncounted()) planEvery(UNCOUNTED)
-        // Of the fandoms changed, those the queue keeps waiting
-        left.filter { it.work.what == CHANGED }.flatMap { it.reasons.keys }.distinct().forEach(::planChanged)
+        val uncounted = fandoms()?.sites?.uncounted().orEmpty()
+        if (uncounted.isEmpty()) return
+        workload.keys.want(CHANGING, uncounted.map { "${it.source}$SEP${it.key}" })
+        planChanged(UNCOUNTED)
     }
-
-    private fun planEvery(reason: String) = workload.plan(Work(EVERY), Instant.now(), reason) { countEvery() }
 
     private fun planChanged(reason: String) =
         workload.plan(CHANGING, Instant.now().plusSeconds(QUIET_SECONDS), reason) { countWaiting() }
@@ -62,20 +63,6 @@ class FandomSiteWorks(private val stores: Stores, private val workload: Workload
             .mapNotNull { s -> UniverseFacet.fandomFacet(s.schema)?.let { s to it } }
 
     private fun fandoms(): FandomRepository? = stores.types.firstOrNull { it.type.universes }?.universes?.fandoms
-
-    /** The works of every site's fandom counted, those changed kept. */
-    private fun countEvery() {
-        val fandoms = fandoms() ?: return
-        val started = System.currentTimeMillis()
-        val kept = fandoms.sites.works()
-        val bound = fandoms.sites.bindings().keys
-        val counted = HashMap<SiteFandomRef, Int>()
-        sites().forEach { (s, facet) ->
-            val uses = s.items.valueUses(facet)
-            bound.filter { it.source == s.id }.forEach { ref -> counted[ref] = uses[ref.key] ?: 0 }
-        }
-        keep(fandoms, counted.filter { (ref, works) -> kept[ref] != works }, counted.size, started)
-    }
 
     /** The works of the sites' fandoms waiting counted again, those changed kept. */
     private fun countWaiting() {
@@ -104,11 +91,7 @@ class FandomSiteWorks(private val stores: Stores, private val workload: Workload
     }
 
     private companion object {
-        /**
-         * The works of every site's fandom counted; of those of the works changed, another work: neither replaces the
-         * other.
-         */
-        val EVERY = WorkKind.FANDOM_SITE_WORKS
+        /** The works of the sites' fandoms waiting counted: of the works written, of those not counted yet. */
         val CHANGED = WorkKind.FANDOM_SITE_WORKS_CHANGED
         val CHANGING = Work(CHANGED)
 

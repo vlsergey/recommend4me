@@ -11,8 +11,6 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetModelsFitted
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
 import io.github.vlsergey.recommend4me.work.WorksRegrouped
-import io.github.vlsergey.recommend4me.workload.WorkKeys
-import io.github.vlsergey.recommend4me.workload.Workload
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -28,21 +26,20 @@ internal class ListIndexEvents(
     private val stores: Stores,
     private val indexing: ListIndexing,
     private val filling: ListFilling,
-    private val workload: Workload,
 ) {
     /**
-     * What the last run of the application left undone planned again — what it named the queue kept ([WorkKeys.want]);
-     * and of every type whose index is of another format, or none, every item. Nothing for the start itself.
+     * Of every type whose index is of another format, or none, every item written anew, and the values the models give
+     * the rated works filled after, last of the queue: an index made anew has none. What the data say, nothing for the
+     * start itself.
      */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() {
-        workload.left(ListIndexing.WORK).forEach { l ->
-            l.work.type?.let { t -> l.reasons.keys.forEach { indexing.plan(t, it) } }
-        }
+    fun start() =
         stores.types
             .filter { !indexing.current(it.id) }
-            .forEach { type -> indexing.change(type.id, ListIndexing.FORMAT) { whole += type.sources.map { it.id } } }
-    }
+            .forEach { type ->
+                indexing.change(type.id, ListIndexing.FORMAT) { whole += type.sources.map { it.id } }
+                type.sources.forEach { filling.fill(it.id, ListIndexing.FORMAT, last = true) }
+            }
 
     @EventListener
     fun itemsChanged(event: ItemsChanged) =

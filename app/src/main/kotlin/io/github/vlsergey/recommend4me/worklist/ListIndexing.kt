@@ -79,7 +79,6 @@ class ListIndexing(
     private val workload: Workload,
     private val indexes: ListIndexes,
     private val modelValues: WorkModelValues,
-    private val filling: ListFilling,
 ) {
     /**
      * What the [change] names added to what waits of the content type [typeId] — kept in the queue ([WorkKeys.want]): a
@@ -100,6 +99,12 @@ class ListIndexing(
     }
 
     private fun work(typeId: String) = Work(WORK, type = typeId)
+
+    // What the last run of the application left undone of it: planned again by the queue at its start — what it named
+    // the queue kept
+    init {
+        workload.resumption.resumes(WORK) { left, reason -> left.work.type?.let { plan(it, reason) } }
+    }
 
     /**
      * What waits of the content type [typeId] written now, in the queue, for a caller that waits for it — what stands
@@ -141,8 +146,6 @@ class ListIndexing(
         }
         index.commit()
         workload.keys.done(work(typeId), taken)
-        // An index made anew has no value the models give: filled last of the queue
-        if (anew) type.sources.forEach { filling.fill(it.id, FORMAT) }
         log.info(
             "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} items' values",
             typeId,

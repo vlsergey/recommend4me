@@ -14,7 +14,6 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.core.annotation.Order
@@ -76,12 +75,12 @@ class LayerDrafts(
         redraft(store, lookup, event.ids, facets, names, store.drafts.ofItems(event.ids))
     }
 
-    /** What the last run of the application left undone of it, planned again: of every source it drafts. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        workload.resume(DRAFTING.what) { _, reason ->
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(DRAFTING.what) { _, reason ->
             stores.sources.filter(::drafts).forEach { redraftLater(it.id, reason) }
         }
+    }
 
     /**
      * Every work of the [source] drafted again once the askings are quiet for [QUIET_SECONDS] — a few in a row draft

@@ -17,10 +17,8 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
 
 private val log = LoggerFactory.getLogger(TextVectors::class.java)
@@ -65,17 +63,13 @@ class TextVectors(
         planned(event.source, Instant.now().plusSeconds(DELAY_SECONDS), "items", event.ids.size)
     }
 
-    /**
-     * What the last run of the application left undone, planned again: the items the queue keeps waiting; a source that
-     * fails is told in the log.
-     */
-    @Order(START_ORDER)
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        workload.resume(WHAT) { left, reason ->
-            val source = left.work.source ?: return@resume
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(WHAT) { left, reason ->
+            val source = left.work.source ?: return@resumes
             planned(source, null, reason, 1)
         }
+    }
 
     private fun work(source: String) = Work(WHAT, source = source)
 
@@ -102,7 +96,7 @@ class TextVectors(
             val left = encoded.left.toHashSet()
             if (every) workload.keys.want(work(source), left)
             workload.keys.done(work(source), taken.filter { it !in left })
-            if (left.isNotEmpty()) planned(source, null, "portion", left.size)
+            if (left.isNotEmpty()) workload.again("portion", left.size)
             // How many texts it encoded: what a caller of [refresh] joined to this work waiting gets back
             encoded.done
         }
@@ -272,8 +266,5 @@ class TextVectors(
          */
         private const val PORTION = 20_000
         private const val DELAY_SECONDS = 5L
-
-        /** Its step of the start: after the kept pages are read again (1), before the pictures' vectors (4). */
-        private const val START_ORDER = 3
     }
 }

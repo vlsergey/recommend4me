@@ -15,8 +15,6 @@ import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
-import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(ScoreSweep::class.java)
@@ -63,11 +61,10 @@ class ScoreSweep(
         plan(type.id, reason)
     }
 
-    /** A pass the last run of the application left unfinished goes on: of its state kept, whatever the queue kept. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun resume() {
-        workload.left(work("").what)
-        stores.types.filter { it.sweep.load() != null }.forEach { plan(it.id, "start") }
+    // What the last run of the application left undone of it: planned again by the queue at its start — a pass under
+    // way goes on of its state kept
+    init {
+        workload.resumption.resumes(WorkKind.SCORE) { left, reason -> left.work.type?.let { plan(it, reason) } }
     }
 
     /** Whether a pass of the [typeId] goes on: some works are not scored by the current model yet. */
@@ -164,10 +161,12 @@ class ScoreSweep(
         }
     }
 
-    /** The pass goes on in its next turn from where it stands [now]. */
+    /**
+     * The pass goes on in its next turn from where it stands [now]: the work planned again after it ([Workload.again]).
+     */
     private fun keep(type: TypeStore, now: SweepState) {
         type.sweep.save(now)
-        plan(type.id, "sweep")
+        workload.again("sweep")
     }
 
     /**

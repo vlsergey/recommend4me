@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 
@@ -126,9 +125,10 @@ class FandomLikenessLearning(
 
     // --- In the background ---
 
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() = workload.resume(LEARNING) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(LEARNING) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+    }
 
     @EventListener
     fun related(@Suppress("UNUSED_PARAMETER") event: UniversesRelated) = schedule(QUIET_SECONDS, "universes")

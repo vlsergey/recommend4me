@@ -15,9 +15,7 @@ import io.github.vlsergey.recommend4me.workload.WorkKeys
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
-import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(ListFilling::class.java)
@@ -45,28 +43,30 @@ class ListFilling(
     private val modelValues: WorkModelValues,
     private val events: ApplicationEventPublisher,
 ) {
-    /**
-     * What the last run of the application left undone of the filling, planned again: of a work a source of before, it.
-     */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        workload.resume(WORK) { left, reason ->
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        // Of a work a source of before, that source
+        workload.resumption.resumes(WORK) { left, reason ->
             left.work.source?.let { fill(it, reason) } ?: left.work.type?.let { plan(it, reason) }
         }
+    }
 
     /**
      * The values of the rated works of the [source] filled anew, for the [reason] the interface tells: the source kept
      * waiting in the queue ([WorkKeys.want]) — ONE WORK OF THE TYPE, of every source of it waiting, not a work a
      * source.
      */
-    fun fill(source: String, reason: String) {
+    fun fill(source: String, reason: String, last: Boolean = false) {
         val type = stores.typeOf(source).id
         workload.keys.want(filling(type), listOf(source))
-        plan(type, reason)
+        plan(type, reason, last)
     }
 
-    private fun plan(type: String, reason: String) =
-        workload.plan(filling(type), Instant.now(), reason) {
+    /**
+     * The filling of the sources of the [type] waiting planned, for the [reason]; [last]: after the background's works.
+     */
+    private fun plan(type: String, reason: String, last: Boolean = false) =
+        workload.plan(filling(type), Instant.now(), reason, last = last) {
             val taken = workload.keys.wanted(filling(type))
             taken.forEach(::filled)
             workload.keys.done(filling(type), taken)

@@ -12,8 +12,6 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.WorkKeys
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -37,7 +35,6 @@ class SearchIndex(
     private val documents: SearchDocuments,
     private val workload: Workload,
 ) {
-    private val built = ConcurrentHashMap<String, CountDownLatch>()
     private val sources = SourceCatchUp(documents)
 
     @EventListener fun itemsChanged(event: ItemsChanged) = queue(event.source, event.ids, "items")
@@ -61,70 +58,49 @@ class SearchIndex(
     private fun planUpdate(type: String, due: Instant, reason: String) =
         workload.plan(updating(type), due, reason) { stores.type(type)?.let(::catchUp) }
 
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(UPDATING) { left, reason ->
+            left.work.type?.let { planUpdate(it, Instant.now(), reason) }
+        }
+    }
+
     /**
-     * Of what the last run left undone, the same planned again: the updates of the items kept waiting, the index made
-     * whole; and the index of a type made whole when the plugin's is not of its format or holds nothing — nothing for
-     * the start itself.
+     * The index of a type brought to every work when the plugin's is not of its format or holds nothing
+     * ([SearchProvider.current][io.github.vlsergey.recommend4me.search.SearchProvider.current]): every source of it
+     * waiting whole — what the data say, nothing for the start itself.
      */
     @EventListener(ApplicationReadyEvent::class)
-    fun build() {
-        val left = workload.left(BUILDING).mapNotNull { it.work.type }.toSet()
-        val updates = workload.left(UPDATING)
+    fun start() {
         val provider = plugins.search ?: return
         // The scores of another reranker are of another model: read again as asked for
         plugins.reranker()?.let { r -> stores.types.forEach { it.searchScores.keepOnly(r.id) } }
-        stores.types.forEach { type ->
-            val anew = type.id in left || !provider.current(type.id)
-            built[type.id] = CountDownLatch(if (anew) 1 else 0)
-            if (anew)
-                workload.plan(Work(BUILDING, type = type.id), null, if (type.id in left) "sweep" else "searchFormat") {
-                    made(type)
-                    // What was written while the index was made
-                    catchUp(type)
-                }
-        }
-        updates.forEach { u -> u.work.type?.let { t -> u.reasons.keys.forEach { planUpdate(t, Instant.now(), it) } } }
-    }
-
-    /** The index of the [type] made whole, unless it is made already. */
-    private fun made(type: TypeStore) {
-        val provider = plugins.search ?: return
-        val latch = built[type.id] ?: return
-        try {
-            // Kept between the runs: the documents of the works whose fingerprint changed since alone made and written
-            // again
-            if (latch.count > 0) {
-                val prints = documents.printsOf(type)
-                provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys) }
+        stores.types
+            .filter { !provider.current(it.id) }
+            .forEach { type ->
+                workload.keys.want(updating(type.id), type.sources.map { whole(it.id) })
+                planUpdate(type.id, Instant.now(), "searchFormat")
             }
-        } finally {
-            latch.countDown()
-        }
     }
 
     /**
-     * The items written since they were indexed, indexed now, in the queue of the computations — once the index is made
-     * whole: those the queue keeps waiting ([WorkKeys.wanted]), done once written.
+     * The items written since they were indexed, indexed now, in the queue of the computations: those the queue keeps
+     * waiting ([WorkKeys.wanted]), done once written. Of every source of the type waiting whole, the index brought to
+     * every work at once ([SearchProvider.sync][io.github.vlsergey.recommend4me.search.SearchProvider.sync]): of a
+     * plugin that keeps it between the runs, only what changed written again, the works gone removed.
      */
     private fun catchUp(type: TypeStore) {
-        val provider = plugins.search
-        val building = built[type.id]?.let { it.count > 0 } == true
-        if (provider == null || building) return
+        val provider = plugins.search ?: return
         val work = updating(type.id)
         val asked = workload.keys.wanted(work)
         if (asked.isEmpty()) return
         val started = System.currentTimeMillis()
-        val bySource = asked.groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) })
         val written =
-            bySource.entries.sumOf { (source, ids) ->
-                val s = stores.source(source)
-                // Of a source gone, its items taken out; of a whole source, every item of it
-                val keys =
-                    if (s != null && WHOLE in ids) s.items.keys().map { ItemKey(source, it.id) }
-                    else ids.filter { it != WHOLE }.map { ItemKey(source, it) }
-                if (s == null) provider.update(type.id, emptyMap(), { emptyList() }, keys)
-                else sources.written(provider, type.id, s, keys)
-            }
+            if (type.sources.all { whole(it.id) in asked }) {
+                val prints = documents.printsOf(type)
+                provider.sync(type.id, prints.prints) { keys -> documents.documentsOf(type, keys) }
+                prints.prints.size
+            } else written(provider, type, asked)
         workload.keys.done(work, asked)
         log.info(
             "{}: the search index caught up with {} works written, {} documents made again, in {} ms",
@@ -135,8 +111,19 @@ class SearchIndex(
         )
     }
 
+    /** The items [asked] of the [type] written again, of a source asked whole every item of it; how many documents. */
+    private fun written(provider: SearchProvider, type: TypeStore, asked: List<String>): Int =
+        asked.groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) }).entries.sumOf { (source, ids) ->
+            val s = stores.source(source)
+            // Of a source gone, its items taken out; of a whole source, every item of it
+            val keys =
+                if (s != null && WHOLE in ids) s.items.keys().map { ItemKey(source, it.id) }
+                else ids.filter { it != WHOLE }.map { ItemKey(source, it) }
+            if (s == null) provider.update(type.id, emptyMap(), { emptyList() }, keys)
+            else sources.written(provider, type.id, s, keys)
+        }
+
     private companion object {
-        val BUILDING = WorkKind.SEARCH_INDEX
         val UPDATING = WorkKind.SEARCH_UPDATE
 
         /** The key of an item waiting in the queue: its source and its id. */

@@ -104,15 +104,18 @@ class TagRenaming(
      */
     @EventListener(SynonymsSet::class) fun synonymsSet() = schedule("synonyms")
 
-    /** The start: what a stop left of the tags finished, what the queue left planned again. */
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(NAMING.what) { _, reason -> schedule(reason) }
+    }
+
+    /** The start: what a stop left of the tags finished. */
     @Order(TagNormalization.AFTER_NORMALIZATION)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         val scope = tags.scope() ?: return
         // The answers of a merge a stop or a failure left unmoved: moved before anything reads them
         moveMergedAnswers(scope, scope.facet)
-        // What the last run of the application left undone of the naming, planned again
-        workload.resume(NAMING.what) { _, reason -> schedule(reason) }
         // The bindings made before what their entries are a kind of was read: read once, in the background — of the
         // catalogues' sites, not a computation, out of the queue
         background.start("tags-above") { above.readAboveOfBound(scope) }

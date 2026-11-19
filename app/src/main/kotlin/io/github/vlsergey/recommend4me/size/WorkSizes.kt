@@ -16,7 +16,6 @@ import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import kotlin.math.abs
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 
@@ -134,12 +133,12 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
 
     // --- The fitting, in the background ---
 
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        workload.resume(FITTING) { left, reason ->
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(FITTING) { left, reason ->
             left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
         }
+    }
 
     @EventListener
     fun itemsChanged(event: SiteItemsWritten) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")

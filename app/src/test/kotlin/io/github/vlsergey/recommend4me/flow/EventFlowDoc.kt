@@ -20,6 +20,23 @@ internal object EventFlowDoc {
             |An arrow is "may lead to, directly": the events a thing makes, the works it plans. A request's events and
             |works go on as the diagram shows.
             |
+            |## Legend
+            |
+            |```mermaid
+            |flowchart LR
+            |    outside(("from outside: the start, a loop of the background")) --> event["an event of the application"]
+            |    event --> work{{"a work of the queue, by its kind"}}
+            |    work --> event
+            |```
+            |
+            |- a circle: what comes from outside the flow — `start`, the start of the application (the listeners of
+            |  `ApplicationReadyEvent`) deciding of the data; `left by the last run`, the works the last run left in the
+            |  queue planned again by their owners (`Workload.resume`); a loop of the background by its name
+            |  (`Background.start`, `every`, `endless`);
+            |- a box: an event of the application, by its class;
+            |- a hexagon: a work of the queue, by its `WorkKind`;
+            |- a request of the interface or the extension: a row of the table below, by its operation's id.
+            |
             |## What leads to what
             |
             |```mermaid

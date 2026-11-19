@@ -73,17 +73,18 @@ class Duplicates(
         return true
     }
 
-    /**
-     * Every type of several sites never searched yet: searched once, in the background; and what the last run of the
-     * application left undone, planned again.
-     */
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(WorkKind.DUPLICATES) { left, reason ->
+            left.work.type?.let(stores::type)?.let { plan(it, reason, left.asked) }
+        }
+    }
+
+    /** Every type of several sites never searched yet: searched once, in the background. */
     @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.types.filter { it.sources.size > 1 && it.duplicates.search() == null }.forEach { plan(it, "start") }
-        workload.resume(WorkKind.DUPLICATES) { left, reason ->
-            left.work.type?.let(stores::type)?.let { plan(it, reason, left.asked) }
-        }
     }
 
     /**

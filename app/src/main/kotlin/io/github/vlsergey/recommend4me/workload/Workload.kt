@@ -39,6 +39,9 @@ class HeavyWork(val work: Work, val since: Instant, val reasons: Map<String, Int
 
     /** Of a work of several steps, the step it is at, and the key of the words of what the step is of. */
     @Volatile var step: Pair<WorkStep, String?>? = null
+
+    /** Of a work that left a tail ([Workload.again]): why it goes on, how many times. */
+    @Volatile var again: Pair<String, Int>? = null
 }
 
 /**
@@ -151,7 +154,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
      * to the callers joined to it as well; the run kept among the works done, and the turn given back after it.
      */
     @Suppress("TooGenericExceptionCaught")
-    private fun <T> runOwn(entry: Waiter, body: () -> T): T {
+    private fun <T> runOwn(entry: Waiter, body: () -> T, goesOn: (Pair<String, Int>) -> Unit = {}): T {
         turns.take(entry)
         try {
             val waited = Duration.between(entry.since, Instant.now())
@@ -164,6 +167,7 @@ class Workload(background: Background = Threads(), private val records: WorkReco
                 return body().also {
                     failed = false
                     entry.result.complete(it)
+                    running.again?.let(goesOn)
                 }
             } catch (e: CancellationException) {
                 failed = false
@@ -195,15 +199,8 @@ class Workload(background: Background = Threads(), private val records: WorkReco
      */
     val keys = WorkKeys(records)
 
-    /**
-     * The works of the kind [what] the last run of the application left undone — planned, waiting or running as it
-     * stopped or crashed: taken by their owner at the start, to plan again.
-     */
-    fun left(what: WorkKind): List<LeftWork> = records.left(what)
-
-    /** The works of the kind [what] the last run left undone planned again by [plan]: each for each of its reasons. */
-    fun resume(what: WorkKind, plan: (left: LeftWork, reason: String) -> Unit) =
-        left(what).forEach { l -> l.reasons.keys.forEach { plan(l, it) } }
+    /** The works the last run left undone planned again, at the start, by how their owners told ([Resumption]). */
+    val resumption = Resumption(records)
 
     /**
      * The [work] planned for [due] — later than planned before, if put off; when null, as planned before, else at once
@@ -221,10 +218,21 @@ class Workload(background: Background = Threads(), private val records: WorkReco
         last: Boolean = false,
         after: (T) -> Unit = {},
         body: () -> T,
-    ) =
+    ): Unit =
         plans.plan(work, due, mapOf(WorkReasonKey.forValue(reason).value to count), asked, last) { entry ->
-            after(runOwn(entry, body))
+            // A tail left: the same work planned again, of the same body, after it — a continuation, not a new cause
+            after(runOwn(entry, body) { (why, n) -> plan(work, null, why, n, asked, last, after, body) })
         }
+
+    /**
+     * The work running now leaves a tail — a portion done, more left (owner, 2026-11-19: "if a work sees it has a tail,
+     * it plans itself again, telling the bound to go on from"): once it ends, it is planned again as it was planned,
+     * its body the same, for the [reason], [count] times; its bound kept where its owner keeps it (the queue's keys,
+     * its state). Of a work run, not planned ([run]), nothing: its caller goes on itself.
+     */
+    fun again(reason: String, count: Int = 1) {
+        current?.again = WorkReasonKey.forValue(reason).value to count
+    }
 
     /**
      * How much of the work running now is done, told by it as it goes: a share (user, 2026-11-18: "a report of the

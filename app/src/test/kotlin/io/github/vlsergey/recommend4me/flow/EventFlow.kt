@@ -101,7 +101,14 @@ internal class EventFlow(private val code: CodeRead) {
             .toSet()
 
     /** A place planning or running a work: the method, the index of its call, the kinds, the lambdas before it. */
-    private class Site(val method: MethodRead, val at: Int, val kinds: Set<String>, val lambdas: List<MethodKey>)
+    private class Site(
+        val method: MethodRead,
+        val at: Int,
+        val kinds: Set<String>,
+        val lambdas: List<MethodKey>,
+        /** Whether it runs the work now ([Workload.run]) rather than plans it: inside a work of the kind, that work. */
+        val runs: Boolean,
+    )
 
     /** The places planning works, by their method and index. */
     private val sites: Map<Pair<MethodKey, Int>, Site>
@@ -120,6 +127,9 @@ internal class EventFlow(private val code: CodeRead) {
      * repository of a source's items telling the items written by the lambda it was made with.
      */
     private val callbacks = HashMap<String, MutableSet<MethodKey>>()
+
+    /** The lambdas the flow does not go into: how a work the last run left is planned again ([RESUMPTION]). */
+    private val hidden = HashSet<MethodKey>()
 
     init {
         // The methods handed a Work that plan it are planners too: the kind named by their callers
@@ -166,7 +176,10 @@ internal class EventFlow(private val code: CodeRead) {
                 val kinds = kindsOf(steps).ifEmpty { kindsOf(m.steps) }.ifEmpty { handed[m.key].orEmpty() }
                 val lambdas = steps.filterIsInstance<Step.Lambda>().map { it.body }
                 if (kinds.isEmpty()) lost += "${m.key}"
-                found[m.key to at] = Site(m, at, kinds, lambdas)
+                val target = m.steps[at]
+                val runs =
+                    target is Step.Call && target.target.owner == WORKLOAD && target.target.name.startsWith("run")
+                found[m.key to at] = Site(m, at, kinds, lambdas, runs)
                 lambdas.forEach { bodies.getOrPut(it) { HashSet() } += kinds }
             }
             // The loops of the background: their lambdas, named by the text before
@@ -179,6 +192,11 @@ internal class EventFlow(private val code: CodeRead) {
                             ?: "background"
                     steps.filterIsInstance<Step.Lambda>().forEach { loops[it.body] = name }
                 }
+        }
+        // How a work the last run left is planned again (Resumption.resumes): the restart's, not the flow's — not shown
+        methods.forEach { m ->
+            segments(m) { it is Step.Call && it.target.owner == RESUMPTION && it.target.name == "resumes" }
+                .forEach { (_, steps) -> steps.filterIsInstance<Step.Lambda>().forEach { hidden += it.body } }
         }
         // The lambdas handed to a constructor: the next call after them makes the object
         methods.forEach { m ->
@@ -215,7 +233,7 @@ internal class EventFlow(private val code: CodeRead) {
     val edges: Map<Node, Set<Node>> by lazy {
         val out = HashMap<Node, MutableSet<Node>>()
         fun from(node: Node, method: MethodKey) {
-            out.getOrPut(node) { sortedSetOf() } += reached(method)
+            out.getOrPut(node) { sortedSetOf() } += reached(method, node)
         }
         code.classes.values.forEach { c ->
             c.methods.values.forEach { m ->
@@ -240,29 +258,40 @@ internal class EventFlow(private val code: CodeRead) {
         return c.methods.values.filter { (it.key.name to it.key.desc) in api }
     }
 
-    /** What running [start] leads to: the events made, the works planned; not into a work's body or a listener. */
-    private fun reached(start: MethodKey): Set<Node> {
+    /** A walk of [reached] from what [self] runs: what it found, what it is to go into. */
+    private class Walk(val self: Node, start: MethodKey) {
         val out = HashSet<Node>()
-        val seen = HashSet<MethodKey>()
         val queue = ArrayDeque(listOf(start))
-        while (queue.isNotEmpty()) {
-            val m = code.method(queue.removeFirst())
-            if (m != null && m.key.owner !in INTERNAL && seen.add(m.key))
-                m.steps.forEachIndexed { i, s -> step(m, i, s, out, queue) }
-        }
-        return out
     }
 
-    /** The step [s], the [i]-th of [m]: what it leads to put [out], the methods it runs [queue]d. */
-    private fun step(m: MethodRead, i: Int, s: Step, out: MutableSet<Node>, queue: ArrayDeque<MethodKey>) {
+    /**
+     * What running [start] — of [self] — leads to: the events made, the works planned; not into a work's body or a
+     * listener. A work run of its own kind inside it is that work itself ([Workload.run] inside its own turn).
+     */
+    private fun reached(start: MethodKey, self: Node): Set<Node> {
+        val walk = Walk(self, start)
+        val seen = HashSet<MethodKey>()
+        while (walk.queue.isNotEmpty()) {
+            val m = code.method(walk.queue.removeFirst())
+            if (m != null && m.key.owner !in INTERNAL && seen.add(m.key))
+                m.steps.forEachIndexed { i, s -> step(m, i, s, walk) }
+        }
+        return walk.out
+    }
+
+    /** The step [s], the [i]-th of [m]: what it leads to put out of the [walk], the methods it runs queued in it. */
+    private fun step(m: MethodRead, i: Int, s: Step, walk: Walk) {
+        val out = walk.out
+        val queue = walk.queue
         // A place planning a work: the work, not what the planner runs
         val site = sites[m.key to i]
         if (site != null) {
-            site.kinds.forEach { out += Node.Work(value(it)) }
+            site.kinds.map { Node.Work(value(it)) }.filterNot { site.runs && it == walk.self }.forEach { out += it }
             return
         }
         when (s) {
-            is Step.Made -> if (s.type in events) out += Node.Event(simple(s.type))
+            is Step.Made,
+            is Step.Field -> told(s)?.let { out += it }
             is Step.Call -> (code.runs(s.target) + pluginCalls(s.target)).forEach { queue += it.key }
             is Step.Lambda -> if (runsWhereMade(s.body)) queue += s.body
             Step.Invoke -> queue += callbacks[m.key.owner].orEmpty()
@@ -270,8 +299,16 @@ internal class EventFlow(private val code: CodeRead) {
         }
     }
 
+    /** The event the step [s] tells: an object of an event's class made, or an event of no data, an object, taken. */
+    private fun told(s: Step): Node? =
+        when {
+            s is Step.Made && s.type in events -> Node.Event(simple(s.type))
+            s is Step.Field && !s.write && s.name == INSTANCE && s.owner in events -> Node.Event(simple(s.owner))
+            else -> null
+        }
+
     /** Whether the lambda [body] is taken as run where it is made: not a work's body, a loop's, a constructor's. */
-    private fun runsWhereMade(body: MethodKey) = body !in bodies && body !in loops && !handed(body)
+    private fun runsWhereMade(body: MethodKey) = body !in bodies && body !in loops && body !in hidden && !handed(body)
 
     private fun handed(body: MethodKey) = callbacks.values.any { body in it }
 
@@ -287,7 +324,11 @@ internal class EventFlow(private val code: CodeRead) {
         while (queue.isNotEmpty()) {
             val t = queue.removeFirst()
             val c = code.classes[t]?.takeIf { it.api && it.isInterface } ?: continue
-            if (types.add(t)) c.methods.values.forEach { m -> queue += Type.getReturnType(m.key.desc).internalName }
+            if (types.add(t)) {
+                c.methods.values.forEach { m -> queue += Type.getReturnType(m.key.desc).internalName }
+                // And what it extends: the context of a source is its stores of items, facets, parts
+                queue += c.interfaces
+            }
         }
         return types
             .flatMap { t -> code.classes.getValue(t).methods.values.flatMap { code.runs(it.key) } }
@@ -301,6 +342,7 @@ internal class EventFlow(private val code: CodeRead) {
         private const val API = "${PACKAGE}api/"
         private const val WORKLOAD = "${PACKAGE}workload/Workload"
         private const val BACKGROUND = "${PACKAGE}background/Background"
+        private const val RESUMPTION = "${PACKAGE}workload/Resumption"
         private const val WORK_DESC = "L${PACKAGE}workload/Work;"
 
         /** What names a kind of work: a `Work`, a `WorkKind` — kept in a field, given by a method. */
@@ -308,6 +350,7 @@ internal class EventFlow(private val code: CodeRead) {
         private const val READY = "org/springframework/boot/context/event/ApplicationReadyEvent"
         private const val REST = "Lorg/springframework/web/bind/annotation/RestController;"
         const val START = "start"
+        private const val INSTANCE = "INSTANCE"
 
         /** The queue's own classes: its planning and running, not followed. */
         private val INTERNAL = setOf(WORKLOAD, "${PACKAGE}workload/Plans", "${PACKAGE}workload/Turns")

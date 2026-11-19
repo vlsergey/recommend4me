@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.workload.Work
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
-import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -29,9 +28,10 @@ class FandomVectors(
     private val workload: Workload,
     private val events: ApplicationEventPublisher,
 ) {
-    /** What the last run of the application left undone of it, planned again. */
-    @EventListener(ApplicationReadyEvent::class)
-    fun start() = workload.resume(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        workload.resumption.resumes(VECTORS.what) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
+    }
 
     /** Works came or changed: their sites' fandoms bound ([FandomNormalization]), maybe new ones. */
     @EventListener(ItemsChanged::class) fun itemsChanged() = schedule(QUIET_SECONDS, "items")

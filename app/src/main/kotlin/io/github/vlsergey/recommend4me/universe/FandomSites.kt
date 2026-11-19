@@ -65,8 +65,11 @@ class FandomSites(private val db: DSLContext) {
             .fetch()
             .associate { SiteFandomRef(it.value1()!!, it.value2()!!) to it.value3()!! }
 
-    /** Whether a site's fandom bound is not counted yet ([works]): none counted since it was bound. */
-    fun uncounted(): Boolean = db.fetchExists(FANDOM_SITE, FANDOM_SITE.WORKS.isNull)
+    /** The sites' fandoms bound and not counted yet ([works]): none counted since they were bound. */
+    fun uncounted(): List<SiteFandomRef> =
+        db.select(FANDOM_SITE.SOURCE, FANDOM_SITE.SITE_KEY).from(FANDOM_SITE).where(FANDOM_SITE.WORKS.isNull).fetch {
+            SiteFandomRef(it.value1()!!, it.value2()!!)
+        }
 
     /** The works of the sites' fandoms [counted] kept, by each. */
     fun works(counted: Map<SiteFandomRef, Int>) {

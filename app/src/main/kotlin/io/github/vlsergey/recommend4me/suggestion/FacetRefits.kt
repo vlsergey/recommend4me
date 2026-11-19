@@ -18,7 +18,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.event.EventListener
-import org.springframework.core.annotation.Order
 import org.springframework.stereotype.Service
 
 private val log = LoggerFactory.getLogger(FacetRefits::class.java)
@@ -76,12 +75,19 @@ internal class FacetRefits(
             workload.keys.done(work, taken)
         }
 
+    // What the last run of the application left undone of it: planned again by the queue at its start
+    init {
+        // Of a work a source of before, that source
+        workload.resumption.resumes(WorkKind.SUGGESTERS) { left, reason ->
+            left.work.source?.let { changed(it, reason) } ?: left.work.type?.let { planRefresh(it, null, reason) }
+        }
+    }
+
     /**
      * On the start: what was worked out of facets a source no longer has the model work on forgotten — only when its
      * facets are others than the last start kept ([FACETS]): a pass over every value of every work, never "just in
-     * case" (user, 2026-11-18) —; what the last run left undone of the fitting planned again.
+     * case" (user, 2026-11-18).
      */
-    @Order(START_ORDER)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
         stores.sources.forEach { s ->
@@ -93,11 +99,6 @@ internal class FacetRefits(
                 s.suggestions.keepOnly(suggested)
                 settings.set(name, facets)
             }
-        }
-        // What the last run of the application left undone of the fitting, planned again: of a work a source of before,
-        // that source
-        workload.resume(WorkKind.SUGGESTERS) { left, reason ->
-            left.work.source?.let { changed(it, reason) } ?: left.work.type?.let { planRefresh(it, null, reason) }
         }
     }
 
@@ -194,12 +195,6 @@ internal class FacetRefits(
          * The quiet after the last change before a source is refreshed: a page sends itself several times as it grows.
          */
         private const val DELAY_SECONDS = 5L
-
-        /**
-         * The place of the start's refresh among the listeners of the application's start: after the texts' vectors
-         * ([TextVectors][io.github.vlsergey.recommend4me.textvector.TextVectors], 3), which the models read.
-         */
-        private const val START_ORDER = 4
 
         /** The refresh of the facets of the type's sources, as the queue of the works tells it planned and running. */
         private fun refreshing(type: String) = Work(WorkKind.SUGGESTERS, type = type)
