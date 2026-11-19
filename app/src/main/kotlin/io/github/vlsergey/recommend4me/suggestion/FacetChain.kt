@@ -179,6 +179,8 @@ internal class FacetChain(
             )
         val lines = linesOf(store, facet, vocabulary, read)
         val siteGives = siteGives(store, facet)
+        // The model's values and those of the works it was not made of, their names read now
+        val values = KeptValues.of(store, facet, kept.values, read, vocabulary, vocabularies, encoder)
         laps.lap("vocabulary")
         return DatabaseRefused.during(computation(store, facet)) {
             val data =
@@ -189,7 +191,7 @@ internal class FacetChain(
                     read,
                     made,
                     vocabulary,
-                    kept = kept.values,
+                    kept = values,
                     cast = lines,
                     siteGives = siteGives,
                     laps = laps,

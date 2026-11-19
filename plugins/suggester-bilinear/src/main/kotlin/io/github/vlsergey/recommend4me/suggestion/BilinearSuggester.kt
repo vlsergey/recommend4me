@@ -56,7 +56,7 @@ internal constructor(
 
     /** A work is scored of its own features by the coordinates of the values kept: no other work read. */
     override fun scoring(model: ByteArray, task: SuggestionTask): SuggestionScores? =
-        Scoring.read(model)?.takeIf { it.valueKeys == task.valueKeys && it.design.readsItems(task) }?.on(task)
+        Scoring.read(model)?.of(task)?.takeIf { it.design.readsItems(task) }?.on(task)
 
     /**
      * Every value's share of the works the model was fitted on, kept with the scoring; none of a scoring kept before it

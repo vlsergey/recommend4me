@@ -47,7 +47,7 @@ internal class FacetRead(
         val owned = owned()
         laps.lap("corrected")
         val side = asked.side
-        val values = asked.kept ?: checkNotNull(side) { "${facet.key}: a task of no values chosen from" }.values
+        val values = asked.kept?.keys ?: checkNotNull(side) { "${facet.key}: a task of no values chosen from" }.values
         val ownInputs = inputs()
         laps.lap("inputs", ownInputs.size)
         // The site's line of characters and pairings as the way chosen reads it: its inputs and its columns in place of
@@ -211,7 +211,7 @@ internal class FacetRead(
         return SuggestionTask(
             itemIds = ids,
             inputs = inputs,
-            values = side?.names ?: Matrix(values.size, 0),
+            values = side?.names ?: asked.kept?.names ?: Matrix(values.size, 0),
             valueKeys = values,
             assigned = assigned,
             confirmed = confirmed,
@@ -220,7 +220,7 @@ internal class FacetRead(
             contextKeys = context.keys,
             allowed = allowedOf,
             barred = barredOf,
-            groupings = side?.groupings.orEmpty(),
+            groupings = side?.groupings ?: asked.kept?.groupings.orEmpty(),
             // A value the user said nothing of is no word: of a work not said all named, none learnt of it
             lackWeight = 0.0,
             examples = examplesOf,

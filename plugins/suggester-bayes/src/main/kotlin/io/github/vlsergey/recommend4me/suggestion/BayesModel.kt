@@ -28,13 +28,18 @@ internal class BayesModel(
     val counts: BayesCounts,
 ) {
     /** The chances of the works of [task] by the counts kept; null when the task is not of the model's values. */
-    fun on(task: SuggestionTask): SuggestionScores? {
-        if (task.valueCount != counts.m) return null
+    fun on(asked: SuggestionTask): SuggestionScores? {
+        if (asked.valueCount < counts.m) return null
+        // Of the values beyond those counted, nothing known: a chance of none ([NewValues])
+        val task = NewValues.ofFirstValues(asked, counts.m)
         val column = contextKeys.withIndex().associate { (c, key) -> key to c }
         // The task's own numbers of the other facets' values as the counts' — a value the counts never saw left out
         val own = IntArray(task.contextCount) { column[task.contextKeys[it]] ?: -1 }
         val works = BayesWork.of(task, SuggestionPairs(task), own)
-        return SuggestionScores { rows -> rows.map { i -> counts.chances(works[i].contexts, works[i], alpha, scale) } }
+        val scores = SuggestionScores { rows ->
+            rows.map { i -> counts.chances(works[i].contexts, works[i], alpha, scale) }
+        }
+        return NewValues.beyond(scores, asked.valueCount, 0f)
     }
 
     /** Every value's share labelled 1 among the pairs of the works counted. */

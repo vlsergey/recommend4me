@@ -62,7 +62,7 @@ internal class FacetData(
             modelled: WorkChances,
             vocabulary: Vocabulary?,
             side: ValueSide? = null,
-            kept: List<String>? = null,
+            kept: KeptValues? = null,
             cast: SaidLines? = null,
             siteGives: Boolean = false,
             laps: Laps = Laps(),
@@ -105,7 +105,7 @@ internal class FacetAsked(
     val modelled: WorkChances,
     val vocabulary: Vocabulary?,
     val side: ValueSide?,
-    val kept: List<String>?,
+    val kept: KeptValues?,
     /** The site's lines of characters and pairings read for the facet; null of a facet that reads none. */
     val cast: SaidLines?,
     /** Whether the site gives values of the facet, told of every work, as the model was fitted. */

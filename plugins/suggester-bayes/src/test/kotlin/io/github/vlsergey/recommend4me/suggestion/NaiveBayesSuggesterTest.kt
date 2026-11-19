@@ -89,7 +89,7 @@ class NaiveBayesSuggesterTest {
         val chances = assertNotNull(suggester.scoring(model, alone)).of(intArrayOf(0, 1))
         assertTrue(chances[0][1] > 0.8f && chances[0][0] < 0.2f, chances[0].toList().toString())
         assertTrue(chances[1][0] > 0.8f, chances[1].toList().toString())
-        // Of other values than the model's: not scored
+        // Of a value beyond the model's, after them: scored a chance of none, the model's as they were (NewValues)
         val other =
             SuggestionTask(
                 alone.itemIds,
@@ -102,7 +102,10 @@ class NaiveBayesSuggesterTest {
                 alone.context,
                 alone.contextKeys,
             )
-        assertTrue(suggester.scoring(model, other) == null)
+        val beyond = assertNotNull(suggester.scoring(model, other)).of(intArrayOf(0, 1))
+        assertEquals(listOf(chances[0].toList() + 0f, chances[1].toList() + 0f), beyond.map { it.toList() })
+        // Of fewer values than the model's: not scored
+        assertTrue(suggester.scoring(model, NewValues.ofFirstValues(alone, 1)) == null)
     }
 
     /**

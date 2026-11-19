@@ -65,6 +65,24 @@ class BilinearSuggesterTest {
     fun `a value goes with the texts that point its way, every item judged by a model that did not learn from it`() =
         goesWithTexts(BilinearSuggester())
 
+    /**
+     * A value the model was not made of, asked after its own ([NewValues]), scored by its name alone: likelier of the
+     * works whose texts point its way than of the others — of a pairing of a work's own characters, no work learnt of.
+     */
+    @Test
+    fun `a value the model was not made of is scored by its name`() {
+        val task = task(400)
+        val learnt = NewValues.ofFirstValues(task, task.valueCount - 1)
+        val fitted = assertNotNull(BilinearSuggester().fit(whole(learnt)))
+        val scores = assertNotNull(BilinearSuggester().scoring(fitted.model(learnt.valueSide()), task))
+        val v = task.valueCount - 1
+        val chances = scores.of(IntArray(task.itemCount) { it }).map { it[v] }
+        val (has, not) = chances.indices.partition { v in task.assigned[it] }
+        val withIt = has.map { chances[it] }.average()
+        val without = not.map { chances[it] }.average()
+        assertTrue(withIt > without, "the new value's chance of the works that have it $withIt, of the others $without")
+    }
+
     private fun goesWithTexts(suggester: BilinearSuggester) {
         val task = task(300, wrong = 5)
         val fitted = assertNotNull(suggester.fit(whole(task)))

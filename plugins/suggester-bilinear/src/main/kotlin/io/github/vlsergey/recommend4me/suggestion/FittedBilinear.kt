@@ -88,6 +88,7 @@ internal class FittedBilinear(
             folds.map { it.pair },
             sides.map { it.first },
             sides.map { it.second },
+            folds.map { it.b },
         )
     }
 

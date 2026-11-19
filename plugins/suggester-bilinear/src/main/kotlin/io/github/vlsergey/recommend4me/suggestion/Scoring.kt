@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
+import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.matrix.Simd
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -24,7 +25,8 @@ private val log = LoggerFactory.getLogger(Scoring::class.java)
  * an item's features to the [rank] coordinates ([a], itemWidth × rank, by the [design]), the weights of a pair's own
  * feature and bias ([pair]: the site gives the value as an example, the common bias), and every value's coordinates
  * ([vt], rank × m, transposed for the product: its names and groups carried by B, its own coordinates added) and bias,
- * of the values [valueKeys] in their order.
+ * of the values [valueKeys] in their order; [b], of every fold, what carries a value's names and groups to its
+ * coordinates (valueWidth × rank) — of a value the model was not made of, its coordinates by its features alone ([of]).
  *
  * Of the item, its features alone: the chance an item has a value is σ(xᵢA · v + b_v + the pair's) — a product of the
  * item's coordinates with the value's kept. Made once of the task fitted on, kept beside the model; a page of twenty
@@ -39,6 +41,8 @@ internal class Scoring(
     val pair: List<FloatArray>,
     val vt: List<FloatArray>,
     val bias: List<FloatArray>,
+    /** Of every fold, B: none of a scoring kept before it was — a value it was not made of then scored the least. */
+    val b: List<FloatArray>? = null,
     /**
      * Every value's share of the works the model was fitted on: the mean of their chances of it, as the model scores
      * them ([withShares]) — what it tells of the value over the works as a whole, no work read ([weights]). None of a
@@ -55,7 +59,51 @@ internal class Scoring(
     }
 
     /** The scoring with every value's [shares] of the works fitted on ([ScoredPortions]). */
-    fun withShares(shares: FloatArray): Scoring = Scoring(design, rank, valueKeys, a, pair, vt, bias, shares)
+    fun withShares(shares: FloatArray): Scoring = Scoring(design, rank, valueKeys, a, pair, vt, bias, b, shares)
+
+    /**
+     * THE SCORING OF THE VALUES OF [task] — this scoring's first, in its order, and any others after them
+     * ([NewValues]): of a value the model was not made of, its coordinates of its names and groups alone ([b]), no own
+     * coordinates nor bias of its own — as the fitting makes those of a value no item had; the least score of a scoring
+     * kept with no [b]. Null of a task of other values first, or of values whose names are not of the names the model
+     * read.
+     */
+    fun of(task: SuggestionTask): Scoring? {
+        val m = valueKeys.size
+        return when {
+            task.valueKeys == valueKeys -> this
+            task.valueCount < m || task.valueKeys.subList(0, m) != valueKeys -> null
+            else -> beyond(task)
+        }
+    }
+
+    /** [of] of a [task] of values beyond this scoring's, after them. */
+    private fun beyond(task: SuggestionTask): Scoring {
+        val m = valueKeys.size
+        val n = task.valueCount
+        val z = b?.takeIf { task.values.cols == design.nameDim }?.let { design.values(task) }
+        val newVt = vt.indices.map { f -> sideOf(vt[f], z?.let { it to b!![f] }, m, n) }
+        val newBias = bias.map { own -> FloatArray(n) { if (it < m) own[it] else if (z != null) 0f else LEAST } }
+        val newShares = shares?.let { s -> FloatArray(n) { if (it < m) s[it] else 0f } }
+        return Scoring(design, rank, task.valueKeys, a, pair, newVt, newBias, b, newShares)
+    }
+
+    /**
+     * A fold's values' side of [n] values of its [own] of [m]: the first as kept, the others the products of their
+     * features with the fold's B ([features]: the values' features and B) — nought of none.
+     */
+    private fun sideOf(own: FloatArray, features: Pair<Matrix, FloatArray>?, m: Int, n: Int): FloatArray {
+        val out = FloatArray(rank * n)
+        for (q in 0 until rank) for (j in 0 until m) out[q * n + j] = own[q * m + j]
+        val (z, bf) = features ?: return out
+        val dz = design.valueWidth
+        for (j in m until n) for (q in 0 until rank) {
+            var sum = 0f
+            for (d in 0 until dz) sum += z.held[z.row(j) + d] * bf[d * rank + q]
+            out[q * n + j] = sum
+        }
+        return out
+    }
 
     /**
      * The chances of every value of the items of [task] — of the values the scoring is of, in its order. Every item by
@@ -765,7 +813,10 @@ internal class Scoring(
             design.write(out)
             out.writeInt(rank)
             Design.writeStrings(out, valueKeys)
-            for (f in a.indices) listOf(a[f], pair[f], vt[f], bias[f]).forEach { Design.writeFloats(out, it) }
+            for (f in a.indices) {
+                listOf(a[f], pair[f], vt[f], bias[f]).forEach { Design.writeFloats(out, it) }
+                Design.writeFloats(out, b?.get(f) ?: FloatArray(0))
+            }
             Design.writeFloats(out, shares ?: FloatArray(0))
         }
         return bytes.toByteArray()
@@ -774,9 +825,13 @@ internal class Scoring(
     companion object {
         /**
          * The version of what [pack] writes: 4 — the pair's own weights without the counts of the values' names in the
-         * texts; one of 3 read without them. One of another is not read: the next refresh keeps it anew.
+         * texts, one of 3 read without them; 5 — every fold's B, one of 3 or 4 read without it. One of another is not
+         * read: the next refresh keeps it anew.
          */
-        private const val FORMAT = 4
+        private const val FORMAT = 5
+
+        /** The least score: of a value a scoring kept with no B was not made of, a chance of none. */
+        private const val LEAST = Float.NEGATIVE_INFINITY
 
         private const val BUFFER = 1 shl 16
 
@@ -807,7 +862,7 @@ internal class Scoring(
                 // One of 3 read with the weight of the counts of names left out, as a state of the suggester
                 // ([Weights.withoutCounts])
                 val format = input.readInt()
-                if (format != FORMAT && format != FORMAT - 1) return null
+                if (format !in FORMAT - 2..FORMAT) return null
                 val design = Design.read(input)
                 val rank = input.readInt()
                 val keys = Design.readStrings(input)
@@ -818,6 +873,7 @@ internal class Scoring(
                             Design.readFloats(input),
                             Design.readFloats(input),
                             Design.readFloats(input),
+                            if (format == FORMAT) Design.readFloats(input) else FloatArray(0),
                         )
                     }
                 val shares = Design.readFloats(input).takeIf { it.size == keys.size }
@@ -832,6 +888,7 @@ internal class Scoring(
                     pair,
                     folds.map { it.vt },
                     folds.map { it.bias },
+                    folds.map { it.b }.takeIf { all -> all.all { it.isNotEmpty() } },
                     shares,
                 )
             }
@@ -880,8 +937,17 @@ internal class Scoring(
         }
     }
 
-    /** A fold's numbers as [pack] keeps them, in its order: A, the pair's own weights, the values' side, the biases. */
-    private class KeptFold(val a: FloatArray, val pair: FloatArray, val vt: FloatArray, val bias: FloatArray)
+    /**
+     * A fold's numbers as [pack] keeps them, in its order: A, the pair's own weights, the values' side, the biases, B
+     * (none of a scoring kept before it was).
+     */
+    private class KeptFold(
+        val a: FloatArray,
+        val pair: FloatArray,
+        val vt: FloatArray,
+        val bias: FloatArray,
+        val b: FloatArray,
+    )
 
     /** The likely of every row brought back: their places and scores one row after another, where each row's begin. */
     private class Likely(val places: IntArray, val scores: FloatArray, val from: IntArray, val over: Int)

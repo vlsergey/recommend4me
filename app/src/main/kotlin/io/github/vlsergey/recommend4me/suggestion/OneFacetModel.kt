@@ -3,7 +3,6 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.database.DatabaseRefused
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import org.springframework.stereotype.Component
 
 /**
@@ -30,7 +29,7 @@ internal class OneFacetModel(
         val reading = FacetReading(passes, chain, vocabularies)
         val pass = FacetPass(store, facets[k], k, encoder, passes.charactersRead(store), reading) {}
         val works = FacetPortions.answered(store, facetKey)
-        val counted = pass.counted(if (facetKey == UniverseFacets.PAIRINGS) null else works)
+        val counted = pass.counted(works)
         return FacetPortions(pass, pass.side(counted, store.corrections.allFacets()), works)
     }
 

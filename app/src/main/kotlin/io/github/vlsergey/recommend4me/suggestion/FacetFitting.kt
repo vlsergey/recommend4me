@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.universe.CharactersRead
-import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.CancellationException
@@ -73,10 +72,10 @@ internal class FacetFitting(private val reading: FacetReading, private val scori
         val facet = pass.facet
         val started = System.currentTimeMillis()
         val works = FacetPortions.answered(store, facet.key)
-        // The values a model offers are the dictionary's, and what the works it learns of have and were answered of:
-        // no walk over every work to count them (owner, 2026-11-19) — but of the pairings, the pairs of every work's
-        // characters, of no dictionary
-        val counted = pass.counted(if (facet.key == UniverseFacets.PAIRINGS) null else works)
+        // The values a model learns of are the dictionary's, and what the works it learns of have and were answered
+        // of: no walk over every work to count them (owner, 2026-11-19). A value no work it learnt of had — a pairing
+        // of a work's own characters — is scored by its features as the works are read ([KeptValues])
+        val counted = pass.counted(works)
         val side = pass.side(counted, store.corrections.allFacets())
         val read = System.currentTimeMillis() - started
         checkpoint()

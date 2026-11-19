@@ -345,9 +345,11 @@ interface FacetSuggester {
      * THE CHANCES OF THE ITEMS OF [task] — A PORTION ([TaskPortions.MOST] items at most) — BY THE [model] KEPT
      * ([FittedSuggester.model]) — the one way to them: their inputs, their context and examples are read, nothing else;
      * its values are the values the model was made of, in its order, without their names, groups or texts — the model
-     * knows what each is. An item the model was fitted on is known by its id: it is not its own witness. Null when the
-     * bytes are not of this suggester's making, or not of the task's values or inputs: the facet has no chances till it
-     * is fitted again.
+     * knows what each is — and after them those the works may have that the model was not made of, with their names and
+     * groups ([NewValues]): scored by them, or the suggester's least of a suggester that knows its own values alone. An
+     * item the model was fitted on is known by its id: it is not its own witness. Null when the bytes are not of this
+     * suggester's making, or not of the task's first values or inputs: the facet has no chances till it is fitted
+     * again.
      */
     fun scoring(model: ByteArray, task: SuggestionTask): SuggestionScores?
 

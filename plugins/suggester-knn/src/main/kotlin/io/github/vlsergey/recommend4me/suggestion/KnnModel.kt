@@ -32,16 +32,19 @@ internal class KnnModel(
      * The chances of the works of [task] by their nearest among the works kept; null when the task is not of the
      * model's values or of its blocks. A work kept is not its own neighbour.
      */
-    fun on(task: SuggestionTask, onnx: Onnx?): SuggestionScores? {
+    fun on(given: SuggestionTask, onnx: Onnx?): SuggestionScores? {
+        // Of the values beyond those labelled, nothing known: a chance of none ([NewValues])
+        val task = NewValues.ofFirstValues(given, labels.m)
         val asked =
-            Neighbours.project(task.inputs, task.itemCount, layout).takeIf { task.valueCount == labels.m }
+            Neighbours.project(task.inputs, task.itemCount, layout)?.takeIf { given.valueCount >= labels.m }
                 ?: return null
         val row = ids.withIndex().associate { (i, id) -> id to i }
         val self = IntArray(task.itemCount) { row[task.itemIds[it]] ?: -1 }
         val near = Neighbours.among(asked, task.itemCount, vectors, ids.size, self, onnx)
-        return SuggestionScores { rows ->
+        val scores = SuggestionScores { rows ->
             rows.map { i -> labels.chances(near.rows[i], near.likeness[i], share, k) { true } }
         }
+        return NewValues.beyond(scores, given.valueCount, 0f)
     }
 
     fun pack(): ByteArray {

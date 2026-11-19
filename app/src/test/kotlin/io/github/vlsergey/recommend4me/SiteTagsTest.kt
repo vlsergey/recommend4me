@@ -85,7 +85,9 @@ class SiteTagsTest : SiteTestBase() {
      */
     private fun merged(hulls: String, starhulls: String) {
         // Offered alike: the other tags of the sites, with how alike their names are; the site's own tag of it, merged.
-        // Of the hulls: the other classes' tags are many, in the one application of the tests
+        // Of the hulls: the other classes' tags are many, in the one application of the tests — their directions made
+        // by the background first: of none every tag as alike, the page of fifty the first keys
+        background.run()
         val similar = tagsApi.listSimilarTags(hulls, "hull", 0, 50, null, null).body!!.tags
         assertTrue(similar.any { it.tag.key == starhulls && it.site == null }, "similar ${similar.map { it.tag.key }}")
         assertEquals(listOf("hulls"), similar.filter { it.site != null }.map { it.site!!.tag })
