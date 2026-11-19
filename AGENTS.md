@@ -153,6 +153,21 @@ format or not brought to every work (`SearchProvider.current`), a type never sea
 every work again in case something changed while the application was down: what changes then is a
 tool or a migration, which asks for what follows itself.
 
+**What leads to what is documented of the code itself: `docs/events.md`** (owner, 2026-11-19: "a
+procedure that generates the diagram by the code of the service: which outer event leads to which
+inner events, and to the planning of which background works"). `EventFlowDocsTest` reads the compiled
+application and the plugins' API (`flow/CodeRead`, `flow/EventFlow`) and writes the document anew
+when the flow changed — commit it with the change: a new arrow is a change of behaviour, seen in the
+diff. The code is written so the flow can be read of it:
+- an event is an object of a class some `@EventListener` listens to, made where it is told;
+- a work is planned by `Workload.plan` or run by `Workload.run`, its `WorkKind` named in the method
+  that plans it — directly, in a field of a `Work` or a `WorkKind`, or by a method giving one — its
+  body the lambda made right before; a place whose kind is named nowhere so fails the test;
+- a lambda handed to an object's constructor runs where that object calls a function value;
+- a call of a method of an interface of the plugins' API may run the plugin, which may call back
+  every method of what it is handed: hand a plugin no more than it needs (a context that writes
+  only where the plugin is to write).
+
 **Every kind of work and every reason of the queue is a value of the API** (`WorkKind`,
 `WorkReasonKey` in `api/openapi.yaml`): `Work.what` is a `WorkKind`, a reason planned that the API
 does not list fails as it is planned, and the interface words them by the typed translation — a word
