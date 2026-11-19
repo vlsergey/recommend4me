@@ -14,6 +14,7 @@ import io.github.vlsergey.recommend4me.item.ItemCards
 import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.SitesSay
+import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -24,9 +25,12 @@ import io.github.vlsergey.recommend4me.suggestion.toApi
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.work.Works
 import java.net.URI
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
+
+private val log = LoggerFactory.getLogger(PagesController::class.java)
 
 /**
  * THE SITE AS THE APPLICATION'S INTERFACE: what the browser extension shows on a page the user opens — on a work's page
@@ -68,20 +72,37 @@ class PagesController(
             )
     }
 
+    /**
+     * The work of the item [itemId] as the site's page shows it — every step timed, told to the log: what the extension
+     * waits for.
+     */
     private fun item(store: SourceStore, itemId: String, decor: PageDecor?): PageItem? {
+        val laps = Laps()
+        val started = System.currentTimeMillis()
+        val made = item(store, itemId, decor, laps)
+        val took = System.currentTimeMillis() - started
+        log.info("{}/{}: the page's work made in {} ms: {}", store.id, itemId, took, laps)
+        return made
+    }
+
+    private fun item(store: SourceStore, itemId: String, decor: PageDecor?, laps: Laps): PageItem? {
         val key = ItemKey(store.id, itemId)
         val type = stores.typeOf(store.id)
         val summary = cards.cards(type, listOf(key)).firstOrNull() ?: return null
+        laps.lap("card")
         val schema = store.schema
         val wanted =
             decor?.facets.orEmpty().map { it.facet }.toSet() +
                 schema.facets.filter { it.suggest || it.infer }.map { it.key }
         // Its chances made now in memory, once for the suggestions and the values both
-        val chances = suggestions.chances(store, listOf(itemId))[itemId].orEmpty()
+        val chances = suggestions.chances(store, listOf(itemId), laps = laps.within("chances:"))[itemId].orEmpty()
+        laps.restart()
         val suggested = suggestions.ofItem(store, itemId, chances).map { it.toApi(store) }
+        laps.lap("suggestions")
         // The values of the work, of every item of it, as the web interface shows them
         val clusters = works.of(type)
         val work = cards.ofWork(type, clusters, key, store.items.facets(itemId), chances)
+        laps.lap("work's items")
         val (site, workChances) = work
         val corrections = store.corrections.facetsOf(itemId)
         val names = wanted.associateWith { facet ->
@@ -92,34 +113,46 @@ class PagesController(
                     ModelValues.named(workChances?.get(facet)),
             )
         }
-        val pictureMarks = store.marks.pictureMarksOf(itemId)
+        laps.lap("names")
+        val said = sitesSay.of(type, store, clusters.fullestFirst(key))
+        laps.lap("what the sites say")
+        val facets =
+            cards.facets(
+                store,
+                work,
+                corrections,
+                names,
+                said,
+                empty = { true },
+                complete = store.corrections.completeOf(itemId),
+            ) {
+                it in wanted
+            }
+        laps.lap("facets")
+        val pictures = picturesOf(store, itemId)
+        val reviewMarks = store.marks.reviewMarksOf(itemId)
+        laps.lap("pictures and reviews")
+        val ratings = details.ratings(type, key)
+        laps.lap("ratings")
+        val pending = texts.awaited(clusters.members(key))
+        laps.lap("texts awaited")
         return PageItem(
             summary = summary,
-            facets =
-                cards.facets(
-                    store,
-                    work,
-                    corrections,
-                    names,
-                    sitesSay.of(type, store, clusters.fullestFirst(key)),
-                    empty = { true },
-                    complete = store.corrections.completeOf(itemId),
-                ) {
-                    it in wanted
-                },
+            facets = facets,
             suggestions = suggested,
-            pictures =
-                store.pictures.ofItem(itemId, plugins.imageEncoder()?.id).map { p ->
-                    PagePicture(
-                        p.position,
-                        p.url,
-                        pictureMarks.firstOrNull { it.position == p.position && it.url == p.url }?.mark,
-                    )
-                },
-            reviewMarks = store.marks.reviewMarksOf(itemId),
-            ratings = details.ratings(type, key),
-            pending = texts.awaited(clusters.members(key)),
+            pictures = pictures,
+            reviewMarks = reviewMarks,
+            ratings = ratings,
+            pending = pending,
         )
+    }
+
+    /** The pictures of the item [itemId] with the user's marks on them. */
+    private fun picturesOf(store: SourceStore, itemId: String): List<PagePicture> {
+        val marks = store.marks.pictureMarksOf(itemId)
+        return store.pictures.ofItem(itemId, plugins.imageEncoder()?.id).map { p ->
+            PagePicture(p.position, p.url, marks.firstOrNull { it.position == p.position && it.url == p.url }?.mark)
+        }
     }
 
     override fun getCards(cardsRequest: CardsRequest): ResponseEntity<List<CardView>> {
