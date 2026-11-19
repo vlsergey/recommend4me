@@ -7,12 +7,14 @@ import io.github.vlsergey.recommend4me.matrix.HalfMatrix
  * trigrams' counts ([titles], a row a work, in half precision; [titleLengths] the counts' lengths, nought of a title of
  * none), the same of the names of its authors ([authorNames], [authorLengths]: nought of a work of no author named) —
  * and of the vectors of their descriptions ([descriptions], a row of noughts and [described] false of a work without
- * one; of no column, a site with no vector of a description); the values of the facets the sites share ([values], by
- * their places among every value of the type, ascending) with the weight of each ([weights]: its rarity among every
- * work of the type, a work's values of each facet of unit length) and the facets it has a value of ([facets], a bit a
- * facet by its place among [PairSearch.families]); the numbers of its size ([sizes], by the places of
- * [PairSearch.sizes], a row a number, nought when not known); its normalized authors ([authors]) and with them every
- * author the dictionary of authors gives as one with them, fully or in part ([kin]).
+ * one; of no column, a site with no vector of a description), the same of the vectors of their titles ([titleVectors],
+ * [titled]), the unit rows of the trigrams of the other texts ([letters] and [letterLengths], by [LetteredText]: nought
+ * of a work of none); the values of the facets the sites share ([values], by their places among every value of the
+ * type, ascending) with the weight of each ([weights]: its rarity among every work of the type, a work's values of each
+ * facet of unit length) and the facets it has a value of ([facets], a bit a facet by its place among
+ * [PairSearch.families]); the numbers of its size ([sizes], by the places of [PairSearch.sizes], a row a number, nought
+ * when not known); its normalized authors ([authors]) and with them every author the dictionary of authors gives as one
+ * with them, fully or in part ([kin]).
  */
 class SiteWorks(
     val source: String,
@@ -29,6 +31,10 @@ class SiteWorks(
     val sizes: Array<DoubleArray>,
     val authors: Array<LongArray>,
     val kin: Array<LongArray>,
+    val titleVectors: HalfMatrix = HalfMatrix(ids.size, 0),
+    val titled: BooleanArray = BooleanArray(ids.size),
+    val letters: List<HalfMatrix> = LetteredText.entries.map { HalfMatrix(ids.size, titles.cols) },
+    val letterLengths: List<FloatArray> = LetteredText.entries.map { FloatArray(ids.size) },
 ) {
     val count: Int
         get() = ids.size
@@ -53,8 +59,21 @@ class SiteWorks(
             "$source: not a mark, a value list, an author list of every one of $count works"
         }
         require(sizes.all { it.size == count }) { "$source: not a number of size of every one of $count works" }
+        require(
+            titleVectors.rows == count &&
+                titled.size == count &&
+                letters.size == LETTERED &&
+                letters.all { it.rows == count && it.cols == width } &&
+                letterLengths.size == LETTERED &&
+                letterLengths.all { it.size == count }
+        ) {
+            "$source: not a title's vector, the trigrams of every text of every one of $count works"
+        }
     }
 }
+
+/** The texts compared letter by letter besides the title and the authors' names ([LetteredText]). */
+val LETTERED = LetteredText.entries.size
 
 /**
  * WHAT A SEARCH OF PAIRS IS GIVEN: every site's works ([sites]); the facet of every value by its place ([familyOf], a
@@ -91,6 +110,12 @@ class PairSearch(
     fun descriptionsCompared(a: Int, b: Int): Boolean =
         sites[a].descriptions.cols > 0 && sites[a].descriptions.cols == sites[b].descriptions.cols
 
+    /**
+     * Whether the vectors of the titles of the [a]-th site's works and of the [b]-th's are compared: of one encoder's.
+     */
+    fun titleVectorsCompared(a: Int, b: Int): Boolean =
+        sites[a].titleVectors.cols > 0 && sites[a].titleVectors.cols == sites[b].titleVectors.cols
+
     /** THE LAYERS OF THE PAIR of the [a]-th site's [i]-th work and the [b]-th site's [j]-th, worked out alone. */
     fun layers(a: Int, i: Int, b: Int, j: Int): PairLayers {
         val x = sites[a]
@@ -122,7 +147,7 @@ class PairSearch(
                 else null,
             size = size(x, i, y, j),
             facets = families.indices.filter { both and (1L shl it) != 0L }.associate { families[it] to facets[it] },
-            sameAuthor = y.authors[j].any { it in x.kin[i] },
+            sameAuthor = y.authors[j].any { it in x.authors[i] },
             site = x.source,
             otherSite = y.source,
             titleWithin = title.within,
@@ -130,6 +155,14 @@ class PairSearch(
             authors =
                 if (authored) Lexical.of(dot(x.authorNames, y.authorNames), x.authorLengths[i], y.authorLengths[j])
                 else null,
+            titleVector =
+                if (titleVectorsCompared(a, b) && x.titled[i] && y.titled[j]) dot(x.titleVectors, y.titleVectors)
+                else null,
+            letters =
+                LetteredText.entries
+                    .filter { x.letterLengths[it.ordinal][i] > 0f && y.letterLengths[it.ordinal][j] > 0f }
+                    .associateWith { dot(x.letters[it.ordinal], y.letters[it.ordinal]) },
+            partlySameAuthor = y.authors[j].none { it in x.authors[i] } && y.authors[j].any { it in x.kin[i] },
         )
     }
 

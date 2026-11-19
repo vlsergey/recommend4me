@@ -19,6 +19,10 @@
 #define KIN 64
 // The numbers of size of a pair at most (PairSearch.sizes)
 #define SIZES 8
+// The texts compared letter by letter besides the title and the authors' names (LetteredText)
+#define LETTERED 3
+// The numbers of a model before its facets' (Logistic.FLAT_HEAD)
+#define HEAD (17 + 2 * LETTERED)
 
 // A number of half precision, as cuBLAS wrote it, in single precision
 __device__ __forceinline__ float half_to_float(unsigned short h) {
@@ -41,7 +45,7 @@ __device__ __forceinline__ int list_of(const int* cum, int from, int to, int idx
 // The weight of the facet f in the model of the numbers m (Logistic.Laid.flat): of the mean of the layers, one — its
 // facets' cosines summed, then divided by how many facets both have
 __device__ __forceinline__ float facet_weight(const float* m, int f) {
-    return m[0] != 0.0f ? 1.0f : m[14 + 2 * f];
+    return m[0] != 0.0f ? 1.0f : m[HEAD + 2 * f];
 }
 
 // Of every row r — the work from + r of this site, a block of threads a row — every rare value k of its (rowAt[i] ..
@@ -90,9 +94,12 @@ __device__ __forceinline__ void keep_higher(float& s, int& j, float t, int k) {
 // share add to every model's score (P, a plane a model, of facets_onto) and the frequent — the rows' weights of every
 // frequent value of the site by its number (rowAt[i] .. rowAt[i + 1] of the numbers rowValues, of weights rowWeights),
 // the other's (otherAt[j] .. otherAt[j + 1] of otherValues, otherWeights) — of the facet frequentFamily[number];
-// whether they are of one author — the row's authors and their kin (kinAt[i] .. kinAt[i + 1] of kin, as places among
-// the other site's authors) against the other's (otherAuthorAt[j] .. of otherAuthors); the sizes (of every number both
-// state, the smaller over the larger, their mean) — and every model's score of them: of every row and model the work of
+// whether they are of one author — the row's own authors (ownAt[i] .. ownAt[i + 1] of owned, as places among the other
+// site's authors) against the other's (otherAuthorAt[j] .. of otherAuthors) — or of an author in part one, none in
+// common — its kin (kinAt[i] .. kinAt[i + 1] of kin) so; the sizes (of every number both state, the smaller over the
+// larger, their mean); the other way, the cosines of the titles' vectors TV (when the two sites' are of one encoder:
+// titleVectors, and both have one: titledA, titledB) and of every other text's trigrams DL (a plane a text, when both
+// have some: lettersA, lettersB, a row a text) — and every model's score of them: of every row and model the work of
 // the highest score, of equal ones the first, written at best[row][model] (-1: none) with its score at
 // scores[row][model]. Of one site against itself (self), a work is never its own pair
 extern "C" __global__ void best(
@@ -102,6 +109,8 @@ extern "C" __global__ void best(
     const unsigned long long* facetsA, const unsigned long long* facetsB, int sizes, const float* sizesA,
     const float* sizesB, const int* passAt, const int* pass,
     const int* rowAt, const int* rowValues, const float* rowWeights, const int* kinAt, const int* kin,
+    const int* ownAt, const int* owned, const unsigned short* TV, const unsigned short* DL, int titleVectors,
+    const unsigned char* titledA, const unsigned char* titledB, const float* lettersA, const float* lettersB,
     const int* otherAt, const int* otherValues, const float* otherWeights,
     const int* otherAuthorAt, const int* otherAuthors, int frequent, const int* frequentFamily,
     int models, const float* weights, int families, int self, int* best, float* scores
@@ -109,12 +118,13 @@ extern "C" __global__ void best(
     __shared__ float held[ROWS][FREQUENT];
     __shared__ float facetOf[MAX_MODELS][FREQUENT];
     __shared__ int ownKin[ROWS][KIN];
+    __shared__ int ownAuthors[ROWS][KIN];
     __shared__ float warpScore[BLOCK / 32];
     __shared__ int warpAt[BLOCK / 32];
     int first = blockIdx.x * ROWS;
     if (first >= rows) return;
     int count = min(ROWS, rows - first);
-    int stride = 14 + 2 * families;
+    int stride = HEAD + 2 * families;
 
     // The rows' weights of every frequent value by its number, every model's weight of its facet, the rows' kin
     for (int k = threadIdx.x; k < ROWS * FREQUENT; k += blockDim.x) held[k / FREQUENT][k % FREQUENT] = 0.0f;
@@ -124,14 +134,18 @@ extern "C" __global__ void best(
     }
     __syncthreads();
     int kinCount[ROWS];
+    int ownCount[ROWS];
     #pragma unroll
     for (int r = 0; r < ROWS; r++) {
         kinCount[r] = 0;
+        ownCount[r] = 0;
         if (r >= count) continue;
         int i = from + first + r;
         for (int k = rowAt[i] + threadIdx.x; k < rowAt[i + 1]; k += blockDim.x) held[r][rowValues[k]] = rowWeights[k];
         kinCount[r] = kinAt[i + 1] - kinAt[i];
         for (int k = threadIdx.x; k < kinCount[r]; k += blockDim.x) ownKin[r][k] = kin[kinAt[i] + k];
+        ownCount[r] = ownAt[i + 1] - ownAt[i];
+        for (int k = threadIdx.x; k < ownCount[r]; k += blockDim.x) ownAuthors[r][k] = owned[ownAt[i] + k];
     }
     __syncthreads();
 
@@ -146,6 +160,10 @@ extern "C" __global__ void best(
         // The other work, read once for every row
         float tB = titleB[j];
         float aB = authorB[j];
+        bool titledOther = titleVectors != 0 && titledB[j] != 0;
+        float lB[LETTERED];
+        #pragma unroll
+        for (int k = 0; k < LETTERED; k++) lB[k] = lettersB[(size_t) k * n + j];
         bool describedOther = descriptions != 0 && describedB[j] != 0;
         unsigned long long facetsOther = facetsB[j];
         float sizeOther[SIZES];
@@ -187,10 +205,21 @@ extern "C" __global__ void best(
                     }
                 }
             }
-            bool same = false;
+            bool same = false, partly = false;
             for (int q = authorsFrom; q < authorsTo && !same; q++) {
                 int author = otherAuthors[q];
-                for (int k = 0; k < kinCount[r]; k++) if (ownKin[r][k] == author) { same = true; break; }
+                for (int k = 0; k < ownCount[r]; k++) if (ownAuthors[r][k] == author) { same = true; break; }
+                for (int k = 0; k < kinCount[r] && !partly; k++) if (ownKin[r][k] == author) partly = true;
+            }
+            partly = partly && !same;
+            bool hasTV = titledOther && titledA[i] != 0;
+            float tv = hasTV ? half_to_float(TV[c]) : 0.0f;
+            bool hasDL[LETTERED];
+            float dl[LETTERED];
+            #pragma unroll
+            for (int k = 0; k < LETTERED; k++) {
+                hasDL[k] = lB[k] > 0.0f && lettersA[(size_t) k * nA + i] > 0.0f;
+                dl[k] = hasDL[k] ? half_to_float(DL[k * plane + c]) : 0.0f;
             }
             float t = half_to_float(T[c]);
             float a = half_to_float(A[c]);
@@ -221,10 +250,14 @@ extern "C" __global__ void best(
                     if (hasD) z += w[3] * d + w[4];
                     if (hasS) z += w[5] * s + w[6];
                     if (same) z += w[7];
+                    if (hasTV) z += w[14] * tv + w[15];
+                    if (partly) z += w[16];
+                    #pragma unroll
+                    for (int k = 0; k < LETTERED; k++) if (hasDL[k]) z += w[17 + 2 * k] * dl[k] + w[18 + 2 * k];
                     unsigned long long bits = both;
                     while (bits != 0ULL) {
                         int k = __ffsll((long long) bits) - 1;
-                        z += w[15 + 2 * k];
+                        z += w[HEAD + 1 + 2 * k];
                         bits &= bits - 1ULL;
                     }
                 }

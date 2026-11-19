@@ -4,10 +4,10 @@ package io.github.vlsergey.recommend4me.duplicate
  * EVERY WORK OF EVERY SITE OF A SEARCH IN ONE NUMBERING ([GraphSearch]): the [site]-th site's [i]-th work is the
  * [start] of the site plus [i]. Of every work, as one list after another: its values ascending ([values], their
  * [valueWeights]), its authors and their kin as numbers of their own, ascending ([authors], [kin]), the works the user
- * answered on with it, by their numbers ([passed]); and the sites' rows — the titles' and the authors' names' trigrams
- * of one [width], the descriptions of one encoder's [described] numbers (of a site of another, none) — put one site
- * after another on the card ([AllOnCard]). Null of sites whose trigrams are not of one width: such a search is every
- * pair's.
+ * answered on with it, by their numbers ([passed]); and the sites' rows — the titles', the authors' names' and the
+ * descriptions' trigrams of one [width], the descriptions of one encoder's [described] numbers and the titles' vectors
+ * of [titled] (of a site of another, none) — put one site after another on the card ([AllOnCard]). Null of sites whose
+ * trigrams are not of one width: such a search is every pair's.
  */
 internal class AllWorks private constructor(val search: PairSearch) {
     val sites = search.sites
@@ -22,6 +22,20 @@ internal class AllWorks private constructor(val search: PairSearch) {
             .groupBy { it.descriptions.cols }
             .maxByOrNull { (_, of) -> of.sumOf { it.count } }
             ?.key ?: 0
+
+    /** The numbers of a title's vector of the most works: a site of another encoder's has none here. */
+    val titled =
+        sites
+            .filter { it.titleVectors.cols > 0 }
+            .groupBy { it.titleVectors.cols }
+            .maxByOrNull { (_, of) -> of.sumOf { it.count } }
+            ?.key ?: 0
+
+    /** Whether the titles' vectors of two sites are compared, by [site] × sites + [site]. */
+    val comparedTitles =
+        ByteArray(sites.size * sites.size) { k ->
+            if (search.titleVectorsCompared(k / sites.size, k % sites.size)) 1 else 0
+        }
 
     val siteOf = IntArray(count).also { s -> sites.indices.forEach { a -> s.fill(a, start[a], start[a + 1]) } }
 

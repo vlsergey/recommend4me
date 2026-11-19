@@ -149,6 +149,19 @@ internal class SiteOnCard(
             it.upload(site.descriptions, 0, site.count)
         }
     val described = room.marks(site.described)
+
+    // The other way: the vectors of the titles; the trigrams of the other texts, one after another ([LetteredText])
+    val titleVectors =
+        room.bytes(site.count.toLong() * site.titleVectors.cols * HALF_BYTES).also {
+            it.upload(site.titleVectors, 0, site.count)
+        }
+    val titled = room.marks(site.titled)
+    val letters =
+        site.letters.map { m ->
+            room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(m, 0, site.count) }
+        }
+    val letterLengths =
+        room.floatsOf(FloatArray(LETTERED * site.count) { site.letterLengths[it / site.count][it % site.count] })
     val facets = room.longs(site.facets)
     val sizes =
         room.floatsOf(

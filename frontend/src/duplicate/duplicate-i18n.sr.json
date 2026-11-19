@@ -55,7 +55,7 @@
   "PairGrid.authorKinApartHint": "Rečnik autora ne daje zajedničkog autora. Srodstvo najbliže dvojice po njihovim delima, kao na ekranu autora: parova dela koje ste nazvali jednim delom ili delom — {{matching}}; očekuje se još {{expected}} po verovatnoćama parova pretrage; zajedničkih zapisa kataloga — {{entry}}. Rekli ste da su različiti autori: crveno.",
   "PairGrid.authorKinHint": "Rečnik autora ne daje zajedničkog autora. Srodstvo najbliže dvojice po njihovim delima, kao na ekranu autora: parova dela koje ste nazvali jednim delom ili delom — {{matching}}; očekuje se još {{expected}} po verovatnoćama parova pretrage; zajedničkih zapisa kataloga — {{entry}}. Žuto — srodstvo postoji, crveno — ne.",
   "PairGrid.authorKinPartlyHint": "Rečnik autora ne daje zajedničkog autora. Srodstvo najbliže dvojice po njihovim delima, kao na ekranu autora: parova dela koje ste nazvali jednim delom ili delom — {{matching}}; očekuje se još {{expected}} po verovatnoćama parova pretrage; zajedničkih zapisa kataloga — {{entry}}. Rekli ste da su delimično isti: žuto.",
-  "PairGrid.authors": "Autori",
+  "PairGrid.authors": "Autori (sajt)",
   "PairGrid.description": "Opis",
   "PairGrid.facetHint": "Sličnost vrednosti {{value}}; retka vrednost teži više od česte. Sve zajedničke zeleno, nijedna crveno, deo žuto",
   "PairGrid.fandoms": "Fandom",
@@ -64,12 +64,11 @@
   "PairGrid.notMeasuredHint": "Tekstovi još nisu kodirani: koliko je sličan njihov smisao, još nije izmereno",
   "PairGrid.oneSided": "Samo kod jednog dela",
   "PairGrid.notCompared": "Ima kod oba, ne poredi se",
-  "PairGrid.notComparedHint2": "Oba dela imaju ova polja, ali model parova ih ne poredi: oznake sajtova (porede se normalizovane oznake), red sajta o likovima i parovima (porede se likovi i parovi iz njega), fasete kojih nema među slojevima para",
+  "PairGrid.notComparedHint2": "Oba dela imaju ova polja, ali model parova ih ne poredi: oznake sajtova (porede se normalizovane oznake), fasete kojih nema među slojevima para; kod para koji pretraga još nije poredila i redovi sajta o univerzumu i likovima",
   "PairGrid.otherAuthorHint": "Oba dela imaju poznate autore, ali po rečniku autora nijedan nije zajednički: najverovatnije različiti autori",
   "PairGrid.sameAuthorHint": "Po rečniku autora dela imaju zajedničkog autora: istog normativnog autora ili autore označene kao delimično iste",
   "PairGrid.sameTextHint": "Tekstovi još nisu kodirani: isti su od reči do reči",
   "PairGrid.sameValueHint": "Svako delo ima jednu vrednost: ista — zeleno, druga — crveno",
-  "PairGrid.siteFandomsHint": "Fandom kako ga sajt naziva: aplikacija ne zna univerzum dela",
   "PairGrid.size": "Veličina",
   "PairGrid.sizeHint": "Veličine se razlikuju za {{value}} (manja prema većoj po rečima, znakovima i delovima, u proseku): do 5 % zeleno, do 10 % žuto, više crveno",
   "PairGrid.textHint": "Sličnost smisla dva teksta {{value}} (kosinus njihovih vektora): od 95 % zeleno, od 85 % žuto, niže crveno. Kod parova označenih „različita” sredina je oko 76 % za naslove i 58 % za opise",
@@ -133,5 +132,8 @@
   "WorkSide.unfold": "Prikaži celo, kod oba dela",
   "WorkSide.words_few": "{{value}} reči",
   "WorkSide.words_one": "{{value}} reč",
-  "WorkSide.words_other": "{{value}} reči"
+  "WorkSide.words_other": "{{value}} reči",
+  "PairGrid.lettersHint": "Sličnost dva teksta po slovima {{value}} (kosinus njihovih trigrama): od 95 % zeleno, od 85 % žuto, niže crveno",
+  "PairGrid.partlyAuthorHint": "Po rečniku autora dela imaju delimično zajedničkog autora: autore označene kao delimično iste, bez zajedničkog normativnog autora",
+  "PairGrid.siteFandoms": "Univerzum (sajt)"
 }

@@ -51,7 +51,7 @@
   "PairGrid.authorKinApartHint": "The dictionary of authors gives no author in common. How close the closest two are by their works, as the screen of authors weighs it: pairs of works you said are one work or a part — {{matching}}; {{expected}} more expected by the chances of the search's pairs; entries of a catalogue in common — {{entry}}. You said they are different authors: red.",
   "PairGrid.authorKinHint": "The dictionary of authors gives no author in common. How close the closest two are by their works, as the screen of authors weighs it: pairs of works you said are one work or a part — {{matching}}; {{expected}} more expected by the chances of the search's pairs; entries of a catalogue in common — {{entry}}. Yellow: kin; red: none.",
   "PairGrid.authorKinPartlyHint": "The dictionary of authors gives no author in common. How close the closest two are by their works, as the screen of authors weighs it: pairs of works you said are one work or a part — {{matching}}; {{expected}} more expected by the chances of the search's pairs; entries of a catalogue in common — {{entry}}. You said they are partly one: yellow.",
-  "PairGrid.authors": "Authors",
+  "PairGrid.authors": "Authors (site)",
   "PairGrid.description": "Description",
   "PairGrid.facetHint": "How alike the values are {{value}}; a rare value weighs more than a common one. All in common green, none red, some yellow",
   "PairGrid.fandoms": "Fandom",
@@ -60,12 +60,11 @@
   "PairGrid.notMeasuredHint": "The texts are not encoded yet: how alike they mean is not measured yet",
   "PairGrid.oneSided": "Of one work alone",
   "PairGrid.notCompared": "Both have, not compared",
-  "PairGrid.notComparedHint2": "Both works have these fields, but the model of pairs does not compare by them: the sites' tags (the normalized tags are compared), the site's line of characters and pairings (the characters and pairings made of it are), facets not among the pair's layers",
+  "PairGrid.notComparedHint2": "Both works have these fields, but the model of pairs does not compare by them: the sites' tags (the normalized tags are compared), facets not among the pair's layers; of a pair no search compared yet, the site's lines of the universe and the characters too",
   "PairGrid.otherAuthorHint": "Both works have their authors, and the dictionary of authors gives them none in common: most likely different authors",
   "PairGrid.sameAuthorHint": "The dictionary of authors gives the works an author in common: one normalized author, or authors marked as partly one",
   "PairGrid.sameTextHint": "The texts are not encoded yet: they are the same word for word",
   "PairGrid.sameValueHint": "One value of each work: the same green, another red",
-  "PairGrid.siteFandomsHint": "The fandom as the site names it: the application knows no universe of the work",
   "PairGrid.size": "Size",
   "PairGrid.sizeHint": "The sizes differ by {{value}} (the smaller over the larger by words, characters and parts, on average): up to 5 % green, up to 10 % yellow, more red",
   "PairGrid.textHint": "How alike the two texts mean {{value}} (the cosine of their vectors): from 95 % green, from 85 % yellow, below red. Of the pairs said different, the middle ones have about 76 % of titles and 58 % of descriptions",
@@ -125,5 +124,8 @@
   "WorkSide.thousands": "{{value}}k",
   "WorkSide.unfold": "Show whole, of both works",
   "WorkSide.words_one": "{{value}} word",
-  "WorkSide.words_other": "{{value}} words"
+  "WorkSide.words_other": "{{value}} words",
+  "PairGrid.lettersHint": "How alike the two texts are letter by letter {{value}} (the cosine of their trigrams): from 95 % green, from 85 % yellow, below red",
+  "PairGrid.partlyAuthorHint": "The dictionary of authors gives the works an author in common in part: authors marked as partly one, no normalized author of both",
+  "PairGrid.siteFandoms": "Universe (site)"
 }

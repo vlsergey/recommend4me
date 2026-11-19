@@ -74,6 +74,14 @@ internal class Logistic(
             sized = weight(has(SIZE)),
             author = weight(SAME_AUTHOR),
             facet = DoubleArray(families.size) { weight(facet(families[it])) },
+            texts =
+                TextWeights(
+                    weight(TITLE_VECTOR),
+                    weight(has(TITLE_VECTOR)),
+                    weight(PARTLY_SAME_AUTHOR),
+                    DoubleArray(LETTERED) { weight(letters(LetteredText.entries[it])) },
+                    DoubleArray(LETTERED) { weight(has(letters(LetteredText.entries[it]))) },
+                ),
             faceted = DoubleArray(families.size) { weight(has(facet(families[it]))) },
             ofSites = weights.orEmpty().filterKeys { it.startsWith(SITES) },
         )
@@ -103,6 +111,8 @@ internal class Logistic(
         val facet: DoubleArray,
         val faceted: DoubleArray,
         private val ofSites: Map<String, Double> = emptyMap(),
+        /** The weights of the texts compared the other way and of an author in part one ([TextWeights]). */
+        val texts: TextWeights = TextWeights.NONE,
     ) {
         /**
          * The model as the works of the [site] against those of the [other] are scored: their weight in the constant.
@@ -125,11 +135,13 @@ internal class Logistic(
                 author,
                 facet,
                 faceted,
+                texts = texts,
             )
 
         /**
          * The facets both have: the bits of [both]; of the f-th, how alike they are [valued] (f). The title's letters
-         * [t]; the authors' names' [a], none when either has none.
+         * [t]; the authors' names' [a], none when either has none. The titles by meaning and the descriptions letter by
+         * letter, and an author in part one ([other]).
          */
         fun score(
             t: Lexical,
@@ -141,6 +153,7 @@ internal class Logistic(
             both: Long,
             valued: (Int) -> Float,
             sameAuthor: Boolean,
+            other: OtherLayers = OtherLayers.NONE,
         ): Double {
             if (mean) {
                 var sum = t.alike.toDouble()
@@ -176,6 +189,7 @@ internal class Logistic(
             if (hasDescription) z += description * d + described
             if (hasSize) z += size * s + sized
             if (sameAuthor) z += author
+            z += texts.of(other)
             var bits = both
             while (bits != 0L) {
                 val k = java.lang.Long.numberOfTrailingZeros(bits)
@@ -188,8 +202,9 @@ internal class Logistic(
         /**
          * The numbers as the card's kernel reads them, one model after another: the mean's mark, the constant, the
          * title, the description and that both have one, the size and that both have it, one author, the title's two
-         * shares, the authors' names, that both have some and their two shares, then of every facet its weight and that
-         * both have it.
+         * shares, the authors' names, that both have some and their two shares, the titles' vectors and that both have
+         * one, an author in part one, of every text compared letter by letter ([LetteredText]) its weight and that both
+         * have it, then of every facet its weight and that both have it.
          */
         fun flat(): FloatArray =
             floatArrayOf(
@@ -207,7 +222,14 @@ internal class Logistic(
                 authored.toFloat(),
                 authorsWithin.toFloat(),
                 authorsHolding.toFloat(),
-            ) + FloatArray(facet.size * 2) { if (it % 2 == 0) facet[it / 2].toFloat() else faceted[it / 2].toFloat() }
+                texts.titleVector.toFloat(),
+                texts.titled.toFloat(),
+                texts.partlyAuthor.toFloat(),
+            ) +
+                FloatArray(LETTERED * 2) {
+                    if (it % 2 == 0) texts.letters[it / 2].toFloat() else texts.lettered[it / 2].toFloat()
+                } +
+                FloatArray(facet.size * 2) { if (it % 2 == 0) facet[it / 2].toFloat() else faceted[it / 2].toFloat() }
     }
 
     companion object {
@@ -225,11 +247,23 @@ internal class Logistic(
         const val DESCRIPTION = "description"
         const val SIZE = "size"
 
-        /** The feature of the dictionary of authors giving the two one author, fully or in part. */
+        /** The feature of the dictionary of authors giving the two one author. */
         const val SAME_AUTHOR = "sameAuthor"
 
+        /** The feature of the dictionary giving the two no author in common, but one in part one with the other's. */
+        const val PARTLY_SAME_AUTHOR = "partlySameAuthor"
+
+        /**
+         * The feature of how alike the titles are by meaning (owner, 2026-11-19: "for every text field both the trigram
+         * ones and the vector ones").
+         */
+        const val TITLE_VECTOR = "titleVector"
+
         /** The numbers of a model before its facets' in [Laid.flat]. */
-        const val FLAT_HEAD = 14
+        val FLAT_HEAD = 17 + 2 * LETTERED
+
+        /** The feature of how alike a text is letter by letter ([LetteredText]): "letters:<text>". */
+        fun letters(text: LetteredText) = "letters:" + text.name.lowercase()
 
         /** The feature of how alike the values of a facet the sites share are: "facet:<facet>". */
         fun facet(family: String) = "facet:$family"
@@ -265,6 +299,15 @@ internal class Logistic(
                 out[AUTHORS_HOLDING] = it.holding.toDouble()
             }
             if (layers.sameAuthor) out[SAME_AUTHOR] = 1.0
+            if (layers.partlySameAuthor) out[PARTLY_SAME_AUTHOR] = 1.0
+            layers.titleVector?.let {
+                out[TITLE_VECTOR] = it.toDouble()
+                out[has(TITLE_VECTOR)] = 1.0
+            }
+            layers.letters.forEach { (text, v) ->
+                out[letters(text)] = v.toDouble()
+                out[has(letters(text))] = 1.0
+            }
             out[sites(layers.site, layers.otherSite)] = 1.0
             layers.description?.let {
                 out[DESCRIPTION] = it.toDouble()

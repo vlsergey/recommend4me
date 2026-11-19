@@ -5988,10 +5988,25 @@ components:
           description: What the pairs are ordered by - the chance times what the sort says of the work the pair was found for (of both, the larger)
         title:
           type: number
-          description: The cosine of the vectors of their titles
+          description: The cosine of the trigrams of their titles, letter by letter
+        titleVector:
+          type: number
+          description: The cosine of the vectors of their titles, by meaning; none when either has none or their sites' are of two encoders
         description:
           type: number
-          description: The cosine of the vectors of their descriptions; none when either has none
+          description: The cosine of the vectors of their descriptions, by meaning; none when either has none
+        descriptionLetters:
+          type: number
+          description: The cosine of the trigrams of their descriptions, letter by letter; none when either has none
+        fandomLetters:
+          type: number
+          description: The cosine of the trigrams of the names the sites give their fandoms, letter by letter; none when either has none
+        characterLetters:
+          type: number
+          description: The cosine of the trigrams of the sites' own lines of their characters and pairings, letter by letter; none when either has none
+        authors:
+          type: number
+          description: The cosine of the trigrams of the names of their authors as the sites write them, letter by letter; none when either has none
         facets:
           type: array
           description: Of every facet the sites share both have (the tags, the universes, the characters, the status...), the cosine of their values, each weighed by its rarity; the most alike first
@@ -6003,6 +6018,9 @@ components:
         sameAuthor:
           type: boolean
           description: The dictionary of authors gives the two one author - a normalized author of both, or two the user said are partly one
+        partlySameAuthor:
+          type: boolean
+          description: Of one author only in part - no normalized author of both, two the user said are partly one
         authorKin:
           $ref: '#/components/schemas/AuthorKin'
         answer:

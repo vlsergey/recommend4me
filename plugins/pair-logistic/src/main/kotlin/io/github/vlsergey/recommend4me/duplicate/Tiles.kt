@@ -40,6 +40,10 @@ internal object Tiles {
             Array(site.sizes.size) { site.sizes[it].copyOfRange(from, until) },
             site.authors.copyOfRange(from, until),
             site.kin.copyOfRange(from, until),
+            site.titleVectors.rows(from, until - from),
+            site.titled.copyOfRange(from, until),
+            site.letters.map { it.rows(from, until - from) },
+            site.letterLengths.map { it.copyOfRange(from, until) },
         )
 }
 

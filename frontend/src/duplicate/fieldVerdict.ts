@@ -15,6 +15,8 @@ export interface FieldVerdict {
   /** The key of the words of the hint, in the namespace "duplicate", and its value. */
   hint:
     | "PairGrid.textHint"
+    | "PairGrid.lettersHint"
+    | "PairGrid.partlyAuthorHint"
     | "PairGrid.facetHint"
     | "PairGrid.allowedHint"
     | "PairGrid.valuesHint"
@@ -60,6 +62,16 @@ export function textVerdict(cosine: number | undefined): FieldVerdict {
   if (cosine == null) return NOTHING;
   const tone = cosine >= TEXT_ALIKE ? "alike" : cosine >= TEXT_PARTLY ? "partly" : "apart";
   return { tone, shown: percent(cosine), hint: "PairGrid.textHint", value: percent(cosine) };
+}
+
+/**
+ * Two texts — their titles, their descriptions, the names of their authors — letter by letter, by the cosine of their
+ * trigrams, coloured as by meaning ([textVerdict]); none of a text one has not.
+ */
+export function lettersVerdict(cosine: number | undefined): FieldVerdict {
+  if (cosine == null) return NOTHING;
+  const tone = cosine >= TEXT_ALIKE ? "alike" : cosine >= TEXT_PARTLY ? "partly" : "apart";
+  return { tone, shown: percent(cosine), hint: "PairGrid.lettersHint", value: percent(cosine) };
 }
 
 /** The values of a facet, by their cosine; none when it was not compared — the facet of one work alone. */
@@ -145,14 +157,15 @@ export function sizeVerdict(ratio: number | undefined): FieldVerdict {
 const KIN_EXPECTED = 1;
 
 /**
- * The authors: one by the dictionary of authors, alike. Both told and none in common: of the window of one
+ * The authors: one by the dictionary of authors, alike — a normalized author of both "=", two the user said are partly
+ * one "≈" ([partly]). Both told and none in common: of the window of one
  * pair, how close their closest two are by their works ([kin], as the offers of authors weigh it) — the
  * user's word on them first: partly one, partly; told apart, apart; else pairs of their works said one or a
  * part "✓k", or both of one entry, or a work expected to be one by the chances "≈x", partly; nothing of it,
  * apart. The authors of one work unknown, nothing to compare.
  */
-export function authorVerdict(sameAuthor: boolean, first: string[], second: string[], kin?: AuthorKin): FieldVerdict {
-  if (sameAuthor) return { tone: "alike", shown: "=", hint: "PairGrid.sameAuthorHint" };
+export function authorVerdict(sameAuthor: boolean, partly: boolean, first: string[], second: string[], kin?: AuthorKin): FieldVerdict {
+  if (sameAuthor) return partly ? { tone: "alike", shown: "≈", hint: "PairGrid.partlyAuthorHint" } : { tone: "alike", shown: "=", hint: "PairGrid.sameAuthorHint" };
   if (first.length === 0 || second.length === 0) return { ...NOTHING, hint: "PairGrid.noAuthorHint" };
   if (!kin) return { tone: "apart", shown: "≠", hint: "PairGrid.otherAuthorHint" };
   const shown = kin.matching > 0 ? `✓${kin.matching}` : kin.expected > 0 ? `≈${kin.expected.toFixed(1)}` : "≠";

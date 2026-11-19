@@ -157,6 +157,8 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom) {
     val titles = room.bytes(n * all.width * HALF_BYTES)
     val authorNames = room.bytes(n * all.width * HALF_BYTES)
     val descriptions = room.bytes(n * maxOf(1, all.described) * HALF_BYTES).also { it.zero() }
+    val titleVectors = room.bytes(n * maxOf(1, all.titled) * HALF_BYTES).also { it.zero() }
+    val letters = room.bytes(LETTERED * n * all.width * HALF_BYTES)
 
     init {
         all.sites.forEachIndexed { a, s ->
@@ -165,6 +167,10 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom) {
             authorNames.upload(s.authorNames, 0, s.count, at * all.width * HALF_BYTES)
             if (all.described > 0 && s.descriptions.cols == all.described)
                 descriptions.upload(s.descriptions, 0, s.count, at * all.described * HALF_BYTES)
+            if (all.titled > 0 && s.titleVectors.cols == all.titled)
+                titleVectors.upload(s.titleVectors, 0, s.count, at * all.titled * HALF_BYTES)
+            // The texts one after another, of every work each
+            for (k in 0 until LETTERED) letters.upload(s.letters[k], 0, s.count, (k * n + at) * all.width * HALF_BYTES)
         }
     }
 
@@ -174,6 +180,13 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom) {
         room.marks(
             all.sites.flatMap { s -> s.described.map { it && s.descriptions.cols == all.described } }.toBooleanArray()
         )
+    val titled =
+        room.marks(all.sites.flatMap { s -> s.titled.map { it && s.titleVectors.cols == all.titled } }.toBooleanArray())
+    val letterLengths =
+        room.floatsOf(
+            (0 until LETTERED).flatMap { k -> all.sites.flatMap { it.letterLengths[k].asList() } }.toFloatArray()
+        )
+    val comparedTitles = room.marks(BooleanArray(all.comparedTitles.size) { all.comparedTitles[it] != 0.toByte() })
     val facets = room.longs(all.sites.flatMap { it.facets.asList() }.toLongArray())
     val sizes = room.floatsOf(all.sizes)
     val siteOf = room.ints(all.siteOf)
@@ -229,6 +242,12 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom) {
             kin,
             authorAt,
             authors,
+            comparedTitles,
+            maxOf(1, all.titled),
+            titleVectors,
+            titled,
+            letters,
+            letterLengths,
             models.size,
             room.floatsOf(weights),
             Logistic.FLAT_HEAD + 2 * search.families.size,

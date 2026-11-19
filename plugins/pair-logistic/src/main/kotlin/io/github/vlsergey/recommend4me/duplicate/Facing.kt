@@ -35,6 +35,10 @@ internal class Facing(
     // The row's authors and their kin by their places among the other's authors: those the other has
     private val kin = Lists.of(own.kin.map { k -> k.asList().mapNotNull { y.inverted.authors[it] }.toIntArray() })
 
+    // The row's own authors so: one author with the other's, not one in part
+    private val ownAuthors =
+        Lists.of(own.authors.map { k -> k.asList().mapNotNull { y.inverted.authors[it] }.toIntArray() })
+
     // The works answered on, passed over: of every row, a list
     private val passed = Lists.of(tile.passed)
 
@@ -51,6 +55,8 @@ internal class Facing(
     private val total = room.ints(rare.total)
     private val kinAt = room.ints(kin.at)
     private val kinEntries = room.ints(kin.entries)
+    private val ownAuthorAt = room.ints(ownAuthors.at)
+    private val ownAuthorEntries = room.ints(ownAuthors.entries)
     private val passAt = room.ints(passed.at)
     private val pass = room.ints(passed.entries)
     private val familyOf = room.ints(search.familyOf)
@@ -64,11 +70,15 @@ internal class Facing(
     private val t = room.bytes(rows.toLong() * n * HALF_BYTES)
     private val a = room.bytes(rows.toLong() * n * HALF_BYTES)
     private val d = room.bytes(rows.toLong() * n * HALF_BYTES)
+    private val tv = room.bytes(rows.toLong() * n * HALF_BYTES)
+    private val dl = room.bytes(LETTERED.toLong() * rows * n * HALF_BYTES)
     private val p = room.floats(models.toLong() * rows * n)
 
-    // The descriptions of the two compared: of one encoder's vectors
+    // The descriptions of the two compared, and their titles' vectors: of one encoder's
     private val descriptions = search.descriptionsCompared(tile.a, tile.b)
     private val described = own.descriptions.cols
+    private val titleVectors = search.titleVectorsCompared(tile.a, tile.b)
+    private val titleColumns = own.titleVectors.cols
     private val best = room.bytes(rows.toLong() * models * Int.SIZE_BYTES)
     private val bestBack = room.pinned(rows.toLong() * models * Int.SIZE_BYTES)
     private val scores = room.bytes(rows.toLong() * models * Float.SIZE_BYTES)
@@ -112,8 +122,9 @@ internal class Facing(
     }
 
     /**
-     * The cosines of the trigrams of the titles and of the authors' names, and of the descriptions, of the [m] rows
-     * from [from] on with every work of the second site: halves summed in halves, the tensor cores' full speed.
+     * The cosines of the trigrams of the titles, of the authors' names and of the descriptions, and of the vectors of
+     * the descriptions and of the titles, of the [m] rows from [from] on with every work of the second site: halves
+     * summed in halves, the tensor cores' full speed.
      */
     private fun products(from: Int, m: Int, card: Cublas) {
         val halves = card.halves
@@ -122,6 +133,24 @@ internal class Facing(
         product(width, x.titles, y.titles, t)
         product(width, x.authorNames, y.authorNames, a)
         if (descriptions) product(described, x.descriptions, y.descriptions, d)
+        if (titleVectors) product(titleColumns, x.titleVectors, y.titleVectors, tv)
+        // The texts' planes one after another, of the block's rows each
+        for (k in 0 until LETTERED) halves.gemmToHalves(
+            false,
+            true,
+            m,
+            n,
+            width,
+            x.letters[k],
+            from.toLong() * width,
+            width,
+            y.letters[k],
+            0,
+            width,
+            dl,
+            k.toLong() * m * n,
+            n,
+        )
     }
 
     /**
@@ -184,6 +213,15 @@ internal class Facing(
             x.frequentWeights,
             kinAt,
             kinEntries,
+            ownAuthorAt,
+            ownAuthorEntries,
+            tv,
+            dl,
+            if (titleVectors) 1 else 0,
+            x.titled,
+            y.titled,
+            x.letterLengths,
+            y.letterLengths,
             y.frequentAt,
             y.frequentIds,
             y.frequentWeights,
@@ -213,8 +251,11 @@ internal class Facing(
         /** The least memory of a block's planes tried before the search is given to the processor. */
         const val LEAST_ROOM = 64L shl 20
 
-        /** The planes of a row's every pair: the titles, the authors' names, the descriptions. */
-        const val PLANES = 3
+        /**
+         * The planes of a row's every pair: the titles, the authors' names, the descriptions, the titles' vectors, the
+         * trigrams of every other text.
+         */
+        val PLANES = 4 + LETTERED
 
         /**
          * The rows of a block of the kernel of the scores (`ROWS`): a thread reads a work of the other site once for

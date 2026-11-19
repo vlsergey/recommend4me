@@ -18,12 +18,19 @@
     const unsigned char* hasD, const unsigned long long* facets, int sizes, const float* sizeOf, \
     const int* valueAt, const int* values, const float* valueWeights, const int* familyOf, \
     const int* kinAt, const int* kin, const int* authorAt, const int* authors, \
+    const unsigned char* comparedV, int titled, const unsigned short* V, const unsigned char* hasV, \
+    const unsigned short* L, const float* ll, \
     int models, const float* weights, int stride
 #define WORKS_ARGS \
     n, siteOf, sites, comparedD, width, described, T, A, D, tl, al, hasD, facets, sizes, sizeOf, valueAt, values, \
-    valueWeights, familyOf, kinAt, kin, authorAt, authors, models, weights, stride
+    valueWeights, familyOf, kinAt, kin, authorAt, authors, comparedV, titled, V, hasV, L, ll, models, weights, stride
 
 #define NO_SCORE (-__int_as_float(0x7f800000))
+
+// The texts compared letter by letter besides the title and the authors' names (LetteredText)
+#define LETTERED 3
+// The numbers of a model before its facets' (Logistic.FLAT_HEAD)
+#define HEAD (17 + 2 * LETTERED)
 
 // A number of half precision in single precision
 __device__ __forceinline__ float half_to_float(unsigned short h) {
@@ -73,10 +80,13 @@ __device__ float warp_dot(const unsigned short* a, const unsigned short* b, int 
 
 // THE PAIR u, j SCORED BY EVERY MODEL as a search scores it (PairSearch.layers, Logistic.Laid.flat), to z[model]: the
 // cosines of the titles (T), of the authors' names (A) and of the descriptions (D, when the two sites' are of one
-// encoder: comparedD[site][site]), the shares of the trigrams of the lengths tl, al; the sizes (of every number both
+// encoder: comparedD[site][site]), the shares of the trigrams of the lengths tl, al; the other way, the titles' vectors
+// (V, when the two sites' are of one encoder: comparedV, and both have one: hasV) and every other text's trigrams (L, of
+// the lengths ll: a text after another, of every work each); the sizes (of every number both
 // state, the smaller over the larger, their mean); the facets they share (the values of both, valueAt .. of values
 // ascending and weights, summed by the facet familyOf by the model's weight of it) and that both have (facets); one
-// author (the kin of u, kinAt .. of kin, among the authors of the other, authorAt .. of authors, both ascending); the
+// author (the authors of u, authorAt .. of authors, among the other's, both ascending) or one in part (the kin of u,
+// kinAt .. of kin, so), none in common; the
 // two sites' weights (weights[site][site][model], stride numbers a model). Of every model its chance to chance[model],
 // when asked: of a learnt one the logistic of its score, of one before any answer (w[0]) the mean of the layers itself
 // What the values shared add, of every model to f[model]: of the two lists, ascending, each value's product by its
@@ -89,7 +99,7 @@ __device__ void shared_values(int u, int j, const float* pairWeights, WORKS_PARA
             float product = valueWeights[p] * valueWeights[q];
             for (int m = 0; m < models; m++) {
                 const float* w = pairWeights + (size_t) m * stride;
-                f[m] += (w[0] != 0.0f ? 1.0f : w[14 + 2 * familyOf[x]]) * product;
+                f[m] += (w[0] != 0.0f ? 1.0f : w[HEAD + 2 * familyOf[x]]) * product;
             }
             p++;
             q++;
@@ -112,7 +122,7 @@ __device__ void warp_shared_values(int u, int j, int lane, const float* pairWeig
             float product = valueWeights[p] * valueWeights[lo];
             for (int m = 0; m < models; m++) {
                 const float* w = pairWeights + (size_t) m * stride;
-                f[m] += (w[0] != 0.0f ? 1.0f : w[14 + 2 * familyOf[x]]) * product;
+                f[m] += (w[0] != 0.0f ? 1.0f : w[HEAD + 2 * familyOf[x]]) * product;
             }
         }
     }
@@ -120,9 +130,12 @@ __device__ void warp_shared_values(int u, int j, int lane, const float* pairWeig
         for (int offset = 16; offset > 0; offset >>= 1) f[m] += __shfl_xor_sync(0xffffffff, f[m], offset);
 }
 
-// Of the products of the rows given — the titles' t, the authors' names' av, the descriptions' d — and of what the
-// values shared add of every model, f
-__device__ void pair_of(int u, int j, float t, float av, float d, const float* f, WORKS_PARAMS, float* z, float* chance) {
+// Of the products of the rows given — the titles' t, the authors' names' av, the descriptions' d, the other way the
+// titles' vectors' v and every other text's trigrams' l — and of what the values shared add of every model, f
+__device__ void pair_of(
+    int u, int j, float t, float av, float d, float v, const float* l, const float* f, WORKS_PARAMS, float* z,
+    float* chance
+) {
     int a = siteOf[u], b = siteOf[j];
     bool hasA = al[u] > 0.0f && al[j] > 0.0f;
     bool hasDescription = comparedD[a * sites + b] != 0 && hasD[u] != 0 && hasD[j] != 0;
@@ -136,10 +149,15 @@ __device__ void pair_of(int u, int j, float t, float av, float d, const float* f
     float s = hasS ? sum / known : 0.0f;
     unsigned long long both = facets[u] & facets[j];
     int layersBoth = __popcll(both);
-    bool same = false;
-    for (int p = kinAt[u], q = authorAt[j]; p < kinAt[u + 1] && q < authorAt[j + 1] && !same;) {
-        if (kin[p] == authors[q]) same = true; else if (kin[p] < authors[q]) p++; else q++;
+    // One author: of u's own and j's; else one in part: of u's kin and j's
+    bool same = false, partly = false;
+    for (int p = authorAt[u], q = authorAt[j]; p < authorAt[u + 1] && q < authorAt[j + 1] && !same;) {
+        if (authors[p] == authors[q]) same = true; else if (authors[p] < authors[q]) p++; else q++;
     }
+    for (int p = kinAt[u], q = authorAt[j]; !same && p < kinAt[u + 1] && q < authorAt[j + 1] && !partly;) {
+        if (kin[p] == authors[q]) partly = true; else if (kin[p] < authors[q]) p++; else q++;
+    }
+    bool hasTitleVector = comparedV[a * sites + b] != 0 && hasV[u] != 0 && hasV[j] != 0;
     const float* pairWeights = weights + ((size_t) a * sites + b) * models * stride;
     for (int m = 0; m < models; m++) {
         const float* w = pairWeights + (size_t) m * stride;
@@ -159,10 +177,14 @@ __device__ void pair_of(int u, int j, float t, float av, float d, const float* f
             if (hasDescription) score += w[3] * d + w[4];
             if (hasS) score += w[5] * s + w[6];
             if (same) score += w[7];
+            if (hasTitleVector) score += w[14] * v + w[15];
+            if (partly) score += w[16];
+            for (int k = 0; k < LETTERED; k++)
+                if (ll[(size_t) k * n + u] > 0.0f && ll[(size_t) k * n + j] > 0.0f) score += w[17 + 2 * k] * l[k] + w[18 + 2 * k];
             unsigned long long bits = both;
             while (bits != 0ULL) {
                 int k = __ffsll((long long) bits) - 1;
-                score += w[15 + 2 * k];
+                score += w[HEAD + 1 + 2 * k];
                 bits &= bits - 1ULL;
             }
         }
@@ -179,9 +201,17 @@ __device__ void pair_scores(int u, int j, WORKS_PARAMS, float* z, float* chance)
     float av = hasA ? dot_halves(A + (size_t) u * width, A + (size_t) j * width, width) : 0.0f;
     bool hasDescription = comparedD[a * sites + b] != 0 && hasD[u] != 0 && hasD[j] != 0;
     float d = hasDescription ? dot_halves(D + (size_t) u * described, D + (size_t) j * described, described) : 0.0f;
+    bool hasTitleVector = comparedV[a * sites + b] != 0 && hasV[u] != 0 && hasV[j] != 0;
+    float v = hasTitleVector ? dot_halves(V + (size_t) u * titled, V + (size_t) j * titled, titled) : 0.0f;
+    float l[LETTERED];
+    for (int k = 0; k < LETTERED; k++) {
+        const unsigned short* Lk = L + (size_t) k * n * width;
+        bool both = ll[(size_t) k * n + u] > 0.0f && ll[(size_t) k * n + j] > 0.0f;
+        l[k] = both ? dot_halves(Lk + (size_t) u * width, Lk + (size_t) j * width, width) : 0.0f;
+    }
     float f[MAX_MODELS];
     shared_values(u, j, weights + ((size_t) a * sites + b) * models * stride, WORKS_ARGS, f);
-    pair_of(u, j, t, av, d, f, WORKS_ARGS, z, chance);
+    pair_of(u, j, t, av, d, v, l, f, WORKS_ARGS, z, chance);
 }
 
 // The pair scored by a warp: the rows' products read together, the rest by its first lane
@@ -192,9 +222,17 @@ __device__ void warp_pair_scores(int u, int j, int lane, WORKS_PARAMS, float* z,
     float av = hasA ? warp_dot(A + (size_t) u * width, A + (size_t) j * width, width, lane) : 0.0f;
     bool hasDescription = comparedD[a * sites + b] != 0 && hasD[u] != 0 && hasD[j] != 0;
     float d = hasDescription ? warp_dot(D + (size_t) u * described, D + (size_t) j * described, described, lane) : 0.0f;
+    bool hasTitleVector = comparedV[a * sites + b] != 0 && hasV[u] != 0 && hasV[j] != 0;
+    float v = hasTitleVector ? warp_dot(V + (size_t) u * titled, V + (size_t) j * titled, titled, lane) : 0.0f;
+    float l[LETTERED];
+    for (int k = 0; k < LETTERED; k++) {
+        const unsigned short* Lk = L + (size_t) k * n * width;
+        bool both = ll[(size_t) k * n + u] > 0.0f && ll[(size_t) k * n + j] > 0.0f;
+        l[k] = both ? warp_dot(Lk + (size_t) u * width, Lk + (size_t) j * width, width, lane) : 0.0f;
+    }
     float f[MAX_MODELS];
     warp_shared_values(u, j, lane, weights + ((size_t) a * sites + b) * models * stride, WORKS_ARGS, f);
-    if (lane == 0) pair_of(u, j, t, av, d, f, WORKS_ARGS, z, chance);
+    if (lane == 0) pair_of(u, j, t, av, d, v, l, f, WORKS_ARGS, z, chance);
 }
 
 // A STEP OF THE DESCENT: of every work u — a block a work — its neighbours (G[u]) and its neighbours' neighbours, every

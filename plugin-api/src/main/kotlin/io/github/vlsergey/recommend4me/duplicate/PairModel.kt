@@ -9,9 +9,12 @@ import io.github.vlsergey.recommend4me.matrix.Cublas
  * cosine of the vectors of their descriptions (none of a work without one), how near their sizes are — of every number
  * both have, the smaller over the larger, their mean (none when they share none) —, of every facet the sites share both
  * have the cosine of their values weighed by rarity ([facets], by the facet), whether the dictionary of authors gives
- * them one author, fully or in part, how alike the names of their authors are letter by letter ([authors]: none when
- * either has none), and the sites they are of ([site] the first's, [otherSite] the second's: a site and itself, or two
- * sites).
+ * them one author ([sameAuthor]) or an author in part one with the other's ([partlySameAuthor]), how alike the names of
+ * their authors are letter by letter ([authors]: none when either has none), and the sites they are of ([site] the
+ * first's, [otherSite] the second's: a site and itself, or two sites). And of every text both by meaning and letter by
+ * letter (owner, 2026-11-19: "for every text field both the trigram ones and the vector ones, shown and given to the
+ * model of pairs"): the cosine of the vectors of their titles ([titleVector]: none when either has none, or of another
+ * encoder), and of the other texts letter by letter ([letters], by [LetteredText]: of those both have).
  */
 class PairLayers(
     val title: Float,
@@ -24,7 +27,21 @@ class PairLayers(
     val titleWithin: Float = 0f,
     val titleHolding: Float = 0f,
     val authors: Lexical? = null,
+    val titleVector: Float? = null,
+    val letters: Map<LetteredText, Float> = emptyMap(),
+    val partlySameAuthor: Boolean = false,
 )
+
+/**
+ * THE TEXTS OF A WORK COMPARED LETTER BY LETTER besides its title and the names of its authors, by the cosine of their
+ * trigrams (owner, 2026-11-19): its description, the names the site gives its fandoms, the site's own line of its
+ * characters and pairings. Of each a model reads also that both have it.
+ */
+enum class LetteredText {
+    DESCRIPTION,
+    FANDOMS,
+    CHARACTERS,
+}
 
 /**
  * HOW ALIKE TWO STRINGS ARE LETTER BY LETTER, as near as their trigrams tell (user, 2026-11-18: approximately and

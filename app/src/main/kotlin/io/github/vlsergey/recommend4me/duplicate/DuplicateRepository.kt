@@ -15,8 +15,8 @@ import org.jooq.impl.DSL
  * cosine of their values weighed by rarity ([facets], by the facet) — its [layers]. How likely they are one work, and
  * one series, is the models' of the user's answers ([PairChances]), made when read. [foundFor]: the works it was found
  * for — whose likeliest of the other site it is — [FIRST], [SECOND], both, or neither (an answered pair the search did
- * not keep). [sameAuthor]: the dictionary of authors gives the two one author, fully or in part
- * ([io.github.vlsergey.recommend4me.author.AuthorKin]).
+ * not keep). [sameAuthor]: the dictionary of authors gives the two one author; [partlySameAuthor]: none in common, but
+ * one in part one with the other's ([io.github.vlsergey.recommend4me.author.AuthorKin]).
  */
 class DuplicateCandidate(
     val first: ItemKey,
@@ -32,6 +32,10 @@ class DuplicateCandidate(
     val titleHolding: Float = 0f,
     /** How alike the names of the two's authors are letter by letter; none when either has none. */
     val authors: Lexical? = null,
+    /** The cosine of the vectors of their titles, and of the trigrams of their other texts ([PairLayers]). */
+    val titleVector: Float? = null,
+    val letters: Map<LetteredText, Float> = emptyMap(),
+    val partlySameAuthor: Boolean = false,
 ) {
     val pair: Pair<ItemKey, ItemKey>
         get() = first to second
@@ -50,6 +54,9 @@ class DuplicateCandidate(
                 titleWithin,
                 titleHolding,
                 authors,
+                titleVector,
+                letters,
+                partlySameAuthor,
             )
 
     companion object {
@@ -67,6 +74,9 @@ class DuplicateCandidate(
                 layers.titleWithin,
                 layers.titleHolding,
                 layers.authors,
+                layers.titleVector,
+                layers.letters,
+                layers.partlySameAuthor,
             )
 
         /** Of [foundFor], the bit of the first work, and of the second. */
@@ -168,6 +178,11 @@ class DuplicateRepository(private val db: DSLContext) {
                     d.authors?.alike,
                     d.authors?.within,
                     d.authors?.holding,
+                    d.titleVector,
+                    d.letters[LetteredText.DESCRIPTION],
+                    d.letters[LetteredText.FANDOMS],
+                    d.letters[LetteredText.CHARACTERS],
+                    d.partlySameAuthor,
                 )
             }
             batch.execute()
@@ -204,6 +219,11 @@ class DuplicateRepository(private val db: DSLContext) {
                 c.AUTHORS_ALIKE,
                 c.AUTHORS_WITHIN,
                 c.AUTHORS_HOLDING,
+                c.TITLE_VECTOR,
+                c.DESCRIPTION_LETTERS,
+                c.FANDOM_LETTERS,
+                c.CHARACTER_LETTERS,
+                c.PARTLY_SAME_AUTHOR,
             )
             .from(c)
             .where(
@@ -225,6 +245,9 @@ class DuplicateRepository(private val db: DSLContext) {
                     r.value7() ?: 0f,
                     r.value8() ?: 0f,
                     lexical(r.value9(), r.value10(), r.value11()),
+                    r.value12(),
+                    letters(r.value13(), r.value14(), r.value15()),
+                    r.value16()!!,
                 )
             }
     }
@@ -284,6 +307,11 @@ class DuplicateRepository(private val db: DSLContext) {
                 DUPLICATE_CANDIDATE.AUTHORS_ALIKE,
                 DUPLICATE_CANDIDATE.AUTHORS_WITHIN,
                 DUPLICATE_CANDIDATE.AUTHORS_HOLDING,
+                DUPLICATE_CANDIDATE.TITLE_VECTOR,
+                DUPLICATE_CANDIDATE.DESCRIPTION_LETTERS,
+                DUPLICATE_CANDIDATE.FANDOM_LETTERS,
+                DUPLICATE_CANDIDATE.CHARACTER_LETTERS,
+                DUPLICATE_CANDIDATE.PARTLY_SAME_AUTHOR,
             )
             .from(DUPLICATE_CANDIDATE)
             .where(condition)
@@ -304,6 +332,9 @@ class DuplicateRepository(private val db: DSLContext) {
                             r.value11() ?: 0f,
                             r.value12() ?: 0f,
                             lexical(r.value13(), r.value14(), r.value15()),
+                            r.value16(),
+                            letters(r.value17(), r.value18(), r.value19()),
+                            r.value20()!!,
                         )
                 }
             }
@@ -352,9 +383,24 @@ class DuplicateRepository(private val db: DSLContext) {
                 DUPLICATE_CANDIDATE.AUTHORS_ALIKE,
                 DUPLICATE_CANDIDATE.AUTHORS_WITHIN,
                 DUPLICATE_CANDIDATE.AUTHORS_HOLDING,
+                DUPLICATE_CANDIDATE.TITLE_VECTOR,
+                DUPLICATE_CANDIDATE.DESCRIPTION_LETTERS,
+                DUPLICATE_CANDIDATE.FANDOM_LETTERS,
+                DUPLICATE_CANDIDATE.CHARACTER_LETTERS,
+                DUPLICATE_CANDIDATE.PARTLY_SAME_AUTHOR,
             )
     }
 }
+
+/** How alike a pair's texts are letter by letter as kept: of the description, the fandoms, the characters. */
+private fun letters(description: Float?, fandoms: Float?, characters: Float?): Map<LetteredText, Float> =
+    listOf(
+            LetteredText.DESCRIPTION to description,
+            LetteredText.FANDOMS to fandoms,
+            LetteredText.CHARACTERS to characters,
+        )
+        .mapNotNull { (text, v) -> v?.let { text to it } }
+        .toMap()
 
 /** How alike the names of a pair's authors are as kept: none of a pair of no names compared. */
 private fun lexical(alike: Float?, within: Float?, holding: Float?): Lexical? = alike?.let {

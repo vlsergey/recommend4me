@@ -5,13 +5,16 @@ import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.AUTHORS_HOLD
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.AUTHORS_WITHIN
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.CONSTANT
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.DESCRIPTION
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.PARTLY_SAME_AUTHOR
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.SAME_AUTHOR
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.SIZE
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE_HOLDING
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE_VECTOR
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.TITLE_WITHIN
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.facet
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.has
+import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.letters
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.sigmoid
 import io.github.vlsergey.recommend4me.duplicate.Logistic.Companion.sites
 import java.util.stream.IntStream
@@ -136,7 +139,24 @@ private constructor(
                 has(AUTHORS),
                 AUTHORS_WITHIN,
                 AUTHORS_HOLDING,
-            )
+                TITLE_VECTOR,
+                has(TITLE_VECTOR),
+                PARTLY_SAME_AUTHOR,
+            ) + LetteredText.entries.flatMap { listOf(letters(it), has(letters(it))) }
+
+        /** How many features the pair [c] has. */
+        private fun featuresOf(c: PairLayers): Int {
+            // The constant, the title and its two shares, the sites
+            var n = 5 + 2 * c.facets.size
+            if (c.authors != null) n += AUTHOR_FEATURES
+            if (c.description != null) n += 2
+            if (c.size != null) n += 2
+            if (c.sameAuthor) n++
+            if (c.partlySameAuthor) n++
+            if (c.titleVector != null) n += 2
+            n += 2 * c.letters.size
+            return n
+        }
 
         /**
          * The features of the [pairs]: every one any pair has, the facets by their names in order, then the sites by
@@ -149,15 +169,7 @@ private constructor(
             val siteAt = siteNames.withIndex().associate { it.value to HEAD.size + 2 * families.size + it.index }
             val names = HEAD + families.flatMap { listOf(facet(it), has(facet(it))) } + siteNames
             val start = IntArray(pairs.size + 1)
-            pairs.forEachIndexed { i, c ->
-                // The constant, the title and its two shares, the sites
-                var n = 5 + 2 * c.facets.size
-                if (c.authors != null) n += AUTHOR_FEATURES
-                if (c.description != null) n += 2
-                if (c.size != null) n += 2
-                if (c.sameAuthor) n++
-                start[i + 1] = start[i] + n
-            }
+            pairs.forEachIndexed { i, c -> start[i + 1] = start[i] + featuresOf(c) }
             val places = IntArray(start[pairs.size])
             val values = FloatArray(start[pairs.size])
             pairs.forEachIndexed { i, c ->
@@ -187,6 +199,15 @@ private constructor(
                     put(HEAD.indexOf(SIZE) + 1, 1f)
                 }
                 if (c.sameAuthor) put(HEAD.indexOf(SAME_AUTHOR), 1f)
+                if (c.partlySameAuthor) put(HEAD.indexOf(PARTLY_SAME_AUTHOR), 1f)
+                c.titleVector?.let {
+                    put(HEAD.indexOf(TITLE_VECTOR), it)
+                    put(HEAD.indexOf(TITLE_VECTOR) + 1, 1f)
+                }
+                c.letters.forEach { (text, v) ->
+                    put(HEAD.indexOf(letters(text)), v)
+                    put(HEAD.indexOf(letters(text)) + 1, 1f)
+                }
                 c.facets.forEach { (family, v) ->
                     val k = HEAD.size + 2 * familyAt.getValue(family)
                     put(k, v)

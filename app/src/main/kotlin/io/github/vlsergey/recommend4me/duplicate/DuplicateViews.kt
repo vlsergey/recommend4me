@@ -51,6 +51,7 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
             val first = described[r.pair.first] ?: return@mapNotNull null
             val second = described[r.pair.second] ?: return@mapNotNull null
             val d = r.layers
+            val same = kin.share(first.authors, second.authors)
             DuplicatePair(
                 first = first.work,
                 second = second.work,
@@ -58,7 +59,12 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
                 seriesChance = r.seriesChance?.toBigDecimal(),
                 priority = r.priority.toBigDecimal(),
                 title = d?.title?.toBigDecimal(),
+                titleVector = d?.titleVector?.toBigDecimal(),
                 description = d?.description?.toBigDecimal(),
+                descriptionLetters = d?.letters?.get(LetteredText.DESCRIPTION)?.toBigDecimal(),
+                fandomLetters = d?.letters?.get(LetteredText.FANDOMS)?.toBigDecimal(),
+                characterLetters = d?.letters?.get(LetteredText.CHARACTERS)?.toBigDecimal(),
+                authors = d?.authors?.alike?.toBigDecimal(),
                 propertySize = d?.size?.toBigDecimal(),
                 facets =
                     d?.facets
@@ -72,7 +78,8 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
                                 `value` = v.toBigDecimal(),
                             )
                         },
-                sameAuthor = kin.share(first.authors, second.authors),
+                sameAuthor = same,
+                partlySameAuthor = (same && first.authors.none { it in second.authors }).takeIf { it },
                 answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
                 derived = (r.pair in said.derived).takeIf { it },
             )

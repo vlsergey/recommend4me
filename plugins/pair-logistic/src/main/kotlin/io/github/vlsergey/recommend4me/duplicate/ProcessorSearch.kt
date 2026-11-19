@@ -49,9 +49,17 @@ private class Against(
     private val authorNames = Products(x.authorNames, y.authorNames, rows)
     private val descriptions =
         if (search.descriptionsCompared(a, b)) Products(x.descriptions, y.descriptions, rows) else null
+
+    // The other way: the cosines of the titles' vectors — of one encoder's — and of the other texts' trigrams
+    private val titleVectors =
+        if (search.titleVectorsCompared(a, b)) Products(x.titleVectors, y.titleVectors, rows) else null
+    private val letters = List(LETTERED) { Products(x.letters[it], y.letters[it], rows) }
     private val title = FloatArray(n)
     private val author = FloatArray(n)
     private val description = FloatArray(n)
+    private val titleVector = FloatArray(n)
+    private val letter = Array(LETTERED) { FloatArray(n) }
+    private val otherLayers = OtherLayers()
 
     // Of a work of the first site, its values' cosine of every facet with every work of the second, and the works it
     // touched: made nought again after
@@ -60,8 +68,10 @@ private class Against(
     private val isTouched = BooleanArray(n)
     private var touches = 0
 
-    // Of a work of the first site, the works of the second of one author with it: made false again after
+    // Of a work of the first site, the works of the second of one author with it, and of an author in part one with
+    // its, none in common: made false again after
     private val sameAuthor = BooleanArray(n)
+    private val partlyAuthor = BooleanArray(n)
     private val best = IntArray(models.size)
     private val scores = DoubleArray(models.size)
 
@@ -72,6 +82,8 @@ private class Against(
             titles.make(from, m)
             authorNames.make(from, m)
             descriptions?.make(from, m)
+            titleVectors?.make(from, m)
+            letters.forEach { it.make(from, m) }
             for (r in 0 until m) row(from + r, r)
             compared.add(m.toLong() * n)
             from += m
@@ -83,9 +95,19 @@ private class Against(
         titles.take(r, title)
         authorNames.take(r, author)
         descriptions?.take(r, description)
+        titleVectors?.take(r, titleVector)
+        letters.forEachIndexed { k, p -> p.take(r, letter[k]) }
         touch(i)
-        val ofOneAuthor = x.kin[i].flatMap { author -> other.ofAuthor(author).map { other.authorItems[it] } }
-        ofOneAuthor.forEach { sameAuthor[it] = true }
+        fun worksOf(authors: LongArray) = authors.flatMap { author ->
+            other.ofAuthor(author).map { other.authorItems[it] }
+        }
+        val ofOneAuthor = worksOf(x.authors[i])
+        val ofKin = worksOf(x.kin[i])
+        ofKin.forEach { partlyAuthor[it] = true }
+        ofOneAuthor.forEach {
+            sameAuthor[it] = true
+            partlyAuthor[it] = false
+        }
         val own = passedOver[i]
         own?.forEach { passed[it] = true }
         choose(i)
@@ -95,6 +117,7 @@ private class Against(
             for (f in valued.indices) valued[f][touched[q]] = 0f
         }
         ofOneAuthor.forEach { sameAuthor[it] = false }
+        ofKin.forEach { partlyAuthor[it] = false }
         own?.forEach { passed[it] = false }
     }
 
@@ -133,6 +156,7 @@ private class Against(
             val t = Lexical.of(title[j], x.titleLengths[i], y.titleLengths[j])
             val named = x.authorLengths[i] > 0f && y.authorLengths[j] > 0f
             val n = if (named) Lexical.of(author[j], x.authorLengths[i], y.authorLengths[j]) else null
+            fillOther(i, j)
             models.forEachIndexed { k, model ->
                 val s =
                     model.score(
@@ -145,12 +169,24 @@ private class Against(
                         both,
                         { f -> valued[f][j] },
                         sameAuthor[j],
+                        otherLayers,
                     )
                 if (s > scores[k]) {
                     scores[k] = s
                     best[k] = j
                 }
             }
+        }
+    }
+
+    /** The layers of the [i]-th work and the [j]-th compared the other way, and an author of them in part one. */
+    private fun fillOther(i: Int, j: Int) {
+        otherLayers.titleVector = titleVector[j]
+        otherLayers.titled = titleVectors != null && x.titled[i] && y.titled[j]
+        otherLayers.partlyAuthor = partlyAuthor[j]
+        for (k in 0 until LETTERED) {
+            otherLayers.letters[k] = letter[k][j]
+            otherLayers.lettered[k] = x.letterLengths[k][i] > 0f && y.letterLengths[k][j] > 0f
         }
     }
 

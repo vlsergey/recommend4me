@@ -47,6 +47,7 @@ internal class SearchSide(
     val values: Array<IntArray>,
     val sizes: Map<String, DoubleArray>,
     val authors: Array<LongArray>,
+    val texts: TextsCompared,
 ) {
     /**
      * The works as the model of pairs reads them ([SiteWorks]): of every work the weight of each of its [values] — the
@@ -80,6 +81,10 @@ internal class SearchSide(
             Array(sizeKeys.size) { k -> sizes[sizeKeys[k]] ?: DoubleArray(ids.size) },
             authors,
             Array(ids.size) { i -> authors[i].flatMap { kin.of(it) }.distinct().toLongArray() },
+            texts.titleVectors,
+            texts.titled,
+            texts.letters,
+            texts.letterLengths,
         )
     }
 
@@ -107,6 +112,7 @@ internal class SearchSide(
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val lettered = System.currentTimeMillis()
             val (descriptions, described) = descriptionsOf(s, encoder, ids)
+            val texts = TextsCompared.read(s, encoder, ids)
             val vectors = System.currentTimeMillis()
             val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.allOf(s.id))
             log.info(
@@ -132,6 +138,7 @@ internal class SearchSide(
                     placed,
                     sizes,
                     compared.authors,
+                    texts,
                 )
             }
         }
@@ -192,6 +199,7 @@ internal class SearchSide(
             val compared = ComparedValues(s, index).of(own, numbers.keys)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val sizes = sizesOf(own, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.ofItems(s.id, own))
+            val texts = TextsCompared.read(s, encoder, own)
             return ReadSide(compared.numbered, compared.names) { placed ->
                 SearchSide(
                     s,
@@ -205,6 +213,7 @@ internal class SearchSide(
                     placed,
                     sizes,
                     compared.authors,
+                    texts,
                 )
             }
         }

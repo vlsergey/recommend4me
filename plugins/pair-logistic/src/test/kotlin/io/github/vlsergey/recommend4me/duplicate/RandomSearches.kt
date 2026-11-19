@@ -13,7 +13,7 @@ internal object RandomSearches {
     const val VALUES = 60
     val familyOf = IntArray(VALUES) { it % families.size }
 
-    fun site(random: Random, source: String, count: Int, width: Int): SiteWorks {
+    fun site(random: Random, source: String, count: Int, width: Int, vectored: Int = TITLE_VECTORS): SiteWorks {
         val titles =
             HalfMatrix(count, width).also { m -> for (i in 0 until count) m.put(i, unit(random, width, counts = true)) }
         val titleLengths = FloatArray(count) { 2f + random.nextInt(6) }
@@ -46,6 +46,12 @@ internal object RandomSearches {
         val authors = Array(count) { LongArray(random.nextInt(2)) { random.nextInt(40).toLong() } }
         // An author one with the next, in part
         val kin = Array(count) { i -> authors[i].flatMap { listOf(it, it + 1) }.distinct().toLongArray() }
+        // The titles' vectors of most, of an encoder of the site's; the descriptions' trigrams of some
+        val titled = BooleanArray(count) { random.nextInt(5) != 0 }
+        val letterLengths =
+            LetteredText.entries.map {
+                FloatArray(count) { if (random.nextInt(3) == 0) 0f else 5f + random.nextInt(50) }
+            }
         return SiteWorks(
             source,
             List(count) { "%05d".format(it) },
@@ -61,11 +67,25 @@ internal object RandomSearches {
             sizes,
             authors,
             kin,
+            rows(random, titled, vectored, counts = false),
+            titled,
+            letterLengths.map { l -> rows(random, BooleanArray(count) { l[it] > 0f }, width, counts = true) },
+            letterLengths,
         )
     }
 
+    /** Rows of [width] numbers, a unit row of each of those [had], of the others none. */
+    private fun rows(random: Random, had: BooleanArray, width: Int, counts: Boolean): HalfMatrix =
+        HalfMatrix(had.size, width).also { m ->
+            for (i in had.indices) if (had[i]) m.put(i, unit(random, width, counts))
+        }
+
+    /** The numbers of a title's vector of the most sites. */
+    const val TITLE_VECTORS = 8
+
     fun search(random: Random): PairSearch {
-        val sites = listOf(site(random, "a", 300, 24), site(random, "b", 500, 24), site(random, "c", 40, 16))
+        val sites =
+            listOf(site(random, "a", 300, 24), site(random, "b", 500, 24), site(random, "c", 40, 16, vectored = 12))
         // A few pairs answered on, passed over both ways: of two sites, and of one
         val answered = HashMap<Pair<Int, Int>, HashMap<Int, IntArray>>()
         fun answer(a: Int, i: Int, b: Int, j: Int) {
@@ -95,6 +115,14 @@ internal object RandomSearches {
                     Logistic.SIZE to 0.7,
                     Logistic.has(Logistic.SIZE) to -0.1,
                     Logistic.SAME_AUTHOR to 1.2,
+                    Logistic.PARTLY_SAME_AUTHOR to 0.6,
+                    Logistic.TITLE_VECTOR to 1.3,
+                    Logistic.has(Logistic.TITLE_VECTOR) to -0.3,
+                    Logistic.letters(LetteredText.DESCRIPTION) to 0.9,
+                    Logistic.has(Logistic.letters(LetteredText.DESCRIPTION)) to 0.1,
+                    Logistic.letters(LetteredText.FANDOMS) to 0.7,
+                    Logistic.has(Logistic.letters(LetteredText.FANDOMS)) to -0.2,
+                    Logistic.letters(LetteredText.CHARACTERS) to 0.5,
                     Logistic.facet("characters") to 2.0,
                     Logistic.has(Logistic.facet("characters")) to 0.3,
                     Logistic.facet("tags") to 0.8,
