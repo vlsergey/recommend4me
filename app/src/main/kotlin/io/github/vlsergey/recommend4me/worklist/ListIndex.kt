@@ -44,9 +44,16 @@ class ListIndex(dir: Path) : AutoCloseable {
             it.indexCommit.userData[FORMAT_KEY] == FORMAT.toString() && it.numDocs() > 0
         }
 
-    /** Every document removed: the index made anew after. */
+    /**
+     * The format the documents are of, kept with the commits: of the last commit as the index opens, this one's once it
+     * is made anew whole ([clear]) — a commit of anything else tells nothing of the documents written before.
+     */
+    @Volatile private var format: String? = writer.liveCommitData?.firstOrNull { it.key == FORMAT_KEY }?.value
+
+    /** Every document removed: the index made anew after, of this [FORMAT]. */
     fun clear() {
         writer.deleteAll()
+        format = FORMAT.toString()
     }
 
     /** The documents of the [rows] written in place of those of their items, and those of the items [gone] removed. */
@@ -100,7 +107,7 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     /** What was written made what the requests read, and kept. */
     fun commit() {
-        val data = stages.data() + (FORMAT_KEY to FORMAT.toString())
+        val data = stages.data() + listOfNotNull(format?.let { FORMAT_KEY to it })
         writer.setLiveCommitData(data.entries)
         writer.commit()
         searchers.maybeRefreshBlocking()
@@ -123,8 +130,11 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     companion object {
         /** How the documents are made ([ListDocuments]): an index of another made anew whole. */
-        /** 9 — the user's mark and the stages of the tasks over the works ([ListDocuments.MARKED], [WorkStages]). */
-        const val FORMAT = 9
+        /**
+         * 9 — the user's mark and the stages of the tasks over the works ([ListDocuments.MARKED], [WorkStages]); 10 —
+         * the same, made anew: a commit of the stages' times told 9 of documents written before it.
+         */
+        const val FORMAT = 10
         private const val FORMAT_KEY = "format"
 
         /** The memory the writer gathers documents in before it writes them out. */
