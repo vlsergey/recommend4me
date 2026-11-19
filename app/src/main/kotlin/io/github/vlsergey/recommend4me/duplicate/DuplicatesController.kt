@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.DuplicateVerdict
 import io.github.vlsergey.recommend4me.api.model.MethodChoice
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.WorkPairJournalPage
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
@@ -48,7 +49,7 @@ class DuplicatesController(
 
     override fun searchDuplicates(type: String): ResponseEntity<Unit> {
         val store = stores.type(type) ?: return ResponseEntity.notFound().build()
-        duplicates.plan(store, "asked", asked = true)
+        duplicates.plan(store, "asked", TaskPriority.ASKED)
         return ResponseEntity.accepted().build()
     }
 

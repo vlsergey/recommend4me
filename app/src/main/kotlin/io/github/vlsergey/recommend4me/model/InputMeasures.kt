@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.matrix.Matrix
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -37,7 +38,7 @@ class InputMeasures(
         tasks.run(
             Task(TaskKind.READ_SCORER_INPUT, type = typeId),
             mapOf("asked" to 1),
-            asked = true,
+            priority = TaskPriority.ASKED,
             joinAlike = false,
         ) {
             val catalogue = everyWork.training(stores.contentType(typeId))
@@ -53,7 +54,11 @@ class InputMeasures(
      * confirm. Nothing is kept.
      */
     fun worth(typeId: String): ModelWorth? =
-        tasks.run(Task(TaskKind.MEASURE_PART_WORTH, type = typeId), mapOf("asked" to 1), asked = true) {
+        tasks.run(
+            Task(TaskKind.MEASURE_PART_WORTH, type = typeId),
+            mapOf("asked" to 1),
+            priority = TaskPriority.ASKED,
+        ) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId) ?: return@run null
             val p = Prepared.grades(everyWork.training(type)) ?: return@run null
@@ -103,7 +108,12 @@ class InputMeasures(
      * kept. [cautious]: [GroupWeights.tune].
      */
     fun weighing(typeId: String, cautious: Boolean = true): Weighing? =
-        tasks.run(Task(TaskKind.WEIGH_PARTS, type = typeId), mapOf("asked" to 1), joinAlike = false, asked = true) {
+        tasks.run(
+            Task(TaskKind.WEIGH_PARTS, type = typeId),
+            mapOf("asked" to 1),
+            joinAlike = false,
+            priority = TaskPriority.ASKED,
+        ) {
             val type = stores.contentType(typeId)
             val scorer = plugins.scorer(typeId)
             val p =

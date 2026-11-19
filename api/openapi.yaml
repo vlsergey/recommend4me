@@ -4885,12 +4885,19 @@ components:
         givenUp:
           type: boolean
           description: Of a work done, whether it was given up - newer data came while it ran, and it is done again on them; no error
-        asked:
-          type: boolean
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        works:
+          $ref: '#/components/schemas/WorkScope'
+        cursorGrade:
+          type: number
+          format: double
           description: >
-            Of a work running or waiting, whether the user's action in the interface asked for it - the search of the
-            duplicates, a grade, what a model that had not seen a work says, a comparison pressed: it waits ahead of
-            every work of the background
+            Of a task over the works in the order of their expected grade, the grade of the work it goes on after;
+            left out when it begins with the highest
+        cursorWork:
+          type: string
+          description: Of a task over the works, the work it goes on after, of those of the same expected grade
         expectedMillis:
           type: integer
           format: int64
@@ -4959,6 +4966,30 @@ components:
           - updateSearchIndex
           - weighParts
           - writeListIndex
+
+    TaskPriority:
+      type: string
+      description: >
+        Where a task of the queue waits, the first first: asked - the user waits for it on the screen; user - of a
+        change of the user's not waited for; background - of every other change; markedWorks - over the works marked
+        or rated; otherWorks - over every other work, after every other task. A task planned by another, or by what
+        it told, has its priority unless it names one; a task waiting long goes as an asked one, those over the other
+        works never
+      enum:
+        - asked
+        - user
+        - background
+        - markedWorks
+        - otherWorks
+
+    WorkScope:
+      type: string
+      description: >
+        The works a task over the works is of: marked - those the user marked (a field answered on) or rated (graded,
+        marked of interest); other - every other work
+      enum:
+        - marked
+        - other
 
     TaskStep:
       type: string

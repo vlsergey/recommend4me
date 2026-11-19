@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.task
 
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CancellationException
@@ -9,9 +10,10 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * WHOSE TURN IT IS, of the works of the [Tasks]: the works waiting their turn, in the order they are asked — those the
- * user asked for first, and a work of the background waiting longer than [AGING] counted among them ([order]) — and the
- * thread holding the turn. A work alike one still waiting joins it instead of waiting a second time.
+ * WHOSE TURN IT IS, of the works of the [Tasks]: the works waiting their turn, by their priorities — a work waiting
+ * longer than [AGING] counted among those the user asked for, but a work over the other works ([order]) — of one
+ * priority in the order they are asked; and the thread holding the turn. A work alike one still waiting joins it
+ * instead of waiting a second time.
  */
 internal class Turns {
     /**
@@ -45,35 +47,39 @@ internal class Turns {
     fun heldHere(): Boolean = lock.withLock { holder === Thread.currentThread() }
 
     /**
-     * The [work] put among the waiting — or, when [joinAlike], joined to a work alike still waiting: its [reasons]
-     * added to that one's, and that one put ahead when [asked]. The waiter, and whether it is the caller's own.
+     * The [work] put among the waiting, of the [priority], going on from the [cursor] — or, when [joinAlike], joined to
+     * a work alike still waiting: its [reasons] added to that one's, that one put ahead to its [priority] and going on
+     * from the earlier cursor. The waiter, and whether it is the caller's own.
      */
     fun enter(
         work: Task,
         reasons: Map<String, Int>,
         joinAlike: Boolean,
-        asked: Boolean,
-        last: Boolean = false,
+        priority: TaskPriority,
+        cursor: TaskCursor? = null,
     ): Pair<Waiter, Boolean> = lock.withLock {
-        val alike = if (joinAlike) joinedTo(work, reasons, asked) else null
+        val alike = if (joinAlike) joinedTo(work, reasons, priority, cursor) else null
         alike?.let { it to false }
-            ?: (Waiter(work, Instant.now(), reasons, joinAlike, asked, last).also { waiting += it } to true)
+            ?: (Waiter(work, Instant.now(), reasons, joinAlike, priority, cursor).also { waiting += it } to true)
     }
 
     /**
      * Whether a work alike the [work] waits its turn, not begun: then the [work] is that one — its [reasons] added to
-     * it, put ahead when [asked] — and need not be done again: it reads the data as they are when it begins.
+     * it, put ahead to the [priority], going on from the earlier [cursor] — and need not be done again: it reads the
+     * data as they are when it begins.
      */
-    fun joined(work: Task, reasons: Map<String, Int>, asked: Boolean): Boolean = lock.withLock {
-        joinedTo(work, reasons, asked) != null
-    }
+    fun joined(work: Task, reasons: Map<String, Int>, priority: TaskPriority, cursor: TaskCursor?): Boolean =
+        lock.withLock {
+            joinedTo(work, reasons, priority, cursor) != null
+        }
 
     /** The work alike the [work] still waiting, joined by it as [joined] tells; none. Under [lock]. */
-    private fun joinedTo(work: Task, reasons: Map<String, Int>, asked: Boolean): Waiter? {
+    private fun joinedTo(work: Task, reasons: Map<String, Int>, priority: TaskPriority, cursor: TaskCursor?): Waiter? {
         val alike = waiting.firstOrNull { it.joinable && it.work == work } ?: return null
         alike.reasons = merged(alike.reasons, reasons)
-        if (asked && !alike.asked) {
-            alike.asked = true
+        alike.cursor = TaskCursor.earlier(alike.cursor, cursor)
+        if (priority < alike.priority) {
+            alike.priority = priority
             turn.signalAll()
         }
         return alike
@@ -113,21 +119,17 @@ internal class Turns {
         turn.signalAll()
     }
 
-    /**
-     * The works waiting their turn, in the order they will run: those the user asked for and those waiting longer than
-     * [AGING] first.
-     */
+    /** The works waiting their turn, in the order they will run ([order]). */
     fun waiting(): List<RunningTask> = lock.withLock {
-        waiting.sortedWith(order(Instant.now())).map { RunningTask(it.work, it.since, it.reasons, it.asked) }
+        waiting.sortedWith(order(Instant.now())).map {
+            RunningTask(it.work, it.since, it.reasons, it.priority, it.cursor)
+        }
     }
 
     /** Whether the [work] waits its turn, or holds it. */
     fun waits(work: Task): Boolean = lock.withLock { held?.work == work || waiting.any { it.work == work } }
 
-    /**
-     * Whose turn comes next: of the works the user asked for and those waiting too long the longest waiting, else of
-     * the rest. Under [lock].
-     */
+    /** Whose turn comes next ([order]). Under [lock]. */
     private fun next(): Waiter? = waiting.minWithOrNull(order(Instant.now()))
 
     companion object {
@@ -139,18 +141,15 @@ internal class Turns {
         val AGING: Duration = Duration.ofMinutes(2)
 
         /**
-         * The order of the turns at [now]: the works the user asked for and those of the background waiting longer than
-         * [AGING] first; then the rest of the background; the works that go [Waiter.last] after them all, never aged
-         * ahead — each kind the longest waiting first.
+         * The order of the turns at [now]: by the priorities ([TaskPriority]), a work waiting longer than [AGING] among
+         * those the user asked for — but a work over the other works, after every other task however long it waits
+         * (user, 2026-11-18: the works' values filled "lower in priority than every other action") — of one priority
+         * the longest waiting first: a task planned again goes after those of its priority planned before it.
          */
         fun order(now: Instant): Comparator<Waiter> =
             compareBy<Waiter> {
-                    when {
-                        it.asked -> 0
-                        it.last -> 2
-                        Duration.between(it.since, now) > AGING -> 0
-                        else -> 1
-                    }
+                    val aged = it.priority != TaskPriority.OTHER_WORKS && Duration.between(it.since, now) > AGING
+                    if (aged) TaskPriority.ASKED.ordinal else it.priority.ordinal
                 }
                 .thenBy { it.since }
 
@@ -161,20 +160,16 @@ internal class Turns {
 }
 
 /**
- * A work waiting its turn: its reasons grow as works alike join it — put ahead when one the user asked for does — its
- * callers wait for its [result].
+ * A work waiting its turn: its reasons grow as works alike join it — put ahead when one of a higher priority does,
+ * going on from the earlier cursor — its callers wait for its [result].
  */
 internal class Waiter(
     val work: Task,
     val since: Instant,
     @Volatile var reasons: Map<String, Int>,
     val joinable: Boolean,
-    @Volatile var asked: Boolean,
-    /**
-     * It goes after every other work of the background, however long it waits (user, 2026-11-18: the works' values
-     * filled into the index "lower in priority than every other action").
-     */
-    val last: Boolean = false,
+    @Volatile var priority: TaskPriority,
+    @Volatile var cursor: TaskCursor? = null,
 ) {
     val result = CompletableFuture<Any?>()
 

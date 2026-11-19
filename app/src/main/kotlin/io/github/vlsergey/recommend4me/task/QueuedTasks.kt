@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.task
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
+import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.database.AppDatabase
 import io.github.vlsergey.recommend4me.database.app.tables.references.QUEUED_KEY
 import io.github.vlsergey.recommend4me.database.app.tables.references.QUEUED_TASK
@@ -34,7 +36,8 @@ class QueuedTasks(app: AppDatabase) : TaskRecords {
         due: Instant,
         since: Instant,
         reasons: Map<String, Int>,
-        asked: Boolean,
+        priority: TaskPriority,
+        cursor: TaskCursor?,
     ) {
         db.insertInto(QUEUED_TASK)
             .set(QUEUED_TASK.TASK_KEY, key(work))
@@ -43,17 +46,22 @@ class QueuedTasks(app: AppDatabase) : TaskRecords {
             .set(QUEUED_TASK.SOURCE_ID, work.source)
             .set(QUEUED_TASK.FACET, work.facet)
             .set(QUEUED_TASK.ITEM, work.item)
+            .set(QUEUED_TASK.WORKS, work.works?.value)
             .set(QUEUED_TASK.PLAN_NO, planNo)
             .set(QUEUED_TASK.DUE, due)
             .set(QUEUED_TASK.SINCE, since)
             .set(QUEUED_TASK.REASONS, told(reasons))
-            .set(QUEUED_TASK.ASKED, asked)
+            .set(QUEUED_TASK.PRIORITY, priority.value)
+            .set(QUEUED_TASK.CURSOR_GRADE, cursor?.grade)
+            .set(QUEUED_TASK.CURSOR_WORK, cursor?.work)
             .onDuplicateKeyUpdate()
             .set(QUEUED_TASK.PLAN_NO, planNo)
             .set(QUEUED_TASK.DUE, due)
             .set(QUEUED_TASK.SINCE, since)
             .set(QUEUED_TASK.REASONS, told(reasons))
-            .set(QUEUED_TASK.ASKED, asked)
+            .set(QUEUED_TASK.PRIORITY, priority.value)
+            .set(QUEUED_TASK.CURSOR_GRADE, cursor?.grade)
+            .set(QUEUED_TASK.CURSOR_WORK, cursor?.work)
             .execute()
     }
 
@@ -70,6 +78,7 @@ class QueuedTasks(app: AppDatabase) : TaskRecords {
             .set(TASK_RUN.SOURCE_ID, run.work.source)
             .set(TASK_RUN.FACET, run.work.facet)
             .set(TASK_RUN.ITEM, run.work.item)
+            .set(TASK_RUN.WORKS, run.work.works?.value)
             .set(TASK_RUN.BEGAN, run.began)
             .set(TASK_RUN.ENDED, run.ended)
             .set(TASK_RUN.REASONS, told(run.reasons))
@@ -96,7 +105,7 @@ class QueuedTasks(app: AppDatabase) : TaskRecords {
             .mapNotNull { r ->
                 val what = kindOf(r.what!!) ?: return@mapNotNull null
                 FinishedTask(
-                    Task(what, r.typeId, r.sourceId, r.facet, r.item),
+                    Task(what, r.typeId, r.sourceId, r.facet, r.item, scopeOf(r.works)),
                     r.began!!,
                     r.ended!!,
                     parsed(r.reasons!!),
@@ -126,7 +135,12 @@ class QueuedTasks(app: AppDatabase) : TaskRecords {
             .where(QUEUED_TASK.TASK_KEY.`in`(rows.map { it.taskKey }), QUEUED_TASK.PLAN_NO.lt(firstPlan))
             .execute()
         return rows.map { r ->
-            LeftTask(Task(what, r.typeId, r.sourceId, r.facet, r.item), parsed(r.reasons!!), r.asked!!)
+            LeftTask(
+                Task(what, r.typeId, r.sourceId, r.facet, r.item, scopeOf(r.works)),
+                parsed(r.reasons!!),
+                TaskPriority.entries.firstOrNull { it.value == r.priority } ?: TaskPriority.BACKGROUND,
+                r.cursorGrade?.let { TaskCursor(it, r.cursorWork) } ?: r.cursorWork?.let { TaskCursor(null, it) },
+            )
         }
     }
 
@@ -196,11 +210,17 @@ class QueuedTasks(app: AppDatabase) : TaskRecords {
         /** The plans of a millisecond a run of the application may make before its numbers reach the next one's. */
         const val PLANS_A_MILLI = 1000L
 
+        /** The key of a [work]: what, type, source, facet and item, tab-separated; and of a task over works, which. */
         fun key(work: Task): String =
-            listOf(work.what.value, work.type, work.source, work.facet, work.item).joinToString("\t") { it.orEmpty() }
+            (listOf(work.what.value, work.type, work.source, work.facet, work.item).map { it.orEmpty() } +
+                    listOfNotNull(work.works?.value))
+                .joinToString("\t")
 
         /** The kind of a work kept by its value; none of a kind no longer done. */
         fun kindOf(value: String): TaskKind? = TaskKind.entries.firstOrNull { it.value == value }
+
+        /** The works a task is of, kept by their value. */
+        fun scopeOf(value: String?): WorkScope? = WorkScope.entries.firstOrNull { it.value == value }
 
         fun told(reasons: Map<String, Int>): String = reasons.entries.joinToString(",") { "${it.key}=${it.value}" }
 

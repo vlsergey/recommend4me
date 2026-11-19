@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.task
 
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.background.Later
 import java.time.Duration
@@ -11,12 +12,13 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger(Plans::class.java)
 
 /**
- * THE WORKS PLANNED, of the [Tasks]: each with when it is due, since when it is planned, why, whether the user asked
- * for it, and what it does — begun here when it is due, among the works waiting their turn ([Turns]). Planned again
- * before it is due, a work is planned once: its reasons summed, its due time the newer, what it does the newer; planned
- * while a work alike waits its turn, not begun, it is that one — it reads the data as they are when it begins. Of every
- * work begun, the thread that waits its turn and runs it is the [background]'s, for the time of the work. Every plan
- * kept in the [records] from its planning to its end, by its number: a plan of a work running made anew is another.
+ * THE WORKS PLANNED, of the [Tasks]: each with when it is due, since when it is planned, why, its priority, where it
+ * goes on from, and what it does — begun here when it is due, among the works waiting their turn ([Turns]). Planned
+ * again before it is due, a work is planned once: its reasons summed, its due time the newer, what it does the newer;
+ * planned while a work alike waits its turn, not begun, it is that one — it reads the data as they are when it begins.
+ * Of every work begun, the thread that waits its turn and runs it is the [background]'s, for the time of the work.
+ * Every plan kept in the [records] from its planning to its end, by its number: a plan of a work running made anew is
+ * another.
  */
 internal class Plans(private val turns: Turns, private val background: Background, private val records: TaskRecords) {
     /** The number of the next plan. */
@@ -35,27 +37,27 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
         val due: Instant,
         val since: Instant,
         val reasons: Map<String, Int>,
-        val asked: Boolean,
-        /** It goes after every other work of the background ([Waiter.last]). */
-        val last: Boolean,
+        val priority: TaskPriority,
+        val cursor: TaskCursor?,
         val task: (Waiter) -> Unit,
     ) {
         @Volatile var timer: Later? = null
     }
 
     /**
-     * The [work] planned for [due] — when null, as planned before, else at once — for the [reasons], ahead of the
-     * background when [asked]; it does [task] when its turn comes.
+     * The [work] planned for [due] — when null, as planned before, else at once — for the [reasons], of the [priority]
+     * (the higher of it and the one planned before), going on from the [cursor] (the earlier); it does [task] when its
+     * turn comes.
      */
     fun plan(
         work: Task,
         due: Instant?,
         reasons: Map<String, Int>,
-        asked: Boolean,
-        last: Boolean,
+        priority: TaskPriority,
+        cursor: TaskCursor?,
         task: (Waiter) -> Unit,
     ) {
-        if (turns.joined(work, reasons, asked)) return
+        if (turns.joined(work, reasons, priority, cursor)) return
         synchronized(planned) {
             val old = planned.remove(work)
             old?.timer?.cancel()
@@ -67,12 +69,12 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
                     due ?: old?.due ?: now,
                     old?.since ?: now,
                     Turns.merged(old?.reasons.orEmpty(), reasons),
-                    asked || old?.asked == true,
-                    last && !asked && old?.asked != true,
+                    old?.priority?.let { minOf(it, priority) } ?: priority,
+                    TaskCursor.earlier(old?.cursor, cursor),
                     task,
                 )
             planned[work] = plan
-            records.planned(work, plan.no, plan.due, plan.since, plan.reasons, plan.asked)
+            records.planned(work, plan.no, plan.due, plan.since, plan.reasons, plan.priority, plan.cursor)
             val delay = Duration.between(now, plan.due).toMillis().coerceAtLeast(0)
             plan.timer = background.later("tasks: $work", Duration.ofMillis(delay)) { begin(plan) }
         }
@@ -93,7 +95,7 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
     fun list(): List<PlannedTask> =
         synchronized(planned) { planned.values.toList() }
             .sortedBy { it.due }
-            .map { PlannedTask(it.work, it.due, it.since, it.reasons, it.asked) }
+            .map { PlannedTask(it.work, it.due, it.since, it.reasons, it.priority, it.cursor) }
 
     /**
      * The [plan] due, on the thread the background begun it on: put among the works waiting their turn — or joined to a
@@ -105,7 +107,7 @@ internal class Plans(private val turns: Turns, private val background: Backgroun
             synchronized(planned) {
                 if (planned[plan.work] !== plan) return
                 planned.remove(plan.work)
-                turns.enter(plan.work, plan.reasons, joinAlike = true, asked = plan.asked, last = plan.last)
+                turns.enter(plan.work, plan.reasons, joinAlike = true, plan.priority, plan.cursor)
             }
         if (own) run(plan, entry)
     }

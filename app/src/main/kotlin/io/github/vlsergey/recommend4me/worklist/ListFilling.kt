@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.item.EveryItemFacets
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -56,17 +57,15 @@ class ListFilling(
      * waiting in the queue ([TaskKeys.want]) — ONE WORK OF THE TYPE, of every source of it waiting, not a work a
      * source.
      */
-    fun fill(source: String, reason: String, last: Boolean = false) {
+    fun fill(source: String, reason: String, priority: TaskPriority? = null) {
         val type = stores.typeOf(source).id
         tasks.keys.want(filling(type), listOf(source))
-        plan(type, reason, last)
+        plan(type, reason, priority)
     }
 
-    /**
-     * The filling of the sources of the [type] waiting planned, for the [reason]; [last]: after the background's works.
-     */
-    private fun plan(type: String, reason: String, last: Boolean = false) =
-        tasks.plan(filling(type), Instant.now(), reason, last = last) {
+    /** The filling of the sources of the [type] waiting planned, for the [reason], of the [priority]. */
+    private fun plan(type: String, reason: String, priority: TaskPriority? = null) =
+        tasks.plan(filling(type), Instant.now(), reason, priority = priority) {
             val taken = tasks.keys.wanted(filling(type))
             taken.forEach(::filled)
             tasks.keys.done(filling(type), taken)

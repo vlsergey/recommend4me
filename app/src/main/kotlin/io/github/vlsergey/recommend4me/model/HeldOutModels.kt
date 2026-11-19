@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.scorer.RankingTask
@@ -105,7 +106,7 @@ class HeldOutModels(
         askedAt[key] = System.currentTimeMillis()
         val work = Task(TaskKind.FIT_HELD_OUT_MODEL, source = key.source, item = key.id)
         if (tasks.due(work)) return
-        tasks.plan(work, Instant.now(), "page", asked = true) {
+        tasks.plan(work, Instant.now(), "page", priority = TaskPriority.ASKED) {
             val asked = askedAt.remove(key) ?: 0L
             if (System.currentTimeMillis() - asked <= ASKED_LATELY_MS && type.heldOut.explained(key) == null) {
                 val h = fitHeldOut(key)

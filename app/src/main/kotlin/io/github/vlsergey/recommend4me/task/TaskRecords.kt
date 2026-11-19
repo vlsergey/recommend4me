@@ -1,10 +1,19 @@
 package io.github.vlsergey.recommend4me.task
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import java.time.Instant
 
-/** A work the last run of the application left undone: planned, waiting its turn or running; why, and if asked. */
-data class LeftTask(val work: Task, val reasons: Map<String, Int>, val asked: Boolean)
+/**
+ * A work the last run of the application left undone: planned, waiting its turn or running; why, of what priority, and
+ * where it was to go on from.
+ */
+data class LeftTask(
+    val work: Task,
+    val reasons: Map<String, Int>,
+    val priority: TaskPriority,
+    val cursor: TaskCursor? = null,
+)
 
 /**
  * WHERE THE QUEUE OF THE [Tasks] IS KEPT: every work not done yet, a row from its plan to its end, and the last runs of
@@ -17,8 +26,19 @@ interface TaskRecords {
     /** The first plan's number of this run of the application: those of the runs before are below. */
     val firstPlan: Long
 
-    /** The [work] planned, its plan [planNo], for [due], since [since], for the [reasons], asked or not. */
-    fun planned(work: Task, planNo: Long, due: Instant, since: Instant, reasons: Map<String, Int>, asked: Boolean)
+    /**
+     * The [work] planned, its plan [planNo], for [due], since [since], for the [reasons], of the [priority], going on
+     * from the [cursor].
+     */
+    fun planned(
+        work: Task,
+        planNo: Long,
+        due: Instant,
+        since: Instant,
+        reasons: Map<String, Int>,
+        priority: TaskPriority,
+        cursor: TaskCursor?,
+    )
 
     /** The [work] of the plan [planNo] ended — done, failed or given up: its row gone, not a newer plan's. */
     fun ended(work: Task, planNo: Long)
@@ -58,7 +78,8 @@ interface TaskRecords {
             due: Instant,
             since: Instant,
             reasons: Map<String, Int>,
-            asked: Boolean,
+            priority: TaskPriority,
+            cursor: TaskCursor?,
         ) = Unit
 
         override fun ended(work: Task, planNo: Long) = Unit

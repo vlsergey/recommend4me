@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.likeness.Likenesses
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -190,7 +191,7 @@ class ScoreSweep(
 
     /** The next turn of the pass of the [typeId] planned, at once — last of the queue. */
     private fun plan(typeId: String, reason: String) =
-        tasks.plan(work(typeId), null, reason, last = true) { step(typeId) }
+        tasks.plan(work(typeId), null, reason, priority = TaskPriority.OTHER_WORKS) { step(typeId) }
 
     private companion object {
         /**

@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
@@ -42,7 +43,9 @@ class PairFitting(
 
     /** The models fitted again [quiet] seconds from now, unless asked again meanwhile — then from that asking. */
     private fun later(type: TypeStore, quiet: Long, reason: String) =
-        tasks.plan(work(type), Instant.now().plusSeconds(quiet), reason, asked = true) { fitAnew(type) }
+        tasks.plan(work(type), Instant.now().plusSeconds(quiet), reason, priority = TaskPriority.ASKED) {
+            fitAnew(type)
+        }
 
     private fun work(type: TypeStore) = Task(WHAT, type = type.id)
 

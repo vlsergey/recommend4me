@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.worklist
 
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.cast.SiteItemCastEncodeEvent
 import io.github.vlsergey.recommend4me.correction.WorkFieldChangeEvent
 import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
@@ -38,7 +39,7 @@ internal class ListIndexEvents(
             .filter { !indexing.current(it.id) }
             .forEach { type ->
                 indexing.change(type.id, ListIndexing.FORMAT) { whole += type.sources.map { it.id } }
-                type.sources.forEach { filling.fill(it.id, ListIndexing.FORMAT, last = true) }
+                type.sources.forEach { filling.fill(it.id, ListIndexing.FORMAT, TaskPriority.OTHER_WORKS) }
             }
 
     @EventListener

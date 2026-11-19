@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.model.MeasuringState
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -55,7 +56,7 @@ class FacetComparisons(
                     Task(TaskKind.COMPARE_FIELD_METHODS, source = store.id, facet = facet),
                     null,
                     "asked",
-                    asked = true,
+                    priority = TaskPriority.ASKED,
                 ) {
                     run(store, facet, c)
                 }

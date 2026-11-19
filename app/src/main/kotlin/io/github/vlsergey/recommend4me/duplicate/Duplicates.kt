@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.CardSource
@@ -69,14 +70,14 @@ class Duplicates(
      */
     fun chooseModel(type: TypeStore, id: String): Boolean {
         if (!models.choose(type.id, id)) return false
-        plan(type, "model chosen", asked = true)
+        plan(type, "model chosen", TaskPriority.ASKED)
         return true
     }
 
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
         tasks.resumption.resumes(TaskKind.SEARCH_DUPLICATES) { left, reason ->
-            left.work.type?.let(stores::type)?.let { plan(it, reason, left.asked) }
+            left.work.type?.let(stores::type)?.let { plan(it, reason, left.priority) }
         }
     }
 
@@ -91,11 +92,11 @@ class Duplicates(
      * The search of the type planned, in the background — ahead of the background's works when the user pressed for it
      * ([asked]); false when one is planned or waiting its turn already — one running is done again after it.
      */
-    fun plan(type: TypeStore, reason: String, asked: Boolean = false): Boolean {
+    fun plan(type: TypeStore, reason: String, priority: TaskPriority? = null): Boolean {
         val work = searching(type)
         // A search running read the works before: asked again, it is done again after it
         if (tasks.due(work, running = false)) return false
-        tasks.plan(work, Instant.now(), reason, asked = asked) { search(type) }
+        tasks.plan(work, Instant.now(), reason, priority = priority) { search(type) }
         return true
     }
 

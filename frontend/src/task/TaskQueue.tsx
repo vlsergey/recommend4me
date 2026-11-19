@@ -69,20 +69,37 @@ export function TaskQueue() {
 /** A work: its state, what it does and of what, why, and its times. */
 function WorkRow({ w }: { w: QueuedTask }) {
   const { t } = useTranslation("task");
-  const of = [w.type && typeTitle(w.type), w.source && sourceTitle(w.source), w.facet && (w.labelKey ? label(w.labelKey) : w.facet), w.item && `#${w.item}`].filter(
-    Boolean,
-  );
+  const of = [
+    w.type && typeTitle(w.type),
+    w.source && sourceTitle(w.source),
+    w.facet && (w.labelKey ? label(w.labelKey) : w.facet),
+    w.item && `#${w.item}`,
+    w.works && t(`Works.${w.works}`),
+  ].filter(Boolean);
+  // Of a task over the works, the work it goes on after and its expected grade; left out going on from the first
+  const cursorGrade = w.cursorGrade ?? undefined;
+  const from =
+    w.cursorWork || cursorGrade !== undefined
+      ? t("TaskQueue.from", {
+          work: w.cursorWork ? `#${w.cursorWork}` : "",
+          grade: cursorGrade === undefined || !Number.isFinite(cursorGrade) ? t("TaskQueue.noGrade") : number(cursorGrade),
+        })
+      : undefined;
   return (
     <li className={cn("flex flex-wrap items-baseline gap-x-3 gap-y-1 py-1.5", w.state === "FINISHED" && "opacity-70")}>
       <State w={w} />
-      {w.asked && (
-        // Asked for by the user's action in the interface: it goes ahead of the background's works
-        <span className="flex items-center gap-1 text-xs text-foreground" title={t("TaskQueue.asked.hint")}>
-          <UserIcon className="size-3.5" /> {t("TaskQueue.asked")}
+      {w.priority && (
+        // Where it waits: the user's first, the works over the other works after every other task
+        <span
+          className={cn("flex items-center gap-1 text-xs", w.priority === "asked" ? "text-foreground" : "text-muted-foreground")}
+          title={t(`Priority.${w.priority}.hint`)}
+        >
+          {w.priority === "asked" && <UserIcon className="size-3.5" />} {t(`Priority.${w.priority}`)}
         </span>
       )}
       <span className="font-medium">{t(`What.${w.what}`)}</span>
       {of.length > 0 && <span className="text-muted-foreground">{of.join(" · ")}</span>}
+      {from && <span className="text-muted-foreground">{from}</span>}
       {w.reasons.length > 0 && (
         <span className="text-muted-foreground">
           {t("TaskQueue.because")} {w.reasons.map((r) => `${t(`Reason.${r.key}`)}${r.count > 1 ? ` ×${number(r.count)}` : ""}`).join(", ")}

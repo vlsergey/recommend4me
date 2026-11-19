@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -95,7 +96,14 @@ class ListIndexing(
         // The user's own action the list is looked at for, and an index never made — an empty list — go ahead of the
         // background's works
         val asked = reason in USERS || (reason == FORMAT && !indexes.of(typeId).current())
-        tasks.plan(work(typeId), Instant.now().plusSeconds(QUIET_SECONDS), reason, asked = asked) { write(typeId) }
+        tasks.plan(
+            work(typeId),
+            Instant.now().plusSeconds(QUIET_SECONDS),
+            reason,
+            priority = TaskPriority.ASKED.takeIf { asked },
+        ) {
+            write(typeId)
+        }
     }
 
     private fun work(typeId: String) = Task(WORK, type = typeId)

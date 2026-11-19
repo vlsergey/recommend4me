@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.suggestion
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.TaskStep
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
@@ -167,7 +168,7 @@ internal class FacetRefits(
             fittingAnew(store, facetKey),
             null,
             "asked",
-            asked = true,
+            priority = TaskPriority.ASKED,
             // The facets after it in the chain read its values: every one of them fitted again, the values filled after
             after = { _: Unit -> changed(store.id, "chances") },
         ) {

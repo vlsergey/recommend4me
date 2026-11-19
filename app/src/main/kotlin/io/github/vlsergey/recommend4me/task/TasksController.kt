@@ -57,11 +57,23 @@ class TasksController(
 
     private fun PlannedTask.toApi() =
         queued(work, QueuedTask.State.PLANNED, since, reasons)
-            .copy(due = due.atOffset(ZoneOffset.UTC), asked = asked.takeIf { it })
+            .copy(
+                due = due.atOffset(ZoneOffset.UTC),
+                priority = priority,
+                cursorGrade = cursor?.grade,
+                cursorWork = cursor?.work,
+            )
 
     private fun RunningTask.toApi(state: QueuedTask.State) =
         queued(work, state, since, reasons)
-            .copy(asked = asked.takeIf { it }, progress = progress, step = step?.first, stepOf = step?.second)
+            .copy(
+                priority = priority,
+                cursorGrade = cursor?.grade,
+                cursorWork = cursor?.work,
+                progress = progress,
+                step = step?.first,
+                stepOf = step?.second,
+            )
 
     /** A work as the page shows it; one not done with how long it is expected to take. */
     private fun queued(work: Task, state: QueuedTask.State, since: Instant, reasons: Map<String, Int>): QueuedTask {
@@ -75,6 +87,7 @@ class TasksController(
             facet = work.facet,
             labelKey = def?.let { I18nKeys.facetLabel(source!!.id, it) },
             item = work.item,
+            works = work.works,
             since = since.atOffset(ZoneOffset.UTC),
             expectedMillis = if (state == QueuedTask.State.FINISHED) null else records.expected(work),
             reasons = reasons.map { (key, count) -> TaskReason(TaskReasonKey.forValue(key), count) },

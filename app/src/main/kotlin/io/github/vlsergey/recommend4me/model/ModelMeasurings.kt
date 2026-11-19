@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Instant
@@ -45,7 +46,7 @@ class ModelMeasurings(private val measures: InputMeasures, private val tasks: Ta
         of.compute(work.type!!) { _, running ->
             if (running != null && running.finishedAt == null) return@compute running
             Measuring<T>(Instant.now()).also { m ->
-                tasks.plan(work, null, "asked", asked = true) {
+                tasks.plan(work, null, "asked", priority = TaskPriority.ASKED) {
                     try {
                         m.result = body()
                     } finally {

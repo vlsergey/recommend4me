@@ -1,8 +1,10 @@
 package io.github.vlsergey.recommend4me.task
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.TaskReasonKey
 import io.github.vlsergey.recommend4me.api.model.TaskStep
+import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.background.Threads
 import java.time.Duration
@@ -15,7 +17,8 @@ private val log = LoggerFactory.getLogger(Tasks::class.java)
 
 /**
  * What a work does — [what], a key the interface words as "tasks.<what>" — and of what: a content type, a source, a
- * facet, a work. Two works alike are the same work: planned twice, it is planned once.
+ * facet, a work; of a task over the works, which of them ([works]: two tasks of one kind, the marked and rated works
+ * apart from the rest). Two works alike are the same work: planned twice, it is planned once.
  */
 data class Task(
     val what: TaskKind,
@@ -23,37 +26,48 @@ data class Task(
     val source: String? = null,
     val facet: String? = null,
     val item: String? = null,
+    val works: WorkScope? = null,
 ) {
     override fun toString() =
-        listOfNotNull(type, source, facet, item).joinToString("/").ifEmpty { "all" } + ": " + what.value
+        listOfNotNull(type, source, facet, item, works?.value).joinToString("/").ifEmpty { "all" } + ": " + what.value
 }
 
 /**
  * A work waiting or running: since when, and why — the changes that asked for it, by the key the interface words as
- * "tasks.reason.<key>", each with how many times it came — and whether the user's action in the interface asked for it
- * ([asked]: it waits ahead of the background).
+ * "tasks.reason.<key>", each with how many times it came — its [priority], and of a task over the works where it goes
+ * on from ([cursor]).
  */
-class RunningTask(val work: Task, val since: Instant, val reasons: Map<String, Int>, val asked: Boolean = false) {
+class RunningTask(
+    val work: Task,
+    val since: Instant,
+    val reasons: Map<String, Int>,
+    val priority: TaskPriority,
+    val cursor: TaskCursor? = null,
+) {
     /** Of a work that tells it ([Tasks.progress]), how much of it is done: a share; none of one that does not. */
     @Volatile var progress: Double? = null
 
     /** Of a work of several steps, the step it is at, and the key of the words of what the step is of. */
     @Volatile var step: Pair<TaskStep, String?>? = null
 
-    /** Of a work that left a tail ([Tasks.again]): why it goes on, how many times. */
-    @Volatile var again: Pair<String, Int>? = null
+    /** Of a work that left a tail ([Tasks.again]): why it goes on, how many times, from where. */
+    @Volatile internal var again: Again? = null
 }
 
+/** A tail a work left ([Tasks.again]): planned again for the [reason], [count] times, going on from the [cursor]. */
+internal class Again(val reason: String, val count: Int, val cursor: TaskCursor?)
+
 /**
- * A work planned for later: when it is due (it may be put off by newer changes), since when it is planned, why, and
- * whether the user asked for it.
+ * A work planned for later: when it is due (it may be put off by newer changes), since when it is planned, why, its
+ * priority, and where it goes on from.
  */
 class PlannedTask(
     val work: Task,
     val due: Instant,
     val since: Instant,
     val reasons: Map<String, Int>,
-    val asked: Boolean = false,
+    val priority: TaskPriority,
+    val cursor: TaskCursor? = null,
 )
 
 /**
@@ -127,23 +141,24 @@ class Tasks(background: Background = Threads(), private val records: TaskRecords
      * is queued again. A caller whose work is more than its [Task] tells — a batch of its own ids — passes [joinAlike]
      * false.
      *
-     * [asked]: the user's action in the interface asked for it — it waits ahead of every work that was not; a work
-     * alike it joins is put ahead with it.
+     * Its [priority] ([TaskPriority]); when null, that of the work planned alike, else the inherited
+     * ([InheritedPriority]). A work alike it joins is put ahead with it.
      */
     fun <T> run(
         work: Task,
         reasons: Map<String, Int>? = null,
         joinAlike: Boolean = true,
-        asked: Boolean = false,
+        priority: TaskPriority? = null,
         body: () -> T,
     ): T {
         Requests.refuseWaiting(work)
         // A work asking for another inside it goes on: the turn is its own
         if (turns.heldHere()) return body()
         val plan = if (reasons == null) plans.take(work) else null
-        val (entry, own) = turns.enter(work, reasons ?: plan?.reasons.orEmpty(), joinAlike, asked)
+        val ranked = InheritedPriority.of(priority ?: plan?.priority)
+        val (entry, own) = turns.enter(work, reasons ?: plan?.reasons.orEmpty(), joinAlike, ranked, plan?.cursor)
         return try {
-            if (own) runOwn(entry, body) else entry.answer()
+            if (own) InheritedPriority.under(entry.priority) { runOwn(entry, body) } else entry.answer()
         } finally {
             plan?.let(plans::ended)
         }
@@ -154,12 +169,12 @@ class Tasks(background: Background = Threads(), private val records: TaskRecords
      * to the callers joined to it as well; the run kept among the works done, and the turn given back after it.
      */
     @Suppress("TooGenericExceptionCaught")
-    private fun <T> runOwn(entry: Waiter, body: () -> T, goesOn: (Pair<String, Int>) -> Unit = {}): T {
+    private fun <T> runOwn(entry: Waiter, body: () -> T, goesOn: (Again) -> Unit = {}): T {
         turns.take(entry)
         try {
             val waited = Duration.between(entry.since, Instant.now())
             if (waited > NOTED) log.info("{} waited {} s for the works before it", entry.work, waited.toSeconds())
-            val running = RunningTask(entry.work, Instant.now(), entry.reasons, entry.asked)
+            val running = RunningTask(entry.work, Instant.now(), entry.reasons, entry.priority, entry.cursor)
             current = running
             var failed = true
             var givenUp = false
@@ -204,34 +219,46 @@ class Tasks(background: Background = Threads(), private val records: TaskRecords
 
     /**
      * The [work] planned for [due] — later than planned before, if put off; when null, as planned before, else at once
-     * — for one more [reason], [count] times; ahead of the background when the user [asked] for it, after all of it
-     * when it goes [last]. When its turn comes, [body] runs, and [after] of what it answers once the turn is given
-     * back: what is told of it — an event whose listeners may do works of their own — is told out of the queue. Planned
-     * again before it begins, the newer [body] is the one run. A failure of either is told in the log.
+     * — for one more [reason], [count] times; of its [priority], when null the inherited ([InheritedPriority]); of a
+     * task over the works going on from the [cursor], the earlier of it and the one planned before. When its turn
+     * comes, [body] runs, and [after] of what it answers once the turn is given back: what is told of it — an event
+     * whose listeners may do works of their own — is told out of the queue; both of the work's priority, inherited by
+     * what they plan. Planned again before it begins, the newer [body] is the one run. A failure of either is told in
+     * the log.
      */
     fun <T> plan(
         work: Task,
         due: Instant?,
         reason: String,
         count: Int = 1,
-        asked: Boolean = false,
-        last: Boolean = false,
+        priority: TaskPriority? = null,
+        cursor: TaskCursor? = null,
         after: (T) -> Unit = {},
         body: () -> T,
-    ): Unit =
-        plans.plan(work, due, mapOf(TaskReasonKey.forValue(reason).value to count), asked, last) { entry ->
-            // A tail left: the same work planned again, of the same body, after it — a continuation, not a new cause
-            after(runOwn(entry, body) { (why, n) -> plan(work, null, why, n, asked, last, after, body) })
+    ) {
+        val reasons = mapOf(TaskReasonKey.forValue(reason).value to count)
+        plans.plan(work, due, reasons, InheritedPriority.of(priority), cursor) { entry ->
+            InheritedPriority.under(entry.priority) {
+                // A tail left: the same work planned again, of the same body and priority, after it — at the end of
+                // the works of its priority; a continuation, not a new cause
+                val answer =
+                    runOwn(entry, body) { a ->
+                        plan(work, null, a.reason, a.count, entry.priority, a.cursor, after, body)
+                    }
+                after(answer)
+            }
         }
+    }
 
     /**
      * The work running now leaves a tail — a portion done, more left (owner, 2026-11-19: "if a work sees it has a tail,
      * it plans itself again, telling the bound to go on from"): once it ends, it is planned again as it was planned,
-     * its body the same, for the [reason], [count] times; its bound kept where its owner keeps it (the queue's keys,
-     * its state). Of a work run, not planned ([run]), nothing: its caller goes on itself.
+     * its body and priority the same, for the [reason], [count] times; going on from the [cursor], or from a bound its
+     * owner keeps (the queue's keys, its state). Of a work run, not planned ([run]), nothing: its caller goes on
+     * itself.
      */
-    fun again(reason: String, count: Int = 1) {
-        current?.again = TaskReasonKey.forValue(reason).value to count
+    fun again(reason: String, count: Int = 1, cursor: TaskCursor? = null) {
+        current?.again = Again(TaskReasonKey.forValue(reason).value, count, cursor)
     }
 
     /**
@@ -257,7 +284,7 @@ class Tasks(background: Background = Threads(), private val records: TaskRecords
     /** The work running now, none when idle. */
     fun running(): RunningTask? = current
 
-    /** The works waiting their turn, in the order they will run: those the user asked for first. */
+    /** The works waiting their turn, in the order they will run: by their priorities, of one the longest waiting. */
     fun waiting(): List<RunningTask> = turns.waiting()
 
     /**

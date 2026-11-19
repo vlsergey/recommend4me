@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.task
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
+import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.database.AppDatabase
 import io.github.vlsergey.recommend4me.folder.DataFolder
 import java.nio.file.Path
@@ -258,7 +260,11 @@ class TasksTest {
         try {
             fun ask(what: TaskKind, asked: Boolean, waiting: Int): CompletableFuture<Unit> =
                 CompletableFuture.supplyAsync(
-                        { tasks.run(Task(what), emptyMap(), asked = asked) { order += what.value } },
+                        {
+                            tasks.run(Task(what), emptyMap(), priority = TaskPriority.ASKED.takeIf { asked }) {
+                                order += what.value
+                            }
+                        },
                         callers,
                     )
                     .also { while (tasks.waiting().size < waiting) Thread.sleep(5) }
@@ -274,8 +280,11 @@ class TasksTest {
                 listOf("updateSearchIndex", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),
                 tasks.waiting().map { it.work.what.value },
             )
-            assertEquals(listOf(true, true, false, false), tasks.waiting().map { it.asked })
-            assertTrue(tasks.running()!!.work.what == TaskKind.FIT_GRADE_MODELS && !tasks.running()!!.asked)
+            assertEquals(listOf(true, true, false, false), tasks.waiting().map { it.priority == TaskPriority.ASKED })
+            assertTrue(
+                tasks.running()!!.work.what == TaskKind.FIT_GRADE_MODELS &&
+                    tasks.running()!!.priority == TaskPriority.BACKGROUND
+            )
             release.countDown()
             all.forEach { it.get(5, TimeUnit.SECONDS) }
             blocker.join()
@@ -318,7 +327,11 @@ class TasksTest {
             while (tasks.waiting().size < 2) Thread.sleep(5)
             val pressed =
                 CompletableFuture.supplyAsync(
-                    { tasks.run(duplicates, mapOf("asked" to 1), asked = true) { order += "searchDuplicates" } },
+                    {
+                        tasks.run(duplicates, mapOf("asked" to 1), priority = TaskPriority.ASKED) {
+                            order += "searchDuplicates"
+                        }
+                    },
                     callers,
                 )
             while (tasks.waiting().firstOrNull()?.work != duplicates) Thread.sleep(5)
@@ -340,28 +353,79 @@ class TasksTest {
                 now.minus(Turns.AGING).minusSeconds(1),
                 emptyMap(),
                 true,
-                false,
+                TaskPriority.BACKGROUND,
             )
-        val asked = Waiter(Task(TaskKind.FIT_GRADE_MODELS), now.minusSeconds(1), emptyMap(), true, true)
-        val young = Waiter(Task(TaskKind.ENCODE_TAG_NAMES), now.minusSeconds(2), emptyMap(), true, false)
+        val asked = Waiter(Task(TaskKind.FIT_GRADE_MODELS), now.minusSeconds(1), emptyMap(), true, TaskPriority.ASKED)
+        val young =
+            Waiter(Task(TaskKind.ENCODE_TAG_NAMES), now.minusSeconds(2), emptyMap(), true, TaskPriority.BACKGROUND)
         assertEquals(listOf(old, asked, young), listOf(young, asked, old).sortedWith(Turns.order(now)))
     }
 
     @Test
-    fun `a work that goes last waits after the whole background, however long it waited`() {
+    fun `the tasks go by their priorities, those over the other works after all, however long they waited`() {
         val now = Instant.now()
-        val last =
-            Waiter(
-                Task(TaskKind.FILL_RATED_WORK_VALUES),
-                now.minus(Turns.AGING).minusSeconds(60),
-                emptyMap(),
-                true,
-                false,
-                true,
-            )
-        val young = Waiter(Task(TaskKind.ENCODE_TAG_NAMES), now.minusSeconds(1), emptyMap(), true, false)
-        val asked = Waiter(Task(TaskKind.FIT_GRADE_MODELS), now, emptyMap(), true, true)
-        assertEquals(listOf(asked, young, last), listOf(last, young, asked).sortedWith(Turns.order(now)))
+        fun waiter(what: TaskKind, waited: Long, priority: TaskPriority, works: WorkScope? = null) =
+            Waiter(Task(what, works = works), now.minusSeconds(waited), emptyMap(), true, priority)
+        val other = waiter(TaskKind.SCORE_WORKS, Turns.AGING.seconds + 60, TaskPriority.OTHER_WORKS, WorkScope.OTHER)
+        val marked = waiter(TaskKind.SCORE_WORKS, 4, TaskPriority.MARKED_WORKS, WorkScope.MARKED)
+        val background = waiter(TaskKind.ENCODE_TAG_NAMES, 3, TaskPriority.BACKGROUND)
+        val user = waiter(TaskKind.WRITE_LIST_INDEX, 2, TaskPriority.USER)
+        val asked = waiter(TaskKind.FIT_GRADE_MODELS, 1, TaskPriority.ASKED)
+        assertEquals(
+            listOf(asked, user, background, marked, other),
+            listOf(other, marked, background, user, asked).sortedWith(Turns.order(now)),
+        )
+    }
+
+    @Test
+    fun `a task planned by a running one is of its priority, unless it names one, any other of the background`() {
+        val tasks = tasks()
+        val done = CountDownLatch(1)
+        val later = Instant.now().plusSeconds(60)
+        tasks.plan(Task(TaskKind.MEASURE_WORK_SIZES), null, "start", priority = TaskPriority.USER) {
+            tasks.plan(Task(TaskKind.MAKE_WORK_MANNERS), later, "items") {}
+            tasks.plan(Task(TaskKind.ENCODE_TAG_NAMES), later, "tags", priority = TaskPriority.OTHER_WORKS) {}
+            done.countDown()
+        }
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+        tasks.plan(Task(TaskKind.COUNT_TAGS), later, "tags") {}
+        assertEquals(
+            mapOf(
+                TaskKind.MAKE_WORK_MANNERS to TaskPriority.USER,
+                TaskKind.ENCODE_TAG_NAMES to TaskPriority.OTHER_WORKS,
+                TaskKind.COUNT_TAGS to TaskPriority.BACKGROUND,
+            ),
+            tasks.planned().associate { it.work.what to it.priority },
+        )
+    }
+
+    @Test
+    fun `a task over the works goes on from where it left, of its priority`() {
+        val tasks = tasks()
+        val scores = Task(TaskKind.SCORE_WORKS, type = "books", works = WorkScope.OTHER)
+        val seen = java.util.Collections.synchronizedList(ArrayList<Pair<TaskCursor?, TaskPriority>>())
+        val done = CountDownLatch(2)
+        tasks.plan(scores, null, "sweep", priority = TaskPriority.OTHER_WORKS, cursor = TaskCursor.FIRST) {
+            val running = tasks.running()!!
+            seen += running.cursor to running.priority
+            if (seen.size == 1) tasks.again("sweep", cursor = TaskCursor(4.0, "w9"))
+            done.countDown()
+        }
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+        assertEquals(
+            listOf(TaskCursor.FIRST to TaskPriority.OTHER_WORKS, TaskCursor(4.0, "w9") to TaskPriority.OTHER_WORKS),
+            seen,
+        )
+    }
+
+    @Test
+    fun `of two cursors the earlier is the one of the higher grade, of one grade the smaller key`() {
+        assertEquals(TaskCursor(4.5, "b"), TaskCursor.earlier(TaskCursor(4.0, "a"), TaskCursor(4.5, "b")))
+        assertEquals(TaskCursor(4.0, "a"), TaskCursor.earlier(TaskCursor(4.0, "b"), TaskCursor(4.0, "a")))
+        assertEquals(TaskCursor.FIRST, TaskCursor.earlier(TaskCursor(9.0, "a"), TaskCursor.FIRST))
+        val none = TaskCursor(Double.NEGATIVE_INFINITY, "a")
+        assertEquals(TaskCursor(1.0, "z"), TaskCursor.earlier(none, TaskCursor(1.0, "z")))
+        assertEquals(none, TaskCursor.earlier(none, null))
     }
 
     @Test

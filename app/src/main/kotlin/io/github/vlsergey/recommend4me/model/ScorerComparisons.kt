@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.Tasks
@@ -65,7 +66,7 @@ class ScorerComparisons(
                     ),
                     null,
                     "asked",
-                    asked = true,
+                    priority = TaskPriority.ASKED,
                 ) {
                     run(typeId, interest, c)
                 }

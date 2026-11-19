@@ -6,7 +6,7 @@ and the queue of its computations with their last runs.
 | Table | What it holds |
 |---|---|
 | `setting` | a setting by its name ("encoder.text", "source.<id>.…", "job.<id>.running"), its value as text |
-| `queued_task` | a task of the queue not done yet — planned, waiting its turn or running — from its plan to its end: what it is, its plan's number, when it is due, since when, why, whether the user asked; what a stop or a crash left is planned again at the next start |
+| `queued_task` | a task of the queue not done yet — planned, waiting its turn or running — from its plan to its end: what it is, its plan's number, when it is due, since when, why, its priority, the works it is over and where it goes on from; what a stop or a crash left is planned again at the next start |
 | `queued_key` | what a task of the queue is to be done of — an item, a fandom its owner names, a key a row — kept till it is done: a stop leaves them to the task planned again at the next start |
 | `task_run` | the last runs of every kind of task: when each began and ended, why, whether it failed or was given up — what a task to come is expected to take |
 
@@ -29,7 +29,10 @@ erDiagram
         TIMESTAMPTZ due
         TIMESTAMPTZ since
         VARCHAR reasons
-        BOOLEAN asked
+        VARCHAR priority
+        VARCHAR works "null"
+        DOUBLE cursor_grade "null"
+        VARCHAR cursor_work "null"
     }
     setting {
         VARCHAR name PK
@@ -48,5 +51,6 @@ erDiagram
         VARCHAR reasons
         BOOLEAN failed
         BOOLEAN given_up
+        VARCHAR works "null"
     }
 ```

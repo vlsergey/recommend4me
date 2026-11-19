@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.model
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.TaskStep
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -58,7 +59,14 @@ class Recommendations(
     // What the last run of the application left undone of it: planned again by the queue at its start
     init {
         tasks.resumption.resumes(TaskKind.FIT_GRADE_MODELS) { left, reason ->
-            left.work.type?.let { scheduleRetrain(it, reason, byUser = left.asked, asked = left.asked) }
+            left.work.type?.let {
+                scheduleRetrain(
+                    it,
+                    reason,
+                    byUser = left.priority <= TaskPriority.USER,
+                    asked = left.priority == TaskPriority.ASKED,
+                )
+            }
         }
     }
 
@@ -96,7 +104,9 @@ class Recommendations(
                             (waiting?.firstAt ?: now) + MAX_WAIT_MS,
                         )
                 }
-            tasks.plan(work, Instant.ofEpochMilli(due), reason, asked = asked) { retrain(type, asked) }
+            tasks.plan(work, Instant.ofEpochMilli(due), reason, priority = TaskPriority.ASKED.takeIf { asked }) {
+                retrain(type, asked)
+            }
             if (!byUser && waiting?.byUser == true) waiting else PendingTraining(waiting?.firstAt ?: now, due, byUser)
         }
     }
@@ -116,7 +126,7 @@ class Recommendations(
      * ([ScoreSweep.begin]) and not waited for.
      */
     fun retrain(typeId: String, asked: Boolean = false): ModelSummary =
-        tasks.run(trainingWork(typeId), asked = asked) {
+        tasks.run(trainingWork(typeId), priority = TaskPriority.ASKED.takeIf { asked }) {
             val type = stores.contentType(typeId)
             trainingNow += typeId
             try {
