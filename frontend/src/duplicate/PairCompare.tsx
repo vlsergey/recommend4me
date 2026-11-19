@@ -1,14 +1,14 @@
 import { type ReactNode, useState } from "react";
 import { ExternalLinkIcon, LibraryBigIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { DuplicatePair, DuplicateSort, DuplicateWork, DuplicateWorkFacet, SizeNumber } from "@/api/client";
+import type { DuplicatePair, DuplicateSort, DuplicateWork, PairCell, PairRow, SizeNumber } from "@/api/client";
 import { number, percent } from "@/i18n/format";
 import { intlTag } from "@/i18n/i18n";
 import { label, sourceShort, sourceTitle, valueName } from "@/i18n/label";
 import { itemHref } from "@/item/itemHash";
 import { pressKeys } from "@/lib/pressKeys";
 import { cn } from "@/lib/utils";
-import { allowedVerdict, authorVerdict, type FieldVerdict, facetVerdict, lettersVerdict, sameTextVerdict, sameValueVerdict, siteVerdict, sizeRatio, sizeVerdict, TONE_CLASS, textVerdict, valuesVerdict } from "./fieldVerdict";
+import { type FieldVerdict, measureVerdict, TONE_CLASS } from "./fieldVerdict";
 
 /**
  * TWO WORKS COMPARED, as the screen of duplicates shows a pair and every other place that asks whether two
@@ -43,169 +43,28 @@ export function PairFacts({ pair: p, priority }: { pair: DuplicatePair; priority
   );
 }
 
-/** The facets compared in the order the user decides by: what the work is of first, the tags last; any other after them. */
-const FACET_ORDER = ["universe", "characters", "pairings", "kind", "status", "languages", "direction", "age-rating", "age-rating-site", "tags"];
-
-/** The facet of the universes: the site's names of the fandoms stand after it. */
-const UNIVERSE = "universe";
-
-/** The normalized authors, compared apart: the row of the authors tells them. */
-const AUTHOR = "author";
-
-/** The facet of the characters: named apart from the site's own line of them ([PairGrid]). */
-const CHARACTERS = "characters";
-
-/** The facets of what a work is of, made of the site's own line of its characters and pairings: the line stands after them. */
-const OF_THE_LINE = [UNIVERSE, "siteFandoms", CHARACTERS, "pairings"];
+/** The lines a long value is folded to, by the server's number of them: classes written whole, for Tailwind. */
+const CLAMP: Record<number, string> = { 2: "line-clamp-2", 3: "line-clamp-3", 4: "line-clamp-4" };
 
 /**
- * A row of the grid: its field, how alike the two are of it — none of a field the pair is not compared by —, the
- * two values, folded or not.
- */
-interface Row {
-  key: string;
-  name: string;
-  verdict?: FieldVerdict;
-  /** Another measure of the field, after [verdict]: of a text by meaning after letter by letter. */
-  also?: FieldVerdict;
-  left: ReactNode;
-  right: ReactNode;
-  /** Long values folded to these lines ([FoldedRow]); none, shown whole. */
-  lines?: string;
-}
-
-/**
- * THE TWO WORKS FIELD BY FIELD: a row a field — the site, the title, the authors, every facet either has, the
- * site's own line of the characters and pairings after the facets of them, the size, the description — the
- * first work's on the left, the second's on the right, and between them the field's
- * name and how alike the two are, in its colour ([FieldVerdict]), on one line: read across, the left, the
- * verdict, the right. In three groups (user, 2026-11-18: "the site's tags are not compared — the normalized
- * tags are; what both works have but is not compared goes to a group below"): what the pair is compared by —
- * the site, the title, the authors, the size, the description and the facets of the pair's layers
- * ([DuplicatePair.facets]; of a pair of no layers yet, every facet as it is) —; what both works have but the
- * pair is not compared by — the site's own tags (in place of the tags, when those are not compared either) and
- * line, a facet not of its layers —, no verdict; and the
- * fields of one work alone. On a narrow screen the name and the verdict stand over the row, the two under them
- * side by side. Of a pair asked whether it is of one series ([ofSeries]), the site says nothing: no colour of it.
+ * THE TWO WORKS FIELD BY FIELD, as the server lays them out ([PairRow], owner, 2026-11-20: the window driven by the
+ * server — a layer the search compares never shown "not compared"): a row a field, the first work's on the left, the
+ * second's on the right, and between them the field's name and how alike the two are by every measure the search
+ * takes of it, each in its colour ([measureVerdict]), on one line: read across, the left, the verdict, the right. In
+ * three groups (user, 2026-11-18: "what both works have but is not compared goes to a group below"): what the pair is
+ * compared by; what both works have but the search compares not, no verdict; the fields of one work alone. On a
+ * narrow screen the name and the verdict stand over the row, the two under them side by side. Of a pair asked whether
+ * it is of one series ([ofSeries]), the site says nothing: no colour of it.
  */
 export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; ofSeries?: boolean }) {
   const { t } = useTranslation("duplicate");
-  const a = p.first;
-  const b = p.second;
-  // The facets the pair is compared by: those of its layers; of a pair of none worked out yet, every one as it is
-  const comparedBy = p.facets ? new Set(p.facets.map((f) => f.key)) : null;
-  const facets = facetKeys(p).map((key): Row => {
-    const left = a.facets.find((f) => f.key === key);
-    const right = b.facets.find((f) => f.key === key);
-    const compared = p.facets?.find((f) => f.key === key);
-    const labelKey = left?.labelKey ?? right?.labelKey ?? compared?.labelKey;
-    return {
-      key,
-      // Of the universes of no work, the site's fandoms alone: named as they are; the characters, the normalized ones,
-      // told from the site's line of them
-      name: key === CHARACTERS ? t("PairGrid.characters") : labelKey ? label(labelKey) : key === UNIVERSE ? t("PairGrid.fandoms") : key,
-      // Of the values a work may have one of, whether they meet; of a facet of one value — a status, a kind —,
-      // whether it is the same; of the values as the works' screens give them (the window of one pair), how many
-      // they share; of any other, how alike by the layers of the pair
-      verdict: comparedBy && !comparedBy.has(key)
-        ? undefined
-        : left?.allowed || right?.allowed
-          ? allowedVerdict(left?.values ?? [], right?.values ?? [])
-          : left?.single || right?.single
-            ? sameValueVerdict(left?.values ?? [], right?.values ?? [])
-            : compared && !left?.computed && !right?.computed
-              ? facetVerdict(compared.value)
-              : valuesVerdict(left?.values ?? [], right?.values ?? []),
-      left: valuesOf(left),
-      right: valuesOf(right),
-      lines: "line-clamp-2",
-    };
-  });
-  // The site's own tags, after the tags: shown, never compared — the normalized tags are. Of a pair not compared by
-  // the tags either, the site's alone: the two rows would tell the same, one under the other (user, 2026-11-19)
-  if ((a.siteTags?.length ?? 0) > 0 || (b.siteTags?.length ?? 0) > 0) {
-    const tagsAt = facets.findIndex((r) => r.key === "tags");
-    const replaced = tagsAt >= 0 && facets[tagsAt].verdict == null;
-    facets.splice(tagsAt < 0 ? facets.length : replaced ? tagsAt : tagsAt + 1, replaced ? 1 : 0, {
-      key: "siteTags",
-      name: t("PairGrid.siteTags"),
-      left: (a.siteTags ?? []).map(valueName).join(", ") || null,
-      right: (b.siteTags ?? []).map(valueName).join(", ") || null,
-      lines: "line-clamp-2",
-    });
-  }
-  // The names the sites give the fandoms, after the universes, and the site's own line of the characters and pairings,
-  // after the facets made of it: letter by letter (owner, 2026-11-19), of a pair of no layers not compared
-  facets.splice(facets.findIndex((r) => r.key === UNIVERSE) + 1, 0, {
-    key: "siteFandoms",
-    name: t("PairGrid.siteFandoms"),
-    verdict: p.fandomLetters != null ? lettersVerdict(p.fandomLetters) : undefined,
-    left: a.fandoms.length > 0 ? a.fandoms.join(", ") : null,
-    right: b.fandoms.length > 0 ? b.fandoms.join(", ") : null,
-    lines: "line-clamp-2",
-  });
-  const lineAt = facets.reduce((at, r, i) => (OF_THE_LINE.includes(r.key) ? i + 1 : at), 0);
-  facets.splice(lineAt, 0, {
-    key: "universeLine",
-    name: t("PairGrid.universeLine"),
-    verdict: p.characterLetters != null ? lettersVerdict(p.characterLetters) : undefined,
-    left: a.universeLine,
-    right: b.universeLine,
-    lines: "line-clamp-2",
-  });
-  // A description measured either way
-  const measured = p.description != null || p.descriptionLetters != null;
-  const rows: Row[] = [
-    {
-      key: "site",
-      name: t("PairGrid.site"),
-      verdict: siteVerdict(a.source, b.source, ofSeries),
-      left: <span title={sourceTitle(a.source)}>{sourceShort(a.source)}</span>,
-      right: <span title={sourceTitle(b.source)}>{sourceShort(b.source)}</span>,
-    },
-    {
-      key: "title",
-      name: t("PairGrid.title"),
-      // Letter by letter, then by meaning; of a pair of no measure, its fields as they are ([valuesVerdict])
-      verdict: p.title != null ? lettersVerdict(p.title) : sameTextVerdict(a.title, b.title),
-      also: p.title != null ? textVerdict(p.titleVector) : undefined,
-      left: <WorkHead work={a} />,
-      right: <WorkHead work={b} />,
-    },
-    {
-      key: "authors",
-      name: t("PairGrid.authors"),
-      verdict: authorVerdict(p.sameAuthor, p.partlySameAuthor === true, a.authors, b.authors, p.authorKin),
-      also: p.authors != null ? lettersVerdict(p.authors) : undefined,
-      left: a.authors.length > 0 ? a.authors.join(", ") : null,
-      right: b.authors.length > 0 ? b.authors.join(", ") : null,
-    },
-    ...facets,
-    {
-      key: "size",
-      name: t("PairGrid.size"),
-      verdict: sizeVerdict(p.size ?? sizeRatio(a, b)),
-      left: sized(a) ? <Sizes work={a} /> : null,
-      right: sized(b) ? <Sizes work={b} /> : null,
-    },
-    {
-      key: "description",
-      name: t("PairGrid.description"),
-      verdict: measured ? lettersVerdict(p.descriptionLetters) : sameTextVerdict(a.description, b.description),
-      also: measured ? textVerdict(p.description) : undefined,
-      left: a.description,
-      right: b.description,
-      lines: "line-clamp-4",
-    },
-  ];
-  // A field neither work has, no row
-  const both = rows.filter((r) => r.left != null && r.right != null);
-  const compared = both.filter((r) => r.verdict != null);
-  const notCompared = both.filter((r) => r.verdict == null);
-  const one = rows.filter((r) => (r.left == null) !== (r.right == null));
+  const of = (group: PairRow["group"]) => p.rows.filter((r) => r.group === group);
+  const notCompared = of("NOT_COMPARED");
+  const one = of("ONE_SIDED");
+  const row = (r: PairRow) => <Row key={r.key} row={r} pair={p} ofSeries={ofSeries} />;
   return (
     <div className="flex flex-col divide-y rounded-md border">
-      {compared.map(row)}
+      {of("COMPARED").map(row)}
       {notCompared.length > 0 && <GroupHead title={t("PairGrid.notComparedHint2")}>{t("PairGrid.notCompared")}</GroupHead>}
       {notCompared.map(row)}
       {one.length > 0 && <GroupHead>{t("PairGrid.oneSided")}</GroupHead>}
@@ -223,35 +82,42 @@ function GroupHead({ title, children }: { title?: string; children: ReactNode })
   );
 }
 
-/** A row drawn: folded when its values are long. */
-const row = (r: Row) =>
-  r.lines ? <FoldedRow key={r.key} name={r.name} verdict={r.verdict} also={r.also} left={r.left} right={r.right} lines={r.lines} /> : <FieldRow key={r.key} name={r.name} verdict={r.verdict} also={r.also} left={r.left} right={r.right} />;
-
-/**
- * The facets of the rows: every one either work has or the pair was compared by — the universes when either
- * has its site's fandoms too —, in [FACET_ORDER], any other after them; the authors apart.
- */
-function facetKeys(p: DuplicatePair): string[] {
-  const all = new Set([...p.first.facets.map((f) => f.key), ...p.second.facets.map((f) => f.key), ...(p.facets ?? []).map((f) => f.key)]);
-  all.delete(AUTHOR);
-  const known = FACET_ORDER.filter((k) => all.has(k));
-  return [...known, ...[...all].filter((k) => !FACET_ORDER.includes(k))];
+/** A row drawn: its name, its measures, its two cells — folded when its values are long. */
+function Row({ row: r, pair: p, ofSeries }: { row: PairRow; pair: DuplicatePair; ofSeries: boolean }) {
+  const name = label(r.labelKey);
+  const verdicts = r.measures.map((m) => measureVerdict(m, ofSeries));
+  const left = cellOf(r, p.first, r.first);
+  const right = cellOf(r, p.second, r.second);
+  const lines = r.folded != null ? CLAMP[r.folded] : undefined;
+  return lines ? <FoldedRow name={name} verdicts={verdicts} left={left} right={right} lines={lines} /> : <FieldRow name={name} verdicts={verdicts} left={left} right={right} />;
 }
 
-/** A work's values of a facet, by their names; none of none. */
-function valuesOf(facet: DuplicateWorkFacet | undefined): ReactNode {
-  return facet && facet.values.length > 0 ? facet.values.map(valueName).join(", ") : null;
+/** A work's cell of a row as the row says it is drawn; none of a work without the field. */
+function cellOf(r: PairRow, w: DuplicateWork, cell: PairCell | undefined): ReactNode {
+  if (!cell) return null;
+  switch (r.show) {
+    case "SITE":
+      return <span title={sourceTitle(w.source)}>{sourceShort(w.source)}</span>;
+    case "TITLE":
+      return <WorkHead work={w} />;
+    case "VALUES":
+      return (cell.values ?? []).map(valueName).join(", ");
+    case "TEXT":
+      return cell.text;
+    case "SIZE":
+      return <Sizes cell={cell} />;
+  }
 }
 
 /**
- * A row of a field: the first work's on the left, the name and the verdict in the middle, the second's on
+ * A row of a field: the first work's on the left, the name and the verdicts in the middle, the second's on
  * the right; a field one work has not, a dash on its side.
  */
-function FieldRow({ name, verdict, also, left, right }: { name: string; verdict?: FieldVerdict; also?: FieldVerdict; left: ReactNode; right: ReactNode }) {
+function FieldRow({ name, verdicts, left, right }: { name: string; verdicts: FieldVerdict[]; left: ReactNode; right: ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 px-2 py-1 md:grid-cols-[minmax(0,1fr)_12rem_minmax(0,1fr)]">
       <Side>{left}</Side>
-      <Middle name={name} verdict={verdict} also={also} />
+      <Middle name={name} verdicts={verdicts} />
       <Side>{right}</Side>
     </div>
   );
@@ -262,7 +128,7 @@ function FieldRow({ name, verdict, also, left, right }: { name: string; verdict?
  * on either side for both: what is compared is read whole side by side. Text to select and copy: a press
  * that selects something does not fold.
  */
-function FoldedRow({ name, verdict, also, left, right, lines }: { name: string; verdict?: FieldVerdict; also?: FieldVerdict; left: ReactNode; right: ReactNode; lines: string }) {
+function FoldedRow({ name, verdicts, left, right, lines }: { name: string; verdicts: FieldVerdict[]; left: ReactNode; right: ReactNode; lines: string }) {
   const { t } = useTranslation("duplicate");
   const [whole, setWhole] = useState(false);
   const side = (content: ReactNode) =>
@@ -281,7 +147,7 @@ function FoldedRow({ name, verdict, also, left, right, lines }: { name: string; 
         {content}
       </div>
     );
-  return <FieldRow name={name} verdict={verdict} also={also} left={side(left)} right={side(right)} />;
+  return <FieldRow name={name} verdicts={verdicts} left={side(left)} right={side(right)} />;
 }
 
 /** One work's side of a row: its value, or a dash of a field it has not. */
@@ -290,17 +156,18 @@ function Side({ children }: { children: ReactNode }) {
 }
 
 /**
- * The middle of a row: the field's name and how alike the two works are of it — of a text letter by letter, then by
- * meaning ([also]); of a field the pair is not compared by, its name alone.
+ * The middle of a row: the field's name and how alike the two works are of it by every measure — of a text letter by
+ * letter, then by meaning; of a field the pair is not compared by, its name alone.
  */
-function Middle({ name, verdict, also }: { name: string; verdict?: FieldVerdict; also?: FieldVerdict }) {
+function Middle({ name, verdicts }: { name: string; verdicts: FieldVerdict[] }) {
   return (
     <div className="col-span-2 order-first flex items-baseline gap-2 md:order-none md:col-span-1 md:justify-center">
       <span className="min-w-0 truncate text-xs text-muted-foreground" title={name}>
         {name}
       </span>
-      {verdict && <Measure verdict={verdict} />}
-      {also && <Measure verdict={also} />}
+      {verdicts.map((v) => (
+        <Measure key={v.hint} verdict={v} />
+      ))}
     </div>
   );
 }
@@ -330,16 +197,13 @@ function WorkHead({ work: w }: { work: DuplicateWork }) {
   );
 }
 
-/** Whether the size of a work is known: its words or its characters. */
-const sized = (w: DuplicateWork) => w.words != null || w.chars != null;
-
-/** A work's size: its words and its characters, as known ([sized]). */
-function Sizes({ work: w }: { work: DuplicateWork }) {
+/** A work's size: its words and its characters, as known. */
+function Sizes({ cell: c }: { cell: PairCell }) {
   return (
     <>
-      {w.words && <Size size={w.words} word="words" />}
-      {w.words && w.chars && "; "}
-      {w.chars && <Size size={w.chars} word="chars" />}
+      {c.words && <Size size={c.words} word="words" />}
+      {c.words && c.chars && "; "}
+      {c.chars && <Size size={c.chars} word="chars" />}
     </>
   );
 }

@@ -3,10 +3,11 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.api.model.AuthorKin
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateValue
-import io.github.vlsergey.recommend4me.api.model.DuplicateWorkFacet
 import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemFacet
+import io.github.vlsergey.recommend4me.author.AuthorKin as KinOfAuthors
 import io.github.vlsergey.recommend4me.author.AuthorKinship
+import io.github.vlsergey.recommend4me.author.AuthorsKin
 import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -29,61 +30,67 @@ class PairWindow(
     private val views: DuplicateViews,
 ) {
 
-    /** The [pair] as its window shows it. */
-    internal fun of(type: TypeStore, pair: DuplicatePair): DuplicatePair {
-        val first = ItemKey(pair.first.source, pair.first.item)
-        val second = ItemKey(pair.second.source, pair.second.item)
+    /** The pair [r] as its window shows it, the word [said] of it; null of a work no longer there. */
+    internal fun of(type: TypeStore, r: Ranked, said: Said): DuplicatePair? {
+        val (first, second) = r.pair
         val described = views.describe(type, listOf(first, second))
         val clusters = works.of(type)
-        val kin =
-            if (pair.sameAuthor) null
-            else
-                AuthorKinship.of(
-                    type,
-                    described[first]?.authors.orEmpty(),
-                    described[second]?.authors.orEmpty(),
-                    answers.said(type),
-                    models.of(type),
-                    clusters,
+        fun shown(key: ItemKey): Described? =
+            described[key]?.let { d ->
+                Described(
+                    d.work,
+                    d.authors,
+                    d.fields.withFacets(
+                        shownOn(d.fields.facets, details.facetsOf(key, clusters), comparedFamilies(type, key))
+                    ),
                 )
-        return pair.copy(
-            first = pair.first.copy(facets = shownOn(pair.first.facets, details.facetsOf(first, clusters))),
-            second = pair.second.copy(facets = shownOn(pair.second.facets, details.facetsOf(second, clusters))),
-            authorKin =
-                kin?.let {
-                    AuthorKin(
-                        matching = it.matching,
-                        expected = it.expected.toBigDecimal(),
-                        oneEntry = it.oneEntry,
-                        said =
-                            it.told?.let { partly -> if (partly) AuthorKin.Said.PARTIAL else AuthorKin.Said.DIFFERENT },
-                    )
-                },
-        )
+            }
+        val x = shown(first)
+        val y = shown(second)
+        if (x == null || y == null) return null
+        val same = KinOfAuthors(type.authors.distinct.told()).share(x.authors, y.authors)
+        val kin =
+            if (same) null
+            else AuthorKinship.of(type, x.authors, y.authors, answers.said(type), models.of(type), clusters)
+        return views.pairOf(r, x, y, same, said, kin?.let(::kinOf))
     }
+
+    /** How close two authors are by their works, as the window of a pair tells it. */
+    private fun kinOf(kin: AuthorsKin) =
+        AuthorKin(
+            matching = kin.matching,
+            expected = kin.expected.toBigDecimal(),
+            oneEntry = kin.oneEntry,
+            said = kin.told?.let { partly -> if (partly) AuthorKin.Said.PARTIAL else AuthorKin.Said.DIFFERENT },
+        )
 
     /**
      * The facets of a work as compared, those of the layer as its screen gives them in their place ([shown]: its facets
      * as the screen shows them, none of a work no longer there); the site's own facets — its status, the ratings it
      * lets — as they were. A facet of the layer the work has no value of, none.
      */
-    private fun shownOn(compared: List<DuplicateWorkFacet>, shown: List<ItemFacet>?): List<DuplicateWorkFacet> {
+    private fun shownOn(compared: List<ShownFacet>, shown: List<ItemFacet>?, families: Set<String>): List<ShownFacet> {
         if (shown == null) return compared
         val layer = shown.filter { it.editable }.groupBy { familyOf(it.facet) }
         val computed = layer.mapNotNull { (family, facets) ->
             val values = facets.flatMap { f -> f.propertyValues.filter(::has) }.distinctBy { it.key }
             if (values.isEmpty()) null
             else
-                DuplicateWorkFacet(
+                ShownFacet(
                     key = family,
                     labelKey = (facets.firstOrNull { it.facet == family } ?: facets.first()).labelKey,
-                    propertyValues = values.map { DuplicateValue(it.name, it.nameKey) }.sortedBy { it.name },
+                    values = values.map { DuplicateValue(it.name, it.nameKey) }.sortedBy { it.name },
+                    single = facets.any { it.single == true },
                     computed = true,
-                    single = facets.any { it.single == true }.takeIf { it },
+                    compared = family in families,
                 )
         }
         return compared.filter { it.key !in layer.keys } + computed
     }
+
+    /** The facets the search compares the works of the site of [key] by, as compared. */
+    private fun comparedFamilies(type: TypeStore, key: ItemKey): Set<String> =
+        type.source(key.source)?.let { ComparedFacets(it).families.values.toSet() }.orEmpty()
 
     /**
      * Whether the work has the value, as its screen gives it: the user's word it has it, or of no word one neither

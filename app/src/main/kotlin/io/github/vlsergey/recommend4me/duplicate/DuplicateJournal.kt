@@ -39,9 +39,6 @@ class DuplicateJournal(
                     item = key.id,
                     title = key.id,
                     url = "",
-                    authors = emptyList(),
-                    fandoms = emptyList(),
-                    facets = emptyList(),
                 )
         return WorkPairJournalPage(
             total = all.size,

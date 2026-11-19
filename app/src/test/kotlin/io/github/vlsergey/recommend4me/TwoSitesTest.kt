@@ -11,6 +11,8 @@ import io.github.vlsergey.recommend4me.api.model.FacetValueInfo
 import io.github.vlsergey.recommend4me.api.model.ItemQuery
 import io.github.vlsergey.recommend4me.api.model.ItemRef
 import io.github.vlsergey.recommend4me.api.model.ItemSort
+import io.github.vlsergey.recommend4me.api.model.PairMeasure
+import io.github.vlsergey.recommend4me.api.model.PairRow
 import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.api.model.SiteAuthorKey
 import io.github.vlsergey.recommend4me.api.model.SizeNumber
@@ -204,6 +206,9 @@ class TwoSitesTest : TwoSitesTestBase() {
      * last search or worked out as it is shown.
      */
     private fun twoWorksCompared() {
+        // The two works opened first, as the user would: a work opened is made on the spot — its texts encoded, the
+        // model's values of them made — and the window of a pair shows the values its screen gives
+        listOf("alpha" to "m1", "beta" to "m2").forEach { (source, item) -> items.getItem(source, item) }
         // Any two works compared as the screen of duplicates shows a pair, the word said of them with it
         val compared = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
         assertEquals(
@@ -212,8 +217,10 @@ class TwoSitesTest : TwoSitesTestBase() {
         )
         assertEquals("The Mill", compared.second.title)
         assertEquals(null, compared.answer)
-        // Each with the values of the layer its screen gives it — the site's tag only offered there, not among them
-        listOf(compared.first, compared.second).forEach { w ->
+        // Each with the values of the layer its screen gives it — the site's tag only offered there, not among them —,
+        // compared by what they share
+        val tags = compared.rows.firstOrNull { it.key == "tags" }
+        listOf(compared.first to tags?.first, compared.second to tags?.second).forEach { (w, cell) ->
             val given =
                 items
                     .getItem(w.source, w.item)
@@ -228,15 +235,18 @@ class TwoSitesTest : TwoSitesTestBase() {
                     }
                     .map { it.name }
                     .sorted()
-            assertEquals(given, w.facets.filter { it.key == "tags" }.flatMap { f -> f.propertyValues.map { it.name } })
-            assertTrue(w.facets.all { it.computed == true || !it.key.startsWith("tags") }, "of ${w.item}: ${w.facets}")
+            assertEquals(given, cell?.propertyValues.orEmpty().map { it.name })
         }
+        if (tags?.group == PairRow.Group.COMPARED)
+            assertEquals(listOf(PairMeasure.Kind.VALUES), tags.measures.map { it.kind }, "$tags")
         // Its layers worked out as it is shown, though no search kept it: the same title, the same vector; its values
         // compared as the index of the list keeps them — what each work is given — the same as the search's (below)
         fun pair() = duplicates.getDuplicatePair("books", "beta", "m2", "alpha", "m1").body!!
         background.run()
-        assertTrue(pair().title != null, "the titles encoded")
-        assertEquals(1.0, pair().title!!.toDouble(), 1e-3)
+        fun title() =
+            pair().rows.single { it.key == "title" }.measures.firstOrNull { it.kind == PairMeasure.Kind.LETTERS }?.value
+        assertTrue(title() != null, "the titles encoded")
+        assertEquals(1.0, title()!!.toDouble(), 1e-3)
         keptAsWorkedOut()
         // The pairs chosen by a title wholly alike, and by the authors: those alone, every one of them. Every page of
         // them: the other classes' pairs too, in the one application of the tests — whose answers the model of the

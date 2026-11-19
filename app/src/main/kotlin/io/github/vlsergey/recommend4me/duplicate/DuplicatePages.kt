@@ -179,10 +179,7 @@ class DuplicatePages(
             type.links.word(a, b, Instant.now())?.let { w -> DuplicateAnswer.entries.firstOrNull { it.name == w } }
         val chance = kept?.let { chances?.same(it) }
         val ranked = Ranked(pair, kept, chance, kept?.let { chances?.series(it) }, chance ?: 0.0)
-        return views
-            .pairs(type, Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet()), listOf(ranked))
-            .firstOrNull()
-            ?.let { window.of(type, it) }
+        return window.of(type, ranked, Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet()))
     }
 
     fun ofItem(key: ItemKey): List<DuplicatePair> {

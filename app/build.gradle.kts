@@ -230,8 +230,10 @@ application {
     applicationName = "recommend4me"
     mainClass = "io.github.vlsergey.recommend4me.launcher.LauncherKt"
     // 12 GB: the pages H2 keeps of every source's file, up to a gigabyte each (Databases.SOURCE_CACHE_MB), beside the
-    // 4-5 GB the rest takes
-    applicationDefaultJvmArgs = jvmFlags + listOf("-Xmx12g")
+    // 4-5 GB the rest takes. Off the heap 20 GB, not the heap's 12 the JVM allows by default: the search of the
+    // duplicates holds every work's rows of trigrams of five texts in half precision, a kilobyte a text — of the
+    // 1.4 million works of ficbook 1.4 GB each — and ran out at 12 (2026-11-20)
+    applicationDefaultJvmArgs = jvmFlags + listOf("-Xmx12g", "-XX:MaxDirectMemorySize=20g")
 }
 
 distributions {

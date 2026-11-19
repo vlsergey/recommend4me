@@ -1,11 +1,10 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.api.model.DuplicateFacet
+import io.github.vlsergey.recommend4me.api.model.AuthorKin
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateValue
 import io.github.vlsergey.recommend4me.api.model.DuplicateWork
-import io.github.vlsergey.recommend4me.api.model.DuplicateWorkFacet
-import io.github.vlsergey.recommend4me.author.AuthorKin
+import io.github.vlsergey.recommend4me.author.AuthorKin as KinOfAuthors
 import io.github.vlsergey.recommend4me.contenttype.StandardTags
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
@@ -31,9 +30,6 @@ internal class Ranked(
     val priority: Double,
 )
 
-/** A work as a pair shows it, and its normalized authors: what "the same author" is told by. */
-internal class Described(val work: DuplicateWork, val authors: Set<Long>)
-
 /** THE PAIRS AND THEIR WORKS AS THE USER IS SHOWN THEM: every source's works read in one go. */
 @Component
 class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexes) {
@@ -44,60 +40,38 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
         said: Said,
         rows: List<Ranked>,
     ): List<DuplicatePair> {
-        val labels = familyLabels(type)
         val described = describe(type, rows.flatMap { listOf(it.pair.first, it.pair.second) })
-        val kin = AuthorKin(type.authors.distinct.told())
+        val kin = KinOfAuthors(type.authors.distinct.told())
         return rows.mapNotNull { r ->
             val first = described[r.pair.first] ?: return@mapNotNull null
             val second = described[r.pair.second] ?: return@mapNotNull null
-            val d = r.layers
-            val same = kin.share(first.authors, second.authors)
-            DuplicatePair(
-                first = first.work,
-                second = second.work,
-                chance = r.chance?.toBigDecimal(),
-                seriesChance = r.seriesChance?.toBigDecimal(),
-                priority = r.priority.toBigDecimal(),
-                title = d?.title?.toBigDecimal(),
-                titleVector = d?.titleVector?.toBigDecimal(),
-                description = d?.description?.toBigDecimal(),
-                descriptionLetters = d?.letters?.get(LetteredText.DESCRIPTION)?.toBigDecimal(),
-                fandomLetters = d?.letters?.get(LetteredText.FANDOMS)?.toBigDecimal(),
-                characterLetters = d?.letters?.get(LetteredText.CHARACTERS)?.toBigDecimal(),
-                authors = d?.authors?.alike?.toBigDecimal(),
-                propertySize = d?.size?.toBigDecimal(),
-                facets =
-                    d?.facets
-                        .orEmpty()
-                        .entries
-                        .sortedByDescending { it.value }
-                        .map { (family, v) ->
-                            DuplicateFacet(
-                                key = family,
-                                labelKey = labels[family] ?: family,
-                                `value` = v.toBigDecimal(),
-                            )
-                        },
-                sameAuthor = same,
-                partlySameAuthor = (same && first.authors.none { it in second.authors }).takeIf { it },
-                answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
-                derived = (r.pair in said.derived).takeIf { it },
-            )
+            pairOf(r, first, second, kin.share(first.authors, second.authors), said, null)
         }
     }
 
-    /** How every facet compared is named: the label of the facet of any source of the type that is it. */
-    private fun familyLabels(type: TypeStore): Map<String, String> {
-        val labels = HashMap<String, String>()
-        type.sources.forEach { s ->
-            s.schema.facets.forEach { def ->
-                val family = comparedAs(def)
-                if (family != null && (!def.editable || family == def.key))
-                    labels.putIfAbsent(family, I18nKeys.facetLabel(s.id, def))
-            }
-        }
-        return labels
-    }
+    /**
+     * The pair [r] of the works [first] and [second], of one author by the dictionary or not ([sameAuthor]), of no
+     * author in common how close their authors are by their works ([kin], the window of one pair alone).
+     */
+    internal fun pairOf(
+        r: Ranked,
+        first: Described,
+        second: Described,
+        sameAuthor: Boolean,
+        said: Said,
+        kin: AuthorKin?,
+    ) =
+        DuplicatePair(
+            first = first.work,
+            second = second.work,
+            chance = r.chance?.toBigDecimal(),
+            seriesChance = r.seriesChance?.toBigDecimal(),
+            priority = r.priority.toBigDecimal(),
+            sameAuthor = sameAuthor,
+            rows = PairFields(first, second, r.layers, sameAuthor, kin).rows(),
+            answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
+            derived = (r.pair in said.derived).takeIf { it },
+        )
 
     /** The works as the pairs show them: each source's read in one go; a work no longer there, none. */
     internal fun describe(type: TypeStore, keys: List<ItemKey>): Map<ItemKey, Described> {
@@ -209,6 +183,9 @@ private class ShownWorks(
                 work = works[id],
                 title = Corrected.title(head.title, written),
                 url = head.url,
+            ),
+            authors.mapNotNull { normalized[it] }.toSet(),
+            ShownFields(
                 authors = authors.map { authorNames[it] ?: it },
                 fandoms = fandomFacet?.let { named(id, it, fandomNames) }.orEmpty(),
                 description = description?.let { shown[it] },
@@ -221,17 +198,16 @@ private class ShownWorks(
                 words = itemSizes[id]?.words,
                 chars = itemSizes[id]?.chars,
             ),
-            authors.mapNotNull { normalized[it] }.toSet(),
         )
     }
 
     /** The values of the work [id] of every facet compared it has, named, by their names. */
-    private fun comparedOf(id: String): List<DuplicateWorkFacet> = namedBy.mapNotNull { (family, def) ->
+    private fun comparedOf(id: String): List<ShownFacet> = namedBy.mapNotNull { (family, def) ->
         byFamily[id]?.get(family)?.let { keys ->
-            DuplicateWorkFacet(
+            ShownFacet(
                 key = family,
                 labelKey = I18nKeys.facetLabel(s.id, def),
-                propertyValues =
+                values =
                     keys
                         .map { k ->
                             DuplicateValue(
@@ -240,8 +216,8 @@ private class ShownWorks(
                             )
                         }
                         .sortedBy { it.name },
-                allowed = (def.key in allowed).takeIf { it },
-                single = def.single.takeIf { it },
+                allowed = def.key in allowed,
+                single = def.single,
             )
         }
     }

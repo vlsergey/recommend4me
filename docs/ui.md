@@ -85,3 +85,14 @@ like the only way, ask the owner first.
 A filter of a list, a sort, a tab that says how a list is shown is kept in the browser
 (`lib/usePref.ts`) under the screen's own key, by the content type when it depends on it
 (`universes.has.<type>`). Changing one starts the list again from its first page.
+
+## 9. What is compared is the server's word
+
+A screen that tells how alike two things are lays out what the server sends, never guesses it
+from which numbers are missing (owner, 2026-11-20, of the sites' universes and characters shown "not
+compared" though the search compared them). The window of a pair draws `DuplicatePair.rows`
+(`duplicate/PairFields.kt`): every row's field, its group — compared, both having it but not
+compared, of one work alone — and its measures; a measure the search takes but did not take of a
+pair is "not measured", never "not compared". The interface knows only how a kind of measure looks
+(`duplicate/fieldVerdict.ts`, a kind not drawn fails the build); a new layer of the search shows
+in the window with its words alone (`PairLabelsTest`).

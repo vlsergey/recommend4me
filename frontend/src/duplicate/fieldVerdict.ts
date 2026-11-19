@@ -1,10 +1,11 @@
-import type { AuthorKin, DuplicateValue } from "@/api/client";
+import type { AuthorKin, PairMeasure } from "@/api/client";
 import { percent } from "@/i18n/format";
 
 /**
- * HOW ALIKE ONE FIELD OF TWO WORKS IS, as a tone the middle of a pair shows it in: alike (green), partly
- * (yellow), apart (red), or nothing to compare — the field of one work alone (grey). Each with what was
- * measured, shown as it is, and the key of the words saying how it was told.
+ * HOW ALIKE ONE FIELD OF TWO WORKS IS BY ONE MEASURE, as a tone the middle of a pair shows it in: alike (green),
+ * partly (yellow), apart (red), or not measured (grey). Each with what was measured, shown as it is, and the key of
+ * the words saying how it was told. What a field is measured by is the server's ([PairMeasure], owner, 2026-11-20:
+ * the window driven by the server): here only how a measure looks.
  */
 export type Tone = "alike" | "partly" | "apart" | "none";
 
@@ -29,20 +30,18 @@ export interface FieldVerdict {
     | "PairGrid.authorKinHint"
     | "PairGrid.authorKinPartlyHint"
     | "PairGrid.authorKinApartHint"
-    | "PairGrid.noAuthorHint"
     | "PairGrid.sameSiteHint"
     | "PairGrid.otherSiteHint"
-    | "PairGrid.seriesSiteHint"
-    | "PairGrid.notComparedHint";
+    | "PairGrid.seriesSiteHint";
   value?: string;
   /** More values of the hint, by their names. */
   values?: Record<string, string | number>;
 }
 
 /**
- * The cosine of two texts' vectors that is alike, and partly: of the pairs the user said one work the tenth
- * part has titles of 0.98 and less, descriptions of 0.89; of those said different the middle ones have
- * titles of 0.76, descriptions of 0.58, the tenth of the most alike 0.92 and 0.70 (2026-11-11).
+ * The cosine of two texts that is alike, and partly: of the pairs the user said one work the tenth part has titles
+ * of 0.98 and less, descriptions of 0.89; of those said different the middle ones have titles of 0.76, descriptions
+ * of 0.58, the tenth of the most alike 0.92 and 0.70 (2026-11-11).
  */
 const TEXT_ALIKE = 0.95;
 const TEXT_PARTLY = 0.85;
@@ -55,124 +54,86 @@ const FACET_NONE = 0.01;
 const SIZE_ALIKE = 0.05;
 const SIZE_PARTLY = 0.1;
 
-const NOTHING: FieldVerdict = { tone: "none", shown: "—", hint: "PairGrid.notComparedHint" };
+/** How many works two authors are expected to share by the chances of their pairs before they are counted kin. */
+const KIN_EXPECTED = 1;
 
-/** Two texts — their titles, their descriptions — by the cosine of their vectors; none of a text one has not. */
-export function textVerdict(cosine: number | undefined): FieldVerdict {
-  if (cosine == null) return NOTHING;
-  const tone = cosine >= TEXT_ALIKE ? "alike" : cosine >= TEXT_PARTLY ? "partly" : "apart";
-  return { tone, shown: percent(cosine), hint: "PairGrid.textHint", value: percent(cosine) };
+/** A cosine of two texts — letter by letter, by meaning — told by [hint]. */
+function cosine(value: number | undefined, hint: "PairGrid.lettersHint" | "PairGrid.textHint"): FieldVerdict {
+  const c = value ?? 0;
+  const tone = c >= TEXT_ALIKE ? "alike" : c >= TEXT_PARTLY ? "partly" : "apart";
+  return { tone, shown: percent(c), hint, value: percent(c) };
 }
 
 /**
- * Two texts — their titles, their descriptions, the names of their authors — letter by letter, by the cosine of their
- * trigrams, coloured as by meaning ([textVerdict]); none of a text one has not.
+ * The values each work may have one of — the ratings a site lets it have —: two works agree when their values meet,
+ * the same "=", one's within the other's "⊂", some in common "∩"; none in common they differ "≠".
  */
-export function lettersVerdict(cosine: number | undefined): FieldVerdict {
-  if (cosine == null) return NOTHING;
-  const tone = cosine >= TEXT_ALIKE ? "alike" : cosine >= TEXT_PARTLY ? "partly" : "apart";
-  return { tone, shown: percent(cosine), hint: "PairGrid.lettersHint", value: percent(cosine) };
-}
-
-/** The values of a facet, by their cosine; none when it was not compared — the facet of one work alone. */
-export function facetVerdict(cosine: number | undefined): FieldVerdict {
-  if (cosine == null) return NOTHING;
-  const tone = cosine >= FACET_ALL ? "alike" : cosine <= FACET_NONE ? "apart" : "partly";
-  return { tone, shown: percent(cosine), hint: "PairGrid.facetHint", value: percent(cosine) };
-}
-
-/**
- * The values each work may have one of — the ratings a site lets it have —: two works agree when their values
- * meet, the same "=", one's within the other's "⊂", some in common "∩"; none in common they differ "≠".
- */
-export function allowedVerdict(first: DuplicateValue[], second: DuplicateValue[]): FieldVerdict {
-  if (first.length === 0 || second.length === 0) return NOTHING;
-  const of = (v: DuplicateValue) => v.nameKey ?? v.name;
-  const a = new Set(first.map(of));
-  const b = new Set(second.map(of));
-  const common = [...a].filter((v) => b.has(v)).length;
-  const shown = common === 0 ? "≠" : common === a.size && common === b.size ? "=" : common === a.size || common === b.size ? "⊂" : "∩";
+function allowed({ common = 0, first = 0, second = 0 }: PairMeasure): FieldVerdict {
+  const shown = common === 0 ? "≠" : common === first && common === second ? "=" : common === first || common === second ? "⊂" : "∩";
   return { tone: common > 0 ? "alike" : "apart", shown, hint: "PairGrid.allowedHint" };
 }
 
-/**
- * OF A PAIR WITH NO MEASURE — its works' texts not encoded yet, the layers of a pair not worked out without them —,
- * its fields compared as they are: the values of a facet by how many they share, all "✓", none "≠", some "k/n"
- * ([valuesVerdict]); a text the same word for word "✓", else not measured ([sameTextVerdict]); the sizes by their
- * numbers ([sizeRatio]).
- */
-export function valuesVerdict(first: DuplicateValue[], second: DuplicateValue[]): FieldVerdict {
-  if (first.length === 0 || second.length === 0) return NOTHING;
-  const of = (v: DuplicateValue) => v.nameKey ?? v.name;
-  const a = new Set(first.map(of));
-  const b = new Set(second.map(of));
-  const common = [...a].filter((v) => b.has(v)).length;
-  const all = new Set([...a, ...b]).size;
+/** The values of two works by how many they share: all "✓", none "≠", some "k/n". */
+function shared({ common = 0, first = 0, second = 0 }: PairMeasure): FieldVerdict {
+  const all = first + second - common;
   const tone = common === all ? "alike" : common === 0 ? "apart" : "partly";
   const shown = tone === "alike" ? "✓" : tone === "apart" ? "≠" : `${common}/${all}`;
   return { tone, shown, hint: "PairGrid.valuesHint", value: `${common}/${all}` };
 }
 
-/** A facet of one value at most ([DuplicateWorkFacet.single] — the status, the kind): the same "✓", another "≠". */
-export function sameValueVerdict(first: DuplicateValue[], second: DuplicateValue[]): FieldVerdict {
-  if (first.length === 0 || second.length === 0) return NOTHING;
-  const of = (v: DuplicateValue) => v.nameKey ?? v.name;
-  const same = first.some((v) => second.some((w) => of(v) === of(w)));
-  return { tone: same ? "alike" : "apart", shown: same ? "✓" : "≠", hint: "PairGrid.sameValueHint" };
-}
-
-export function sameTextVerdict(first: string | undefined, second: string | undefined): FieldVerdict {
-  if (!first || !second) return NOTHING;
-  const same = first.trim().toLocaleLowerCase() === second.trim().toLocaleLowerCase();
-  return same ? { tone: "alike", shown: "✓", hint: "PairGrid.sameTextHint" } : { tone: "none", shown: "—", hint: "PairGrid.notMeasuredHint" };
-}
-
-/**
- * The sites of the two: of one work, one site is a doubt — a site seldom has a work twice —, partly; two sites,
- * alike. Of two works asked whether they are of one series ([ofSeries]) the site tells nothing: no colour.
- */
-export function siteVerdict(first: string, second: string, ofSeries: boolean): FieldVerdict {
-  const same = first === second;
-  const shown = same ? "=" : "≠";
-  if (ofSeries) return { tone: "none", shown, hint: "PairGrid.seriesSiteHint" };
-  return same ? { tone: "partly", shown, hint: "PairGrid.sameSiteHint" } : { tone: "alike", shown, hint: "PairGrid.otherSiteHint" };
-}
-
-/** Of two sizes, the smaller over the larger, by the words of both, else by their characters; none of no number of both. */
-export function sizeRatio(first: { words?: { value: number }; chars?: { value: number } }, second: typeof first): number | undefined {
-  const pair = first.words && second.words ? [first.words.value, second.words.value] : first.chars && second.chars ? [first.chars.value, second.chars.value] : null;
-  if (!pair || Math.max(...pair) <= 0) return undefined;
-  return Math.min(...pair) / Math.max(...pair);
-}
-
 /** The sizes, by the smaller over the larger: how much they differ. */
-export function sizeVerdict(ratio: number | undefined): FieldVerdict {
-  if (ratio == null) return NOTHING;
+function size(ratio = 0): FieldVerdict {
   const apart = Math.max(0, 1 - ratio);
   const tone = apart <= SIZE_ALIKE ? "alike" : apart <= SIZE_PARTLY ? "partly" : "apart";
   return { tone, shown: `Δ ${percent(apart)}`, hint: "PairGrid.sizeHint", value: percent(apart) };
 }
 
-/** How many works two authors are expected to share by the chances of their pairs before they are counted kin. */
-const KIN_EXPECTED = 1;
-
 /**
- * The authors: one by the dictionary of authors, alike — a normalized author of both "=", two the user said are partly
- * one "≈" ([partly]). Both told and none in common: of the window of one
- * pair, how close their closest two are by their works ([kin], as the offers of authors weigh it) — the
- * user's word on them first: partly one, partly; told apart, apart; else pairs of their works said one or a
- * part "✓k", or both of one entry, or a work expected to be one by the chances "≈x", partly; nothing of it,
- * apart. The authors of one work unknown, nothing to compare.
+ * Two authors of no author in common, of the window of one pair: how close their closest two are by their works —
+ * the user's word on them first: partly one, partly; told apart, apart; else pairs of their works said one or a part
+ * "✓k", or both of one entry, or a work expected to be one by the chances "≈x", partly; nothing of it, apart.
  */
-export function authorVerdict(sameAuthor: boolean, partly: boolean, first: string[], second: string[], kin?: AuthorKin): FieldVerdict {
-  if (sameAuthor) return partly ? { tone: "alike", shown: "≈", hint: "PairGrid.partlyAuthorHint" } : { tone: "alike", shown: "=", hint: "PairGrid.sameAuthorHint" };
-  if (first.length === 0 || second.length === 0) return { ...NOTHING, hint: "PairGrid.noAuthorHint" };
+function kinVerdict(kin: AuthorKin | undefined): FieldVerdict {
   if (!kin) return { tone: "apart", shown: "≠", hint: "PairGrid.otherAuthorHint" };
   const shown = kin.matching > 0 ? `✓${kin.matching}` : kin.expected > 0 ? `≈${kin.expected.toFixed(1)}` : "≠";
   const close = kin.matching > 0 || kin.oneEntry || kin.expected >= KIN_EXPECTED;
   const tone = kin.said === "PARTIAL" ? "partly" : kin.said === "DIFFERENT" ? "apart" : close ? "partly" : "apart";
   const hint = kin.said === "PARTIAL" ? "PairGrid.authorKinPartlyHint" : kin.said === "DIFFERENT" ? "PairGrid.authorKinApartHint" : "PairGrid.authorKinHint";
   return { tone, shown, hint, values: { matching: kin.matching, expected: kin.expected.toFixed(1), entry: kin.oneEntry ? 1 : 0 } };
+}
+
+/**
+ * How every kind of measure looks: a kind the server adds fails the build here till it is drawn. The sites of the
+ * two: of one work, one site is a doubt — a site seldom has a work twice —, partly; two sites, alike; of two works
+ * asked whether they are of one series ([ofSeries]), the site tells nothing: no colour.
+ */
+const VERDICTS: Record<PairMeasure["kind"], (m: PairMeasure, ofSeries: boolean) => FieldVerdict> = {
+  LETTERS: (m) => cosine(m.value, "PairGrid.lettersHint"),
+  MEANING: (m) => cosine(m.value, "PairGrid.textHint"),
+  FACET: ({ value = 0 }) => ({
+    tone: value >= FACET_ALL ? "alike" : value <= FACET_NONE ? "apart" : "partly",
+    shown: percent(value),
+    hint: "PairGrid.facetHint",
+    value: percent(value),
+  }),
+  NOT_MEASURED: () => ({ tone: "none", shown: "—", hint: "PairGrid.notMeasuredHint" }),
+  ALLOWED: allowed,
+  VALUES: shared,
+  SAME_VALUE: () => ({ tone: "alike", shown: "✓", hint: "PairGrid.sameValueHint" }),
+  OTHER_VALUE: () => ({ tone: "apart", shown: "≠", hint: "PairGrid.sameValueHint" }),
+  SAME_TEXT: () => ({ tone: "alike", shown: "✓", hint: "PairGrid.sameTextHint" }),
+  SIZE: (m) => size(m.value),
+  SAME_AUTHOR: () => ({ tone: "alike", shown: "=", hint: "PairGrid.sameAuthorHint" }),
+  PARTLY_AUTHOR: () => ({ tone: "alike", shown: "≈", hint: "PairGrid.partlyAuthorHint" }),
+  OTHER_AUTHOR: () => ({ tone: "apart", shown: "≠", hint: "PairGrid.otherAuthorHint" }),
+  AUTHOR_KIN: (m) => kinVerdict(m.kin),
+  SAME_SITE: (_, ofSeries) => (ofSeries ? { tone: "none", shown: "=", hint: "PairGrid.seriesSiteHint" } : { tone: "partly", shown: "=", hint: "PairGrid.sameSiteHint" }),
+  OTHER_SITE: (_, ofSeries) => (ofSeries ? { tone: "none", shown: "≠", hint: "PairGrid.seriesSiteHint" } : { tone: "alike", shown: "≠", hint: "PairGrid.otherSiteHint" }),
+};
+
+/** How a measure of a field looks ([VERDICTS]). */
+export function measureVerdict(m: PairMeasure, ofSeries: boolean): FieldVerdict {
+  return VERDICTS[m.kind](m, ofSeries);
 }
 
 /**

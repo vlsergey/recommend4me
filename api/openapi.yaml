@@ -5971,7 +5971,7 @@ components:
 
     DuplicatePair:
       type: object
-      required: [first, second, sameAuthor]
+      required: [first, second, sameAuthor, rows]
       properties:
         first:
           $ref: '#/components/schemas/DuplicateWork'
@@ -5986,43 +5986,19 @@ components:
         priority:
           type: number
           description: What the pairs are ordered by - the chance times what the sort says of the work the pair was found for (of both, the larger)
-        title:
-          type: number
-          description: The cosine of the trigrams of their titles, letter by letter
-        titleVector:
-          type: number
-          description: The cosine of the vectors of their titles, by meaning; none when either has none or their sites' are of two encoders
-        description:
-          type: number
-          description: The cosine of the vectors of their descriptions, by meaning; none when either has none
-        descriptionLetters:
-          type: number
-          description: The cosine of the trigrams of their descriptions, letter by letter; none when either has none
-        fandomLetters:
-          type: number
-          description: The cosine of the trigrams of the names the sites give their fandoms, letter by letter; none when either has none
-        characterLetters:
-          type: number
-          description: The cosine of the trigrams of the sites' own lines of their characters and pairings, letter by letter; none when either has none
-        authors:
-          type: number
-          description: The cosine of the trigrams of the names of their authors as the sites write them, letter by letter; none when either has none
-        facets:
-          type: array
-          description: Of every facet the sites share both have (the tags, the universes, the characters, the status...), the cosine of their values, each weighed by its rarity; the most alike first
-          items:
-            $ref: '#/components/schemas/DuplicateFacet'
-        size:
-          type: number
-          description: Of the numbers of their size both have (words, characters, parts; the words or the characters a site does not state worked out), the smaller over the larger, their mean; none when they share none
         sameAuthor:
           type: boolean
           description: The dictionary of authors gives the two one author - a normalized author of both, or two the user said are partly one
-        partlySameAuthor:
-          type: boolean
-          description: Of one author only in part - no normalized author of both, two the user said are partly one
-        authorKin:
-          $ref: '#/components/schemas/AuthorKin'
+        rows:
+          type: array
+          description: |
+            The two works field by field, in the order they are read, as the window of a pair draws them (owner,
+            2026-11-20: the window driven by the server - a layer the search compares never shown "not compared"):
+            the site, the title, the authors, every facet either has with the sites' names of the fandoms after the
+            universes, the sites' own tags after the tags and the sites' lines of the characters after the facets
+            made of them, the size, the description; of a field neither has, none
+          items:
+            $ref: '#/components/schemas/PairRow'
         answer:
           type: string
           enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
@@ -6428,21 +6404,9 @@ components:
       enum: [SAME, DIFFERENT, TRANSLATION, PARTIAL, SERIES]
       description: A word on a pair - one work, different works, one the translation of the other, one a part of the other, two works of one series
 
-    DuplicateFacet:
-      type: object
-      required: [key, labelKey, value]
-      properties:
-        key:
-          type: string
-          description: The facet as compared - the facet of the layer ("characters" of the main and the secondary alike) or the standard one ("status")
-        labelKey:
-          type: string
-        value:
-          type: number
-
     DuplicateWork:
       type: object
-      required: [source, item, title, url, authors, fandoms, facets]
+      required: [source, item, title, url]
       properties:
         source:
           type: string
@@ -6456,38 +6420,6 @@ components:
           type: string
         url:
           type: string
-        authors:
-          type: array
-          items:
-            type: string
-        fandoms:
-          type: array
-          description: The site's fandoms of it, by their names
-          items:
-            type: string
-        description:
-          type: string
-        universeLine:
-          type: string
-          description: The characters and pairings as the site writes them, its own line (SourceSchema.universeLine); none of a site without one
-        siteTags:
-          type: array
-          description: The site's own tags of it, by their names - shown beside what is compared, never compared themselves; none of a site without tags
-          items:
-            $ref: '#/components/schemas/DuplicateValue'
-        facets:
-          type: array
-          description: |
-            The values of every facet a pair is compared by the work has (DuplicatePair.facets) - as the
-            search compares them: the site's, the drafts, the model's kept above its cutoff, the user's
-            answers over them, the ignored tags left out; the authors apart (authors). Read of the
-            databases, as the index of the list the search reads is made of them
-          items:
-            $ref: '#/components/schemas/DuplicateWorkFacet'
-        words:
-          $ref: '#/components/schemas/SizeNumber'
-        chars:
-          $ref: '#/components/schemas/SizeNumber'
 
     WorkPairJournalPage:
       type: object
@@ -6530,35 +6462,82 @@ components:
           type: boolean
           description: The newest word on its pair and what the pair has now - undone, the pair has the word before
 
-    DuplicateWorkFacet:
+    PairRow:
       type: object
-      required: [key, labelKey, values]
-      description: The values of a work of one facet it is compared by
+      required: [key, labelKey, show, group, measures]
+      description: One field of the two works of a pair
       properties:
         key:
           type: string
-          description: The facet as compared (DuplicateFacet.key)
+          description: The field - site, title, authors, a facet as compared ("universe", "tags"...), siteFandoms, siteTags, universeLine, size, description
         labelKey:
           type: string
+          description: The key of its name - of a field of the application's own "duplicate:PairGrid.<key>", of a facet its label
+        show:
+          type: string
+          enum: [SITE, TITLE, VALUES, TEXT, SIZE]
+          description: How its cells are drawn - the work's site, the work's title, the cell's values, the cell's text, the cell's size
+        group:
+          type: string
+          enum: [COMPARED, NOT_COMPARED, ONE_SIDED]
+          description: Compared - both have it and the search compares it -; both have it, but the search compares it not; of one work alone
+        first:
+          $ref: '#/components/schemas/PairCell'
+        second:
+          $ref: '#/components/schemas/PairCell'
+        measures:
+          type: array
+          description: How alike the two are of it, by every measure the search takes of it, in their order (of a text letter by letter, then by meaning); none of a row not compared
+          items:
+            $ref: '#/components/schemas/PairMeasure'
+        folded:
+          type: integer
+          description: The lines a long value is folded to, unfolded by a press; none, shown whole
+
+    PairCell:
+      type: object
+      description: A work's value of a field; none of a work without it
+      properties:
         values:
           type: array
           items:
             $ref: '#/components/schemas/DuplicateValue'
-        single:
-          type: boolean
-          description: A work has one value of it at most (FacetDef.single) - the status, the kind - two works compared by whether it is the same
-        computed:
-          type: boolean
+        text:
+          type: string
+        words:
+          $ref: '#/components/schemas/SizeNumber'
+        chars:
+          $ref: '#/components/schemas/SizeNumber'
+
+    PairMeasure:
+      type: object
+      required: [kind]
+      description: How alike two works are of a field by one measure
+      properties:
+        kind:
+          type: string
+          enum: [LETTERS, MEANING, FACET, NOT_MEASURED, ALLOWED, VALUES, SAME_VALUE, OTHER_VALUE, SAME_TEXT, SIZE, SAME_AUTHOR, PARTLY_AUTHOR, OTHER_AUTHOR, AUTHOR_KIN, SAME_SITE, OTHER_SITE]
           description: |
-            The work's values as its screen gives them - the site's, the drafts, the user's answers and the
-            model's given ones, its chances made now -: of the window of one pair alone (getDuplicatePair),
-            compared by what they share
-        allowed:
-          type: boolean
-          description: |
-            The work has one value of these, the site letting any of them - the ratings a site lets a work
-            have (the site's word of a facet of one value, FacetDef.originalFacet of a single one): two
-            works agree when their values meet
+            LETTERS - the cosine of their trigrams (value); MEANING - of their vectors (value); FACET - of the
+            values of a facet, each weighed by its rarity (value); NOT_MEASURED - a measure the search takes, not
+            taken of this pair (its texts not encoded yet, or found before the search took it); ALLOWED - of the
+            values a work may have one of, how many meet (common of first and second); VALUES - the values as the
+            works' screens give them, or of a pair never measured, how many are shared (common of first and
+            second); SAME_VALUE, OTHER_VALUE - a facet of one value the same or not; SAME_TEXT - of a pair never
+            measured, the same word for word; SIZE - of every number both have, the smaller over the larger
+            (value); SAME_AUTHOR - a normalized author of both; PARTLY_AUTHOR - none, but two the user said are
+            partly one; AUTHOR_KIN - none, how close their closest two are by their works (kin, the window of one
+            pair alone); OTHER_AUTHOR - none; SAME_SITE, OTHER_SITE - of one site or of two
+        value:
+          type: number
+        common:
+          type: integer
+        first:
+          type: integer
+        second:
+          type: integer
+        kin:
+          $ref: '#/components/schemas/AuthorKin'
 
     AuthorKin:
       type: object
