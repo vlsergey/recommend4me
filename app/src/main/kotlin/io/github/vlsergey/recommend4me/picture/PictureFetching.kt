@@ -1,7 +1,5 @@
 package io.github.vlsergey.recommend4me.picture
 
-import io.github.vlsergey.recommend4me.encoder.ImageEncoder
-import io.github.vlsergey.recommend4me.encoder.PreparedPicture
 import io.github.vlsergey.recommend4me.source.SourceContexts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import java.net.HttpURLConnection
@@ -16,40 +14,34 @@ internal class PictureJob(val store: SourceStore, val picture: Picture, val keep
         get() = store.id to (picture.itemId to picture.position)
 }
 
-/** A picture of the queue downloaded, and decoded and prepared for the encoder when it is to be analysed. */
+/** A picture of the queue downloaded: its original and its preview, or why it was not. */
 internal class Fetched(
     val job: PictureJob,
     val original: Pair<ByteArray, String>?,
     val preview: Pair<ByteArray, String>?,
-    val prepared: PreparedPicture?,
     val error: String?,
-    /** The error does not pass: the picture is gone (404) or cannot be decoded — never tried again. */
+    /** The error does not pass: the picture is gone (404) — never tried again. */
     val lasting: Boolean = false,
 )
 
 /**
  * The download of one picture of the queue, on a thread of the downloads: the original from the first of its addresses
- * that gives it, the preview, and — when the picture is to be analysed — the original decoded and prepared, which
- * leaves the encoder's thread to the encoder.
+ * that gives it, and the preview.
  */
 internal class PictureFetching(private val contexts: SourceContexts) {
 
     /** The original of a picture from one of its addresses, and the address; or the last failure, of none. */
     private class Original(val bytes: Pair<ByteArray, String>?, val address: String?, val error: Exception?)
 
-    /** The original, the preview and what the encoder needs of the picture; a failed download its error. */
-    fun fetch(job: PictureJob, encoder: ImageEncoder): Fetched {
+    /** The original and the preview of the picture; a failed download its error. */
+    fun fetch(job: PictureJob): Fetched {
         val original = original(job)
         val bytes = original.bytes
         return if (bytes == null) {
             val error = original.error?.let { it.message ?: it.javaClass.simpleName } ?: "no address"
             val gone = (original.error as? PictureException)?.status == HttpURLConnection.HTTP_NOT_FOUND
-            Fetched(job, null, null, null, error, lasting = gone)
-        } else {
-            val preview = preview(job, bytes, original.address)
-            if (job.picture.analyzed) Fetched(job, bytes, preview, null, null)
-            else prepared(job, bytes, preview, encoder)
-        }
+            Fetched(job, null, null, error, lasting = gone)
+        } else Fetched(job, bytes, preview(job, bytes, original.address), null)
     }
 
     /** The headers the source asks for to download the picture at [url]. */
@@ -90,33 +82,5 @@ internal class PictureFetching(private val contexts: SourceContexts) {
             log.debug("preview {} was not downloaded, the original stands for it: {}", picture.url, e.message)
             original
         }
-    }
-
-    /** The original decoded and prepared for the encoder; a picture no reader decodes a lasting error. */
-    @Suppress("TooGenericExceptionCaught")
-    private fun prepared(
-        job: PictureJob,
-        original: Pair<ByteArray, String>,
-        preview: Pair<ByteArray, String>?,
-        encoder: ImageEncoder,
-    ): Fetched {
-        val prepared =
-            try {
-                PictureFiles.decode(original.first)?.let(encoder::prepare)
-            } catch (e: Exception) {
-                // A boundary: bytes of the web go through the readers of the formats and the encoder's preparing, and
-                // a malformed picture may fail them in any way — it is a picture that cannot be decoded
-                return Fetched(
-                    job,
-                    original,
-                    preview,
-                    null,
-                    "cannot decode ${original.second}: ${e.message ?: e.javaClass.simpleName}",
-                    lasting = true,
-                )
-            }
-        return if (prepared == null)
-            Fetched(job, original, preview, null, "cannot decode ${original.second}: no reader", lasting = true)
-        else Fetched(job, original, preview, prepared, null)
     }
 }

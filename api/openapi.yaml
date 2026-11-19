@@ -4939,6 +4939,7 @@ components:
           - manners
           - methodsCompared
           - partVectors
+          - pictureVectors
           - score
           - scorersCompared
           - scorersInput

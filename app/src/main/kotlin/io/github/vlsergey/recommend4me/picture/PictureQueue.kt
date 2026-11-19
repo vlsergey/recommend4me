@@ -14,9 +14,9 @@ import org.jooq.impl.DSL
 class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPictureVectors) {
 
     /**
-     * The pictures of the items [itemIds] to be worked on: without a vector of [encoder], or of an item in [keep] whose
-     * original is not on disk; not failed, or failed and due to be tried again. In the order of [itemIds], every
-     * picture of an item together.
+     * The pictures of the items [itemIds] to be downloaded: their original not on disk, and without a vector of
+     * [encoder] or of an item in [keep]; not failed, or failed and due to be tried again. In the order of [itemIds],
+     * every picture of an item together.
      */
     fun pendingOf(itemIds: List<String>, encoder: String, keep: Set<String>, limit: Int): List<Picture> {
         if (itemIds.isEmpty()) return emptyList()
@@ -27,14 +27,11 @@ class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPict
             val keepHere = chunk.filter { it in keep }
             out +=
                 db.selectFrom(PICTURE)
-                    .where(PICTURE.ITEM_ID.`in`(chunk), due())
+                    .where(PICTURE.ITEM_ID.`in`(chunk), due(), PICTURE.FULL_FILE.isNull)
                     .and(
                         analyzedBy(encoder)
                             .not()
-                            .or(
-                                if (keepHere.isEmpty()) DSL.falseCondition()
-                                else PICTURE.ITEM_ID.`in`(keepHere).and(PICTURE.FULL_FILE.isNull)
-                            )
+                            .or(if (keepHere.isEmpty()) DSL.falseCondition() else PICTURE.ITEM_ID.`in`(keepHere))
                     )
                     .fetch { pictureOf(it, encoder) }
                     .sortedWith(compareBy({ order.getValue(it.itemId) }, { it.position }))
@@ -42,11 +39,42 @@ class PictureQueue(private val db: DSLContext, private val itemVectors: ItemPict
         return out.take(limit)
     }
 
-    /** The items with a picture not analysed by [encoder] yet (not failed, or due to be tried again). */
+    /**
+     * The items with a picture not analysed by [encoder] yet and not downloaded (not failed, or due to be tried again).
+     */
     fun itemsWithPending(encoder: String): Set<String> =
-        db.selectDistinct(PICTURE.ITEM_ID).from(PICTURE).where(due(), analyzedBy(encoder).not()).fetchSet {
-            it.value1()!!
+        db.selectDistinct(PICTURE.ITEM_ID)
+            .from(PICTURE)
+            .where(due(), analyzedBy(encoder).not(), PICTURE.FULL_FILE.isNull)
+            .fetchSet { it.value1()!! }
+
+    /** The pictures of the items [itemIds] downloaded — their original on disk — and not analysed by [encoder] yet. */
+    fun downloadedOf(itemIds: Collection<String>, encoder: String): List<Picture> =
+        itemIds.distinct().chunked(PICTURES_BATCH).flatMap { chunk ->
+            db.selectFrom(PICTURE)
+                .where(PICTURE.ITEM_ID.`in`(chunk), PICTURE.FULL_FILE.isNotNull, analyzedBy(encoder).not())
+                .orderBy(PICTURE.ITEM_ID, PICTURE.POSITION)
+                .fetch { pictureOf(it, encoder) }
         }
+
+    /** The items with a picture downloaded and not analysed by [encoder] yet. */
+    fun itemsDownloaded(encoder: String): Set<String> =
+        db.selectDistinct(PICTURE.ITEM_ID)
+            .from(PICTURE)
+            .where(PICTURE.FULL_FILE.isNotNull, analyzedBy(encoder).not())
+            .fetchSet { it.value1()!! }
+
+    /** The picture downloaded: its files on disk, whatever failed before past. */
+    fun saveDownloaded(itemId: String, position: Int, previewFile: String?, fullFile: String) {
+        db.update(PICTURE)
+            .set(PICTURE.PREVIEW_FILE, previewFile)
+            .set(PICTURE.FULL_FILE, fullFile)
+            .setNull(PICTURE.ERROR)
+            .set(PICTURE.FAILURES, 0)
+            .setNull(PICTURE.RETRY_AT)
+            .where(PICTURE.ITEM_ID.eq(itemId), PICTURE.POSITION.eq(position))
+            .execute()
+    }
 
     /**
      * The picture analysed: its files on disk, its [vector] by [encoder] when it got one — the vectors of its item made

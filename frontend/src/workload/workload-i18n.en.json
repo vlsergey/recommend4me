@@ -75,6 +75,7 @@
   "What.suggesters": "The fields' models fitted",
   "What.tagTextModel": "Model of tags by the text",
   "What.fandomVectors": "Vectors of the fandoms' names",
+  "What.pictureVectors": "The pictures downloaded analysed",
   "What.searchWeights": "The search's weights by your judgments",
   "What.tagVectors": "Vectors of tags",
   "What.tagsCounted": "Every work's tags counted",

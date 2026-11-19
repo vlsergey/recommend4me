@@ -33,8 +33,9 @@ sealed interface Served {
 
 /**
  * The pictures of the items of every source: the cover (position 0) and every screenshot, analysed by the picture
- * encoder from the ORIGINAL in the background ([PictureAnalysis]): every picture of the graded works first, then the
- * other items from the top of the recommendations down, every picture of an item at once; the sources share the work.
+ * encoder from the ORIGINAL: downloaded by an outer batch ([PictureDownloads]) — every picture of the graded works
+ * first, then the other items from the top of the recommendations down, every picture of an item at once; the sources
+ * share the work — and analysed in the queue of the computations ([PictureVectors]).
  *
  * WHAT IS KEPT FOLLOWS THE GRADES: the vector and a preview always, the original only for works graded "can be played"
  * or more — graded so later, the originals are downloaded again; graded lower, they are deleted.
@@ -44,7 +45,8 @@ class PictureService(
     private val stores: Stores,
     private val plugins: Plugins,
     private val contexts: SourceContexts,
-    private val analysis: PictureAnalysis,
+    private val downloads: PictureDownloads,
+    private val vectors: PictureVectors,
 ) {
     private val serving = ReentrantLock()
 
@@ -55,7 +57,7 @@ class PictureService(
     fun gradesChanged(event: GradesChanged) {
         val store = stores.source(event.source) ?: return
         if (!keepsOriginals(store, event.itemId)) store.files.delete(store.pictures.forgetOriginals(event.itemId))
-        analysis.signal()
+        else downloads.begin()
     }
 
     private fun keepsOriginals(store: SourceStore, itemId: String): Boolean =
@@ -67,8 +69,8 @@ class PictureService(
             total = stores.sources.sumOf { it.pictures.count() },
             analyzed = encoder?.let { e -> stores.sources.sumOf { it.pictures.countAnalyzed(e.id) } } ?: 0,
             failed = stores.sources.sumOf { it.pictures.countFailed() },
-            running = analysis.running,
-            perMinute = analysis.perMinute,
+            running = downloads.running || vectors.running(),
+            perMinute = null,
         )
     }
 

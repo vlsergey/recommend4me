@@ -75,6 +75,7 @@
   "What.suggesters": "Obučavanje modela polja",
   "What.tagTextModel": "Model oznaka po tekstu",
   "What.fandomVectors": "Vektori naziva fandoma",
+  "What.pictureVectors": "Analiza preuzetih slika",
   "What.searchWeights": "Težine pretrage po vašim ocenama",
   "What.tagVectors": "Vektori oznaka",
   "What.tagsCounted": "Brojanje oznaka svih dela",

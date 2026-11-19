@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.correction.FacetAnswered
 import io.github.vlsergey.recommend4me.interest.InterestChanged
 import io.github.vlsergey.recommend4me.manner.MannersChanged
 import io.github.vlsergey.recommend4me.mark.MarksChanged
+import io.github.vlsergey.recommend4me.picture.PicturesAnalysed
 import io.github.vlsergey.recommend4me.rating.GradesChanged
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.setvector.SetVectorsChanged
@@ -62,6 +63,11 @@ class TrainingTriggers(
     @EventListener
     fun ratedValuesFilled(event: RatedValuesFilled) =
         recommendations.scheduleRetrain(event.type, "chances", byUser = false)
+
+    /** The works' pictures analysed: features of the works, learnt as they come. */
+    @EventListener
+    fun picturesAnalysed(event: PicturesAnalysed) =
+        recommendations.scheduleRetrain(stores.typeOf(event.source).id, "pictures", byUser = false)
 
     @EventListener
     fun setVectorsChanged(event: SetVectorsChanged) {

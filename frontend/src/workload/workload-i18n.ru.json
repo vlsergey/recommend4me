@@ -75,6 +75,7 @@
   "What.suggesters": "Обучение моделей полей",
   "What.tagTextModel": "Модель тегов по тексту",
   "What.fandomVectors": "Векторы названий фандомов",
+  "What.pictureVectors": "Анализ скачанных картинок",
   "What.searchWeights": "Веса поиска по вашим оценкам найденного",
   "What.tagVectors": "Векторы тегов",
   "What.tagsCounted": "Подсчёт тегов всех работ",

@@ -46,6 +46,7 @@ flowchart LR
     e_MarksChanged["MarksChanged"]
     e_PartsSaved["PartsSaved"]
     e_PicturesAnalysed["PicturesAnalysed"]
+    e_PicturesDownloaded["PicturesDownloaded"]
     e_PicturesListed["PicturesListed"]
     e_PredictionsChanged["PredictionsChanged"]
     e_RatedValuesFilled["RatedValuesFilled"]
@@ -75,6 +76,7 @@ flowchart LR
     w_manners{{"manners"}}
     w_methodsCompared{{"methodsCompared"}}
     w_partVectors{{"partVectors"}}
+    w_pictureVectors{{"pictureVectors"}}
     w_score{{"score"}}
     w_scorersCompared{{"scorersCompared"}}
     w_scorersInput{{"scorersInput"}}
@@ -107,7 +109,7 @@ flowchart LR
     o_pictures --> e_GradesChanged
     o_pictures --> e_ItemsChanged
     o_pictures --> e_PartsSaved
-    o_pictures --> e_PicturesAnalysed
+    o_pictures --> e_PicturesDownloaded
     o_pictures --> e_PicturesListed
     o_pictures --> e_SiteItemsWritten
     o_pictures --> e_SynonymsSet
@@ -132,6 +134,7 @@ flowchart LR
     o_start --> w_fandomSiteWorksChanged
     o_start --> w_listIndex
     o_start --> w_listValues
+    o_start --> w_pictureVectors
     o_start --> w_searchUpdate
     o_start --> w_setVectors
     o_start --> w_tagTextModel
@@ -166,6 +169,8 @@ flowchart LR
     e_PartsSaved --> w_suggesters
     e_PartsSaved --> w_workSizes
     e_PicturesAnalysed --> w_setVectors
+    e_PicturesAnalysed --> w_train
+    e_PicturesDownloaded --> w_pictureVectors
     e_PredictionsChanged --> w_listIndex
     e_RatedValuesFilled --> w_train
     e_SearchJudged --> w_searchWeights
@@ -198,6 +203,7 @@ flowchart LR
     w_listValues --> e_RatedValuesFilled
     w_manners --> e_MannersChanged
     w_partVectors --> e_TextVectorsChanged
+    w_pictureVectors --> e_PicturesAnalysed
     w_score --> e_PredictionsChanged
     w_scorersCompared --> w_scorersInput
     w_setVectors --> e_SetVectorsChanged
