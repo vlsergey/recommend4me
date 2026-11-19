@@ -4,7 +4,7 @@ import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.LikeliestFirst
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -59,7 +59,7 @@ class TextVectors(
 
     /** The items written encoded a few seconds after the last write, a work of their source in the queue. */
     @EventListener
-    fun itemsChanged(event: ItemsChanged) {
+    fun itemsChanged(event: SiteItemsWritten) {
         queued.computeIfAbsent(event.source) { ConcurrentHashMap.newKeySet() } += event.ids
         planned(event.source, Instant.now().plusSeconds(DELAY_SECONDS), "items", event.ids.size)
     }

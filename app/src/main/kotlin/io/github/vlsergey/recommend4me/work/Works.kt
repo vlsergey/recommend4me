@@ -2,7 +2,7 @@ package io.github.vlsergey.recommend4me.work
 
 import io.github.vlsergey.recommend4me.contenttype.StandardValue
 import io.github.vlsergey.recommend4me.item.ItemKey
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -103,7 +103,7 @@ class Works(private val stores: Stores) {
     /** The items [event] names that are there bound at once, before anything reads the works. */
     @Order(BIND_FIRST)
     @EventListener
-    fun itemsChanged(event: ItemsChanged) {
+    fun itemsChanged(event: SiteItemsWritten) {
         val s = stores.source(event.source) ?: return
         bind(s, s.items.heads(event.ids).mapValues { it.value.version })
         measure(s, event.ids)

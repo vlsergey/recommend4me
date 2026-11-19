@@ -17,6 +17,7 @@ import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.interest.InterestRepository
 import io.github.vlsergey.recommend4me.item.ItemRepository
 import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.likeness.MarkLikenessRepository
 import io.github.vlsergey.recommend4me.manner.GroupMannerRepository
 import io.github.vlsergey.recommend4me.manner.MannerRepository
@@ -120,7 +121,12 @@ class SourceStore(
      */
     val writing = ReentrantLock()
 
-    val items = ItemRepository(dbs.source.dsl) { ids -> events.publishEvent(ItemsChanged(source.id, ids.toList())) }
+    // What the site says written: the bindings of what it said first, then everything that reads the works again
+    val items =
+        ItemRepository(dbs.source.dsl) { ids ->
+            events.publishEvent(SiteItemsWritten(source.id, ids.toList()))
+            events.publishEvent(ItemsChanged(source.id, ids.toList()))
+        }
     val pictures = PictureRepository(dbs.source.dsl)
     val files = PictureFiles(folder)
     val reviews = ReviewRepository(dbs.source.dsl)

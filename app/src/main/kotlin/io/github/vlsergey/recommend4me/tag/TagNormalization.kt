@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.tag
 
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.item.SynonymsSet
 import io.github.vlsergey.recommend4me.layer.LayerValues
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -76,7 +76,7 @@ class TagNormalization(private val stores: Stores) {
      */
     @Order(FIRST)
     @EventListener
-    fun itemsChanged(event: ItemsChanged) {
+    fun itemsChanged(event: SiteItemsWritten) {
         val scope = scope() ?: return
         val source = scope.source(event.source)
         val f = source?.let { siteFacetOf(it, scope.facet) }

@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.cast
 
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -47,7 +47,7 @@ class CastNames(
         }
 
     @EventListener
-    fun itemsChanged(event: ItemsChanged) {
+    fun itemsChanged(event: SiteItemsWritten) {
         val store = stores.source(event.source)?.takeIf(::encodes) ?: return
         synchronized(queued) {
             if (store.id !in queued) queued[store.id] = HashSet()

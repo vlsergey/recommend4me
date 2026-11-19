@@ -4,7 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.SizeNumber
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.correction.FacetAnswered
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.part.PartsSaved
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -140,7 +140,8 @@ class WorkSizes(private val stores: Stores, private val workload: Workload) {
             left.work.type?.let(stores::type)?.let { schedule(it, START_DELAY_SECONDS, reason) }
         }
 
-    @EventListener fun itemsChanged(event: ItemsChanged) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
+    @EventListener
+    fun itemsChanged(event: SiteItemsWritten) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
 
     @EventListener fun partsSaved(event: PartsSaved) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
 

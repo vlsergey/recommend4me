@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.universe
 
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.workload.Work
@@ -39,7 +39,7 @@ class FandomSiteWorks(private val stores: Stores, private val workload: Workload
     }
 
     @EventListener
-    fun itemsChanged(event: ItemsChanged) {
+    fun itemsChanged(event: SiteItemsWritten) {
         val (store, facet) = sites().firstOrNull { it.first.id == event.source && event.ids.isNotEmpty() } ?: return
         val keys = store.items.facetsOf(event.ids).values.flatMap { it[facet].orEmpty() }
         if (keys.isEmpty()) return

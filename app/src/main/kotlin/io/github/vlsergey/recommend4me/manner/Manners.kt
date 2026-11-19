@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.manner
 
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.part.PartMark
 import io.github.vlsergey.recommend4me.part.PartsSaved
 import io.github.vlsergey.recommend4me.series.TypeSeries
@@ -130,7 +130,8 @@ class Manners(
     @EventListener fun partsSaved(event: PartsSaved) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "parts")
 
     /** An item's authors or series may have changed: the manners of the authors and the series with them. */
-    @EventListener fun itemsChanged(event: ItemsChanged) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
+    @EventListener
+    fun itemsChanged(event: SiteItemsWritten) = schedule(stores.typeOf(event.source), QUIET_SECONDS, "items")
 
     @EventListener
     fun regrouped(event: WorksRegrouped) {

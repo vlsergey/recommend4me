@@ -1,6 +1,6 @@
 package io.github.vlsergey.recommend4me.author
 
-import io.github.vlsergey.recommend4me.item.ItemsChanged
+import io.github.vlsergey.recommend4me.item.SiteItemsWritten
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -51,7 +51,7 @@ class AuthorBinding(private val stores: Stores, private val named: NamedAuthors)
      */
     @Order(AFTER_WORKS)
     @EventListener
-    fun itemsChanged(event: ItemsChanged) {
+    fun itemsChanged(event: SiteItemsWritten) {
         val s = stores.source(event.source) ?: return
         val facets = peopleFacetsOf(s)
         val keys = s.items.facetsOf(event.ids).values.flatMap { of -> facets.flatMap { of[it].orEmpty() } }.toSet()
