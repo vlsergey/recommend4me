@@ -53,7 +53,7 @@
   "ScaleChoice.choose": "Rejting dela je {{name}}",
   "ScaleChoice.chooseAgainstSite": "Rejting dela je {{name}} (sajt to ne dozvoljava)",
   "ScaleChoice.mine": "vaš odgovor",
-  "ScaleChoice.model": "po oznakama, {{chance}}",
+  "ScaleChoice.model": "po modelu, {{chance}}",
   "ScaleChoice.none": "nepoznat",
   "ScaleChoice.site": "po sajtu",
   "ScaleChoice.takeBack": "Povuci vaš odgovor",

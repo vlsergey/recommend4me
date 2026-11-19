@@ -377,16 +377,17 @@ inputs); of every facet its model, the dictionary's word on the values each work
 works' lines of characters are read before it — what they are read of is the chances of the facets
 before it — and its chances are made inside `DatabaseRefused.during`, where a connection asked for
 fails at once (`InlineBlobs.acquire`), in the tests as on the user's machine. So are the chances
-of the age rating (`FacetModel.read`, then `FacetModelRead.chances`) and the chances of every work
-after a refit.
-The models of a source's facets are fitted again in the background, in the queue of the computations,
-whenever anything they learn from changes: one work of the queue, whole, NOTHING OF IT HOLDING MORE
+of every work after a refit. The age rating is a field of the chain as any other (owner,
+2026-11-19): learnt of the user's answers, of the whole description of the work and the fields
+before it, a work offered the steps its site lets it have alone (`AgeRatingVocabulary`).
+The models of the facets of a type's sources are fitted again in the background, in the queue of the
+computations, whenever anything they learn from changes: one work of the queue of the type, the
+sources changed kept waiting in it, whole, NOTHING OF IT HOLDING MORE
 THAN TEN THOUSAND WORKS (user, 2026-11-17: of ficbook's 1.39 million works a pass holding every work
 was more than the memory of 12 GB). The works of the source are read a portion at a time in the
 order of their ids (`WorkPasses.forEachPortion`, `TaskPortions.MOST`), each portion read anew of
 the database at every walk and let go before the next: no reading of more works at once is let
-through (`TooManyWorks`). The values the models of their own (the age rating) give every work are
-kept first; then a facet after another down the chain (`FacetFitting`, `FacetPass`), each walking
+through (`TooManyWorks`). A facet after another down the chain (`FacetFitting`, `FacetPass`), each walking
 the works:
 - once, of their values alone (no vector read): what its value side is made of (`ValueCount`) — the
   values the works have or were answered of, the keys of their context and how many works have each

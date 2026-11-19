@@ -52,7 +52,7 @@
   "ScaleChoice.choose": "The work's rating is {{name}}",
   "ScaleChoice.chooseAgainstSite": "The work's rating is {{name}} (the site does not allow it)",
   "ScaleChoice.mine": "your answer",
-  "ScaleChoice.model": "by the tags, {{chance}}",
+  "ScaleChoice.model": "by the model, {{chance}}",
   "ScaleChoice.none": "unknown",
   "ScaleChoice.site": "by the site",
   "ScaleChoice.takeBack": "Take your answer back",

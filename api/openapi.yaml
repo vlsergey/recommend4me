@@ -4922,7 +4922,6 @@ components:
         What a work of the queue does: a key the interface words ("workload:What.<kind>") - every kind listed, its
         words checked as the interface is built
       enum:
-          - ageRatingModel
           - castNames
           - duplicates
           - duplicatesModel

@@ -27,12 +27,4 @@ internal class FacetRefitEvents(private val refits: FacetRefits, private val sto
 
     /** The user's answer on a work's value: what the models of the facets learn from. */
     @EventListener fun answered(event: FacetAnswered) = refits.changed(event.source, "answer")
-
-    /**
-     * A facet's own model fitted again — the age rating — of every source that has the facet: its chances are the
-     * context of the facets after it, and the values the works are shown with, filled into the index after it.
-     */
-    @EventListener
-    fun ownModelFitted(event: OwnModelFitted) =
-        stores.sources.filter { it.schema.facet(event.facet) != null }.forEach { refits.changed(it.id, "chances") }
 }

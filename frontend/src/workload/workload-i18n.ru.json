@@ -49,7 +49,6 @@
   "Step.readCharacters": "чтение персонажей словаря",
   "Step.readGraded": "чтение оценённых работ",
   "Step.scoreRated": "оценка оценённых работ",
-  "What.ageRatingModel": "Модель возрастного рейтинга по тегам",
   "What.castNames": "Векторы имён из строк персонажей",
   "What.duplicates": "Поиск дублей на разных сайтах",
   "What.duplicatesModel": "Модель пар дубликатов",

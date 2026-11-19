@@ -11,7 +11,6 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.universe.LayerDraft
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
 
 /** [WorkChances] as they are made, a facet after another. */
@@ -35,25 +34,17 @@ internal typealias MadeChances = HashMap<String, HashMap<String, Map<String, Cha
 @Component
 internal class FacetChain(
     private val plugins: Plugins,
-    models: ObjectProvider<FacetModel>,
     private val vocabularies: FacetVocabularies,
     private val passes: WorkPasses,
     private val casts: CastReading,
 ) {
-    /**
-     * The facets worked out by models of their own ([FacetModel]): no suggester of them fitted, their chances theirs.
-     */
-    private val ownModels: List<FacetModel> by lazy { models.orderedStream().toList() }
-
     /**
      * The facets the model works on, in the order of the chain they are worked out in: those it gives values of first —
      * their values are the context of the others, the characters are of the universes given before them, the pairings
      * of the characters — in the order of the schema.
      */
     fun facetsOf(store: SourceStore): List<FacetDef> =
-        store.schema.facets
-            .filter { (it.suggest || it.infer) && ownModels.none { m -> m.facet == it.key } }
-            .sortedBy { !it.infer }
+        store.schema.facets.filter { it.suggest || it.infer }.sortedBy { !it.infer }
 
     /**
      * THE CHANCES OF THE WORKS [ids] made now in memory by the models kept, down the chain of the facets; of the facets
@@ -87,7 +78,7 @@ internal class FacetChain(
         known: EveryItemFacets? = null,
     ): WorkChances =
         facetsOf(store).lastOrNull { it.key in wanted }?.let { chances(store, ids, it.key, laps, known) }
-            ?: seeded(store, ids, every = known)
+            ?: seeded(store, ids, draftsOf(store, ids, known))
 
     /**
      * The chances of the works [ids] of the first [upTo] facets of the chain: a portion of [TaskPortions.MOST] works at
@@ -101,7 +92,7 @@ internal class FacetChain(
         known: EveryItemFacets? = null,
     ): MadeChances {
         val encoder = plugins.textEncoder()
-        if (encoder == null || ids.isEmpty()) return seeded(store, ids, every = known)
+        if (encoder == null || ids.isEmpty()) return seeded(store, ids, draftsOf(store, ids, known))
         val made = MadeChances()
         ids.distinct().chunked(TaskPortions.MOST).forEach { portion ->
             passes.worksRead(store, encoder, portion, card = true, known = known).use {
@@ -118,8 +109,7 @@ internal class FacetChain(
     fun chain(store: SourceStore, encoder: TextEncoder, read: WorksRead, upTo: Int, laps: Laps = Laps()): MadeChances {
         val drafts = read.drafts
         laps.lap("drafts", drafts.size)
-        val made = seeded(store, read.ids, drafts, EveryItemFacets(read.site, read.corrections))
-        laps.lap("models of their own", made.size)
+        val made = seeded(store, read.ids, drafts)
         facetsOf(store).take(upTo).forEach { facet ->
             val suggester = plugins.suggester(store.id, facet.key) ?: return@forEach
             val own = laps.within(facet.key)
@@ -205,16 +195,15 @@ internal class FacetChain(
         }
     }
 
-    /**
-     * The drafts of the layer of the works [ids] as their chances: 1, marked so, till the model gives its own; and the
-     * chances of the facets worked out by models of their own — what each reads read, its chances made with the
-     * database refused. [every]: the site's values and the user's answers of the works, read already.
-     */
+    /** The drafts of the layer of the works [ids], of their site's values [known] already when given. */
+    private fun draftsOf(store: SourceStore, ids: Collection<String>, known: EveryItemFacets?) =
+        if (known == null) WorkDrafts.of(store, ids) else WorkDrafts.of(store, ids, known.site)
+
+    /** The drafts of the layer of the works [ids] as their chances: 1, marked so, till the model gives its own. */
     fun seeded(
         store: SourceStore,
         ids: Collection<String>,
         drafts: Map<String, List<LayerDraft>> = WorkDrafts.of(store, ids),
-        every: EveryItemFacets? = null,
     ): MadeChances {
         val made = MadeChances()
         drafts.forEach { (id, list) ->
@@ -231,27 +220,17 @@ internal class FacetChain(
                         )
                 }
         }
-        // The facets worked out by models of their own: their chances as theirs, before the chain
-        val own = ownModels.filter { store.schema.facet(it.facet) != null }.map { it to it.read(store, ids, every) }
-        own.forEach { (model, read) ->
-            DatabaseRefused.during("the chances of ${store.id}/${model.facet}") {
-                read.chances().forEach { (id, chances) ->
-                    made.getOrPut(id) { HashMap() }[model.facet] = FewChances(chances.values.toTypedArray())
-                }
-            }
-        }
         return made
     }
 
     /**
-     * THE CHANCES OF A PORTION OF A PASS BEFORE ITS [k]-TH FACET: the drafts and the models of their own of the works
-     * of [read] ([seeded]), and of every facet before it in the chain its chances made now by its model kept — the one
-     * just fitted by the pass before it ([chain]), the works' inputs read for it: no value of a work kept anywhere but
-     * in the index of the list (user, 2026-11-18). Of the first facet the seeded alone.
+     * THE CHANCES OF A PORTION OF A PASS BEFORE ITS [k]-TH FACET: the drafts of the works of [read] ([seeded]), and of
+     * every facet before it in the chain its chances made now by its model kept — the one just fitted by the pass
+     * before it ([chain]), the works' inputs read for it: no value of a work kept anywhere but in the index of the list
+     * (user, 2026-11-18). Of the first facet the seeded alone.
      */
     fun before(store: SourceStore, encoder: TextEncoder, read: WorksRead, k: Int): MadeChances =
-        if (k == 0) seeded(store, read.ids, read.drafts, EveryItemFacets(read.site, read.corrections))
-        else chain(store, encoder, read, k)
+        if (k == 0) seeded(store, read.ids, read.drafts) else chain(store, encoder, read, k)
 
     /** The works' lines of characters and pairings read for the [facet]; null of a facet that reads none. */
     fun linesOf(store: SourceStore, facet: FacetDef, vocabulary: Vocabulary?, read: WorksRead): SaidLines? =

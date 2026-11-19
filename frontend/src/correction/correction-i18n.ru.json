@@ -54,7 +54,7 @@
   "ScaleChoice.choose": "Рейтинг работы — {{name}}",
   "ScaleChoice.chooseAgainstSite": "Рейтинг работы — {{name}} (сайт такого не допускает)",
   "ScaleChoice.mine": "ваш ответ",
-  "ScaleChoice.model": "по тегам, {{chance}}",
+  "ScaleChoice.model": "по модели, {{chance}}",
   "ScaleChoice.none": "не определён",
   "ScaleChoice.site": "по сайту",
   "ScaleChoice.takeBack": "Снять ваш ответ",

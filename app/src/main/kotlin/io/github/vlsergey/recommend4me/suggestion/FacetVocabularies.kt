@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.agerating.AgeRatingVocabulary
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
@@ -35,6 +36,7 @@ internal class FacetVocabularies(private val stores: Stores, private val univers
         site: Map<String, Map<String, List<String>>>? = null,
     ): Vocabulary? =
         universes.of(store, facet, ids, made, characters, answers, light, site)
+            ?: AgeRatingVocabulary.of(store, facet, ids, site)
             ?: examplesFrom(store, facet)?.let { worksExamples(store, it, ids, site) }
 
     /**

@@ -18,7 +18,6 @@
 | `tag_entry_too_general` | an entry the user said is too general to be a tag above others: offered so no more |
 | `tag_offers` | the offers of the tags' graph as last worked out with the names of the tags, in the queue of the computations: a request reads them, never waits for them |
 | `tag_text_model` | the model of how close a tag and a paragraph are when the work has the tag, learnt from the user's answers: the slope and the intercept, and every answered tag's own bias |
-| `age_rating_weight` | the model of a work's age rating by its tags and its site, learnt from every site's works whose rating is known to lie between two steps: every feature's weight ("tag:<id>", "source:<id>"), and the thresholds between the ratings ("threshold:<k>") |
 | `normalized_author` | a writer of the user's, whatever accounts the sites know them by |
 | `site_author` | a site's author bound to a normalized author: at first of their own, merged by the user on the evidence of their works, never of their names, or by a place another site's author lists as theirs; several of one site may be one. Why it is with the others (`merged_by`): none of the one the normalized author was made of, `USER` — the user merged it, `PLACE` — the page of the author `merged_by_source`/`merged_by_author` lists it among their places on the web, `NAME` — a key of no works whose name another key of the site with works has: given by the name alone by a dump, by its own key by the site's page since |
 | `site_author_place` | the places on the web a site's author's page lists as theirs ("Места в сети" of fanfics.me), as it showed them last: the address, and of one that is an author's page of another source, that author (`place_source`, `place_author`) — the same person, merged with them |
@@ -54,12 +53,6 @@ The diagram is made of the migrations by `SchemaDocsTest`: change it with them.
 
 ```mermaid
 erDiagram
-    age_rating_weight {
-        VARCHAR feature PK
-        DOUBLE weight
-        INTEGER works
-        TIMESTAMPTZ fitted_at
-    }
     fandom {
         BIGINT id PK
         VARCHAR name "null"
