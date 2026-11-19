@@ -16,8 +16,8 @@ import io.github.vlsergey.recommend4me.marking.MarkingController
 import io.github.vlsergey.recommend4me.model.CatalogueReader
 import io.github.vlsergey.recommend4me.model.InputMeasures
 import io.github.vlsergey.recommend4me.model.Recommendations
-import io.github.vlsergey.recommend4me.model.ScoreSweep
 import io.github.vlsergey.recommend4me.model.ScorerComparisons
+import io.github.vlsergey.recommend4me.model.WorkPredictions
 import io.github.vlsergey.recommend4me.page.PagesController
 import io.github.vlsergey.recommend4me.pairing.PairingsController
 import io.github.vlsergey.recommend4me.plugin.Plugins
@@ -87,7 +87,7 @@ abstract class SiteTestBase : BaseTest() {
     @Autowired lateinit var universes: UniversesController
     @Autowired lateinit var universeEntries: UniverseEntriesController
     @Autowired lateinit var recommendations: Recommendations
-    @Autowired lateinit var scoreSweep: ScoreSweep
+    @Autowired lateinit var workPredictions: WorkPredictions
     @Autowired lateinit var comparisons: ScorerComparisons
     @Autowired lateinit var tagsApi: TagsController
     @Autowired lateinit var catalogueReader: CatalogueReader

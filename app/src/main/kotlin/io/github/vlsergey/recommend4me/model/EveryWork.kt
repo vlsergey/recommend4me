@@ -13,6 +13,8 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.Works
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 
@@ -20,10 +22,10 @@ private val log = LoggerFactory.getLogger(EveryWork::class.java)
 
 /**
  * EVERY WORK OF A CONTENT TYPE READ AS THE MODEL READS IT, NEVER ALL AT ONCE: a type of a million works — ficbook's
- * dump — held whole was more than the memory (2026-11-17). The fourth stage reads the works of the items it is given, a
- * thousand at a time ([ofKeys], [ScoreSweep]); a training reads the works it learns of alone ([training]) with the
- * average work as the last pass counted it and kept ([AverageWorkRepository]) — of the graded works alone when none is
- * kept ([averageOf]), nothing of a work kept once counted.
+ * dump — held whole was more than the memory (2026-11-17). The expectations of the works read the works of the items
+ * they are given, a thousand at a time ([ofKeys], [WorkPredictions]); a training reads the works it learns of alone
+ * ([training]) with the average work as the last pass counted it and kept ([AverageWorkRepository]) — of the graded
+ * works alone when none is kept ([averageOf]), nothing of a work kept once counted.
  */
 @Component
 class EveryWork(
@@ -32,6 +34,7 @@ class EveryWork(
     private val works: Works,
     private val likenesses: Likenesses,
     private val tasks: Tasks,
+    private val lists: ListIndexes,
 ) {
 
     /**
@@ -49,17 +52,18 @@ class EveryWork(
     }
 
     /**
-     * The average work of the [type] as the last sweep of the scores counted it, of the vectors as they are made now
-     * ([AverageWork.basis]); when none is kept — the first training, the encoders changed — of the graded works alone
-     * ([gradedAverage]): the sweep the training begins counts every work's and keeps it ([ScoreSweep]).
+     * The average work of the [type] as the last pass of the expectations counted it, of the vectors as they are made
+     * now ([AverageWork.basis]); when none is kept — the first training, the encoders changed — of the graded works
+     * alone ([gradedAverage]): the pass the training begins counts every work's and keeps it ([WorkPredictions]).
      */
     fun averageOf(type: TypeStore): AverageWork =
         type.averageWork.load(AverageWork.basis(plugins, type)) ?: gradedAverage(type)
 
     /**
-     * The average work of the graded works of the [type] alone, as the sweep counts them when it begins ([ScoreSweep]):
-     * never counted of every work inside a training (owner, 2026-11-19: the training of the grades ran for hours, a
-     * million and a half works read a portion at a time, begun anew at every start of the application).
+     * The average work of the graded works of the [type] alone, as the pass of the expectations counts them
+     * ([WorkPredictions]): never counted of every work inside a training (owner, 2026-11-19: the training of the grades
+     * ran for hours, a million and a half works read a portion at a time, begun anew at every start of the
+     * application).
      */
     private fun gradedAverage(type: TypeStore): AverageWork {
         tasks.progress(0.0, TaskStep.AVERAGE)
@@ -85,17 +89,18 @@ class EveryWork(
     /**
      * The works of the items [keys] of the [type] — of several sources, each with all its items — a portion of each
      * source in turn handed to [action], the values the models give its items made with it ([WorkPortion.given]): what
-     * the fourth stage scores and fills ([ScoreSweep]). The likeness to the marks by [likeness], [seen] told of every
-     * vector read.
+     * of [kept], those the index of the list keeps ([ListModelValues]), no model run: what the expectations of the
+     * works score ([WorkPredictions]). The likeness to the marks by [likeness], [seen] told of every vector read.
      */
     internal fun ofKeys(
         type: TypeStore,
         likeness: TypeLikeness,
         keys: Collection<ItemKey>,
         seen: VectorSeen? = null,
+        kept: Boolean = false,
         action: (WorkPortion) -> Unit,
     ) {
-        val pass = Pass(type, likeness, seen)
+        val pass = Pass(type, likeness, seen, kept)
         keys.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
             val s = type.source(source) ?: return@forEach
             pass.portion(s, s.items.keysOf(ids))?.let(action)
@@ -107,7 +112,10 @@ class EveryWork(
         private val type: TypeStore,
         private val likeness: TypeLikeness,
         private val seen: VectorSeen?,
+        /** The values the models gave the items as the index of the list keeps them: no model run. */
+        private val kept: Boolean,
     ) {
+        private val index = lists.of(type.id)
         private val severalSources = type.sources.size > 1
         private val ratings = ratingsOf(type)
         private val interest = interestOf(type)
@@ -147,6 +155,7 @@ class EveryWork(
                         heads ?: of.items.keysOf(ids),
                         laps.within("$source:"),
                         read,
+                        kept = if (kept) ListModelValues.of(index, source, ids) else null,
                         given = told,
                     )
                     .also { told.forEach { (id, v) -> given[ItemKey(source, id)] = v } }

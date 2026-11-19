@@ -163,30 +163,39 @@ class LuceneSearchTest {
     }
 
     /**
-     * The index brought to [docs] as a start brings it, of their fingerprints; the keys of the documents it asked to be
-     * made added to [asked].
+     * The index brought to [docs] as the tasks over the works bring it, of their fingerprints, those [removed] taken
+     * out; the keys of the documents it asked to be made added to [asked].
      */
-    private fun sync(index: LuceneIndex, docs: List<SearchDocument>, asked: MutableList<ItemKey> = ArrayList()): Int =
-        index.sync(docs.associate { it.key to DocumentPrints.of(it) }) { keys ->
-            asked += keys
-            docs.filter { it.key in keys }.asSequence()
-        }
+    private fun update(
+        index: LuceneIndex,
+        docs: List<SearchDocument>,
+        asked: MutableList<ItemKey> = ArrayList(),
+        removed: Collection<ItemKey> = emptyList(),
+    ): Int =
+        index.update(
+            docs.associate { it.key to DocumentPrints.of(it) },
+            { keys ->
+                asked += keys
+                docs.filter { it.key in keys }
+            },
+            removed,
+        )
 
     @Test
     fun `the index is kept between the runs, only what changed made and written again`() {
         val dir = Files.createTempDirectory("search")
         LuceneIndex(dir.resolve("types").resolve("books").resolve("search-index")).use { index ->
-            assertEquals(3, sync(index, documents))
+            assertEquals(3, update(index, documents))
             // Nothing changed: nothing made, nothing written
             val asked = ArrayList<ItemKey>()
-            assertEquals(0, sync(index, documents, asked))
+            assertEquals(0, update(index, documents, asked))
             assertTrue(asked.isEmpty())
         }
         // Another run: the index opened again as it was left
         LuceneIndex(dir.resolve("types").resolve("books").resolve("search-index")).use { index ->
             val changed = listOf(documents[0], doc("2", "Beach Night", "Somebody", "The night at the beach."))
             val asked = ArrayList<ItemKey>()
-            assertEquals(1, sync(index, changed, asked))
+            assertEquals(1, update(index, changed, asked, documents.map { it.key } - changed.map { it.key }.toSet()))
             assertEquals(listOf(ItemKey("test", "2")), asked)
             index.search { searcher -> assertEquals(2, index.items(searcher)) }
         }

@@ -55,11 +55,13 @@ flowchart LR
     e_TagTextAnswerEvent["TagTextAnswerEvent"]
     e_WorkChangeEvent["WorkChangeEvent"]
     e_WorkFieldChangeEvent["WorkFieldChangeEvent"]
+    e_WorkFieldFillEvent["WorkFieldFillEvent"]
     e_WorkGradeChangeEvent["WorkGradeChangeEvent"]
     e_WorkGroupChangeEvent["WorkGroupChangeEvent"]
     e_WorkInterestChangeEvent["WorkInterestChangeEvent"]
     e_WorkMannerChangeEvent["WorkMannerChangeEvent"]
     e_WorkPredictionChangeEvent["WorkPredictionChangeEvent"]
+    e_WorkPredictionFillEvent["WorkPredictionFillEvent"]
     w_analyseSiteItemPictures{{"analyseSiteItemPictures"}}
     w_compareFieldMethods{{"compareFieldMethods"}}
     w_compareGradeScorers{{"compareGradeScorers"}}
@@ -72,7 +74,7 @@ flowchart LR
     w_encodeSiteItemChapters{{"encodeSiteItemChapters"}}
     w_encodeSiteItemTexts{{"encodeSiteItemTexts"}}
     w_encodeTagNames{{"encodeTagNames"}}
-    w_fillRatedWorkValues{{"fillRatedWorkValues"}}
+    w_fillWorkFields{{"fillWorkFields"}}
     w_fitDuplicateModel{{"fitDuplicateModel"}}
     w_fitFandomLikeness{{"fitFandomLikeness"}}
     w_fitFieldModels{{"fitFieldModels"}}
@@ -81,6 +83,7 @@ flowchart LR
     w_fitSearchWeights{{"fitSearchWeights"}}
     w_fitSetDirections{{"fitSetDirections"}}
     w_fitTagTextModel{{"fitTagTextModel"}}
+    w_indexWorkTexts{{"indexWorkTexts"}}
     w_keepOutWorks{{"keepOutWorks"}}
     w_letGoUnusedFandoms{{"letGoUnusedFandoms"}}
     w_makeSiteItemSetVectors{{"makeSiteItemSetVectors"}}
@@ -89,14 +92,15 @@ flowchart LR
     w_measureWorkSizes{{"measureWorkSizes"}}
     w_nameFandoms{{"nameFandoms"}}
     w_nameTags{{"nameTags"}}
+    w_predictWorks{{"predictWorks"}}
     w_readScorerInput{{"readScorerInput"}}
+    w_removeSiteItemTexts{{"removeSiteItemTexts"}}
     w_renameFandoms{{"renameFandoms"}}
-    w_scoreWorks{{"scoreWorks"}}
     w_searchDuplicates{{"searchDuplicates"}}
     w_searchFieldModelAnew{{"searchFieldModelAnew"}}
-    w_updateSearchIndex{{"updateSearchIndex"}}
     w_weighParts{{"weighParts"}}
     w_writeListIndex{{"writeListIndex"}}
+    w_writeWorkValues{{"writeWorkValues"}}
     o_job__ --> e_SiteItemChapterChangeEvent
     o_job__ --> e_SiteItemPictureListEvent
     o_job__ --> e_SiteItemRemoveEvent
@@ -105,7 +109,6 @@ flowchart LR
     o_job__ --> e_WorkGroupChangeEvent
     o_job__ --> w_encodeSiteItemTexts
     o_job__ --> w_fitGradeModels
-    o_job__ --> w_scoreWorks
     o_pictures --> e_SiteItemChapterChangeEvent
     o_pictures --> e_SiteItemPictureDownloadEvent
     o_pictures --> e_SiteItemPictureListEvent
@@ -127,17 +130,16 @@ flowchart LR
     o_start --> e_WorkGroupChangeEvent
     o_start --> w_analyseSiteItemPictures
     o_start --> w_countFandomWorks
-    o_start --> w_fillRatedWorkValues
     o_start --> w_fitGradeModels
     o_start --> w_fitTagTextModel
+    o_start --> w_indexWorkTexts
     o_start --> w_makeSiteItemSetVectors
     o_start --> w_searchDuplicates
-    o_start --> w_updateSearchIndex
     o_start --> w_writeListIndex
     o_universes_languages --> e_WorkChangeEvent
     e_FandomRelationChangeEvent --> w_fitFandomLikeness
     e_FandomVectorChangeEvent --> w_fitFandomLikeness
-    e_FieldModelFitEvent --> w_fillRatedWorkValues
+    e_FieldModelFitEvent --> w_fillWorkFields
     e_RatedWorkValueFillEvent --> w_fitGradeModels
     e_SearchJudgmentEvent --> w_fitSearchWeights
     e_SiteItemCastEncodeEvent --> w_fitFieldModels
@@ -152,10 +154,10 @@ flowchart LR
     e_SiteItemPictureDownloadEvent --> w_analyseSiteItemPictures
     e_SiteItemRemoveEvent --> e_WorkChangeEvent
     e_SiteItemRemoveEvent --> w_fitGradeModels
+    e_SiteItemRemoveEvent --> w_removeSiteItemTexts
     e_SiteItemSetVectorChangeEvent --> w_fitGradeModels
     e_SiteItemTextVectorChangeEvent --> w_fitFieldModels
     e_SiteItemTextVectorChangeEvent --> w_makeSiteItemSetVectors
-    e_SiteItemTextVectorChangeEvent --> w_updateSearchIndex
     e_SiteItemTextVectorChangeEvent --> w_writeListIndex
     e_SiteItemWriteEvent --> e_WorkChangeEvent
     e_SiteItemWriteEvent --> e_WorkGroupChangeEvent
@@ -179,22 +181,22 @@ flowchart LR
     e_WorkChangeEvent --> w_fitFieldModels
     e_WorkChangeEvent --> w_nameFandoms
     e_WorkChangeEvent --> w_nameTags
-    e_WorkChangeEvent --> w_updateSearchIndex
     e_WorkChangeEvent --> w_writeListIndex
     e_WorkFieldChangeEvent --> w_fitFieldModels
     e_WorkFieldChangeEvent --> w_fitGradeModels
     e_WorkFieldChangeEvent --> w_measureWorkSizes
-    e_WorkFieldChangeEvent --> w_updateSearchIndex
     e_WorkFieldChangeEvent --> w_writeListIndex
+    e_WorkFieldFillEvent --> w_predictWorks
     e_WorkGradeChangeEvent --> w_fitGradeModels
     e_WorkGradeChangeEvent --> w_nameTags
-    e_WorkGradeChangeEvent --> w_writeListIndex
+    e_WorkGradeChangeEvent --> w_writeWorkValues
     e_WorkGroupChangeEvent --> w_makeWorkManners
     e_WorkGroupChangeEvent --> w_writeListIndex
     e_WorkInterestChangeEvent --> w_fitGradeModels
-    e_WorkInterestChangeEvent --> w_writeListIndex
+    e_WorkInterestChangeEvent --> w_writeWorkValues
     e_WorkMannerChangeEvent --> w_fitGradeModels
-    e_WorkPredictionChangeEvent --> w_writeListIndex
+    e_WorkPredictionChangeEvent --> w_writeWorkValues
+    e_WorkPredictionFillEvent --> w_indexWorkTexts
     w_analyseSiteItemPictures --> e_SiteItemPictureAnalysisEvent
     w_compareGradeScorers --> w_readScorerInput
     w_compareInterestScorers --> w_readScorerInput
@@ -202,17 +204,21 @@ flowchart LR
     w_encodeSiteItemCasts --> e_SiteItemCastEncodeEvent
     w_encodeSiteItemChapters --> e_SiteItemTextVectorChangeEvent
     w_encodeSiteItemTexts --> e_SiteItemTextVectorChangeEvent
-    w_fillRatedWorkValues --> e_RatedWorkValueFillEvent
+    w_fillWorkFields --> e_RatedWorkValueFillEvent
+    w_fillWorkFields --> e_WorkFieldFillEvent
     w_fitFieldModels --> e_FieldModelFitEvent
     w_fitGradeModels --> e_WorkPredictionChangeEvent
-    w_fitGradeModels --> w_scoreWorks
+    w_fitGradeModels --> w_predictWorks
     w_keepOutWorks --> e_SiteItemRemoveEvent
     w_makeSiteItemSetVectors --> e_SiteItemSetVectorChangeEvent
     w_makeSiteItemSetVectors --> w_fitSetDirections
     w_makeWorkManners --> e_WorkMannerChangeEvent
     w_nameTags --> w_countTags
-    w_scoreWorks --> e_WorkPredictionChangeEvent
+    w_predictWorks --> e_WorkPredictionChangeEvent
+    w_predictWorks --> e_WorkPredictionFillEvent
     w_searchFieldModelAnew --> w_fitFieldModels
+    w_writeListIndex --> e_WorkFieldFillEvent
+    w_writeListIndex --> w_fillWorkFields
 ```
 
 ## The requests

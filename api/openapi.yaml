@@ -4941,7 +4941,7 @@ components:
           - encodeSiteItemChapters
           - encodeSiteItemTexts
           - encodeTagNames
-          - fillRatedWorkValues
+          - fillWorkFields
           - fitDuplicateModel
           - fitFandomLikeness
           - fitFieldModels
@@ -4950,6 +4950,7 @@ components:
           - fitSearchWeights
           - fitSetDirections
           - fitTagTextModel
+          - indexWorkTexts
           - keepOutWorks
           - letGoUnusedFandoms
           - makeSiteItemSetVectors
@@ -4958,14 +4959,15 @@ components:
           - measureWorkSizes
           - nameFandoms
           - nameTags
+          - predictWorks
           - readScorerInput
+          - removeSiteItemTexts
           - renameFandoms
-          - scoreWorks
           - searchDuplicates
           - searchFieldModelAnew
-          - updateSearchIndex
           - weighParts
           - writeListIndex
+          - writeWorkValues
 
     TaskPriority:
       type: string
@@ -5021,6 +5023,7 @@ components:
           - dictionary
           - fandomVectors
           - fandoms
+          - fields
           - grade
           - interest
           - items
@@ -5036,6 +5039,7 @@ components:
           - parts
           - pictures
           - portion
+          - predicted
           - regrouped
           - removal
           - searchFormat

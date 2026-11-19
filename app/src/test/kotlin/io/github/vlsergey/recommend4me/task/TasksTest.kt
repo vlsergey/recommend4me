@@ -156,9 +156,9 @@ class TasksTest {
     @Test
     fun `the last five works done are told, the oldest first, a failed one marked`() {
         val tasks = tasks()
-        repeat(6) { i -> tasks.run(Task(TaskKind.SCORE_WORKS, type = "t$i"), emptyMap()) {} }
+        repeat(6) { i -> tasks.run(Task(TaskKind.PREDICT_WORKS, type = "t$i"), emptyMap()) {} }
         assertFailsWith<IllegalStateException> {
-            tasks.run(Task(TaskKind.SCORE_WORKS, type = "bad"), emptyMap()) { error("no") }
+            tasks.run(Task(TaskKind.PREDICT_WORKS, type = "bad"), emptyMap()) { error("no") }
         }
         val done = records.runs()
         assertEquals(listOf("t2", "t3", "t4", "t5", "bad"), done.map { it.work.type })
@@ -272,12 +272,12 @@ class TasksTest {
                 listOf(
                     ask(TaskKind.MAKE_WORK_MANNERS, false, 1),
                     ask(TaskKind.MEASURE_WORK_SIZES, false, 2),
-                    ask(TaskKind.UPDATE_SEARCH_INDEX, true, 3),
+                    ask(TaskKind.INDEX_WORK_TEXTS, true, 3),
                     ask(TaskKind.FIT_HELD_OUT_MODEL, true, 4),
                 )
             // The page of the queue tells the order they will run in, the asked ones marked
             assertEquals(
-                listOf("updateSearchIndex", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),
+                listOf("indexWorkTexts", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),
                 tasks.waiting().map { it.work.what.value },
             )
             assertEquals(listOf(true, true, false, false), tasks.waiting().map { it.priority == TaskPriority.ASKED })
@@ -289,7 +289,7 @@ class TasksTest {
             all.forEach { it.get(5, TimeUnit.SECONDS) }
             blocker.join()
             assertEquals(
-                listOf("fitGradeModels", "updateSearchIndex", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),
+                listOf("fitGradeModels", "indexWorkTexts", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),
                 order,
             )
         } finally {
@@ -366,8 +366,8 @@ class TasksTest {
         val now = Instant.now()
         fun waiter(what: TaskKind, waited: Long, priority: TaskPriority, works: WorkScope? = null) =
             Waiter(Task(what, works = works), now.minusSeconds(waited), emptyMap(), true, priority)
-        val other = waiter(TaskKind.SCORE_WORKS, Turns.AGING.seconds + 60, TaskPriority.OTHER_WORKS, WorkScope.OTHER)
-        val marked = waiter(TaskKind.SCORE_WORKS, 4, TaskPriority.MARKED_WORKS, WorkScope.MARKED)
+        val other = waiter(TaskKind.PREDICT_WORKS, Turns.AGING.seconds + 60, TaskPriority.OTHER_WORKS, WorkScope.OTHER)
+        val marked = waiter(TaskKind.PREDICT_WORKS, 4, TaskPriority.MARKED_WORKS, WorkScope.MARKED)
         val background = waiter(TaskKind.ENCODE_TAG_NAMES, 3, TaskPriority.BACKGROUND)
         val user = waiter(TaskKind.WRITE_LIST_INDEX, 2, TaskPriority.USER)
         val asked = waiter(TaskKind.FIT_GRADE_MODELS, 1, TaskPriority.ASKED)
@@ -402,7 +402,7 @@ class TasksTest {
     @Test
     fun `a task over the works goes on from where it left, of its priority`() {
         val tasks = tasks()
-        val scores = Task(TaskKind.SCORE_WORKS, type = "books", works = WorkScope.OTHER)
+        val scores = Task(TaskKind.PREDICT_WORKS, type = "books", works = WorkScope.OTHER)
         val seen = java.util.Collections.synchronizedList(ArrayList<Pair<TaskCursor?, TaskPriority>>())
         val done = CountDownLatch(2)
         tasks.plan(scores, null, "sweep", priority = TaskPriority.OTHER_WORKS, cursor = TaskCursor.FIRST) {
@@ -432,7 +432,7 @@ class TasksTest {
     fun `a work inside another goes on and is not told apart`() {
         val tasks = tasks()
         tasks.run(Task(TaskKind.FIT_GRADE_MODELS, type = "books"), emptyMap()) {
-            tasks.run(Task(TaskKind.SCORE_WORKS, type = "books"), emptyMap()) {}
+            tasks.run(Task(TaskKind.PREDICT_WORKS, type = "books"), emptyMap()) {}
         }
         assertEquals(listOf(TaskKind.FIT_GRADE_MODELS), records.runs().map { it.work.what })
     }

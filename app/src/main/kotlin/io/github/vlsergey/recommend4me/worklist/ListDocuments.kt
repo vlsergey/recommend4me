@@ -32,11 +32,16 @@ object ListDocuments {
     const val INTEREST = "interest"
     const val EXPECTED = "expected"
 
+    /** Whether the user marked the item's work ([RowValues.marked]): 1 or 0, updated in place. */
+    const val MARKED = "marked"
+
     /**
-     * The pass of the fourth stage that last scored the item's work and filled its values ([ListPasses]): updated in
-     * place, nought of none.
+     * When the tasks over the works last did the item ([WorkStages]): its fields computed, its grade and interest
+     * expected, its document of the search written — milliseconds, nought of never; updated in place.
      */
-    const val PASS = "pass"
+    const val FIELDS_AT = "fieldsAt"
+    const val PREDICTED_AT = "predictedAt"
+    const val TEXTS_AT = "textsAt"
 
     /** The item's title as the user corrected it: of the doc values, what the search of duplicates reads. */
     const val TITLE = "title"
@@ -84,8 +89,7 @@ object ListDocuments {
         if (row.linked) doc.add(StringField(LINKED, YES, Field.Store.NO))
         doc.add(NumericDocValuesField(UPDATED, row.updatedAt.toEpochMilli()))
         doc.add(NumericDocValuesField(ADDED, row.firstSeenAt.toEpochMilli()))
-        // Of no pass yet: the document made anew is scored and filled by the pass under way
-        doc.add(NumericDocValuesField(PASS, 0L))
+        row.stages.fields().forEach(doc::add)
         valueFields(row.values).forEach(doc::add)
         row.facets.forEach { (facetId, keys) ->
             val field = facetField(facetId)
@@ -108,6 +112,7 @@ object ListDocuments {
     fun valueFields(values: RowValues): Array<Field> =
         arrayOf(
             NumericDocValuesField(GRADED, if (values.graded) 1L else 0L),
+            NumericDocValuesField(MARKED, if (values.marked) 1L else 0L),
             DoubleDocValuesField(PREDICTION, values.prediction ?: Double.NEGATIVE_INFINITY),
             DoubleDocValuesField(INTEREST, values.interest ?: Double.NEGATIVE_INFINITY),
             DoubleDocValuesField(EXPECTED, values.expected ?: Double.NEGATIVE_INFINITY),

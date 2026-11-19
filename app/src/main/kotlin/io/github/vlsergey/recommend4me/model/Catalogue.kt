@@ -56,8 +56,8 @@ class TypedRating(val key: ItemKey, val version: String, val grade: Int, val rat
  * NEVER EVERY WORK AT ONCE: a type of a million works — ficbook's dump — held whole is more than the memory
  * (2026-11-17). A training reads the works it learns of alone — the graded, those marked of interest
  * ([EveryWork.training], [CatalogueReader.gradedWorks]) — and what the average work is ([averages]), counted of every
- * work as it streams past ([AverageCount]) by the last sweep of the scores and kept ([AverageWorkRepository]); a sweep
- * of the scores reads every work a portion at a time ([EveryWork.portions], [ScoreSweep]).
+ * work as it streams past ([AverageCount]) by the last pass of the expectations and kept ([AverageWorkRepository]); a
+ * pass of the expectations reads every work a portion at a time ([EveryWork.ofKeys], [WorkPredictions]).
  *
  * A WORK IS ONE ROW, whatever sites have it: of several items it is made of all of them ([WorkFeatures]), named by the
  * first of them ([WorkClusters.representative]); its grades and its mark are the grades and the mark of that item, as

@@ -168,9 +168,9 @@ interface NameCounting {
 }
 
 /**
- * A search over the items of a content type. The index is the provider's: made from every document in the background
- * when it is not [current] ([sync]), kept in step by [update]; the names the works' own words say are counted of it
- * ([NameCounting]).
+ * A search over the items of a content type. The index is the provider's: made anew empty when it is not [current]
+ * ([rebuild]), every item's document written by [update] — kept in step by it; the names the works' own words say are
+ * counted of it ([NameCounting]).
  */
 interface SearchProvider : NameCounting {
     val id: String
@@ -178,23 +178,11 @@ interface SearchProvider : NameCounting {
     fun rebuild(contentType: String, documents: Sequence<SearchDocument>)
 
     /**
-     * Whether the index of the type is kept of this provider's format and brought to every item — a [sync] or a
-     * [rebuild] that ended: then the application keeps it in step by [update] alone, no [sync] of every item at a
+     * Whether the index of the type is kept of this provider's format and brought to every item — a [rebuild] that
+     * ended, documents written since: then the application keeps it in step by [update] alone, nothing made anew at a
      * start. False of a provider that keeps nothing between the runs.
      */
     fun current(contentType: String): Boolean = false
-
-    /**
-     * The index brought to every item of the type, when it is not [current]: [fingerprints] tells what each item's
-     * document is made of ([SearchDocument.fingerprint]), [documents] makes the documents of the items asked for. Of a
-     * provider that keeps its index between the runs, the documents of the items whose fingerprint changed alone made
-     * and written again, those gone removed; of any other, made anew of every one.
-     */
-    fun sync(
-        contentType: String,
-        fingerprints: Map<ItemKey, Long>,
-        documents: (Collection<ItemKey>) -> Sequence<SearchDocument>,
-    ) = rebuild(contentType, documents(fingerprints.keys))
 
     /**
      * The items written since brought into the index: [fingerprints] tells what each one's document is made of now

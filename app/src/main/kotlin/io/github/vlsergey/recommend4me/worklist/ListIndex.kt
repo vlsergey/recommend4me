@@ -35,6 +35,9 @@ class ListIndex(dir: Path) : AutoCloseable {
         )
     private val searchers = SearcherManager(writer, SearcherFactory())
 
+    /** Since when each stage of the tasks over the works holds, kept with the commits ([StageTimes]). */
+    val stages = StageTimes(writer.liveCommitData?.associate { it.key to it.value }.orEmpty() - FORMAT_KEY)
+
     /** Whether the index is of this [FORMAT]: else it is to be made anew whole before it is read. */
     fun current(): Boolean =
         DirectoryReader.open(writer).use {
@@ -88,7 +91,8 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     /**
      * Of every item of [fields], the doc values written in place — what changes of its work without it
-     * ([ListDocuments.valueFields]), the pass of the fourth stage done ([ListPasses]); an item of no document none.
+     * ([ListDocuments.valueFields]), the stages of the tasks over the works done ([WorkStages]); an item of no document
+     * none.
      */
     fun update(fields: Map<ItemKey, Array<out Field>>) {
         fields.forEach { (key, of) -> writer.updateDocValues(Term(KEY, key.toString()), *of) }
@@ -96,7 +100,8 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     /** What was written made what the requests read, and kept. */
     fun commit() {
-        writer.setLiveCommitData(mapOf(FORMAT_KEY to FORMAT.toString()).entries)
+        val data = stages.data() + (FORMAT_KEY to FORMAT.toString())
+        writer.setLiveCommitData(data.entries)
         writer.commit()
         searchers.maybeRefreshBlocking()
     }
@@ -118,8 +123,8 @@ class ListIndex(dir: Path) : AutoCloseable {
 
     companion object {
         /** How the documents are made ([ListDocuments]): an index of another made anew whole. */
-        /** 8 — the pass of the fourth stage of every document ([ListDocuments.PASS]). */
-        const val FORMAT = 8
+        /** 9 — the user's mark and the stages of the tasks over the works ([ListDocuments.MARKED], [WorkStages]). */
+        const val FORMAT = 9
         private const val FORMAT_KEY = "format"
 
         /** The memory the writer gathers documents in before it writes them out. */

@@ -9,10 +9,10 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger(AverageWorkRepository::class.java)
 
 /**
- * THE AVERAGE WORK OF A CONTENT TYPE AS LAST COUNTED, in its model database: by the last sweep of the scores over every
- * work ([ScoreSweep]), or by the full pass of a training that found none ([EveryWork.averageWork]) — what a training
- * reads instead of every work. One of another [AverageWork.FORMAT], or counted of vectors made by another basis
- * ([AverageWork.basis]), is none.
+ * THE AVERAGE WORK OF A CONTENT TYPE AS LAST COUNTED, in its model database: by the last pass of the expectations over
+ * every work ([WorkPredictions]), or by the full pass of a training that found none ([EveryWork.averageWork]) — what a
+ * training reads instead of every work. One of another [AverageWork.FORMAT], or counted of vectors made by another
+ * basis ([AverageWork.basis]), is none.
  */
 class AverageWorkRepository(private val db: DSLContext) {
 

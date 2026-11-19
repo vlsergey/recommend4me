@@ -8,10 +8,8 @@ import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.SourceSchema
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.StoredItem
-import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.FacetSuggestions
 import io.github.vlsergey.recommend4me.suggestion.ModelValues
-import io.github.vlsergey.recommend4me.suggestion.TaskPortions
 import io.github.vlsergey.recommend4me.suggestion.WorkChances
 import io.github.vlsergey.recommend4me.tag.TagHierarchy
 import io.github.vlsergey.recommend4me.vector.Vectors
@@ -25,43 +23,6 @@ import org.springframework.stereotype.Component
 class SearchDocuments(private val plugins: Plugins, private val suggestions: FacetSuggestions) {
 
     /**
-     * Of every item of a type, what its document is made of ([SearchDocument.fingerprint]), its chapters and the
-     * vectors not read: of every source a portion of [TaskPortions.MOST] items at a time, in the order of their ids —
-     * their heads, values, answers and texts, of their texts and chapters their hashes and how their vectors were made
-     * — of the values the site and the user give them alone: nothing of the models, whose refits never touch the index
-     * of the search (user, 2026-11-18). The documents of those whose fingerprint changed are made of the same
-     * ([documentsOf]).
-     */
-    fun printsOf(type: TypeStore): TypePrints {
-        val prints = HashMap<ItemKey, Long>()
-        for (s in type.sources) {
-            val hierarchies = s.hierarchies()
-            var after: String? = null
-            do {
-                val keys = s.items.keysAfter(after, TaskPortions.MOST)
-                after = keys.lastOrNull()?.id
-                val read = Read(s, keys.map { it.id }, true, null, hierarchies)
-                read.heads.forEach { (id, head) -> prints[ItemKey(s.id, id)] = read.printOf(id, head) }
-            } while (keys.size == TaskPortions.MOST)
-        }
-        return TypePrints(prints)
-    }
-
-    /**
-     * The documents of the items [keys] of a type, streamed: read a chunk at a time, of the values the site and the
-     * user give them alone — as their fingerprints were read ([printsOf]) — each source's tree of tags read once.
-     */
-    fun documentsOf(type: TypeStore, keys: Collection<ItemKey>): Sequence<SearchDocument> = sequence {
-        for ((source, list) in keys.groupBy { it.source }) {
-            val s = type.sources.firstOrNull { it.id == source } ?: continue
-            val hierarchies = s.hierarchies()
-            for (chunk in list.map { it.id }.chunked(CHUNK)) yieldAll(
-                documents(s, chunk, models = false, hierarchies = hierarchies).values
-            )
-        }
-    }
-
-    /**
      * What the documents of the items [ids] of a source are made of ([SearchDocument.fingerprint]) in the index of the
      * search — the values the site and the user give them alone —, their chapters and vectors not read: the documents
      * of those whose fingerprint changed are made of the same ([documents] of no [models]).
@@ -70,9 +31,6 @@ class SearchDocuments(private val plugins: Plugins, private val suggestions: Fac
         val read = Read(s, ids, true, null, hierarchies)
         return read.heads.map { (id, head) -> ItemKey(s.id, id) to read.printOf(id, head) }.toMap()
     }
-
-    /** What the documents of every item of a type are made of ([prints]): of the values of the site and the user. */
-    class TypePrints(val prints: Map<ItemKey, Long>)
 
     /**
      * The documents of the items [ids] of a source, read in one batch per table: their fields — the chapters read among

@@ -22,7 +22,7 @@ internal typealias MadeChances = HashMap<String, HashMap<String, Map<String, Cha
  * the model gives of the facets before it, made in the same reading; of every facet what a work is shown with
  * ([ShownChances.keep]). Nothing waits for a refit, no chance is written of a work (user, 2026-10-15); the values the
  * models give every work are kept in the index of the list alone ([WorkModelValues],
- * [io.github.vlsergey.recommend4me.worklist.ListFilling]), and a pass reads those of the facets before the one it works
+ * [io.github.vlsergey.recommend4me.worklist.WorkFields]), and a pass reads those of the facets before the one it works
  * out made now by their models, just fitted ([before]).
  *
  * EVERY FACET READ, THEN WORKED OUT WITH THE DATABASE REFUSED (user, 2026-11-12): the works are read as the reading

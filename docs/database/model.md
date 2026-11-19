@@ -6,8 +6,8 @@
 |---|---|
 | `model` | the current model of the grades: its scorer, description and packed state |
 | `prediction` | the predicted grade of every work, 0..10, and its chance of interest |
-| `average_work` | the average work of the type as the last pass of the fourth stage counted it — the mean and the spread of every vector block and number, the share of every categorical feature, the mean picture — packed, with the format and the basis of the vectors (the encoders, the directions of the sets) it was counted of: what a training reads instead of every work |
-| `score_sweep` | where a pass of the fourth stage stands while one goes on: the model it scores by, since when it goes — the pass the index of the list marks the works done with —, how many items it scored and changed, the sums of the average work counted so far |
+| `average_work` | the average work of the type as the last pass of the expectations counted it — the mean and the spread of every vector block and number, the share of every categorical feature, the mean picture — packed, with the format and the basis of the vectors (the encoders, the directions of the sets) it was counted of: what a training reads instead of every work |
+| `score_sweep` | where the pass of the expectations by a new model stands while one goes on: the model it scores by, since when it goes, how many items it scored and changed, the sums of the average work counted so far |
 | `held_out` | the prediction of every graded work by a model that had not seen it |
 | `held_out_explained` | what a model that had not seen a graded work says of it — score, where the grade stands, what moves it — worked out in the queue once the work is opened, gone with every training and every word on the work |
 | `set_embedding` | the directions the sets of the works are embedded by |

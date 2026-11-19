@@ -5,10 +5,10 @@ import java.time.Instant
 import org.jooq.DSLContext
 
 /**
- * Where a pass of the fourth stage stands ([ScoreSweep]): the [model] it scores by, as when it was trained; the [basis]
- * of the vectors the average work is counted of ([AverageWork.basis]); since when it goes — the pass the index of the
- * list marks the works done with ([pass]) —, how many items it scored and how many of their predictions changed; the
- * sums of the average work counted so far ([AverageCount.pack]; none of a pass just begun).
+ * Where the pass of the expectations by a new model of the grades stands ([WorkPredictions]): the [model] it scores by,
+ * as when it was trained; the [basis] of the vectors the average work is counted of ([AverageWork.basis]); since when
+ * it goes, how many items it scored and how many of their predictions changed; the sums of the average work counted so
+ * far ([AverageCount.pack]; none of a pass just begun).
  */
 class SweepState(
     val model: Instant,
@@ -17,16 +17,9 @@ class SweepState(
     val scored: Int,
     val changed: Int,
     val counted: ByteArray?,
-) {
-    /**
-     * The pass the index of the list marks the works done with
-     * ([ListDocuments.PASS][io.github.vlsergey.recommend4me.worklist.ListDocuments.PASS]): when it began.
-     */
-    val pass: Long
-        get() = began.toEpochMilli()
-}
+)
 
-/** Where the sweep of the scores of a content type stands, in its model database: one row while one goes on. */
+/** Where the pass of the expectations of a content type stands, in its model database: one row while one goes on. */
 class ScoreSweepRepository(private val db: DSLContext) {
 
     fun load(): SweepState? =

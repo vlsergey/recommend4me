@@ -190,7 +190,6 @@ class Jobs(
         } catch (_: JobCancelled) {
             // Stopped by the user: it waits for the user to resume it
             if (whole && !shuttingDown) settings.set("job.${run.sourceId}.running", null)
-            if (!shuttingDown) recommendations.scoreAll(store.type, "crawl")
             run.update { it.copy(state = JobState.CANCELLED, finishedAt = Instant.now()) }
         } catch (e: Exception) {
             log.error("{}: the job failed", run.sourceId, e)

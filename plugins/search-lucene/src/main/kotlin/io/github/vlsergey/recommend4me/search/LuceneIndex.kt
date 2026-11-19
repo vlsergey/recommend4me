@@ -20,7 +20,6 @@ import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
 import org.apache.lucene.index.Term
 import org.apache.lucene.index.VectorSimilarityFunction
-import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
@@ -61,66 +60,13 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
 
     /**
      * Whether the index is of this [FORMAT], holds documents, and its last commit is of an index brought to every item
-     * — a [sync] or a [rebuild] that ended: no sync of every item wanted at a start.
+     * — a [rebuild] that ended: every item's document written since by [update].
      */
     fun current(): Boolean = lock.withLock {
         DirectoryReader.open(writer).use { reader ->
             val data = reader.indexCommit.userData
             data[FORMAT_KEY] == FORMAT.toString() && data[WHOLE_KEY] == true.toString() && reader.numDocs() > 0
         }
-    }
-
-    /**
-     * The index brought to every item of the type, of the fingerprints of their documents ([fingerprints]): the
-     * documents of the items whose fingerprint changed or that are new made by [documents] and written, those gone
-     * removed; answers how many were written. Made anew whole of every document when it is of another [FORMAT], or
-     * empty.
-     */
-    fun sync(fingerprints: Map<ItemKey, Long>, documents: (Collection<ItemKey>) -> Sequence<SearchDocument>): Int {
-        val kept =
-            lock.withLock {
-                DirectoryReader.open(writer).use { reader ->
-                    if (reader.indexCommit.userData[FORMAT_KEY] != FORMAT.toString() || reader.numDocs() == 0) null
-                    else fingerprintsOf(reader)
-                }
-            } ?: return rebuild(documents(fingerprints.keys))
-        val changed = fingerprints.filter { (key, print) -> kept[key.toString()] != print }.keys
-        var written = 0
-        documents(changed).forEach { doc ->
-            lock.withLock { writer.updateDocuments(idTerm(doc.key), documents(doc, DocumentPrints.of(doc))) }
-            written++
-        }
-        val present = fingerprints.keys.mapTo(HashSet()) { it.toString() }
-        lock.withLock {
-            kept.keys.filter { it !in present }.forEach { writer.deleteDocuments(Term(ID, it)) }
-            commit(writer, whole = true)
-            searchers.maybeRefresh()
-        }
-        return written
-    }
-
-    /**
-     * The fingerprint of every item's document of the index [reader] reads, by the item's id: of the items' documents
-     * alone, found by their kind — not every passage's read too.
-     */
-    private fun fingerprintsOf(reader: DirectoryReader): Map<String, Long> {
-        val wanted = setOf(ID, FINGERPRINT)
-        val out = HashMap<String, Long>()
-        for (leaf in reader.leaves()) {
-            val r = leaf.reader()
-            val live = r.liveDocs
-            val stored = r.storedFields()
-            val items = r.postings(ITEM_TERM) ?: continue
-            var doc = items.nextDoc()
-            while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                if (live == null || live.get(doc)) {
-                    val d = stored.document(doc, wanted)
-                    d.getField(FINGERPRINT)?.numericValue()?.toLong()?.let { out[d.get(ID)] = it }
-                }
-                doc = items.nextDoc()
-            }
-        }
-        return out
     }
 
     /** Rebuilds the index from [documents]; searches use the old one until it is done. */

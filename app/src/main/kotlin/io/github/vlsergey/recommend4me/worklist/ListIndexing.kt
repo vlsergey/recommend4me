@@ -2,17 +2,21 @@ package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
 import io.github.vlsergey.recommend4me.api.model.TaskPriority
+import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.suggestion.WorkModelValues
 import io.github.vlsergey.recommend4me.task.Task
+import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.TaskKeys
 import io.github.vlsergey.recommend4me.task.Tasks
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.work.Works
 import java.time.Instant
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Component
 
 private val log = LoggerFactory.getLogger(ListIndexing::class.java)
@@ -25,9 +29,6 @@ class ListWaiting {
     /** The sources every document of which is made anew. */
     val whole = HashSet<String>()
 
-    /** The items whose work's values alone changed. */
-    val values = HashSet<ItemKey>()
-
     /** Whether works were merged or split. */
     var regrouped = false
 
@@ -35,13 +36,11 @@ class ListWaiting {
     fun keys(): List<String> =
         rows.flatMap { (source, ids) -> ids.map { "$ROW$SEP$source$SEP$it" } } +
             whole.map { "$WHOLE$SEP$it" } +
-            values.map { "$VALUES$SEP${it.source}$SEP${it.id}" } +
             listOfNotNull(REGROUPED.takeIf { regrouped })
 
     companion object {
         private const val ROW = "row"
         private const val WHOLE = "whole"
-        private const val VALUES = "values"
         private const val REGROUPED = "regrouped"
         private const val SEP = '\t'
 
@@ -53,7 +52,6 @@ class ListWaiting {
                     when (parts[0]) {
                         ROW -> rows.getOrPut(parts[1]) { HashSet() } += parts[2]
                         WHOLE -> whole += parts[1]
-                        VALUES -> values += ItemKey(parts[1], parts[2])
                         REGROUPED -> regrouped = true
                     }
                 }
@@ -67,9 +65,8 @@ class ListWaiting {
  * - the documents of the items a change names made anew, of every item of their works: their data, the user's answers
  *   and corrections, the values the models give them, made now of them ([WorkModelValues]);
  * - of a regrouping of the works, of every item of a work of several before and after;
- * - of a grade, a mark of interest, the predictions of a training, the values of the items' works alone, in place;
  * - of a source whole, every item, those gone removed, the values the models gave them as the index kept them; an index
- *   of another format made anew whole, its values filled after ([ListFilling]).
+ *   of another format made anew whole, the tasks over the works following it ([WorkFields]).
  *
  * What waits is the names of the items alone, never their data: the databases are read when the work runs.
  */
@@ -80,6 +77,8 @@ class ListIndexing(
     private val tasks: Tasks,
     private val indexes: ListIndexes,
     private val modelValues: WorkModelValues,
+    private val fields: WorkFields,
+    private val events: ApplicationEventPublisher,
 ) {
     /**
      * What the [change] names added to what waits of the content type [typeId] — kept in the queue ([TaskKeys.want]): a
@@ -138,36 +137,53 @@ class ListIndexing(
         val whole = if (anew) type.sources.map { it.id }.toSet() else w.whole
         val named = named(index, clusters, w, whole)
         var written = whole.sumOf { writeWhole(type, it, index, clusters, anew) }
+        val from = HashMap<WorkScope, TaskCursor>()
         named.forEach { (sourceId, ids) ->
-            val s = type.source(sourceId) ?: return@forEach
-            val rows = ListRows.read(type, s, ids, clusters, modelValues.of(s, ids))
-            val found = rows.mapTo(HashSet()) { it.key.id }
-            index.replace(rows, ids.filter { it !in found }.map { ItemKey(sourceId, it) })
-            written += rows.size
-        }
-        val valued =
-            w.values.filter { it.source !in whole && named[it.source]?.contains(it.id) != true }.groupBy { it.source }
-        valued.forEach { (sourceId, keys) ->
-            val s = type.source(sourceId) ?: return@forEach
-            val values = ListRows.valuesOf(type, s, keys.map { it.id })
-            index.update(values.entries.associate { (id, v) -> ItemKey(sourceId, id) to ListDocuments.valueFields(v) })
+            type.source(sourceId)?.let { written += writeNamed(type, it, ids, index, clusters, from) }
         }
         index.commit()
         tasks.keys.done(work(typeId), taken)
+        if (from.isNotEmpty()) events.publishEvent(WorkFieldFillEvent(typeId, from))
+        // Of a source written whole, every work's fields to be computed, of the models as they are
+        if (whole.isNotEmpty()) WorkScope.entries.forEach { fields.plan(typeId, it, reasonOf(anew), TaskCursor.FIRST) }
         log.info(
-            "{}: the index of the list written in {} ms: {} sources whole, {} items made anew, {} items' values",
+            "{}: the index of the list written in {} ms: {} sources whole, {} items made anew",
             typeId,
             System.currentTimeMillis() - started,
             whole.size,
             written,
-            valued.values.sumOf { it.size },
         )
     }
 
     /**
+     * The documents of the items [ids] of the source [s] made anew, those of the items gone removed: their fields
+     * computed now, their expectation and their document of the search to be made again — of each scope from the first
+     * of them on, kept in [from]. How many were written.
+     */
+    private fun writeNamed(
+        type: TypeStore,
+        s: SourceStore,
+        ids: Set<String>,
+        index: ListIndex,
+        clusters: WorkClusters,
+        from: MutableMap<WorkScope, TaskCursor>,
+    ): Int {
+        val fieldsAt = System.currentTimeMillis()
+        val rows = ListRows.read(type, s, ids, clusters, modelValues.of(s, ids)) { WorkStages(fieldsAt, 0, 0) }
+        val found = rows.mapTo(HashSet()) { it.key.id }
+        index.replace(rows, ids.filter { it !in found }.map { ItemKey(s.id, it) })
+        rows.forEach { r ->
+            val scope = if (r.values.marked) WorkScope.MARKED else WorkScope.OTHER
+            val at = TaskCursor(r.values.prediction ?: Double.NEGATIVE_INFINITY, r.key.toString())
+            from[scope] = TaskCursor.earlier(from[scope], at)!!
+        }
+        return rows.size
+    }
+
+    /**
      * Every document of the source [sourceId] made anew, those of the items gone removed: how many were written. The
-     * values the models gave its items as the index kept them — none of an index made [anew]: the filling makes them
-     * after the models.
+     * values the models gave its items as the index kept them — none of an index made [anew] — every stage of the tasks
+     * over the works to be done again ([WorkFields] first).
      */
     private fun writeWhole(
         type: TypeStore,
@@ -213,7 +229,10 @@ class ListIndexing(
         /** The reason of an index of another format, or none: made anew whole. */
         const val FORMAT = "listFormat"
 
+        /** The reason the fields of a source written whole are computed for: an index made [anew], or its items. */
+        private fun reasonOf(anew: Boolean) = if (anew) FORMAT else "items"
+
         /** The reasons that are the user's own actions: their writing goes ahead of the background's works. */
-        private val USERS = setOf("grade", "interest", "answer")
+        private val USERS = setOf("answer")
     }
 }

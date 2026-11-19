@@ -22,11 +22,11 @@ private val log = LoggerFactory.getLogger(Recommendations::class.java)
 internal fun Stores.contentType(id: String): TypeStore = type(id) ?: error("No such content type: $id")
 
 /**
- * Trains the model of every content type on the user's grades; the score of 0..10 of every item is kept by the sweep of
- * the scores that follows every training ([ScoreSweep]), a work of the queue of its own. Training is cheap enough — a
- * few thousand ratings of a few thousand numbers, the graded works alone read, the average work as the last sweep
- * counted it — to be redone from scratch after the grades change and after every sync rather than updated incrementally
- * ([TrainingTriggers]).
+ * Trains the model of every content type on the user's grades; the score of 0..10 of every item is kept by the pass of
+ * the expectations that follows every training ([WorkPredictions]), tasks of the queue of their own. Training is cheap
+ * enough — a few thousand ratings of a few thousand numbers, the graded works alone read, the average work as the last
+ * pass counted it — to be redone from scratch after the grades change and after every sync rather than updated
+ * incrementally ([TrainingTriggers]).
  *
  * NOTHING IS KEPT IN MEMORY between operations: the model is read from its database when it is needed ([KeptModels]),
  * the graded works loaded at the start of a training and dropped at its end.
@@ -41,7 +41,7 @@ class Recommendations(
     private val tasks: Tasks,
     private val kept: KeptModels,
     private val fitting: ModelFitting,
-    private val sweep: ScoreSweep,
+    private val predictions: WorkPredictions,
     private val scoring: Scoring,
 ) {
     private val trainingNow = ConcurrentHashMap.newKeySet<String>()
@@ -122,8 +122,8 @@ class Recommendations(
 
     /**
      * The models of the type trained now, in the queue — [asked]: ahead of the background — of the graded works alone
-     * and the average work kept ([EveryWork.training]); every work scored by them after it, by the sweep planned
-     * ([ScoreSweep.begin]) and not waited for.
+     * and the average work kept ([EveryWork.training]); every work scored by them after it, by the pass planned
+     * ([WorkPredictions.begin]) and not waited for.
      */
     fun retrain(typeId: String, asked: Boolean = false): ModelSummary =
         tasks.run(trainingWork(typeId), priority = TaskPriority.ASKED.takeIf { asked }) {
@@ -147,22 +147,16 @@ class Recommendations(
                     loaded - started,
                     System.currentTimeMillis() - loaded,
                 )
-                // The rated works scored at once, of the works the training read; the others by the fourth stage —
-                // their values filled by it of no model too
+                // The rated works scored at once, of the works the training read; every work by the pass of the
+                // expectations
                 tasks.progress(SCORING_FROM, TaskStep.SCORE_RATED)
                 if (model != null) scoring.score(catalogue, model, interest)
-                sweep.begin(type, "trained")
+                predictions.begin(type, "trained")
             } finally {
                 trainingNow -= typeId
             }
             summary(typeId)
         }
-
-    /**
-     * Every item of the type scored again by its current models, for the [reason]: the sweep of the scores begun anew
-     * and planned ([ScoreSweep.begin]), not waited for.
-     */
-    fun scoreAll(typeId: String, reason: String) = sweep.begin(stores.contentType(typeId), reason)
 
     /** Where every grade stands on 0..10 by the current model of the type; null without one. */
     fun gradePlaces(typeId: String): Map<Int, Double>? = kept.load(stores.contentType(typeId))?.scale?.grades()

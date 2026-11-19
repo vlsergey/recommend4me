@@ -27,22 +27,6 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         log.info("search index of {}: {} items made in {} ms", contentType, count, System.currentTimeMillis() - started)
     }
 
-    override fun sync(
-        contentType: String,
-        fingerprints: Map<ItemKey, Long>,
-        documents: (Collection<ItemKey>) -> Sequence<SearchDocument>,
-    ) {
-        val started = System.currentTimeMillis()
-        val written = indexes.of(contentType).sync(fingerprints, documents)
-        log.info(
-            "search index of {}: {} items held against their fingerprints, {} of them written again, in {} ms",
-            contentType,
-            fingerprints.size,
-            written,
-            System.currentTimeMillis() - started,
-        )
-    }
-
     override fun current(contentType: String): Boolean = indexes.of(contentType).current()
 
     override fun update(

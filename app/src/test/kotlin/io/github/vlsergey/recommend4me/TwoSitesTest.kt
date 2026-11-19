@@ -549,20 +549,22 @@ class TwoSitesTest : TwoSitesTestBase() {
     }
 
     @Test
-    fun `a work's fingerprint read of every work is its document's, made a few works at a time`() {
+    fun `a work's fingerprint read of a portion of works is its document's, made one work at a time`() {
         alpha("f1|Prints|print|A keeper of prints||")
         alpha("f2|Other prints|print|Prints of another kind||")
-        val type = stores.type("books")!!
+        val s = stores.source("alpha")!!
         // Of the works as the background leaves them
         background.run()
         var told = ""
         val alike = inBackground {
-            val read = searchDocuments.printsOf(type)
-            val keys = read.prints.keys.filter { it.source == "alpha" }
+            val read = searchDocuments.printsOf(s, s.items.keys().map { it.id }, s.hierarchies())
+            val keys = read.keys.toList()
             // Each document made apart, as an update makes a few: what one reads of the others is not in it
-            val made = keys.associateWith { k -> searchDocuments.documentsOf(type, listOf(k)).single().fingerprint }
-            told = "read ${keys.associateWith { read.prints[it] }}, made $made"
-            keys.isNotEmpty() && made == keys.associateWith { read.prints[it] }
+            val made = keys.associateWith { k ->
+                searchDocuments.documents(s, listOf(k.id), models = false).values.single().fingerprint
+            }
+            told = "read ${keys.associateWith { read[it] }}, made $made"
+            keys.isNotEmpty() && made == keys.associateWith { read[it] }
         }
         assertTrue(alike, told)
     }

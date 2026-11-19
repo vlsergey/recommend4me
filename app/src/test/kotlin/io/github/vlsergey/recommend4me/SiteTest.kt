@@ -252,7 +252,7 @@ class SiteTest : SiteTestBase() {
         }
         inBackground {
             recommendations.retrain("books")
-            scoreSweep.sweepNow("books")
+            workPredictions.predictNow("books")
         }
         // What every part is worth: the ranking cross-validated without it, every part measured
         val worth = inBackground { inputMeasures.worth("books")!! }

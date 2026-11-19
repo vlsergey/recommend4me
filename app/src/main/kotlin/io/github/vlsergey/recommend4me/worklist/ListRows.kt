@@ -20,17 +20,35 @@ import java.time.Instant
 /**
  * WHAT CHANGES OF A ROW OF THE LIST WITHOUT ITS ITEM CHANGING — of its work: whether it is graded, its prediction, its
  * chance of interest and the two multiplied, the order of the list by the formula ([Interest.expected]); null of none.
+ * And whether the user [marked] the work — graded it, marked it of interest, answered on a value of it: the tasks over
+ * the works go over the marked apart from the rest (docs/computations.md, 9).
  */
-class RowValues(val graded: Boolean, val prediction: Double?, val interest: Double?, val expected: Double?) {
+class RowValues(
+    val graded: Boolean,
+    val prediction: Double?,
+    val interest: Double?,
+    val expected: Double?,
+    val marked: Boolean = graded,
+) {
     companion object {
-        /** The values of an item of the [ratings] given at its [version], [predicted] so, [marked] of interest so. */
-        fun of(version: String, ratings: List<Rating>?, predicted: Predicted?, marked: InterestMark?): RowValues {
-            val chance = Interest.chance(marked?.interesting, predicted?.interest)
+        /**
+         * The values of an item of the [ratings] given at its [version], [predicted] so, [mark]ed of interest so,
+         * [answered] on a value or not.
+         */
+        fun of(
+            version: String,
+            ratings: List<Rating>?,
+            predicted: Predicted?,
+            mark: InterestMark?,
+            answered: Boolean,
+        ): RowValues {
+            val chance = Interest.chance(mark?.interesting, predicted?.interest)
             return RowValues(
                 graded = ratings.orEmpty().any { it.version == version },
                 prediction = predicted?.score,
                 interest = chance,
                 expected = predicted?.let { Interest.expected(it.score, chance) },
+                marked = !ratings.isNullOrEmpty() || mark != null || answered,
             )
         }
     }
@@ -41,8 +59,9 @@ class RowValues(val graded: Boolean, val prediction: Double?, val interest: Doub
  * of the list — and its [rank] among the items of the work, the one the work is shown with ([WorkClusters.shown]) 0;
  * its dates, its [values], the values of every filter facet of its source as the user sees them ([facets], by the
  * facet's filter id — the site's, the model's kept, the user's word on top), every number with the user's word on top
- * ([numbers], by the number's id), its [title] as the user corrected it, and of every facet the source works out the
- * values the models give it beyond the site's own ([model], by the facet's key): kept in the index alone.
+ * ([numbers], by the number's id), its [title] as the user corrected it, of every facet the source works out the values
+ * the models give it beyond the site's own ([model], by the facet's key): kept in the index alone; and when the tasks
+ * over the works last did it ([stages]).
  */
 class ListRow(
     val key: ItemKey,
@@ -56,6 +75,7 @@ class ListRow(
     val numbers: Map<String, Double>,
     val title: String,
     val model: Map<String, List<String>> = emptyMap(),
+    val stages: WorkStages = WorkStages.NONE,
 )
 
 /**
@@ -67,7 +87,8 @@ internal object ListRows {
     /**
      * The rows of the items [ids] of the source [s] — every item when null —, of the works [clusters] tells; [model]:
      * of every item, by the facet's key, the values the models give it beyond the site's own — made now of a few, kept
-     * by the index of a whole source ([ListModelValues]); none of a source not filled yet.
+     * by the index of a whole source ([ListModelValues]); none of a source not filled yet. The [stages] of every item —
+     * when the tasks over the works did it —, none of an item not told.
      */
     fun read(
         type: TypeStore,
@@ -75,6 +96,7 @@ internal object ListRows {
         ids: Collection<String>?,
         clusters: WorkClusters,
         model: Map<String, Map<String, List<String>>>,
+        stages: (String) -> WorkStages = { WorkStages.NONE },
     ): List<ListRow> {
         val heads =
             if (ids == null) s.items.keys()
@@ -83,7 +105,9 @@ internal object ListRows {
         val ratings = s.ratings.all().groupBy { it.itemId }
         val predicted = if (ids == null) type.predictions.predicted(s.id) else type.predictions.predicted(s.id, ids)
         val marks = s.interest.all()
-        val facets = facetsOf(s, ids, model)
+        val corrections =
+            if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
+        val facets = facetsOf(s, ids, model, corrections)
         val numbers = numbersOf(s, ids)
         val titles = titlesOf(s, ids)
         return heads.map { h ->
@@ -96,11 +120,19 @@ internal object ListRows {
                 linked = clusters.linked(key),
                 updatedAt = h.updatedAt,
                 firstSeenAt = h.firstSeenAt,
-                values = RowValues.of(h.version, ratings[h.id], predicted[h.id], marks[h.id]),
+                values =
+                    RowValues.of(
+                        h.version,
+                        ratings[h.id],
+                        predicted[h.id],
+                        marks[h.id],
+                        !corrections[h.id].isNullOrEmpty(),
+                    ),
                 facets = facets.mapValues { (_, byItem) -> byItem[h.id].orEmpty() },
                 numbers = numbers[h.id].orEmpty(),
                 title = titles[h.id].orEmpty(),
                 model = model[h.id].orEmpty(),
+                stages = stages(h.id),
             )
         }
     }
@@ -117,7 +149,10 @@ internal object ListRows {
         val ratings = s.ratings.ofItems(ids).groupBy { it.itemId }
         val predicted = type.predictions.predicted(s.id, ids)
         val marks = s.interest.ofItems(ids)
-        return versions.mapValues { (id, version) -> RowValues.of(version, ratings[id], predicted[id], marks[id]) }
+        val answered = s.corrections.facetsOf(ids).filterValues { it.isNotEmpty() }.keys
+        return versions.mapValues { (id, version) ->
+            RowValues.of(version, ratings[id], predicted[id], marks[id], id in answered)
+        }
     }
 
     /**
@@ -131,6 +166,8 @@ internal object ListRows {
         s: SourceStore,
         ids: Collection<String>?,
         model: Map<String, Map<String, List<String>>>,
+        /** The user's answers on the facets of the items, read by the caller already; read now when not. */
+        answers: Map<String, List<FacetCorrection>>? = null,
     ): Map<String, Map<String, List<String>>> {
         val defs = s.schema.facets.filter { it.filter || it.role == FacetRole.AUTHOR }
         if (defs.isEmpty()) return emptyMap()
@@ -139,7 +176,7 @@ internal object ListRows {
         val site: Map<String, Map<String, List<String>>> =
             if (ids == null) siteOfEvery(s, defs.map { it.key }.toSet() + draftedOf) else s.items.facetsOf(ids)
         val corrections =
-            if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
+            answers ?: if (ids == null) s.corrections.allFacets().groupBy { it.itemId } else s.corrections.facetsOf(ids)
         // The drafts of the layer — the site's words bound to the layer's values, a site's tag to a tag — given as the
         // model's are, before any model is fitted
         val drafts = HashMap<String, HashMap<String, MutableList<String>>>()

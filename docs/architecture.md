@@ -215,17 +215,16 @@ training (`Recommendations.retrain`, the work `train`, asked when the user's act
 the graded works alone and takes seconds; the average work it centres the vectors and the numbers
 by is kept in the model database (`average_work`, `AverageWorkRepository`) — counted by a pass over
 every work only when none is kept, or the encoders or the directions of the sets changed since
-(`AverageWork.basis`). Its end begins the sweep (`ScoreSweep`, the work `score`, never asked): every
-work read a portion of ten thousand at a time in the order of the sources and of their items' ids
-(`EveryWork.portions`), scored by the model kept, the predictions that changed written and told
-(`WorkPredictionChangeEvent`), and the average work counted along — every vector of an item as the scoring
-reads it, every work's features (`AverageCount`). A turn of the sweep goes on for a minute and plans
-the next one where it stopped: whatever waits in the queue goes between. Where it stands — the
-model it scores by, the next portion, the sums counted so far — is kept in the model database
-(`score_sweep`), so a restart of the application goes on with it. A turn that finds another model
-than the sweep's begins it again from the first work: a sweep never mixes two models. At its end
-the predictions of the items gone are removed and the average work counted is kept for the next
-training. An explicit re-scoring (`Recommendations.scoreAll`) begins the sweep anew.
+(`AverageWork.basis`). Its end begins the pass of the expectations (`WorkPredictions`, the tasks
+`predictWorks` of the marked and rated works and of the others, never asked): every work done before
+the model is to be done again, a thousand at a time, the highest predicted first, from where the turn
+before left; scored by the model kept of the fields the index of the list keeps, the predictions that
+changed written and told (`WorkPredictionChangeEvent`), and the average work counted along — every
+vector of an item as the scoring reads it, every work's features (`AverageCount`). Where the counting
+stands — the model, the sums counted so far — is kept in the model database (`score_sweep`), so a
+restart of the application goes on with it. At the end of the pass of the other works the
+predictions of the items gone are removed and the average work counted is kept for the next
+training.
 
 Scorers implement `Scorer`; anything that maps a row of features to a number fits.
 
@@ -342,17 +341,20 @@ learnt of no answer keeps the suggester's chances, likely above one half.
 
 THE VALUES A WORK IS GIVEN ARE KEPT FOR THE FILTERS (user, 2026-11-17) — IN THE INDEX OF THE LIST
 ALONE, NEVER IN A DATABASE (user, 2026-11-18): a filter of the list runs no model. THE MODELS AND THE
-VALUES GO IN FOUR STAGES (owner, 2026-11-19, `docs/computations.md`): (1) the pass of a source's
-facets fits their models alone (and a calibrated facet's cutoff) and tells it (`FieldModelFitEvent`);
-(2) the values the models give the source's rated works — graded or marked of interest — are made
-(`WorkModelValues`), compared with those their documents keep, and the documents whose values
-changed made anew (`ListFilling`, the work `listValues`), told (`RatedWorkValueFillEvent`); (3) the models
-of the grade and of interest are made of the rated works, their values read of the index of the
-list, no chain run (`CatalogueReader.gradedWorks`), and the rated works scored by them; (4) last of
-the queue, the works not graded, a thousand at a time, the highest predicted first, not done by the
-pass under way (`ListPasses`, `ScoreSweep`): of each portion the chain of the models run once, the
-work scored of it and its values written where they changed (`ListFilling.written`), every item
-marked with the pass. A work changed is given its values as its document is made.
+VALUES GO IN STAGES, BY TASKS OVER THE WORKS (owner, 2026-11-19, `docs/computations.md`): the pass of
+a source's facets fits their models alone (and a calibrated facet's cutoff) and tells it
+(`FieldModelFitEvent`); then three tasks over the works, each of the marked and rated works ahead of
+the others' after every other task, a thousand works a turn, the highest predicted first, from where
+the turn before left (`NextWorks`, `TaskCursor`): the fields the models give (`WorkFields`, the task
+`fillWorkFields`) — made (`WorkModelValues`), compared with those the documents keep, the documents
+whose values changed made anew —, the expected grade and interest (`WorkPredictions`, `predictWorks`)
+and the documents of the search (`WorkTexts`, `indexWorkTexts`), each planning the next of the works
+it did (`WorkFieldFillEvent`, `WorkPredictionFillEvent`). When each stage was last done of an item is
+kept in its document (`WorkStages`); a stage is done again of the documents done before what it
+depends on changed. The fields of the marked and rated works all computed, the models of the grade
+and of interest are made of them (`RatedWorkValueFillEvent`), their values read of the index of the
+list, no chain run (`CatalogueReader.gradedWorks`). A work changed is given its fields as its document
+is made.
 THE INDEX OF THE SEARCH KNOWS NOTHING OF THE MODELS (user, 2026-11-18: "the refitting of the models and
 the updating of the computed values must not lead to an update of the full-text search"): its
 documents hold the texts and the values the site and the user give alone (`SearchDocuments`, of no
