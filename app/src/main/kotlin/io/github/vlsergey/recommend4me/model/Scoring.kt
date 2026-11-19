@@ -33,7 +33,7 @@ class Scoring(
         val predicted = scored(catalogue, model, interest)
         val written = catalogue.type.predictions.write(predicted)
         if (written.isNotEmpty()) events.publishEvent(WorkPredictionChangeEvent(catalogue.type.id, written))
-        return PortionScored(predicted.size, written.size)
+        return PortionScored(predicted.size, written.size, predicted.maxOfOrNull { it.second.score })
     }
 
     /**
@@ -131,5 +131,8 @@ class Scoring(
     }
 }
 
-/** Of a portion scored ([Scoring.score]): how many items, and of how many the prediction changed. */
-class PortionScored(val items: Int, val changed: Int)
+/**
+ * Of a portion scored ([Scoring.score]): how many items, of how many the prediction changed, and the highest prediction
+ * made — none of no item.
+ */
+class PortionScored(val items: Int, val changed: Int, val highest: Double? = null)

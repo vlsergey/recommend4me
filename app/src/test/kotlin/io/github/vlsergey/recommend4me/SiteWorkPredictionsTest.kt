@@ -13,6 +13,10 @@ import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.task.Task
 import io.github.vlsergey.recommend4me.task.TaskCursor
 import io.github.vlsergey.recommend4me.task.inBackground
+import io.github.vlsergey.recommend4me.worklist.ListDocuments
+import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import io.github.vlsergey.recommend4me.worklist.RowValues
+import io.github.vlsergey.recommend4me.worklist.WorkStage
 import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -30,6 +34,7 @@ import org.springframework.beans.factory.annotation.Autowired
  */
 class SiteWorkPredictionsTest : SiteTestBase() {
     @Autowired lateinit var plugins: Plugins
+    @Autowired lateinit var lists: ListIndexes
 
     private val type
         get() = stores.type("books")!!
@@ -62,6 +67,34 @@ class SiteWorkPredictionsTest : SiteTestBase() {
 
         trainedWithTheAverageKept(swept)
         inTurns(inOneGo.keys, swept)
+    }
+
+    @Test
+    fun `the documents of the search go on from where the works scored stand now, not where they stood`() {
+        catalogue()
+        (3..8).forEach { k ->
+            gradesController.rateItem("site", "s$k", RatingRequest(5))
+            gradesController.rateItem("site", "d$k", RatingRequest(1))
+        }
+        background.run()
+        inBackground { recommendations.retrain("books") }
+        capture("lh1|Lighthouse keeper|space|A keeper of the lighthouse watches the starships|Pilot/Captain")
+        background.run()
+        // A work of no prediction yet in the index of the list, its expectation to be made: of the lowest place
+        val key = ItemKey("site", "lh1")
+        val index = lists.of("books")
+        index.update(mapOf(key to ListDocuments.valueFields(RowValues(false, null, null, null))))
+        WorkStage.PREDICTED.again(index, listOf(key))
+        index.commit()
+        inBackground {
+            workPredictions.turn("books", WorkScope.OTHER, TaskCursor(Double.NEGATIVE_INFINITY, key.toString()))
+        }
+        // Scored, it stands higher: the documents of the search go on from no lower than it
+        val score = type.predictions.predicted("site", listOf("lh1")).getValue("lh1").score
+        val from =
+            tasks.planned().single { it.work.what == TaskKind.INDEX_WORK_TEXTS && it.work.works == WorkScope.OTHER }
+        assertTrue(from.cursor!!.grade!! >= score, "from ${from.cursor} of a work scored $score")
+        background.run()
     }
 
     /**

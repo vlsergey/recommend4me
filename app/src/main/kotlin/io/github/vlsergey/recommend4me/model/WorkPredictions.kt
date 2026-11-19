@@ -152,12 +152,17 @@ class WorkPredictions(
         val clusters = works.of(type)
         val done = items.mapTo(HashSet()) { it.key }
         var scored = 0
+        // The highest the portion's works stand, before and as scored now: the next task goes on from it, whichever
+        // the index of the list holds when it begins — told of the predictions of before, a work scored higher than
+        // it stood was above the cursor, and its document of the search never written
+        var highest = items.first().grade
         var changed = 0
         val named = items.map { clusters.representative(it.key) }.distinct()
         everyWork.ofKeys(type, likeness, named, count, kept = true) { read ->
             val made = scoring.score(read.catalogue, model, interest)
             count?.addAll(read)
             scored += made.items
+            made.highest?.let { highest = maxOf(highest, it) }
             changed += made.changed
             read.catalogue.items.forEach { done += clusters.members(it.key) }
         }
@@ -183,7 +188,7 @@ class WorkPredictions(
             changed,
             scored,
         )
-        events.publishEvent(WorkPredictionFillEvent(type.id, mapOf(scope to items.first().cursor())))
+        events.publishEvent(WorkPredictionFillEvent(type.id, mapOf(scope to TaskCursor(highest))))
     }
 
     /** The sums of the average work counted so far by the pass [state] of the [type]. */
