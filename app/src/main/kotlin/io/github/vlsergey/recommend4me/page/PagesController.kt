@@ -16,6 +16,8 @@ import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.SitesSay
 import io.github.vlsergey.recommend4me.laps.Laps
+import io.github.vlsergey.recommend4me.model.ReadWork
+import io.github.vlsergey.recommend4me.model.Scoring
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.source.PageDecor
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -27,7 +29,6 @@ import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.work.Works
 import java.net.URI
 import org.slf4j.LoggerFactory
-import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
@@ -48,6 +49,7 @@ class PagesController(
     private val works: Works,
     private val sitesSay: SitesSay,
     private val texts: TextVectors,
+    private val scoring: Scoring,
 ) : PagesApi {
 
     /** The source whose site the address is on: one that wants the page, or one of the same host. */
@@ -60,17 +62,15 @@ class PagesController(
         val decor = store.source.pageDecor
         val itemId = runCatching { store.source.itemIdOf(url) }.getOrNull()
         val item = itemId?.takeIf { store.items.find(it) != null }?.let { item(store, it, decor) }
-        // The work's chances still to come: the extension asks again till they are there
-        return ResponseEntity.status(if (item?.pending == true) HttpStatus.ACCEPTED else HttpStatus.OK)
-            .body(
-                PageView(
-                    source = store.id,
-                    type = store.type,
-                    decor = decor?.toApi() ?: PageDecorInfo(emptyList()),
-                    itemId = itemId,
-                    item = item,
-                )
+        return ResponseEntity.ok(
+            PageView(
+                source = store.id,
+                type = store.type,
+                decor = decor?.toApi() ?: PageDecorInfo(emptyList()),
+                itemId = itemId,
+                item = item,
             )
+        )
     }
 
     /**
@@ -91,15 +91,19 @@ class PagesController(
         val type = stores.typeOf(store.id)
         // Which items are one work: of this work alone, read once for the whole page
         val clusters = works.ofKeys(type, listOf(key))
-        val summary = cards.cards(type, listOf(key), clusters = clusters).firstOrNull() ?: return null
-        laps.lap("card")
-        val schema = store.schema
-        val wanted =
-            decor?.facets.orEmpty().map { it.facet }.toSet() +
-                schema.facets.filter { it.suggest || it.infer }.map { it.key }
+        // THE WORK THE USER OPENS MADE ON THE SPOT, no model touched (owner, 2026-11-19: "when we open the page, I want
+        // to begin marking"): its texts' vectors made where there are none, its chances below, its expectation of them
+        texts.encodeOwn(clusters.members(key))
+        laps.lap("texts")
+        val wanted = wantedOf(store, decor)
         // Every item of the work read once, its chances made now in memory — one chain of the models a source — for
         // the suggestions and the values both, as the screen of a work reads them
         val members = cards.membersRead(type, clusters.members(key), null, laps.within("chances "))
+        scoring.scoreItem(key, ReadWork(clusters.members(key), members.chances))
+        laps.lap("expectation")
+        val summary =
+            cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull() ?: return null
+        laps.lap("card")
         val chances = members.chances[key].orEmpty()
         val suggested = suggestions.ofItem(store, itemId, chances).map { it.toApi(store) }
         laps.lap("suggestions")
@@ -137,8 +141,6 @@ class PagesController(
         laps.lap("pictures and reviews")
         val ratings = details.ratings(type, key)
         laps.lap("ratings")
-        val pending = texts.awaited(clusters.members(key))
-        laps.lap("texts awaited")
         return PageItem(
             summary = summary,
             facets = facets,
@@ -146,9 +148,15 @@ class PagesController(
             pictures = pictures,
             reviewMarks = reviewMarks,
             ratings = ratings,
-            pending = pending,
         )
     }
+
+    /**
+     * The facets of the source [store] its page shows: those the [decor] places, and those the models offer or infer.
+     */
+    private fun wantedOf(store: SourceStore, decor: PageDecor?): Set<String> =
+        decor?.facets.orEmpty().map { it.facet }.toSet() +
+            store.schema.facets.filter { it.suggest || it.infer }.map { it.key }
 
     /** The pictures of the item [itemId] with the user's marks on them. */
     private fun picturesOf(store: SourceStore, itemId: String): List<PagePicture> {

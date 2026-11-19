@@ -26,6 +26,7 @@ import io.github.vlsergey.recommend4me.model.Details
 import io.github.vlsergey.recommend4me.model.Explanations
 import io.github.vlsergey.recommend4me.model.LabelledContribution
 import io.github.vlsergey.recommend4me.model.ReadWork
+import io.github.vlsergey.recommend4me.model.Scoring
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.series.SeriesViews
 import io.github.vlsergey.recommend4me.series.seriesFacetOf
@@ -123,6 +124,7 @@ class ItemDetailsReader(
     private val lines: WorkLines,
     private val series: SeriesViews,
     private val texts: TextVectors,
+    private val scoring: Scoring,
 ) {
     /**
      * The work as the dialog shows it, its chances made now in memory ([FacetSuggestions.chances]): of every item of
@@ -133,7 +135,11 @@ class ItemDetailsReader(
             stores.source(key.source)?.let { store ->
                 val type = stores.typeOf(key.source)
                 val clusters = works.ofKeys(type, listOf(key))
+                // The work the user opens made on the spot, no model touched: its texts' vectors made where there are
+                // none, its chances, its expectation of them (owner, 2026-11-19)
+                texts.encodeOwn(clusters.members(key))
                 val members = cards.membersRead(type, clusters.members(key), null)
+                scoring.scoreItem(key, ReadWork(clusters.members(key), members.chances))
                 cards.cards(type, listOf(key), clusters = clusters, members = members).firstOrNull()?.let { summary ->
                     details(store, type, key, summary, clusters, members)
                 }
@@ -207,7 +213,6 @@ class ItemDetailsReader(
             sites = sites(type, clusters.fullestFirst(key), ownSeries),
             relations = relations(type, clusters.members(key)),
             // An item of it not judged by the models of the facets yet, its texts waiting to be encoded
-            pending = texts.awaited(clusters.members(key)),
         )
     }
 

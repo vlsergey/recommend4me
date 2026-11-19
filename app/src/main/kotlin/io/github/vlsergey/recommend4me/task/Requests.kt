@@ -10,9 +10,13 @@ import org.springframework.web.context.request.RequestContextHolder
  * it is a mistake of the code, not of the user: it fails at once, in the tests as on the user's machine, instead of
  * hanging the page while a training runs.
  *
- * One computation is a request's own, out of the queue: the vector of the line searched for
+ * Two computations are a request's own, out of the queue: the vector of the line searched for
  * ([TextVectors.query][io.github.vlsergey.recommend4me.textvector.TextVectors.query]) — the search is the answer, and
- * one short line through the encoder takes milliseconds.
+ * one short line through the encoder takes milliseconds; and the work the user opens, made on the spot with no model
+ * touched — its texts' vectors where there are none
+ * ([TextVectors.encodeOwn][io.github.vlsergey.recommend4me.textvector.TextVectors.encodeOwn]), its chances, its
+ * expectation ([Scoring.scoreItem][io.github.vlsergey.recommend4me.model.Scoring.scoreItem]): the user marks it at once
+ * (owner, 2026-11-19).
  */
 object Requests {
     /** Whether the current thread serves a request of the browser. */

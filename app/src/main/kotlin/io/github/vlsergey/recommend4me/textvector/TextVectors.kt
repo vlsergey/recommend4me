@@ -1,7 +1,6 @@
 package io.github.vlsergey.recommend4me.textvector
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
-import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.WorkScope
 import io.github.vlsergey.recommend4me.encoder.TextEncoder
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
@@ -48,8 +47,7 @@ data class WorkTextVectorFillEvent(val type: String, val from: Map<WorkScope, Ta
  * ([WorkStage.VECTORS]), the fields of those whose vectors changed to be computed again; told
  * ([WorkTextVectorFillEvent]).
  *
- * A WORK THE USER WAITS FOR ON THE SCREEN — its card or its page, its chances still to come ([awaited]) — has its texts
- * encoded ahead of everything ([TaskPriority.ASKED]), its items kept waiting in the queue's keys.
+ * A WORK THE USER OPENS — its card or its page — has its texts encoded on the spot ([encodeOwn]).
  */
 @Service
 class TextVectors(
@@ -67,12 +65,11 @@ class TextVectors(
     @Volatile private var busy = false
 
     // What the last run of the application left undone of it: planned again by the queue at its start, from where it
-    // was to go on, or of the items the queue kept
+    // was to go on
     init {
         tasks.resumption.resumes(KIND) { left, reason ->
             val type = left.work.type ?: return@resumes
-            val scope = left.work.works
-            if (scope == null) planAsked(type, reason) else plan(type, scope, reason, left.cursor ?: TaskCursor.FIRST)
+            plan(type, left.work.works ?: return@resumes, reason, left.cursor ?: TaskCursor.FIRST)
         }
     }
 
@@ -106,13 +103,11 @@ class TextVectors(
         }
 
     /** Every text of the [typeId] to be encoded encoded now, on the caller's thread, turn after turn: for the tests. */
-    fun encodeNow(typeId: String) {
-        encodeAsked(typeId)
+    fun encodeNow(typeId: String) =
         WorkScope.entries.forEach { scope ->
             var cursor: TaskCursor? = TaskCursor.FIRST
             while (cursor != null) cursor = turn(typeId, scope, cursor)
         }
-    }
 
     /**
      * ONE TURN: the next [portion] works of the [scope] of the [typeId] whose texts are to be encoded, from the
@@ -195,45 +190,18 @@ class TextVectors(
     }
 
     /**
-     * Whether one of the [items] has none of its texts encoded yet and a text to encode: captured or written just now,
-     * its texts to come. Till they are, the models of the facets do not judge it
-     * ([FacetData.judged][io.github.vlsergey.recommend4me.suggestion.FacetData]): its chances are still to come. The
-     * user waits for them on the screen: their encoding planned ahead of everything — planned, never waited for.
+     * THE TEXTS OF A WORK THE USER OPENS, ENCODED ON THE SPOT (owner, 2026-11-19: "when we open the page, I want to
+     * begin marking; as I mark, the chances change all the time; so I need a method that computes the vectors if there
+     * are none yet and keeps them"): the texts new or changed of the [items] encoded now, on the caller's thread — a
+     * request's —, and kept, those gone dropped; the work's chances and expectation made of them at once. The second
+     * computation of a request ([Requests][io.github.vlsergey.recommend4me.task.Requests]): a work's few texts. The
+     * stages of the index of the list are the background's: it finds them encoded.
      */
-    fun awaited(items: Collection<ItemKey>): Boolean {
-        val encoder = plugins.textEncoder() ?: return false
-        val bare =
-            items.groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-                val store = stores.source(source) ?: return@flatMap emptyList()
-                val encoded = store.textVectors.kept(encoder.id, ids).filterValues { it != null }.keys.map { it.first }
-                val todo = TextScan(store, ids - encoded.toSet(), encoder.id).todo
-                todo.map { ItemKey(source, it.itemId) }.distinct()
-            }
-        bare
-            .groupBy { stores.typeOf(it.source).id }
-            .forEach { (type, keys) ->
-                tasks.keys.want(asked(type), keys.map { "${it.source}$SEP${it.id}" })
-                planAsked(type, "page")
-            }
-        return bare.isNotEmpty()
-    }
-
-    /**
-     * The texts of the items of the [typeId] the user waits for, kept in the queue's keys, planned for the [reason].
-     */
-    private fun planAsked(typeId: String, reason: String) =
-        tasks.plan(asked(typeId), null, reason, priority = TaskPriority.ASKED) { encodeAsked(typeId) }
-
-    /** The texts of the items of the [typeId] the user waits for, as the queue keeps them, encoded now. */
-    private fun encodeAsked(typeId: String) {
-        val type = stores.type(typeId)
-        val encoder = plugins.textEncoder()
-        val taken = tasks.keys.wanted(asked(typeId))
-        if (type == null || encoder == null || taken.isEmpty()) return
-        done(type, lists.of(typeId), encoder, taken.map { ItemKey(it.substringBefore(SEP), it.substringAfter(SEP)) })
-        tasks.keys.done(asked(typeId), taken)
-        // Of the scopes the items are of, the fields of every one to be computed found from the first
-        events.publishEvent(WorkTextVectorFillEvent(typeId, WorkScope.entries.associateWith { TaskCursor.FIRST }))
+    fun encodeOwn(items: Collection<ItemKey>) {
+        val encoder = plugins.textEncoder() ?: return
+        items.groupBy({ it.source }, { it.id }).forEach { (source, ids) ->
+            stores.source(source)?.let { encoded(it, encoder, ids) }
+        }
     }
 
     /**
@@ -250,12 +218,6 @@ class TextVectors(
 
         /** The works a turn takes (owner, 2026-11-19: "each of the tasks does at most N operations, say, 1000"). */
         const val PORTION = 1000
-
-        /** An item's key as the queue keeps it: its source and its id. */
-        private const val SEP = '\t'
-
-        /** The task of the texts of the works of the [typeId] the user waits for. */
-        private fun asked(typeId: String) = Task(KIND, type = typeId)
 
         /** The key the title of an item is kept under among its texts' vectors. */
         const val TITLE = "title"

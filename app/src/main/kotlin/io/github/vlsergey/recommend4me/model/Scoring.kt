@@ -92,15 +92,19 @@ class Scoring(
             .toList()
     }
 
-    /** Re-scores the work of one item, after its data changed outside a training. */
-    fun scoreItem(key: ItemKey) {
+    /**
+     * Re-scores the work of one item by the models kept, after its data changed outside a training — of a work the user
+     * opens, as its page is read ([read]: its items and chances read already): the models untouched, the prediction
+     * written where it changed.
+     */
+    fun scoreItem(key: ItemKey, read: ReadWork? = null) {
         val type = stores.typeOf(key.source)
         val model = kept.load(type) ?: return
-        val input = inputOf(type, key, likenesses.stored(type)) ?: return
+        val input = inputOf(type, key, likenesses.stored(type), read) ?: return
         val prediction = Predicted(model.score(input), kept.loadInterest(type)?.chances(listOf(input))?.single())
-        val members = works.ofKeys(type, listOf(key)).members(key)
-        members.forEach { type.predictions.save(it, prediction) }
-        events.publishEvent(WorkPredictionChangeEvent(type.id, members))
+        val members = read?.members ?: works.ofKeys(type, listOf(key)).members(key)
+        val written = type.predictions.write(members.map { it to prediction })
+        if (written.isNotEmpty()) events.publishEvent(WorkPredictionChangeEvent(type.id, written))
     }
 
     /** The input of the work of one item as the model reads it now; [stored]: the type's likeness to the marks. */

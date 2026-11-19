@@ -37,7 +37,6 @@ and tell the user to update the extension.
 | "No other …" — shown with no value too; the unconfirmed go | `universe/AllNamed.tsx` `AllNamed` | `completeButton` |
 | An answer: only written; shown once kept, never before, whole — by what the application answers the answers made of the facets it touched (`AnsweredFacet`: a character moved, the other value of a facet of one, a tag above or under); read anew after 2 s of quiet, a read an answer was kept during showing nothing older than the page | `correction/useCorrections.ts` `withAnswers`, `settleLater`; `item/workRead.ts` | `act`, `facetsShown`, `loadLater`, `load` |
 | A facet whose values are a scale (the age rating, `steps`): the steps in order, the chosen one with where it is from (the user's / the site's / by the tags with its chance), the model's chance under every other, a step any site lets not faded yet chosen; sites that disagree choose none, each step held marked with its sites; a step pressed is the user's answer, the user's own pressed again taken back | `correction/ScaleChoice.tsx` | `scaleBlock`, `chosenShown` |
-| A work whose chances are still to come (`pending`, its texts not encoded yet): a quiet line says so, the work read again every 3 s till they are there | `item/workRead.ts` `whilePending`, `item/WorkScreen.tsx` | `load`, `panel` |
 | The suggestions of a facet | `suggestion/Suggestions.tsx` | `suggestedChip` |
 | Grades and interest; interest with no mark by what a grade says of it ("by your grade"), a press making it the user's word | `item/useRateItem.ts`, `item/pieces.tsx` | `grades`, `interest` |
 | The offers that came after the work was opened stand after a quiet line | `facet/valueOrder.ts` `useLaterOffer`, `correction/FacetCorrections.tsx` `LaterOffers` | `laterOffer` |
@@ -128,9 +127,12 @@ A request of the browser never waits for the queue of the computations, nor runs
 user's machine. A request writes what it was told, plans the work that follows (`Tasks.plan`) and
 answers with what there is — what the works made and kept, with a mark that more is coming (202,
 `pending`), the interface asking again till it is there. A test standing for the background runs it
-in `inBackground` (the thread of a Spring test is bound to a request). The one computation of a
-request is the vector of the line searched for (`TextVectors.query`): the search is the answer, one
-short line through the encoder.
+in `inBackground` (the thread of a Spring test is bound to a request). The computations of a
+request are two: the vector of the line searched for (`TextVectors.query`): the search is the answer, one
+short line through the encoder; and the work the user opens, made on the spot, no model touched —
+its texts' vectors where there are none (`TextVectors.encodeOwn`), its chances, its expectation
+(`Scoring.scoreItem`) — the user marks it at once (owner, 2026-11-19: "when we open the page, I want
+to begin marking"), on its screen and on the site's page alike.
 
 **`Tasks.plan` is the one way the background is scheduled**: a work, when it is due, why, and what
 it does — no executor or timer of a component's own. Planned again before it begins, a work is done
