@@ -26,6 +26,7 @@
   "Reason.portion": "следующая порция",
   "Reason.regrouped": "работы, циклы или авторы объединены или разделены",
   "Reason.removal": "работа удалена",
+  "Reason.searchFormat": "индекс поиска другого формата или не доведён до всех работ",
   "Reason.setVectors": "новые векторы наборов",
   "Reason.setsGrew": "наборы выросли",
   "Reason.start": "запуск приложения",

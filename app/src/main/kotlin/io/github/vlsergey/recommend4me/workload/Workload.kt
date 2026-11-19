@@ -183,6 +183,12 @@ class Workload(background: Background = Threads(), private val records: WorkReco
     }
 
     /**
+     * What each work of the queue is to be done of — the items, the fandoms its owner names — kept with it till done
+     * ([WorkKeys]): a stop leaves them to the work planned again at the next start.
+     */
+    val keys = WorkKeys(records)
+
+    /**
      * The works of the kind [what] the last run of the application left undone — planned, waiting or running as it
      * stopped or crashed: taken by their owner at the start, to plan again.
      */

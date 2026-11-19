@@ -43,6 +43,8 @@ class LuceneSearch private constructor(private val indexes: LuceneIndexes) :
         )
     }
 
+    override fun current(contentType: String): Boolean = indexes.of(contentType).current()
+
     override fun update(
         contentType: String,
         fingerprints: Map<ItemKey, Long>,

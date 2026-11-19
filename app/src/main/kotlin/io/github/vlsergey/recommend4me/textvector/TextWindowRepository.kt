@@ -6,7 +6,6 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 
 /**
  * The windows of the long texts of one source's items: how many a text whose vector is kept has, and of one of more
@@ -50,36 +49,6 @@ class TextWindowRepository(private val db: DSLContext, private val writing: Reen
                     .execute()
             }
         }
-
-    /**
-     * The texts of keys [keys] whose vector by [encoder] is stored and whose windows are not counted yet, or were made
-     * by another than [by], at most [limit], in the order of the table's key from past [after] (from the first when
-     * null): (item, text key). A pass goes on from the last it was given, not from the start of the table again a
-     * batch.
-     */
-    fun withoutWindows(
-        encoder: String,
-        by: String,
-        keys: Collection<String>,
-        limit: Int,
-        after: Pair<String, String>? = null,
-    ): List<Pair<String, String>> =
-        if (keys.isEmpty()) emptyList()
-        else
-            db.select(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY)
-                .from(TEXT_VECTOR)
-                .where(
-                    TEXT_VECTOR.ENCODER.eq(encoder),
-                    TEXT_VECTOR.WINDOWS.isNull.or(TEXT_VECTOR.WINDOWS_BY.isDistinctFrom(by)),
-                    TEXT_VECTOR.TEXT_KEY.`in`(keys),
-                )
-                .and(
-                    after?.let { (item, key) -> DSL.row(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY).gt(item, key) }
-                        ?: DSL.noCondition()
-                )
-                .orderBy(TEXT_VECTOR.ITEM_ID, TEXT_VECTOR.TEXT_KEY)
-                .limit(limit)
-                .fetch { it.value1()!! to it.value2()!! }
 
     /**
      * The windows of the texts of the items [ids] that have more than one, of the texts' vectors by [encoder], made by

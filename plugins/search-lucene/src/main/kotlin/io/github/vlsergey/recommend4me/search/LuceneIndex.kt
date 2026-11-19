@@ -60,6 +60,17 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
     private var building: IndexWriter? = null
 
     /**
+     * Whether the index is of this [FORMAT], holds documents, and its last commit is of an index brought to every item
+     * — a [sync] or a [rebuild] that ended: no sync of every item wanted at a start.
+     */
+    fun current(): Boolean = lock.withLock {
+        DirectoryReader.open(writer).use { reader ->
+            val data = reader.indexCommit.userData
+            data[FORMAT_KEY] == FORMAT.toString() && data[WHOLE_KEY] == true.toString() && reader.numDocs() > 0
+        }
+    }
+
+    /**
      * The index brought to every item of the type, of the fingerprints of their documents ([fingerprints]): the
      * documents of the items whose fingerprint changed or that are new made by [documents] and written, those gone
      * removed; answers how many were written. Made anew whole of every document when it is of another [FORMAT], or
@@ -82,7 +93,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         val present = fingerprints.keys.mapTo(HashSet()) { it.toString() }
         lock.withLock {
             kept.keys.filter { it !in present }.forEach { writer.deleteDocuments(Term(ID, it)) }
-            commit(writer)
+            commit(writer, whole = true)
             searchers.maybeRefresh()
         }
         return written
@@ -126,7 +137,7 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
                 next.updateDocuments(idTerm(it.key), documents(it, DocumentPrints.of(it)))
                 count++
             }
-            commit(next)
+            commit(next, whole = true)
             built = true
         } finally {
             if (!built) {
@@ -262,9 +273,16 @@ class LuceneIndex(private val dir: Path) : AutoCloseable {
         const val FORMAT = 3
         private const val FORMAT_KEY = "format"
 
-        /** Commits [w] with the version of the index ([FORMAT]). */
-        private fun commit(w: IndexWriter) {
-            w.setLiveCommitData(mapOf(FORMAT_KEY to FORMAT.toString()).entries)
+        private const val WHOLE_KEY = "whole"
+
+        /**
+         * Commits [w] with the version of the index ([FORMAT]) and whether it was brought to every item: [whole] of the
+         * end of a [sync] or a [rebuild]; else as the commit before it said.
+         */
+        private fun commit(w: IndexWriter, whole: Boolean? = null) {
+            val before = w.liveCommitData?.associate { it.key to it.value }.orEmpty()
+            val made = whole?.toString() ?: before[WHOLE_KEY] ?: false.toString()
+            w.setLiveCommitData(mapOf(FORMAT_KEY to FORMAT.toString(), WHOLE_KEY to made).entries)
             w.commit()
         }
 

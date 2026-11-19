@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.workload
 
 import io.github.vlsergey.recommend4me.database.AppDatabase
+import io.github.vlsergey.recommend4me.database.app.tables.references.QUEUED_KEY
 import io.github.vlsergey.recommend4me.database.app.tables.references.QUEUED_WORK
 import io.github.vlsergey.recommend4me.database.app.tables.references.WORK_RUN
 import java.time.Duration
@@ -126,6 +127,37 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
         }
     }
 
+    override fun want(work: Work, keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        val workKey = key(work)
+        keys.distinct().chunked(BATCH).forEach { chunk ->
+            db.batch(
+                    chunk.map { k ->
+                        db.mergeInto(QUEUED_KEY)
+                            .using(db.selectOne())
+                            .on(QUEUED_KEY.WORK_KEY.eq(workKey), QUEUED_KEY.ITEM_KEY.eq(k))
+                            .whenNotMatchedThenInsert(QUEUED_KEY.WORK_KEY, QUEUED_KEY.ITEM_KEY)
+                            .values(workKey, k)
+                    }
+                )
+                .execute()
+        }
+    }
+
+    override fun wanted(work: Work): List<String> =
+        db.select(QUEUED_KEY.ITEM_KEY)
+            .from(QUEUED_KEY)
+            .where(QUEUED_KEY.WORK_KEY.eq(key(work)))
+            .fetch(QUEUED_KEY.ITEM_KEY)
+            .filterNotNull()
+
+    override fun done(work: Work, keys: Collection<String>) {
+        val workKey = key(work)
+        keys.distinct().chunked(BATCH).forEach { chunk ->
+            db.deleteFrom(QUEUED_KEY).where(QUEUED_KEY.WORK_KEY.eq(workKey), QUEUED_KEY.ITEM_KEY.`in`(chunk)).execute()
+        }
+    }
+
     /** Once every owner took its works at the start: those of the last run nobody took, told and dropped. */
     @Order(Ordered.LOWEST_PRECEDENCE)
     @EventListener(ApplicationReadyEvent::class)
@@ -135,9 +167,16 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
                 .from(QUEUED_WORK)
                 .where(QUEUED_WORK.PLAN_NO.lt(firstPlan))
                 .fetch(QUEUED_WORK.WORK_KEY)
-        if (rest.isEmpty()) return
-        log.warn("works the last run left that nobody does again: {}", rest.map { it?.replace('\t', '/') })
-        db.deleteFrom(QUEUED_WORK).where(QUEUED_WORK.PLAN_NO.lt(firstPlan)).execute()
+        if (rest.isNotEmpty()) {
+            log.warn("works the last run left that nobody does again: {}", rest.map { it?.replace('\t', '/') })
+            db.deleteFrom(QUEUED_WORK).where(QUEUED_WORK.PLAN_NO.lt(firstPlan)).execute()
+        }
+        // The keys of no work in the queue: of a work nobody does again, or of one that failed and is not planned
+        val orphans =
+            db.deleteFrom(QUEUED_KEY)
+                .whereNotExists(db.selectOne().from(QUEUED_WORK).where(QUEUED_WORK.WORK_KEY.eq(QUEUED_KEY.WORK_KEY)))
+                .execute()
+        if (orphans > 0) log.info("{} keys of works no longer in the queue dropped", orphans)
     }
 
     private companion object {
@@ -147,6 +186,9 @@ class QueuedWorks(app: AppDatabase) : WorkRecords {
 
         /** The last runs the interface is told of. */
         const val TOLD_RUNS = 5
+
+        /** The keys written or removed by one statement: the length of its list, not a meaning. */
+        const val BATCH = 1000
 
         /** The plans of a millisecond a run of the application may make before its numbers reach the next one's. */
         const val PLANS_A_MILLI = 1000L

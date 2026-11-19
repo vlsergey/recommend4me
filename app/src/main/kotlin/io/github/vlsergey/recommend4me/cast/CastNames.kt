@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.textvector.PhraseVectors
 import io.github.vlsergey.recommend4me.workload.Work
+import io.github.vlsergey.recommend4me.workload.WorkKeys
 import io.github.vlsergey.recommend4me.workload.Workload
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -22,9 +23,9 @@ data class CastNamesEncoded(val source: String, val ids: List<String>)
 /**
  * THE TEXTS OF THE SAID CASTS ENCODED, IN THE BACKGROUND: of every work whose line changed, the texts every way of
  * reading the casts asks for ([CastReader.encoded]) — the names, the pairings written so — encoded and kept as the
- * short texts are ([PhraseVectors]), a text once, after a quiet; on start, of every work. In the queue of the
- * computations ([Workload]), never on the thread of a request: the models read the vectors kept alone ([CastReading]).
- * The queue of the works waiting is the only thing kept here.
+ * short texts are ([PhraseVectors]), a text once, after a quiet; the works waiting kept in the queue. In the queue of
+ * the computations ([Workload]), never on the thread of a request: the models read the vectors kept alone
+ * ([CastReading]). The queue of the works waiting is the only thing kept here.
  */
 @Component
 class CastNames(
@@ -34,26 +35,15 @@ class CastNames(
     private val workload: Workload,
     private val events: ApplicationEventPublisher,
 ) {
-    /** Of every source, its works to encode the casts of; null of every work. Guarded by itself. */
-    private val queued = HashMap<String, MutableSet<String>?>()
-
-    /** What the last run of the application left undone of it, planned again: of every work of its source. */
+    /** What the last run of the application left undone of it, planned again: the works the queue keeps waiting. */
     @EventListener(ApplicationReadyEvent::class)
-    fun start() =
-        workload.resume(WHAT) { left, reason ->
-            val source = left.work.source ?: return@resume
-            synchronized(queued) { queued[source] = null }
-            schedule(source, START_DELAY_SECONDS, reason)
-        }
+    fun start() = workload.resume(WHAT) { _, reason -> schedule(START_DELAY_SECONDS, reason) }
 
     @EventListener
     fun itemsChanged(event: SiteItemsWritten) {
         val store = stores.source(event.source)?.takeIf(::encodes) ?: return
-        synchronized(queued) {
-            if (store.id !in queued) queued[store.id] = HashSet()
-            queued[store.id]?.addAll(event.ids)
-        }
-        schedule(store.id, QUIET_SECONDS, "items")
+        workload.keys.want(WORK, event.ids.map { "${store.id}$SEP$it" })
+        schedule(QUIET_SECONDS, "items")
     }
 
     /** Whether a way of reading asks for texts of the source's casts at all: it has a line, and a way is installed. */
@@ -61,34 +51,36 @@ class CastNames(
         WorkCasts.facetOf(store) != null && plugins.castReaders.isNotEmpty()
 
     /**
-     * The works of the [source] queued encoded after [delaySeconds] of quiet; whatever reads them again told out of the
-     * queue, it plans its own work.
+     * The works the queue keeps waiting ([WorkKeys.wanted]) — of every source, one work — encoded after [delaySeconds]
+     * of quiet; whatever reads them again told out of the queue, it plans its own work.
      */
-    private fun schedule(source: String, delaySeconds: Long, reason: String) =
+    private fun schedule(delaySeconds: Long, reason: String) =
         workload.plan(
-            work(source),
+            WORK,
             Instant.now().plusSeconds(delaySeconds),
             reason,
-            after = { encoded: List<String> ->
-                if (encoded.isNotEmpty()) events.publishEvent(CastNamesEncoded(source, encoded))
+            after = { encoded: Map<String, List<String>> ->
+                encoded.forEach { (source, ids) ->
+                    if (ids.isNotEmpty()) events.publishEvent(CastNamesEncoded(source, ids))
+                }
             },
         ) {
-            val (queuedHere, ids) = synchronized(queued) { (source in queued) to queued.remove(source) }
-            stores.source(source)?.takeIf { queuedHere }?.let { encode(it, ids) }.orEmpty()
+            val taken = workload.keys.wanted(WORK)
+            val encoded =
+                taken
+                    .groupBy({ it.substringBefore(SEP) }, { it.substringAfter(SEP) })
+                    .mapNotNull { (source, ids) -> stores.source(source)?.let { source to encode(it, ids) } }
+                    .toMap()
+            workload.keys.done(WORK, taken)
+            encoded
         }
 
     /**
-     * The texts of the casts of the works [ids] (every work of the [store] when null) not encoded yet, encoded now; the
-     * works that had any.
+     * The texts of the casts of the works [ids] of the [store] not encoded yet, encoded now; the works that had any.
      */
-    private fun encode(store: SourceStore, ids: Collection<String>?): List<String> {
+    private fun encode(store: SourceStore, ids: Collection<String>): List<String> {
         val facet = WorkCasts.facetOf(store) ?: return emptyList()
-        val entries =
-            if (ids == null)
-                HashMap<String, List<String>>().also { m ->
-                    store.items.forEachFacet(facet) { id, keys -> m[id] = keys }
-                }
-            else ids.associateWith { store.items.facets(it)[facet].orEmpty() }
+        val entries = store.items.facetsOf(ids).mapValues { it.value[facet].orEmpty() }
         val texts =
             WorkCasts.of(store, facet, entries).mapValues { (_, cast) ->
                 plugins.castReaders.flatMap { it.encoded(cast) }.distinct()
@@ -112,7 +104,10 @@ class CastNames(
     private companion object {
         const val WHAT = "castNames"
 
-        fun work(source: String) = Work(WHAT, source = source)
+        /** One work of every source: their works told apart by their keys ("<source>\t<id>"). */
+        val WORK = Work(WHAT)
+
+        const val SEP = '\t'
 
         /** After the start's own steps: the texts of the works and their vectors first. */
         const val START_DELAY_SECONDS = 90L

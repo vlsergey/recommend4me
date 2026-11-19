@@ -26,6 +26,7 @@
   "Reason.portion": "the next portion",
   "Reason.regrouped": "works, series or authors put together or apart",
   "Reason.removal": "a work removed",
+  "Reason.searchFormat": "the search index is of another format or not brought to every work",
   "Reason.setVectors": "new vectors of sets",
   "Reason.setsGrew": "sets grew",
   "Reason.start": "the application started",

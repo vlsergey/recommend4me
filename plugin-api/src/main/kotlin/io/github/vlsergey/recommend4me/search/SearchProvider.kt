@@ -168,8 +168,9 @@ interface NameCounting {
 }
 
 /**
- * A search over the items of a content type. The index is the provider's: made from every document on start ([rebuild],
- * in the background), kept in step by [update]; the names the works' own words say are counted of it ([NameCounting]).
+ * A search over the items of a content type. The index is the provider's: made from every document in the background
+ * when it is not [current] ([sync]), kept in step by [update]; the names the works' own words say are counted of it
+ * ([NameCounting]).
  */
 interface SearchProvider : NameCounting {
     val id: String
@@ -177,10 +178,17 @@ interface SearchProvider : NameCounting {
     fun rebuild(contentType: String, documents: Sequence<SearchDocument>)
 
     /**
-     * The index brought to every item of the type, on a start: [fingerprints] tells what each item's document is made
-     * of ([SearchDocument.fingerprint]), [documents] makes the documents of the items asked for. Of a provider that
-     * keeps its index between the runs, the documents of the items whose fingerprint changed alone made and written
-     * again, those gone removed; of any other, made anew of every one.
+     * Whether the index of the type is kept of this provider's format and brought to every item — a [sync] or a
+     * [rebuild] that ended: then the application keeps it in step by [update] alone, no [sync] of every item at a
+     * start. False of a provider that keeps nothing between the runs.
+     */
+    fun current(contentType: String): Boolean = false
+
+    /**
+     * The index brought to every item of the type, when it is not [current]: [fingerprints] tells what each item's
+     * document is made of ([SearchDocument.fingerprint]), [documents] makes the documents of the items asked for. Of a
+     * provider that keeps its index between the runs, the documents of the items whose fingerprint changed alone made
+     * and written again, those gone removed; of any other, made anew of every one.
      */
     fun sync(
         contentType: String,

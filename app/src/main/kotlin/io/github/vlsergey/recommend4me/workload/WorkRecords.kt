@@ -34,8 +34,21 @@ interface WorkRecords {
     /** The works of the kind [what] the last run of the application left undone: taken, kept no more. */
     fun left(what: String): List<LeftWork>
 
-    /** Nothing kept. */
+    /**
+     * The [keys] the [work] is to be done of — the items, the fandoms its owner names — kept till they are [done]: a
+     * stop leaves them to the work planned again at the next start.
+     */
+    fun want(work: Work, keys: Collection<String>)
+
+    /** The keys the [work] is to be done of, as kept. */
+    fun wanted(work: Work): List<String>
+
+    /** The [keys] of the [work] done: kept no more — those wanted since stay. */
+    fun done(work: Work, keys: Collection<String>)
+
+    /** Nothing kept between the runs: the keys of the works in the process alone. */
     object NONE : WorkRecords {
+        private val keys = HashMap<Work, MutableSet<String>>()
         override val firstPlan = 0L
 
         override fun planned(
@@ -56,5 +69,15 @@ interface WorkRecords {
         override fun expected(work: Work): Long? = null
 
         override fun left(what: String): List<LeftWork> = emptyList()
+
+        override fun want(work: Work, keys: Collection<String>) {
+            synchronized(this.keys) { this.keys.getOrPut(work) { LinkedHashSet() } += keys }
+        }
+
+        override fun wanted(work: Work): List<String> = synchronized(keys) { keys[work]?.toList().orEmpty() }
+
+        override fun done(work: Work, keys: Collection<String>) {
+            synchronized(this.keys) { this.keys[work]?.removeAll(keys.toSet()) }
+        }
     }
 }

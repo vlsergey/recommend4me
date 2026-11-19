@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.suggestion.FacetModelsFitted
 import io.github.vlsergey.recommend4me.textvector.TextVectorsChanged
 import io.github.vlsergey.recommend4me.work.WorksRegrouped
+import io.github.vlsergey.recommend4me.workload.WorkKeys
 import io.github.vlsergey.recommend4me.workload.Workload
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
@@ -19,7 +20,8 @@ import org.springframework.stereotype.Component
 /**
  * WHAT CHANGED THAT THE INDEX OF THE LIST HOLDS ([ListIndexing]), each change a reason the interface words: an item's
  * data, the values the model gives it, an answer — its document made anew —; a grade, a mark of interest, the
- * predictions of a training — its work's values alone —; a regrouping of the works; and the start, of every item.
+ * predictions of a training — its work's values alone —; a regrouping of the works; an index of another format, of
+ * every item.
  */
 @Component
 internal class ListIndexEvents(
@@ -29,17 +31,17 @@ internal class ListIndexEvents(
     private val workload: Workload,
 ) {
     /**
-     * Of every type whose index is of another format, or none, every item; and of what the last run of the application
-     * left undone, every item of its type: of the items it named nothing was kept.
+     * What the last run of the application left undone planned again — what it named the queue kept ([WorkKeys.want]);
+     * and of every type whose index is of another format, or none, every item. Nothing for the start itself.
      */
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        val left = workload.left(ListIndexing.WORK).mapNotNull { it.work.type }.toSet()
+        workload.left(ListIndexing.WORK).forEach { l ->
+            l.work.type?.let { t -> l.reasons.keys.forEach { indexing.plan(t, it) } }
+        }
         stores.types
-            .filter { it.id in left || !indexing.current(it.id) }
-            .forEach { type ->
-                indexing.change(type.id, ListIndexing.START) { whole += type.sources.map { it.id } }
-            }
+            .filter { !indexing.current(it.id) }
+            .forEach { type -> indexing.change(type.id, ListIndexing.FORMAT) { whole += type.sources.map { it.id } } }
     }
 
     @EventListener

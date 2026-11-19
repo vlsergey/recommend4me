@@ -143,10 +143,15 @@ and pictures — stays out of the queue.
 **The queue is kept in the application's database, and a start plans nothing "just in case"**
 (user, 2026-11-18): every work planned is a row of `queued_work` till it ends, so a stop or a crash
 leaves it to the next start, where its owner takes it (`Workload.resume`) and plans it again; the
-last runs of every kind are kept in `work_run`, what a work to come is expected to take. A start
-plans a work only of what the data say — an index of another format, a type never searched —
-never every work again in case something changed while the application was down: what changes
-then is a tool or a migration, which asks for what follows itself.
+last runs of every kind are kept in `work_run`, what a work to come is expected to take. **What a
+work is to be done of — the items, the fandoms its owner names — is kept with it** (`queued_key`,
+`Workload.keys`: `want` as the change comes, `wanted` as the work begins, `done` once written), never
+in the memory alone: a work resumed does what was asked, not everything because what was asked was
+lost (owner, 2026-11-19: "the queue is kept in the database: nothing is to be run at a start just
+because it is a start"). A start plans a work only of what the data say — an index of another
+format or not brought to every work (`SearchProvider.current`), a type never searched — never
+every work again in case something changed while the application was down: what changes then is a
+tool or a migration, which asks for what follows itself.
 
 **Nothing of the application starts a thread or a timer of its own: it asks `Background`** — the works of
 the queue begun when due, the jobs of the sites, the rounds done again and again, the loops as long as the
