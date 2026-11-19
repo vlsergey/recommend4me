@@ -81,7 +81,8 @@ interface Row {
  * tags are; what both works have but is not compared goes to a group below"): what the pair is compared by —
  * the site, the title, the authors, the size, the description and the facets of the pair's layers
  * ([DuplicatePair.facets]; of a pair of no layers yet, every facet as it is) —; what both works have but the
- * pair is not compared by — the site's own tags and line, a facet not of its layers —, no verdict; and the
+ * pair is not compared by — the site's own tags (in place of the tags, when those are not compared either) and
+ * line, a facet not of its layers —, no verdict; and the
  * fields of one work alone. On a narrow screen the name and the verdict stand over the row, the two under them
  * side by side. Of a pair asked whether it is of one series ([ofSeries]), the site says nothing: no colour of it.
  */
@@ -118,10 +119,12 @@ export function PairGrid({ pair: p, ofSeries = false }: { pair: DuplicatePair; o
       lines: "line-clamp-2",
     };
   });
-  // The site's own tags, after the tags: shown, never compared — the normalized tags are
+  // The site's own tags, after the tags: shown, never compared — the normalized tags are. Of a pair not compared by
+  // the tags either, the site's alone: the two rows would tell the same, one under the other (user, 2026-11-19)
   if ((a.siteTags?.length ?? 0) > 0 || (b.siteTags?.length ?? 0) > 0) {
     const tagsAt = facets.findIndex((r) => r.key === "tags");
-    facets.splice(tagsAt < 0 ? facets.length : tagsAt + 1, 0, {
+    const replaced = tagsAt >= 0 && facets[tagsAt].verdict == null;
+    facets.splice(tagsAt < 0 ? facets.length : replaced ? tagsAt : tagsAt + 1, replaced ? 1 : 0, {
       key: "siteTags",
       name: t("PairGrid.siteTags"),
       left: (a.siteTags ?? []).map(valueName).join(", ") || null,
