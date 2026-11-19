@@ -75,6 +75,8 @@ function WorkRow({ w }: { w: QueuedTask }) {
     w.facet && (w.labelKey ? label(w.labelKey) : w.facet),
     w.item && `#${w.item}`,
     w.works && t(`Works.${w.works}`),
+    // A task over a scope of works goes over them a portion at a time; one of the works the user waits for, at once
+    w.works && t("TaskQueue.inPortions"),
   ].filter(Boolean);
   // Of a task over the works, the work it goes on after and its expected grade; left out going on from the first
   const cursorGrade = w.cursorGrade ?? undefined;

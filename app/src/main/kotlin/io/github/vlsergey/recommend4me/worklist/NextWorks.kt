@@ -13,6 +13,7 @@ import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.Query
 import org.apache.lucene.search.Sort
 import org.apache.lucene.search.SortField
+import org.apache.lucene.search.TermInSetQuery
 import org.apache.lucene.search.TermQuery
 import org.apache.lucene.util.BytesRef
 
@@ -66,6 +67,10 @@ object NextWorks {
                 key?.let { TakenWork(ItemKey.parse(it), grade) }
             }
         }
+
+    /** The documents of the items [keys] alone: what another store tells is to be done of them. */
+    fun among(keys: Collection<ItemKey>): Query =
+        TermInSetQuery(ListDocuments.KEY, keys.map { BytesRef(it.toString()) })
 
     /** The documents of the [stage] done before [since]: of every one when it never was. */
     fun before(stage: WorkStage, since: Long): Query =

@@ -81,11 +81,12 @@ gives an author's own key, the normalized author of the key of the same name is 
 its name to the normalized fandom of the same name anyway, its key of no works let go as a twin
 (`UnusedFandoms`).
 
-A MILLION WORKS ARE ENCODED A PORTION AT A TIME, THE LIKELIEST FIRST (user, 2026-11-17): the texts of
-the works and the chapters wait in the queue of the computations as works of a few minutes each
-(`TextVectors`: 20 000 texts, `PartVectors`: the chapters of 50 works), each queueing the rest anew,
-so a grade or a training goes between them; the works in the order of `LikeliestFirst` — the graded,
-then by the list's formula (the prediction times the chance of interest), then those not predicted.
+A MILLION WORKS ARE ENCODED A PORTION AT A TIME, THE LIKELIEST FIRST (user, 2026-11-17; owner, 2026-11-19):
+the texts of the works and the chapters are tasks over the works (`TextVectors`: a thousand works a turn,
+`PartVectors`: the chapters of 50 works), of the marked and rated works ahead of the others, the
+others after every other task, each turn planning the next from where it left, so a grade or a
+training goes between them; the works in the order of their expected grade (`NextWorks`), those not
+predicted last. A work whose page the user waits on has its texts encoded ahead of everything.
 Archive of Our Own has browser tracking and single pages, one request at a time, five seconds
 apart, with "bot" in the user agent, as the site asks of anything automated.
 

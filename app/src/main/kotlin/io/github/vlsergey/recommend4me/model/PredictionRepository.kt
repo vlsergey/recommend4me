@@ -121,8 +121,9 @@ class PredictionRepository(private val db: DSLContext) {
         private const val FETCH = 5000
 
         /**
-         * A score or a chance changed by less is not written again: a retraining's noise, unseen on the 0..10 scale.
+         * A score or a chance changed by less is not written again: a retraining's noise, unseen on the 0..10 scale. A
+         * prediction kept may so stand that much above the score made of it.
          */
-        private const val STEP = 1e-4
+        const val STEP = 1e-4
     }
 }
