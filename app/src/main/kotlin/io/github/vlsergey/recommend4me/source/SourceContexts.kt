@@ -56,7 +56,11 @@ class SourceContexts(
             get() = store.folder
 
         override fun keepPage(url: String, html: String, itemId: String?) =
-            store.writing.withLock { store.pages.keep(url, html, itemId, Instant.now(), store.source.parserVersion) }
+            store.writing.withLock {
+                Instant.now().let { now ->
+                    store.pages.keep(url, html, itemId, now, PageParser.of(store.source.parsers, now).version)
+                }
+            }
 
         override fun authorPlaces(author: String, urls: List<String>) =
             authorPlaces.getObject().said(store.id, author, urls)

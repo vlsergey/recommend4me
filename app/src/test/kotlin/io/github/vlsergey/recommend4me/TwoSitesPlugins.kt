@@ -8,6 +8,7 @@ import io.github.vlsergey.recommend4me.source.FacetValue
 import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.Job
 import io.github.vlsergey.recommend4me.source.JobCancelled
+import io.github.vlsergey.recommend4me.source.PageParser
 import io.github.vlsergey.recommend4me.source.ReviewData
 import io.github.vlsergey.recommend4me.source.SettingDef
 import io.github.vlsergey.recommend4me.source.Source
@@ -58,6 +59,10 @@ class TwoSitesPlugins {
         override val parserVersion: Int
             get() = version
 
+        /** Of the ways set ([ways]), those; else the one way of its [version]. */
+        override val parsers: List<PageParser>
+            get() = ways ?: listOf(PageParser(null, version))
+
         override fun capture(page: CapturedPage, context: SourceContext): List<String> {
             val parts = page.html.split('|')
             val (id, title, tags) = parts
@@ -68,7 +73,7 @@ class TwoSitesPlugins {
                 ItemHead(
                     id,
                     itemUrl(id),
-                    if (version >= 2) title.uppercase() else title,
+                    if (PageParser.of(parsers, page.capturedAt).version >= 2) title.uppercase() else title,
                     updatedAt = Instant.parse("2026-01-01T00:00:00Z"),
                 ),
                 page.capturedAt,
@@ -87,6 +92,11 @@ class TwoSitesPlugins {
 
         companion object {
             @Volatile var version = 1
+
+            /**
+             * The ways of reading of the site by the date of a page, when set: the site changed the form of its pages.
+             */
+            @Volatile var ways: List<PageParser>? = null
         }
     }
 

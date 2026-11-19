@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.background.Background
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.source.CapturedPage
 import io.github.vlsergey.recommend4me.source.ItemStore
+import io.github.vlsergey.recommend4me.source.PageParser
 import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.source.SourceContext
 import io.github.vlsergey.recommend4me.source.SourceContexts
@@ -37,8 +38,8 @@ class Captured(
 
 /**
  * THE BROWSER TRACKING MODE: the pages the user opens, sent by the extension. Every page a source wants is kept
- * (gzipped, in the source database) and handed to the source; a kept page is handed to it again when the source's
- * parser grows ([Source.parserVersion][io.github.vlsergey.recommend4me.source.Source.parserVersion]).
+ * (gzipped, in the source database) and handed to the source; a kept page is handed to it again when the source's way
+ * of reading of their day changes ([PageParser][io.github.vlsergey.recommend4me.source.PageParser]).
  */
 @Service
 class Captures(
@@ -89,7 +90,7 @@ class Captures(
                 emptyList()
             }
         store.writing.withLock {
-            store.pages.keep(url, html, items.firstOrNull(), now, store.source.parserVersion)
+            store.pages.keep(url, html, items.firstOrNull(), now, PageParser.of(store.source.parsers, now).version)
             // The answer of a request the source wanted: not asked again, whatever it said
             store.wanted.fetched(url, now)
         }
@@ -119,16 +120,17 @@ class Captures(
     @Order(1)
     @EventListener(ApplicationReadyEvent::class)
     fun start() {
-        background.start("reparse") { reparse() }
+        // What the data say: some kept page read by another version than the way of reading of its day
+        if (stores.sources.any { it.pages.anyMisread(it.source.parsers) }) background.start("reparse") { reparse() }
     }
 
-    /** The kept pages read by an older parser, read again. */
+    /** The kept pages read by another version than the way of reading of their day has, read again. */
     // A source's parser is a plugin reading a site's page: one page it fails on any way leaves the others to be read
     @Suppress("TooGenericExceptionCaught")
     fun reparse() {
         stores.sources.forEach { s ->
-            val version = s.source.parserVersion
-            val older = s.pages.older(version)
+            val parsers = s.source.parsers
+            val older = s.pages.misread(parsers)
             if (older.isEmpty()) return@forEach
             log.info("{}: reading {} kept pages again", s.id, older.size)
             val context = contexts.of(s.id)
@@ -139,7 +141,7 @@ class Captures(
                 } catch (e: Exception) {
                     log.warn("{}: the kept page {} cannot be read: {}", s.id, url, e.message)
                 }
-                s.pages.markRead(url, version)
+                s.pages.markRead(url, PageParser.of(parsers, page.capturedAt).version)
             }
         }
     }

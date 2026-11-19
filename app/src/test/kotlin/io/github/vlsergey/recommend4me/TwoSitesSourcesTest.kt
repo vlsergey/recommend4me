@@ -8,7 +8,10 @@ import io.github.vlsergey.recommend4me.api.model.RatingRequest
 import io.github.vlsergey.recommend4me.api.model.ScorerChoice
 import io.github.vlsergey.recommend4me.refusal.Refusal
 import io.github.vlsergey.recommend4me.refusal.Refused
+import io.github.vlsergey.recommend4me.source.PageParser
 import io.github.vlsergey.recommend4me.source.SourceMode
+import java.time.Duration
+import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -88,6 +91,30 @@ class TwoSitesSourcesTest : TwoSitesTestBase() {
             assertEquals("QUIET HARBOUR", items.getItem("alpha", "a7").body!!.summary.title)
         } finally {
             Alpha.version = 1
+        }
+    }
+
+    /**
+     * The site changed the form of its pages: a page downloaded before it is read by the way of its day, and read again
+     * only when that way is another than the one that read it — not when a way of later pages changes.
+     */
+    @Test
+    fun `a kept page is read again by the way of reading of the day it was downloaded`() {
+        alpha("a10|Calm bay|harbour|Boats at rest||")
+        assertEquals("Calm bay", items.getItem("alpha", "a10").body!!.summary.title)
+        val downloaded = Instant.now()
+        try {
+            // A way of the pages downloaded from tomorrow: the page of today is not its own, read by the way of its day
+            Alpha.ways = listOf(PageParser(null, 1), PageParser(downloaded.plus(Duration.ofDays(1)), 2))
+            captured.reparse()
+            assertEquals("Calm bay", items.getItem("alpha", "a10").body!!.summary.title)
+            // A way of the pages downloaded since yesterday: the page of today is its own, read by it again
+            Alpha.ways = listOf(PageParser(null, 1), PageParser(downloaded.minus(Duration.ofDays(1)), 2))
+            captured.reparse()
+            assertEquals("CALM BAY", items.getItem("alpha", "a10").body!!.summary.title)
+        } finally {
+            Alpha.ways = null
+            captured.reparse()
         }
     }
 

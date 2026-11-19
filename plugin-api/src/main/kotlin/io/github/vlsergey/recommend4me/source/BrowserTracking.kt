@@ -18,10 +18,18 @@ interface BrowserTracking {
 
     /**
      * Raised when the source reads its pages differently: every kept page ([SourceContext.keepPage]) is handed to
-     * [capture] again on the next start.
+     * [capture] again — of a source whose site never changed the form of its pages, its one way of reading them
+     * ([parsers]).
      */
     val parserVersion: Int
         get() = 1
+
+    /**
+     * The ways the source reads its pages, each of the pages downloaded since its date ([PageParser]): a kept page read
+     * by another version than the way of its day is handed to [capture] again. One way, of every page, by default.
+     */
+    val parsers: List<PageParser>
+        get() = listOf(PageParser(null, parserVersion))
 
     /**
      * Reads a page the browser sent — or one kept before, read again after the parser changed — and writes what it
