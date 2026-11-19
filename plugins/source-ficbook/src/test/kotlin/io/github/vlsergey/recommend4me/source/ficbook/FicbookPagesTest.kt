@@ -258,6 +258,30 @@ class FicbookPagesTest {
     }
 
     @Test
+    fun `a page of the site's catalogue of fandoms names and describes every fandom of its group`() {
+        val context = MemorySourceContext()
+        assertEquals(
+            emptyList(),
+            capture(context, "https://ficbook.net/fanfiction/musicals?p=19", "fandoms-catalogue.html"),
+        )
+        assertEquals(
+            mapOf(
+                "musicals/shurale" to "Шурале",
+                "musicals/elizabet" to "Элизабет",
+                "musicals/eljfijskaja_rukopisj__skazanie_na_vse_vremena" to
+                    "Эльфийская рукопись: Сказание на все времена",
+                "musicals/ja___edmon_dantes" to "Я - Эдмон Дантес",
+            ),
+            context.facetNames.getValue("fandom"),
+        )
+        assertEquals("Elisabeth / 1992-2016", context.facetDescriptions.getValue("fandom")["musicals/elizabet"])
+        // A fandom's own page is no page of the catalogue: its links name nothing
+        val other = MemorySourceContext()
+        capture(other, "https://ficbook.net/fanfiction/books/rouling_dzhoan___garri_potter", "fandom.html")
+        assertNull(other.facetNames["fandom"])
+    }
+
+    @Test
     fun `the site's search of tags, asked by the browser, says what the tag means — of its own name or a synonym`() {
         val harassment =
             "В работе описываются персонажи, совершающие нежелательные и как правило неоднократные действия сексуального характера в отношении других персонажей."

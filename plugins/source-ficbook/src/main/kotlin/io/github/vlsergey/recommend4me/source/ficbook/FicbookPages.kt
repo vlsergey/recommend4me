@@ -51,6 +51,7 @@ class FicbookPages(private val context: SourceContext) {
         touched += cards(doc, page.capturedAt)
         TAG_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { meanings.tagPage(doc, it) }
         FANDOM_PAGE.matchEntire(path)?.groupValues?.get(1)?.let { fandoms.page(doc, it) }
+        CATALOGUE.matchEntire(path)?.groupValues?.get(1)?.let { fandoms.catalogue(doc, it) }
         // A series' own page, and an author's list of series: after the cards, whose works they list
         FicbookSeries.SERIES.matchEntire(path)?.groupValues?.get(1)?.let { series.page(doc, it) }
         if (AUTHOR_SERIES.matches(path)) series.list(doc)
@@ -283,6 +284,9 @@ class FicbookPages(private val context: SourceContext) {
 
         /** A fandom's own page, the list of its works: "/fanfiction/books/rouling_dzhoan___garri_potter". */
         private val FANDOM_PAGE = Regex("/fanfiction/([^/]+/[^/]+)/?")
+
+        /** A page of the catalogue of the fandoms of a group: "/fanfiction/musicals". */
+        private val CATALOGUE = Regex("/fanfiction/([^/]+)/?")
 
         /** An author's list of series: "/authors/3093607/series". */
         private val AUTHOR_SERIES = Regex("/authors/[^/]+/series/?")
