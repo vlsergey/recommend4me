@@ -3,10 +3,14 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_CANDIDATE
 import io.github.vlsergey.recommend4me.database.model.tables.references.DUPLICATE_SEARCH
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.laps.Laps
 import java.time.Instant
 import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(DuplicateRepository::class.java)
 
 /**
  * Two works of different sites that may be one — [first] the smaller key — with how alike each layer of theirs is (none
@@ -135,21 +139,29 @@ class DuplicateRepository(private val db: DSLContext) {
      * searched.
      */
     fun replace(candidates: Collection<DuplicateCandidate>, search: DuplicateSearch, rarity: Map<String, Float>) {
+        // Where the time goes, told in the log: the tables emptied, the rarities, the candidates ordered and written,
+        // the commit, the index
+        val laps = Laps()
         db.deleteFrom(DUPLICATE_SEARCH).execute()
         db.truncate(DUPLICATE_CANDIDATE).execute()
         // The index of the other works built once after, not row by row: 1.24 million rows written in 9 s, not 28
         // (H2 2.4, measured 2026-11-20). A search broken before it is built builds it, as it is made again
         db.execute("DROP INDEX IF EXISTS $OTHER_INDEX")
+        laps.lap("emptied")
         db.transaction { c ->
             this.rarity.replace(c.dsl(), rarity)
-            fill(c.dsl(), candidates, search)
+            laps.lap("rarities of ${rarity.size} values")
+            fill(c.dsl(), candidates, search, laps)
         }
+        laps.lap("committed")
         db.execute("CREATE INDEX IF NOT EXISTS $OTHER_INDEX ON DUPLICATE_CANDIDATE(OTHER_SOURCE, OTHER_ITEM_ID)")
+        laps.lap("the index of the other works")
+        log.info("the {} candidates of a search written: {}", candidates.size, laps)
     }
 
     /** The [candidates] and the [search] written by [tx], into tables emptied. */
-    private fun fill(tx: DSLContext, candidates: Collection<DuplicateCandidate>, search: DuplicateSearch) {
-        keep(tx, candidates)
+    private fun fill(tx: DSLContext, candidates: Collection<DuplicateCandidate>, search: DuplicateSearch, laps: Laps) {
+        keep(tx, candidates, laps)
         tx.insertInto(DUPLICATE_SEARCH)
             .set(DUPLICATE_SEARCH.ID, 1)
             .set(DUPLICATE_SEARCH.MADE_AT, search.madeAt)
@@ -167,7 +179,7 @@ class DuplicateRepository(private val db: DSLContext) {
      * The [candidates] written by [tx], one statement prepared and bound a row each: half a million statements of their
      * own, each parsed by the database apart, were most of a search's half a minute of keeping.
      */
-    private fun keep(tx: DSLContext, candidates: Collection<DuplicateCandidate>) {
+    private fun keep(tx: DSLContext, candidates: Collection<DuplicateCandidate>, laps: Laps) {
         // In the order of the table's key: every row written after the last, not into the middle of its pages — half a
         // million rows in the order found took 20 s of a search, most of it the database finding their places
         // (2026-11-18)
@@ -180,6 +192,7 @@ class DuplicateRepository(private val db: DSLContext) {
                     { it.second.id },
                 )
             )
+        laps.lap("ordered")
         ordered.chunked(BATCH).forEach { chunk ->
             val batch =
                 tx.batch(tx.insertInto(DUPLICATE_CANDIDATE).columns(COLUMNS).values(List(COLUMNS.size) { null }))
@@ -211,6 +224,7 @@ class DuplicateRepository(private val db: DSLContext) {
             }
             batch.execute()
         }
+        laps.lap("written")
     }
 
     /**
