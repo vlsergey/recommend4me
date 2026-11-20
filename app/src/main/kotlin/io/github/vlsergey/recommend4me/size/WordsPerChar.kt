@@ -6,10 +6,28 @@ import kotlin.math.ln
 import kotlin.math.sqrt
 
 /**
- * What a work tells of how long its words are: its [features] — the site, the language, the normalized tags and authors
- * — and the [words] of its [chars] known, of its text or of what the sites state.
+ * THE FEATURES OF THE WORKS' SIZES BY THEIR NUMBERS: the mean the first ([WordsPerChar.MEAN]), then every site,
+ * language, normalized tag and author as it is met — a work's features numbers, not strings: of 1.4 million works a
+ * string and a set a feature of every work (2026-11-20).
  */
-class SizeExample(val features: Collection<String>, val words: Double, val chars: Double) {
+class SizeFeatures {
+    private val byName = HashMap<String, Int>()
+    val names = ArrayList<String>()
+
+    init {
+        id(WordsPerChar.MEAN)
+    }
+
+    /** The number of the feature [name], given at its first meeting. */
+    fun id(name: String): Int = byName.getOrPut(name) { names.size.also { names += name } }
+}
+
+/**
+ * What a work tells of how long its words are: its [features] by their numbers ([SizeFeatures]) — the site, the
+ * language, the normalized tags and authors, each once —, and the [words] of its [chars] known, of its text or of what
+ * the sites state.
+ */
+class SizeExample(val features: IntArray, val words: Double, val chars: Double) {
     val logRatio: Double
         get() = ln(words / chars)
 
@@ -24,12 +42,16 @@ class SizeExample(val features: Collection<String>, val words: Double, val chars
  * much of a work and a tag's less, each by its own penalty. A work's own numbers weigh over the model's by how many
  * characters they count ([of]).
  */
-class WordsPerChar(private val weights: Map<String, Double>) {
-    /** The logarithm of the ratio of a work of these features. */
-    fun log(features: Collection<String>): Double = (weights[MEAN] ?: 0.0) + features.sumOf { weights[it] ?: 0.0 }
+class WordsPerChar(private val weights: DoubleArray) {
+    /** The logarithm of the ratio of a work of these features: a feature met after the fitting, none. */
+    fun log(features: IntArray): Double {
+        var sum = weights[0]
+        for (f in features) if (f < weights.size) sum += weights[f]
+        return sum
+    }
 
     /** The ratio of a work of these features, of its [own] numbers when it has them. */
-    fun of(features: Collection<String>, own: SizeExample?): Double {
+    fun of(features: IntArray, own: SizeExample?): Double {
         val model = log(features)
         return exp(if (own == null) model else (own.chars * own.logRatio + SAMPLE * model) / (own.chars + SAMPLE))
     }
@@ -43,7 +65,8 @@ class WordsPerChar(private val weights: Map<String, Double>) {
         const val TAG = "tag:"
         const val AUTHOR = "author:"
 
-        private const val MEAN = "mean"
+        /** The feature every work has, the first of [SizeFeatures]. */
+        const val MEAN = "mean"
         private const val ITERATIONS = 2000
         private const val TOLERANCE = 1e-20
         private const val FOLDS = 10
@@ -69,28 +92,33 @@ class WordsPerChar(private val weights: Map<String, Double>) {
         private const val SOURCE_PENALTY = 3.0
         private const val TAG_PENALTY = 10.0
 
-        /** The model of the [examples]: the normal equations of the weighed ridge solved by conjugate gradients. */
-        fun fit(examples: List<SizeExample>): WordsPerChar {
-            val index = HashMap<String, Int>()
-            index[MEAN] = 0
-            val rows = examples.map { e ->
-                (e.features.map { f -> index.getOrPut(f) { index.size } } + 0).distinct().toIntArray()
-            }
-            val n = index.size
-            val lambda = DoubleArray(n)
-            index.forEach { (f, i) -> lambda[i] = penalty(f) }
+        /**
+         * The model of the [examples], their features named by [names]: the normal equations of the weighed ridge
+         * solved by conjugate gradients. Every example of the mean and its own features, read as they are: no row made
+         * of them.
+         */
+        fun fit(examples: List<SizeExample>, names: List<String>): WordsPerChar {
+            val n = names.size
+            val lambda = DoubleArray(n) { penalty(names[it]) }
             val weight = DoubleArray(examples.size) { examples[it].weight }
             fun times(x: DoubleArray): DoubleArray {
                 val out = DoubleArray(n) { lambda[it] * x[it] }
-                rows.forEachIndexed { i, row ->
-                    val s = weight[i] * row.sumOf { x[it] }
-                    row.forEach { out[it] += s }
+                examples.forEachIndexed { i, e ->
+                    var sum = x[0]
+                    for (f in e.features) sum += x[f]
+                    val s = weight[i] * sum
+                    out[0] += s
+                    for (f in e.features) out[f] += s
                 }
                 return out
             }
             val x = DoubleArray(n)
             val r = DoubleArray(n)
-            rows.forEachIndexed { i, row -> row.forEach { r[it] += weight[i] * examples[i].logRatio } }
+            examples.forEachIndexed { i, e ->
+                val s = weight[i] * e.logRatio
+                r[0] += s
+                for (f in e.features) r[f] += s
+            }
             val p = r.copyOf()
             var rs = r.sumOf { it * it }
             for (step in 1..ITERATIONS) {
@@ -105,19 +133,19 @@ class WordsPerChar(private val weights: Map<String, Double>) {
                 for (i in 0 until n) p[i] = r[i] + next / rs * p[i]
                 rs = next
             }
-            return WordsPerChar(index.entries.associate { (f, i) -> f to x[i] })
+            return WordsPerChar(x)
         }
 
         /**
          * How far from the truth the logarithm of the ratio is told of a work the model did not see: the mean square of
          * the folds' errors, its root.
          */
-        fun outOfFold(examples: List<SizeExample>): Double {
+        fun outOfFold(examples: List<SizeExample>, names: List<String>): Double {
             if (examples.size < FOLDS) return Double.NaN
             val shuffled = examples.shuffled(Random(1))
             var sum = 0.0
             for (fold in 0 until FOLDS) {
-                val model = fit(shuffled.filterIndexed { i, _ -> i % FOLDS != fold })
+                val model = fit(shuffled.filterIndexed { i, _ -> i % FOLDS != fold }, names)
                 shuffled.forEachIndexed { i, e ->
                     if (i % FOLDS == fold) sum += (e.logRatio - model.log(e.features)).let { it * it }
                 }

@@ -20,7 +20,19 @@ internal fun TypeStore.hasSizes() = sources.any { it.wordsKey() != null || it.ch
 
 /** What is known of a work's size by every item of it. */
 internal class Known {
-    val features = HashSet<String>()
+    /** Its features by their numbers ([SizeFeatures]), each once, the first [count] of them. */
+    private var features = IntArray(INITIAL)
+    private var count = 0
+
+    /** The feature [id] added, once. */
+    fun add(id: Int) {
+        for (q in 0 until count) if (features[q] == id) return
+        if (count == features.size) features = features.copyOf(count * 2)
+        features[count++] = id
+    }
+
+    /** Its features. */
+    fun features(): IntArray = features.copyOf(count)
 
     /** The longest text kept of any of its items, counted. */
     var text: Pair<Double, Double>? = null
@@ -33,17 +45,24 @@ internal class Known {
     var chars = 0.0
 
     /** Of its text or of what one site states, none of two sites. */
-    fun own(): SizeExample? = (text ?: stated)?.let { SizeExample(features, it.first, it.second) }
+    fun own(): SizeExample? = (text ?: stated)?.let { SizeExample(features(), it.first, it.second) }
 
-    fun acrossSites(): SizeExample? = if (words > 0 && chars > 0) SizeExample(features, words, chars) else null
+    fun acrossSites(): SizeExample? = if (words > 0 && chars > 0) SizeExample(features(), words, chars) else null
+
+    private companion object {
+        const val INITIAL = 8
+    }
 }
 
-/** What every source of the [type] knows of its works, each source read in one pass. */
-internal fun knownSizes(type: TypeStore): Map<Long, Known> {
+/**
+ * What every source of the [type] knows of its works, each source read in one pass, their features numbered in
+ * [features].
+ */
+internal fun knownSizes(type: TypeStore, features: SizeFeatures): Map<Long, Known> {
     val works = HashMap<Long, Known>()
     type.sources.forEach { s ->
         countTexts(s)
-        SourceSizes(s, works).read()
+        SourceSizes(s, works, features).read()
     }
     return works
 }
@@ -65,16 +84,28 @@ private fun countTexts(s: SourceStore) {
 }
 
 /** What the source [s] tells of the works its items are bound to, put in [works]. */
-private class SourceSizes(private val s: SourceStore, private val works: HashMap<Long, Known>) {
+private class SourceSizes(
+    private val s: SourceStore,
+    private val works: HashMap<Long, Known>,
+    private val features: SizeFeatures,
+) {
     private val bound = s.works.allOf(s.id)
 
     private fun of(id: String): Known? = bound[id]?.let { work -> works.getOrPut(work) { Known() } }
 
+    // A feature's number made of its name once a tag, an author, a language, not once a work
+    private val tagIds = HashMap<Long, Int>()
+    private val authorIds = HashMap<Long, Int>()
+
+    private fun language(code: String) = features.id(WordsPerChar.LANGUAGE + code)
+
     fun read() {
-        bound.keys.forEach { of(it)!!.features += WordsPerChar.SOURCE + s.id }
+        val site = features.id(WordsPerChar.SOURCE + s.id)
+        bound.keys.forEach { of(it)!!.add(site) }
         val corrections = s.corrections.allFacets()
         s.normalizedTags(null, corrections).forEach { (id, tags) ->
-            of(id)?.features?.addAll(tags.map { WordsPerChar.TAG + it })
+            val k = of(id) ?: return@forEach
+            tags.forEach { k.add(tagIds.getOrPut(it) { features.id(WordsPerChar.TAG + it) }) }
         }
         authors()
         languages(corrections)
@@ -87,7 +118,9 @@ private class SourceSizes(private val s: SourceStore, private val works: HashMap
         val f = s.schema.facets.firstOrNull { it.role == FacetRole.AUTHOR } ?: return
         val authors = s.authors.bindingsOf(s.id)
         s.items.forEachFacet(f.key) { id, keys ->
-            keys.forEach { k -> authors[k]?.let { of(id)?.features?.add(WordsPerChar.AUTHOR + it) } }
+            keys.forEach { k ->
+                authors[k]?.let { a -> of(id)?.add(authorIds.getOrPut(a) { features.id(WordsPerChar.AUTHOR + a) }) }
+            }
         }
     }
 
@@ -97,14 +130,12 @@ private class SourceSizes(private val s: SourceStore, private val works: HashMap
             .firstOrNull { it.standard === StandardLanguages.LANGUAGE }
             ?.let { f ->
                 s.items.forEachFacet(f.key) { id, keys ->
-                    keys.mapNotNull(StandardLanguages::code).forEach {
-                        of(id)?.features?.add(WordsPerChar.LANGUAGE + it)
-                    }
+                    keys.mapNotNull(StandardLanguages::code).forEach { of(id)?.add(language(it)) }
                 }
             }
         corrections
             .filter { it.facet == StandardLanguages.KEY && it.added }
-            .forEach { of(it.itemId)?.features?.add(WordsPerChar.LANGUAGE + it.key) }
+            .forEach { of(it.itemId)?.add(language(it.key)) }
     }
 
     /** The words and the characters every item's site states: the most of each, and the two of one item. */

@@ -105,18 +105,19 @@ class WorkSizes(private val stores: Stores, private val tasks: Tasks) {
     /** The model of the type fitted, the works of two sites near enough to it let in, and every work's ratio kept. */
     fun fit(type: TypeStore) {
         val started = System.currentTimeMillis()
-        val works = knownSizes(type)
+        val features = SizeFeatures()
+        val works = knownSizes(type, features)
         val sure = works.values.mapNotNull { it.own() }
         if (sure.isEmpty()) return
-        val error = WordsPerChar.outOfFold(sure)
-        val first = WordsPerChar.fit(sure)
+        val error = WordsPerChar.outOfFold(sure, features.names)
+        val first = WordsPerChar.fit(sure, features.names)
         val across = works.values.filter { it.own() == null }.mapNotNull { k -> k.acrossSites()?.let { k to it } }
         val near =
             across
                 .filter { (_, e) -> error.isNaN() || abs(e.logRatio - first.log(e.features)) <= TRUST * error }
                 .toMap()
-        val model = WordsPerChar.fit(sure + near.values)
-        type.sizes.keep(works.mapValues { (_, k) -> model.of(k.features, k.own() ?: near[k]) })
+        val model = WordsPerChar.fit(sure + near.values, features.names)
+        type.sizes.keep(works.mapValues { (_, k) -> model.of(k.features(), k.own() ?: near[k]) })
         log.info(
             "{}: the words to a character of {} works, learnt from {} of their own numbers " +
                 "and {} of two sites of {}, out of fold {} by a logarithm, the mean alone {}, in {} ms",
@@ -126,7 +127,10 @@ class WorkSizes(private val stores: Stores, private val tasks: Tasks) {
             near.size,
             across.size,
             "%.4f".format(error),
-            "%.4f".format(WordsPerChar.outOfFold(sure.map { SizeExample(emptyList(), it.words, it.chars) })),
+            "%.4f"
+                .format(
+                    WordsPerChar.outOfFold(sure.map { SizeExample(IntArray(0), it.words, it.chars) }, features.names)
+                ),
             System.currentTimeMillis() - started,
         )
     }
