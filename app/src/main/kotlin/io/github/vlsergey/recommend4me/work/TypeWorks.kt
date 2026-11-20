@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.work
 
+import io.github.vlsergey.recommend4me.correction.TypeLinkRepository.Companion.DIFFERENT
 import io.github.vlsergey.recommend4me.item.ItemKey
 
 /**
@@ -9,6 +10,10 @@ class TypeWorks(private val works: WorkRepository, private val sources: Collecti
 
     /** The items of the [works] among the type's sources: work to its items. */
     fun itemsOf(works: Collection<Long>): Map<Long, List<ItemKey>> = this.works.itemsOf(works, sources)
+
+    /** Every two works the user said to be different works, the smaller id first. */
+    fun differentWorks(): List<Pair<Long, Long>> =
+        works.relations.words().filterValues { it == DIFFERENT }.keys.toList()
 
     /** The normalized works of the [items]: item to work, of those bound to one. */
     fun worksOf(items: Collection<ItemKey>): Map<ItemKey, Long> =

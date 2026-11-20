@@ -77,6 +77,7 @@ flowchart LR
     w_encodeSiteItemChapters{{"encodeSiteItemChapters"}}
     w_encodeSiteItemTexts{{"encodeSiteItemTexts"}}
     w_encodeTagNames{{"encodeTagNames"}}
+    w_eraseDifferentInSeries{{"eraseDifferentInSeries"}}
     w_fillWorkFields{{"fillWorkFields"}}
     w_fitDuplicateModel{{"fitDuplicateModel"}}
     w_fitFandomLikeness{{"fitFandomLikeness"}}
@@ -168,6 +169,7 @@ flowchart LR
     e_SiteItemWriteEvent --> e_WorkGroupChangeEvent
     e_SiteItemWriteEvent --> w_countFandomWorks
     e_SiteItemWriteEvent --> w_encodeSiteItemCasts
+    e_SiteItemWriteEvent --> w_eraseDifferentInSeries
     e_SiteItemWriteEvent --> w_keyNamedValues
     e_SiteItemWriteEvent --> w_letGoUnusedFandoms
     e_SiteItemWriteEvent --> w_makeSiteItemSetVectors
@@ -196,6 +198,7 @@ flowchart LR
     e_WorkGradeChangeEvent --> w_fitGradeModels
     e_WorkGradeChangeEvent --> w_nameTags
     e_WorkGradeChangeEvent --> w_writeWorkValues
+    e_WorkGroupChangeEvent --> w_eraseDifferentInSeries
     e_WorkGroupChangeEvent --> w_makeWorkManners
     e_WorkGroupChangeEvent --> w_writeListIndex
     e_WorkInterestChangeEvent --> w_fitGradeModels

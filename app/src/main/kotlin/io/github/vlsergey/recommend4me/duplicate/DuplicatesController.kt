@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.api.model.TaskPriority
 import io.github.vlsergey.recommend4me.api.model.WorkPairJournalPage
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.refusal.Refusal
+import io.github.vlsergey.recommend4me.series.SeriesDifferences
 import io.github.vlsergey.recommend4me.source.Stores
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -68,6 +69,13 @@ class DuplicatesController(
     override fun answerDuplicate(type: String, duplicateAnswer: ApiDuplicateAnswer): ResponseEntity<Unit> {
         val a = duplicateAnswer.first.let { ItemKey(it.source, it.item) }
         val b = duplicateAnswer.second.let { ItemKey(it.source, it.item) }
+        val store = stores.type(type)
+        if (
+            store != null &&
+                duplicateAnswer.verdict == ApiDuplicateAnswer.Verdict.DIFFERENT &&
+                SeriesDifferences.heldBySites(store, listOf(a to b)).isNotEmpty()
+        )
+            throw Refusal.SERIES_HOLDS.refuse(HttpStatus.CONFLICT, "The sites hold $a and $b in one series")
         if (!duplicates.answer(type, a, b, DuplicateAnswer.valueOf(duplicateAnswer.verdict.name))) {
             throw Refusal.NO_SUCH_WORK.refuse(HttpStatus.BAD_REQUEST, "No such pair of works of $type: $a, $b")
         }

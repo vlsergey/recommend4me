@@ -105,6 +105,7 @@
   "What.encodeSiteItemChapters": "Vectors of the works' chapters",
   "What.encodeSiteItemTexts": "Vectors of the works' text fields on the sites",
   "What.encodeTagNames": "Vectors of tags",
+  "What.eraseDifferentInSeries": "Taking back \"different\" between works of one series",
   "What.fillWorkFields": "The works' fields computed by the models",
   "What.fitDuplicateModel": "The model of duplicate pairs",
   "What.fitFandomLikeness": "The likeness of the fandoms' names by your word on the universes",

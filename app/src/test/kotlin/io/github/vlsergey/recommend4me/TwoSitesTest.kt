@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.api.model.AuthorAnswer
 import io.github.vlsergey.recommend4me.api.model.AuthorKind
 import io.github.vlsergey.recommend4me.api.model.AuthorOffer
 import io.github.vlsergey.recommend4me.api.model.AuthorSaid
+import io.github.vlsergey.recommend4me.api.model.CaptureRequest
 import io.github.vlsergey.recommend4me.api.model.DuplicatePair
 import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.api.model.FacetCorrection
@@ -103,6 +104,39 @@ class TwoSitesTest : TwoSitesTestBase() {
         // A text changed is counted anew
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово")))
         assertNull(a.parts.counts.counted()["z1"])
+    }
+
+    @Test
+    fun `a word of different works on two of one series of a site is taken back, and refused while it holds them`() {
+        // The site of the tests that has series: "<id>|<title>|<tags>|<annotation>|<pairings>|<series>"
+        fun site(body: String) =
+            captures.capturePage(CaptureRequest("https://site.example/work/${body.substringBefore('|')}", body))
+        site("sd1|Saga One|river|The first of a saga||saga")
+        site("sd2|Saga Two|river|The second of a saga||")
+        val type = stores.type("books")!!
+        val d1 = ItemKey("site", "sd1")
+        val d2 = ItemKey("site", "sd2")
+        fun different() =
+            duplicates.answerDuplicate(
+                "books",
+                io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(
+                    ItemRef("site", "sd1"),
+                    ItemRef("site", "sd2"),
+                    io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT,
+                ),
+            )
+        different()
+        background.run()
+        assertEquals("DIFFERENT", type.links.word(d1, d2, Instant.now()))
+        // The site puts the second in the series too: the word taken back, in the journal so
+        site("sd2|Saga Two|river|The second of a saga||saga")
+        background.run()
+        assertNull(type.links.word(d1, d2, Instant.now()))
+        val taken = type.links.journal().first { setOf(it.first, it.second) == setOf(d1, d2) }
+        assertTrue(taken.ofSeries && taken.answer == null && taken.before == "DIFFERENT", taken.toString())
+        // Said again, the word is refused: the site's series is stronger than it
+        assertEquals("seriesHolds", assertThrows<Refused> { different() }.refusal.code)
+        assertNull(type.links.word(d1, d2, Instant.now()))
     }
 
     @Test

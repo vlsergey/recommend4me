@@ -18,6 +18,8 @@ class PairWord(
     val answer: String?,
     val before: String?,
     val restored: Boolean,
+    /** A word "different" taken back by the application, the two works being of one series. */
+    val ofSeries: Boolean = false,
 )
 
 /**
@@ -26,7 +28,10 @@ class PairWord(
  */
 class WorkPairJournal(private val db: DSLContext) {
 
-    fun write(a: ItemKey, b: ItemKey, answer: String?, before: String?, now: Instant) {
+    /**
+     * The word [answer] on the two items, in place of [before]; [ofSeries]: taken back as the two are of one series.
+     */
+    fun write(a: ItemKey, b: ItemKey, answer: String?, before: String?, now: Instant, ofSeries: Boolean = false) {
         val j = WORK_PAIR_JOURNAL
         db.insertInto(j)
             .set(j.SAID_AT, now)
@@ -36,6 +41,7 @@ class WorkPairJournal(private val db: DSLContext) {
             .set(j.OTHER_ITEM, b.id)
             .set(j.ANSWER, answer)
             .set(j.ANSWER_BEFORE, before)
+            .set(j.OF_SERIES, ofSeries)
             .execute()
     }
 
@@ -54,6 +60,7 @@ class WorkPairJournal(private val db: DSLContext) {
                     it.answer,
                     it.answerBefore,
                     it.restored!!,
+                    it.ofSeries!!,
                 )
             }
     }

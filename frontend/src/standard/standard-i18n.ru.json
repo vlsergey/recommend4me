@@ -20,6 +20,7 @@
   "error.noSuchType": "Нет такого типа",
   "error.noSuchUniverse": "Нет такой вселенной в словаре",
   "error.noSuchWork": "Такой работы нет",
+  "error.seriesHolds": "Обе работы в одном цикле по сайту: «Разные» не записывается — цикл сайта сильнее ответа",
   "error.noUniverses": "Ни у одного сайта нет вселенных",
   "error.noValue": "Не указано значение",
   "error.notInCatalogue": "В справочнике нет «{{universe}}»",

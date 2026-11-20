@@ -10,6 +10,7 @@ import io.github.vlsergey.recommend4me.author.AuthorKinship
 import io.github.vlsergey.recommend4me.author.AuthorsKin
 import io.github.vlsergey.recommend4me.item.ItemDetailsReader
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.series.SeriesDifferences
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
 import org.springframework.stereotype.Component
@@ -52,7 +53,8 @@ class PairWindow(
         val kin =
             if (same) null
             else AuthorKinship.of(type, x.authors, y.authors, answers.said(type), models.of(type), clusters)
-        return views.pairOf(r, x, y, same, said, kin?.let(::kinOf))
+        val held = SeriesDifferences.heldBySites(type, listOf(r.pair)).isNotEmpty()
+        return views.pairOf(r, x, y, same, said, kin?.let(::kinOf), held)
     }
 
     /** How close two authors are by their works, as the window of a pair tells it. */

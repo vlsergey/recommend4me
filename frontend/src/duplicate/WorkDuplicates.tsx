@@ -98,8 +98,8 @@ export function WorkDuplicates({ type, item, sites, corrections }: { type: Conte
                   key={verdict}
                   size="xs"
                   variant={p.answer === verdict ? "default" : "outline"}
-                  disabled={p.answer === verdict}
-                  title={t(`PairRow.${word}Hint`)}
+                  disabled={p.answer === verdict || (verdict === "DIFFERENT" && p.heldBySites === true)}
+                  title={t(verdict === "DIFFERENT" && p.heldBySites ? "PairRow.differentHeldHint" : `PairRow.${word}Hint`)}
                   onClick={() => answer(p, ref(other), verdict)}
                 >
                   {t(`PairRow.${word}`)}

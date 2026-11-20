@@ -76,9 +76,10 @@ private constructor(
 
         /**
          * The series of the [works] alone, read around them: their items' series of the sites, those series' works, the
-         * user's groups of any of them, and so on, till no work is new.
+         * user's groups of any of them, and so on, till no work is new. [bySites]: of the series of the sites alone, no
+         * group of the user's — what holds works in one series whatever the user says.
          */
-        fun around(type: TypeStore, works: Collection<Long>): TypeSeries {
+        fun around(type: TypeStore, works: Collection<Long>, bySites: Boolean = false): TypeSeries {
             val read = SeriesRead(type)
             val seenWorks = HashSet<Long>()
             val seenSeries = HashSet<SiteSeriesRef>()
@@ -87,7 +88,7 @@ private constructor(
                 seenWorks += fresh
                 val series = read.itemsOf(fresh) - seenSeries
                 seenSeries += series
-                fresh = (read.worksOf(series) + read.groupsOf(fresh)) - seenWorks
+                fresh = (read.worksOf(series) + (if (bySites) emptySet() else read.groupsOf(fresh))) - seenWorks
             }
             return TypeSeries(SeriesJoin(read.siteOf, read.workOf, read.groups).series(), read.workOf)
         }

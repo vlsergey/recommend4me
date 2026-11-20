@@ -23,6 +23,9 @@ enum class Refusal(val code: String, val params: List<String> = emptyList()) {
     SITE_FIELD("siteField", listOf("field")),
     NO_VALUE("noValue"),
     NO_SUCH_WORK("noSuchWork"),
+
+    /** The word "different" on two works the sites hold in one series: the series is stronger than the word. */
+    SERIES_HOLDS("seriesHolds"),
     JOIN_TYPES("joinTypes"),
     JOIN_SELF("joinSelf"),
     BAD_RANGE("badRange", listOf("range")),

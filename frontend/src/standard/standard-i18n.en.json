@@ -20,6 +20,7 @@
   "error.noSuchType": "There is no such type",
   "error.noSuchUniverse": "There is no such universe in the dictionary",
   "error.noSuchWork": "There is no such work",
+  "error.seriesHolds": "Both works are in one series of a site: \"Different\" is not kept — the site's series is stronger than the answer",
   "error.noUniverses": "No site has universes",
   "error.noValue": "No value given",
   "error.notInCatalogue": "The catalogue has no “{{universe}}”",

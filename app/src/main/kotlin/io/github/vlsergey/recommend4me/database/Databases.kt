@@ -5,6 +5,9 @@ import io.github.vlsergey.recommend4me.part.PartStore
 import io.github.vlsergey.recommend4me.part.V19__parts_out_of_database
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
+import io.github.vlsergey.recommend4me.series.SourceSeriesFile
+import io.github.vlsergey.recommend4me.series.V34__different_in_series_taken_back
+import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Duration
 import org.jooq.DSLContext
@@ -34,15 +37,6 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
      */
     val preferences = Database("preferences", DataFolder.database(folder.root, "preferences"), "preferences")
 
-    /**
-     * The user's dictionaries, common to every content type: the tags of every site as the user merges and names them,
-     * the universes, and the normalized works with what the user said of them.
-     */
-    val dictionaries =
-        Database("dictionaries", DataFolder.database(folder.root, "dictionaries"), "dictionaries") { db ->
-            CatalogueRenameRepository.moveFrom("dictionaries", db, preferences.dsl)
-        }
-
     private val sources: Map<String, SourceDatabases> =
         plugins.sources.associate { s ->
             val dir = folder.source(s.id)
@@ -70,6 +64,31 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
                     ratings = Database("${s.id}/ratings", dir.resolve("ratings"), "ratings"),
                     parts = parts,
                 )
+        }
+
+    /**
+     * The user's dictionaries, common to every content type: the tags of every site as the user merges and names them,
+     * the universes, and the normalized works with what the user said of them. Opened after the sources' files: one of
+     * its migrations reads them.
+     */
+    val dictionaries =
+        Database(
+            "dictionaries",
+            DataFolder.database(folder.root, "dictionaries"),
+            "dictionaries",
+            // Of the series of the sites, read of the sources' files opened before
+            code =
+                listOf(
+                    V34__different_in_series_taken_back(
+                        plugins.sources.mapNotNull { s ->
+                            s.schema.facets
+                                .firstOrNull { it.role == FacetRole.SERIES }
+                                ?.let { SourceSeriesFile(s.id, it.key, of(s.id).source.dsl) }
+                        }
+                    )
+                ),
+        ) { db ->
+            CatalogueRenameRepository.moveFrom("dictionaries", db, preferences.dsl)
         }
 
     private val types: Map<String, TypeDatabases> =

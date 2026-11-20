@@ -105,6 +105,7 @@
   "What.encodeSiteItemChapters": "Векторы глав работ",
   "What.encodeSiteItemTexts": "Векторы текстовых полей работ сайтов",
   "What.encodeTagNames": "Векторы тегов",
+  "What.eraseDifferentInSeries": "Снятие ответов «Разные» внутри циклов",
   "What.fillWorkFields": "Поля работ по моделям",
   "What.fitDuplicateModel": "Модель пар дубликатов",
   "What.fitFandomLikeness": "Похожесть названий фандомов по вашим ответам о вселенных",

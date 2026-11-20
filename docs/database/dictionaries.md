@@ -28,7 +28,7 @@
 | `normalized_work_relation` | the user's word on two works that stay two: different, one the translation of the other, one a part of the other |
 | `series_group` | a group of works the user said to be one series ("one series" of two works) |
 | `series_group_work` | a work of a group of the user's, in one at most: a normalized series is made on reading of the groups and the series of the sites, every one of them sharing a work with another one series with it |
-| `work_pair_journal` | every word the user said on two items being one work or not — one work, different, a translation, a part — and every word taken back (`answer` none), with the word the pair had before (`answer_before`), by the two items as pressed, the newest last: what a word is undone by; `restored`: written of what was kept before the journal was, the word before unknown |
+| `work_pair_journal` | every word the user said on two items being one work or not — one work, different, a translation, a part — and every word taken back (`answer` none), with the word the pair had before (`answer_before`), by the two items as pressed, the newest last: what a word is undone by; `restored`: written of what was kept before the journal was, the word before unknown; `of_series`: a word "different" the application took back, the two works being of one series — by the sites or by the user's words "one series" —, not undoable |
 | `work_rating` | the grade of a work, and the item and version it was given through: one current of a work, the rest grades of releases before |
 | `work_interest` | the user's word on whether a work is interesting at all |
 | `work_facet_correction` | the user's word on a value of a facet of a work: added (true) or taken away (false) |
@@ -335,6 +335,7 @@ erDiagram
         VARCHAR answer "null"
         VARCHAR answer_before "null"
         BOOLEAN restored
+        BOOLEAN of_series
     }
     work_rating {
         BIGINT work PK, FK

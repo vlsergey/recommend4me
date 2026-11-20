@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.correction.TypeLinkRepository
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.CardSource
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.series.SeriesDifferences
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.task.Task
@@ -187,10 +188,17 @@ class Duplicates(
      * The user's word on the pair, in place of any before: one work — their normalized works merged, the grade and
      * interest shared — different works, or related ones (a translation, a part, one series: each its own grade and
      * interest), [b] taken out of a work holding both. A word is a word on the two normalized works: of every item of
-     * them alike. False when either is no work of the type, or they are one item.
+     * them alike. False when either is no work of the type, or they are one item — or of the word "different" on two
+     * works the sites hold in one series: no different works, the word refused, as it would be taken back
+     * ([SeriesDifferences]).
      */
     fun answer(typeId: String, a: ItemKey, b: ItemKey, verdict: DuplicateAnswer): Boolean {
-        val type = stores.type(typeId)?.takeIf { isPair(it, a, b) } ?: return false
+        val type =
+            stores.type(typeId)?.takeIf {
+                isPair(it, a, b) &&
+                    (verdict != DuplicateAnswer.DIFFERENT ||
+                        SeriesDifferences.heldBySites(it, listOf(a to b)).isEmpty())
+            } ?: return false
         val now = Instant.now()
         when (verdict) {
             DuplicateAnswer.SAME -> {

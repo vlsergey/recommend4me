@@ -105,6 +105,7 @@
   "What.encodeSiteItemChapters": "Vektori poglavlja dela",
   "What.encodeSiteItemTexts": "Vektori tekstualnih polja dela sajtova",
   "What.encodeTagNames": "Vektori oznaka",
+  "What.eraseDifferentInSeries": "Uklanjanje odgovora „Različiti” unutar ciklusa",
   "What.fillWorkFields": "Polja dela po modelima",
   "What.fitDuplicateModel": "Model parova duplikata",
   "What.fitFandomLikeness": "Sličnost naziva fandoma po vašim odgovorima o univerzumima",

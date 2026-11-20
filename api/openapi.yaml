@@ -4940,6 +4940,7 @@ components:
           - encodeSiteItemChapters
           - encodeSiteItemTexts
           - encodeTagNames
+          - eraseDifferentInSeries
           - fillWorkFields
           - fitDuplicateModel
           - fitFandomLikeness
@@ -6008,6 +6009,9 @@ components:
         derived:
           type: boolean
           description: Of the answer SERIES, not said of this pair but by a chain of words "one series" its works are joined by - weighing as one said; "different" or the taking back on it takes both works out of the series, as on a pair said so
+        heldBySites:
+          type: boolean
+          description: The two works are held in one series by the series of the sites, whatever the user's groups - the answer DIFFERENT is refused on them, a series being stronger than the word
 
     AuthorOfferPage:
       type: object
@@ -6439,7 +6443,7 @@ components:
 
     WorkPairJournalEntry:
       type: object
-      required: [id, saidAt, first, second, restored, undoable]
+      required: [id, saidAt, first, second, restored, ofSeries, undoable]
       properties:
         id:
           type: integer
@@ -6462,6 +6466,9 @@ components:
         restored:
           type: boolean
           description: Written of what was kept before the journal was - its time the kept one, the pair one item of each work, the word before unknown
+        ofSeries:
+          type: boolean
+          description: A word "different" the application took back, the two works being of one series - by the sites, or by the user's words "one series"; not undoable
         undoable:
           type: boolean
           description: The newest word on its pair and what the pair has now - undone, the pair has the word before

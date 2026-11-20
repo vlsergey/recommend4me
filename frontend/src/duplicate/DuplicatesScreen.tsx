@@ -373,8 +373,8 @@ function PairRow({
               size="sm"
               variant={p.answer === verdict ? "default" : "outline"}
               icon={icon}
-              disabled={locked || p.answer === verdict}
-              title={t(`PairRow.${word}Hint`)}
+              disabled={locked || p.answer === verdict || (verdict === "DIFFERENT" && p.heldBySites === true)}
+              title={t(verdict === "DIFFERENT" && p.heldBySites ? "PairRow.differentHeldHint" : `PairRow.${word}Hint`)}
               onClick={() => answer(verdict)}
             >
               {t(`PairRow.${word}`)}

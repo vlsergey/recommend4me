@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.contenttype.StandardTags
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.i18n.I18nKeys
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.series.SeriesDifferences
 import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
@@ -42,10 +43,11 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
     ): List<DuplicatePair> {
         val described = describe(type, rows.flatMap { listOf(it.pair.first, it.pair.second) })
         val kin = KinOfAuthors(type.authors.distinct.told())
+        val held = SeriesDifferences.heldBySites(type, rows.map { it.pair })
         return rows.mapNotNull { r ->
             val first = described[r.pair.first] ?: return@mapNotNull null
             val second = described[r.pair.second] ?: return@mapNotNull null
-            pairOf(r, first, second, kin.share(first.authors, second.authors), said, null)
+            pairOf(r, first, second, kin.share(first.authors, second.authors), said, null, r.pair in held)
         }
     }
 
@@ -60,6 +62,8 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
         sameAuthor: Boolean,
         said: Said,
         kin: AuthorKin?,
+        /** The two works held in one series by the sites ([SeriesDifferences.heldBySites]). */
+        heldBySites: Boolean,
     ) =
         DuplicatePair(
             first = first.work,
@@ -71,6 +75,7 @@ class DuplicateViews(private val sizes: WorkSizes, private val lists: ListIndexe
             rows = PairFields(first, second, r.layers, sameAuthor, kin).rows(),
             answer = said[r.pair]?.let { DuplicatePair.Answer.valueOf(it.name) },
             derived = (r.pair in said.derived).takeIf { it },
+            heldBySites = heldBySites.takeIf { it },
         )
 
     /** The works as the pairs show them: each source's read in one go; a work no longer there, none. */

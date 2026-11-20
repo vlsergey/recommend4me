@@ -52,7 +52,13 @@ class DuplicateJournal(
                         answer = w.answer?.let { WorkPairJournalEntry.Answer.valueOf(it) },
                         before = w.before?.let { WorkPairJournalEntry.Before.valueOf(it) },
                         restored = w.restored,
-                        undoable = w.id in newest && w.answer != w.before && now[w.first to w.second] == w.answer,
+                        ofSeries = w.ofSeries,
+                        // A word the application took back of a series is no word of the user's to undo
+                        undoable =
+                            !w.ofSeries &&
+                                w.id in newest &&
+                                w.answer != w.before &&
+                                now[w.first to w.second] == w.answer,
                     )
                 },
         )
@@ -86,7 +92,8 @@ class DuplicateJournal(
         val pair = type.links.ordered(word.first, word.second)
         val newest = all.first { type.links.ordered(it.first, it.second) == pair }.id == id
         return word.takeIf {
-            newest &&
+            !word.ofSeries &&
+                newest &&
                 type.links.word(word.first, word.second, Instant.now()) == word.answer &&
                 word.answer != word.before
         }

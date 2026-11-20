@@ -97,7 +97,9 @@ function JournalRow({ word: w, undone, undo }: { word: WorkPairJournalEntry; und
         {ago(w.saidAt)}
       </span>
       <span className="flex shrink-0 flex-col">
-        <span className="font-semibold">{w.answer ? t(WORDS[w.answer]) : t("PairJournal.taken")}</span>
+        <span className="font-semibold" title={w.ofSeries ? t("PairJournal.takenOfSeriesHint") : undefined}>
+          {w.answer ? t(WORDS[w.answer]) : w.ofSeries ? t("PairJournal.takenOfSeries") : t("PairJournal.taken")}
+        </span>
         <span className="text-xs text-muted-foreground">
           {w.restored ? (
             <span title={t("PairJournal.restoredHint")}>{t("PairJournal.restored")}</span>
