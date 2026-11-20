@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.part.PartStore
 import io.github.vlsergey.recommend4me.part.V19__parts_out_of_database
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
+import io.github.vlsergey.recommend4me.series.V34__different_in_series_taken_back
 import io.github.vlsergey.recommend4me.task.Tasks
 import java.time.Duration
 import org.jooq.DSLContext
@@ -39,7 +40,13 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
      * the universes, and the normalized works with what the user said of them.
      */
     val dictionaries =
-        Database("dictionaries", DataFolder.database(folder.root, "dictionaries"), "dictionaries") { db ->
+        Database(
+            "dictionaries",
+            DataFolder.database(folder.root, "dictionaries"),
+            "dictionaries",
+            // A migration done once and nothing now, kept by its number
+            code = listOf(V34__different_in_series_taken_back()),
+        ) { db ->
             CatalogueRenameRepository.moveFrom("dictionaries", db, preferences.dsl)
         }
 
