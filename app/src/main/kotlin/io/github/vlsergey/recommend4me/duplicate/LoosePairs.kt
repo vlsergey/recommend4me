@@ -38,11 +38,10 @@ internal object LoosePairs {
     ): List<ReadSide>? {
         val keys = listOf(first, second)
         val stores = keys.mapNotNull { type.source(it.source) }.takeIf { it.size == keys.size } ?: return null
-        val works = keys.zip(stores).flatMap { (k, s) -> s.works.ofItems(s.id, listOf(k.id)).values }
-        val ratios = type.sizes.of(works)
+        val model = type.sizes.model()
         return keys
             .zip(stores)
-            .mapNotNull { (k, s) -> SearchSide.readOf(s, encoder, listOf(k.id), ratios, index) }
+            .mapNotNull { (k, s) -> SearchSide.readOf(s, encoder, listOf(k.id), model, index) }
             .takeIf { it.size == keys.size }
     }
 

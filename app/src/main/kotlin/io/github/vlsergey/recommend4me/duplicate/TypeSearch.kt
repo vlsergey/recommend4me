@@ -112,12 +112,12 @@ private constructor(
             index: ListIndex,
         ): TypeSearch {
             val places = HashMap<String, Int>()
-            val ratios = type.sizes.all()
+            val model = type.sizes.model()
             // The sites read side by side, each its own database: their values placed after, in the sites' order
             val sides =
                 type.sources
                     .parallelStream()
-                    .map { SearchSide.read(it, encoder, ratios, index) }
+                    .map { SearchSide.read(it, encoder, model, index) }
                     .toList()
                     .mapNotNull { it?.placed(places) }
             val works = sides.sumOf { it.ids.size }

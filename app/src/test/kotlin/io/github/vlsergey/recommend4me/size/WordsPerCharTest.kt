@@ -37,7 +37,7 @@ class WordsPerCharTest {
             SizeExample(
                 ids(
                     *listOfNotNull(
-                            if (english) "language:en" else "language:ru",
+                            if (english) "languages:en" else "languages:ru",
                             "source:a",
                             if (concise) "author:1" else "author:$i".takeIf { i % 2 == 0 },
                         )
@@ -52,11 +52,11 @@ class WordsPerCharTest {
     fun `the language and the author tell the ratio`() {
         val model = WordsPerChar.fit(examples(), features.names)
         fun ratio(vararg features: String) = exp(model.log(ids(*features)))
-        assertTrue(abs(ratio("language:ru", "source:a") - 0.15) < 0.002, ratio("language:ru", "source:a").toString())
-        assertTrue(abs(ratio("language:en", "source:a") - 0.18) < 0.002, ratio("language:en", "source:a").toString())
+        assertTrue(abs(ratio("languages:ru", "source:a") - 0.15) < 0.002, ratio("languages:ru", "source:a").toString())
+        assertTrue(abs(ratio("languages:en", "source:a") - 0.18) < 0.002, ratio("languages:en", "source:a").toString())
         assertTrue(
-            ratio("language:ru", "source:a", "author:1") < 0.141,
-            ratio("language:ru", "source:a", "author:1").toString(),
+            ratio("languages:ru", "source:a", "author:1") < 0.141,
+            ratio("languages:ru", "source:a", "author:1").toString(),
         )
     }
 
@@ -64,7 +64,7 @@ class WordsPerCharTest {
     fun `a feature of no work moves nothing, and out of fold the model beats the mean`() {
         val all = examples()
         val model = WordsPerChar.fit(all, features.names)
-        assertEquals(model.log(ids("language:ru")), model.log(ids("language:ru", "tag:unknown")))
+        assertEquals(model.log(ids("languages:ru")), model.log(ids("languages:ru", "tag:unknown")))
         val alone = all.map { SizeExample(IntArray(0), it.words, it.chars) }
         assertTrue(WordsPerChar.outOfFold(all, features.names) < WordsPerChar.outOfFold(alone, features.names) / 3)
     }
@@ -72,7 +72,7 @@ class WordsPerCharTest {
     @Test
     fun `a work's own numbers weigh by how many characters they count`() {
         val model = WordsPerChar.fit(examples(), features.names)
-        val own = ids("language:ru", "source:a")
+        val own = ids("languages:ru", "source:a")
         val long = model.of(own, SizeExample(own, 2_000_000.0, 10_000_000.0))
         val short = model.of(own, SizeExample(own, 20.0, 100.0))
         assertTrue(abs(long - 0.2) < 0.001, long.toString())

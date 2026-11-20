@@ -1,5 +1,7 @@
 package io.github.vlsergey.recommend4me.size
 
+import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
+import io.github.vlsergey.recommend4me.duplicate.AUTHOR_FAMILY
 import java.util.Random
 import kotlin.math.exp
 import kotlin.math.ln
@@ -53,17 +55,32 @@ class WordsPerChar(private val weights: DoubleArray) {
     /** The ratio of a work of these features, of its [own] numbers when it has them. */
     fun of(features: IntArray, own: SizeExample?): Double {
         val model = log(features)
-        return exp(if (own == null) model else (own.chars * own.logRatio + SAMPLE * model) / (own.chars + SAMPLE))
+        return exp(if (own == null) model else blended(own.words, own.chars, model))
     }
 
+    /** The weight of every feature the model learnt a step of, by the feature's name of [names]: what is kept. */
+    fun named(names: List<String>): Map<String, Double> =
+        weights.indices.filter { weights[it] != 0.0 }.associate { names[it] to weights[it] }
+
     companion object {
+        /**
+         * The logarithm of the ratio of a text of its own [words] and [chars], and of the [model]'s: its own weighing
+         * over the model's by how many characters it counts.
+         */
+        fun blended(words: Double, chars: Double, model: Double): Double =
+            (chars * ln(words / chars) + SAMPLE * model) / (chars + SAMPLE)
+
         /** The characters a work's own numbers weigh as much as the model by. */
         const val SAMPLE = 5000.0
 
+        /**
+         * The beginnings of the features' names: a site's, and of the values of the index as the search of duplicates
+         * compares them ([io.github.vlsergey.recommend4me.duplicate.ComparedValues]) — the languages and the normalized
+         * authors; any other value, a tag.
+         */
         const val SOURCE = "source:"
-        const val LANGUAGE = "language:"
-        const val TAG = "tag:"
-        const val AUTHOR = "author:"
+        const val LANGUAGE = StandardLanguages.KEY + ":"
+        const val AUTHOR = AUTHOR_FAMILY + ":"
 
         /** The feature every work has, the first of [SizeFeatures]. */
         const val MEAN = "mean"

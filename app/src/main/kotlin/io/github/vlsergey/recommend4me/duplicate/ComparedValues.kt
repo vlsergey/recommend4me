@@ -80,7 +80,7 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
                 rows.names,
                 values,
                 List(kept.size) { rows.ids[kept[it]] },
-                authorsOf(authorKeys),
+                authorsOf(authorKeys, every = true),
                 namesOf(authorKeys, names),
                 List(kept.size) { rows.titles[kept[it]]!! },
                 rows.numbers.mapValues { (_, all) -> DoubleArray(kept.size) { all[kept[it]] } },
@@ -125,7 +125,15 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         val authorKeys =
             Array(ids.size) { i -> authorFacet?.let { f -> facets[ids[i]]?.get(f) }?.takeIf { it.isNotEmpty() } }
         val authorNames = authorFacet?.let { f -> s.names(f, authorKeys.flatMap { it.orEmpty() }.distinct()) }.orEmpty()
-        return Compared(names, values, ids, authorsOf(authorKeys), namesOf(authorKeys, authorNames), emptyList(), sized)
+        return Compared(
+            names,
+            values,
+            ids,
+            authorsOf(authorKeys, every = false),
+            namesOf(authorKeys, authorNames),
+            emptyList(),
+            sized,
+        )
     }
 
     /**
@@ -141,10 +149,14 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         return out.asList()
     }
 
-    /** The normalized authors of every work, by their places, of the site's authors' keys [authorKeys]. */
-    private fun authorsOf(authorKeys: Array<List<String>?>): Array<LongArray> {
+    /**
+     * The normalized authors of every work, by their places, of the site's authors' keys [authorKeys]: the bindings of
+     * every author of the site read of [every] work, of a few works theirs alone, by their keys.
+     */
+    private fun authorsOf(authorKeys: Array<List<String>?>, every: Boolean): Array<LongArray> {
         if (authorKeys.all { it == null }) return Array(authorKeys.size) { LongArray(0) }
-        val authors = s.authors.bindingsOf(s.id)
+        val authors =
+            if (every) s.authors.bindingsOf(s.id) else s.authors.bindingsOf(s.id, authorKeys.flatMap { it.orEmpty() })
         return Array(authorKeys.size) { i ->
             authorKeys[i]?.mapNotNull { authors[it] }?.distinct()?.toLongArray() ?: LongArray(0)
         }

@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.correction.Corrected
 import io.github.vlsergey.recommend4me.matrix.Rows
 import io.github.vlsergey.recommend4me.model.FeatureNames
+import io.github.vlsergey.recommend4me.size.KeptRatios
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
@@ -100,7 +101,7 @@ internal class SearchSide(
          * null when it has none. Its values by their names, given their places once every site is read ([ReadSide]):
          * the sites are read side by side.
          */
-        fun read(s: SourceStore, encoder: String, ratios: Map<Long, Double>, index: ListIndex): ReadSide? {
+        fun read(s: SourceStore, encoder: String, model: KeptRatios, index: ListIndex): ReadSide? {
             val started = System.currentTimeMillis()
             // Every work of a title, ascending, as the user corrected it, its values, authors and sizes: of the index
             // of
@@ -116,7 +117,8 @@ internal class SearchSide(
             val lettered = System.currentTimeMillis()
             val texts = TextsCompared.read(s, encoder, ids)
             val vectors = System.currentTimeMillis()
-            val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it] }, s.works.allOf(s.id))
+            val sizes =
+                sizesOf(ids, model.of(s.id, compared, s.parts.counts.counted()), numbers) { compared.numbers[it] }
             log.info(
                 "{}: the search's side of {} works read in {} ms: the index {}, the letters {}, vectors {}, sizes {}",
                 s.id,
@@ -153,7 +155,7 @@ internal class SearchSide(
             s: SourceStore,
             encoder: String,
             ids: List<String>,
-            ratios: Map<Long, Double>,
+            model: KeptRatios,
             index: ListIndex,
         ): ReadSide? {
             val heads = s.items.heads(ids)
@@ -165,7 +167,8 @@ internal class SearchSide(
             val numbers = sizeNumbers(s)
             val compared = ComparedValues(s, index).of(own, numbers.keys)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
-            val sizes = sizesOf(own, ratios, numbers, { compared.numbers[it] }, s.works.ofItems(s.id, own))
+            val sizes =
+                sizesOf(own, model.of(s.id, compared, s.parts.counts.counted(own)), numbers) { compared.numbers[it] }
             val texts = TextsCompared.read(s, encoder, own)
             return ReadSide(compared.numbered, compared.names) { placed ->
                 SearchSide(
@@ -197,14 +200,14 @@ internal class SearchSide(
         /**
          * The numbers of the size of every work the sites share, of the [numbers] by their ids ([numberOf] of an id
          * every work's), by the standard number's key; the words of a work of its characters alone, or the characters
-         * of its words alone, worked out by the [ratios] of the works: so two sites compare, whichever they state.
+         * of its words alone, worked out by the [ratios] of the items by their places: so two sites compare, whichever
+         * they state.
          */
         private fun sizesOf(
             ids: List<String>,
-            ratios: Map<Long, Double>,
+            ratios: DoubleArray?,
             numbers: Map<String, NumberDef>,
             numberOf: (id: String) -> DoubleArray?,
-            bound: Map<String, Long>,
         ): Map<String, DoubleArray> {
             val out =
                 numbers.entries.associateTo(HashMap()) { (id, n) ->
@@ -212,11 +215,12 @@ internal class SearchSide(
                 }
             val words = out.getOrPut(StandardNumbers.WORDS.key) { DoubleArray(ids.size) }
             val chars = out.getOrPut(StandardNumbers.CHARS.key) { DoubleArray(ids.size) }
-            ids.forEachIndexed { i, id ->
-                val ratio = bound[id]?.let { ratios[it] } ?: return@forEachIndexed
-                if (words[i] <= 0 && chars[i] > 0) words[i] = chars[i] * ratio
-                if (chars[i] <= 0 && words[i] > 0) chars[i] = words[i] / ratio
-            }
+            if (ratios != null)
+                for (i in ids.indices) {
+                    val ratio = ratios[i]
+                    if (words[i] <= 0 && chars[i] > 0) words[i] = chars[i] * ratio
+                    if (chars[i] <= 0 && words[i] > 0) chars[i] = words[i] / ratio
+                }
             return out
         }
     }
