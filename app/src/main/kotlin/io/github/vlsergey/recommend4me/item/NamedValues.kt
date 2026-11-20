@@ -43,7 +43,7 @@ class NamedValues(private val stores: Stores) {
                 .filter { (name, of) -> name.isNotEmpty() && of.size == 1 }
                 .mapValues { it.value.single() }
         // Of the names some work still has, by the index of the values: of most none
-        val given = s.items.valueUsesOf(facet, owners.keys.map { prefix + it }).keys.map { it.removePrefix(prefix) }
+        val given = s.items.given(facet, owners.keys.map { prefix + it }).map { it.removePrefix(prefix) }
         if (given.isEmpty()) return
         val known = s.items.keysNamed(facet, given)
         var moved = 0

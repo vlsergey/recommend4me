@@ -11,6 +11,12 @@ interface ItemValueKeys {
      * it; an item that has [to] already loses [from]. The items changed, told as written.
      */
     fun rekey(facet: String, from: String, to: String): List<String>
+
+    /**
+     * The [keys] of the facet some item has: one lookup a key by the index of the values — H2 matches a list bound to
+     * the query against every row of the facet, 5 s of ficbook's authors (2026-11-20).
+     */
+    fun given(facet: String, keys: Collection<String>): List<String>
 }
 
 /** The [ItemValueKeys] of the source database [db]: [changed] told of every item whose values were keyed anew. */
@@ -41,4 +47,7 @@ internal class ItemValueKeyRepository(
         changed(items)
         return items
     }
+
+    override fun given(facet: String, keys: Collection<String>): List<String> =
+        keys.distinct().filter { db.fetchExists(ITEM_FACET, ITEM_FACET.FACET.eq(facet), ITEM_FACET.VALUE_KEY.eq(it)) }
 }
