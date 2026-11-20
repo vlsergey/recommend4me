@@ -96,3 +96,15 @@ compared, of one work alone — and its measures; a measure the search takes but
 pair is "not measured", never "not compared". The interface knows only how a kind of measure looks
 (`duplicate/fieldVerdict.ts`, a kind not drawn fails the build); a new layer of the search shows
 in the window with its words alone (`PairLabelsTest`).
+
+## 10. A value is never shown by its id
+
+The user never sees a number of the application in place of a name (owner, 2026-11-20): a tag, a universe, a
+character, an author, a series is shown by a name a person wrote. Its own name, the user's word, the label of its
+entry, a site's name of it. A name that is missing is a fault of the data or of the code that names it. It is fixed
+where the name is made, never covered in the interface:
+
+- a tag's name worked out in the background is of its sites' tags, those of no work too (`TagCounting`), never its id;
+- a draft names an existing value: a universe merged into another takes its drafts with it (`FandomEditing.merged`).
+
+A fallback `?: key` in a place that names a value is a fault waiting to be shown: name it by what there is.

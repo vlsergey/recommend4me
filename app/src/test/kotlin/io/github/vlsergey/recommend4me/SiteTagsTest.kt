@@ -79,6 +79,16 @@ class SiteTagsTest : SiteTestBase() {
         madeUp(hulls)
     }
 
+    @Test
+    fun `a tag whose every site's tag is of no work now is named as its site names it, never by its id`() {
+        capture("t20|Hull adrift|driftwood|A hull adrift in deep space|")
+        val drift = tag("driftwood")
+        // The work's tag on the site no more: the site's tag bound, of no work
+        capture("t20|Hull adrift||A hull adrift in deep space|")
+        inBackground { tagService.scope()?.let { tagRenaming.rename(it, it.facet) } }
+        assertEquals("Driftwood", stores.type("books")!!.tags.stats.shown(listOf(drift))[drift])
+    }
+
     /**
      * Offered alike, nothing merged by itself; merged, the site's tags of the other bound to [hulls], named by the
      * liked work, then by the user, the answer on the other the tag's now.

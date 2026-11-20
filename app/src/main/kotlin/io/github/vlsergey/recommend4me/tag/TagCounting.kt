@@ -55,6 +55,7 @@ class TagCounting(
         fun count() {
             siteTags()
             synonyms()
+            boundOfNoWork()
             userWord()
         }
 
@@ -101,6 +102,18 @@ class TagCounting(
                 val site = SiteTagRef(s.id, k)
                 val tag = tagOf(site) ?: return@forEach
                 out.getOrPut(tag) { TagStats(tag) }.variant(site, (names[k] ?: k).trim())
+            }
+
+        /**
+         * A site's tag bound to a tag and of no work now — its work gone, or its value written otherwise since — is a
+         * variant of the tag all the same, of no works, named as its site names it: a tag is never named by its id
+         * (user, 2026-11-20), and one whose every site's tag is of no work has no other name.
+         */
+        private fun boundOfNoWork() =
+            bindings.forEach { (site, id) ->
+                if (site.source != s.id) return@forEach
+                out.getOrPut(TagRepository.key(id)) { TagStats(TagRepository.key(id)) }
+                    .variant(site, (names[site.tag] ?: site.tag).trim())
             }
 
         /** A tag the user gave a work the site does not; a graded work the user said has it not. */
