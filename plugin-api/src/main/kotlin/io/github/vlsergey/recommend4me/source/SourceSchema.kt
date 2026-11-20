@@ -140,7 +140,8 @@ class FacetDef(
     /**
      * The prefix of the keys of values the site gave by their names alone — a dump of it, the site's own keys unknown:
      * such a key and the site's own key of a value of the name after it are one value ("name:Lorem" and the key of the
-     * author Lorem: one person, the name an account of the site); null: no such keys.
+     * author Lorem: one person, the name an account of the site) — as soon as a page gives the key of a name one key of
+     * the facet has, every item of the name is given the key in its place; null: no such keys.
      */
     val byName: String? = null,
     /**

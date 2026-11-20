@@ -29,6 +29,9 @@ interface FacetDictionary {
     /** Every named value of one facet: key to name. */
     fun facetNames(facet: String): Map<String, String>
 
+    /** The keys of the facet's values named each of the [names], by the index of the names: name to its keys. */
+    fun keysNamed(facet: String, names: Collection<String>): Map<String, List<String>>
+
     /** Every named value of every facet: facet to key to name. */
     fun allFacetNames(): Map<String, Map<String, String>>
 
@@ -112,6 +115,19 @@ internal class FacetDictionaryRepository(private val db: DSLContext) : FacetDict
             .from(FACET_VALUE)
             .where(FACET_VALUE.FACET.eq(facet))
             .fetchMap({ it.value1()!! }, { it.value2()!! })
+
+    /** One lookup a name, by the index of the names: H2 matches a list bound to the query against every row. */
+    override fun keysNamed(facet: String, names: Collection<String>): Map<String, List<String>> =
+        names
+            .distinct()
+            .associateWith { name ->
+                db.select(FACET_VALUE.VALUE_KEY)
+                    .from(FACET_VALUE)
+                    .where(FACET_VALUE.FACET.eq(facet), FACET_VALUE.NAME.eq(name.take(NAME_LENGTH)))
+                    .fetch(FACET_VALUE.VALUE_KEY)
+                    .filterNotNull()
+            }
+            .filterValues { it.isNotEmpty() }
 
     override fun allFacetNames(): Map<String, Map<String, String>> =
         db.select(FACET_VALUE.FACET, FACET_VALUE.VALUE_KEY, FACET_VALUE.NAME)

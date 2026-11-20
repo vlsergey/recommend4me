@@ -27,7 +27,7 @@ class NamedAuthorsTest : TwoSitesTestBase() {
         val dictionary = stores.type("books")!!.authors
         val byName = dictionary.bindingsOf("alpha").getValue("name:Nell")
 
-        // The site's page gives the first work her own key; the second keeps the name
+        // The site's page gives the first work her own key; the dump's author of the name is she
         alpha.items.setFacet("na1", Books.AUTHOR.key, listOf(FacetValue("na-nell", "Nell")))
         val nell = dictionary.bindingsOf("alpha").getValue("na-nell")
         assertNotEquals(byName, nell)

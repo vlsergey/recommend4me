@@ -30,9 +30,9 @@ internal const val NAME_LENGTH = 1000
 
 /**
  * The items of one source as its source database holds them: what every item has, its facets, numbers and texts, and
- * the dictionary of the facets' values — each held by its own part ([ItemFacets], [FacetDictionary], [ItemNumbers],
- * [ItemTexts], [ItemKeyList]), this one by the items' heads. [changed] is told of every item whose searchable data was
- * written.
+ * the dictionary of the facets' values — each held by its own part ([ItemFacets], [FacetDictionary], [ItemValueKeys],
+ * [ItemNumbers], [ItemTexts], [ItemKeyList]), this one by the items' heads. [changed] is told of every item whose
+ * searchable data was written.
  */
 class ItemRepository
 private constructor(
@@ -42,6 +42,7 @@ private constructor(
 ) :
     FacetDictionary by dictionary,
     ItemFacets by ItemFacetRepository(db, changed, dictionary),
+    ItemValueKeys by ItemValueKeyRepository(db, changed),
     ItemNumbers by ItemNumberRepository(db),
     ItemKeyList by ItemKeyRepository(db),
     ItemTexts by ItemTextRepository(db, changed),
