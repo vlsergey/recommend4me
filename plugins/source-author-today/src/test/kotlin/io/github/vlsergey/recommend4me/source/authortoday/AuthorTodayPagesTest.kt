@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.source.SeriesWork
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -242,6 +243,17 @@ class AuthorTodayPagesTest {
         assertEquals(SeriesWork("300411", 1), series.works.first())
         assertEquals((1..22).toList(), series.works.map { it.position })
         assertTrue(series.whole)
+        // A page of a series of several pages, 30 works a page, is not every work of it
+        val paged =
+            page("series-30377.html")
+                .replace(
+                    "</body>",
+                    "<ul class=\"pagination\"><li class=\"active\"><a>1</a></li>" +
+                        "<li><a href=\"/work/series/30377?page=2\">2</a></li></ul></body>",
+                )
+        capture(context, "https://author.today/work/series/30377?page=1", paged)
+        assertFalse(context.series.getValue("30377").whole)
+        assertEquals(22, context.series.getValue("30377").works.size)
         // A series of two authors
         capture(context, "https://author.today/work/series/61877", page("series-61877.html"))
         val other = context.series.getValue("61877")

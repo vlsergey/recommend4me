@@ -11,9 +11,9 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 /**
- * THE SERIES OF AUTHOR.TODAY ("Цикл"): a series' own page — its title, status, dates, description and every work of it
- * numbered, on one page —, and an author's list of series, each with its status, description and every work of it in
- * its order. A work's own page tells its number in its series ("#9").
+ * THE SERIES OF AUTHOR.TODAY ("Цикл"): a series' own page — its title, status, dates, description and its works
+ * numbered, 30 a page —, and an author's list of series, each with its status, description and every work of it in its
+ * order. A work's own page tells its number in its series ("#9").
  */
 internal class AuthorTodaySeries(private val items: ItemStore) {
 
@@ -47,7 +47,9 @@ internal class AuthorTodaySeries(private val items: ItemStore) {
                         val id = row.selectFirst(".book-title a[href^=/work/]")?.let { workId(it.attr("href")) }
                         id?.let { SeriesWork(it, row.selectFirst(".label-row-index")?.text()?.trim()?.toIntOrNull()) }
                     },
-                whole = true,
+                // A series of many works is listed on pages of 30, "?page=2": a page of several is not every work
+                // (owner, 2026-11-21: "the extension rewrites the series of several pages wrongly")
+                whole = doc.selectFirst("ul.pagination") == null,
             )
         )
     }

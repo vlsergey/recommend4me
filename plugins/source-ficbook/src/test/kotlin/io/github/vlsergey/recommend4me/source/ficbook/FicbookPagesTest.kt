@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.jsoup.Jsoup
@@ -431,6 +432,10 @@ class FicbookPagesTest {
         assertEquals(works, series.works.map { it.itemId })
         assertTrue(series.whole)
         assertEquals(listOf("20989"), context.facets.getValue("7412901")["series"])
+        // A page listing fewer works than it counts is not every work of the series
+        val fewer = page("series.html").replace("В серии 9 работ", "В серии 40 работ")
+        source.capture(CapturedPage("https://ficbook.net/series/20989", fewer, now), context)
+        assertFalse(context.series.getValue("20989").whole)
     }
 
     @Test

@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.source.MemorySourceContext
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -161,6 +162,10 @@ class FanficsMePagesTest {
         assertTrue(series.description!!.startsWith("— Джордж, вы не могли бы говорить"), series.description)
         assertEquals(works, series.works.map { it.itemId })
         assertTrue(series.whole)
+        // A page listing fewer works than its header counts is not every work of the series
+        val fewer = page("serie.html").replace(Regex("(Количество:</div>\\s*<div class=\"content\">)3 "), "$15 ")
+        source.capture(CapturedPage("https://fanfics.me/serie4423", fewer, now), context)
+        assertFalse(context.series.getValue("4423").whole)
     }
 
     @Test

@@ -30,6 +30,7 @@ internal class FanficsMeSeries(private val items: ItemStore) {
                 .toMap()
         if (rows.isEmpty()) return
         val title = doc.selectFirst("h1")?.let { clean(it.text()) }?.ifEmpty { null } ?: return
+        val works = works(doc.select("div.FicTable[id^=fic_]"))
         items.keepSeries(
             SeriesData(
                 key = key,
@@ -38,8 +39,9 @@ internal class FanficsMeSeries(private val items: ItemStore) {
                 // The header shows a description when there is one: none of a header without it
                 description = rows["Описание серии"]?.let(PageText::of).orEmpty(),
                 status = rows["Статус"]?.let { status(it.text()) },
-                works = works(doc.select("div.FicTable[id^=fic_]")),
-                whole = true,
+                works = works,
+                // The page is every work of the series when it lists as many as its header counts ("Количество: 42")
+                whole = rows["Количество"]?.let { PageText.number(it.text()) } == works.size.toLong(),
             )
         )
     }
