@@ -2,6 +2,9 @@ package io.github.vlsergey.recommend4me.size
 
 import kotlin.math.abs
 import kotlin.math.max
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger(SizeVariances::class.java)
 
 /**
  * THE PENALTIES AND THE WEIGHTS OF THE WORDS TO A CHARACTER WORKED OUT OF THE DATA (owner, 2026-11-20: no number of the
@@ -89,15 +92,20 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
         val lambda = penalties(at.tau)
         var now = at
         var x = from
+        val turns = ArrayDeque<String>()
         for (turn in 1..MOST_ROUNDS) {
             val weights = now.weights(rows.chars, null)
+            val began = ridge.steps
             val solved = ridge.solve(weights, lambda, x)
             x = solved
             val (noise, counting) = lengths(solved, weights, rows.diagonal(weights), lambda, now)
             val moved = maxOf(changed(now.noise, noise), changed(now.counting, counting))
             now = Variances(noise, counting, at.tau)
-            if (moved < CHANGE) break
+            if (moved < CHANGE) return now to solved
+            turns.addLast("%.6g %.6g (%d steps)".format(noise, counting, ridge.steps - began))
+            if (turns.size > TOLD) turns.removeFirst()
         }
+        log.info("the deviation of the words to a character did not settle; its last turns: {}", turns.joinToString())
         return now to x!!
     }
 
@@ -173,6 +181,9 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
 
         /** The turns at most: of variances that stand, never near. */
         const val MOST_ROUNDS = 200
+
+        /** The last turns of a deviation that did not settle told in the log. */
+        const val TOLD = 6
 
         /** A leverage below one: a residual of a step of one example alone is not made infinite. */
         const val ALMOST_ONE = 1 - 1e-9
