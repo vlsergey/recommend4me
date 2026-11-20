@@ -72,7 +72,8 @@ class DuplicatePages(
         val ranked = chosen.map { r ->
             val c = layers[r.pair]
             val chance = c?.let { chances?.same(it) }
-            Ranked(r.pair, c, chance, c?.let { chances?.series(it) }, chance ?: 0.0)
+            // What the page is ordered by, as the search wrote it: the sort's key, not the chance alone
+            Ranked(r.pair, c, chance, c?.let { chances?.series(it) }, r.priority ?: 0.0)
         }
         return DuplicatePage(
             total = total,

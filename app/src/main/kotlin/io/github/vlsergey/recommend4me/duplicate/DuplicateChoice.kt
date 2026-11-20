@@ -13,8 +13,16 @@ import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(DuplicateChoice::class.java)
 
-/** A pair of a page as chosen: its two works, the smaller key first, and the word kept with it ([PairScore]). */
-class ChosenPair(val pair: Pair<ItemKey, ItemKey>, val answer: DuplicateAnswer?, val derived: Boolean)
+/**
+ * A pair of a page as chosen: its two works, the smaller key first, the word kept with it, and the key of the sort it
+ * was chosen by ([priority], [PairScore]; none of one not known).
+ */
+class ChosenPair(
+    val pair: Pair<ItemKey, ItemKey>,
+    val answer: DuplicateAnswer?,
+    val derived: Boolean,
+    val priority: Double?,
+)
 
 /**
  * THE PAIRS OF A PAGE CHOSEN IN THE DATABASE (owner, 2026-11-20: "load the duplicates from the database with the
@@ -32,11 +40,12 @@ class DuplicateChoice internal constructor(private val db: DSLContext) {
         val where = condition(choice)
         val total = total(choice, where)
         laps.lap("counted")
-        val key = keyOf(choice.sort).desc()
+        val field = keyOf(choice.sort)
+        val key = field.desc()
         // Of the open pairs alone, the word first — none, of every one — as their index has it: walked, not sorted
         val order: List<SortField<*>> = if (choice.answers.isEmpty()) listOf(c.ANSWER.asc(), key) else listOf(key)
         val rows =
-            db.select(c.SOURCE, c.ITEM_ID, c.OTHER_SOURCE, c.OTHER_ITEM_ID, c.ANSWER, c.ANSWER_DERIVED)
+            db.select(c.SOURCE, c.ITEM_ID, c.OTHER_SOURCE, c.OTHER_ITEM_ID, c.ANSWER, c.ANSWER_DERIVED, field)
                 .from(c)
                 .where(where)
                 .orderBy(order)
@@ -47,6 +56,7 @@ class DuplicateChoice internal constructor(private val db: DSLContext) {
                         ItemKey(r.value1()!!, r.value2()!!) to ItemKey(r.value3()!!, r.value4()!!),
                         r.value5()?.let(DuplicateAnswer::valueOf),
                         r.value6()!!,
+                        r.value7(),
                     )
                 }
         laps.lap("chosen")

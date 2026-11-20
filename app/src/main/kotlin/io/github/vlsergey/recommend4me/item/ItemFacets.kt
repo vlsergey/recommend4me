@@ -5,6 +5,7 @@ import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_V
 import io.github.vlsergey.recommend4me.database.source.tables.references.FACET_VALUE_DESCRIPTION
 import io.github.vlsergey.recommend4me.database.source.tables.references.ITEM_FACET
 import io.github.vlsergey.recommend4me.source.FacetValue
+import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
@@ -127,7 +128,7 @@ internal class ItemFacetRepository(
             .flatMap { chunk ->
                 db.select(ITEM_FACET.VALUE_KEY, DSL.count())
                     .from(ITEM_FACET)
-                    .where(ITEM_FACET.FACET.eq(facet), ITEM_FACET.VALUE_KEY.`in`(chunk))
+                    .where(valuesOf(facet, chunk))
                     .groupBy(ITEM_FACET.VALUE_KEY)
                     .fetch { it.value1()!! to it.value2()!! }
             }
@@ -185,11 +186,16 @@ internal class ItemFacetRepository(
 
     override fun itemsWith(facet: String, keys: Collection<String>): Map<String, List<String>> {
         if (keys.isEmpty()) return emptyMap()
-        return db.select(ITEM_FACET.VALUE_KEY, ITEM_FACET.ITEM_ID)
-            .from(ITEM_FACET)
-            .where(ITEM_FACET.FACET.eq(facet), ITEM_FACET.VALUE_KEY.`in`(keys.distinct()))
-            .fetch()
-            .groupBy({ it.value1()!! }, { it.value2()!! })
+        return keys
+            .distinct()
+            .chunked(ITEM_BATCH)
+            .flatMap { chunk ->
+                db.select(ITEM_FACET.VALUE_KEY, ITEM_FACET.ITEM_ID)
+                    .from(ITEM_FACET)
+                    .where(valuesOf(facet, chunk))
+                    .fetch { it.value1()!! to it.value2()!! }
+            }
+            .groupBy({ it.first }, { it.second })
     }
 
     override fun forEachFacet(facet: String, action: (itemId: String, keys: List<String>) -> Unit) {
@@ -212,3 +218,12 @@ internal class ItemFacetRepository(
             .use { cursor -> cursor.forEach { action(it.value1()!!, it.value2()!!, it.value3()!!) } }
     }
 }
+
+/**
+ * The rows of the values [keys] of the [facet], by the index of the facet and the value: a row of both a value, as
+ * [io.github.vlsergey.recommend4me.database.SourceItems] — H2 takes `facet = ? AND value_key IN (…)` by the facet alone
+ * and walks its every value, every author of every work of a site (2026-11-20: 22 s of a page of 30 authors).
+ */
+private fun valuesOf(facet: String, keys: Collection<String>): Condition =
+    DSL.row(ITEM_FACET.FACET, ITEM_FACET.VALUE_KEY)
+        .`in`(keys.map { DSL.row(DSL.`val`(facet, ITEM_FACET.FACET), DSL.`val`(it, ITEM_FACET.VALUE_KEY)) })
