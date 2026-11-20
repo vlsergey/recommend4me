@@ -223,8 +223,8 @@ internal class Variances(val noise: Double, val counting: Double, val tau: Doubl
             WordsPerChar.KINDS.indices.associate { TAU + WordsPerChar.KINDS[it] to tau[it] }
 
     companion object {
-        /** The beginning of the names of the variances among the weights kept. */
-        const val PREFIX = "model."
+        /** The beginning of the names of the variances among the weights kept: no feature's. */
+        private const val PREFIX = "model."
         private const val NOISE = PREFIX + "noise"
         private const val COUNTING = PREFIX + "counting"
         private const val TAU = PREFIX + "tau:"

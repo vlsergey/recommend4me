@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
+import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Service
@@ -52,7 +53,7 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
             names.size,
         )
         val rows = SizeRows(sure, names.size)
-        val begun = Variances.kept(type.sizes.kept(Variances.PREFIX))
+        val begun = Variances.kept(type.sizes.weights())
         val (crossed, where) =
             solved(rows) { ridge ->
                 val variances = SizeVariances(rows, WordsPerChar.kindsOf(names), ridge)
@@ -73,7 +74,7 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
             model.named(names) +
                 fitted.variances.named() +
                 examples.rules.flatMap { (source, rule) -> rule.named(source).entries }.associate { it.toPair() }
-        type.sizes.keep(weights)
+        type.sizes.keep(weights, Instant.now())
         laps.lap("kept")
         val counts = IntArray(names.size).also { c -> sure.forEach { e -> e.features.forEach { c[it]++ } } }
         log.info(
