@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.database
 import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.part.PartStore
 import io.github.vlsergey.recommend4me.part.V19__parts_out_of_database
+import io.github.vlsergey.recommend4me.part.V26__item_text_size_filled
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
 import io.github.vlsergey.recommend4me.series.V34__different_in_series_taken_back
@@ -53,7 +54,7 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
     private val sources: Map<String, SourceDatabases> =
         plugins.sources.associate { s ->
             val dir = folder.source(s.id)
-            // Opened before the source's file: one of its migrations moves the texts into it
+            // Opened before the source's file: one of its migrations moves the texts into it, another counts them
             val parts = PartStore(dir)
             s.id to
                 SourceDatabases(
@@ -65,7 +66,7 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
                             "source",
                             s.migrations,
                             cacheMegabytes = SOURCE_CACHE_MB,
-                            code = listOf(V19__parts_out_of_database(parts)),
+                            code = listOf(V19__parts_out_of_database(parts), V26__item_text_size_filled(parts)),
                         ),
                     corrections =
                         Database(
