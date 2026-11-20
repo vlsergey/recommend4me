@@ -36,8 +36,8 @@ import java.net.URLEncoder
  * (2026-11-17), an author or a fandom the dump gave by its name, the site's own key unknown, is keyed by the name under
  * [NAME_KEY] — no page of the site has it. A tag is the site's id of its page, its name and description bound to it
  * (user, 2026-11-18); the dump's tags were given their ids by the kept pages once (V4), a name of no tag found keyed by
- * the name as well. A page of the site that gives a value of such a name its key gives it every work of the name
- * ([FacetDef.byName]).
+ * the name as well. A page of the site that gives an author of such a name a key gives it every work of the name
+ * ([FacetDef.byName]): an account's name is one account, a fandom's or a tag's name may be several.
  */
 class Ficbook : Source {
     override val id = ID
@@ -52,7 +52,7 @@ class Ficbook : Source {
                     Books.AUTHOR.asFacet(AUTHOR, byName = NAME_KEY),
                     FacetDef(BETA, people = true),
                     FacetDef(GAMMA, people = true),
-                    Books.FANDOM.asFacet(FANDOM, byName = NAME_KEY),
+                    Books.FANDOM.asFacet(FANDOM),
                     Books.DIRECTION.asFacet(DIRECTION),
                     AgeRating.SITE.asFacet(),
                     Books.STATUS.asFacet(STATUS),

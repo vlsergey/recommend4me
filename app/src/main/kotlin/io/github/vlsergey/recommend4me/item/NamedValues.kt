@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.item
 
 import io.github.vlsergey.recommend4me.api.model.TaskKind
+import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.task.Task
@@ -13,18 +14,21 @@ import org.springframework.stereotype.Component
 private val log = LoggerFactory.getLogger(NamedValues::class.java)
 
 /**
- * A VALUE A SITE GAVE BY ITS NAME ALONE IS THE VALUE OF THAT NAME THE SITE GIVES A KEY OF, ON EVERY WORK (owner,
- * 2026-11-20: "let us carry it over"): a dump keyed what it gave by the name — "name:Сэм и Кэт", under the prefix the
- * source says of its facet ([io.github.vlsergey.recommend4me.source.FacetDef.byName]) — and as soon as a page of the
- * site gives a value of that name its key, every work the name was given to has the key in its place: what a page read
- * once tells of every work of the name, not of its own alone. Never a name two keys of the facet have — two fandoms of
- * one name — nor a name the site gave another since: a value renamed stays by its old name till its own work is read.
- * The authors so keyed are one person as well ([io.github.vlsergey.recommend4me.author.NamedAuthors]).
+ * AN AUTHOR A SITE GAVE BY THE NAME ALONE IS THE ACCOUNT OF THAT NAME THE SITE GIVES A KEY OF, ON EVERY WORK (owner,
+ * 2026-11-20: "let us carry it over"; "only the authors can be taken for unique"): a dump keyed the authors by their
+ * names — "name:Мышилла", under the prefix the source says of its facet of the authors
+ * ([io.github.vlsergey.recommend4me.source.FacetDef.byName]) — and as soon as a page of the site gives an author of
+ * that name a key, every work the name was given to has the key in its place: an account's name is one account of the
+ * site at a time. Of no other facet: two fandoms of a site may have one name (ficbook's «12 стульев» of two addresses,
+ * 478 such names of 17 thousand), and a tag may too — a dump's name of either does not tell which of them a work is of,
+ * and the site's dictionary known is never all of it. Never a name two keys have even so, nor a name the site gave
+ * another since: an account renamed stays by its old name till its own work is read. The authors so keyed are one
+ * person as well ([io.github.vlsergey.recommend4me.author.NamedAuthors]).
  *
  * The works of a name are keyed in the queue of the computations: each is a work written anew, read again by whatever
  * listens to the items written — a third of a second a work of ficbook, minutes of an author of hundreds of works,
- * which no page sent waits for (2026-11-20: 12 s a page of a fandom of 20 works). The keys whose names wait are kept
- * with the work of the queue, of the source and the facet.
+ * which no page sent waits for (2026-11-20: 12 s a page of a fandom of 20 works, when fandoms were keyed so). The keys
+ * whose names wait are kept with the work of the queue, of the source and the facet.
  */
 @Component
 class NamedValues(private val stores: Stores, private val tasks: Tasks) {
@@ -39,11 +43,11 @@ class NamedValues(private val stores: Stores, private val tasks: Tasks) {
         }
     }
 
-    /** The values the items [event] names were given keyed in place of their names on every other item, later. */
+    /** The authors the items [event] names were given keyed in place of their names on every other item, later. */
     @EventListener
     fun itemsWritten(event: SiteItemWriteEvent) {
         val s = stores.source(event.source) ?: return
-        val facets = s.schema.facets.filter { it.byName != null }
+        val facets = s.schema.facets.filter { it.byName != null && it.role == FacetRole.AUTHOR }
         if (facets.isEmpty()) return
         val values = s.items.facetsOf(event.ids).values
         facets.forEach { f ->
