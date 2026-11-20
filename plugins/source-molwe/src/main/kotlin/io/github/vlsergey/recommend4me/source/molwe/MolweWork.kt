@@ -11,13 +11,14 @@ import io.github.vlsergey.recommend4me.source.molwe.Molwe.Companion.NOTES
 import io.github.vlsergey.recommend4me.source.molwe.Molwe.Companion.PARTS
 import io.github.vlsergey.recommend4me.source.molwe.Molwe.Companion.READERS
 import io.github.vlsergey.recommend4me.source.molwe.Molwe.Companion.REVIEWS
+import io.github.vlsergey.recommend4me.source.molwe.Molwe.Companion.WORDS
 import java.time.Instant
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 /**
- * A work's own pages: its page — its header, its description with the line of its pairings and characters, its tags and
- * notes, every chapter named, the reviews its page has loaded — and a chapter's page with its text.
+ * A work's own pages: its page — its header, its words, its description with the line of its pairings and characters,
+ * its tags and notes, every chapter named, the reviews its page has loaded — and a chapter's page with its text.
  */
 internal class MolweWork(private val items: ItemStore) {
 
@@ -56,6 +57,7 @@ internal class MolweWork(private val items: ItemStore) {
         // The list is every chapter the work has on the site when it names as many as its heading counts
         if (chapters.isNotEmpty()) items.saveParts(id, chapters, whole = chapters.size.toLong() == count)
         count?.let { items.setNumbers(id, mapOf(PARTS to it.toDouble())) }
+        words(doc)?.let { items.setNumbers(id, mapOf(WORDS to it.toDouble())) }
         reviews(doc, id)
         return true
     }
@@ -116,6 +118,14 @@ internal class MolweWork(private val items: ItemStore) {
         labelled[TAGS]?.let { block -> fields.tags(id, block.children().map { it.text() }) }
         labelled[NOTE]?.let { items.setTexts(id, mapOf(NOTES to PageText.of(it))) }
     }
+
+    /** The work's words, a tile of the block of its counts: its number, then its caption — "16 357", "слов". */
+    private fun words(doc: Document): Long? =
+        doc.select("p")
+            .firstOrNull { it.ownText().trim() == WORDS_CAPTION && it.previousElementSibling()?.tagName() == "p" }
+            ?.previousElementSibling()
+            ?.text()
+            ?.let(PageText::number)
 
     /** Every chapter the page names, without its text: its id, number, title and day. */
     private fun chapters(doc: Document): List<PartData> =
@@ -184,6 +194,7 @@ internal class MolweWork(private val items: ItemStore) {
         /** The captions of the header's counts. */
         private const val READERS_CAPTION = "читателей"
         private const val REVIEWS_CAPTION = "отзывов"
+        private const val WORDS_CAPTION = "слов"
 
         private const val CAST = "Пэйринг и персонажи:"
         private const val TAGS = "Метки"

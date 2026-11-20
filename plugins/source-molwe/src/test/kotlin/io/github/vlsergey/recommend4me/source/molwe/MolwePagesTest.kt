@@ -104,6 +104,8 @@ class MolwePagesTest {
         assertEquals(189.0, context.numbers.getValue(id)["readers"])
         assertEquals(0.0, context.numbers.getValue(id)["reviews"])
         assertEquals(46.0, context.numbers.getValue(id)["parts"])
+        // The block of the work's counts: "58 841", "слов"
+        assertEquals(58841.0, context.numbers.getValue(id)["words"])
         val parts = context.parts.getValue(id).values.sortedBy { it.position }
         assertEquals(46, parts.size)
         assertEquals("83fefa5f-4d3c-4e85-b8f5-77f04c306abe", parts.first().id)
