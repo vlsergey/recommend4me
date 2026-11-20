@@ -222,9 +222,19 @@ private constructor(
                 into.toArray(ValueLayout.JAVA_DOUBLE)
             }
 
-        /** The rows [fromRow] to [fromRow] + [count] of [from], half precision as they are, written [at] bytes on. */
-        fun upload(from: HalfMatrix, fromRow: Int, count: Int, at: Long = 0) {
-            if (count > 0) copyBytes(at(at), from.slice(fromRow, count), count.toLong() * from.cols * 2, HOST_TO_DEVICE)
+        /**
+         * The rows [fromRow] to [fromRow] + [count] of [from] as they are kept, written [at] bytes on: halves two bytes
+         * a number, of a [ByteMatrix] its bytes alone (its scales sent apart). Sparse rows are sent as their entries.
+         */
+        fun upload(from: Rows, fromRow: Int, count: Int, at: Long = 0) {
+            if (count <= 0) return
+            when (from) {
+                is HalfMatrix ->
+                    copyBytes(at(at), from.slice(fromRow, count), count.toLong() * from.cols * 2, HOST_TO_DEVICE)
+                is ByteMatrix ->
+                    copyBytes(at(at), from.slice(fromRow, count), count.toLong() * from.cols, HOST_TO_DEVICE)
+                is SparseRows -> error("sparse rows are sent as their entries")
+            }
         }
 
         /** The first [bytes] of [from] written [at] bytes on. */
@@ -239,6 +249,9 @@ private constructor(
 
         /** Every byte made nought. */
         fun zero() = memset(address, bytes)
+
+        /** The [count] bytes from [at] on made nought. */
+        fun zero(at: Long, count: Long) = memset(at(at), count)
 
         /** The address [offset] bytes on. */
         fun at(offset: Long): MemorySegment = MemorySegment.ofAddress(address.address() + offset)

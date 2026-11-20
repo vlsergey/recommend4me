@@ -3,7 +3,8 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.correction.Corrected
-import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.matrix.ByteMatrix
+import io.github.vlsergey.recommend4me.matrix.Rows
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberRole
@@ -38,11 +39,11 @@ internal fun familyOf(facet: String) = if (facet in UniverseFacet.CHARACTER_FACE
 internal class SearchSide(
     val store: SourceStore,
     val ids: List<String>,
-    val titles: HalfMatrix,
+    val titles: Rows,
     val titleLengths: FloatArray,
-    val authorNames: HalfMatrix,
+    val authorNames: Rows,
     val authorLengths: FloatArray,
-    val descriptions: HalfMatrix,
+    val descriptions: Rows,
     val described: BooleanArray,
     val values: Array<IntArray>,
     val sizes: Map<String, DoubleArray>,
@@ -144,24 +145,24 @@ internal class SearchSide(
         }
 
         /**
-         * The vectors of the descriptions of the works [ids] by the [encoder], unit rows in half precision, and which
-         * have one: of no column, a site of none.
+         * The vectors of the descriptions of the works [ids] by the [encoder], unit rows a byte a number (ByteMatrix),
+         * and which have one: of no column, a site of none.
          */
-        private fun descriptionsOf(s: SourceStore, encoder: String, ids: List<String>): Pair<HalfMatrix, BooleanArray> {
+        private fun descriptionsOf(s: SourceStore, encoder: String, ids: List<String>): Pair<ByteMatrix, BooleanArray> {
             val described = BooleanArray(ids.size)
             val description =
                 s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-                    ?: return HalfMatrix(ids.size, 0) to described
+                    ?: return ByteMatrix(ids.size, 0) to described
             val at = ids.withIndex().associate { it.value to it.index }
-            var rows: HalfMatrix? = null
+            var rows: ByteMatrix? = null
             s.textVectors.forEach(encoder, listOf(description)) { id, _, vector ->
                 val i = at[id] ?: return@forEach
-                val into = rows ?: HalfMatrix(ids.size, vector.size).also { rows = it }
+                val into = rows ?: ByteMatrix(ids.size, vector.size).also { rows = it }
                 if (vector.size != into.cols) return@forEach
                 into.put(i, Vectors.unit(vector))
                 described[i] = true
             }
-            return (rows ?: HalfMatrix(ids.size, 0)) to described
+            return (rows ?: ByteMatrix(ids.size, 0)) to described
         }
 
         /**
@@ -184,7 +185,7 @@ internal class SearchSide(
             val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
             val vectors = description?.let { s.textVectors.ofMany(own, encoder, listOf(it)) }.orEmpty()
             val width = vectors.values.firstNotNullOfOrNull { it[description] }?.size ?: 0
-            val descriptions = HalfMatrix(own.size, width)
+            val descriptions = ByteMatrix(own.size, width)
             val described = BooleanArray(own.size)
             own.forEachIndexed { i, id ->
                 vectors[id]

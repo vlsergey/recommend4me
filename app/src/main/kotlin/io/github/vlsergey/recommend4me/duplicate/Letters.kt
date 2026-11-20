@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.matrix.SparseRows
 import java.util.stream.IntStream
 import kotlin.math.sqrt
 
@@ -44,25 +45,46 @@ internal object Letters {
     }
 
     /**
-     * Of every string of [texts] — none of one of none —, its trigrams' counts as a unit row, in half precision, and
+     * Of every string of [texts] — none of one of none —, its trigrams' counts as a unit row, in half precision, only
+     * those not nought kept (a short text's twenty of [WIDTH], owner, 2026-11-20: the search ran out of memory), and
      * the counts' length (nought of a string of no trigram): a row a string, side by side on every core.
      */
-    fun rows(texts: List<String?>): Pair<HalfMatrix, FloatArray> {
+    fun rows(texts: List<String?>): Pair<SparseRows, FloatArray> {
+        val lengths = FloatArray(texts.size)
+        val rows =
+            SparseRows.of(texts.size, WIDTH) { i ->
+                counted(texts[i])?.let { (row, length) ->
+                    lengths[i] = length
+                    row
+                }
+            }
+        return rows to lengths
+    }
+
+    /** The same of long texts — a description, of hundreds of trigrams —, every row whole. */
+    fun wholeRows(texts: List<String?>): Pair<HalfMatrix, FloatArray> {
         val rows = HalfMatrix(texts.size, WIDTH)
         val lengths = FloatArray(texts.size)
         IntStream.range(0, texts.size).parallel().forEach { i ->
-            val text = texts[i]?.let(::normalized)?.takeIf { it.isNotEmpty() } ?: return@forEach
-            val counts = FloatArray(WIDTH)
-            // Padded by a space either side: a word's first and last letters a trigram of their own
-            val padded = " $text "
-            for (k in 0..padded.length - TRIGRAM) {
-                val hash = (padded[k].code * PRIME + padded[k + 1].code) * PRIME + padded[k + 2].code
-                counts[(hash * SPREAD) ushr (Int.SIZE_BITS - BITS)]++
+            counted(texts[i])?.let { (row, length) ->
+                lengths[i] = length
+                rows.put(i, row)
             }
-            val length = sqrt(counts.sumOf { (it * it).toDouble() }).toFloat()
-            lengths[i] = length
-            rows.put(i, FloatArray(WIDTH) { counts[it] / length })
         }
         return rows to lengths
+    }
+
+    /** The counts of the trigrams of [text] as a unit row, and their length; none of a string of none. */
+    private fun counted(text: String?): Pair<FloatArray, Float>? {
+        val normal = text?.let(::normalized)?.takeIf { it.isNotEmpty() } ?: return null
+        val counts = FloatArray(WIDTH)
+        // Padded by a space either side: a word's first and last letters a trigram of their own
+        val padded = " $normal "
+        for (k in 0..padded.length - TRIGRAM) {
+            val hash = (padded[k].code * PRIME + padded[k + 1].code) * PRIME + padded[k + 2].code
+            counts[(hash * SPREAD) ushr (Int.SIZE_BITS - BITS)]++
+        }
+        val length = sqrt(counts.sumOf { (it * it).toDouble() }).toFloat()
+        return FloatArray(WIDTH) { counts[it] / length } to length
     }
 }

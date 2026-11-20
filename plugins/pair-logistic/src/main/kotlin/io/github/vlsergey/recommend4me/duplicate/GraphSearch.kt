@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
+import io.github.vlsergey.recommend4me.matrix.Rows
 import java.util.Random
 import kotlin.concurrent.withLock
 import org.slf4j.LoggerFactory
@@ -16,7 +17,7 @@ private val log = LoggerFactory.getLogger(GraphSearch::class.java)
  * are not of one width: their search is every pair's ([CardSearch]).
  */
 internal object GraphSearch {
-    private val NAMES = listOf("descend", "scored")
+    private val NAMES = listOf("descend", "scored") + RowsOnCard.NAMES
 
     private var compiledFor: Cublas? = null
     private var compiled: CudaKernels? = null
@@ -25,7 +26,7 @@ internal object GraphSearch {
     private fun kernels(card: Cublas): CudaKernels? {
         if (compiledFor !== card) {
             compiledFor = card
-            compiled = card.kernels(GraphSearch::class.java.getResource("graph.cu")!!.readText(), NAMES)
+            compiled = card.kernels(RowsOnCard.source("graph.cu"), NAMES)
         }
         return compiled
     }
@@ -39,7 +40,7 @@ internal object GraphSearch {
             val kernels = kernels(card) ?: error("the kernels of the graph were not made")
             CardRoom(card).use { room ->
                 val started = System.currentTimeMillis()
-                val onCard = AllOnCard(all, room)
+                val onCard = AllOnCard(all, room, kernels)
                 // Of every work the works of an author one with its: every one a candidate
                 val titles = Titles.of(all)
                 val ofAuthors = Lists.of(sameAuthor(all))
@@ -151,7 +152,7 @@ internal object GraphSearch {
  * descriptions — noughts of a work of none, or of another encoder's —, the lengths, the facets, the sizes, the values,
  * the authors and their kin, the works answered on.
  */
-internal class AllOnCard(private val all: AllWorks, room: CardRoom) {
+internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: CudaKernels) {
     private val began = System.currentTimeMillis()
     private val n = all.count.toLong()
     val titles = room.bytes(n * all.width * HALF_BYTES)
@@ -161,16 +162,18 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom) {
     val letters = room.bytes(LETTERED * n * all.width * HALF_BYTES)
 
     init {
+        // Whole halves, however the sites' works hold them ([RowsOnCard])
+        fun write(rows: Rows, into: Cublas.DeviceBytes, at: Long) = RowsOnCard.write(room.card, kernels, rows, into, at)
         all.sites.forEachIndexed { a, s ->
             val at = all.start[a].toLong()
-            titles.upload(s.titles, 0, s.count, at * all.width * HALF_BYTES)
-            authorNames.upload(s.authorNames, 0, s.count, at * all.width * HALF_BYTES)
+            write(s.titles, titles, at * all.width * HALF_BYTES)
+            write(s.authorNames, authorNames, at * all.width * HALF_BYTES)
             if (all.described > 0 && s.descriptions.cols == all.described)
-                descriptions.upload(s.descriptions, 0, s.count, at * all.described * HALF_BYTES)
+                write(s.descriptions, descriptions, at * all.described * HALF_BYTES)
             if (all.titled > 0 && s.titleVectors.cols == all.titled)
-                titleVectors.upload(s.titleVectors, 0, s.count, at * all.titled * HALF_BYTES)
+                write(s.titleVectors, titleVectors, at * all.titled * HALF_BYTES)
             // The texts one after another, of every work each
-            for (k in 0 until LETTERED) letters.upload(s.letters[k], 0, s.count, (k * n + at) * all.width * HALF_BYTES)
+            for (k in 0 until LETTERED) write(s.letters[k], letters, (k * n + at) * all.width * HALF_BYTES)
         }
     }
 

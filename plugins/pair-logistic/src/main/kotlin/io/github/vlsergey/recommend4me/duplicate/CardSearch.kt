@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
+import io.github.vlsergey.recommend4me.matrix.Rows
 import kotlin.concurrent.withLock
 
 /**
@@ -14,7 +15,7 @@ import kotlin.concurrent.withLock
  * site kept ([Likeliest]). Nothing of a pair comes back but the works kept and their scores.
  */
 internal object CardSearch {
-    private val NAMES = listOf("facets_onto", "best")
+    private val NAMES = listOf("facets_onto", "best") + RowsOnCard.NAMES
 
     private var compiledFor: Cublas? = null
     private var compiled: CudaKernels? = null
@@ -23,7 +24,7 @@ internal object CardSearch {
     private fun kernels(card: Cublas): CudaKernels? {
         if (compiledFor !== card) {
             compiledFor = card
-            compiled = card.kernels(CardSearch::class.java.getResource("search.cu")!!.readText(), NAMES)
+            compiled = card.kernels(RowsOnCard.source("search.cu"), NAMES)
         }
         return compiled
     }
@@ -55,7 +56,7 @@ internal object CardSearch {
                 Frequent.tell(search, a, b, frequent[a])
                 // Of every run of the first site on the card, every run of the second put there in its turn
                 for ((r, rows) in slices[a].withIndex()) CardRoom(card).use { ofRows ->
-                    val x = SiteOnCard(rows.works, inverted[a][r], frequent[a], ofRows)
+                    val x = SiteOnCard(rows.works, inverted[a][r], frequent[a], ofRows, kernels)
                     for ((c, columns) in slices[b].withIndex()) {
                         val tile = Tile(search, a, b, rows, columns)
                         val y = inverted[b][c]
@@ -68,7 +69,7 @@ internal object CardSearch {
                                     Facing(
                                             tile,
                                             x,
-                                            SiteOnCard(columns.works, y, frequent[a], own),
+                                            SiteOnCard(columns.works, y, frequent[a], own, kernels),
                                             models.size,
                                             weights,
                                             own,
@@ -93,7 +94,7 @@ internal object CardSearch {
 internal class NoRoom : RuntimeException("no room on the card")
 
 /** What is put on the card and freed with the search, or with a pair of sites. */
-internal class CardRoom(private val card: Cublas) : AutoCloseable {
+internal class CardRoom(val card: Cublas) : AutoCloseable {
     private val made = ArrayList<AutoCloseable>()
 
     fun floats(count: Long): Cublas.DeviceFloats =
@@ -107,6 +108,10 @@ internal class CardRoom(private val card: Cublas) : AutoCloseable {
     fun floatsOf(a: FloatArray): Cublas.DeviceBytes = bytes(a.size.toLong() * Float.SIZE_BYTES).also { it.upload(a) }
 
     fun longs(a: LongArray): Cublas.DeviceBytes = bytes(a.size.toLong() * Long.SIZE_BYTES).also { it.upload(a) }
+
+    /** The [rows] as whole halves, a row after a row ([RowsOnCard]), by the [kernels] of the search. */
+    fun halves(rows: Rows, kernels: CudaKernels): Cublas.DeviceBytes =
+        bytes(rows.rows.toLong() * rows.cols * HALF_BYTES).also { RowsOnCard.write(card, kernels, rows, it, 0) }
 
     /** Page-locked main memory of [bytes]: what is brought back from the card is copied into it. */
     fun pinned(bytes: Long): Cublas.Pinned = (card.pinned(maxOf(1L, bytes)) ?: throw NoRoom()).also { made += it }
@@ -135,31 +140,21 @@ internal class SiteOnCard(
     val inverted: Inverted,
     val frequent: FrequentValues,
     room: CardRoom,
+    kernels: CudaKernels,
 ) {
-    // Half precision, as the site's works hold them: half the room of single precision's (a million works of 1024
-    // numbers 6 GB of the card's 16, not 12)
-    val titles =
-        room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(site.titles, 0, site.count) }
-    val authorNames =
-        room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(site.authorNames, 0, site.count) }
+    // Whole halves, however the site's works hold them ([RowsOnCard]): half the room of single precision's (a million
+    // works of 1024 numbers 6 GB of the card's 16, not 12)
+    val titles = room.halves(site.titles, kernels)
+    val authorNames = room.halves(site.authorNames, kernels)
     val titleLengths = room.floatsOf(site.titleLengths)
     val authorLengths = room.floatsOf(site.authorLengths)
-    val descriptions =
-        room.bytes(site.count.toLong() * site.descriptions.cols * HALF_BYTES).also {
-            it.upload(site.descriptions, 0, site.count)
-        }
+    val descriptions = room.halves(site.descriptions, kernels)
     val described = room.marks(site.described)
 
     // The other way: the vectors of the titles; the trigrams of the other texts, one after another ([LetteredText])
-    val titleVectors =
-        room.bytes(site.count.toLong() * site.titleVectors.cols * HALF_BYTES).also {
-            it.upload(site.titleVectors, 0, site.count)
-        }
+    val titleVectors = room.halves(site.titleVectors, kernels)
     val titled = room.marks(site.titled)
-    val letters =
-        site.letters.map { m ->
-            room.bytes(site.count.toLong() * site.width * HALF_BYTES).also { it.upload(m, 0, site.count) }
-        }
+    val letters = site.letters.map { room.halves(it, kernels) }
     val letterLengths =
         room.floatsOf(FloatArray(LETTERED * site.count) { site.letterLengths[it / site.count][it % site.count] })
     val facets = room.longs(site.facets)

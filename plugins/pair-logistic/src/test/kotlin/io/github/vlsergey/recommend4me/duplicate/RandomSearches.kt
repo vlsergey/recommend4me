@@ -1,6 +1,9 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.matrix.ByteMatrix
 import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.matrix.Rows
+import io.github.vlsergey.recommend4me.matrix.SparseRows
 import java.util.Random
 import kotlin.math.sqrt
 
@@ -52,14 +55,16 @@ internal object RandomSearches {
             LetteredText.entries.map {
                 FloatArray(count) { if (random.nextInt(3) == 0) 0f else 5f + random.nextInt(50) }
             }
+        // Kept as the application keeps them: the short texts' trigrams sparse, the vectors a byte a number, the
+        // description's trigrams whole
         return SiteWorks(
             source,
             List(count) { "%05d".format(it) },
-            titles,
+            sparse(titles),
             titleLengths,
-            authorNames,
+            sparse(authorNames),
             authorLengths,
-            descriptions,
+            bytes(descriptions),
             described,
             values,
             weights,
@@ -67,12 +72,27 @@ internal object RandomSearches {
             sizes,
             authors,
             kin,
-            rows(random, titled, vectored, counts = false),
+            bytes(rows(random, titled, vectored, counts = false)),
             titled,
-            letterLengths.map { l -> rows(random, BooleanArray(count) { l[it] > 0f }, width, counts = true) },
+            letterLengths.mapIndexed { k, l ->
+                val m = rows(random, BooleanArray(count) { l[it] > 0f }, width, counts = true)
+                if (LetteredText.entries[k] == LetteredText.DESCRIPTION) m else sparse(m)
+            },
             letterLengths,
         )
     }
+
+    /** The rows of [m] kept sparse. */
+    private fun sparse(m: HalfMatrix): Rows =
+        SparseRows.of(m.rows, m.cols) { i ->
+            FloatArray(m.cols).also { m.take(i, it) }.takeIf { r -> r.any { it != 0f } }
+        }
+
+    /** The rows of [m] kept a byte a number. */
+    private fun bytes(m: HalfMatrix): Rows =
+        ByteMatrix(m.rows, m.cols).also { b ->
+            for (i in 0 until m.rows) b.put(i, FloatArray(m.cols).also { m.take(i, it) })
+        }
 
     /** Rows of [width] numbers, a unit row of each of those [had], of the others none. */
     private fun rows(random: Random, had: BooleanArray, width: Int, counts: Boolean): HalfMatrix =

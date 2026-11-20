@@ -1,7 +1,8 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.correction.Corrected
-import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.matrix.ByteMatrix
+import io.github.vlsergey.recommend4me.matrix.Rows
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.textvector.TextVectors
@@ -10,16 +11,17 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 
 /**
  * THE TEXTS OF A SITE'S WORKS COMPARED BOTH WAYS (owner, 2026-11-19: "for every text field both the trigram ones and
- * the vector ones"): of every work of the search, the vector of its title by the encoder ([titleVectors], a unit row in
- * half precision, [titled] false of a work without one; of no column, a site of none) and the trigrams of its other
- * texts ([letters], [letterLengths]: by [LetteredText], [Letters], nought of a work of none) — its description and the
- * site's line of its characters as the user corrected them, the names the site gives its fandoms — beside the trigrams
- * of the titles and the vectors of the descriptions the search compared before.
+ * the vector ones"): of every work of the search, the vector of its title by the encoder ([titleVectors], a unit row a
+ * byte a number ([io.github.vlsergey.recommend4me.matrix.ByteMatrix]), [titled] false of a work without one; of no
+ * column, a site of none) and the trigrams of its other texts ([letters], [letterLengths]: by [LetteredText],
+ * [Letters], nought of a work of none) — its description and the site's line of its characters as the user corrected
+ * them, the names the site gives its fandoms — beside the trigrams of the titles and the vectors of the descriptions
+ * the search compared before.
  */
 internal class TextsCompared(
-    val titleVectors: HalfMatrix,
+    val titleVectors: Rows,
     val titled: BooleanArray,
-    val letters: List<HalfMatrix>,
+    val letters: List<Rows>,
     val letterLengths: List<FloatArray>,
 ) {
     companion object {
@@ -29,10 +31,10 @@ internal class TextsCompared(
         fun read(s: SourceStore, encoder: String, ids: List<String>): TextsCompared {
             val at = ids.withIndex().associate { it.value to it.index }
             val titled = BooleanArray(ids.size)
-            var titleVectors: HalfMatrix? = null
+            var titleVectors: ByteMatrix? = null
             fun put(id: String, vector: FloatArray) {
                 val i = at[id] ?: return
-                val into = titleVectors ?: HalfMatrix(ids.size, vector.size).also { titleVectors = it }
+                val into = titleVectors ?: ByteMatrix(ids.size, vector.size).also { titleVectors = it }
                 if (vector.size != into.cols) return
                 into.put(i, Vectors.unit(vector))
                 titled[i] = true
@@ -44,9 +46,14 @@ internal class TextsCompared(
                     texts[TextVectors.TITLE]?.let { put(id, it) }
                 }
             val texts = textsOf(s, ids, at)
-            val rows = LetteredText.entries.map { Letters.rows(texts.getValue(it)) }
+            // The description long, every row whole; the names of the fandoms and the line of the characters short
+            val rows =
+                LetteredText.entries.map {
+                    if (it == LetteredText.DESCRIPTION) Letters.wholeRows(texts.getValue(it))
+                    else Letters.rows(texts.getValue(it))
+                }
             return TextsCompared(
-                titleVectors ?: HalfMatrix(ids.size, 0),
+                titleVectors ?: ByteMatrix(ids.size, 0),
                 titled,
                 rows.map { it.first },
                 rows.map { it.second },

@@ -1,6 +1,8 @@
 package io.github.vlsergey.recommend4me.duplicate
 
-import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.matrix.ByteMatrix
+import io.github.vlsergey.recommend4me.matrix.Rows
+import io.github.vlsergey.recommend4me.matrix.SparseRows
 
 /**
  * THE WORKS OF ONE SITE AS A SEARCH OF PAIRS READS THEM: every work of a title ([ids], ascending) — the unit row of its
@@ -9,21 +11,22 @@ import io.github.vlsergey.recommend4me.matrix.HalfMatrix
  * and of the vectors of their descriptions ([descriptions], a row of noughts and [described] false of a work without
  * one; of no column, a site with no vector of a description), the same of the vectors of their titles ([titleVectors],
  * [titled]), the unit rows of the trigrams of the other texts ([letters] and [letterLengths], by [LetteredText]: nought
- * of a work of none); the values of the facets the sites share ([values], by their places among every value of the
- * type, ascending) with the weight of each ([weights]: its rarity among every work of the type, a work's values of each
- * facet of unit length) and the facets it has a value of ([facets], a bit a facet by its place among
- * [PairSearch.families]); the numbers of its size ([sizes], by the places of [PairSearch.sizes], a row a number, nought
- * when not known); its normalized authors ([authors]) and with them every author the dictionary of authors gives as one
- * with them, fully or in part ([kin]).
+ * of a work of none). The rows of any kind ([Rows]): the application keeps those of the short texts sparse, the vectors
+ * a byte a number (owner, 2026-11-20: the search ran out of memory). The values of the facets the sites share
+ * ([values], by their places among every value of the type, ascending) with the weight of each ([weights]: its rarity
+ * among every work of the type, a work's values of each facet of unit length) and the facets it has a value of
+ * ([facets], a bit a facet by its place among [PairSearch.families]); the numbers of its size ([sizes], by the places
+ * of [PairSearch.sizes], a row a number, nought when not known); its normalized authors ([authors]) and with them every
+ * author the dictionary of authors gives as one with them, fully or in part ([kin]).
  */
 class SiteWorks(
     val source: String,
     val ids: List<String>,
-    val titles: HalfMatrix,
+    val titles: Rows,
     val titleLengths: FloatArray,
-    val authorNames: HalfMatrix,
+    val authorNames: Rows,
     val authorLengths: FloatArray,
-    val descriptions: HalfMatrix,
+    val descriptions: Rows,
     val described: BooleanArray,
     val values: Array<IntArray>,
     val weights: Array<FloatArray>,
@@ -31,9 +34,9 @@ class SiteWorks(
     val sizes: Array<DoubleArray>,
     val authors: Array<LongArray>,
     val kin: Array<LongArray>,
-    val titleVectors: HalfMatrix = HalfMatrix(ids.size, 0),
+    val titleVectors: Rows = ByteMatrix(ids.size, 0),
     val titled: BooleanArray = BooleanArray(ids.size),
-    val letters: List<HalfMatrix> = LetteredText.entries.map { HalfMatrix(ids.size, titles.cols) },
+    val letters: List<Rows> = LetteredText.entries.map { SparseRows.of(ids.size, titles.cols) { null } },
     val letterLengths: List<FloatArray> = LetteredText.entries.map { FloatArray(ids.size) },
 ) {
     val count: Int
@@ -120,11 +123,7 @@ class PairSearch(
     fun layers(a: Int, i: Int, b: Int, j: Int): PairLayers {
         val x = sites[a]
         val y = sites[b]
-        fun dot(u: HalfMatrix, v: HalfMatrix): Float {
-            var sum = 0f
-            for (k in 0 until u.cols) sum += u[i, k] * v[j, k]
-            return sum
-        }
+        fun dot(u: Rows, v: Rows): Float = u.dot(i, v, j)
         val title = Lexical.of(dot(x.titles, y.titles), x.titleLengths[i], y.titleLengths[j])
         val authored = x.authorLengths[i] > 0f && y.authorLengths[j] > 0f
         return PairLayers(

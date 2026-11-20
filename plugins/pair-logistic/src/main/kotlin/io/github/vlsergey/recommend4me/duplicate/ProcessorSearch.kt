@@ -2,7 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Blas
 import io.github.vlsergey.recommend4me.matrix.Floats
-import io.github.vlsergey.recommend4me.matrix.HalfMatrix
+import io.github.vlsergey.recommend4me.matrix.Rows
 
 /**
  * THE SEARCH IN THE MAIN MEMORY, of a launch without a card: every work of a site against every work of every site, its
@@ -221,7 +221,7 @@ private class Against(
  * precision whole, once; the first's [own] a block of [rows] at a time ([make]), their products with every row of the
  * second read a row at a time ([take]).
  */
-private class Products(private val own: HalfMatrix, other: HalfMatrix, rows: Int) {
+private class Products(private val own: Rows, other: Rows, rows: Int) {
     private val width = own.cols
     private val n = other.rows
     private val others = Floats(n * width).also { other.floats(0, n, it) }

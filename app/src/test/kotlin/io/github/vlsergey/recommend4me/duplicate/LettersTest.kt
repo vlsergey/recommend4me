@@ -14,9 +14,10 @@ class LettersTest {
     /** How alike the [a]-th and the [b]-th strings are, as the search compares them. */
     private fun lexical(texts: List<String?>, a: Int, b: Int): Lexical {
         val (rows, lengths) = Letters.rows(texts)
-        var cosine = 0f
-        for (k in 0 until Letters.WIDTH) cosine += rows[a, k] * rows[b, k]
-        return Lexical.of(cosine, lengths[a], lengths[b])
+        val (whole, _) = Letters.wholeRows(texts)
+        // Kept sparse or whole, the same cosine
+        assertEquals(whole.dot(a, whole, b), rows.dot(a, rows, b), 1e-6f)
+        return Lexical.of(rows.dot(a, rows, b), lengths[a], lengths[b])
     }
 
     @Test

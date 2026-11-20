@@ -14,14 +14,15 @@ import java.util.stream.IntStream
  *
  * The memory belongs to the garbage collector (`Arena.ofAuto`), as [Floats]'.
  */
-class HalfMatrix private constructor(val rows: Int, val cols: Int, internal val seg: MemorySegment) {
+class HalfMatrix private constructor(override val rows: Int, override val cols: Int, internal val seg: MemorySegment) :
+    Rows {
     constructor(
         rows: Int,
         cols: Int,
     ) : this(rows, cols, Arena.ofAuto().allocate(HALF, rows.toLong().times(cols).coerceAtLeast(1)))
 
     /** The rows [fromRow] to [fromRow] + [count] as a matrix of their own, over the same memory: nothing copied. */
-    fun rows(fromRow: Int, count: Int): HalfMatrix = HalfMatrix(count, cols, slice(fromRow, count))
+    override fun rows(fromRow: Int, count: Int): HalfMatrix = HalfMatrix(count, cols, slice(fromRow, count))
 
     /** Where row [i] begins, in numbers. */
     fun row(i: Int): Long = i.toLong() * cols
@@ -44,7 +45,7 @@ class HalfMatrix private constructor(val rows: Int, val cols: Int, internal val 
     }
 
     /** Row [i] as single precision, into [into]. */
-    fun take(i: Int, into: FloatArray) {
+    override fun take(i: Int, into: FloatArray) {
         val at = row(i)
         for (q in 0 until cols) into[q] = java.lang.Float.float16ToFloat(seg.getAtIndex(HALF, at + q))
     }
@@ -59,7 +60,7 @@ class HalfMatrix private constructor(val rows: Int, val cols: Int, internal val 
      * The rows [fromRow] to [fromRow] + [count] as single precision, into [into] from its start: a row on a core of its
      * own.
      */
-    fun floats(fromRow: Int, count: Int, into: Floats) {
+    override fun floats(fromRow: Int, count: Int, into: Floats) {
         IntStream.range(0, count).parallel().forEach { r ->
             val at = row(fromRow + r)
             val to = r * cols
