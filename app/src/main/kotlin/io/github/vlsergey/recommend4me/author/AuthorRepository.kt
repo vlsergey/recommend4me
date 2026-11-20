@@ -64,11 +64,14 @@ class AuthorRepository(
     /**
      * The [authors] of the [source] bound to normalized ones and those they are bound to: the site's key to the id; a
      * batch of them a query by the table's key — of the authors of a portion of the works, not every author of the
-     * site.
+     * site. Of more than [MANY] of them, every binding of the site read in one pass and picked from: H2 walks every row
+     * of the site for a batch of keys after its source (2026-11-20: the authors of the 60 000 items the words to a
+     * character learn of took a quarter of an hour so).
      */
-    fun bindingsOf(source: String, authors: Collection<String>): Map<String, Long> =
-        authors
-            .distinct()
+    fun bindingsOf(source: String, authors: Collection<String>): Map<String, Long> {
+        val asked = authors.toHashSet()
+        if (asked.size > MANY) return bindingsOf(source).filterKeys { it in asked }
+        return asked
             .chunked(BATCH)
             .flatMap { chunk ->
                 db.select(SITE_AUTHOR.AUTHOR, SITE_AUTHOR.NORMALIZED)
@@ -77,6 +80,7 @@ class AuthorRepository(
                     .fetch { it.value1()!! to it.value2()!! }
             }
             .toMap()
+    }
 
     /** The normalized author the author of a site is bound to now. */
     fun of(site: SiteAuthorRef): Long? =
@@ -253,6 +257,9 @@ class AuthorRepository(
     companion object {
         /** The authors read by one query at most: a list of keys in a query, not a meaning. */
         private const val BATCH = 1000
+
+        /** Of more keys than so many, every binding of the site read and picked from. */
+        private const val MANY = 10_000
 
         /** The value of a normalized author among the values of the works: its id. */
         fun key(id: Long): String = id.toString()
