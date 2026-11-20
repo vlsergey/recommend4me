@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.series.SeriesDifferences
 import io.github.vlsergey.recommend4me.source.Stores
-import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import java.time.Instant
 import java.time.ZoneOffset
@@ -27,10 +26,7 @@ class PairChoice(
     val sort: DuplicateSort = DuplicateSort.FORMULA,
     val sameAuthors: Boolean = false,
     val sameTitle: Boolean = false,
-) {
-    /** Whether a pair of the [answer] (none: not answered on) is among the chosen. */
-    fun holds(answer: DuplicateAnswer?): Boolean = if (answer == null) open else answer in answers
-}
+)
 
 /**
  * THE PAIRS AS THEY ARE LOOKED THROUGH: a page of the pairs of a type in the order the user chose ([page]), and the
@@ -57,22 +53,16 @@ class DuplicatePages(
      * equal, the likelier pair first. Or times the pair's own mean size ([DuplicateSort.SIZE]): the long works first.
      * Or by the chance the pair is one series of works ([DuplicateSort.SERIES]), alone or times the pair's size
      * ([DuplicateSort.SERIES_SIZE]: the long works of one series first). Or, of the pairs in doubt
-     * ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairChances.boundary]): what an
-     * answer teaches the model most; or the same of the chance of one series ([DuplicateSort.UNCERTAIN_SERIES]). Chosen
-     * in the database by the chances kept with the pairs ([DuplicateChoice]), the page's pairs alone read: the chances
-     * shown of the models as they are. Null of no such type.
+     * ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairDoubt]): what an answer teaches
+     * the model most; or the same of the chance of one series ([DuplicateSort.UNCERTAIN_SERIES]). Chosen in the
+     * database by the keys the search wrote with the pairs as things stood then ([PairScore], [DuplicateChoice]), the
+     * page's pairs alone read: the chances shown of the models as they are. Null of no such type.
      */
     fun page(typeId: String, choice: PairChoice, offset: Int, limit: Int): DuplicatePage? {
         val type = stores.type(typeId) ?: return null
         val search = type.duplicates.search()
         val chances = models.of(type)
-        val (total, chosen) =
-            type.duplicates.choice.page(
-                choice,
-                marksOf(type, choice.sort),
-                offset.coerceAtLeast(0),
-                limit.coerceIn(1, MAX_PAGE),
-            )
+        val (total, chosen) = type.duplicates.choice.page(choice, offset.coerceAtLeast(0), limit.coerceIn(1, MAX_PAGE))
         val layers = type.duplicates.reads.ofPairs(chosen.map { it.pair }).associateBy { it.pair }
         val said =
             Said(
@@ -94,26 +84,6 @@ class DuplicatePages(
         )
     }
 
-    /**
-     * The user's marks of interest of every work, of a sort that reads them over the model's chance: by the formula, by
-     * interest; none of another.
-     */
-    private fun marksOf(type: TypeStore, sort: DuplicateSort): InterestMarks {
-        val interesting = ArrayList<ItemKey>()
-        val dull = ArrayList<ItemKey>()
-        if (sort == DuplicateSort.FORMULA || sort == DuplicateSort.INTEREST)
-            type.sources.forEach { s ->
-                s.interest.all().forEach { (id, mark) ->
-                    (if (mark.interesting) interesting else dull) += ItemKey(s.id, id)
-                }
-            }
-        return InterestMarks(interesting, dull)
-    }
-
-    /**
-     * What the last search found for the work of [key]: every pair of an item of it and an item of another work,
-     * answered or not, the likeliest first.
-     */
     /**
      * The two works as the screen shows a pair: how alike they are — as the last search kept them, or of a pair it did
      * not keep worked out now the same way ([LoosePairs]) — and the word said of them; null of no such type, or a work

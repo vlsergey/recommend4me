@@ -4,7 +4,6 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.settings.Settings
 import io.github.vlsergey.recommend4me.source.TypeStore
-import kotlin.math.ln
 import org.springframework.stereotype.Component
 
 /**
@@ -16,36 +15,6 @@ class PairChances(val same: FittedPairModel, val series: FittedPairModel?, val l
     fun same(c: DuplicateCandidate): Double = same.chance(c.layers)
 
     fun series(c: DuplicateCandidate): Double? = series?.chance(c.layers)
-
-    /** The chance the pair is one work on the scale a logistic model adds up on. */
-    fun logit(c: DuplicateCandidate): Double = scale(same(c))
-
-    /** The chance the pair is one series on the scale of [logit]; none without a model of one series. */
-    fun seriesLogit(c: DuplicateCandidate): Double? = series(c)?.let(::scale)
-
-    /**
-     * Where on the scale of the chance [at] — [logit], [seriesLogit] — the user's answers change: between the mean of
-     * the [pairs] said to be of its kind and of those said not ([said], null of one not answered). The chance is of the
-     * plugin's making, a half not promised to be where the answers change: what is in doubt is told by the answers.
-     * Nought with neither kind of answer.
-     */
-    fun boundary(
-        pairs: Collection<DuplicateCandidate>,
-        at: (DuplicateCandidate) -> Double?,
-        said: (DuplicateCandidate) -> Boolean?,
-    ): Double {
-        val yes = pairs.filter { said(it) == true }.mapNotNull(at)
-        val no = pairs.filter { said(it) == false }.mapNotNull(at)
-        return if (yes.isEmpty() || no.isEmpty()) 0.0 else (yes.average() + no.average()) / 2
-    }
-
-    private companion object {
-        /** A chance of nought or one has no place on the scale of [logit]. */
-        const val LEAST_CHANCE = 1e-12
-
-        /** The [chance] on the scale a logistic model adds up on. */
-        fun scale(chance: Double): Double = chance.coerceIn(LEAST_CHANCE, 1 - LEAST_CHANCE).let { ln(it / (1 - it)) }
-    }
 }
 
 /**

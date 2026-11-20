@@ -130,6 +130,7 @@ class DuplicateRepository(private val db: DSLContext) {
                     score.derived,
                     score.sameAuthors,
                     score.sameTitle,
+                    *score.ranks,
                 )
             }
             batch.execute()
@@ -233,42 +234,6 @@ class DuplicateRepository(private val db: DSLContext) {
             .execute()
     }
 
-    /**
-     * Every pair scored anew — its chance of one work and of one series by the [chances] of it —, streamed and written
-     * by the table's key a [BATCH] at a time; how many.
-     */
-    fun rescore(chances: (DuplicateCandidate) -> Pair<Double, Double?>): Int {
-        var count = 0
-        val chunk = ArrayList<DuplicateCandidate>(BATCH)
-        reads.forEach { d ->
-            chunk += d
-            if (chunk.size == BATCH) {
-                scored(chunk, chances)
-                count += chunk.size
-                chunk.clear()
-            }
-        }
-        if (chunk.isNotEmpty()) scored(chunk, chances)
-        return count + chunk.size
-    }
-
-    /** The chances of the [pairs] by [chances] written, one statement bound a pair each. */
-    private fun scored(pairs: List<DuplicateCandidate>, chances: (DuplicateCandidate) -> Pair<Double, Double?>) {
-        val c = DUPLICATE_CANDIDATE
-        val batch =
-            db.batch(
-                db.update(c)
-                    .set(c.SAME_CHANCE, null as Double?)
-                    .set(c.SERIES_CHANCE, null as Double?)
-                    .where(c.SOURCE.eq(""), c.ITEM_ID.eq(""), c.OTHER_SOURCE.eq(""), c.OTHER_ITEM_ID.eq(""))
-            )
-        pairs.forEach { d ->
-            val (same, series) = chances(d)
-            batch.bind(same, series, d.first.source, d.first.id, d.second.source, d.second.id)
-        }
-        batch.execute()
-    }
-
     companion object {
         private const val BATCH = 1000
 
@@ -305,6 +270,13 @@ class DuplicateRepository(private val db: DSLContext) {
                 DUPLICATE_CANDIDATE.ANSWER_DERIVED,
                 DUPLICATE_CANDIDATE.SAME_AUTHORS,
                 DUPLICATE_CANDIDATE.SAME_TITLE,
+                DUPLICATE_CANDIDATE.BY_SIZE,
+                DUPLICATE_CANDIDATE.BY_SERIES_SIZE,
+                DUPLICATE_CANDIDATE.BY_DOUBT,
+                DUPLICATE_CANDIDATE.BY_SERIES_DOUBT,
+                DUPLICATE_CANDIDATE.BY_FORMULA,
+                DUPLICATE_CANDIDATE.BY_INTEREST,
+                DUPLICATE_CANDIDATE.BY_GRADE,
             )
     }
 }

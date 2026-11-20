@@ -19,14 +19,20 @@ class PairChancesTest {
         DuplicateCandidate(ItemKey("a", "$n"), ItemKey("b", "$n"), title, null, null, emptyMap())
 
     @Test
-    fun `the boundary of the answers stands between what is said one work and what not, none of one kind of answer`() {
+    fun `the pairs in most doubt stand between what is said one work and what not, of a half of one kind of answer`() {
         val same = (0 until 10).map { pair(it, 0.9f) }
         val different = (10 until 20).map { pair(it, 0.2f) }
-        val chances = PairChances(byTitle, null, true)
-        val said = (same.map { it.pair to true } + different.map { it.pair to false }).toMap()
-        val boundary = chances.boundary(same + different, chances::logit) { said[it.pair] }
-        assertTrue(boundary > chances.logit(pair(100, 0.2f)) && boundary < chances.logit(pair(100, 0.9f)), "$boundary")
-        assertEquals(0.0, chances.boundary(same, chances::logit) { said[it.pair] })
+        val said =
+            Said(
+                (same.map { it.pair to DuplicateAnswer.SAME } + different.map { it.pair to DuplicateAnswer.DIFFERENT })
+                    .toMap(),
+                emptySet(),
+            )
+        val doubt = PairDoubt.of(same + different, said, { byTitle.chance(it.layers) }, { null })
+        val between = doubt.ofSame(0.5)
+        assertTrue(between > doubt.ofSame(0.9) && between > doubt.ofSame(0.2), "$between")
+        val oneKind = PairDoubt.of(same, said, { byTitle.chance(it.layers) }, { null })
+        assertEquals(1.0, oneKind.ofSame(0.5), 1e-9)
     }
 
     @Test
@@ -80,33 +86,20 @@ class PairChancesTest {
     }
 
     @Test
-    fun `the boundary of one series stands on the chance of one series, none without its model`() {
+    fun `the pairs in most doubt of one series stand on the chance of one series, of a half without its model`() {
         // The chance of one work by the title, of one series by its complement: the two scales apart
-        val bySeries =
-            object : FittedPairModel {
-                override fun chance(layers: PairLayers) = 1 - layers.title.toDouble()
-
-                override fun pack() = ByteArray(0)
-            }
         val series = (0 until 10).map { pair(it, 0.1f) }
         val other = (10 until 20).map { pair(it, 0.7f) }
-        val said = (series.map { it.pair to true } + other.map { it.pair to false }).toMap()
-        val chances = PairChances(byTitle, bySeries, true)
-        val boundary = chances.boundary(series + other, chances::seriesLogit) { said[it.pair] }
-        assertTrue(
-            boundary < chances.seriesLogit(pair(100, 0.1f))!! && boundary > chances.seriesLogit(pair(100, 0.7f))!!,
-            "$boundary",
-        )
-        val none = PairChances(byTitle, null, true)
-        assertEquals(0.0, none.boundary(series + other, none::seriesLogit) { said[it.pair] })
-    }
-
-    @Test
-    fun `a page holds the pairs of the answers chosen, those not answered on as one of them`() {
-        val different = PairChoice(false, setOf(DuplicateAnswer.DIFFERENT))
-        assertTrue(!different.holds(null) && different.holds(DuplicateAnswer.DIFFERENT))
-        assertTrue(!different.holds(DuplicateAnswer.SAME) && !different.holds(DuplicateAnswer.SERIES))
-        val open = PairChoice(true)
-        assertTrue(open.holds(null) && !open.holds(DuplicateAnswer.DIFFERENT))
+        val said =
+            Said(
+                (series.map { it.pair to DuplicateAnswer.SERIES } + other.map { it.pair to DuplicateAnswer.DIFFERENT })
+                    .toMap(),
+                emptySet(),
+            )
+        val doubt = PairDoubt.of(series + other, said, { byTitle.chance(it.layers) }, { 1 - it.title.toDouble() })
+        val between = doubt.ofSeries(0.6)
+        assertTrue(between > doubt.ofSeries(0.9) && between > doubt.ofSeries(0.3), "$between")
+        val none = PairDoubt.of(series + other, said, { byTitle.chance(it.layers) }, { null })
+        assertEquals(1.0, none.ofSeries(0.5), 1e-9)
     }
 }

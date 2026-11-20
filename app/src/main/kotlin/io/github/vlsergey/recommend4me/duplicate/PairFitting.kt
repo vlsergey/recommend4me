@@ -59,8 +59,8 @@ class PairFitting(
 
     /**
      * The models fitted anew on the pairs answered, by the words kept with them — those the user said since the search
-     * among them ([DuplicateRepository.said]) —, kept with when and how long it took, and every pair scored anew by
-     * them: what a page is chosen in the order of ([DuplicateChoice]). None without a plugin.
+     * among them ([DuplicateRepository.said]) —, kept with when and how long it took: what the next search keeps and
+     * orders its pairs by, and a page shows its pairs' chances by. None without a plugin.
      */
     private fun fitAnew(type: TypeStore) {
         val model = models.model(type.id) ?: return
@@ -70,11 +70,9 @@ class PairFitting(
         val fitted = PairModels.fit(model, answered.map { it.first }, said)
         val fit = System.currentTimeMillis() - started
         type.duplicates.keepModels(model.id, fitted.same?.pack(), fitted.series?.pack(), Instant.now(), fit)
-        val same = fitted.same ?: model.prior()
-        val scored = type.duplicates.rescore { c -> same.chance(c.layers) to fitted.series?.chance(c.layers) }
         log.info(
             "{}: the models of the pairs fitted on {} pairs answered — {} said one work, {} one series, {} related " +
-                "otherwise, {} different — in {} ms, and {} pairs scored anew by them in {} ms",
+                "otherwise, {} different — in {} ms",
             type.id,
             answered.size,
             said.values.count { it == DuplicateAnswer.SAME },
@@ -82,8 +80,6 @@ class PairFitting(
             said.values.count { it.related && it != DuplicateAnswer.SERIES },
             said.values.count { it == DuplicateAnswer.DIFFERENT },
             fit,
-            scored,
-            System.currentTimeMillis() - started - fit,
         )
     }
 
