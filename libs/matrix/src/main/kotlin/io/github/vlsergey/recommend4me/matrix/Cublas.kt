@@ -78,6 +78,14 @@ private constructor(
                 FunctionDescriptor.of(ValueLayout.JAVA_INT),
             )
     }
+    private val cudaMemGetInfo: MethodHandle by lazy {
+        Linker.nativeLinker()
+            .downcallHandle(
+                runtime.find("cudaMemGetInfo").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.ADDRESS),
+            )
+    }
+
     private val cudaFreeHost: MethodHandle by lazy {
         Linker.nativeLinker()
             .downcallHandle(
@@ -128,6 +136,7 @@ private constructor(
         val address: MemorySegment =
             Arena.ofConfined().use { a ->
                 val out = a.allocate(ValueLayout.ADDRESS)
+                fits(cudaMemGetInfo, count * Float.SIZE_BYTES)
                 check((cudaMalloc.invokeExact(out, count * Float.SIZE_BYTES) as Int) == 0) {
                     "the card has no room for $count floats"
                 }
@@ -171,6 +180,7 @@ private constructor(
         val address: MemorySegment =
             Arena.ofConfined().use { a ->
                 val out = a.allocate(ValueLayout.ADDRESS)
+                fits(cudaMemGetInfo, bytes)
                 check((cudaMalloc.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) {
                     "the card has no room for $bytes bytes"
                 }
@@ -536,6 +546,26 @@ private constructor(
 }
 
 /** The warning that the card's own kernels were not made, and why: the caller's work stays on the processor. */
+/**
+ * No room of [bytes] beyond the card's own memory free now, less [SPARE] (`cudaMemGetInfo` of [memGetInfo]): what is
+ * asked beyond it Windows does not refuse (WDDM) — it moves the card's memory to the main one, and every kernel reads
+ * it through the bus: the graph of the duplicates ran 70 times slower so (2026-11-20). Refused here as the card would.
+ */
+private fun fits(memGetInfo: MethodHandle, bytes: Long) {
+    if (bytes <= SPARE / 2) return
+    val free =
+        Arena.ofConfined().use { a ->
+            val free = a.allocate(ValueLayout.JAVA_LONG)
+            val total = a.allocate(ValueLayout.JAVA_LONG)
+            check((memGetInfo.invokeExact(free, total) as Int) == 0) { "the card's memory not told" }
+            free.get(ValueLayout.JAVA_LONG, 0)
+        }
+    check(bytes <= free - SPARE) { "the card has no room for $bytes bytes: $free free" }
+}
+
+/** The card's memory left free: cuBLAS's own, the kernels', the screen's. */
+private const val SPARE = 512L shl 20
+
 private fun kernelsNotMade(e: Exception): CudaKernels? {
     log.warn(
         "kernels of their own not made for the card ({}): that work stays on the processor",

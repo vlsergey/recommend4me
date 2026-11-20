@@ -47,7 +47,7 @@ class LogisticPairModel : PairModel {
     ): List<FoundPair>? {
         val started = System.currentTimeMillis()
         return runCatching {
-            GraphSearch.search(search, laid, card)?.let { likeliest ->
+            graph(search, laid, card)?.let { likeliest ->
                 // How much of what a search of every pair keeps it found, and whether the card scored as the
                 // processor does
                 likeliest.found().also { found -> GraphCheck.tell(search, logistic, likeliest, found) }
@@ -67,6 +67,15 @@ class LogisticPairModel : PairModel {
             }
             .getOrNull()
     }
+
+    /** The search by the graph; none when the card has no room for every work at once: the tiles' then. */
+    private fun graph(search: PairSearch, laid: List<Logistic.Laid>, card: Cublas): Likeliest? =
+        try {
+            GraphSearch.search(search, laid, card)
+        } catch (_: NoRoom) {
+            log.info("the graph has no room on the card: every pair searched by tiles")
+            null
+        }
 
     override fun fitted(search: PairSearch, models: List<FittedPairModel>) {
         // What the next search will do of the models as they are now

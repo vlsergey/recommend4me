@@ -2,7 +2,6 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
-import io.github.vlsergey.recommend4me.matrix.Rows
 import java.util.Random
 import kotlin.concurrent.withLock
 import org.slf4j.LoggerFactory
@@ -148,32 +147,35 @@ internal object GraphSearch {
 }
 
 /**
- * EVERY WORK OF A SEARCH ON THE CARD ([AllWorks], one numbering): the titles' and the authors' names' trigrams, the
- * descriptions — noughts of a work of none, or of another encoder's —, the lengths, the facets, the sizes, the values,
- * the authors and their kin, the works answered on.
+ * EVERY WORK OF A SEARCH ON THE CARD ([AllWorks], one numbering), its rows kept small there as in the main memory
+ * (owner, 2026-11-20: every work's rows made whole halves took 13 of the card's 16 GB, Windows moved the rest to the
+ * main memory and the graph ran 70 times slower): the trigrams of the titles, of the authors' names, of the sites'
+ * names of the fandoms and lines of the characters sparse ([SparseOnCard]); the descriptions' and the titles' vectors a
+ * byte a number with a scale a work — noughts of a work of none, or of another encoder's —; the description's trigrams
+ * whole halves; the lengths, the facets, the sizes, the values, the authors and their kin, the works answered on.
  */
 internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: CudaKernels) {
     private val began = System.currentTimeMillis()
     private val n = all.count.toLong()
-    val titles = room.bytes(n * all.width * HALF_BYTES)
-    val authorNames = room.bytes(n * all.width * HALF_BYTES)
-    val descriptions = room.bytes(n * maxOf(1, all.described) * HALF_BYTES).also { it.zero() }
-    val titleVectors = room.bytes(n * maxOf(1, all.titled) * HALF_BYTES).also { it.zero() }
-    val letters = room.bytes(LETTERED * n * all.width * HALF_BYTES)
+    val titles = SparseOnCard.of(all.sites.map { it.titles }, room)
+    val authorNames = SparseOnCard.of(all.sites.map { it.authorNames }, room)
+    val fandoms = SparseOnCard.of(all.sites.map { it.letters[LetteredText.FANDOMS.ordinal] }, room)
+    val characters = SparseOnCard.of(all.sites.map { it.letters[LetteredText.CHARACTERS.ordinal] }, room)
+    val descriptions = BytesOnCard.of(all, { it.descriptions }, all.described, room)
+    val titleVectors = BytesOnCard.of(all, { it.titleVectors }, all.titled, room)
+    val descriptionLetters = room.bytes(n * all.width * HALF_BYTES)
 
     init {
         // Whole halves, however the sites' works hold them ([RowsOnCard])
-        fun write(rows: Rows, into: Cublas.DeviceBytes, at: Long) = RowsOnCard.write(room.card, kernels, rows, into, at)
         all.sites.forEachIndexed { a, s ->
-            val at = all.start[a].toLong()
-            write(s.titles, titles, at * all.width * HALF_BYTES)
-            write(s.authorNames, authorNames, at * all.width * HALF_BYTES)
-            if (all.described > 0 && s.descriptions.cols == all.described)
-                write(s.descriptions, descriptions, at * all.described * HALF_BYTES)
-            if (all.titled > 0 && s.titleVectors.cols == all.titled)
-                write(s.titleVectors, titleVectors, at * all.titled * HALF_BYTES)
-            // The texts one after another, of every work each
-            for (k in 0 until LETTERED) write(s.letters[k], letters, (k * n + at) * all.width * HALF_BYTES)
+            val rows = s.letters[LetteredText.DESCRIPTION.ordinal]
+            RowsOnCard.write(
+                room.card,
+                kernels,
+                rows,
+                descriptionLetters,
+                all.start[a] * all.width * HALF_BYTES.toLong(),
+            )
         }
     }
 
@@ -228,9 +230,12 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: Cud
             comparedDescriptions,
             all.width,
             maxOf(1, all.described),
-            titles,
-            authorNames,
-            descriptions,
+            titles.at,
+            titles.entries,
+            authorNames.at,
+            authorNames.entries,
+            descriptions.bytes,
+            descriptions.scales,
             titleLengths,
             authorLengths,
             described,
@@ -247,9 +252,14 @@ internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: Cud
             authors,
             comparedTitles,
             maxOf(1, all.titled),
-            titleVectors,
+            titleVectors.bytes,
+            titleVectors.scales,
             titled,
-            letters,
+            descriptionLetters,
+            fandoms.at,
+            fandoms.entries,
+            characters.at,
+            characters.entries,
             letterLengths,
             models.size,
             room.floatsOf(weights),

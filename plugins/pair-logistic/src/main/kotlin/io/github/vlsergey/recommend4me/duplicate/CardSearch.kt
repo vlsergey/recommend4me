@@ -93,7 +93,11 @@ internal object CardSearch {
 /** No room on the card for what the search needs there: it is the main memory's. */
 internal class NoRoom : RuntimeException("no room on the card")
 
-/** What is put on the card and freed with the search, or with a pair of sites. */
+/**
+ * What is put on the card and freed with the search, or with a pair of sites. Of no room — the card's own memory, as
+ * [Cublas] measures it, not the main memory Windows would lend it — [NoRoom]: the search fits itself to the card, a
+ * block halved, the graph given up for the tiles.
+ */
 internal class CardRoom(val card: Cublas) : AutoCloseable {
     private val made = ArrayList<AutoCloseable>()
 

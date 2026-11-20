@@ -12,18 +12,24 @@
 #define CANDIDATES (K + K * K)
 
 // What a pair is scored by, of every work (see pair_scores)
+// The rows kept small (AllOnCard, owner, 2026-11-20: every work's rows whole ran the card out of its memory): the
+// trigrams of the short texts sparse — of a work its entries tAt[u] .. tAt[u + 1] of tE, each its column in the lower
+// two bytes and its half in the higher, by their columns ascending —, the vectors a byte a number with a scale a work
+// (D and dS, V and vS), the description's trigrams whole halves (L)
 #define WORKS_PARAMS \
     int n, const int* siteOf, int sites, const unsigned char* comparedD, int width, int described, \
-    const unsigned short* T, const unsigned short* A, const unsigned short* D, const float* tl, const float* al, \
+    const int* tAt, const unsigned int* tE, const int* aAt, const unsigned int* aE, \
+    const signed char* D, const float* dS, const float* tl, const float* al, \
     const unsigned char* hasD, const unsigned long long* facets, int sizes, const float* sizeOf, \
     const int* valueAt, const int* values, const float* valueWeights, const int* familyOf, \
     const int* kinAt, const int* kin, const int* authorAt, const int* authors, \
-    const unsigned char* comparedV, int titled, const unsigned short* V, const unsigned char* hasV, \
-    const unsigned short* L, const float* ll, \
-    int models, const float* weights, int stride
+    const unsigned char* comparedV, int titled, const signed char* V, const float* vS, const unsigned char* hasV, \
+    const unsigned short* L, const int* fAt, const unsigned int* fE, const int* cAt, const unsigned int* cE, \
+    const float* ll, int models, const float* weights, int stride
 #define WORKS_ARGS \
-    n, siteOf, sites, comparedD, width, described, T, A, D, tl, al, hasD, facets, sizes, sizeOf, valueAt, values, \
-    valueWeights, familyOf, kinAt, kin, authorAt, authors, comparedV, titled, V, hasV, L, ll, models, weights, stride
+    n, siteOf, sites, comparedD, width, described, tAt, tE, aAt, aE, D, dS, tl, al, hasD, facets, sizes, sizeOf, \
+    valueAt, values, valueWeights, familyOf, kinAt, kin, authorAt, authors, comparedV, titled, V, vS, hasV, L, fAt, fE, \
+    cAt, cE, ll, models, weights, stride
 
 #define NO_SCORE (-__int_as_float(0x7f800000))
 
@@ -78,11 +84,72 @@ __device__ float warp_dot(const unsigned short* a, const unsigned short* b, int 
     return s;
 }
 
+// The product of the sparse rows u and j (at .. of e): of the columns both have, their halves' products
+__device__ float sparse_dot(const int* at, const unsigned int* e, int u, int j) {
+    float s = 0.0f;
+    int p = at[u], pEnd = at[u + 1], q = at[j], qEnd = at[j + 1];
+    while (p < pEnd && q < qEnd) {
+        unsigned int x = e[p] & 0xffffu, y = e[q] & 0xffffu;
+        if (x == y) {
+            s += half_to_float((unsigned short) (e[p] >> 16)) * half_to_float((unsigned short) (e[q] >> 16));
+            p++;
+            q++;
+        } else if (x < y) p++; else q++;
+    }
+    return s;
+}
+
+// The same by a warp, every lane of it: the lanes share u's entries, each found among j's by halving
+__device__ float warp_sparse_dot(const int* at, const unsigned int* e, int u, int j, int lane) {
+    float s = 0.0f;
+    int from = at[j], to = at[j + 1];
+    for (int p = at[u] + lane; p < at[u + 1]; p += 32) {
+        unsigned int x = e[p] & 0xffffu;
+        int lo = from, hi = to;
+        while (lo < hi) {
+            int mid = (lo + hi) >> 1;
+            if ((e[mid] & 0xffffu) < x) lo = mid + 1; else hi = mid;
+        }
+        if (lo < to && (e[lo] & 0xffffu) == x)
+            s += half_to_float((unsigned short) (e[p] >> 16)) * half_to_float((unsigned short) (e[lo] >> 16));
+    }
+    for (int offset = 16; offset > 0; offset >>= 1) s += __shfl_xor_sync(0xffffffff, s, offset);
+    return s;
+}
+
+// The product of two rows of n bytes, as integers, four at a time (n of fours: their starts of four bytes)
+__device__ float dot_bytes(const signed char* a, const signed char* b, int n) {
+    int s = 0;
+    if ((n & 3) == 0) {
+        const int* x = (const int*) a;
+        const int* y = (const int*) b;
+        for (int q = 0; q < n / 4; q++) s = __dp4a(x[q], y[q], s);
+    } else {
+        for (int q = 0; q < n; q++) s += a[q] * b[q];
+    }
+    return (float) s;
+}
+
+// The same by a warp, every lane of it
+__device__ float warp_dot_bytes(const signed char* a, const signed char* b, int n, int lane) {
+    int s = 0;
+    if ((n & 3) == 0) {
+        const int* x = (const int*) a;
+        const int* y = (const int*) b;
+        for (int q = lane; q < n / 4; q += 32) s = __dp4a(x[q], y[q], s);
+    } else {
+        for (int q = lane; q < n; q += 32) s += a[q] * b[q];
+    }
+    for (int offset = 16; offset > 0; offset >>= 1) s += __shfl_xor_sync(0xffffffff, s, offset);
+    return (float) s;
+}
+
 // THE PAIR u, j SCORED BY EVERY MODEL as a search scores it (PairSearch.layers, Logistic.Laid.flat), to z[model]: the
-// cosines of the titles (T), of the authors' names (A) and of the descriptions (D, when the two sites' are of one
-// encoder: comparedD[site][site]), the shares of the trigrams of the lengths tl, al; the other way, the titles' vectors
-// (V, when the two sites' are of one encoder: comparedV, and both have one: hasV) and every other text's trigrams (L, of
-// the lengths ll: a text after another, of every work each); the sizes (of every number both
+// cosines of the titles (tAt, tE), of the authors' names (aAt, aE) and of the descriptions (D, dS, when the two sites'
+// are of one encoder: comparedD[site][site]), the shares of the trigrams of the lengths tl, al; the other way, the
+// titles' vectors (V, vS, when the two sites' are of one encoder: comparedV, and both have one: hasV) and the other
+// texts' trigrams (the description's L, the fandoms' fAt, fE, the characters' cAt, cE, of the lengths ll: a text after
+// another, of every work each); the sizes (of every number both
 // state, the smaller over the larger, their mean); the facets they share (the values of both, valueAt .. of values
 // ascending and weights, summed by the facet familyOf by the model's weight of it) and that both have (facets); one
 // author (the authors of u, authorAt .. of authors, among the other's, both ascending) or one in part (the kin of u,
@@ -193,22 +260,25 @@ __device__ void pair_of(
     }
 }
 
+// Whether both have the k-th text compared letter by letter
+#define LETTERED_BOTH(k) (ll[(size_t) (k) * n + u] > 0.0f && ll[(size_t) (k) * n + j] > 0.0f)
+
 // The pair scored by a thread alone, its rows' products its own
 __device__ void pair_scores(int u, int j, WORKS_PARAMS, float* z, float* chance) {
     int a = siteOf[u], b = siteOf[j];
-    float t = dot_halves(T + (size_t) u * width, T + (size_t) j * width, width);
+    float t = sparse_dot(tAt, tE, u, j);
     bool hasA = al[u] > 0.0f && al[j] > 0.0f;
-    float av = hasA ? dot_halves(A + (size_t) u * width, A + (size_t) j * width, width) : 0.0f;
+    float av = hasA ? sparse_dot(aAt, aE, u, j) : 0.0f;
     bool hasDescription = comparedD[a * sites + b] != 0 && hasD[u] != 0 && hasD[j] != 0;
-    float d = hasDescription ? dot_halves(D + (size_t) u * described, D + (size_t) j * described, described) : 0.0f;
+    float d = hasDescription
+        ? dot_bytes(D + (size_t) u * described, D + (size_t) j * described, described) * dS[u] * dS[j] : 0.0f;
     bool hasTitleVector = comparedV[a * sites + b] != 0 && hasV[u] != 0 && hasV[j] != 0;
-    float v = hasTitleVector ? dot_halves(V + (size_t) u * titled, V + (size_t) j * titled, titled) : 0.0f;
+    float v = hasTitleVector ? dot_bytes(V + (size_t) u * titled, V + (size_t) j * titled, titled) * vS[u] * vS[j] : 0.0f;
+    // The description's trigrams whole, the sites' names of the fandoms and lines of the characters sparse
     float l[LETTERED];
-    for (int k = 0; k < LETTERED; k++) {
-        const unsigned short* Lk = L + (size_t) k * n * width;
-        bool both = ll[(size_t) k * n + u] > 0.0f && ll[(size_t) k * n + j] > 0.0f;
-        l[k] = both ? dot_halves(Lk + (size_t) u * width, Lk + (size_t) j * width, width) : 0.0f;
-    }
+    l[0] = LETTERED_BOTH(0) ? dot_halves(L + (size_t) u * width, L + (size_t) j * width, width) : 0.0f;
+    l[1] = LETTERED_BOTH(1) ? sparse_dot(fAt, fE, u, j) : 0.0f;
+    l[2] = LETTERED_BOTH(2) ? sparse_dot(cAt, cE, u, j) : 0.0f;
     float f[MAX_MODELS];
     shared_values(u, j, weights + ((size_t) a * sites + b) * models * stride, WORKS_ARGS, f);
     pair_of(u, j, t, av, d, v, l, f, WORKS_ARGS, z, chance);
@@ -217,19 +287,21 @@ __device__ void pair_scores(int u, int j, WORKS_PARAMS, float* z, float* chance)
 // The pair scored by a warp: the rows' products read together, the rest by its first lane
 __device__ void warp_pair_scores(int u, int j, int lane, WORKS_PARAMS, float* z, float* chance) {
     int a = siteOf[u], b = siteOf[j];
-    float t = warp_dot(T + (size_t) u * width, T + (size_t) j * width, width, lane);
+    float t = warp_sparse_dot(tAt, tE, u, j, lane);
     bool hasA = al[u] > 0.0f && al[j] > 0.0f;
-    float av = hasA ? warp_dot(A + (size_t) u * width, A + (size_t) j * width, width, lane) : 0.0f;
+    float av = hasA ? warp_sparse_dot(aAt, aE, u, j, lane) : 0.0f;
     bool hasDescription = comparedD[a * sites + b] != 0 && hasD[u] != 0 && hasD[j] != 0;
-    float d = hasDescription ? warp_dot(D + (size_t) u * described, D + (size_t) j * described, described, lane) : 0.0f;
+    float d = hasDescription
+        ? warp_dot_bytes(D + (size_t) u * described, D + (size_t) j * described, described, lane) * dS[u] * dS[j]
+        : 0.0f;
     bool hasTitleVector = comparedV[a * sites + b] != 0 && hasV[u] != 0 && hasV[j] != 0;
-    float v = hasTitleVector ? warp_dot(V + (size_t) u * titled, V + (size_t) j * titled, titled, lane) : 0.0f;
+    float v = hasTitleVector
+        ? warp_dot_bytes(V + (size_t) u * titled, V + (size_t) j * titled, titled, lane) * vS[u] * vS[j]
+        : 0.0f;
     float l[LETTERED];
-    for (int k = 0; k < LETTERED; k++) {
-        const unsigned short* Lk = L + (size_t) k * n * width;
-        bool both = ll[(size_t) k * n + u] > 0.0f && ll[(size_t) k * n + j] > 0.0f;
-        l[k] = both ? warp_dot(Lk + (size_t) u * width, Lk + (size_t) j * width, width, lane) : 0.0f;
-    }
+    l[0] = LETTERED_BOTH(0) ? warp_dot(L + (size_t) u * width, L + (size_t) j * width, width, lane) : 0.0f;
+    l[1] = LETTERED_BOTH(1) ? warp_sparse_dot(fAt, fE, u, j, lane) : 0.0f;
+    l[2] = LETTERED_BOTH(2) ? warp_sparse_dot(cAt, cE, u, j, lane) : 0.0f;
     float f[MAX_MODELS];
     warp_shared_values(u, j, lane, weights + ((size_t) a * sites + b) * models * stride, WORKS_ARGS, f);
     if (lane == 0) pair_of(u, j, t, av, d, v, l, f, WORKS_ARGS, z, chance);
