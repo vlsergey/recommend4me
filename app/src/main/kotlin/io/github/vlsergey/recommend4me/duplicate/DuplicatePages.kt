@@ -18,6 +18,9 @@ import org.springframework.stereotype.Component
 /** The pairs, or the words of the journal, a page holds at most. */
 internal const val MAX_PAGE = 200
 
+/** The sorts of the pairs by their size: of one work, of one series. */
+private val SIZED = setOf(DuplicateSort.SIZE, DuplicateSort.SERIES_SIZE)
+
 /**
  * Which pairs a page holds and in what order: by their answer — [open], those not answered on; those answered with the
  * words [answers] —, of them only those of the same authors ([sameAuthors]) or of the same title ([sameTitle]) when
@@ -59,10 +62,11 @@ class DuplicatePages(
      * (the prediction times the chance of interest: a work the user would read first), its chance of interest, its
      * predicted grade, or nothing — a work of a high score, the likeliest of many works of another site, does not lift
      * every pair of them; equal, the likelier pair first. Or times the pair's own mean size ([DuplicateSort.SIZE]): the
-     * long works first. Or by the chance the pair is one series of works ([DuplicateSort.SERIES]). Or, of the pairs in
-     * doubt ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairChances.boundary]): what
-     * an answer teaches the model most; or the same of the chance of one series ([DuplicateSort.UNCERTAIN_SERIES]).
-     * Every pair read for the request and let go. Null of no such type.
+     * long works first. Or by the chance the pair is one series of works ([DuplicateSort.SERIES]), alone or times the
+     * pair's size ([DuplicateSort.SERIES_SIZE]: the long works of one series first). Or, of the pairs in doubt
+     * ([DuplicateSort.UNCERTAIN]), those nearest where the user's answers change ([PairChances.boundary]): what an
+     * answer teaches the model most; or the same of the chance of one series ([DuplicateSort.UNCERTAIN_SERIES]). Every
+     * pair read for the request and let go. Null of no such type.
      */
     fun page(typeId: String, choice: PairChoice, offset: Int, limit: Int): DuplicatePage? {
         val type = stores.type(typeId) ?: return null
@@ -73,7 +77,7 @@ class DuplicatePages(
         val kept = type.duplicates.all()
         // The size of every work of the pairs, in words, as the search compared them: of the sort by the pair's size
         // alone
-        val words = if (sort != DuplicateSort.SIZE) emptyMap() else wordsOf(kept)
+        val words = if (sort !in SIZED) emptyMap() else wordsOf(kept)
         val boundary = boundaryOf(sort, chances, kept, said)
         val ranking = Ranking(sort, chances, worthOf(type, sort), words, boundary)
         val byPair = kept.associateBy { it.pair }
@@ -217,6 +221,7 @@ private fun DuplicateSort.worth(grade: Double, interest: Double): Double =
         DuplicateSort.GRADE -> grade
         DuplicateSort.CHANCE,
         DuplicateSort.SIZE,
+        DuplicateSort.SERIES_SIZE,
         DuplicateSort.SERIES,
         DuplicateSort.UNCERTAIN,
         DuplicateSort.UNCERTAIN_SERIES -> 1.0
@@ -245,6 +250,7 @@ private class Ranking(
                 DuplicateSort.UNCERTAIN,
                 DuplicateSort.UNCERTAIN_SERIES -> doubt(layers)
                 DuplicateSort.SIZE -> size(pair) * (chance ?: 0.0)
+                DuplicateSort.SERIES_SIZE -> size(pair) * (series ?: 0.0)
                 DuplicateSort.FORMULA,
                 DuplicateSort.INTEREST,
                 DuplicateSort.GRADE -> sought(pair, layers) * (chance ?: 0.0)

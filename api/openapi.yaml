@@ -6388,7 +6388,7 @@ components:
 
     DuplicateSort:
       type: string
-      enum: [FORMULA, CHANCE, INTEREST, GRADE, SIZE, SERIES, UNCERTAIN, UNCERTAIN_SERIES]
+      enum: [FORMULA, CHANCE, INTEREST, GRADE, SIZE, SERIES, SERIES_SIZE, UNCERTAIN, UNCERTAIN_SERIES]
       default: FORMULA
       description: >
         What the chance a pair is one work is multiplied by, of the work the pair was found for (of both, the larger):
@@ -6396,7 +6396,9 @@ components:
         interest; INTEREST - the chance of interest alone; GRADE - the predicted grade alone; CHANCE - nothing, the
         likeliest pairs first. SIZE - of the pair, not of one work: the mean size of its two works in words, stated by
         their sites or worked out of their characters (of one known, its own; of neither, nought). SERIES - no such
-        product: the chance the pair is two works of one series alone, the likeliest first. UNCERTAIN - no
+        product: the chance the pair is two works of one series alone, the likeliest first. SERIES_SIZE - the chance
+        of one series times the mean size of the pair's two works, as of SIZE: the long works of one series first.
+        UNCERTAIN - no
         such product: the pairs nearest where the user's answers change from different to one work first, whose
         answer teaches the model most. UNCERTAIN_SERIES - the same of the chance of one series: the pairs nearest
         where the user's answers change from any other to one series first

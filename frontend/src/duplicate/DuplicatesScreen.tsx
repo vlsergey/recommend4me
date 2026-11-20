@@ -40,13 +40,23 @@ const sameRow = (a: DuplicatePair, b: DuplicatePair) => a.answer === b.answer;
  * What the chance a pair is one work is multiplied by, of the work it was found for: the formula of the list first, the default; or
  * the chance of one series alone; or, of the pairs in doubt, those nearest where the answers change, of one work or of one series.
  */
-const SORTS: DuplicateSort[] = ["FORMULA", "INTEREST", "GRADE", "SIZE", "CHANCE", "SERIES", "UNCERTAIN", "UNCERTAIN_SERIES"];
+const SORTS: DuplicateSort[] = [
+  "FORMULA",
+  "INTEREST",
+  "GRADE",
+  "SIZE",
+  "CHANCE",
+  "SERIES",
+  "SERIES_SIZE",
+  "UNCERTAIN",
+  "UNCERTAIN_SERIES",
+];
 
 /** The sorts whose order says nothing of the work, or is a chance shown already: no priority shown. */
 const NO_PRIORITY: DuplicateSort[] = ["SERIES", "UNCERTAIN", "UNCERTAIN_SERIES"];
 
 /** The sorts of the pairs asked whether they are two works of one series. */
-const SERIES_SORTS: DuplicateSort[] = ["SERIES", "UNCERTAIN_SERIES"];
+const SERIES_SORTS: DuplicateSort[] = ["SERIES", "SERIES_SIZE", "UNCERTAIN_SERIES"];
 
 /** The answer of a pair the list is chosen by: a word, or none ("NONE"). */
 type Shown = Verdict | "NONE";

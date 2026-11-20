@@ -21,6 +21,8 @@ import { type FieldVerdict, measureVerdict, TONE_CLASS } from "./fieldVerdict";
  */
 export function PairFacts({ pair: p, priority }: { pair: DuplicatePair; priority?: DuplicateSort }) {
   const { t } = useTranslation("duplicate");
+  // Of the sorts by size the priority is words: a whole number, not a score of two digits
+  const sized = priority === "SIZE" || priority === "SERIES_SIZE";
   return (
     <>
       {p.chance != null && (
@@ -34,9 +36,17 @@ export function PairFacts({ pair: p, priority }: { pair: DuplicatePair; priority
         </span>
       )}
       {priority && p.priority != null && p.priority > 0 && (
-        // Of the sort by size the priority is words: a whole number, not a score of two digits
-        <span className="tabular-nums" title={t(priority === "SIZE" ? "PairRow.prioritySizeHint" : "PairRow.priorityHint")}>
-          {t("PairRow.priority", { value: priority === "SIZE" ? number(Math.round(p.priority)) : p.priority.toFixed(2) })}
+        <span
+          className="tabular-nums"
+          title={t(
+            priority === "SERIES_SIZE"
+              ? "PairRow.prioritySeriesSizeHint"
+              : sized
+                ? "PairRow.prioritySizeHint"
+                : "PairRow.priorityHint",
+          )}
+        >
+          {t("PairRow.priority", { value: sized ? number(Math.round(p.priority)) : p.priority.toFixed(2) })}
         </span>
       )}
     </>
