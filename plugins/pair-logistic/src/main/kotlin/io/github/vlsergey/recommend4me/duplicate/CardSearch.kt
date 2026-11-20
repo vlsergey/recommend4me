@@ -1,7 +1,9 @@
 package io.github.vlsergey.recommend4me.duplicate
 
+import io.github.vlsergey.recommend4me.matrix.CardMemory
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
+import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 import io.github.vlsergey.recommend4me.matrix.Rows
 import kotlin.concurrent.withLock
 
@@ -55,7 +57,7 @@ internal object CardSearch {
                         .toFloatArray()
                 Frequent.tell(search, a, b, frequent[a])
                 // Of every run of the first site on the card, every run of the second put there in its turn
-                for ((r, rows) in slices[a].withIndex()) CardRoom(card).use { ofRows ->
+                for ((r, rows) in slices[a].withIndex()) CardRoom.of(card, 0).use { ofRows ->
                     val x = SiteOnCard(rows.works, inverted[a][r], frequent[a], ofRows, kernels)
                     for ((c, columns) in slices[b].withIndex()) {
                         val tile = Tile(search, a, b, rows, columns)
@@ -64,7 +66,7 @@ internal object CardSearch {
                         var planes = Facing.MOST_ROOM
                         while (true) {
                             try {
-                                CardRoom(card).use { own ->
+                                CardRoom.of(card, Facing.LEAST_ROOM).use { own ->
                                     val weights = own.floatsOf(between)
                                     Facing(
                                             tile,
@@ -78,7 +80,7 @@ internal object CardSearch {
                                         .offer(kernels, card, likeliest, compared)
                                 }
                                 break
-                            } catch (e: NoRoom) {
+                            } catch (e: NoCardRoom) {
                                 if (planes <= Facing.LEAST_ROOM) throw e
                                 planes /= 2
                             }
@@ -90,22 +92,23 @@ internal object CardSearch {
         }
 }
 
-/** No room on the card for what the search needs there: it is the main memory's. */
-internal class NoRoom : RuntimeException("no room on the card")
-
 /**
- * What is put on the card and freed with the search, or with a pair of sites. Of no room — the card's own memory, as
- * [Cublas] measures it, not the main memory Windows would lend it — [NoRoom]: the search fits itself to the card, a
- * block halved, the graph given up for the tiles.
+ * What a search puts on the card, in a block of the card's memory ([CardMemory], owner, 2026-11-20: every operation
+ * with the card's memory inside a block of a least and a most, freed at its exit): freed with the search, or with a
+ * pair of sites. Of no room — the card's own memory, not the main memory Windows would lend it — [NoCardRoom]: the
+ * search fits itself to the card, a block made of the room it has ([left]), the graph given up for the tiles.
  */
-internal class CardRoom(val card: Cublas) : AutoCloseable {
-    private val made = ArrayList<AutoCloseable>()
+internal class CardRoom private constructor(val card: Cublas, private val memory: CardMemory) : AutoCloseable {
+    /** The bytes of the block not taken yet. */
+    val left: Long
+        get() = memory.left
 
-    fun floats(count: Long): Cublas.DeviceFloats =
-        (card.allocate(maxOf(1L, count)) ?: throw NoRoom()).also { made += it }
+    fun floats(count: Long): Cublas.DeviceFloats = memory.floats(count)
 
-    fun bytes(count: Long): Cublas.DeviceBytes =
-        (card.allocateBytes(maxOf(1L, count)) ?: throw NoRoom()).also { made += it }
+    fun bytes(count: Long): Cublas.DeviceBytes = memory.bytes(count)
+
+    /** [what], made here, freed now. */
+    fun free(what: AutoCloseable) = memory.free(what)
 
     fun ints(a: IntArray): Cublas.DeviceBytes = bytes(a.size.toLong() * Int.SIZE_BYTES).also { it.upload(a) }
 
@@ -118,7 +121,7 @@ internal class CardRoom(val card: Cublas) : AutoCloseable {
         bytes(rows.rows.toLong() * rows.cols * HALF_BYTES).also { RowsOnCard.write(card, kernels, rows, it, 0) }
 
     /** Page-locked main memory of [bytes]: what is brought back from the card is copied into it. */
-    fun pinned(bytes: Long): Cublas.Pinned = (card.pinned(maxOf(1L, bytes)) ?: throw NoRoom()).also { made += it }
+    fun pinned(bytes: Long): Cublas.Pinned = memory.pinned(bytes)
 
     /** Marks a byte each, as a kernel reads them: [Int.SIZE_BYTES] to an int, little-endian. */
     fun marks(marks: BooleanArray): Cublas.DeviceBytes {
@@ -130,7 +133,12 @@ internal class CardRoom(val card: Cublas) : AutoCloseable {
         return ints(ints)
     }
 
-    override fun close() = made.forEach { it.close() }
+    override fun close() = memory.close()
+
+    companion object {
+        /** A block of the [card]'s memory of [least] bytes at least, of [most] at most ([Cublas.memory]). */
+        fun of(card: Cublas, least: Long, most: Long = Long.MAX_VALUE) = CardRoom(card, card.memory(least, most))
+    }
 }
 
 /**

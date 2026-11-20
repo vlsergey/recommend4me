@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
+import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(LogisticPairModel::class.java)
@@ -72,7 +73,7 @@ class LogisticPairModel : PairModel {
     private fun graph(search: PairSearch, laid: List<Logistic.Laid>, card: Cublas): Likeliest? =
         try {
             GraphSearch.search(search, laid, card)
-        } catch (_: NoRoom) {
+        } catch (_: NoCardRoom) {
             log.info("the graph has no room on the card: every pair searched by tiles")
             null
         }

@@ -2,6 +2,7 @@ package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
+import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 
 /**
  * A RUN OF THE [Tile.a]-TH SITE'S WORKS AGAINST A RUN OF THE [Tile.b]-TH'S ON THE CARD ([CardSearch], [Tiles]): of
@@ -62,9 +63,10 @@ internal class Facing(
     private val familyOf = room.ints(search.familyOf)
     private val frequentFamily = room.ints(x.frequent.family)
 
-    /** The rows of a block: as many as the [planes] hold. */
+    /** The rows of a block: as many as the [planes] hold, and the room the block was given has left. */
     private val rows =
-        (planes / maxOf(1L, n.toLong() * (HALF_BYTES * PLANES + Float.SIZE_BYTES * models)))
+        (minOf(planes, room.left * ROOM_SHARE / ROOM_PARTS) /
+                maxOf(1L, n.toLong() * (HALF_BYTES * PLANES + Float.SIZE_BYTES * models)))
             .toInt()
             .coerceIn(1, maxOf(1, own.count))
     private val t = room.bytes(rows.toLong() * n * HALF_BYTES)
@@ -243,8 +245,9 @@ internal class Facing(
 
     companion object {
         /**
-         * The memory a block's planes take on the card at most, halved while the card has no room for it ([NoRoom]):
-         * every block reads every work of the other site's vectors again — the more rows a block, the fewer readings.
+         * The memory a block's planes take on the card at most, halved while the card has no room for it
+         * ([NoCardRoom]): every block reads every work of the other site's vectors again — the more rows a block, the
+         * fewer readings.
          */
         const val MOST_ROOM = 4L shl 30
 
@@ -256,6 +259,12 @@ internal class Facing(
          * trigrams of every other text.
          */
         val PLANES = 4 + LETTERED
+
+        /**
+         * The share of the room left a block's planes take: the rest the rows of the scores and the pinned memory's.
+         */
+        const val ROOM_SHARE = 3L
+        const val ROOM_PARTS = 4L
 
         /**
          * The rows of a block of the kernel of the scores (`ROWS`): a thread reads a work of the other site once for

@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /** Kernels of one's own compiled for the card and run there; skipped without the card's libraries. */
@@ -23,20 +24,21 @@ class CudaKernelsTest {
         val kernels = cublas!!.kernels(SOURCE, listOf("scaled_sum"))!!
         val n = 1000
         val x = Floats(n).also { f -> for (i in 0 until n) f[i] = i.toFloat() }
-        cublas.allocate(n.toLong())!!.use { dx ->
-            cublas.allocateBytes(Double.SIZE_BYTES.toLong())!!.use { sum ->
-                cublas.allocateBytes(Int.SIZE_BYTES.toLong() * n)!!.use { index ->
-                    dx.upload(x, 0, 0, n)
-                    sum.zero()
-                    index.upload(IntArray(n) { n - 1 - it })
-                    kernels.launch("scaled_sum", n.toLong(), dx, index, n, 2f, sum)
-                    val back = Floats(n)
-                    dx.download(back, 0, 0, n)
-                    // Every number doubled in place, read through the reversed index; their sum in double
-                    assertEquals((0 until n).map { 2f * it }, (0 until n).map { back[it] })
-                    assertEquals(2.0 * n * (n - 1) / 2, sum.doubles(1)[0])
-                }
-            }
+        cublas.withMemory(0, 1L shl 16) { memory ->
+            val dx = memory.floats(n.toLong())
+            val sum = memory.bytes(Double.SIZE_BYTES.toLong())
+            val index = memory.bytes(Int.SIZE_BYTES.toLong() * n)
+            dx.upload(x, 0, 0, n)
+            sum.zero()
+            index.upload(IntArray(n) { n - 1 - it })
+            kernels.launch("scaled_sum", n.toLong(), dx, index, n, 2f, sum)
+            val back = Floats(n)
+            dx.download(back, 0, 0, n)
+            // Every number doubled in place, read through the reversed index; their sum in double
+            assertEquals((0 until n).map { 2f * it }, (0 until n).map { back[it] })
+            assertEquals(2.0 * n * (n - 1) / 2, sum.doubles(1)[0])
+            // Beyond the block's promise, no room: the card's memory had only in its block
+            assertFailsWith<NoCardRoom> { memory.bytes(memory.left + 1) }
         }
     }
 

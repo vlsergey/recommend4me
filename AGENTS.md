@@ -227,6 +227,13 @@ No baseline, no rule turned off: a finding is fixed. The one exception is a boun
 outlive whatever fails — a background loop, a step of the start, a call of a plugin: there
 `@Suppress("TooGenericExceptionCaught")`, with a comment saying why it is a boundary.
 
+**The card's memory is had only in a block** (owner, 2026-11-20): `cublas.withMemory(least, most) { memory -> }`,
+or of an object that holds its rooms while it lives `cublas.memory(least, most)` closed by it — the block given what
+the card has free now, no more than `most`, refused (`NoCardRoom`) below `least`; every array on the card made of it,
+none beyond its size nor beyond what the card has free; everything freed at its end. Windows refuses the card no
+allocation (WDDM): it moves the card's memory to the main one, and the work goes through the bus — the graph of the
+duplicates ran 70 times slower so. A refusal is the caller's to fit itself: a smaller block, another way, the processor.
+
 **The scripts — the web interface and the extension — are linted by Biome**, its recommended rules
 (`biome.jsonc`; `npm run lint` in `frontend`, `gradlew :app:lintScripts`): a file of 600 lines at most.
 Biome lints alone, it formats nothing.

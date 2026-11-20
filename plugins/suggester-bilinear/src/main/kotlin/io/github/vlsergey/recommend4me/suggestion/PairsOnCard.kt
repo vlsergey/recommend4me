@@ -3,6 +3,7 @@ package io.github.vlsergey.recommend4me.suggestion
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
+import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 import java.util.IdentityHashMap
 import org.slf4j.LoggerFactory
 
@@ -608,10 +609,10 @@ private constructor(
 
         /** The pairs and the names of [p] put on the card by the [kernels]; null when the card has no room for them. */
         private fun opened(p: Problem, cublas: Cublas, kernels: CudaKernels, count: Int, rank: Int): PairsOnCard? {
-            val room = CardRoom(cublas)
+            val room = runCatching { CardRoom(cublas) }.getOrNull() ?: return null
             return try {
                 PairsOnCard(p, cublas, kernels, count, rank, room)
-            } catch (e: CardRoom.NoRoom) {
+            } catch (e: NoCardRoom) {
                 room.close()
                 log.info(
                     "no room on the card for the pairs of {} items × {} values and {} names: they stay on the " +

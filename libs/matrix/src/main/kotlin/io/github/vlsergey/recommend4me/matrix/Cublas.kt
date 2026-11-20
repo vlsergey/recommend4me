@@ -99,7 +99,7 @@ private constructor(
      * of the ordinary memory goes through a buffer of the driver first. Of what a kernel is handed and gives back, laid
      * out here and sent at once. Freed by [close].
      */
-    inner class Pinned(val bytes: Long) : AutoCloseable {
+    inner class Pinned internal constructor(val bytes: Long) : AutoCloseable {
         val segment: MemorySegment =
             Arena.ofConfined().use { a ->
                 val out = a.allocate(ValueLayout.ADDRESS)
@@ -128,15 +128,11 @@ private constructor(
         }
     }
 
-    /** Page-locked room of [bytes]; null when there is none. */
-    fun pinned(bytes: Long): Pinned? = runCatching { Pinned(bytes) }.getOrNull()
-
-    /** Floats in the card's memory: [count] of them. Freed by [close]. */
-    inner class DeviceFloats(val count: Long) : AutoCloseable {
+    /** Floats in the card's memory: [count] of them, made in a block of work ([withMemory]). Freed by [close]. */
+    inner class DeviceFloats internal constructor(val count: Long) : AutoCloseable {
         val address: MemorySegment =
             Arena.ofConfined().use { a ->
                 val out = a.allocate(ValueLayout.ADDRESS)
-                fits(cudaMemGetInfo, count * Float.SIZE_BYTES)
                 check((cudaMalloc.invokeExact(out, count * Float.SIZE_BYTES) as Int) == 0) {
                     "the card has no room for $count floats"
                 }
@@ -176,11 +172,10 @@ private constructor(
      * Bytes in the card's memory, of numbers other than the floats of [DeviceFloats]: the ints a kernel indexes by, the
      * doubles it sums into. Freed by [close].
      */
-    inner class DeviceBytes(val bytes: Long) : AutoCloseable {
+    inner class DeviceBytes internal constructor(val bytes: Long) : AutoCloseable {
         val address: MemorySegment =
             Arena.ofConfined().use { a ->
                 val out = a.allocate(ValueLayout.ADDRESS)
-                fits(cudaMemGetInfo, bytes)
                 check((cudaMalloc.invokeExact(out, bytes.coerceAtLeast(1)) as Int) == 0) {
                     "the card has no room for $bytes bytes"
                 }
@@ -273,11 +268,31 @@ private constructor(
         }
     }
 
-    /** Room for [count] floats on the card; null when it has none left. */
-    fun allocate(count: Long): DeviceFloats? = runCatching { DeviceFloats(count) }.getOrNull()
+    /**
+     * A BLOCK OF WORK ON THE CARD, the one way its memory is had (owner, 2026-11-20): [body] handed the card's memory
+     * of its own ([CardMemory]) — as much as the card has free now, less [SPARE], and no more than [most] —, everything
+     * it made there freed at its end. Of less than [least] free, [NoCardRoom]: the caller fits itself — a smaller
+     * block, another way, the processor.
+     */
+    fun <T> withMemory(least: Long, most: Long, body: (CardMemory) -> T): T = memory(least, most).use(body)
 
-    /** Room for [bytes] bytes on the card; null when it has none left. */
-    fun allocateBytes(bytes: Long): DeviceBytes? = runCatching { DeviceBytes(bytes) }.getOrNull()
+    /**
+     * The card's memory of a block of work whose end is an object's ([withMemory]): one that holds its rooms while it
+     * lives — a model scoring the works one portion after another — and frees them as it is closed.
+     */
+    fun memory(least: Long, most: Long): CardMemory {
+        val free = freeOf(cudaMemGetInfo) - SPARE
+        val size = minOf(most, free)
+        if (size < least) throw NoCardRoom("$least bytes asked of the card, $free free")
+        return CardMemory(this, maxOf(0L, size))
+    }
+
+    /** No [bytes] beyond what the card has free now, less [SPARE]: [NoCardRoom], as the card would refuse them. */
+    internal fun refuseBeyondFree(bytes: Long) {
+        if (bytes <= SPARE / 2) return
+        val free = freeOf(cudaMemGetInfo) - SPARE
+        if (bytes > free) throw NoCardRoom("$bytes bytes asked of the card, $free free")
+    }
 
     /**
      * Every work handed to the card done: a kernel and a product return before they end, and the time of what follows
@@ -527,41 +542,35 @@ private constructor(
                 for (q in 0 until k) s += a[i * k + q] * b[j * k + q]
                 expected[i * n + j] = s
             }
-            cublas.DeviceFloats(a.count.toLong()).use { da ->
-                cublas.DeviceFloats(b.count.toLong()).use { db ->
-                    cublas.DeviceFloats(got.count.toLong()).use { dc ->
-                        da.upload(a, 0, 0, a.count)
-                        db.upload(b, 0, 0, b.count)
-                        cublas.gemm(false, true, m, n, k, da, 0, k, db, 0, k, dc, 0, n)
-                        dc.download(got, 0, 0, got.count)
-                    }
-                }
+            cublas.withMemory(0, CHECK_ROOM) { memory ->
+                val da = memory.floats(a.count.toLong())
+                val db = memory.floats(b.count.toLong())
+                val dc = memory.floats(got.count.toLong())
+                da.upload(a, 0, 0, a.count)
+                db.upload(b, 0, 0, b.count)
+                cublas.gemm(false, true, m, n, k, da, 0, k, db, 0, k, dc, 0, n)
+                dc.download(got, 0, 0, got.count)
             }
             return (0 until m * n).all { abs(got[it] - expected[it]) < AGREEMENT }
         }
 
         /** How near the card's product and the processor's must be: the last digits of a float. */
         private const val AGREEMENT = 1e-4f
+
+        /** The card's memory of the check: three small products. */
+        private const val CHECK_ROOM = 1L shl 16
     }
 }
 
 /** The warning that the card's own kernels were not made, and why: the caller's work stays on the processor. */
-/**
- * No room of [bytes] beyond the card's own memory free now, less [SPARE] (`cudaMemGetInfo` of [memGetInfo]): what is
- * asked beyond it Windows does not refuse (WDDM) — it moves the card's memory to the main one, and every kernel reads
- * it through the bus: the graph of the duplicates ran 70 times slower so (2026-11-20). Refused here as the card would.
- */
-private fun fits(memGetInfo: MethodHandle, bytes: Long) {
-    if (bytes <= SPARE / 2) return
-    val free =
-        Arena.ofConfined().use { a ->
-            val free = a.allocate(ValueLayout.JAVA_LONG)
-            val total = a.allocate(ValueLayout.JAVA_LONG)
-            check((memGetInfo.invokeExact(free, total) as Int) == 0) { "the card's memory not told" }
-            free.get(ValueLayout.JAVA_LONG, 0)
-        }
-    check(bytes <= free - SPARE) { "the card has no room for $bytes bytes: $free free" }
-}
+/** The bytes of the card's own memory free now (`cudaMemGetInfo` of [memGetInfo]). */
+private fun freeOf(memGetInfo: MethodHandle): Long =
+    Arena.ofConfined().use { a ->
+        val free = a.allocate(ValueLayout.JAVA_LONG)
+        val total = a.allocate(ValueLayout.JAVA_LONG)
+        check((memGetInfo.invokeExact(free, total) as Int) == 0) { "the card's memory not told" }
+        free.get(ValueLayout.JAVA_LONG, 0)
+    }
 
 /** The card's memory left free: cuBLAS's own, the kernels', the screen's. */
 private const val SPARE = 512L shl 20

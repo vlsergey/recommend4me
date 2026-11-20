@@ -1,8 +1,10 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.matrix.CardMemory
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.HalfMatrix
 import io.github.vlsergey.recommend4me.matrix.Matrix
+import io.github.vlsergey.recommend4me.matrix.NoCardRoom
 import java.util.Collections
 import java.util.IdentityHashMap
 import java.util.stream.IntStream
@@ -71,6 +73,7 @@ class InputBlock(val name: String, val vectors: HalfMatrix, val rows: IntArray, 
  */
 class CardRows(
     val cublas: Cublas,
+    private val memory: CardMemory,
     val vectors: Cublas.DeviceBytes,
     val items: Cublas.DeviceBytes,
     val count: Int,
@@ -94,22 +97,25 @@ class CardRows(
         open = false
         after.forEach { it.close() }
         after.clear()
-        vectors.close()
-        items.close()
+        memory.close()
     }
 
     companion object {
         /**
-         * The rows [vectors] of the [items] put on the [card]; null when it has no room for them. Under the card's
-         * lock.
+         * The rows [vectors] of the [items] put on the [card], in a block of the card's memory of their own size
+         * ([Cublas.memory]), freed as they are closed; null when it has no room for them. Under the card's lock.
          */
         fun put(card: Cublas, vectors: HalfMatrix, items: IntArray): CardRows? {
-            val halves = card.allocateBytes(vectors.rows.toLong() * vectors.cols * 2) ?: return null
-            val ints = card.allocateBytes(items.size.toLong() * Int.SIZE_BYTES) ?: null.also { halves.close() }
-            return ints?.let {
-                halves.upload(vectors, 0, vectors.rows)
-                it.upload(items)
-                CardRows(card, halves, it, items.size, vectors.cols)
+            val halves = vectors.rows.toLong() * vectors.cols * 2
+            val ints = items.size.toLong() * Int.SIZE_BYTES
+            val memory = runCatching { card.memory(halves + ints, halves + ints) }.getOrNull() ?: return null
+            return try {
+                val v = memory.bytes(halves).also { it.upload(vectors, 0, vectors.rows) }
+                val i = memory.bytes(ints).also { it.upload(items) }
+                CardRows(card, memory, v, i, items.size, vectors.cols)
+            } catch (_: NoCardRoom) {
+                memory.close()
+                null
             }
         }
     }

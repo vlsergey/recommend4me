@@ -127,17 +127,21 @@ internal object FandomRetrieval {
         val n = rows.rows
         val out = Floats(asked.size * n)
         if (card != null) {
+            // A block of the card's memory of its own size, freed at its end
+            val need =
+                n.toLong() * rows.cols * 2 +
+                    (rows.cols + n + out.count.toLong()) * Float.SIZE_BYTES +
+                    asked.size.toLong() * Int.SIZE_BYTES
             card.cublas.lock.withLock {
-                val held = ArrayList<AutoCloseable>()
-                try {
-                    val y = card.cublas.allocateBytes(n.toLong() * rows.cols * 2)!!.also { held += it }
+                card.cublas.withMemory(need, need) { memory ->
+                    val y = memory.bytes(n.toLong() * rows.cols * 2)
                     y.upload(rows, 0, n)
-                    val ones = card.cublas.allocate(rows.cols.toLong())!!.also { held += it }
+                    val ones = memory.floats(rows.cols.toLong())
                     ones.upload(Floats.of(FloatArray(rows.cols) { 1f }), 0, 0, rows.cols)
-                    val c = card.cublas.allocate(n.toLong())!!.also { held += it }
-                    val at = card.cublas.allocateBytes(asked.size.toLong() * Int.SIZE_BYTES)!!.also { held += it }
+                    val c = memory.floats(n.toLong())
+                    val at = memory.bytes(asked.size.toLong() * Int.SIZE_BYTES)
                     at.upload(asked)
-                    val result = card.cublas.allocate(out.count.toLong())!!.also { held += it }
+                    val result = memory.floats(out.count.toLong())
                     card.kernels.launch("weigh", n.toLong() * CudaKernels.BLOCK, y, ones, c, n, rows.cols)
                     val runs = (n + RUN - 1L) / RUN
                     card.kernels.launch(
@@ -152,8 +156,6 @@ internal object FandomRetrieval {
                         result,
                     )
                     result.download(out, 0, 0, out.count)
-                } finally {
-                    held.asReversed().forEach { it.close() }
                 }
             }
             return out

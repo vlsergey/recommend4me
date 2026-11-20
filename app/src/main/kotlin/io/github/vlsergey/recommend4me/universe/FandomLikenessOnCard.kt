@@ -20,7 +20,8 @@ internal class FandomLikenessOnCard(card: FandomLikeness.OnCard, private val pai
     AutoCloseable {
     private val cublas = card.cublas
     private val kernels = card.kernels
-    private val held = ArrayList<AutoCloseable>()
+    /** A block of the card's memory, held while the learning is: freed by [close]. */
+    private val memory = card.cublas.memory(0, Long.MAX_VALUE)
     private val dim = rows.cols
     private val names = rows.rows
     private val anchorCount = pairs.anchors.size
@@ -30,17 +31,11 @@ internal class FandomLikenessOnCard(card: FandomLikeness.OnCard, private val pai
         require(dim % 2 == 0 && dim <= MAX_DIM) { "a name of $dim numbers is not read two at a time on the card" }
     }
 
-    private fun bytes(count: Long): Cublas.DeviceBytes =
-        (cublas.allocateBytes(count.coerceAtLeast(Int.SIZE_BYTES.toLong()))
-                ?: error("the card has no room for $count bytes"))
-            .also { held += it }
+    private fun bytes(count: Long): Cublas.DeviceBytes = memory.bytes(count.coerceAtLeast(Int.SIZE_BYTES.toLong()))
 
     private fun ints(of: IntArray) = bytes(of.size.toLong() * Int.SIZE_BYTES).also { it.upload(of) }
 
-    private fun floats(count: Int): Cublas.DeviceFloats =
-        (cublas.allocate(count.toLong().coerceAtLeast(1)) ?: error("the card has no room for $count floats")).also {
-            held += it
-        }
+    private fun floats(count: Int): Cublas.DeviceFloats = memory.floats(count.toLong().coerceAtLeast(1))
 
     private val sent = System.nanoTime()
     private val y = bytes(names.toLong() * dim * 2).also { it.upload(rows, 0, names) }
@@ -161,8 +156,7 @@ internal class FandomLikenessOnCard(card: FandomLikeness.OnCard, private val pai
     }
 
     override fun close() {
-        held.asReversed().forEach { it.close() }
-        held.clear()
+        memory.close()
     }
 
     companion object {

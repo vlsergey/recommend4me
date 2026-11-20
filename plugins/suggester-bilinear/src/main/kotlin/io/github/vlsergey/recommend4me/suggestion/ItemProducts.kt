@@ -1,5 +1,6 @@
 package io.github.vlsergey.recommend4me.suggestion
 
+import io.github.vlsergey.recommend4me.matrix.CardMemory
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.matrix.CudaKernels
 import io.github.vlsergey.recommend4me.matrix.Floats
@@ -66,16 +67,19 @@ internal class ItemProducts(
      * freed — when it has no room for every one of them.
      */
     private fun opened(c: Cublas, kernels: CudaKernels, count: Int): OnCard? {
+        // A block of the card's memory of the portion, the application's rows in blocks of their own
+        val memory = runCatching { c.memory(0, Long.MAX_VALUE) }.getOrNull() ?: return null
         val made = ArrayList<AutoCloseable>()
-        fun room(size: Long) = c.allocate(size)?.also { made += it }
+        fun room(size: Long) = runCatching { memory.floats(size) }.getOrNull()
         val blocks = p.x.blocks.map { b -> b.card ?: CardRows.put(c, b.vectors, b.items)?.also { made += it } }
         val a = room(count.toLong() * r * dx)
         val u = room(count.toLong() * r * n)
         val du = room(count.toLong() * r * n)
         val g = room(count.toLong() * r * dx)
         val part = room(maxOf(1L, count.toLong() * r * p.x.widest))
-        val halves = HalvesOnCard.of(c, count.toLong() * r * dx, p.x, count.toLong() * r, made)
-        val ones = OnesOnCard.of(c, p.x, made)
+        val halves = HalvesOnCard.of(memory, count.toLong() * r * dx, p.x, count.toLong() * r)
+        val ones = OnesOnCard.of(memory, p.x)
+        made += memory
         // Every block and every room on the card, or nothing kept there
         val missing = listOf(a, u, du, g, part).any { it == null } || halves == null || ones == null
         return if (blocks.any { it == null } || missing) {
@@ -255,11 +259,13 @@ internal class OnesOnCard(
         /** The items a feature has as a one from which a warp, not a thread, sums their slopes. */
         private const val HEAVY = 64
 
-        /** The ones of [x] put on the card of [c], what was put there into [made]; null when it has no room. */
-        fun of(c: Cublas, x: ItemFeatures, made: MutableList<AutoCloseable>): OnesOnCard? {
-            fun ints(of: IntArray) =
-                c.allocateBytes(maxOf(1L, of.size.toLong() * Int.SIZE_BYTES))?.also {
-                    made += it
+        /** The ones of [x] put in the card's [memory]; null when it has no room. */
+        fun of(memory: CardMemory, x: ItemFeatures): OnesOnCard? {
+            fun ints(of: IntArray) = runCatching {
+                memory.bytes(maxOf(1L, of.size.toLong() * Int.SIZE_BYTES))
+            }
+                .getOrNull()
+                ?.also {
                     it.upload(of)
                 }
             val (at, features) = x.onesFlat()
@@ -309,10 +315,10 @@ internal class HalvesOnCard(val a: Cublas.DeviceBytes, val rows: Cublas.DeviceBy
 
         /**
          * The rooms of [weights] numbers of the weights, of a run of the rows of [x] and of [kr] rows of its widest
-         * block's items, on the card of [c], what was put there into [made]; null when it has no room.
+         * block's items, in the card's [memory]; null when it has no room.
          */
-        fun of(c: Cublas, weights: Long, x: ItemFeatures, kr: Long, made: MutableList<AutoCloseable>): HalvesOnCard? {
-            fun room(numbers: Long) = c.allocateBytes(maxOf(1L, numbers) * HALF)?.also { made += it }
+        fun of(memory: CardMemory, weights: Long, x: ItemFeatures, kr: Long): HalvesOnCard? {
+            fun room(numbers: Long) = runCatching { memory.bytes(maxOf(1L, numbers) * HALF) }.getOrNull()
             val a = room(weights)
             val rows = room(minOf(FeatureKernels.CARD_ROWS, x.widest).toLong() * x.longest)
             val part = room(kr * x.widest)

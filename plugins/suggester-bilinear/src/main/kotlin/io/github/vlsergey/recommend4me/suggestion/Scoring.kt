@@ -438,13 +438,13 @@ internal class Scoring(
          * takes back, grown as asked. Under the card's lock, every call.
          */
         private inner class OnCard(val cublas: Cublas, val kernels: CudaKernels) : AutoCloseable {
-            private val made = ArrayList<AutoCloseable>()
+            /** A block of the card's memory, held while the scores are: freed as they are. */
+            private val memory = cublas.memory(0, Long.MAX_VALUE)
             private val rooms = HashMap<String, Cublas.DeviceBytes>()
             private val pins = HashMap<String, Cublas.Pinned>()
             private var closed = false
 
-            private fun floats(count: Long): Cublas.DeviceFloats =
-                (cublas.allocate(maxOf(1L, count)) ?: throw NoRoom()).also { made += it }
+            private fun floats(count: Long): Cublas.DeviceFloats = memory.floats(count)
 
             /**
              * The room [name], of [bytes] at least: kept for the next choosing, grown to twice when it is not enough.
@@ -452,10 +452,8 @@ internal class Scoring(
             private fun room(name: String, bytes: Long): Cublas.DeviceBytes {
                 val have = rooms[name]
                 if (have != null && have.bytes >= bytes) return have
-                have?.close()
-                return (cublas.allocateBytes(maxOf(bytes, 2 * (have?.bytes ?: 0), LEAST_ROOM)) ?: throw NoRoom()).also {
-                    rooms[name] = it
-                }
+                have?.let(memory::free)
+                return memory.bytes(maxOf(bytes, 2 * (have?.bytes ?: 0), LEAST_ROOM)).also { rooms[name] = it }
             }
 
             private fun ints(name: String, values: IntArray) =
@@ -479,11 +477,7 @@ internal class Scoring(
                 room("examples", folds.toLong() * Float.SIZE_BYTES).also {
                     it.upload(FloatArray(folds) { f -> pair[f][0] })
                 }
-            private val folded =
-                (cublas.allocateBytes(task.itemCount.toLong() * Int.SIZE_BYTES) ?: throw NoRoom()).also {
-                    made += it
-                    it.upload(foldOf)
-                }
+            private val folded = memory.bytes(task.itemCount.toLong() * Int.SIZE_BYTES).also { it.upload(foldOf) }
 
             /**
              * Every item's coordinates made in [u] — the ones summed of the stacked weights, every block's rows
@@ -533,10 +527,7 @@ internal class Scoring(
                 u.download(out, 0, 0, n * width)
                 val multiplied = System.nanoTime()
                 // The weights, the block's part and its single rows are of the products alone
-                listOf(weights, part, single).forEach {
-                    it.close()
-                    made.remove(it)
-                }
+                listOf(weights, part, single).forEach(memory::free)
                 return longArrayOf((sent - started) / NANOS_IN_MILLI, (multiplied - sent) / NANOS_IN_MILLI)
             }
 
@@ -547,10 +538,8 @@ internal class Scoring(
             private fun pinned(name: String, bytes: Long): Cublas.Pinned {
                 val have = pins[name]
                 if (have != null && have.bytes >= bytes) return have
-                have?.close()
-                return (cublas.pinned(maxOf(bytes, 2 * (have?.bytes ?: 0), LEAST_ROOM)) ?: throw NoRoom()).also {
-                    pins[name] = it
-                }
+                have?.let(memory::free)
+                return memory.pinned(maxOf(bytes, 2 * (have?.bytes ?: 0), LEAST_ROOM)).also { pins[name] = it }
             }
 
             /**
@@ -789,15 +778,12 @@ internal class Scoring(
             override fun close() {
                 if (closed) return
                 closed = true
-                made.forEach { it.close() }
-                rooms.values.forEach { it.close() }
-                pins.values.forEach { it.close() }
+                rooms.clear()
+                pins.clear()
+                memory.close()
             }
         }
     }
-
-    /** No room on the card for what a scoring needs there: it is the main memory's. */
-    private class NoRoom : RuntimeException("no room on the card")
 
     /**
      * Every value's weight over the works as a whole: its share of the works fitted on ([shares]); none of a scoring

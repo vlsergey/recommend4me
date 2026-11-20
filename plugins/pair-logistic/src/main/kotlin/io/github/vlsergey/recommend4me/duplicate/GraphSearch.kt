@@ -37,7 +37,7 @@ internal object GraphSearch {
         val all = AllWorks.of(search) ?: return null
         return card.lock.withLock {
             val kernels = kernels(card) ?: error("the kernels of the graph were not made")
-            CardRoom(card).use { room ->
+            CardRoom.of(card, AllOnCard.need(all, models.size)).use { room ->
                 val started = System.currentTimeMillis()
                 val onCard = AllOnCard(all, room, kernels)
                 // Of every work the works of an author one with its: every one a candidate
@@ -155,6 +155,35 @@ internal object GraphSearch {
  * whole halves; the lengths, the facets, the sizes, the values, the authors and their kin, the works answered on.
  */
 internal class AllOnCard(private val all: AllWorks, room: CardRoom, kernels: CudaKernels) {
+    companion object {
+        /**
+         * The card's memory the graph of [all] needs at least, of [models] models: its rows, their lengths and marks,
+         * the values, the authors and the works answered on, the graph and its candidates — a block of less refused,
+         * the tiles searching then.
+         */
+        fun need(all: AllWorks, models: Int): Long {
+            val n = all.count.toLong()
+            fun sparse(of: (SiteWorks) -> io.github.vlsergey.recommend4me.matrix.Rows) =
+                (n + 1) * Int.SIZE_BYTES +
+                    all.sites.sumOf { SparseOnCard.sparse(of(it)).entryCount.toLong() } * Int.SIZE_BYTES
+            val rows =
+                sparse { it.titles } +
+                    sparse { it.authorNames } +
+                    sparse { it.letters[LetteredText.FANDOMS.ordinal] } +
+                    sparse { it.letters[LetteredText.CHARACTERS.ordinal] } +
+                    n * (maxOf(1, all.described) + maxOf(1, all.titled) + 2L * Float.SIZE_BYTES) +
+                    n * all.width * HALF_BYTES
+            val lists =
+                (all.values.entries.size.toLong() * 2 +
+                    all.kin.entries.size +
+                    all.authors.entries.size +
+                    all.passed.entries.size +
+                    4 * n) * Int.SIZE_BYTES
+            val graph = n * GraphSearch.K * (2L * Int.SIZE_BYTES + 2) + n * models * 2L * Float.SIZE_BYTES
+            return rows + lists + graph
+        }
+    }
+
     private val began = System.currentTimeMillis()
     private val n = all.count.toLong()
     val titles = SparseOnCard.of(all.sites.map { it.titles }, room)

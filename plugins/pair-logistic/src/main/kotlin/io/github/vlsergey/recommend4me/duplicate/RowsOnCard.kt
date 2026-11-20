@@ -31,9 +31,10 @@ internal object RowsOnCard {
         if (n == 0 || rows.cols == 0) return
         when (rows) {
             is HalfMatrix -> into.upload(rows, 0, n, at)
-            is SparseRows ->
-                CardRoom(card).use { sent ->
-                    val e = rows.entries(0, n)
+            is SparseRows -> {
+                val e = rows.entries(0, n)
+                val bytes = (e.at.size + e.packed.size).toLong() * Int.SIZE_BYTES
+                CardRoom.of(card, bytes, bytes).use { sent ->
                     into.zero(at, n.toLong() * rows.cols * HALF_BYTES)
                     kernels.launch(
                         "sparse_halves",
@@ -46,9 +47,11 @@ internal object RowsOnCard {
                     )
                     card.synchronize()
                 }
-            is ByteMatrix ->
-                CardRoom(card).use { sent ->
-                    val count = n.toLong() * rows.cols
+            }
+            is ByteMatrix -> {
+                val count = n.toLong() * rows.cols
+                val bytes = count + n.toLong() * Float.SIZE_BYTES
+                CardRoom.of(card, bytes, bytes).use { sent ->
                     kernels.launch(
                         "byte_halves",
                         count,
@@ -60,6 +63,7 @@ internal object RowsOnCard {
                     )
                     card.synchronize()
                 }
+            }
         }
     }
 }

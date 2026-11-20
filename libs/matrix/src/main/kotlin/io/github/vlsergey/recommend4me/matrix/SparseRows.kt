@@ -24,6 +24,10 @@ private constructor(
 
     override fun rows(fromRow: Int, count: Int) = SparseRows(count, cols, at, columns, values, first + fromRow)
 
+    /** The entries of every row, the numbers not nought kept. */
+    val entryCount: Int
+        get() = at[first + rows] - at[first]
+
     override fun take(i: Int, into: FloatArray) {
         into.fill(0f, 0, cols)
         for (k in at[first + i] until at[first + i + 1]) into[column(k)] = value(k)
