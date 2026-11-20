@@ -17,6 +17,7 @@ import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.AfterEach
@@ -268,13 +269,15 @@ class TasksTest {
                         callers,
                     )
                     .also { while (tasks.waiting().size < waiting) Thread.sleep(5) }
+            val background =
+                listOf(ask(TaskKind.MAKE_WORK_MANNERS, false, 1), ask(TaskKind.MEASURE_WORK_SIZES, false, 2))
+            // Works of the background waiting: the one running is not asked to give way
+            assertFalse(tasks.outranked)
             val all =
-                listOf(
-                    ask(TaskKind.MAKE_WORK_MANNERS, false, 1),
-                    ask(TaskKind.MEASURE_WORK_SIZES, false, 2),
-                    ask(TaskKind.INDEX_WORK_TEXTS, true, 3),
-                    ask(TaskKind.FIT_HELD_OUT_MODEL, true, 4),
-                )
+                background + listOf(ask(TaskKind.INDEX_WORK_TEXTS, true, 3), ask(TaskKind.FIT_HELD_OUT_MODEL, true, 4))
+            // A work the user asked for waiting: the one running, of the background, is asked to give way — and gives
+            // it only if it can stop (owner, 2026-11-20)
+            assertTrue(tasks.outranked)
             // The page of the queue tells the order they will run in, the asked ones marked
             assertEquals(
                 listOf("indexWorkTexts", "fitHeldOutModel", "makeWorkManners", "measureWorkSizes"),

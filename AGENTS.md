@@ -147,7 +147,10 @@ expected grade, from the cursor where they left (`TaskCursor`, `Tasks.again`), t
 every other task. A task planned by a running one, or by what it told, inherits its priority
 (`InheritedPriority`, a `ScopedValue`) unless it names one; planned again, a task goes after those of
 its priority planned before. The tasks wait by their priorities alone, however long a task of a
-lower one waits (owner, 2026-11-19: no two minutes). What is not a computation — reading the sites' pages
+lower one waits (owner, 2026-11-19: no two minutes). A task running is never stopped, but one that can go on from where it
+stopped — the encoding of the works' texts and chapters, from its cursor — asks between its steps whether
+a task the user asked for waits (`Tasks.outranked`), and gives way: planned again, "yielded" (owner,
+2026-11-20). What is not a computation — reading the sites' pages
 and pictures — stays out of the queue.
 
 **The queue is kept in the application's database, and a start plans nothing "just in case"**

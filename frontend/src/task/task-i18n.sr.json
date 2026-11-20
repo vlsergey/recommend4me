@@ -53,6 +53,7 @@
   "Reason.trained": "obučen novi model",
   "Reason.uncounted": "fandomi još nisu prebrojani",
   "Reason.universes": "vaš odgovor o univerzumima",
+  "Reason.yielded": "ustupila je mesto prioritetnom poslu, nastavlja od mesta zaustavljanja",
   "Span.minutesSeconds": "{{minutes}} min {{seconds}} s",
   "Span.seconds": "{{value}} s",
   "Step.average": "prosečno delo ocenjenih",

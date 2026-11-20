@@ -124,6 +124,9 @@ internal class Turns {
         }
     }
 
+    /** Whether a work of the [priority] waits its turn. */
+    fun waitsOf(priority: TaskPriority): Boolean = lock.withLock { waiting.any { it.priority == priority } }
+
     /** Whether the [work] waits its turn, or holds it. */
     fun waits(work: Task): Boolean = lock.withLock { held?.work == work || waiting.any { it.work == work } }
 

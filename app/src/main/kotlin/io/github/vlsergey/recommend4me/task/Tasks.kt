@@ -281,6 +281,16 @@ class Tasks(background: Background = Threads(), private val records: TaskRecords
     val stopping: Boolean
         get() = turns.closed
 
+    /**
+     * Whether the work running now is to give way (owner, 2026-11-20: "if a work can stop, and is not of the highest
+     * priority, and a work of the highest priority queued below it, ask it to stop"): a work the user asked for waits
+     * ([TaskPriority.ASKED]), the one running of a lower priority. A long work that can go on from where it stopped — a
+     * task over the works, from its cursor — asks it between its steps, and stops: planned again ([again]) for the
+     * reason "yielded", after the work it gave way to.
+     */
+    val outranked: Boolean
+        get() = current?.let { it.priority != TaskPriority.ASKED && turns.waitsOf(TaskPriority.ASKED) } ?: false
+
     /** The work running now, none when idle. */
     fun running(): RunningTask? = current
 

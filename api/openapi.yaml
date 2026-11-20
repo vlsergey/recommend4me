@@ -5055,6 +5055,7 @@ components:
           - trained
           - uncounted
           - universes
+          - yielded
 
     TaskReason:
       type: object

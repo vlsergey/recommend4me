@@ -53,6 +53,7 @@
   "Reason.trained": "a new model trained",
   "Reason.uncounted": "fandoms not counted yet",
   "Reason.universes": "your word on the universes",
+  "Reason.yielded": "it gave way to a work you asked for, and goes on from where it stopped",
   "Span.minutesSeconds": "{{minutes}} min {{seconds}} s",
   "Span.seconds": "{{value}} s",
   "Step.average": "counting the average work of the graded",

@@ -99,7 +99,9 @@ class TextVectors(
             priority = NextWorks.priority(scope),
             cursor = cursor,
         ) {
-            turn(typeId, scope, tasks.running()?.cursor ?: TaskCursor.FIRST)?.let { tasks.again("sweep", cursor = it) }
+            turn(typeId, scope, tasks.running()?.cursor ?: TaskCursor.FIRST)?.let {
+                tasks.again(if (tasks.outranked) "yielded" else "sweep", cursor = it)
+            }
         }
 
     /** Every text of the [typeId] to be encoded encoded now, on the caller's thread, turn after turn: for the tests. */
@@ -112,7 +114,8 @@ class TextVectors(
     /**
      * ONE TURN: the next [portion] works of the [scope] of the [typeId] whose texts are to be encoded, from the
      * [cursor] on, encoded; where the next turn goes on from — none when none is left. Of no encoder, none: the next
-     * task told alike.
+     * task told alike. Stopped between its batches for a work the user asked for ([Tasks.outranked]), none of its works
+     * marked done: it goes on from the [cursor] again, the texts it encoded found encoded.
      */
     internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION): TaskCursor? {
         val type = stores.type(typeId)
@@ -131,7 +134,7 @@ class TextVectors(
         when {
             items == null -> events.publishEvent(WorkTextVectorFillEvent(typeId, mapOf(scope to cursor)))
             items.isNotEmpty() -> {
-                done(type!!, index, encoder!!, items.map { it.key })
+                if (!done(type!!, index, encoder!!, items.map { it.key })) return cursor
                 events.publishEvent(WorkTextVectorFillEvent(typeId, mapOf(scope to items.first().cursor())))
             }
         }
@@ -140,42 +143,54 @@ class TextVectors(
 
     /**
      * Of the items [keys] of the [type], the texts new or changed encoded by the [encoder], those gone dropped, every
-     * item marked done, the fields of those whose vectors changed to be computed again; committed.
+     * item marked done, the fields of those whose vectors changed to be computed again; committed. False, nothing
+     * marked done, of a turn that gave way to a work the user asked for ([Tasks.outranked]).
      */
-    private fun done(type: TypeStore, index: ListIndex, encoder: TextEncoder, keys: List<ItemKey>) {
+    private fun done(type: TypeStore, index: ListIndex, encoder: TextEncoder, keys: List<ItemKey>): Boolean {
         val started = System.currentTimeMillis()
         busy = true
         val changed =
             try {
                 keys.groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
-                    type.source(source)?.let { encoded(it, encoder, ids) }.orEmpty()
+                    type.source(source)?.let { encoded(it, encoder, ids) { tasks.outranked } }.orEmpty()
                 }
             } finally {
                 busy = false
             }
-        WorkStage.VECTORS.done(index, keys, started)
+        // Of a turn that gave way, the works not marked done — met again, their texts found encoded — but the fields
+        // of those encoded anew to be computed again all the same: the next turn finds them unchanged
+        val gaveWay = tasks.outranked
+        if (!gaveWay) WorkStage.VECTORS.done(index, keys, started)
         WorkStage.FIELDS.again(index, changed)
         index.commit()
         log.info(
-            "{}: the texts of {} works held, of {} encoded anew, in {} ms",
+            "{}: the texts of {} works held, of {} encoded anew, in {} ms{}",
             type.id,
             keys.size,
             changed.size,
             System.currentTimeMillis() - started,
+            if (gaveWay) ", given way to a work asked for" else "",
         )
+        return !gaveWay
     }
 
     /**
      * The texts of the items [ids] of the source [store] encoded by [encoder] where new or changed, and kept with their
      * windows, a batch at a time; those gone dropped. The items whose vectors changed.
      */
-    private fun encoded(store: SourceStore, encoder: TextEncoder, ids: List<String>): List<ItemKey> {
+    private fun encoded(
+        store: SourceStore,
+        encoder: TextEncoder,
+        ids: List<String>,
+        giveWay: () -> Boolean = { false },
+    ): List<ItemKey> {
         val scan = TextScan(store, ids, encoder.id)
         val gone = scan.gone()
         gone.forEach { (id, key) -> store.textVectors.delete(id, key) }
         if (gone.isNotEmpty())
             events.publishEvent(SiteItemTextVectorChangeEvent(store.id, gone.map { it.first }.distinct()))
         for (batch in scan.todo.chunked(BATCH)) {
+            if (giveWay()) break
             val vectors = encoder.encode(batch.map { it.text })
             batch.forEachIndexed { i, t ->
                 vectors[i]?.let { store.textVectors.save(t.itemId, t.key, encoder.id, t.hash, it) }

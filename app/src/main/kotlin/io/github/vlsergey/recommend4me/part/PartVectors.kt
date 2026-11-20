@@ -66,12 +66,16 @@ class PartVectors(
             priority = NextWorks.priority(scope),
             cursor = cursor,
         ) {
-            turn(typeId, scope, tasks.running()?.cursor ?: TaskCursor.FIRST)?.let { tasks.again("sweep", cursor = it) }
+            turn(typeId, scope, tasks.running()?.cursor ?: TaskCursor.FIRST)?.let {
+                tasks.again(if (tasks.outranked) "yielded" else "sweep", cursor = it)
+            }
         }
 
     /**
      * ONE TURN: of the works of the [scope] of the [typeId] whose parts wait to be encoded, the next [portion] from the
-     * [cursor] on encoded; where the next turn goes on from — none when none is left.
+     * [cursor] on encoded; where the next turn goes on from — none when none is left. Stopped between its batches for a
+     * work the user asked for ([Tasks.outranked]), it goes on from the [cursor] again: the works it encoded wait no
+     * more, and are passed over.
      */
     internal fun turn(typeId: String, scope: WorkScope, cursor: TaskCursor, portion: Int = PORTION_WORKS): TaskCursor? {
         val type = stores.type(typeId)
@@ -87,16 +91,17 @@ class PartVectors(
         val items =
             if (waiting.isEmpty()) emptyList()
             else NextWorks.next(lists.of(typeId), scope, NextWorks.among(waiting), cursor, portion)
+        var gaveWay = false
         if (items.isNotEmpty()) {
             val works = items.groupBy({ it.key.source }, { it.key.id }).mapValues { it.value.toSet() }
             try {
                 val reached = Reached()
-                while (!tasks.stopping && encodeSome(reached, works) > 0) continue
+                while (!tasks.stopping && !gaveWay && encodeSome(reached, works) > 0) gaveWay = tasks.outranked
             } finally {
                 busy = false
             }
         }
-        return items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
+        return if (gaveWay) cursor else items.lastOrNull()?.cursor()?.takeIf { items.size == portion }
     }
 
     /**

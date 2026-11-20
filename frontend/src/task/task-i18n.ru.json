@@ -53,6 +53,7 @@
   "Reason.trained": "обучена новая модель",
   "Reason.uncounted": "есть непосчитанные фандомы",
   "Reason.universes": "ваш ответ о вселенных",
+  "Reason.yielded": "уступила место первоочередной работе, продолжит с места остановки",
   "Span.minutesSeconds": "{{minutes}} мин {{seconds}} с",
   "Span.seconds": "{{value}} с",
   "Step.average": "средняя работа по оценённым",
