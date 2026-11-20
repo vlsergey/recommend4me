@@ -127,6 +127,7 @@ class Duplicates(
             }
         val compared = System.currentTimeMillis() - started
         tasks.progress(COMPARED)
+        ChanceSpread.of(found.values, kept)?.let { log.info("{}: {}", type.id, it) }
         val likely = likely(found.values, said, kept)
         val fitted = PairModels.fit(model, likely, said)
         model.fitted(search.search, listOfNotNull(fitted.same ?: model.prior(), fitted.series))
