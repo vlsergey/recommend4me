@@ -73,6 +73,20 @@ class WordsPerCharTest {
         assertTrue(model.sample in 50_000.0..200_000.0, model.sample.toString())
     }
 
+    @Test
+    fun `the variances of a model of one example begin no fitting, the next one fits every example`() {
+        val one = examples().take(1)
+        val rows = SizeRows(one, features.names.size)
+        val kinds = WordsPerChar.kindsOf(features.names)
+        val single = SizeVariances(rows, kinds, SizeRidge(rows, SizeOnProcessor(rows))).fit()
+        assertEquals(null, Variances.kept(single.variances.named()), "nought of a model of one example")
+        val all = SizeRows(examples(), features.names.size)
+        val next =
+            SizeVariances(all, kinds, SizeRidge(all, SizeOnProcessor(all)))
+                .fit(Variances.kept(single.variances.named()))
+        assertTrue(next.x.all { it.isFinite() } && next.variances.noise > 0, next.variances.noise.toString())
+    }
+
     private companion object {
         const val COUNT = 2000
         const val AUTHORS = 100

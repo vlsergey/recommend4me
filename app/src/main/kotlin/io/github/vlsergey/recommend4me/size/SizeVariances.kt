@@ -229,12 +229,17 @@ internal class Variances(val noise: Double, val counting: Double, val tau: Doubl
         private const val COUNTING = PREFIX + "counting"
         private const val TAU = PREFIX + "tau:"
 
-        /** The variances of the kept [weights] by their names; none of a model kept without them. */
+        /**
+         * The variances of the kept [weights] by their names; none of a model kept without them, or of one of examples
+         * that varied in nothing — no variance told, nought, nothing to begin at (2026-11-21: a model of one example
+         * kept, the next fitting weighed every example by the inverse of nought).
+         */
         fun kept(weights: Map<String, Double>): Variances? {
             val tau = WordsPerChar.KINDS.map { weights[TAU + it] }
             val noise = weights[NOISE]
             val counting = weights[COUNTING]
             if (noise == null || counting == null || tau.any { it == null }) return null
+            if (noise <= 0 || tau.any { it!! <= 0 }) return null
             return Variances(noise, counting, DoubleArray(tau.size) { tau[it]!! })
         }
     }
