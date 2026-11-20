@@ -101,9 +101,9 @@ class TwoSitesTest : TwoSitesTestBase() {
         val words = if (pair.first == z1) kept.words to kept.otherWords else kept.otherWords to kept.words
         assertEquals(900f, words.first)
         assertTrue(words.second!! in 950f..1050f, words.toString())
-        // A text changed is counted anew
+        // A text changed is counted anew as it is written, the item's sum with it
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово")))
-        assertNull(a.parts.counts.counted()["z1"])
+        assertEquals(1.0 to 5.0, a.parts.counts.counted()["z1"])
     }
 
     @Test

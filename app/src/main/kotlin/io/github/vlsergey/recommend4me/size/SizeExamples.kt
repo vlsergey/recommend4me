@@ -9,7 +9,6 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.WorkClusters
 import io.github.vlsergey.recommend4me.worklist.ListIndex
-import kotlin.concurrent.withLock
 
 /** The number of the source's layer that counts a work's words; null when its site states none. */
 internal fun SourceStore.wordsKey() = schema.numbers.firstOrNull { it.standard === StandardNumbers.WORDS }?.key
@@ -25,7 +24,8 @@ private class Known(val words: Double, val chars: Double)
 
 /**
  * THE EXAMPLES THE MODEL OF THE WORDS TO A CHARACTER LEARNS OF, every one a site item that tells both:
- * - [own]: its kept text, counted once ([countTexts]), else its site stating both;
+ * - [own]: its kept text, as counted as it was written ([io.github.vlsergey.recommend4me.part.PartCounts]), else its
+ *   site stating both;
  * - [across]: of an item of no such numbers that states one of them, the other of the most another item of its work
  *   states — a site may hold a part or another version of it, the caller decides whether to trust it.
  *
@@ -39,7 +39,6 @@ internal class SizeExamples(val own: List<SizeExample>, val across: List<SizeExa
             val known = HashMap<ItemKey, Known>()
             val across = HashMap<ItemKey, Known>()
             type.sources.forEach { s ->
-                countTexts(s)
                 ownOf(s).forEach { (id, k) -> known[ItemKey(s.id, id)] = k }
             }
             // The numbers of every item of a work of several, of every site in one batch: not a query a work
@@ -143,7 +142,6 @@ internal fun givesExamples(type: TypeStore, keys: Collection<ItemKey>): Boolean 
     val clusters = WorkClusters.of(type.links.groups())
     return keys.groupBy({ it.source }, { it.id }).any { (source, ids) ->
         val s = type.source(source) ?: return@any false
-        countTexts(s, ids)
         val words = s.wordsKey()
         val chars = s.charsKey()
         s.parts.counts.counted(ids).isNotEmpty() ||
@@ -152,23 +150,5 @@ internal fun givesExamples(type: TypeStore, keys: Collection<ItemKey>): Boolean 
                 val c = chars?.let { own[it] } ?: 0.0
                 (w > 0 && c > 0) || ((w > 0 || c > 0) && clusters.linked(ItemKey(source, id)))
             }
-    }
-}
-
-/** The parts of the source read and counted at once. */
-private const val COUNTED_AT_ONCE = 100
-
-/**
- * Every part whose text is not counted yet counted — of the items [ids] alone, or of every item when null —: one count
- * of a part, kept, however often the model is fitted.
- */
-private fun countTexts(s: SourceStore, ids: Collection<String>? = null) {
-    s.parts.counts.uncounted(ids).chunked(COUNTED_AT_ONCE).forEach { chunk ->
-        val parts = s.parts.counts.toCount(chunk)
-        s.writing.withLock {
-            parts.forEach {
-                s.parts.counts.setCounted(it.itemId, it.partId, it.content.length, WordCount.of(it.content))
-            }
-        }
     }
 }

@@ -4,7 +4,7 @@
 
 | Table | What it holds |
 |---|---|
-| `item` | a work of the site: its id, address, title, version and dates |
+| `item` | a work of the site: its id, address, title, version and dates; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`) |
 | `item_version` | every version of a work seen |
 | `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order, with its name as the work's page wrote it |
 | `facet_value` | the name of a value the site names by key (a tag's id) |
@@ -21,7 +21,7 @@
 | `review` | an opinion of another reader, its text kept by the key it is encoded under |
 | `series` | a series of the site — a cycle of works — as its own page, or a list of an author's series, said it last: its page, title, description, status and dates |
 | `series_place` | the number of a work in a series of the site, as the site tells it; that the work is of the series is its facet of the series |
-| `part` | a part of a work's text — a chapter: what it has, its text and its vectors kept outside the database, in the source's store of parts (`sources/<source>/parts/`, `PartStore`, RocksDB): the hash of its text (a part has a text when it is written), its characters and words counted once; of its windows' vectors — overlapping by half, what the search finds a scene of a chapter by and what the models read of it — the encoder, the text's hash and how many (`windows`); of its paragraphs' vectors — what the tags are held against to be offered by the text — the encoder and the text's hash |
+| `part` | a part of a work's text — a chapter: what it has, its text and its vectors kept outside the database, in the source's store of parts (`sources/<source>/parts/`, `PartStore`, RocksDB): the hash of its text (a part has a text when it is written), its characters and words counted as its text is written; of its windows' vectors — overlapping by half, what the search finds a scene of a chapter by and what the models read of it — the encoder, the text's hash and how many (`windows`); of its paragraphs' vectors — what the tags are held against to be offered by the text — the encoder and the text's hash |
 | `set_vector` | a work's set — screenshots, reviews, windows of its text — as one vector of fixed length |
 | `item_manner` | the manner of a work's text: the share in it of every word its content type measures a manner by, standardised, and the hash of the texts it was made of |
 | `captured_page` | a page kept, gzipped, to be read again when the parser changes |
@@ -67,6 +67,8 @@ erDiagram
         VARCHAR version
         TIMESTAMPTZ updated_at
         TIMESTAMPTZ first_seen_at
+        INTEGER text_words "null"
+        INTEGER text_chars "null"
     }
     item_facet {
         VARCHAR item_id PK, FK

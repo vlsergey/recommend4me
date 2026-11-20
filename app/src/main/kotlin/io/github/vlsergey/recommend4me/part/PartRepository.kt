@@ -35,8 +35,8 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
     /** The texts of the parts of every item, an item at a time. */
     val texts = ItemTexts(db, store)
 
-    /** The characters and the words of the parts' texts, counted once. */
-    val counts = PartCounts(db, store)
+    /** The characters and the words of the items' texts, as they lie. */
+    val counts = PartCounts(db)
 
     /**
      * Stores parts, a known one updated; a part named without its text keeps the text it had, and a part whose text
@@ -49,6 +49,8 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
                 db.select(PART.CONTENT_HASH).from(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).fetchOne()
             val content = p.content
             val hash = content?.let(Vectors::hash)
+            // A text's characters and words counted as it is written, kept with its part
+            val words = content?.let(WordCount::of)
             val changed = hash != null && hash != known?.value1()
             if (content != null && changed) store.putText(itemId, id, content)
             if (known == null) {
@@ -60,6 +62,8 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
                     .set(PART.TITLE, p.title?.take(TITLE_WIDTH))
                     .set(PART.CONTENT_HASH, hash)
                     .set(PART.PUBLISHED_AT, p.publishedAt)
+                    .set(PART.CHARS, content?.length)
+                    .set(PART.WORDS, words)
                     .execute()
                 return@forEach
             }
@@ -76,11 +80,12 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
                         .setNull(PART.WINDOWS)
                         .setNull(PART.PARAGRAPHS_ENCODER)
                         .setNull(PART.PARAGRAPHS_HASH)
-                        .setNull(PART.CHARS)
-                        .setNull(PART.WORDS)
+                        .set(PART.CHARS, content?.length)
+                        .set(PART.WORDS, words)
             }
             update.where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).execute()
         }
+        counts.totalled(itemId)
     }
 
     fun ofItem(itemId: String): List<StoredPart> =
