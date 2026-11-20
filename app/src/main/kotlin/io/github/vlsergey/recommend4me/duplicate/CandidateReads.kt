@@ -43,68 +43,57 @@ class CandidateReads internal constructor(private val db: DSLContext) {
             }
     }
 
-    /** The candidates of the [pairs], the smaller key first, by the table's key. */
+    /**
+     * The candidates of the [pairs], the smaller key first: those of their first works by the table's key — a site's
+     * works at once, its ids in one list —, the pairs asked picked of them (2026-11-20: a disjunction of the pairs'
+     * keys made H2 read the whole table for every list of them, 37 s of a page of 30 authors).
+     */
     fun ofPairs(pairs: Collection<Pair<ItemKey, ItemKey>>): List<DuplicateCandidate> {
-        val c = DUPLICATE_CANDIDATE
-        return pairs.chunked(BATCH).flatMap { chunk ->
-            read(
-                DSL.or(
-                    chunk.map { (a, b) ->
-                        c.SOURCE.eq(a.source)
-                            .and(c.ITEM_ID.eq(a.id))
-                            .and(c.OTHER_SOURCE.eq(b.source))
-                            .and(c.OTHER_ITEM_ID.eq(b.id))
-                    }
-                )
-            )
-        }
+        val asked = pairs.toHashSet()
+        return firstOf(pairs.map { it.first }).filter { it.pair in asked }
     }
 
-    /** The candidates of which either work is among the [items]: of one work's items, say. */
+    /**
+     * The candidates of which either work is among the [items]: of one work's items, say. Those of them as the first
+     * work by the table's key, as the second by the index of the second: a site's works at once, never a disjunction.
+     */
     fun ofItems(items: Collection<ItemKey>): List<DuplicateCandidate> {
         val c = DUPLICATE_CANDIDATE
-        return items
-            .distinct()
-            .chunked(BATCH)
-            .flatMap { chunk ->
-                read(
-                    DSL.or(
-                        chunk.map { k ->
-                            c.SOURCE.eq(k.source)
-                                .and(c.ITEM_ID.eq(k.id))
-                                .or(c.OTHER_SOURCE.eq(k.source).and(c.OTHER_ITEM_ID.eq(k.id)))
-                        }
-                    )
-                )
-            }
-            .distinctBy { it.pair }
+        val asSecond = bySource(items) { source, ids -> read(c.OTHER_SOURCE.eq(source).and(c.OTHER_ITEM_ID.`in`(ids))) }
+        return (firstOf(items) + asSecond).distinctBy { it.pair }
     }
+
+    /** The candidates the [items] are the first works of, by the table's key: a site's works at once. */
+    private fun firstOf(items: Collection<ItemKey>): List<DuplicateCandidate> {
+        val c = DUPLICATE_CANDIDATE
+        return bySource(items) { source, ids -> read(c.SOURCE.eq(source).and(c.ITEM_ID.`in`(ids))) }
+    }
+
+    /** Of the [items], every site's ids — a [BATCH] at most a list — read by [read]. */
+    private fun <T> bySource(items: Collection<ItemKey>, read: (String, List<String>) -> List<T>): List<T> =
+        items.distinct().groupBy({ it.source }, { it.id }).flatMap { (source, ids) ->
+            ids.chunked(BATCH).flatMap { read(source, it) }
+        }
 
     /** The user's word on every pair of [pairs] as kept with it ([PairScore]): of a pair of none, none. */
     fun wordsOf(pairs: Collection<Pair<ItemKey, ItemKey>>): Said {
         val c = DUPLICATE_CANDIDATE
+        val asked = pairs.toHashSet()
         val words = HashMap<Pair<ItemKey, ItemKey>, DuplicateAnswer>()
         val derived = HashSet<Pair<ItemKey, ItemKey>>()
-        pairs.chunked(BATCH).forEach { chunk ->
-            db.select(c.SOURCE, c.ITEM_ID, c.OTHER_SOURCE, c.OTHER_ITEM_ID, c.ANSWER, c.ANSWER_DERIVED)
-                .from(c)
-                .where(
-                    c.ANSWER.isNotNull,
-                    DSL.or(
-                        chunk.map { (a, b) ->
-                            c.SOURCE.eq(a.source)
-                                .and(c.ITEM_ID.eq(a.id))
-                                .and(c.OTHER_SOURCE.eq(b.source))
-                                .and(c.OTHER_ITEM_ID.eq(b.id))
-                        }
-                    ),
-                )
-                .fetch { r ->
-                    val pair = ItemKey(r.value1()!!, r.value2()!!) to ItemKey(r.value3()!!, r.value4()!!)
+        bySource(pairs.map { it.first }) { source, ids ->
+                db.select(c.SOURCE, c.ITEM_ID, c.OTHER_SOURCE, c.OTHER_ITEM_ID, c.ANSWER, c.ANSWER_DERIVED)
+                    .from(c)
+                    .where(c.SOURCE.eq(source), c.ITEM_ID.`in`(ids), c.ANSWER.isNotNull)
+                    .fetch()
+            }
+            .forEach { r ->
+                val pair = ItemKey(r.value1()!!, r.value2()!!) to ItemKey(r.value3()!!, r.value4()!!)
+                if (pair in asked) {
                     words[pair] = DuplicateAnswer.valueOf(r.value5()!!)
                     if (r.value6()!!) derived += pair
                 }
-        }
+            }
         return Said(words, derived)
     }
 
