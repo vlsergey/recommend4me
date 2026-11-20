@@ -57,7 +57,7 @@ class ParagraphVectorRepository(private val db: DSLContext, private val store: P
         val parts =
             db.select(PART.PART_ID)
                 .from(PART)
-                .where(PART.ITEM_ID.eq(itemId), PART.PARAGRAPHS_ENCODER.eq(encoder))
+                .where(PART.ITEM_ID.eq(itemId), PART.PARAGRAPHS_ENCODER.eq(encoder), onSite)
                 .orderBy(PART.POSITION)
                 .fetch { it.value1()!! }
         val kept = store.paragraphs(itemId, parts)
@@ -74,6 +74,7 @@ class ParagraphVectorRepository(private val db: DSLContext, private val store: P
                 PART.ITEM_ID.eq(itemId),
                 PART.PART_ID.eq(partId),
                 PART.PARAGRAPHS_ENCODER.eq(encoder),
+                onSite,
             )
         if (!encoded) return null
         return store.paragraphs(itemId, listOf(partId))[partId]?.getOrNull(number)?.let {
@@ -88,5 +89,6 @@ class ParagraphVectorRepository(private val db: DSLContext, private val store: P
             PART.ITEM_ID.eq(itemId),
             PART.CONTENT_HASH.isNotNull,
             PART.PARAGRAPHS_ENCODER.isNull.or(PART.PARAGRAPHS_ENCODER.ne(encoder)),
+            onSite,
         )
 }

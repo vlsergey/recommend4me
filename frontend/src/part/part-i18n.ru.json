@@ -4,6 +4,9 @@
   "Parts.more": "Ещё {{n, number}}",
   "Parts.noText": "Текст не сохранён",
   "Parts.showText": "Показать текст",
+  "Parts.takenOff": "снята с сайта {{date}}",
+  "Parts.takenOffCount": "снято с сайта {{n, number}}",
+  "Parts.takenOffHint": "Этой главы больше нет в оглавлении сайта: её текст сохранён, но ни прогноз, ни поиск его не читают",
   "Parts.upDown": "<up>повышают {{up, number}}</up>, <down>понижают {{down, number}}</down>",
   "Parts.upDownHint": "Сколько сохранённых глав повышают прогноз и сколько понижают — каждая сама по себе",
   "Parts.withText": "текст сохранён у {{n, number}}"

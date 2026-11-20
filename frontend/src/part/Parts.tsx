@@ -12,8 +12,9 @@ const FIRST_SHOWN = 20;
 
 /**
  * The parts of the work — chapters — as one line: how many, from when to when, how many of them
- * read (their text kept), how many of those raise the prediction and how many lower it; opened,
- * the list in order, each read part with the points it moves the work by, opening its text in place.
+ * read (their text kept), how many of those raise the prediction and how many lower it, how many the
+ * site took off; opened, the list in order, each read part with the points it moves the work by,
+ * opening its text in place — a part taken off crossed out, its text kept and still opened.
  */
 export function Parts({ item, label, parts, unfolded = false }: { item: ItemRef; label: string; parts: PartInfo[]; /** Open from the start: a page of its own. */ unfolded?: boolean }) {
   const { t } = useTranslation("part");
@@ -24,7 +25,10 @@ export function Parts({ item, label, parts, unfolded = false }: { item: ItemRef;
   const sorted = [...parts].sort((a, b) => a.position - b.position);
   const shown = all ? sorted : sorted.slice(0, FIRST_SHOWN);
   const dates = sorted.map((p) => p.publishedAt).filter((d): d is string => d != null).sort();
-  const read = parts.filter((p) => p.hasText).length;
+  // The chapters the site has now; those it took off are only counted apart
+  const onSite = parts.filter((p) => p.takenOffAt == null);
+  const takenOff = parts.length - onSite.length;
+  const read = onSite.filter((p) => p.hasText).length;
   // What the chapters read do to the prediction, each by itself
   const up = parts.filter((p) => p.influence != null && p.influence > 0).length;
   const down = parts.filter((p) => p.influence != null && p.influence < 0).length;
@@ -34,7 +38,8 @@ export function Parts({ item, label, parts, unfolded = false }: { item: ItemRef;
         <ChevronDownIcon className={cn("size-4 shrink-0", !listed && "-rotate-90")} />
         <span className="font-semibold">{label}</span>
         <span className="text-muted-foreground">
-          {parts.length}
+          {onSite.length}
+          {takenOff > 0 && ` · ${t("Parts.takenOffCount", { n: takenOff })}`}
           {dates.length > 0 && ` · ${formatDay(dates[0])} — ${formatDay(dates[dates.length - 1])}`}
           {` · ${t("Parts.withText", { n: read })}`}
           {up + down > 0 && (
@@ -62,7 +67,14 @@ export function Parts({ item, label, parts, unfolded = false }: { item: ItemRef;
               title={p.hasText ? t("Parts.showText") : t("Parts.noText")}
             >
               <span className="w-8 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{p.position}</span>
-              <span className={cn("min-w-0 flex-1 truncate", !p.hasText && "text-muted-foreground")}>{p.title ?? `#${p.position}`}</span>
+              <span className={cn("min-w-0 flex-1 truncate", (!p.hasText || p.takenOffAt) && "text-muted-foreground", p.takenOffAt && "line-through")}>
+                {p.title ?? `#${p.position}`}
+              </span>
+              {p.takenOffAt && (
+                <span className="shrink-0 text-xs text-muted-foreground" title={t("Parts.takenOffHint")}>
+                  {t("Parts.takenOff", { date: formatDay(p.takenOffAt) })}
+                </span>
+              )}
               {p.influence != null && (
                 <InfluenceBadge
                   influence={p.influence}

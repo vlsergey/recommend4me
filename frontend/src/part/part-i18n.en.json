@@ -4,6 +4,9 @@
   "Parts.more": "{{n, number}} more",
   "Parts.noText": "Text not kept",
   "Parts.showText": "Show the text",
+  "Parts.takenOff": "taken off the site {{date}}",
+  "Parts.takenOffCount": "{{n, number}} taken off the site",
+  "Parts.takenOffHint": "The site's table of contents no longer has this chapter: its text is kept, but neither the prediction nor the search reads it",
   "Parts.upDown": "<up>{{up, number}} raise</up>, <down>{{down, number}} lower</down>",
   "Parts.upDownHint": "How many kept chapters raise the prediction and how many lower it — each by itself",
   "Parts.withText": "text kept for {{n, number}}"

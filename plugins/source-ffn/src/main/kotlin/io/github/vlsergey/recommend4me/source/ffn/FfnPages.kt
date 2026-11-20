@@ -106,7 +106,10 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
         }
     }
 
-    /** Every chapter the menu names, "2. A Different Life", and the text of the one the page shows. */
+    /**
+     * Every chapter the menu names, "2. A Different Life" — every one the work has on the site — and the text of the
+     * one the page shows.
+     */
     private fun chapters(doc: Document, id: String, shown: String) {
         val named =
             doc.select("#chap_select").firstOrNull()?.select("option[value]").orEmpty().map { o ->
@@ -118,7 +121,7 @@ internal class FfnPages(private val items: ItemStore, db: DSLContext) {
             PartData(shown, (shown.toIntOrNull() ?: 1) - 1, named.firstOrNull { p -> p.id == shown }?.title, it)
         }
         val parts = named.filter { it.id != shownPart?.id } + listOfNotNull(shownPart)
-        if (parts.isNotEmpty()) items.saveParts(id, parts)
+        if (parts.isNotEmpty()) items.saveParts(id, parts, whole = named.isNotEmpty())
     }
 
     // --- Reviews ---

@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.database.source.tables.references.PART
 import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.vector.Vectors
 import java.time.Instant
+import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 
@@ -13,7 +14,16 @@ data class StoredPart(
     val title: String?,
     val hasText: Boolean,
     val publishedAt: Instant?,
+    /** When a whole table of contents of its site no longer named it; null — it is on the site. */
+    val takenOffAt: Instant? = null,
 )
+
+/**
+ * The parts on their site — none a whole table of contents read last left out ([PartRepository.save]): what a work is
+ * made of, its words, its vectors, its search. A part taken off keeps its text, shown on the screen of the work alone.
+ */
+internal val onSite: Condition
+    get() = PART.TAKEN_OFF_AT.isNull
 
 /**
  * The parts of the works' texts — chapters — of one source, their texts and their words counted; the vectors of their
@@ -40,9 +50,11 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
 
     /**
      * Stores parts, a known one updated; a part named without its text keeps the text it had, and a part whose text
-     * changed is encoded again. The text is kept in the store before its hash says the part has it.
+     * changed is encoded again. The text is kept in the store before its hash says the part has it. A part named is on
+     * the site; of the [whole] table of contents, a part kept and not named is taken off it ([StoredPart.takenOffAt]).
+     * Whether some part was taken off or came back: what the work is made of changed.
      */
-    fun save(itemId: String, parts: List<PartData>) {
+    fun save(itemId: String, parts: List<PartData>, whole: Boolean = false, now: Instant = Instant.now()): Boolean {
         parts.forEach { p ->
             val id = p.id.take(ID_WIDTH)
             val known =
@@ -85,21 +97,45 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
             }
             update.where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(id)).execute()
         }
+        val named = parts.map { it.id.take(ID_WIDTH) }.distinct()
+        val back =
+            db.update(PART)
+                .setNull(PART.TAKEN_OFF_AT)
+                .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.`in`(named), PART.TAKEN_OFF_AT.isNotNull)
+                .execute()
+        val off =
+            if (!whole || named.isEmpty()) 0
+            else
+                db.update(PART)
+                    .set(PART.TAKEN_OFF_AT, now)
+                    .where(PART.ITEM_ID.eq(itemId), PART.PART_ID.notIn(named), onSite)
+                    .execute()
         counts.totalled(itemId)
+        return back + off > 0
     }
 
+    /** Every part of the item, those taken off the site too, in their order. */
     fun ofItem(itemId: String): List<StoredPart> =
-        db.select(PART.PART_ID, PART.POSITION, PART.TITLE, PART.CONTENT_HASH.isNotNull, PART.PUBLISHED_AT)
+        db.select(
+                PART.PART_ID,
+                PART.POSITION,
+                PART.TITLE,
+                PART.CONTENT_HASH.isNotNull,
+                PART.PUBLISHED_AT,
+                PART.TAKEN_OFF_AT,
+            )
             .from(PART)
             .where(PART.ITEM_ID.eq(itemId))
             .orderBy(PART.POSITION)
-            .fetch { StoredPart(it.value1()!!, it.value2()!!, it.value3(), it.value4() == true, it.value5()) }
+            .fetch {
+                StoredPart(it.value1()!!, it.value2()!!, it.value3(), it.value4() == true, it.value5(), it.value6())
+            }
 
     fun text(itemId: String, partId: String): Pair<StoredPart, String>? =
         db.selectFrom(PART).where(PART.ITEM_ID.eq(itemId), PART.PART_ID.eq(partId)).fetchOne()?.let {
             if (it.contentHash == null) return null
             val content = store.text(itemId, partId) ?: return null
-            StoredPart(it.partId!!, it.position!!, it.title, true, it.publishedAt) to content
+            StoredPart(it.partId!!, it.position!!, it.title, true, it.publishedAt, it.takenOffAt) to content
         }
 
     /**
@@ -121,15 +157,15 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
             .filterValues { it.isNotEmpty() }
 
     /**
-     * The titles of every part of the items [ids] that has a text, in their order — the texts not read: item to (part,
-     * title).
+     * The titles of every part of the items [ids] on the site that has a text, in their order — the texts not read:
+     * item to (part, title).
      */
     fun titlesOf(ids: Collection<String>): Map<String, List<Pair<String, String?>>> {
         val out = HashMap<String, MutableList<Pair<String, String?>>>()
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE)
                 .from(PART)
-                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT_HASH.isNotNull)
+                .where(PART.ITEM_ID.`in`(chunk), PART.CONTENT_HASH.isNotNull, onSite)
                 .orderBy(PART.ITEM_ID, PART.POSITION)
                 .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! to it.value3() }
         }

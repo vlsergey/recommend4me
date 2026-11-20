@@ -52,10 +52,10 @@ internal class MolweWork(private val items: ItemStore) {
         header(id, hero, doc)
         MolweCards.cover(hero)?.let { items.setPictures(id, it) }
         description(id, doc)
-        if (chapters.isNotEmpty()) items.saveParts(id, chapters)
-        doc.selectFirst("#work-chapters h2")?.text()?.let(PageText::number)?.let {
-            items.setNumbers(id, mapOf(PARTS to it.toDouble()))
-        }
+        val count = doc.selectFirst("#work-chapters h2")?.text()?.let(PageText::number)
+        // The list is every chapter the work has on the site when it names as many as its heading counts
+        if (chapters.isNotEmpty()) items.saveParts(id, chapters, whole = chapters.size.toLong() == count)
+        count?.let { items.setNumbers(id, mapOf(PARTS to it.toDouble())) }
         reviews(doc, id)
         return true
     }

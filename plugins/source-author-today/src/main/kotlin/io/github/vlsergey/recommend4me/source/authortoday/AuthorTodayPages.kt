@@ -203,7 +203,10 @@ class AuthorTodayPages(context: SourceContext) {
         )
     }
 
-    /** The chapters the work's table of contents names, each with the day it came out, without their texts. */
+    /**
+     * The chapters the work's table of contents names, each with the day it came out, without their texts: every
+     * chapter the work has on the site — one it no longer names is taken off it.
+     */
     private fun chapters(doc: Document, id: String) {
         val parts =
             doc.select("#tab-chapters .table-of-content li").mapIndexedNotNull { i, li ->
@@ -219,7 +222,7 @@ class AuthorTodayPages(context: SourceContext) {
                     li.selectFirst("[data-time]")?.attr("data-time")?.let(::instant),
                 )
             }
-        if (parts.isNotEmpty()) items.saveParts(id, parts)
+        if (parts.isNotEmpty()) items.saveParts(id, parts, whole = true)
     }
 
     companion object {

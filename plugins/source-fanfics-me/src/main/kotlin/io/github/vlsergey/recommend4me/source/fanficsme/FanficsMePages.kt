@@ -220,7 +220,7 @@ class FanficsMePages(context: SourceContext) {
     /**
      * The table of contents: every chapter by its number in the reader, with its date — the page lists the first and
      * the last chapters apart from the rest, some of them twice. A work without one is of one chapter, read whole by
-     * the link "ЧИТАТЬ".
+     * the link "ЧИТАТЬ". The table names every chapter the work has on the site.
      */
     private fun contents(doc: Document, id: String) {
         val parts =
@@ -237,7 +237,7 @@ class FanficsMePages(context: SourceContext) {
         val whole = doc.selectFirst("#FicReadLink a[href^=/read.php]")?.attr("href")?.let { "chapter=" !in it } ?: false
         when {
             parts.isNotEmpty() -> {
-                items.saveParts(id, parts)
+                items.saveParts(id, parts, whole = true)
                 items.setNumbers(id, mapOf(PARTS to parts.size.toDouble()))
             }
             whole -> {

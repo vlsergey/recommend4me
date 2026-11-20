@@ -160,8 +160,13 @@ interface ItemReviewStore {
 
 /** THE PARTS OF THE TEXT OF A SOURCE'S ITEMS — its chapters ([PartData]). A part of [ItemStore]. */
 interface ItemPartStore {
-    /** Stores parts of the item's text, a known one updated; none is deleted. */
-    fun saveParts(itemId: String, parts: List<PartData>)
+    /**
+     * Stores parts of the item's text, a known one updated; none is deleted. [whole] — the [parts] are every part the
+     * site lists of the item now, its table of contents read whole: a part kept and not among them is marked taken off
+     * the site, its text kept but no longer the work's, and a part named again is the work's again (owner, 2026-11-20:
+     * "the chapters of the work became fewer, but the application does not follow it").
+     */
+    fun saveParts(itemId: String, parts: List<PartData>, whole: Boolean = false)
 
     /** The parts of the item: id to whether its text is kept. */
     fun parts(itemId: String): Map<String, Boolean>

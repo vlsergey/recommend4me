@@ -4200,6 +4200,10 @@ components:
           format: double
           nullable: true
           description: Points of the user's scale the part's text moves the work by - the prediction as it is minus without this part; none when its text is not kept or the model reads no text of parts
+        takenOffAt:
+          type: string
+          format: date-time
+          description: When the whole table of contents of its site no longer named the part; its text is kept, but nothing of the work is made of it. None - the part is on the site
 
     PartText:
       type: object

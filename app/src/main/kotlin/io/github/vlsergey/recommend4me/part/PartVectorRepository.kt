@@ -20,13 +20,13 @@ internal fun pastPart(after: Pair<String, String>?): Condition =
 internal fun ofItems(items: Collection<String>?): Condition = items?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition()
 
 /**
- * The parts with a text the [condition] chooses, at most [limit], in the order of the table's key, their texts read of
- * the [store]; a part whose text the store lost left out.
+ * The parts on the site with a text the [condition] chooses, at most [limit], in the order of the table's key, their
+ * texts read of the [store]; a part whose text the store lost left out.
  */
 internal fun partsToEncode(db: DSLContext, store: PartStore, condition: Condition, limit: Int): List<PartToEncode> =
     db.select(PART.ITEM_ID, PART.PART_ID, PART.CONTENT_HASH)
         .from(PART)
-        .where(PART.CONTENT_HASH.isNotNull)
+        .where(PART.CONTENT_HASH.isNotNull, onSite)
         .and(condition)
         .orderBy(PART.ITEM_ID, PART.PART_ID)
         .limit(limit)
@@ -70,7 +70,7 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
     fun itemsToEncode(windows: String, paragraphs: String): Set<String> =
         db.selectDistinct(PART.ITEM_ID)
             .from(PART)
-            .where(PART.CONTENT_HASH.isNotNull)
+            .where(PART.CONTENT_HASH.isNotNull, onSite)
             .and(
                 PART.ENCODER.isNull
                     .or(PART.ENCODER.ne(windows))
@@ -95,7 +95,7 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
     fun windowCounts(encoder: String): Map<String, Int> =
         db.select(PART.ITEM_ID, DSL.sum(PART.WINDOWS))
             .from(PART)
-            .where(PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
+            .where(PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0), onSite)
             .groupBy(PART.ITEM_ID)
             .fetch()
             .associate { it.value1()!! to it.value2()!!.toInt() }
@@ -106,7 +106,7 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(PART.ITEM_ID, DSL.sum(PART.WINDOWS))
                 .from(PART)
-                .where(PART.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
+                .where(PART.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0), onSite)
                 .groupBy(PART.ITEM_ID)
                 .fetch { out[it.value1()!!] = it.value2()!!.toInt() }
         }
@@ -140,7 +140,7 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
     fun sample(n: Int, encoder: String): List<FloatArray> =
         db.select(PART.ITEM_ID, PART.PART_ID)
             .from(PART)
-            .where(PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
+            .where(PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0), onSite)
             .orderBy(DSL.rand())
             .limit(n)
             .fetch()
@@ -152,7 +152,7 @@ class PartVectorRepository(private val db: DSLContext, private val store: PartSt
         ids.distinct().chunked(BATCH).forEach { chunk ->
             db.select(PART.ITEM_ID, PART.PART_ID)
                 .from(PART)
-                .where(PART.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0))
+                .where(PART.ITEM_ID.`in`(chunk), PART.ENCODER.eq(encoder), PART.WINDOWS.gt(0), onSite)
                 .orderBy(PART.ITEM_ID, PART.POSITION)
                 .fetch { out.getOrPut(it.value1()!!) { ArrayList() } += it.value2()!! }
         }

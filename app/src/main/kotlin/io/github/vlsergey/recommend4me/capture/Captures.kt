@@ -74,8 +74,8 @@ class Captures(
             object : SourceContext by own {
                 override val items: ItemStore =
                     object : ItemStore by own.items {
-                        override fun saveParts(itemId: String, parts: List<PartData>) {
-                            own.items.saveParts(itemId, parts)
+                        override fun saveParts(itemId: String, parts: List<PartData>, whole: Boolean) {
+                            own.items.saveParts(itemId, parts, whole)
                             parts.forEach { p ->
                                 p.content?.let { texts += CapturedPart(ItemKey(store.id, itemId), p.title, it.length) }
                             }

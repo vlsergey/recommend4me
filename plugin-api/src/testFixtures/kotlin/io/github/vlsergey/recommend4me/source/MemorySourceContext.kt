@@ -22,6 +22,8 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
     val pictures = HashMap<String, List<String?>>()
     val reviews = HashMap<String, MutableMap<String, ReviewData>>()
     val parts = HashMap<String, MutableMap<String, PartData>>()
+    /** Of every item, its parts a whole table of contents read last did not name: taken off the site. */
+    val partsTakenOff = HashMap<String, MutableSet<String>>()
     /** Every series kept, by its key: the last word of its page. */
     val series = LinkedHashMap<String, SeriesData>()
     /** Of every series, the places of its works its works' own pages told: item to position. */
@@ -52,7 +54,9 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
             override fun find(itemId: String) = heads[itemId]
 
             override fun remove(itemId: String) {
-                listOf(heads, facets, numbers, texts, pictures, reviews, parts).forEach { it.remove(itemId) }
+                listOf(heads, facets, numbers, texts, pictures, reviews, parts, partsTakenOff).forEach {
+                    it.remove(itemId)
+                }
                 seriesPlaces.values.forEach { it.remove(itemId) }
                 signalValues.keys.removeIf { it.first == itemId }
             }
@@ -116,8 +120,11 @@ class MemorySourceContext(override val sourceId: String = "test") : SourceContex
             override fun reviewContents(itemId: String): Map<String, String> =
                 reviews[itemId].orEmpty().mapValues { it.value.content }
 
-            override fun saveParts(itemId: String, parts: List<PartData>) {
+            override fun saveParts(itemId: String, parts: List<PartData>, whole: Boolean) {
                 val own = this@MemorySourceContext.parts.getOrPut(itemId) { LinkedHashMap() }
+                val off = partsTakenOff.getOrPut(itemId) { HashSet() }
+                off -= parts.map { it.id }.toSet()
+                if (whole) off += own.keys - parts.map { it.id }.toSet()
                 parts.forEach { p ->
                     val known = own[p.id]
                     own[p.id] =

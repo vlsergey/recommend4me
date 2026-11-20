@@ -13,18 +13,21 @@ import org.jooq.impl.DSL
  */
 class PartCounts(private val db: DSLContext, private val store: PartStore) {
 
-    /** The words and the characters of every part of the item [itemId] that has a text counted, summed, kept. */
+    /**
+     * The words and the characters of every part on the site of the item [itemId] that has a text counted, summed,
+     * kept.
+     */
     fun totalled(itemId: String) {
         val sum =
             db.select(DSL.sum(PART.WORDS), DSL.sum(PART.CHARS))
                 .from(PART)
-                .where(PART.ITEM_ID.eq(itemId), PART.CHARS.isNotNull)
+                .where(PART.ITEM_ID.eq(itemId), PART.CHARS.isNotNull, onSite)
                 .fetchOne()
         // The classes of the characters of every text of the item's, read of the store: an item's few
         val parts =
             db.select(PART.PART_ID)
                 .from(PART)
-                .where(PART.ITEM_ID.eq(itemId), PART.CONTENT_HASH.isNotNull)
+                .where(PART.ITEM_ID.eq(itemId), PART.CONTENT_HASH.isNotNull, onSite)
                 .fetch(PART.PART_ID)
         val classes = IntArray(CharClasses.NAMES.size)
         store.texts(itemId, parts.filterNotNull()).values.forEach { text ->

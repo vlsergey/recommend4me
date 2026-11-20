@@ -165,7 +165,8 @@ class Ao3Pages(private val context: SourceContext) {
 
     /**
      * The chapters: every one the menu of the chapters names, without its text, and the text of every chapter the page
-     * shows. A work of one chapter names none: its text is its only part.
+     * shows. A work of one chapter names none: its text is its only part. The menu names every chapter the work has on
+     * the site.
      */
     private fun chapters(doc: Document, id: String, title: String) {
         val named =
@@ -191,7 +192,7 @@ class Ao3Pages(private val context: SourceContext) {
             }
         val parts = named.filter { n -> shown.none { it.id == n.id } } + shown
         if (parts.isNotEmpty()) {
-            items.saveParts(id, parts)
+            items.saveParts(id, parts, whole = named.isNotEmpty())
             return
         }
         doc.selectFirst("#chapters > div.userstuff")
@@ -203,7 +204,8 @@ class Ao3Pages(private val context: SourceContext) {
     }
 
     /**
-     * The table of contents (/works/<id>/navigate): every chapter with the day it came out — of a work known already.
+     * The table of contents (/works/<id>/navigate): every chapter with the day it came out — of a work known already;
+     * every chapter the work has on the site.
      */
     private fun contents(doc: Document, id: String): Boolean {
         val parts =
@@ -215,7 +217,7 @@ class Ao3Pages(private val context: SourceContext) {
                     val day = li.selectFirst("span.datetime")?.text()?.trim()?.removePrefix("(")?.removeSuffix(")")
                     PartData(chapterId, i, NUMBERED.replace(a.text().trim(), ""), null, day?.let(::isoDate))
                 }
-        if (parts.isNotEmpty()) items.saveParts(id, parts)
+        if (parts.isNotEmpty()) items.saveParts(id, parts, whole = true)
         return parts.isNotEmpty()
     }
 

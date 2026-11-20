@@ -48,8 +48,8 @@ internal class KeptOutItems(
         if (itemId !in out) items.saveReviews(itemId, reviews)
     }
 
-    override fun saveParts(itemId: String, parts: List<PartData>) {
-        if (itemId !in out) items.saveParts(itemId, parts)
+    override fun saveParts(itemId: String, parts: List<PartData>, whole: Boolean) {
+        if (itemId !in out) items.saveParts(itemId, parts, whole)
     }
 
     override fun placeInSeries(itemId: String, key: String, position: Int) {

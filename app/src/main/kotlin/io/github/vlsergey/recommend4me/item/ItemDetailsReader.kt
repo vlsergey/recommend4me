@@ -273,6 +273,7 @@ class ItemDetailsReader(
                 it.title,
                 it.publishedAt?.atOffset(ZoneOffset.UTC),
                 model.parts[it.partId],
+                it.takenOffAt?.atOffset(ZoneOffset.UTC),
             )
         }
 
@@ -315,7 +316,8 @@ class ItemDetailsReader(
                 numbers = numberValues(s, s.items.numbers(m.id), fields, withSite = true),
                 reviewCount = s.reviews.countOf(m.id),
                 pictureCount = s.pictures.ofItem(m.id, encoder).size,
-                partCount = s.parts.ofItem(m.id).size,
+                // The chapters the site has now: those taken off it are not counted
+                partCount = s.parts.ofItem(m.id).count { it.takenOffAt == null },
                 canRefresh = s.source.downloadsPages,
                 series = siteSeries,
                 seriesPosition =

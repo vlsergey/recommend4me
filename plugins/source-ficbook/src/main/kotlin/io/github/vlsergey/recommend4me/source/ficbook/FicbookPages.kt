@@ -142,7 +142,7 @@ class FicbookPages(private val context: SourceContext) {
             .firstNotNullOfOrNull { PageText.number(it.text()) }
             ?.let { items.setNumbers(id, mapOf(COMMENTS to it.toDouble())) }
         marks(doc, id)
-        if (parts.isNotEmpty()) items.saveParts(id, parts)
+        if (parts.isNotEmpty()) items.saveParts(id, parts, whole = true)
         // A work of one part has its text on its own page, without a table of contents
         else
             doc.selectFirst("#content")?.let { content ->
@@ -170,7 +170,10 @@ class FicbookPages(private val context: SourceContext) {
         EDITORS.forEach { (mark, facet) -> items.setFacet(id, facet, people[mark].orEmpty().filterNotNull()) }
     }
 
-    /** The parts the work's table of contents names, each with the day it came out, without their texts. */
+    /**
+     * The parts the work's table of contents names, each with the day it came out, without their texts: every part the
+     * work has on the site.
+     */
     private fun contents(doc: Document): List<PartData> =
         doc.select("ul.list-of-fanfic-parts li.part").mapIndexedNotNull { i, li ->
             val a = li.selectFirst("a.part-link[href^=/readfic/]") ?: return@mapIndexedNotNull null

@@ -87,6 +87,11 @@ class AuthorTodayPagesTest {
         assertEquals(listOf("6337965", "6344849", "6362286"), parts.keys.toList())
         assertEquals("Глава 1. Прикрывая тылы", parts.getValue("6337965").title)
         assertNull(parts.getValue("6337965").content)
+        assertEquals(emptySet(), context.partsTakenOff.getValue("661269"))
+        // The table of contents is every chapter the work has: one it no longer names is taken off the site
+        val fewer = Regex("<li[^>]*>(?:(?!</li>).)*?/reader/661269/6362286.*?</li>", RegexOption.DOT_MATCHES_ALL)
+        capture(context, "https://author.today/work/661269", page("work-661269.html").replace(fewer, ""))
+        assertEquals(setOf("6362286"), context.partsTakenOff.getValue("661269"))
         // A card of the work read later adds nothing of its genres and takes none of its tags away
         capture(context, "https://author.today/work/genre/fantasy", page("genre-fantasy.html"))
         assertEquals(tags, context.facets.getValue("661269").getValue("tag"))

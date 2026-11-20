@@ -23,13 +23,16 @@ data class PartMark(
  */
 class PartMarks(private val db: DSLContext) {
 
-    /** Of every part with a text of the items [ids] (every item when null), in their order: item to its parts. */
+    /**
+     * Of every part on the site with a text of the items [ids] (every item when null), in their order: item to its
+     * parts.
+     */
     fun of(ids: Collection<String>?): Map<String, List<PartMark>> {
         val out = HashMap<String, MutableList<PartMark>>()
         fun read(only: Collection<String>?) =
             db.select(PART.ITEM_ID, PART.PART_ID, PART.TITLE, PART.CONTENT_HASH, PART.ENCODER, PART.ENCODED_HASH)
                 .from(PART)
-                .where(PART.CONTENT_HASH.isNotNull)
+                .where(PART.CONTENT_HASH.isNotNull, onSite)
                 .and(only?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition())
                 .orderBy(PART.ITEM_ID, PART.POSITION)
                 .fetch {

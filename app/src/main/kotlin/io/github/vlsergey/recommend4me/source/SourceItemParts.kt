@@ -10,9 +10,12 @@ import org.springframework.context.ApplicationEventPublisher
  */
 internal class SourceItemParts(private val store: SourceStore, private val events: ApplicationEventPublisher) :
     ItemPartStore {
-    override fun saveParts(itemId: String, parts: List<PartData>) {
-        store.writing.withLock { store.parts.save(itemId, parts) }
-        if (parts.any { it.content != null }) events.publishEvent(SiteItemChapterChangeEvent(store.id, listOf(itemId)))
+    override fun saveParts(itemId: String, parts: List<PartData>, whole: Boolean) {
+        // A part taken off the site or come back changes what the work is made of, as a text written does
+        val moved = store.writing.withLock { store.parts.save(itemId, parts, whole) }
+        if (moved || parts.any { it.content != null }) {
+            events.publishEvent(SiteItemChapterChangeEvent(store.id, listOf(itemId)))
+        }
     }
 
     override fun parts(itemId: String): Map<String, Boolean> =

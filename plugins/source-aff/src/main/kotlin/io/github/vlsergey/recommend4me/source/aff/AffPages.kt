@@ -141,7 +141,7 @@ class AffPages(private val context: SourceContext) {
 
     /**
      * The chapters: every one the menu names, without its text, and the text of the one the page shows. A work of one
-     * chapter has no menu: its text is its first chapter.
+     * chapter has no menu: its text is its first chapter. The menu names every chapter the work has on the site.
      */
     private fun chapters(doc: Document, id: String) {
         val named =
@@ -161,7 +161,7 @@ class AffPages(private val context: SourceContext) {
             )
         }
         val parts = named.filter { it.id != shown?.id } + listOfNotNull(shown)
-        if (parts.isNotEmpty()) items.saveParts(id, parts)
+        if (parts.isNotEmpty()) items.saveParts(id, parts, whole = named.isNotEmpty())
     }
 
     // --- Reviews ---

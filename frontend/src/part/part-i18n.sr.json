@@ -4,6 +4,9 @@
   "Parts.more": "Još {{n, number}}",
   "Parts.noText": "Tekst nije sačuvan",
   "Parts.showText": "Prikaži tekst",
+  "Parts.takenOff": "skinuto sa sajta {{date}}",
+  "Parts.takenOffCount": "skinuto sa sajta: {{n, number}}",
+  "Parts.takenOffHint": "Ovog poglavlja više nema u sadržaju sajta: njegov tekst je sačuvan, ali ga ni predviđanje ni pretraga ne čitaju",
   "Parts.upDown": "<up>podižu {{up, number}}</up>, <down>spuštaju {{down, number}}</down>",
   "Parts.upDownHint": "Koliko sačuvanih poglavlja podiže predviđanje, a koliko ga spušta — svako samo za sebe",
   "Parts.withText": "tekst sačuvan za {{n, number}}"
