@@ -116,7 +116,11 @@ private class ShownWorks(
     private val fandomFacet = UniverseFacet.fandomFacet(s.schema)
     private val facets = s.items.facetsOf(ids)
     private val authorNames = namesOf(authorFacet)
-    private val normalized = s.authors.bindingsOf(s.id)
+    // The normalized authors of these works' authors alone, by their keys: never every binding of the site
+    private val normalized =
+        authorFacet
+            ?.let { f -> s.authors.bindingsOf(s.id, facets.values.flatMap { it[f].orEmpty() }.distinct()) }
+            .orEmpty()
     private val fandomNames = namesOf(fandomFacet)
 
     // The values the search compares, of these works alone, the models' as the index of the list keeps them: shown by
