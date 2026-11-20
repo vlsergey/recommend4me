@@ -417,6 +417,11 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertTrue(has(different()), "among those said different")
         duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
         assertTrue(has(open()), "back among the open pairs")
+        // Made one work by another way than its own answer — a work's screen —: struck out as the page is chosen
+        corrections.linkItem(a.source, a.id, ItemRef(b.source, b.id))
+        assertTrue(!has(open()), "one work by a work's screen: no open pair")
+        corrections.unlinkItem(a.source, a.id, b.source, b.id)
+        duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
     }
 
     private fun keysOf(a: ItemKey, b: ItemKey) = setOf(a.source to a.id, b.source to b.id)

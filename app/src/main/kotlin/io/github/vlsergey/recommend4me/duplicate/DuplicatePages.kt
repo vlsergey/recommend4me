@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.series.SeriesDifferences
 import io.github.vlsergey.recommend4me.source.Stores
+import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.worklist.ListIndexes
 import java.time.Instant
 import java.time.ZoneOffset
@@ -62,7 +63,7 @@ class DuplicatePages(
         val type = stores.type(typeId) ?: return null
         val search = type.duplicates.search()
         val chances = models.of(type)
-        val (total, chosen) = type.duplicates.choice.page(choice, offset.coerceAtLeast(0), limit.coerceIn(1, MAX_PAGE))
+        val (total, chosen) = chosen(type, choice, offset.coerceAtLeast(0), limit.coerceIn(1, MAX_PAGE))
         val layers = type.duplicates.reads.ofPairs(chosen.map { it.pair }).associateBy { it.pair }
         val said =
             Said(
@@ -83,6 +84,26 @@ class DuplicatePages(
             works = search?.works,
             learnt = chances?.learnt == true,
         )
+    }
+
+    /**
+     * The pairs the [choice] holds from [offset], [limit] of them, and how many in all — every open one of them checked
+     * against the words on the works as they are now: a pair of two works made one, or said different or related, by
+     * any way but its own answer — through another pair of the same works, on a work's screen, by a site — is struck
+     * out of the open ones there and then, till the next search, and the page chosen again without it (owner,
+     * 2026-11-21: "merged already, but still shown").
+     */
+    private fun chosen(type: TypeStore, choice: PairChoice, offset: Int, limit: Int): Pair<Int, List<ChosenPair>> {
+        while (true) {
+            val page = type.duplicates.choice.page(choice, offset, limit)
+            val open = page.second.filter { it.answer == null }.map { it.pair }
+            val words =
+                type.links.words(open).mapNotNull { (pair, word) ->
+                    word?.let { w -> DuplicateAnswer.entries.firstOrNull { it.name == w } }?.let { pair to it }
+                }
+            if (words.isEmpty()) return page
+            words.forEach { (pair, word) -> type.duplicates.said(pair, word) }
+        }
     }
 
     /**
