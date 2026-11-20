@@ -143,22 +143,29 @@ class ListIndexing(
         if (anew) index.clear()
         val whole = if (anew) type.sources.map { it.id }.toSet() else w.whole
         val named = named(index, clusters, w, whole)
+        val gathered = System.currentTimeMillis()
         var written = whole.sumOf { writeWhole(type, it, index, clusters, anew) }
         val from = HashMap<WorkScope, TaskCursor>()
         named.forEach { (sourceId, ids) ->
             type.source(sourceId)?.let { written += writeNamed(type, it, ids, index, clusters, from) }
         }
+        val replaced = System.currentTimeMillis()
         index.commit()
+        val committed = System.currentTimeMillis()
         tasks.keys.done(work(typeId), taken)
         // Of a source written whole, every work from the first
         val told = if (whole.isEmpty()) from else WorkScope.entries.associateWith { TaskCursor.FIRST }
         if (told.isNotEmpty()) events.publishEvent(WorkDocumentWriteEvent(typeId, told, anew))
         log.info(
-            "{}: the index of the list written in {} ms: {} sources whole, {} items made anew",
+            "{}: the index of the list written in {} ms: {} sources whole, {} items made anew — the items named {}, " +
+                "read and replaced {}, committed {}",
             typeId,
             System.currentTimeMillis() - started,
             whole.size,
             written,
+            gathered - started,
+            replaced - gathered,
+            committed - replaced,
         )
     }
 
