@@ -7,7 +7,6 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.textvector.TextVectors
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
-import io.github.vlsergey.recommend4me.vector.Vectors
 
 /**
  * THE TEXTS OF A SITE'S WORKS COMPARED BOTH WAYS (owner, 2026-11-19: "for every text field both the trigram ones and
@@ -21,29 +20,34 @@ import io.github.vlsergey.recommend4me.vector.Vectors
 internal class TextsCompared(
     val titleVectors: Rows,
     val titled: BooleanArray,
+    /** The vectors of the descriptions by the encoder, a unit row a byte a number; [described] false of none. */
+    val descriptions: Rows,
+    val described: BooleanArray,
     val letters: List<Rows>,
     val letterLengths: List<FloatArray>,
 ) {
     companion object {
         /**
-         * Of the works [ids] of the source [s], ascending: the vectors of their titles by the [encoder], the letters.
+         * Of the works [ids] of the source [s], ascending: the vectors of their titles and their descriptions by the
+         * [encoder] — of every work of a site in one pass of the table of the vectors, each decoded into one buffer
+         * (2026-11-20: two passes and two arrays of every vector took 46 of the 57 seconds of reading ficbook) —, the
+         * letters.
          */
         fun read(s: SourceStore, encoder: String, ids: List<String>): TextsCompared {
-            val at = ids.withIndex().associate { it.value to it.index }
-            val titled = BooleanArray(ids.size)
-            var titleVectors: ByteMatrix? = null
-            fun put(id: String, vector: FloatArray) {
-                val i = at[id] ?: return
-                val into = titleVectors ?: ByteMatrix(ids.size, vector.size).also { titleVectors = it }
-                if (vector.size != into.cols) return
-                into.put(i, Vectors.unit(vector))
-                titled[i] = true
-            }
-            // Of every work of a site, every title's vector streamed; of a few, theirs by their ids
-            if (ids.size > FEW) s.textVectors.forEach(encoder, listOf(TextVectors.TITLE)) { id, _, v -> put(id, v) }
+            val at = HashMap<String, Int>(ids.size * 2).also { m -> ids.forEachIndexed { i, id -> m[id] = i } }
+            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
+            val titles = UnitRows(ids.size)
+            val descriptions = UnitRows(ids.size)
+            fun rowsOf(key: String) = if (key == TextVectors.TITLE) titles else descriptions
+            val keys = listOfNotNull(TextVectors.TITLE, description)
+            // Of every work of a site, every vector streamed as kept; of a few, theirs by their ids
+            if (ids.size > FEW)
+                s.textVectors.forEachHalves(encoder, keys) { id, key, halves ->
+                    at[id]?.let { rowsOf(key).putHalves(it, halves) }
+                }
             else
-                s.textVectors.ofMany(ids, encoder, listOf(TextVectors.TITLE)).forEach { (id, texts) ->
-                    texts[TextVectors.TITLE]?.let { put(id, it) }
+                s.textVectors.ofMany(ids, encoder, keys).forEach { (id, texts) ->
+                    texts.forEach { (key, v) -> at[id]?.let { rowsOf(key).put(it, v) } }
                 }
             val texts = textsOf(s, ids, at)
             // The description long, every row whole; the names of the fandoms and the line of the characters short
@@ -53,8 +57,10 @@ internal class TextsCompared(
                     else Letters.rows(texts.getValue(it))
                 }
             return TextsCompared(
-                titleVectors ?: ByteMatrix(ids.size, 0),
-                titled,
+                titles.rows(),
+                titles.had,
+                descriptions.rows(),
+                descriptions.had,
                 rows.map { it.first },
                 rows.map { it.second },
             )
@@ -116,5 +122,46 @@ internal class TextsCompared(
 
         /** Of more works than so many, every work's texts streamed and picked from: one pass, not a query a chunk. */
         private const val FEW = 10_000
+    }
+}
+
+/**
+ * The vectors of one text of [count] works as they come, a unit row a byte a number ([ByteMatrix]) of the numbers of
+ * the first one; which have one ([had]). A vector of another number of numbers passed over. Decoded into one buffer: no
+ * array a vector.
+ */
+private class UnitRows(private val count: Int) {
+    private var matrix: ByteMatrix? = null
+    private var buffer = FloatArray(0)
+    val had = BooleanArray(count)
+
+    /** The vector of the [i]-th work of [halves]: half-precision numbers, little-endian, as kept. */
+    fun putHalves(i: Int, halves: ByteArray) {
+        val n = halves.size / 2
+        if (buffer.size != n) buffer = FloatArray(n)
+        for (q in 0 until n) {
+            val bits = (halves[2 * q].toInt() and BYTE) or ((halves[2 * q + 1].toInt() and BYTE) shl Byte.SIZE_BITS)
+            buffer[q] = java.lang.Float.float16ToFloat(bits.toShort())
+        }
+        put(i, buffer)
+    }
+
+    /** The vector [v] of the [i]-th work, made of unit length in place. */
+    fun put(i: Int, v: FloatArray) {
+        val into = matrix ?: ByteMatrix(count, v.size).also { matrix = it }
+        if (v.size != into.cols) return
+        var norm = 0.0
+        for (x in v) norm += x.toDouble() * x
+        val length = kotlin.math.sqrt(norm).toFloat()
+        if (length > 0f) for (q in v.indices) v[q] /= length
+        into.put(i, v)
+        had[i] = true
+    }
+
+    /** The rows read; of none, rows of no column. */
+    fun rows(): ByteMatrix = matrix ?: ByteMatrix(count, 0)
+
+    private companion object {
+        const val BYTE = 0xff
     }
 }

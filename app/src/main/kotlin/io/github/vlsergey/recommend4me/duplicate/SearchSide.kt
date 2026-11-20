@@ -3,16 +3,13 @@ package io.github.vlsergey.recommend4me.duplicate
 import io.github.vlsergey.recommend4me.author.AuthorKin
 import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.correction.Corrected
-import io.github.vlsergey.recommend4me.matrix.ByteMatrix
 import io.github.vlsergey.recommend4me.matrix.Rows
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.NumberDef
 import io.github.vlsergey.recommend4me.source.NumberRole
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.source.TextRole
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
-import io.github.vlsergey.recommend4me.vector.Vectors
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import org.slf4j.LoggerFactory
 
@@ -112,7 +109,6 @@ internal class SearchSide(
             val (titles, titleLengths) = Letters.rows(compared.titles)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val lettered = System.currentTimeMillis()
-            val (descriptions, described) = descriptionsOf(s, encoder, ids)
             val texts = TextsCompared.read(s, encoder, ids)
             val vectors = System.currentTimeMillis()
             val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it] }, s.works.allOf(s.id))
@@ -134,35 +130,14 @@ internal class SearchSide(
                     titleLengths,
                     authorNames,
                     authorLengths,
-                    descriptions,
-                    described,
+                    texts.descriptions,
+                    texts.described,
                     placed,
                     sizes,
                     compared.authors,
                     texts,
                 )
             }
-        }
-
-        /**
-         * The vectors of the descriptions of the works [ids] by the [encoder], unit rows a byte a number (ByteMatrix),
-         * and which have one: of no column, a site of none.
-         */
-        private fun descriptionsOf(s: SourceStore, encoder: String, ids: List<String>): Pair<ByteMatrix, BooleanArray> {
-            val described = BooleanArray(ids.size)
-            val description =
-                s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-                    ?: return ByteMatrix(ids.size, 0) to described
-            val at = ids.withIndex().associate { it.value to it.index }
-            var rows: ByteMatrix? = null
-            s.textVectors.forEach(encoder, listOf(description)) { id, _, vector ->
-                val i = at[id] ?: return@forEach
-                val into = rows ?: ByteMatrix(ids.size, vector.size).also { rows = it }
-                if (vector.size != into.cols) return@forEach
-                into.put(i, Vectors.unit(vector))
-                described[i] = true
-            }
-            return (rows ?: ByteMatrix(ids.size, 0)) to described
         }
 
         /**
@@ -182,20 +157,6 @@ internal class SearchSide(
             val fields = s.corrections.fieldsOf(own)
             val (titles, titleLengths) =
                 Letters.rows(own.map { Corrected.title(heads.getValue(it).title, fields[it].orEmpty()) })
-            val description = s.schema.texts.firstOrNull { it.role == TextRole.DESCRIPTION }?.key
-            val vectors = description?.let { s.textVectors.ofMany(own, encoder, listOf(it)) }.orEmpty()
-            val width = vectors.values.firstNotNullOfOrNull { it[description] }?.size ?: 0
-            val descriptions = ByteMatrix(own.size, width)
-            val described = BooleanArray(own.size)
-            own.forEachIndexed { i, id ->
-                vectors[id]
-                    ?.get(description)
-                    ?.takeIf { it.size == width }
-                    ?.let { v ->
-                        descriptions.put(i, Vectors.unit(v))
-                        described[i] = true
-                    }
-            }
             val numbers = sizeNumbers(s)
             val compared = ComparedValues(s, index).of(own, numbers.keys)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
@@ -209,8 +170,8 @@ internal class SearchSide(
                     titleLengths,
                     authorNames,
                     authorLengths,
-                    descriptions,
-                    described,
+                    texts.descriptions,
+                    texts.described,
                     placed,
                     sizes,
                     compared.authors,
