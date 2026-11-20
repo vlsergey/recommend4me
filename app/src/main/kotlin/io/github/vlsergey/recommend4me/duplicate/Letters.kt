@@ -52,11 +52,8 @@ internal object Letters {
     fun rows(texts: List<String?>): Pair<SparseRows, FloatArray> {
         val lengths = FloatArray(texts.size)
         val rows =
-            SparseRows.of(texts.size, WIDTH) { i ->
-                counted(texts[i])?.let { (row, length) ->
-                    lengths[i] = length
-                    row
-                }
+            SparseRows.filled(texts.size, WIDTH) { i, into ->
+                counted(texts[i], into)?.let { lengths[i] = it } != null
             }
         return rows to lengths
     }
@@ -65,26 +62,35 @@ internal object Letters {
     fun wholeRows(texts: List<String?>): Pair<HalfMatrix, FloatArray> {
         val rows = HalfMatrix(texts.size, WIDTH)
         val lengths = FloatArray(texts.size)
+        val buffer = ThreadLocal.withInitial { FloatArray(WIDTH) }
         IntStream.range(0, texts.size).parallel().forEach { i ->
-            counted(texts[i])?.let { (row, length) ->
+            val into = buffer.get()
+            counted(texts[i], into)?.let { length ->
                 lengths[i] = length
-                rows.put(i, row)
+                rows.put(i, into)
+                into.fill(0f)
             }
         }
         return rows to lengths
     }
 
-    /** The counts of the trigrams of [text] as a unit row, and their length; none of a string of none. */
-    private fun counted(text: String?): Pair<FloatArray, Float>? {
+    /**
+     * The counts of the trigrams of [text] as a unit row, written into [into] — nought before —, and their length; none
+     * of a string of none, [into] left as it was.
+     */
+    private fun counted(text: String?, into: FloatArray): Float? {
         val normal = text?.let(::normalized)?.takeIf { it.isNotEmpty() } ?: return null
-        val counts = FloatArray(WIDTH)
         // Padded by a space either side: a word's first and last letters a trigram of their own
-        val padded = " $normal "
-        for (k in 0..padded.length - TRIGRAM) {
-            val hash = (padded[k].code * PRIME + padded[k + 1].code) * PRIME + padded[k + 2].code
-            counts[(hash * SPREAD) ushr (Int.SIZE_BITS - BITS)]++
+        val last = normal.length + 1
+        fun at(k: Int) = if (k == 0 || k == last) ' ' else normal[k - 1]
+        for (k in 0..last + 1 - TRIGRAM) {
+            val hash = (at(k).code * PRIME + at(k + 1).code) * PRIME + at(k + 2).code
+            into[(hash * SPREAD) ushr (Int.SIZE_BITS - BITS)]++
         }
-        val length = sqrt(counts.sumOf { (it * it).toDouble() }).toFloat()
-        return FloatArray(WIDTH) { counts[it] / length } to length
+        var sum = 0.0
+        for (c in into) sum += c.toDouble() * c
+        val length = sqrt(sum).toFloat()
+        for (q in into.indices) into[q] /= length
+        return length
     }
 }

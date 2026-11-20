@@ -93,14 +93,33 @@ private constructor(
          * The [count] rows of [cols] numbers [row] gives, a row on a core of its own: of each its numbers not nought, a
          * row of none of null.
          */
-        fun of(count: Int, cols: Int, row: (Int) -> FloatArray?): SparseRows {
+        fun of(count: Int, cols: Int, row: (Int) -> FloatArray?): SparseRows =
+            filled(count, cols) { i, into -> row(i)?.copyInto(into) != null }
+
+        /**
+         * The [count] rows of [cols] numbers [fill] writes, a row on a core of its own, into a buffer of the core's —
+         * nought before, and made nought again after: no array a row (2026-11-20, the trigrams of five texts of 1.4
+         * million works) —; false of a row of none, the buffer left as it was.
+         */
+        fun filled(count: Int, cols: Int, fill: (i: Int, into: FloatArray) -> Boolean): SparseRows {
             val own = arrayOfNulls<ShortArray>(count)
             val ownValues = arrayOfNulls<ShortArray>(count)
+            val buffer = ThreadLocal.withInitial { FloatArray(cols) }
             IntStream.range(0, count).parallel().forEach { i ->
-                val v = row(i) ?: return@forEach
-                val kept = (0 until cols).filter { v[it] != 0f }
-                own[i] = ShortArray(kept.size) { kept[it].toShort() }
-                ownValues[i] = ShortArray(kept.size) { java.lang.Float.floatToFloat16(v[kept[it]]) }
+                val v = buffer.get()
+                if (!fill(i, v)) return@forEach
+                var n = 0
+                for (q in 0 until cols) if (v[q] != 0f) n++
+                val columns = ShortArray(n)
+                val halves = ShortArray(n)
+                var k = 0
+                for (q in 0 until cols) if (v[q] != 0f) {
+                    columns[k] = q.toShort()
+                    halves[k++] = java.lang.Float.floatToFloat16(v[q])
+                    v[q] = 0f
+                }
+                own[i] = columns
+                ownValues[i] = halves
             }
             val at = IntArray(count + 1)
             for (i in 0 until count) at[i + 1] = at[i] + (own[i]?.size ?: 0)

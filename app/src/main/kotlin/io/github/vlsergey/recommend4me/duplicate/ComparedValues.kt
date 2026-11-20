@@ -208,7 +208,7 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
 }
 
 /** The first [count] numbers of [a] ascending, each once. */
-private fun ascendingOnce(a: IntArray, count: Int): IntArray {
+internal fun ascendingOnce(a: IntArray, count: Int): IntArray {
     a.sort(0, count)
     var k = 0
     for (q in 0 until count) if (k == 0 || a[k - 1] != a[q]) a[k++] = a[q]

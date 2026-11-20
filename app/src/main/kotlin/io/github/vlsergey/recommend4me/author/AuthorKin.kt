@@ -20,6 +20,13 @@ class AuthorKin(told: Map<Pair<Long, Long>, Boolean>) {
     fun of(author: Long): Set<Long> = setOf(author) + partly[author].orEmpty()
 
     /**
+     * The [authors] with every author counted as one of them, each once: of authors none is partly one with, [authors]
+     * themselves — no set an author of a million works (2026-11-20).
+     */
+    fun ofAll(authors: LongArray): LongArray =
+        if (authors.none { it in partly }) authors else authors.flatMap { of(it) }.distinct().toLongArray()
+
+    /**
      * Whether the two lists of authors have one in common, fully or in part: of several writing together, one is
      * enough.
      */

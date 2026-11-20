@@ -11,6 +11,7 @@ import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.universe.UniverseFacet
 import io.github.vlsergey.recommend4me.universe.UniverseFacets
 import io.github.vlsergey.recommend4me.worklist.ListIndex
+import java.util.stream.IntStream
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(SearchSide::class.java)
@@ -54,16 +55,20 @@ internal class SearchSide(
      * the site has not), and with its authors every author the dictionary gives as one with them ([kin]).
      */
     fun works(rarity: FloatArray, familyOf: IntArray, sizeKeys: List<String>, kin: AuthorKin): SiteWorks {
-        val weights =
-            Array(values.size) { i ->
-                val w = FloatArray(values[i].size) { k -> rarity[values[i][k]] }
-                val norms = HashMap<Int, Double>()
-                values[i].forEachIndexed { k, v -> norms.merge(familyOf[v], w[k].toDouble() * w[k], Double::plus) }
-                values[i].forEachIndexed { k, v ->
-                    norms[familyOf[v]]?.let { n -> if (n > 0) w[k] /= Math.sqrt(n).toFloat() }
-                }
-                w
-            }
+        // A work on a core, its facets' lengths summed in a buffer of the core's: no map a work (2026-11-20)
+        val families = (familyOf.maxOrNull() ?: -1) + 1
+        val buffer = ThreadLocal.withInitial { DoubleArray(families) }
+        val made = arrayOfNulls<FloatArray>(values.size)
+        IntStream.range(0, values.size).parallel().forEach { i ->
+            val own = values[i]
+            val norms = buffer.get()
+            val w = FloatArray(own.size) { k -> rarity[own[k]] }
+            for (k in own.indices) norms[familyOf[own[k]]] += w[k].toDouble() * w[k]
+            for (k in own.indices) norms[familyOf[own[k]]].let { n -> if (n > 0) w[k] /= Math.sqrt(n).toFloat() }
+            for (v in own) norms[familyOf[v]] = 0.0
+            made[i] = w
+        }
+        val weights = Array(values.size) { made[it]!! }
         return SiteWorks(
             store.id,
             ids,
@@ -78,7 +83,7 @@ internal class SearchSide(
             LongArray(values.size) { i -> values[i].fold(0L) { bits, v -> bits or (1L shl familyOf[v]) } },
             Array(sizeKeys.size) { k -> sizes[sizeKeys[k]] ?: DoubleArray(ids.size) },
             authors,
-            Array(ids.size) { i -> authors[i].flatMap { kin.of(it) }.distinct().toLongArray() },
+            Array(ids.size) { i -> kin.ofAll(authors[i]) },
             texts.titleVectors,
             texts.titled,
             texts.letters,
@@ -233,7 +238,12 @@ internal class ReadSide(
         val place = IntArray(names.size) { k -> names[k]?.let { places.getOrPut(it) { places.size } } ?: -1 }
         return side(
             Array(numbered.size) { i ->
-                numbered[i].map { place[it] }.filter { it >= 0 }.distinct().sorted().toIntArray()
+                numbered[i].let { own ->
+                    val out = IntArray(own.size)
+                    var n = 0
+                    for (v in own) place[v].let { if (it >= 0) out[n++] = it }
+                    ascendingOnce(out, n)
+                }
             }
         )
     }
