@@ -136,6 +136,7 @@ class Duplicates(
         val now = Instant.now()
         type.duplicates.replace(
             likely,
+            PairScore.of(type, likely, said, fitted.same ?: model.prior(), fitted.series),
             DuplicateSearch(
                 now,
                 encoder,
@@ -208,6 +209,8 @@ class Duplicates(
             DuplicateAnswer.DIFFERENT -> type.links.distinct(a, b, now)
             else -> type.links.relate(a, b, verdict.name, now)
         }
+        // Struck out of the open pairs at once, till the next search tells every word anew
+        type.duplicates.said(type.links.ordered(a, b), verdict)
         fitting.afterAnswer(type)
         return true
     }
@@ -225,6 +228,7 @@ class Duplicates(
         val now = Instant.now()
         if (type.links.word(a, b, now) == TypeLinkRepository.SAME) type.links.unlink(a, b, now)
         else type.links.takeBack(a, b, now)
+        type.duplicates.said(type.links.ordered(a, b), null)
         fitting.afterAnswer(type)
     }
 

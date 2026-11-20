@@ -107,7 +107,7 @@ class TwoSitesTest : TwoSitesTestBase() {
         duplicates.searchDuplicates("books")
         background.run()
         val pair = type.links.ordered(z1, z2)
-        val kept = type.duplicates.all().first { it.pair == pair }
+        val kept = type.duplicates.reads.ofPairs(listOf(pair)).single()
         val words = if (pair.first == z1) kept.words to kept.otherWords else kept.otherWords to kept.words
         assertEquals(900f, words.first)
         assertTrue(words.second!! in 950f..1050f, words.toString())
@@ -356,7 +356,10 @@ class TwoSitesTest : TwoSitesTestBase() {
         val river = "tags:${tagOf("alpha", "river")}"
         assertTrue(type.duplicates.rarity.of(listOf(river)).isNotEmpty(), "$river of the index's ${listed()}")
         // Of a pair the search kept — of the works of the other classes too, in the one application of the tests
-        val kept = type.duplicates.all().first { it.first.source == "alpha" && it.second.source == "beta" }
+        val kept = buildList {
+            type.duplicates.reads.forEach { add(it) }
+        }
+            .first { it.first.source == "alpha" && it.second.source == "beta" }
         val worked =
             LoosePairs.candidate(
                 type,
@@ -369,7 +372,54 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertEquals(kept.facets.keys, worked.facets.keys)
         kept.facets.forEach { (k, v) -> assertEquals(v, worked.facets.getValue(k), 1e-3f, k) }
         assertEquals(kept.sameAuthor, worked.sameAuthor)
+        pageChosenInTheDatabase(kept.first, kept.second)
     }
+
+    /**
+     * A page of the pairs chosen in the database: the open ones by the chance kept with them, the likeliest first, of
+     * the total counted alike; a pair answered struck out of them at once and among those of its word, and back when
+     * the word is taken back.
+     */
+    private fun pageChosenInTheDatabase(a: ItemKey, b: ItemKey) {
+        fun open() = duplicates.getDuplicates("books", true, 0, 200, DuplicateSort.CHANCE, null, false, false).body!!
+        fun different() =
+            duplicates
+                .getDuplicates(
+                    "books",
+                    false,
+                    0,
+                    200,
+                    DuplicateSort.CHANCE,
+                    listOf(io.github.vlsergey.recommend4me.api.model.DuplicateVerdict.DIFFERENT),
+                    false,
+                    false,
+                )
+                .body!!
+        fun has(page: io.github.vlsergey.recommend4me.api.model.DuplicatePage) =
+            page.pairs.any {
+                setOf(it.first.source to it.first.item, it.second.source to it.second.item) == keysOf(a, b)
+            }
+        val before = open()
+        assertEquals(minOf(before.total, 200), before.pairs.size)
+        val chances = before.pairs.map { it.chance!!.toDouble() }
+        assertEquals(chances.sortedDescending(), chances, "the likeliest first")
+        assertTrue(has(before), "$a, $b among the open pairs")
+        duplicates.answerDuplicate(
+            "books",
+            io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(
+                ItemRef(a.source, a.id),
+                ItemRef(b.source, b.id),
+                io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT,
+            ),
+        )
+        assertTrue(!has(open()), "struck out of the open pairs")
+        assertEquals(before.total - 1, open().total)
+        assertTrue(has(different()), "among those said different")
+        duplicates.unanswerDuplicate("books", a.source, a.id, b.source, b.id)
+        assertTrue(has(open()), "back among the open pairs")
+    }
+
+    private fun keysOf(a: ItemKey, b: ItemKey) = setOf(a.source to a.id, b.source to b.id)
 
     @Test
     fun `every word on a pair is in the journal, a word undone gives the pair the word before`() {

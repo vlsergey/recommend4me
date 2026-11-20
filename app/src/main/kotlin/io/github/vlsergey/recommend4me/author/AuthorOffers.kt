@@ -121,12 +121,14 @@ class AuthorOffers(
         val said = answers.said(type)
         val chances = models.of(type)
         val out = ArrayList<WorkPair>()
-        val kept = type.duplicates.all()
-        val found = kept.associateBy { it.pair }
+        val found = HashSet<Pair<ItemKey, ItemKey>>()
         fun tells(answer: DuplicateAnswer?) =
             answer == null || answer == DuplicateAnswer.SAME || answer == DuplicateAnswer.PARTIAL
-        kept.forEach { c ->
-            if (tells(said[c.pair])) out += WorkPair(c.first, c.second, said[c.pair], chances?.same(c))
+        // Streamed, a pair at a time, none of the candidates held: of 2.6 million read whole for a request, 4 GB
+        type.duplicates.reads.forEach { c ->
+            val answer = said[c.pair]
+            if (answer != null) found += c.pair
+            if (tells(answer)) out += WorkPair(c.first, c.second, answer, chances?.same(c))
         }
         said
             .filterKeys { it !in found }

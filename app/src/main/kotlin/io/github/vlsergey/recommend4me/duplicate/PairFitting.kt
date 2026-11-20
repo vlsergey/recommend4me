@@ -23,7 +23,6 @@ class PairFitting(
     private val stores: Stores,
     private val tasks: Tasks,
     private val models: PairModels,
-    private val answers: PairAnswers,
 ) {
     /** Whether the models of the type are to be fitted again, or being fitted: of the page of models. */
     fun isFitting(type: TypeStore) = tasks.due(work(type))
@@ -59,31 +58,32 @@ class PairFitting(
     private fun work(type: TypeStore) = Task(WHAT, type = type.id)
 
     /**
-     * The models fitted anew on the pairs kept as they are, and kept, with when and how long: none without a plugin.
+     * The models fitted anew on the pairs answered, by the words kept with them — those the user said since the search
+     * among them ([DuplicateRepository.said]) —, kept with when and how long it took, and every pair scored anew by
+     * them: what a page is chosen in the order of ([DuplicateChoice]). None without a plugin.
      */
     private fun fitAnew(type: TypeStore) {
         val model = models.model(type.id) ?: return
         val started = System.currentTimeMillis()
-        val said = answers.said(type)
-        val pairs = type.duplicates.all()
-        val fitted = PairModels.fit(model, pairs, said)
-        type.duplicates.keepModels(
-            model.id,
-            fitted.same?.pack(),
-            fitted.series?.pack(),
-            Instant.now(),
-            System.currentTimeMillis() - started,
-        )
+        val answered = type.duplicates.reads.answered()
+        val said = answered.associate { (c, word) -> c.pair to word }
+        val fitted = PairModels.fit(model, answered.map { it.first }, said)
+        val fit = System.currentTimeMillis() - started
+        type.duplicates.keepModels(model.id, fitted.same?.pack(), fitted.series?.pack(), Instant.now(), fit)
+        val same = fitted.same ?: model.prior()
+        val scored = type.duplicates.rescore { c -> same.chance(c.layers) to fitted.series?.chance(c.layers) }
         log.info(
-            "{}: the models of the pairs fitted on {} pairs, {} said one work, {} one series, {} related otherwise, " +
-                "{} different, in {} ms",
+            "{}: the models of the pairs fitted on {} pairs answered — {} said one work, {} one series, {} related " +
+                "otherwise, {} different — in {} ms, and {} pairs scored anew by them in {} ms",
             type.id,
-            pairs.size,
+            answered.size,
             said.values.count { it == DuplicateAnswer.SAME },
             said.values.count { it == DuplicateAnswer.SERIES },
             said.values.count { it.related && it != DuplicateAnswer.SERIES },
             said.values.count { it == DuplicateAnswer.DIFFERENT },
-            System.currentTimeMillis() - started,
+            fit,
+            scored,
+            System.currentTimeMillis() - started - fit,
         )
     }
 
