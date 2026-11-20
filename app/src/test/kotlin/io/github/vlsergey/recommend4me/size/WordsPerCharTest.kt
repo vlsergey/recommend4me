@@ -51,13 +51,13 @@ class WordsPerCharTest {
     }
 
     @Test
-    fun `a feature of no work moves nothing, and out of fold the model beats the mean`() {
+    fun `a feature of no work moves nothing, and held out the model beats the mean`() {
         val all = examples()
         val model = WordsPerChar.fit(all, features.names)
         assertEquals(model.log(ids("languages:ru")), model.log(ids("languages:ru", "tag:unknown")))
         val alone = all.map { SizeExample(IntArray(0), it.words, it.chars) }
-        val ofModel = WordsPerChar.outOfFold(all, features.names)
-        val ofMean = WordsPerChar.outOfFold(alone, features.names)
+        val ofModel = WordsPerChar.heldError(all, features.names)
+        val ofMean = WordsPerChar.heldError(alone, features.names)
         assertTrue(ofModel < ofMean, "$ofModel of the model, $ofMean of the mean")
     }
 

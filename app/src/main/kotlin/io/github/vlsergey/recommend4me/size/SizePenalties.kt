@@ -20,10 +20,13 @@ internal class SizePenalties(
     /** The kinds that have a feature. */
     private val present = BooleanArray(kindCount).also { p -> kinds.forEach { if (it >= 0) p[it] = true } }
 
+    /** The variance of every kind chosen ([tau]), and the error on the fold held out of the model of them. */
+    class Chosen(val tau: DoubleArray, val error: Double)
+
     /**
      * Of every kind its variance chosen of the examples' [weights], begun at [tau]; the steps solved begun at [from].
      */
-    fun chosen(weights: DoubleArray, tau: DoubleArray, from: DoubleArray?): DoubleArray {
+    fun chosen(weights: DoubleArray, tau: DoubleArray, from: DoubleArray?): Chosen {
         val training = ridge.withoutHeld(weights)
         val chosen = tau.copyOf()
         var x = from
@@ -42,7 +45,7 @@ internal class SizePenalties(
             for (k in 0 until kindCount) if (present[k]) best = along(k, chosen, best, ::error)
             if (before - best <= CHANGE * before) break
         }
-        return chosen
+        return Chosen(chosen, best)
     }
 
     /**

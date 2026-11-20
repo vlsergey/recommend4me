@@ -5,83 +5,71 @@ import kotlin.math.max
 
 /**
  * THE PENALTIES AND THE WEIGHTS OF THE WORDS TO A CHARACTER WORKED OUT OF THE DATA (owner, 2026-11-20: no number of the
- * code's own), as the variances of a model of them: the logarithm of a work's ratio is the mean and the steps of its
- * features, each step of a kind spread by the kind's variance ([Fitted.tau]: a penalty of 1/τ²), and a deviation of the
- * work's own, of two parts — the work's itself, whatever its length ([Fitted.noise]), and its count's, the fewer
- * characters the more ([Fitted.counting] / its characters): an example weighs the inverse of their sum. Worked out in
- * turns till they stand: the steps solved of the variances, the variances of the steps — a kind's of the sum of its
- * steps' squares over the number of them the data, not the penalty, tell (their effective number, MacKay's) — and of
+ * code's own), as the variances of a model of them ([Variances]): the logarithm of a work's ratio is the mean and the
+ * steps of its features, each step of a kind spread by the kind's variance (a penalty of its inverse), and a deviation
+ * of the work's own, of two parts — the work's itself, whatever its length, and its count's, the fewer characters the
+ * more: an example weighs the inverse of their sum. Worked out in turns till they stand: the kinds' variances chosen by
+ * the error on the examples held out ([SizePenalties]), the steps solved of them, and the two parts of the deviation of
  * the residuals, each of its leverage taken back, by its characters ([lengths]). [kinds]: of every feature its kind, of
  * the mean none.
  */
 internal class SizeVariances(private val rows: SizeRows, private val kinds: IntArray, private val ridge: SizeRidge) {
-    private val kindCount = (kinds.maxOrNull() ?: -1) + 1
+    private val kindCount = WordsPerChar.KINDS.size
 
     /**
-     * The steps [x] fitted of the penalties [lambda], the variances they are of, and how much each example is trusted
-     * ([trust]: of the examples of two sites, the chance they are of one text; none — every one wholly).
+     * The steps [x] fitted of the penalties [lambda], the [variances] they are of, how much each example is trusted
+     * ([trust]: of the examples of two sites, the chance they are of one text; none — every one wholly), and the error
+     * of the model on the tenth of the examples held out of its choice ([held]).
      */
     class Fitted(
         val x: DoubleArray,
         val lambda: DoubleArray,
-        val noise: Double,
-        val counting: Double,
-        val tau: DoubleArray,
+        val variances: Variances,
         private val trust: DoubleArray?,
         private val chars: DoubleArray,
+        val held: Double,
     ) {
-        /**
-         * The characters a work's own count weighs as much as the model by: its count as uncertain as its own
-         * deviation; of no deviation told at all, none — its own count is the model.
-         */
-        val sample: Double
-            get() = if (noise > 0) counting / noise else 0.0
-
         /** The weight of every example: its trust over the variance of its deviation. */
-        fun weights(): DoubleArray =
-            DoubleArray(chars.size) { (trust?.get(it) ?: 1.0) / (noise + counting / chars[it]) }
-
-        /** The variance of the deviation of a text of [chars] characters from the model. */
-        fun variance(chars: Double) = noise + counting / chars
+        fun weights(): DoubleArray = variances.weights(chars, trust)
     }
 
-    /** The model fitted, the examples trusted by [trust], begun at what [from] fitted. */
-    fun fit(trust: DoubleArray? = null, from: Fitted? = null): Fitted {
+    /**
+     * The model fitted, begun at the variances [from] — those the last fitting stood at, kept with its model: of data
+     * that changed little, one turn (2026-11-20: begun anew every time, a fitting took ten minutes).
+     */
+    fun fit(from: Variances? = null): Fitted {
         val spread = variance(rows.y)
         // Examples of one ratio — one of them, say —: nothing varies to tell a variance of, the model is their mean
         if (spread <= 0)
             return Fitted(
                 DoubleArray(rows.features).also { if (rows.count > 0) it[0] = rows.y.average() },
                 DoubleArray(rows.features),
-                0.0,
-                0.0,
-                DoubleArray(kindCount),
-                trust,
+                Variances(0.0, 0.0, DoubleArray(kindCount)),
+                null,
                 rows.chars,
+                0.0,
             )
-        var noise = from?.noise ?: spread
-        var counting = from?.counting ?: 0.0
-        var tau = from?.tau?.copyOf() ?: DoubleArray(kindCount) { spread }
-        var x = from?.x
+        var at = from ?: Variances(spread, 0.0, DoubleArray(kindCount) { spread })
+        var x: DoubleArray? = null
+        var held = Double.NaN
         val choice = SizePenalties(rows, kinds, kindCount, ridge)
         for (round in 1..MOST_ROUNDS) {
-            val weights = Fitted(DoubleArray(0), DoubleArray(0), noise, counting, tau, trust, rows.chars).weights()
-            val chosen = choice.chosen(weights, tau, x)
-            x = ridge.solve(weights, penalties(chosen), x)
-            val (nextNoise, nextCounting) =
-                lengths(x, weights, rows.diagonal(weights), penalties(chosen), noise, counting, trust)
+            val weights = at.weights(rows.chars, null)
+            val chosen = choice.chosen(weights, at.tau, x)
+            held = chosen.error
+            val lambda = penalties(chosen.tau)
+            x = ridge.solve(weights, lambda, x)
+            val (noise, counting) = lengths(x, weights, rows.diagonal(weights), lambda, at)
             val moved =
                 maxOf(
-                    changed(noise, nextNoise),
-                    changed(counting, nextCounting),
-                    tau.indices.maxOfOrNull { changed(tau[it], chosen[it]) } ?: 0.0,
+                    changed(at.noise, noise),
+                    changed(at.counting, counting),
+                    at.tau.indices.maxOfOrNull { changed(at.tau[it], chosen.tau[it]) } ?: 0.0,
                 )
-            noise = nextNoise
-            counting = nextCounting
-            tau = chosen
+            at = Variances(noise, counting, chosen.tau)
             if (moved < CHANGE) break
         }
-        return Fitted(x!!, penalties(tau), noise, counting, tau, trust, rows.chars)
+        return Fitted(x!!, penalties(at.tau), at, null, rows.chars, held)
     }
 
     /** Of every feature, its kind's penalty: the inverse of the kind's variance; the mean held by none. */
@@ -90,17 +78,15 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
 
     /**
      * The two parts of the examples' deviation: every residual's square, its leverage taken back, by the inverse of its
-     * characters — a weighted least squares of a line, weighing each by the inverse of its variance's square; a part
-     * below nought, nought, the other of the rest.
+     * characters — a weighted least squares of a line, weighing each by the inverse of its variance's square, of the
+     * variances [at] —; a part below nought, nought, the other of the rest.
      */
     private fun lengths(
         x: DoubleArray,
         weights: DoubleArray,
         diagonal: DoubleArray,
         lambda: DoubleArray,
-        noise: Double,
-        counting: Double,
-        trust: DoubleArray?,
+        at: Variances,
     ): Pair<Double, Double> {
         val inverse =
             DoubleArray(rows.features) { if (diagonal[it] + lambda[it] > 0) 1 / (diagonal[it] + lambda[it]) else 0.0 }
@@ -116,8 +102,8 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
             val residual = rows.y[i] - rows.dot(i, x)
             val variance = residual * residual / kept
             val v = 1 / rows.chars[i]
-            val expected = noise + counting * v
-            val omega = (trust?.get(i) ?: 1.0) / (expected * expected)
+            val expected = at.variance(rows.chars[i])
+            val omega = 1 / (expected * expected)
             s0 += omega
             s1 += omega * v
             s2 += omega * v * v
@@ -133,7 +119,7 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
         }
         if (nextNoise <= 0) {
             nextCounting = t1 / s2
-            nextNoise = max(Double.MIN_VALUE, noise * Double.MIN_VALUE)
+            nextNoise = max(Double.MIN_VALUE, at.noise * Double.MIN_VALUE)
         }
         return nextNoise to nextCounting
     }
@@ -161,6 +147,49 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
 
         /** A leverage below one: a residual of a step of one example alone is not made infinite. */
         const val ALMOST_ONE = 1 - 1e-9
+    }
+}
+
+/**
+ * THE VARIANCES A MODEL OF THE WORDS TO A CHARACTER IS OF: a work's own deviation ([noise]), its count's by a character
+ * ([counting]), the spread of the steps of every kind ([tau], by [WordsPerChar.KINDS]) — kept with the model by their
+ * names ([named], [kept]), the next fitting begun at them.
+ */
+internal class Variances(val noise: Double, val counting: Double, val tau: DoubleArray) {
+    /**
+     * The characters a work's own count weighs as much as the model by: its count as uncertain as its own deviation; of
+     * no deviation told at all, none — its own count is the model.
+     */
+    val sample: Double
+        get() = if (noise > 0) counting / noise else 0.0
+
+    /** The variance of the deviation of a text of [chars] characters from the model. */
+    fun variance(chars: Double) = noise + counting / chars
+
+    /** The weight of every example of the [chars]: its [trust] — of none, whole — over its variance. */
+    fun weights(chars: DoubleArray, trust: DoubleArray?): DoubleArray =
+        DoubleArray(chars.size) { (trust?.get(it) ?: 1.0) / variance(chars[it]) }
+
+    /** The variances by the names they are kept by among the model's weights: no feature is named so. */
+    fun named(): Map<String, Double> =
+        mapOf(NOISE to noise, COUNTING to counting) +
+            WordsPerChar.KINDS.indices.associate { TAU + WordsPerChar.KINDS[it] to tau[it] }
+
+    companion object {
+        /** The beginning of the names of the variances among the weights kept. */
+        const val PREFIX = "model."
+        private const val NOISE = PREFIX + "noise"
+        private const val COUNTING = PREFIX + "counting"
+        private const val TAU = PREFIX + "tau:"
+
+        /** The variances of the kept [weights] by their names; none of a model kept without them. */
+        fun kept(weights: Map<String, Double>): Variances? {
+            val tau = WordsPerChar.KINDS.map { weights[TAU + it] }
+            val noise = weights[NOISE]
+            val counting = weights[COUNTING]
+            if (noise == null || counting == null || tau.any { it == null }) return null
+            return Variances(noise, counting, DoubleArray(tau.size) { tau[it]!! })
+        }
     }
 }
 

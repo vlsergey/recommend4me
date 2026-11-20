@@ -103,18 +103,16 @@ class WordsPerChar(internal val weights: DoubleArray, val sample: Double) {
         fun fit(examples: List<SizeExample>, names: List<String>): WordsPerChar {
             val rows = SizeRows(examples, names.size)
             val fitted = SizeVariances(rows, kindsOf(names), SizeRidge(rows, SizeGram.OnProcessor(rows))).fit()
-            return WordsPerChar(fitted.x, fitted.sample)
+            return WordsPerChar(fitted.x, fitted.variances.sample)
         }
 
         /**
-         * How far from the truth the logarithm of the ratio is told of a work the model did not see: the mean square of
-         * the folds' errors, its root; on the processor.
+         * How far from the truth the logarithm of the ratio is told of a work the model did not see: the root of the
+         * mean square of the errors on the tenth of the examples held out of its fitting; on the processor.
          */
-        fun outOfFold(examples: List<SizeExample>, names: List<String>): Double {
+        fun heldError(examples: List<SizeExample>, names: List<String>): Double {
             val rows = SizeRows(examples, names.size)
-            val ridge = SizeRidge(rows, SizeGram.OnProcessor(rows))
-            val fitted = SizeVariances(rows, kindsOf(names), ridge).fit()
-            return ridge.outOfFold(fitted.weights(), fitted.lambda, fitted.x)
+            return SizeVariances(rows, kindsOf(names), SizeRidge(rows, SizeGram.OnProcessor(rows))).fit().held
         }
     }
 }

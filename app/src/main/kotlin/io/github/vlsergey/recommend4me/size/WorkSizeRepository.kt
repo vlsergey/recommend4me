@@ -18,6 +18,13 @@ class WorkSizeRepository(private val db: DSLContext) {
                 .fetchMap({ it.value1()!! }, { it.value2()!! })
         )
 
+    /** The weights kept whose names begin with [prefix]: of the model's own numbers, not its every feature's. */
+    fun kept(prefix: String): Map<String, Double> =
+        db.select(WORK_SIZE_WEIGHT.FEATURE, WORK_SIZE_WEIGHT.WEIGHT)
+            .from(WORK_SIZE_WEIGHT)
+            .where(WORK_SIZE_WEIGHT.FEATURE.startsWith(prefix))
+            .fetchMap({ it.value1()!! }, { it.value2()!! })
+
     /** The [weights] of the model fitted, in place of the last. */
     fun keep(weights: Map<String, Double>) = db.transaction { c ->
         val tx = DSL.using(c)

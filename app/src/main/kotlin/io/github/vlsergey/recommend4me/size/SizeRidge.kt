@@ -6,41 +6,36 @@ import kotlin.math.sqrt
  * THE WEIGHED RIDGE OF THE WORDS TO A CHARACTER SOLVED: the normal equations (Aᵀ W A + Λ) x = Aᵀ W y of the examples'
  * [rows], of the weights and the penalties asked, by conjugate gradients preconditioned by the matrix's diagonal, till
  * the residual is [TOLERANCE] of what the spread asks — not a number of steps —, the product with the matrix of the
- * [gram], on the card or the processor. The folds of the cross-validation each begun of the solution of every example.
+ * [gram], on the card or the processor; the error of a solution told on a tenth of the examples held out of it.
  */
 internal class SizeRidge(private val rows: SizeRows, private val gram: SizeGram) {
 
-    /**
-     * How far from the truth the logarithm of the ratio is told of an example the model did not see — the mean square
-     * of the folds' errors, its root —, of the examples' [weights] and the [lambda] fitted: every fold's model begun at
-     * [whole], the solution of every example.
-     */
-    fun outOfFold(weights: DoubleArray, lambda: DoubleArray, whole: DoubleArray): Double {
-        if (rows.count < FOLDS) return Double.NaN
-        var sum = 0.0
-        for (fold in 0 until FOLDS) {
-            val x = solve(DoubleArray(rows.count) { if (foldOf(it) == fold) 0.0 else weights[it] }, lambda, whole)
-            for (i in 0 until rows.count) if (foldOf(i) == fold) sum += (rows.y[i] - rows.dot(i, x)).let { it * it }
-        }
-        return sqrt(sum / rows.count)
-    }
+    /** The solutions solved, and the steps of all of them: what a fitting cost, told in the log. */
+    var solutions = 0
+        private set
 
-    /** The same of the mean alone, of no feature: of every fold, the mean of the others by their [weights]. */
-    fun meanOutOfFold(weights: DoubleArray): Double {
-        if (rows.count < FOLDS) return Double.NaN
-        val sums = DoubleArray(FOLDS)
-        val folds = DoubleArray(FOLDS)
-        for (i in 0 until rows.count) {
-            sums[foldOf(i)] += weights[i] * rows.y[i]
-            folds[foldOf(i)] += weights[i]
-        }
+    var steps = 0
+        private set
+
+    /**
+     * The error of the mean alone on the examples of the first fold, held out — the root of their mean square —: of the
+     * mean of the others by their [weights], what the model is to beat ([heldError]).
+     */
+    fun meanHeld(weights: DoubleArray): Double {
         var sum = 0.0
-        for (i in 0 until rows.count) {
-            val f = foldOf(i)
-            val mean = (sums.sum() - sums[f]) / (folds.sum() - folds[f])
-            sum += (rows.y[i] - mean).let { it * it }
+        var weight = 0.0
+        for (i in 0 until rows.count) if (foldOf(i) != 0) {
+            sum += weights[i] * rows.y[i]
+            weight += weights[i]
         }
-        return sqrt(sum / rows.count)
+        val mean = if (weight > 0) sum / weight else 0.0
+        var square = 0.0
+        var count = 0
+        for (i in 0 until rows.count) if (foldOf(i) == 0) {
+            square += (rows.y[i] - mean).let { it * it }
+            count++
+        }
+        return if (count == 0) 0.0 else sqrt(square / count)
     }
 
     /** The [weights] of the examples but those of the first fold, held out: what a choice is made without. */
@@ -80,8 +75,8 @@ internal class SizeRidge(private val rows: SizeRows, private val gram: SizeGram)
         val z = DoubleArray(n) { if (diagonal[it] > 0) r[it] / diagonal[it] else 0.0 }
         val p = z.copyOf()
         var rz = dot(r, z)
-        var steps = 0
-        while (steps++ < MOST_STEPS && sqrt(rz) > enough) {
+        var taken = 0
+        while (taken++ < MOST_STEPS && sqrt(rz) > enough) {
             val ap = times(p, lambda)
             val alpha = rz / dot(p, ap)
             for (f in 0 until n) {
@@ -94,6 +89,8 @@ internal class SizeRidge(private val rows: SizeRows, private val gram: SizeGram)
             for (f in 0 until n) p[f] = z[f] + beta * p[f]
             rz = next
         }
+        solutions++
+        steps += taken - 1
         return x
     }
 

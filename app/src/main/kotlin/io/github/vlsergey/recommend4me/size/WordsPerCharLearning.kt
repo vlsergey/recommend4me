@@ -51,21 +51,21 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
             examples.across.size,
             names.size,
         )
-        val kinds = WordsPerChar.kindsOf(names)
         val rows = SizeRows(sure, names.size)
+        val begun = Variances.kept(type.sizes.kept(Variances.PREFIX))
         val (crossed, where) =
             solved(rows) { ridge ->
-                val fitted = SizeVariances(rows, kinds, ridge).fit()
-                val weights = fitted.weights()
-                Crossed(fitted, ridge.outOfFold(weights, fitted.lambda, fitted.x), ridge.meanOutOfFold(weights))
+                val fitted = SizeVariances(rows, WordsPerChar.kindsOf(names), ridge).fit(begun)
+                Crossed(fitted, ridge.meanHeld(fitted.weights()), ridge.solutions, ridge.steps)
             }
-        laps.lap("fitted and cross-validated on $where")
+        laps.lap("fitted on $where${if (begun == null) " begun anew" else ""}")
         val across = examples.across
-        val (fitted, trust) = withTwoSites(crossed.fitted, sure, across, names.size, kinds)
-        val model = WordsPerChar(fitted.x, fitted.sample)
-        laps.lap("fitted with two sites' on $where")
+        val (fitted, trust) = withTwoSites(crossed.fitted, sure, across, names.size)
+        val model = WordsPerChar(fitted.x, fitted.variances.sample)
+        laps.lap("solved with two sites'")
         val weights =
             model.named(names) +
+                fitted.variances.named() +
                 examples.rules.flatMap { (source, rule) -> rule.named(source).entries }.associate { it.toPair() }
         type.sizes.keep(weights)
         laps.lap("kept")
@@ -91,52 +91,59 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
     ) {
         log.info(
             "{}: the words to a character learnt from {} items of their own numbers and {} of two sites trusted {} " +
-                "in all, {} features, out of fold {} by a logarithm, the mean alone {}; a work's own deviation {}, " +
-                "its count's of a character {} — its own text weighing as the model's at {} characters —, the steps' " +
-                "spread {}: {}",
+                "in all, {} features, on a tenth held out {} by a logarithm, the mean alone {}; a work's own " +
+                "deviation {}, its count's of a character {} — its own text weighing as the model's at {} " +
+                "characters —, the steps' spread {}; {} solutions of {} steps in all: {}",
             type.id,
             own,
             across,
             "%.1f".format(trusted),
             features,
-            "%.4f".format(crossed.error),
+            "%.4f".format(crossed.fitted.held),
             "%.4f".format(crossed.meanError),
-            "%.4f".format(Math.sqrt(fitted.noise)),
-            "%.4f".format(Math.sqrt(fitted.counting)),
-            "%.0f".format(fitted.sample),
+            "%.4f".format(Math.sqrt(fitted.variances.noise)),
+            "%.4f".format(Math.sqrt(fitted.variances.counting)),
+            "%.0f".format(fitted.variances.sample),
             WordsPerChar.KINDS.indices.joinToString {
-                "${WordsPerChar.KINDS[it]} %.4f".format(Math.sqrt(fitted.tau[it]))
+                "${WordsPerChar.KINDS[it]} %.4f".format(Math.sqrt(fitted.variances.tau[it]))
             },
+            crossed.solutions,
+            crossed.steps,
             laps,
         )
     }
 
     /**
      * Of the model fitted of the examples of their own numbers ([own], [sure]), every example of two sites ([across])
-     * trusted as the chance it is of the same text, of its residual from it, and the model fitted again of them all —
-     * begun at it —; and the trust.
+     * trusted as the chance it is of the same text, of its residual from it, and the steps solved again of them all —
+     * begun at it, of its variances: two thousand examples among a million choose no variance anew —; and the trust.
      */
     private fun withTwoSites(
         own: SizeVariances.Fitted,
         sure: List<SizeExample>,
         across: List<SizeExample>,
         features: Int,
-        kinds: IntArray,
     ): Pair<SizeVariances.Fitted, DoubleArray> {
         if (across.isEmpty()) return own to DoubleArray(0)
-        val first = WordsPerChar(own.x, own.sample)
+        val first = WordsPerChar(own.x, own.variances.sample)
         val trust =
             SizeTrust.of(
                 DoubleArray(across.size) { across[it].logRatio - first.log(across[it].features) },
-                DoubleArray(across.size) { own.variance(across[it].chars) },
+                DoubleArray(across.size) { own.variances.variance(across[it].chars) },
             )
         val all = SizeRows(sure + across, features)
         val trusted = DoubleArray(all.count) { if (it < sure.size) 1.0 else trust[it - sure.size] }
-        return solved(all) { ridge -> SizeVariances(all, kinds, ridge).fit(trusted, own) }.first to trust
+        val x = solved(all) { ridge -> ridge.solve(own.variances.weights(all.chars, trusted), own.lambda, own.x) }.first
+        return SizeVariances.Fitted(x, own.lambda, own.variances, trusted, all.chars, own.held) to trust
     }
 
-    /** The model fitted of every example, and the errors out of fold of it and of the mean alone. */
-    private class Crossed(val fitted: SizeVariances.Fitted, val error: Double, val meanError: Double)
+    /** The model fitted of every example, the error of the mean alone on the tenth held out, and what it cost. */
+    private class Crossed(
+        val fitted: SizeVariances.Fitted,
+        val meanError: Double,
+        val solutions: Int,
+        val steps: Int,
+    )
 
     /**
      * [body] of the ridge of [rows] on the card when there is one with room for them — its memory had in a block of
