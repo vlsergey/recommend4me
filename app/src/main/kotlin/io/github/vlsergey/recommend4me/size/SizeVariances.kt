@@ -172,8 +172,11 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
     }
 
     private companion object {
-        /** How little the variances move between two turns when they stand: far below what tells. */
-        const val CHANGE = 1e-4
+        /**
+         * How little the variances move between two turns when they stand: half a percent (owner, 2026-11-20: "no sense
+         * doing mathematics here").
+         */
+        const val CHANGE = 0.005
 
         /** The turns at most: of variances that stand, never near. */
         const val MOST_ROUNDS = 200
@@ -214,7 +217,7 @@ internal object SizeTrust {
                         residuals.indices.sumOf { (1 - same[it]) * (residuals[it] - mean).let { d -> d * d } } / other,
                     )
             }
-            val moved = abs(next - share)
+            val moved = abs(next - share) / max(next, share)
             share = next
             if (moved < CHANGE) break
         }
@@ -227,6 +230,7 @@ internal object SizeTrust {
     /** The share of the same text begun at: either as likely. */
     private const val HALF = 0.5
 
-    private const val CHANGE = 1e-9
+    /** How little the share of the same text moves between two turns when it stands: half a percent of it. */
+    private const val CHANGE = 0.005
     private const val MOST_ROUNDS = 1000
 }
