@@ -59,9 +59,19 @@ class AuthorTodayPages(context: SourceContext) {
         }
         REVIEW.matchEntire(path)?.let { m -> reviews.review(doc, m.groupValues[1])?.let { touched += it } }
         READER.matchEntire(path)?.let { m ->
-            reader.chapter(doc, m.groupValues[1], m.groupValues[2], page.capturedAt)?.let { touched += it }
+            // "Read" opens the reader at the work alone, "/reader/676118": the chapter it shows is the page's
+            // canonical address
+            val chapter = m.groups[2]?.value ?: canonicalChapter(doc, m.groupValues[1])
+            if (chapter != null) reader.chapter(doc, m.groupValues[1], chapter, page.capturedAt)?.let { touched += it }
         }
         return touched.toList()
+    }
+
+    /** The chapter of [workId] the reader's page names as its canonical address. */
+    private fun canonicalChapter(doc: Document, workId: String): String? {
+        val href = doc.selectFirst("link[rel=canonical]")?.attr("href")
+        val m = href?.let { runCatching { URI(it).path }.getOrNull() }?.let(READER::matchEntire)
+        return m?.groups?.get(2)?.value?.takeIf { m.groupValues[1] == workId }
     }
 
     // --- Cards of a list ---
@@ -212,7 +222,7 @@ class AuthorTodayPages(context: SourceContext) {
             doc.select("#tab-chapters .table-of-content li").mapIndexedNotNull { i, li ->
                 val a = li.selectFirst("a[href^=/reader/]") ?: return@mapIndexedNotNull null
                 val partId =
-                    READER.matchEntire(a.attr("href").substringBefore('?'))?.groupValues?.get(2)
+                    READER.matchEntire(a.attr("href").substringBefore('?'))?.groups?.get(2)?.value
                         ?: return@mapIndexedNotNull null
                 PartData(
                     partId,
@@ -231,7 +241,7 @@ class AuthorTodayPages(context: SourceContext) {
         /** An author's list of series: "/u/denratmanov/series". */
         private val AUTHOR_SERIES = Regex("/u/[^/]+/series/?")
         private val REVIEW = Regex("/review/(\\d+)/?")
-        private val READER = Regex("/reader/(\\d+)/(\\d+)/?")
+        private val READER = Regex("/reader/(\\d+)(?:/(\\d+))?/?")
         private val WORK_ID = Regex("^/work/(\\d+)")
 
         private val LOGGED_IN = Regex("isAuthenticated:\\s*(true|false)")

@@ -136,6 +136,16 @@ class AuthorTodayPagesTest {
         val part = context.parts.getValue("661269").getValue("6337965")
         assertEquals("Глава 1. Прикрывая тылы", part.title)
         assertEquals("55 сутки, север Дуата\n\nГуам давно меня заметил.", part.content)
+        // "Read" opens the reader at the work alone: the chapter is the one its canonical address names
+        val first =
+            loaded
+                .replace("<head>", "<head><link rel=\"canonical\" href=\"https://author.today/reader/661269/6337966\">")
+                .replace("Гуам давно меня заметил.", "Первая глава.")
+        assertEquals(listOf("661269"), capture(context, "https://author.today/reader/661269", first))
+        val firstPart = context.parts.getValue("661269").getValue("6337966")
+        assertEquals("55 сутки, север Дуата\n\nПервая глава.", firstPart.content)
+        // No canonical address of a chapter of the work: no chapter
+        assertEquals(emptyList(), capture(context, "https://author.today/reader/661269", loaded))
     }
 
     @Test
