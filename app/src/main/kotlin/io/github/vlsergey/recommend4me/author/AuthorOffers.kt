@@ -8,10 +8,14 @@ import io.github.vlsergey.recommend4me.api.model.AuthorWorkPair
 import io.github.vlsergey.recommend4me.duplicate.DuplicateAnswer
 import io.github.vlsergey.recommend4me.duplicate.PairModels
 import io.github.vlsergey.recommend4me.item.ItemKey
+import io.github.vlsergey.recommend4me.laps.Laps
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import java.time.ZoneOffset
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+
+private val log = LoggerFactory.getLogger(AuthorOffers::class.java)
 
 /**
  * THE OFFERS OF TWO AUTHORS WHO MAY BE ONE, on the evidence of their works, as the last search of the authors'
@@ -50,12 +54,16 @@ class AuthorOffers(
      * user said first, then the likeliest; their works, the authors of the sites and the entries read by their keys.
      */
     private fun offersOf(type: TypeStore, rows: List<AuthorCandidate>): List<AuthorOffer> {
+        val laps = Laps()
         val ids = rows.flatMap { listOf(it.first, it.second) }.distinct()
         val library = AuthorLibrary.ofAuthors(type, ids)
+        laps.lap("works", library.writersOf.size)
         val evidence = AuthorEvidence(library)
         val wanted = rows.map { it.pair }.toSet()
         val ofOffer = HashMap<Pair<Long, Long>, MutableList<WorkPair>>()
-        workPairs(type, library).forEach { p ->
+        val pairs = workPairs(type, library)
+        laps.lap("pairs of works", pairs.size)
+        pairs.forEach { p ->
             evidence.add(p)
             evidence.forEachAuthors(p) { authors, inOrder ->
                 if (authors in wanted)
@@ -80,6 +88,8 @@ class AuthorOffers(
                 library,
                 library.worksOf[id].orEmpty().filter { it !in inPairs }.map { shown.of(it, id) },
             )
+        laps.lap("sides")
+        log.info("{}: a page of {} offers of authors read: {}", type.id, rows.size, laps)
         return rows.map { row ->
             val own =
                 ofOffer[row.pair]
