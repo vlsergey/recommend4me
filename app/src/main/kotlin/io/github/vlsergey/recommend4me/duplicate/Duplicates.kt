@@ -113,7 +113,7 @@ class Duplicates(
         val model = models.model(type.id) ?: return
         val started = System.currentTimeMillis()
         val said = answers.said(type)
-        val search = TypeSearch.read(type, encoder, said, indexes.of(type.id))
+        val search = TypeSearch.read(type, encoder, said, indexes.of(type.id)) { tasks.progress(it * READ) }
         val read = System.currentTimeMillis() - started
         tasks.progress(READ)
         val kept = models.of(type)

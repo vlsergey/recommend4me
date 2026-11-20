@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.worklist.ListIndex
+import java.util.concurrent.atomic.AtomicLong
 import java.util.stream.IntStream
 
 /**
@@ -120,21 +121,29 @@ private constructor(
         /**
          * The search of the [type] by the [encoder]'s vectors: every site read, every value of the type weighed by how
          * rare it is among every work of the type, its facet given its place; the pairs answered on ([said]) passed
-         * over both ways.
+         * over both ways. The share of the works read told to [progress] as every site is read.
          */
         fun read(
             type: TypeStore,
             encoder: String,
             said: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>,
             index: ListIndex,
+            progress: (Double) -> Unit = {},
         ): TypeSearch {
             val places = HashMap<String, Int>()
             val model = type.sizes.model()
+            val counts = type.sources.associate { it.id to it.items.count().toLong() }
+            val total = counts.values.sum().coerceAtLeast(1).toDouble()
+            val read = AtomicLong()
             // The sites read side by side, each its own database: their values placed after, in the sites' order
             val sides =
                 type.sources
                     .parallelStream()
-                    .map { SearchSide.read(it, encoder, model, index) }
+                    .map { s ->
+                        SearchSide.read(s, encoder, model, index).also {
+                            progress(read.addAndGet(counts.getValue(s.id)) / total)
+                        }
+                    }
                     .toList()
                     .mapNotNull { it?.placed(places) }
             val works = sides.sumOf { it.ids.size }
