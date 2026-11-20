@@ -21,8 +21,8 @@ private val log = LoggerFactory.getLogger(SeriesDifferences::class.java)
  * hand-made 'not a series'"), and two works can be no pair of different works and of one series at once, nor teach the
  * models both. Taken back in the journal, told apart there from a word the user took back. Done in the queue after a
  * quiet, of every word "different" of the type — they are few — as the items of a site that has series are written and
- * as works are regrouped: merged, taken out, put in one series or taken out of it. The words said before the series
- * were stronger were taken back by a migration ([V34__different_in_series_taken_back]).
+ * as works are regrouped: merged, taken out, put in one series or taken out of it. Till then the word is not heeded: of
+ * two works of one series it is read as "one series" ([io.github.vlsergey.recommend4me.duplicate.PairAnswers]).
  */
 @Component
 class SeriesDifferences(private val stores: Stores, private val tasks: Tasks) {
@@ -83,10 +83,21 @@ class SeriesDifferences(private val stores: Stores, private val tasks: Tasks) {
          * Of the [pairs] of items, those whose works are held in one series by the sites alone — whatever the user's
          * groups —: a word "different" on them would be taken back at once. The series read once around them all.
          */
-        fun heldBySites(type: TypeStore, pairs: Collection<Pair<ItemKey, ItemKey>>): Set<Pair<ItemKey, ItemKey>> {
+        fun heldBySites(type: TypeStore, pairs: Collection<Pair<ItemKey, ItemKey>>): Set<Pair<ItemKey, ItemKey>> =
+            ofOneSeries(type, pairs, bySites = true)
+
+        /**
+         * Of the [pairs] of items, those whose works are of one series — by the sites, or by the user's words "one
+         * series" —; of the sites' alone of [bySites]. The series read once around them all.
+         */
+        fun ofOneSeries(
+            type: TypeStore,
+            pairs: Collection<Pair<ItemKey, ItemKey>>,
+            bySites: Boolean = false,
+        ): Set<Pair<ItemKey, ItemKey>> {
             if (pairs.isEmpty()) return emptySet()
             val works = type.works.worksOf(pairs.flatMap { listOf(it.first, it.second) })
-            val series = TypeSeries.around(type, works.values, bySites = true)
+            val series = TypeSeries.around(type, works.values, bySites)
             return pairs.filterTo(HashSet()) { (a, b) ->
                 val x = works[a]
                 val y = works[b]

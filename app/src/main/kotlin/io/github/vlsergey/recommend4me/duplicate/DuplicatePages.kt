@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
+import io.github.vlsergey.recommend4me.series.SeriesDifferences
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
@@ -180,7 +181,13 @@ class DuplicatePages(
             type.links.word(a, b, Instant.now())?.let { w -> DuplicateAnswer.entries.firstOrNull { it.name == w } }
         val chance = kept?.let { chances?.same(it) }
         val ranked = Ranked(pair, kept, chance, kept?.let { chances?.series(it) }, chance ?: 0.0)
-        return window.of(type, ranked, Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet()))
+        // A word "different" on two works of one series not heeded, as of every pair ([PairAnswers.said])
+        val unheeded =
+            word == DuplicateAnswer.DIFFERENT && SeriesDifferences.ofOneSeries(type, listOf(pair)).isNotEmpty()
+        val said =
+            if (unheeded) Said(mapOf(pair to DuplicateAnswer.SERIES), setOf(pair))
+            else Said(listOfNotNull(word?.let { pair to it }).toMap(), emptySet())
+        return window.of(type, ranked, said)
     }
 
     fun ofItem(key: ItemKey): List<DuplicatePair> {

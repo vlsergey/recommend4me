@@ -31,7 +31,8 @@ enum class DuplicateAnswer {
 /**
  * The user's word on every pair, the smaller key first ([words]), and of them the pairs of one normalized series the
  * user did not say so of ([derived], [TypeSeries]) — by the series of the sites, or a work of the series another said
- * to be one series: weighing as one said, told apart only to be shown so.
+ * to be one series: weighing as one said, told apart only to be shown so. A word "different" on two works of one series
+ * is not heeded: the pair is of the series ([io.github.vlsergey.recommend4me.series.SeriesDifferences]).
  */
 class Said(private val words: Map<Pair<ItemKey, ItemKey>, DuplicateAnswer>, val derived: Set<Pair<ItemKey, ItemKey>>) :
     Map<Pair<ItemKey, ItemKey>, DuplicateAnswer> by words
@@ -63,7 +64,9 @@ class PairAnswers(private val works: Works) {
                 works.drop(k + 1).forEach { y ->
                     for (i in items[x].orEmpty()) for (j in items[y].orEmpty()) {
                         val pair = type.links.ordered(i, j)
-                        if (pair !in out) derived += pair
+                        // A word "different" on two works of one series not heeded: the series is stronger, and the
+                        // word is taken back as their works change (SeriesDifferences)
+                        if (pair !in out || out[pair] == DuplicateAnswer.DIFFERENT) derived += pair
                     }
                 }
             }

@@ -142,6 +142,9 @@ class Database(
             .locations(*locations.toTypedArray())
             .table(table)
             .baselineOnMigrate(shared)
+            // A migration of the application's code done and gone ("one-time work is never a part of the application":
+            // its code goes when it is done) is no error of the history
+            .ignoreMigrationPatterns("*:missing")
 
     /** The file's size and the share of it used, in per cent, as H2 counts them now. */
     fun usage(): Triple<Long, Int, Int>? =

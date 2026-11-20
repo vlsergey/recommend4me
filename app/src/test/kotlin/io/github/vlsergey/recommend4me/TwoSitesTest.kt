@@ -128,8 +128,12 @@ class TwoSitesTest : TwoSitesTestBase() {
         different()
         background.run()
         assertEquals("DIFFERENT", type.links.word(d1, d2, Instant.now()))
-        // The site puts the second in the series too: the word taken back, in the journal so
+        // The site puts the second in the series too: the word not heeded at once — the pair of the series —, and
+        // taken back in the queue, in the journal so
         site("sd2|Saga Two|river|The second of a saga||saga")
+        val shown = duplicates.getDuplicatePair("books", "site", "sd1", "site", "sd2").body!!
+        assertEquals(io.github.vlsergey.recommend4me.api.model.DuplicatePair.Answer.SERIES, shown.answer)
+        assertEquals(true, shown.derived)
         background.run()
         assertNull(type.links.word(d1, d2, Instant.now()))
         val taken = type.links.journal().first { setOf(it.first, it.second) == setOf(d1, d2) }
