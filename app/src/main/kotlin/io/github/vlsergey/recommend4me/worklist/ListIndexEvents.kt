@@ -6,6 +6,7 @@ import io.github.vlsergey.recommend4me.interest.WorkInterestChangeEvent
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.WorkChangeEvent
 import io.github.vlsergey.recommend4me.model.WorkPredictionChangeEvent
+import io.github.vlsergey.recommend4me.part.SiteItemChapterChangeEvent
 import io.github.vlsergey.recommend4me.part.SiteItemChapterVectorChangeEvent
 import io.github.vlsergey.recommend4me.rating.WorkGradeChangeEvent
 import io.github.vlsergey.recommend4me.source.Stores
@@ -48,6 +49,13 @@ internal class ListIndexEvents(
      */
     @EventListener
     fun chaptersEncoded(event: SiteItemChapterVectorChangeEvent) =
+        indexing.change(stores.typeOf(event.source).id, "parts") {
+            rows.getOrPut(event.source) { HashSet() } += event.ids
+        }
+
+    /** The texts of the works' chapters written: the words and the characters of their texts among their numbers. */
+    @EventListener
+    fun chaptersWritten(event: SiteItemChapterChangeEvent) =
         indexing.change(stores.typeOf(event.source).id, "parts") {
             rows.getOrPut(event.source) { HashSet() } += event.ids
         }

@@ -9,6 +9,7 @@ import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.item.ItemKeys
 import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.model.Predicted
+import io.github.vlsergey.recommend4me.part.PartCounts
 import io.github.vlsergey.recommend4me.rating.Rating
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
@@ -224,11 +225,14 @@ internal object ListRows {
         return out
     }
 
-    /** Every number of the items [ids] — of every item when null — by the number's id, the user's word on top. */
+    /**
+     * Every number of the items [ids] — of every item when null — by the number's id, the user's word on top; and the
+     * words and the characters of an item's kept texts ([PartCounts.WORDS_ID], [PartCounts.CHARS_ID]), as they lie.
+     */
     private fun numbersOf(s: SourceStore, ids: Collection<String>?): Map<String, Map<String, Double>> {
         val defs = s.schema.numbers.associateBy { it.key }
-        if (defs.isEmpty()) return emptyMap()
-        val out = HashMap<String, HashMap<String, Double>>()
+        val out = textSizesOf(s, ids)
+        if (defs.isEmpty()) return out
         fun put(id: String, key: String, value: Double) {
             val def = defs[key] ?: return
             out.getOrPut(id) { HashMap() }[FeatureNames.numberId(s.source, def)] = value
@@ -239,6 +243,15 @@ internal object ListRows {
         s.corrections.allFields().forEach { (id, fields) ->
             if (wanted != null && id !in wanted) return@forEach
             defs.keys.forEach { key -> fields[Corrected.numberField(key)]?.toDoubleOrNull()?.let { put(id, key, it) } }
+        }
+        return out
+    }
+
+    /** The words and the characters of the kept texts of the items [ids] — of every item when null —, as they lie. */
+    private fun textSizesOf(s: SourceStore, ids: Collection<String>?): HashMap<String, HashMap<String, Double>> {
+        val out = HashMap<String, HashMap<String, Double>>()
+        (if (ids == null) s.parts.counts.counted() else s.parts.counts.counted(ids)).forEach { (id, size) ->
+            out[id] = hashMapOf(PartCounts.WORDS_ID to size.first, PartCounts.CHARS_ID to size.second)
         }
         return out
     }

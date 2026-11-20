@@ -133,9 +133,10 @@ class ListIndex(dir: Path) : AutoCloseable {
         /**
          * 9 — the user's mark and the stages of the tasks over the works ([ListDocuments.MARKED], [WorkStages]); 10 —
          * the same, made anew: a commit of the stages' times told 9 of documents written before it; 11 — the vectors of
-         * the site's text fields a stage too ([WorkStage.VECTORS]).
+         * the site's text fields a stage too ([WorkStage.VECTORS]); 12 — the words and the characters of an item's kept
+         * texts among its numbers ([io.github.vlsergey.recommend4me.part.PartCounts.WORDS_ID]).
          */
-        const val FORMAT = 11
+        const val FORMAT = 12
         private const val FORMAT_KEY = "format"
 
         /** The memory the writer gathers documents in before it writes them out. */

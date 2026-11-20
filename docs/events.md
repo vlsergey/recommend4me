@@ -153,6 +153,7 @@ flowchart LR
     e_SiteItemChapterChangeEvent --> w_fitFieldModels
     e_SiteItemChapterChangeEvent --> w_makeWorkManners
     e_SiteItemChapterChangeEvent --> w_measureWorkSizes
+    e_SiteItemChapterChangeEvent --> w_writeListIndex
     e_SiteItemChapterVectorChangeEvent --> w_fitFieldModels
     e_SiteItemChapterVectorChangeEvent --> w_makeSiteItemSetVectors
     e_SiteItemChapterVectorChangeEvent --> w_writeListIndex

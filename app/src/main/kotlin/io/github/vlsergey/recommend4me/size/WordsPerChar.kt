@@ -2,10 +2,8 @@ package io.github.vlsergey.recommend4me.size
 
 import io.github.vlsergey.recommend4me.contenttype.StandardLanguages
 import io.github.vlsergey.recommend4me.duplicate.AUTHOR_FAMILY
-import java.util.Random
 import kotlin.math.exp
 import kotlin.math.ln
-import kotlin.math.sqrt
 
 /**
  * THE FEATURES OF THE WORKS' SIZES BY THEIR NUMBERS: the mean the first ([WordsPerChar.MEAN]), then every site,
@@ -84,9 +82,6 @@ class WordsPerChar(private val weights: DoubleArray) {
 
         /** The feature every work has, the first of [SizeFeatures]. */
         const val MEAN = "mean"
-        private const val ITERATIONS = 2000
-        private const val TOLERANCE = 1e-20
-        private const val FOLDS = 10
 
         /**
          * The penalty of a feature's weight, found by the cross-validation over the works known on 2026-10-30: the mean
@@ -109,65 +104,23 @@ class WordsPerChar(private val weights: DoubleArray) {
         private const val SOURCE_PENALTY = 3.0
         private const val TAG_PENALTY = 10.0
 
-        /**
-         * The model of the [examples], their features named by [names]: the normal equations of the weighed ridge
-         * solved by conjugate gradients. Every example of the mean and its own features, read as they are: no row made
-         * of them.
-         */
+        /** The penalty of every feature of [names], by what it is. */
+        fun penalties(names: List<String>): DoubleArray = DoubleArray(names.size) { penalty(names[it]) }
+
+        /** The model of the [examples], their features named by [names], solved on the processor ([SizeRidge]). */
         fun fit(examples: List<SizeExample>, names: List<String>): WordsPerChar {
-            val n = names.size
-            val lambda = DoubleArray(n) { penalty(names[it]) }
-            val weight = DoubleArray(examples.size) { examples[it].weight }
-            fun times(x: DoubleArray): DoubleArray {
-                val out = DoubleArray(n) { lambda[it] * x[it] }
-                examples.forEachIndexed { i, e ->
-                    var sum = x[0]
-                    for (f in e.features) sum += x[f]
-                    val s = weight[i] * sum
-                    out[0] += s
-                    for (f in e.features) out[f] += s
-                }
-                return out
-            }
-            val x = DoubleArray(n)
-            val r = DoubleArray(n)
-            examples.forEachIndexed { i, e ->
-                val s = weight[i] * e.logRatio
-                r[0] += s
-                for (f in e.features) r[f] += s
-            }
-            val p = r.copyOf()
-            var rs = r.sumOf { it * it }
-            for (step in 1..ITERATIONS) {
-                if (rs < TOLERANCE) break
-                val ap = times(p)
-                val alpha = rs / p.indices.sumOf { p[it] * ap[it] }
-                for (i in 0 until n) {
-                    x[i] += alpha * p[i]
-                    r[i] -= alpha * ap[i]
-                }
-                val next = r.sumOf { it * it }
-                for (i in 0 until n) p[i] = r[i] + next / rs * p[i]
-                rs = next
-            }
-            return WordsPerChar(x)
+            val rows = SizeRows(examples, names.size)
+            return WordsPerChar(SizeRidge(rows, penalties(names), SizeGram.OnProcessor(rows)).fit())
         }
 
         /**
          * How far from the truth the logarithm of the ratio is told of a work the model did not see: the mean square of
-         * the folds' errors, its root.
+         * the folds' errors, its root; on the processor.
          */
         fun outOfFold(examples: List<SizeExample>, names: List<String>): Double {
-            if (examples.size < FOLDS) return Double.NaN
-            val shuffled = examples.shuffled(Random(1))
-            var sum = 0.0
-            for (fold in 0 until FOLDS) {
-                val model = fit(shuffled.filterIndexed { i, _ -> i % FOLDS != fold }, names)
-                shuffled.forEachIndexed { i, e ->
-                    if (i % FOLDS == fold) sum += (e.logRatio - model.log(e.features)).let { it * it }
-                }
-            }
-            return sqrt(sum / shuffled.size)
+            val rows = SizeRows(examples, names.size)
+            val ridge = SizeRidge(rows, penalties(names), SizeGram.OnProcessor(rows))
+            return ridge.outOfFold(ridge.fit())
         }
     }
 }

@@ -55,10 +55,17 @@ class PartCounts(private val db: DSLContext) {
         out[id] = (words ?: 0).toDouble() to chars.toDouble()
     }
 
-    private companion object {
-        const val BATCH = 1000
+    companion object {
+        /**
+         * The ids the index of the list keeps an item's words and characters of its kept texts by, among its numbers:
+         * of every source alike.
+         */
+        const val WORDS_ID = "text.words"
+        const val CHARS_ID = "text.chars"
+
+        private const val BATCH = 1000
 
         /** The rows read at a time as they are streamed. */
-        const val STREAMED = 10_000
+        private const val STREAMED = 10_000
     }
 }

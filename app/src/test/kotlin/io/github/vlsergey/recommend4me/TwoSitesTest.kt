@@ -30,6 +30,7 @@ import io.github.vlsergey.recommend4me.source.ItemHead
 import io.github.vlsergey.recommend4me.source.PartData
 import io.github.vlsergey.recommend4me.task.inBackground
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
+import io.github.vlsergey.recommend4me.worklist.ListIndexing
 import java.time.Instant
 import java.util.Locale
 import kotlin.test.assertEquals
@@ -40,6 +41,7 @@ import kotlin.test.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.i18n.LocaleContextHolder
 
 /**
@@ -49,6 +51,8 @@ import org.springframework.context.i18n.LocaleContextHolder
 // More than a few seconds: in CI alone — the local build's tests take a minute at most together (user, 2026-11-18)
 @Tag("ci")
 class TwoSitesTest : TwoSitesTestBase() {
+
+    @Autowired lateinit var listIndexing: ListIndexing
 
     private companion object {
         /** A page of the authors holding every author of the application of the tests. */
@@ -69,6 +73,12 @@ class TwoSitesTest : TwoSitesTestBase() {
         b.items.setNumbers("z2", mapOf("chars" to 6000.0))
         // Words of five letters and a space: one word to six characters
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово ".repeat(1000))))
+        // Written past the application's events: their documents of the index of the list, which the model reads, made
+        listIndexing.change("books", "items") {
+            rows.getOrPut("alpha") { HashSet() } += "z1"
+            rows.getOrPut("beta") { HashSet() } += "z2"
+        }
+        background.run()
         sizeFitting.fit(type)
         assertEquals(1000, a.parts.counts.counted().getValue("z1").first.toInt())
         val first = workSizes.ofItems(type, a, listOf("z1"), a.items.numbersOf(listOf("z1")), emptyMap()).getValue("z1")
