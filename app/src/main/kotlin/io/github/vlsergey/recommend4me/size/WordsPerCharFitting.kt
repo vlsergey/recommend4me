@@ -87,6 +87,12 @@ class WordsPerCharFitting(
         val weights = model.named(names)
         type.sizes.keep(weights)
         laps.lap("kept")
+        val counts = IntArray(names.size).also { c -> sure.forEach { e -> e.features.forEach { c[it]++ } } }
+        log.info(
+            "{}: the steps of the words to a character — {}",
+            type.id,
+            SizeSteps.told(model.weights, names, counts),
+        )
         log.info(
             "{}: the words to a character learnt from {} items of their own numbers and {} of two sites of {}, " +
                 "{} features, out of fold {} by a logarithm, the mean alone {}: {}",

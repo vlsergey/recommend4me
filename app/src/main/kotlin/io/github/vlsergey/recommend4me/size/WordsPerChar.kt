@@ -42,7 +42,7 @@ class SizeExample(val features: IntArray, val words: Double, val chars: Double) 
  * much of a work and a tag's less, each by its own penalty. A work's own numbers weigh over the model's by how many
  * characters they count ([of]).
  */
-class WordsPerChar(private val weights: DoubleArray) {
+class WordsPerChar(internal val weights: DoubleArray) {
     /** The logarithm of the ratio of a work of these features: a feature met after the fitting, none. */
     fun log(features: IntArray): Double {
         var sum = weights[0]
