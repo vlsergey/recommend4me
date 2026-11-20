@@ -36,7 +36,7 @@ class PartRepository(private val db: DSLContext, private val store: PartStore) {
     val texts = ItemTexts(db, store)
 
     /** The characters and the words of the items' texts, as they lie. */
-    val counts = PartCounts(db)
+    val counts = PartCounts(db, store)
 
     /**
      * Stores parts, a known one updated; a part named without its text keeps the text it had, and a part whose text

@@ -35,7 +35,8 @@ class WorkSizes(private val indexes: ListIndexes) {
     ): Map<String, ItemSize> {
         if (s.wordsKey() == null && s.charsKey() == null) return emptyMap()
         val compared = ComparedValues(s, indexes.of(type.id)).of(ids, emptyList())
-        val ratios = type.sizes.model().of(s.id, compared) { s.parts.counts.counted(ids) }
+        val ratios =
+            type.sizes.model().of(s.id, compared, { s.parts.counts.counted(ids) }) { s.parts.counts.classes(ids) }
         return sized(s, ids, numbers, fields, ratiosOf(compared.ids, ratios))
     }
 

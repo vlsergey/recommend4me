@@ -78,6 +78,21 @@ class PartStore(folder: Path) : AutoCloseable {
     fun texts(itemId: String, partIds: Collection<String>): Map<String, String> =
         multi(texts, itemId, partIds) { it.toString(Charsets.UTF_8) }
 
+    /**
+     * Every text kept, in the order of the keys — the parts of an item one after another —, read as one pass of the
+     * store: its item and its UTF-8 bytes.
+     */
+    fun forEachText(action: (itemId: String, bytes: ByteArray) -> Unit) {
+        db.newIterator(texts).use { cursor ->
+            cursor.seekToFirst()
+            while (cursor.isValid) {
+                val key = cursor.key().toString(Charsets.UTF_8)
+                action(key.substringBefore(SEPARATOR), cursor.value())
+                cursor.next()
+            }
+        }
+    }
+
     fun putText(itemId: String, partId: String, text: String) =
         db.put(texts, key(itemId, partId), text.toByteArray(Charsets.UTF_8))
 

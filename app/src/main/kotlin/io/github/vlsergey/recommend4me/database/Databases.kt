@@ -4,6 +4,7 @@ import io.github.vlsergey.recommend4me.folder.DataFolder
 import io.github.vlsergey.recommend4me.part.PartStore
 import io.github.vlsergey.recommend4me.part.V19__parts_out_of_database
 import io.github.vlsergey.recommend4me.part.V26__item_text_size_filled
+import io.github.vlsergey.recommend4me.part.V28__item_text_classes_filled
 import io.github.vlsergey.recommend4me.plugin.Plugins
 import io.github.vlsergey.recommend4me.preferences.CatalogueRenameRepository
 import io.github.vlsergey.recommend4me.series.V34__different_in_series_taken_back
@@ -66,7 +67,12 @@ class Databases(folder: DataFolder, plugins: Plugins, private val tasks: Tasks) 
                             "source",
                             s.migrations,
                             cacheMegabytes = SOURCE_CACHE_MB,
-                            code = listOf(V19__parts_out_of_database(parts), V26__item_text_size_filled(parts)),
+                            code =
+                                listOf(
+                                    V19__parts_out_of_database(parts),
+                                    V26__item_text_size_filled(parts),
+                                    V28__item_text_classes_filled(parts),
+                                ),
                         ),
                     corrections =
                         Database(

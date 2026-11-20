@@ -4,7 +4,7 @@
 
 | Table | What it holds |
 |---|---|
-| `item` | a work of the site: its id, address, title, version and dates; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`) |
+| `item` | a work of the site: its id, address, title, version and dates; the words and the characters of its kept texts, every part's summed as its parts are written (`text_words`, `text_chars`), and its characters by their classes — letters of one, two, three or more bytes in UTF-8, punctuation of one or more, spaces, breaks, the rest (`text_letters_1` … `text_other`) — what a site's count of characters is told of |
 | `item_version` | every version of a work seen |
 | `item_facet` | a work's value of a facet (tags, status, author, fandom…) by its stable key, in the site's order, with its name as the work's page wrote it |
 | `facet_value` | the name of a value the site names by key (a tag's id) |
@@ -69,6 +69,14 @@ erDiagram
         TIMESTAMPTZ first_seen_at
         INTEGER text_words "null"
         INTEGER text_chars "null"
+        INTEGER text_letters_1 "null"
+        INTEGER text_letters_2 "null"
+        INTEGER text_letters_3 "null"
+        INTEGER text_punctuation_1 "null"
+        INTEGER text_punctuation_2 "null"
+        INTEGER text_spaces "null"
+        INTEGER text_breaks "null"
+        INTEGER text_other "null"
     }
     item_facet {
         VARCHAR item_id PK, FK

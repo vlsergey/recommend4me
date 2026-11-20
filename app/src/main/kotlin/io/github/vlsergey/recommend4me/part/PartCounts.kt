@@ -11,7 +11,7 @@ import org.jooq.impl.DSL
  * an item's every part's summed as its parts are written ([totalled]) — what a work's size is known by when its site
  * tells none ([io.github.vlsergey.recommend4me.size.SizeExamples]). Read, never counted.
  */
-class PartCounts(private val db: DSLContext) {
+class PartCounts(private val db: DSLContext, private val store: PartStore) {
 
     /** The words and the characters of every part of the item [itemId] that has a text counted, summed, kept. */
     fun totalled(itemId: String) {
@@ -20,11 +20,43 @@ class PartCounts(private val db: DSLContext) {
                 .from(PART)
                 .where(PART.ITEM_ID.eq(itemId), PART.CHARS.isNotNull)
                 .fetchOne()
-        db.update(ITEM)
-            .set(ITEM.TEXT_WORDS, sum?.value1()?.toInt())
-            .set(ITEM.TEXT_CHARS, sum?.value2()?.toInt())
-            .where(ITEM.ITEM_ID.eq(itemId))
-            .execute()
+        // The classes of the characters of every text of the item's, read of the store: an item's few
+        val parts =
+            db.select(PART.PART_ID)
+                .from(PART)
+                .where(PART.ITEM_ID.eq(itemId), PART.CONTENT_HASH.isNotNull)
+                .fetch(PART.PART_ID)
+        val classes = IntArray(CharClasses.NAMES.size)
+        store.texts(itemId, parts.filterNotNull()).values.forEach { text ->
+            CharClasses.of(text).forEachIndexed { k, v -> classes[k] += v }
+        }
+        val some = parts.isNotEmpty()
+        var update =
+            db.update(ITEM).set(ITEM.TEXT_WORDS, sum?.value1()?.toInt()).set(ITEM.TEXT_CHARS, sum?.value2()?.toInt())
+        COLUMNS.forEachIndexed { k, column -> update = update.set(column, if (some) classes[k] else null) }
+        update.where(ITEM.ITEM_ID.eq(itemId)).execute()
+    }
+
+    /**
+     * The classes of the characters of the texts of the items [ids] — of every item when null — that have any
+     * ([CharClasses]).
+     */
+    fun classes(ids: Collection<String>?): Map<String, IntArray> {
+        val out = HashMap<String, IntArray>()
+        fun read(condition: org.jooq.Condition) =
+            db.select(ITEM.ITEM_ID, *COLUMNS.toTypedArray())
+                .from(ITEM)
+                .where(condition, ITEM.TEXT_LETTERS_1.isNotNull)
+                .fetchSize(STREAMED)
+                .fetchLazy()
+                .use { cursor ->
+                    cursor.forEach { r ->
+                        out[r.get(ITEM.ITEM_ID)!!] = IntArray(COLUMNS.size) { k -> r.get(COLUMNS[k]) ?: 0 }
+                    }
+                }
+        if (ids == null) read(DSL.noCondition())
+        else ids.distinct().chunked(BATCH).forEach { read(ITEM.ITEM_ID.`in`(it)) }
+        return out
     }
 
     /** The words and the characters of the texts of every item that has any, as kept. */
@@ -62,6 +94,22 @@ class PartCounts(private val db: DSLContext) {
          */
         const val WORDS_ID = "text.words"
         const val CHARS_ID = "text.chars"
+
+        /** The id the index keeps the count of the class [k] of an item's characters by ([CharClasses.NAMES]). */
+        fun classId(k: Int) = "text." + CharClasses.NAMES[k]
+
+        /** The item's columns of the classes, in the order of [CharClasses.NAMES]. */
+        private val COLUMNS =
+            listOf(
+                ITEM.TEXT_LETTERS_1,
+                ITEM.TEXT_LETTERS_2,
+                ITEM.TEXT_LETTERS_3,
+                ITEM.TEXT_PUNCTUATION_1,
+                ITEM.TEXT_PUNCTUATION_2,
+                ITEM.TEXT_SPACES,
+                ITEM.TEXT_BREAKS,
+                ITEM.TEXT_OTHER,
+            )
 
         private const val BATCH = 1000
 

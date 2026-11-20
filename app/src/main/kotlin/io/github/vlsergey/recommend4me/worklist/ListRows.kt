@@ -253,6 +253,10 @@ internal object ListRows {
         (if (ids == null) s.parts.counts.counted() else s.parts.counts.counted(ids)).forEach { (id, size) ->
             out[id] = hashMapOf(PartCounts.WORDS_ID to size.first, PartCounts.CHARS_ID to size.second)
         }
+        s.parts.counts.classes(ids).forEach { (id, classes) ->
+            val numbers = out.getOrPut(id) { HashMap() }
+            classes.forEachIndexed { k, v -> numbers[PartCounts.classId(k)] = v.toDouble() }
+        }
         return out
     }
 

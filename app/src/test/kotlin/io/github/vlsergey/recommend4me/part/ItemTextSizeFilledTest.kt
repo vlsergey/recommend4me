@@ -40,7 +40,7 @@ class ItemTextSizeFilledTest {
                 }
             }
             Database("test/source", file, "source", code = listOf(V26__item_text_size_filled(store))).use { db ->
-                val counts = PartCounts(db.dsl)
+                val counts = PartCounts(db.dsl, store)
                 assertEquals(mapOf("w1" to (23.0 to 111.0)), counts.counted())
             }
         }

@@ -40,6 +40,11 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
         if (sure.isEmpty()) return
         val names = features.names
         log.info(
+            "{}: how the sites count the characters, of our texts' classes — {}",
+            type.id,
+            examples.rules.entries.joinToString("; ") { (source, rule) -> "$source: $rule" },
+        )
+        log.info(
             "{}: the words to a character to learn of {} items of their own numbers and {} of two sites, {} features",
             type.id,
             sure.size,
@@ -59,7 +64,9 @@ class WordsPerCharLearning(private val indexes: ListIndexes, private val cards: 
         val (fitted, trust) = withTwoSites(crossed.fitted, sure, across, names.size, kinds)
         val model = WordsPerChar(fitted.x, fitted.sample)
         laps.lap("fitted with two sites' on $where")
-        val weights = model.named(names)
+        val weights =
+            model.named(names) +
+                examples.rules.flatMap { (source, rule) -> rule.named(source).entries }.associate { it.toPair() }
         type.sizes.keep(weights)
         laps.lap("kept")
         val counts = IntArray(names.size).also { c -> sure.forEach { e -> e.features.forEach { c[it]++ } } }

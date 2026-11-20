@@ -7,6 +7,7 @@ import io.github.vlsergey.recommend4me.duplicate.AUTHOR_FAMILY
 import io.github.vlsergey.recommend4me.duplicate.ComparedValues
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.model.FeatureNames
+import io.github.vlsergey.recommend4me.part.CharClasses
 import io.github.vlsergey.recommend4me.part.PartCounts
 import io.github.vlsergey.recommend4me.source.SourceStore
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -32,13 +33,20 @@ private class SourceNumbers(s: SourceStore) {
 
     private val wordsId = numberOf(s, StandardNumbers.WORDS)
     private val charsId = numberOf(s, StandardNumbers.CHARS)
-    val ids = listOfNotNull(wordsId, charsId, PartCounts.WORDS_ID, PartCounts.CHARS_ID)
+    private val classIds = CharClasses.NAMES.indices.map(PartCounts::classId)
+    val ids = listOfNotNull(wordsId, charsId, PartCounts.WORDS_ID, PartCounts.CHARS_ID) + classIds
 
     /** The numbers of the items [compared], by their places; nought of one not known. */
     fun of(compared: ComparedValues.Compared): ItemSizes {
         val none = DoubleArray(compared.ids.size)
         fun number(id: String?) = id?.let { compared.numbers[it] } ?: none
-        return ItemSizes(number(PartCounts.WORDS_ID), number(PartCounts.CHARS_ID), number(wordsId), number(charsId))
+        return ItemSizes(
+            number(PartCounts.WORDS_ID),
+            number(PartCounts.CHARS_ID),
+            number(wordsId),
+            number(charsId),
+            classIds.map(::number),
+        )
     }
 }
 
@@ -48,14 +56,33 @@ private class ItemSizes(
     private val textChars: DoubleArray,
     val words: DoubleArray,
     val chars: DoubleArray,
+    /** Of every class of the characters of the texts, its count by the items' places ([CharClasses]). */
+    private val classes: List<DoubleArray>,
 ) {
-    /** The two the item [i] tells by itself: of its text, else of its site stating both; none of neither. */
-    fun own(i: Int): Pair<Double, Double>? =
-        when {
-            textWords[i] > 0 && textChars[i] > 0 -> textWords[i] to textChars[i]
+    /** The classes of the characters of the item [i]'s text; none of no text. */
+    fun classesOf(i: Int): DoubleArray? = DoubleArray(classes.size) { classes[it][i] }.takeIf { c -> c.any { it > 0 } }
+
+    /**
+     * How the site counts the characters, of the items that tell both its count and our text's classes; none of a site
+     * that states no characters, or of no such item.
+     */
+    fun rule(): CharRule? {
+        val of = chars.indices.filter { chars[it] > 0 }.mapNotNull { i -> classesOf(i)?.let { it to chars[i] } }
+        return CharRule.of(of.map { it.first }, of.map { it.second })
+    }
+
+    /**
+     * The two the item [i] tells by itself: of its text — its characters as the site counts them by its [rule], of a
+     * site of none as we count them —, else of its site stating both; none of neither.
+     */
+    fun own(i: Int, rule: CharRule?): Pair<Double, Double>? {
+        val counted = rule?.let { r -> classesOf(i)?.let(r::of) }?.takeIf { it > 0 } ?: textChars[i]
+        return when {
+            textWords[i] > 0 && counted > 0 -> textWords[i] to counted
             words[i] > 0 && chars[i] > 0 -> words[i] to chars[i]
             else -> null
         }
+    }
 
     /** Whether its site states one of the two. */
     fun states(i: Int) = words[i] > 0 || chars[i] > 0
@@ -71,13 +98,21 @@ private class ItemSizes(
  * enough data, pass it over"), a source in one pass: every item's numbers — its site's and its texts' — and its
  * features as the search of duplicates compares them ([ComparedValues]); an item that tells neither is no example.
  */
-internal class SizeExamples(val own: List<SizeExample>, val across: List<SizeExample>) {
+internal class SizeExamples(
+    val own: List<SizeExample>,
+    val across: List<SizeExample>,
+    /** How every site that states characters counts them, by the source. */
+    val rules: Map<String, CharRule>,
+) {
     companion object {
         fun read(type: TypeStore, index: ListIndex, features: SizeFeatures): SizeExamples {
             val own = ArrayList<SizeExample>()
             val stated = HashMap<ItemKey, Stated>()
+            val rules = HashMap<String, CharRule>()
             val clusters = WorkClusters.of(type.links.groups())
-            type.sources.forEach { s -> readSource(s, index, features, clusters, own, stated) }
+            type.sources.forEach { s ->
+                readSource(s, index, features, clusters, own, stated)?.let { rules[s.id] = it }
+            }
             val across = ArrayList<SizeExample>()
             clusters.linkedWorks().forEach { members ->
                 val of = members.mapNotNull { stated[it] }
@@ -85,12 +120,13 @@ internal class SizeExamples(val own: List<SizeExample>, val across: List<SizeExa
                 val chars = of.maxOfOrNull { it.chars } ?: 0.0
                 if (words > 0 && chars > 0) of.forEach { across += SizeExample(it.features, words, chars) }
             }
-            return SizeExamples(own, across)
+            return SizeExamples(own, across, rules)
         }
 
         /**
          * Of the source [s], every item of a kept text or of both numbers stated an example of [own], every item of a
-         * work of several stating one of them put in [stated]; the rest passed over.
+         * work of several stating one of them put in [stated]; the rest passed over. How the site counts the
+         * characters, its texts' counted so; none of a site that states none.
          */
         private fun readSource(
             s: SourceStore,
@@ -99,19 +135,21 @@ internal class SizeExamples(val own: List<SizeExample>, val across: List<SizeExa
             clusters: WorkClusters,
             own: MutableList<SizeExample>,
             stated: MutableMap<ItemKey, Stated>,
-        ) {
+        ): CharRule? {
             val numbers = SourceNumbers(s)
             val compared = ComparedValues(s, index).every(numbers.ids)
             val featuresOf = featuresOf(s, compared, features)
             val sizes = numbers.of(compared)
+            val rule = sizes.rule()
             for (i in compared.ids.indices) {
-                val known = sizes.own(i)
+                val known = sizes.own(i, rule)
                 if (known != null) own += SizeExample(featuresOf(i), known.first, known.second)
                 else if (sizes.states(i)) {
                     val key = ItemKey(s.id, compared.ids[i])
                     if (clusters.linked(key)) stated[key] = Stated(sizes.words[i], sizes.chars[i], featuresOf(i))
                 }
             }
+            return rule
         }
 
         /**

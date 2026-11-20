@@ -118,7 +118,13 @@ internal class SearchSide(
             val texts = TextsCompared.read(s, encoder, ids)
             val vectors = System.currentTimeMillis()
             val sizes =
-                sizesOf(ids, model.of(s.id, compared) { s.parts.counts.counted() }, numbers) { compared.numbers[it] }
+                sizesOf(
+                    ids,
+                    model.of(s.id, compared, { s.parts.counts.counted() }) { s.parts.counts.classes(null) },
+                    numbers,
+                ) {
+                    compared.numbers[it]
+                }
             log.info(
                 "{}: the search's side of {} works read in {} ms: the index {}, the letters {}, vectors {}, sizes {}",
                 s.id,
@@ -168,7 +174,13 @@ internal class SearchSide(
             val compared = ComparedValues(s, index).of(own, numbers.keys)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
             val sizes =
-                sizesOf(own, model.of(s.id, compared) { s.parts.counts.counted(own) }, numbers) { compared.numbers[it] }
+                sizesOf(
+                    own,
+                    model.of(s.id, compared, { s.parts.counts.counted(own) }) { s.parts.counts.classes(own) },
+                    numbers,
+                ) {
+                    compared.numbers[it]
+                }
             val texts = TextsCompared.read(s, encoder, own)
             return ReadSide(compared.numbered, compared.names) { placed ->
                 SearchSide(
