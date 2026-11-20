@@ -39,27 +39,6 @@ class WorkSizes(private val indexes: ListIndexes) {
         return sized(s, ids, numbers, fields, ratiosOf(compared.ids, ratios))
     }
 
-    /**
-     * The size of every item of the source that has one, for an operation over every work (the pairs of the duplicates
-     * sorted by their size): each table read whole, once — the two numbers of the size alone, every field the user
-     * wrote —, every item's values of one reading of the index. Asked item by item, the 82 000 works of the books took
-     * three minutes.
-     */
-    fun ofEvery(type: TypeStore, s: SourceStore): Map<String, ItemSize> {
-        val keys = listOfNotNull(s.wordsKey(), s.charsKey())
-        if (keys.isEmpty()) return emptyMap()
-        val numbers = HashMap<String, MutableMap<String, Double>>()
-        keys.forEach { key ->
-            s.items.number(key).forEach { (id, value) -> numbers.getOrPut(id) { HashMap() }[key] = value }
-        }
-        val fields = s.corrections.allFields()
-        // An item of no number of its size may have one the user wrote
-        val ids = (numbers.keys + fields.keys).toList()
-        val compared = ComparedValues(s, indexes.of(type.id)).every(emptyList())
-        val ratios = type.sizes.model().of(s.id, compared, s.parts.counts.counted())
-        return sized(s, ids, numbers, fields, ratiosOf(compared.ids, ratios))
-    }
-
     /** The [ratios] of the items [ids] by their places, by the items; none of no model. */
     private fun ratiosOf(ids: List<String>, ratios: DoubleArray?): Map<String, Double> =
         if (ratios == null) emptyMap() else ids.indices.associate { ids[it] to ratios[it] }

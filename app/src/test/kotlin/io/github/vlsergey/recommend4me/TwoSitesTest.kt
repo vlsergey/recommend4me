@@ -80,6 +80,26 @@ class TwoSitesTest : TwoSitesTestBase() {
         assertEquals(false, second.words!!.stated)
         // Of the one example the model has, its ratio
         assertTrue(second.words!!.value in 950.0..1050.0, second.words.toString())
+        // The search of duplicates writes the words it compared with the pair — an answered pair is kept by it —:
+        // what the pairs are sorted by their size by
+        val z1 = ItemKey("alpha", "z1")
+        val z2 = ItemKey("beta", "z2")
+        duplicates.answerDuplicate(
+            "books",
+            io.github.vlsergey.recommend4me.api.model.DuplicateAnswer(
+                ItemRef("alpha", "z1"),
+                ItemRef("beta", "z2"),
+                io.github.vlsergey.recommend4me.api.model.DuplicateAnswer.Verdict.DIFFERENT,
+            ),
+        )
+        background.run()
+        duplicates.searchDuplicates("books")
+        background.run()
+        val pair = type.links.ordered(z1, z2)
+        val kept = type.duplicates.all().first { it.pair == pair }
+        val words = if (pair.first == z1) kept.words to kept.otherWords else kept.otherWords to kept.words
+        assertEquals(900f, words.first)
+        assertTrue(words.second!! in 950f..1050f, words.toString())
         // A text changed is counted anew
         a.parts.save("z1", listOf(PartData("1", 0, null, "слово")))
         assertNull(a.parts.counts.counted()["z1"])

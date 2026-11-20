@@ -6,7 +6,6 @@ import io.github.vlsergey.recommend4me.api.model.DuplicateSort
 import io.github.vlsergey.recommend4me.interest.Interest
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.plugin.Plugins
-import io.github.vlsergey.recommend4me.size.WorkSizes
 import io.github.vlsergey.recommend4me.source.Stores
 import io.github.vlsergey.recommend4me.source.TypeStore
 import io.github.vlsergey.recommend4me.work.Works
@@ -46,7 +45,6 @@ class DuplicatePages(
     private val duplicates: Duplicates,
     private val answers: PairAnswers,
     private val views: DuplicateViews,
-    private val sizes: WorkSizes,
     private val models: PairModels,
     private val plugins: Plugins,
     private val window: PairWindow,
@@ -73,10 +71,9 @@ class DuplicatePages(
         val search = type.duplicates.search()
         val chances = models.of(type)
         val kept = type.duplicates.all()
-        // The size of every work of the pairs, in words: of the sort by the pair's size alone
-        val words =
-            if (sort != DuplicateSort.SIZE) emptyMap()
-            else wordsOf(type, (kept.map { it.pair } + said.keys).flatMap { listOf(it.first, it.second) }.toSet())
+        // The size of every work of the pairs, in words, as the search compared them: of the sort by the pair's size
+        // alone
+        val words = if (sort != DuplicateSort.SIZE) emptyMap() else wordsOf(kept)
         val boundary = boundaryOf(sort, chances, kept, said)
         val ranking = Ranking(sort, chances, worthOf(type, sort), words, boundary)
         val byPair = kept.associateBy { it.pair }
@@ -199,19 +196,15 @@ class DuplicatePages(
     }
 
     /**
-     * The size in words of every work of [keys]: stated by its site, or worked out of its characters
-     * ([WorkSizes.ofEvery]); none of a work of neither. The pairs are of nearly every work: every source's sizes read
-     * whole, once.
+     * The size in words of every work of the [kept] pairs, as the search wrote it with them; none of a work of none
+     * known, or of an answered pair the search did not keep.
      */
-    private fun wordsOf(type: TypeStore, keys: Collection<ItemKey>): Map<ItemKey, Double> {
+    private fun wordsOf(kept: List<DuplicateCandidate>): Map<ItemKey, Double> {
         val out = HashMap<ItemKey, Double>()
-        keys
-            .groupBy { it.source }
-            .forEach { (source, own) ->
-                val s = type.source(source) ?: return@forEach
-                val every = sizes.ofEvery(type, s)
-                own.forEach { key -> every[key.id]?.words?.let { out[key] = it.value } }
-            }
+        kept.forEach { c ->
+            c.words?.let { out[c.first] = it.toDouble() }
+            c.otherWords?.let { out[c.second] = it.toDouble() }
+        }
         return out
     }
 }

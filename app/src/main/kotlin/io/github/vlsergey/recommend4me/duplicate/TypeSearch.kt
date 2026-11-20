@@ -1,6 +1,7 @@
 package io.github.vlsergey.recommend4me.duplicate
 
 import io.github.vlsergey.recommend4me.author.AuthorKin
+import io.github.vlsergey.recommend4me.contenttype.StandardNumbers
 import io.github.vlsergey.recommend4me.item.ItemKey
 import io.github.vlsergey.recommend4me.matrix.Cublas
 import io.github.vlsergey.recommend4me.source.TypeStore
@@ -80,8 +81,24 @@ private constructor(
      * its layers.
      */
     private fun candidate(first: ItemKey, second: ItemKey, a: Int, i: Int, b: Int, j: Int): DuplicateCandidate {
-        return DuplicateCandidate.of(first, second, search.layers(a, i, b, j))
+        val x = wordsOf(a, i)
+        val y = wordsOf(b, j)
+        val straight = first.source == sides[a].store.id && first.id == sides[a].ids[i]
+        return DuplicateCandidate.of(
+            first,
+            second,
+            search.layers(a, i, b, j),
+            words = if (straight) x else y,
+            otherWords = if (straight) y else x,
+        )
     }
+
+    /** The place of the words among the numbers of size the search compares; -1 of none. */
+    private val wordsAt = search.sizes.indexOf(StandardNumbers.WORDS.key)
+
+    /** The words of the [a]-th site's [i]-th work as the search compared them; none of none known. */
+    private fun wordsOf(a: Int, i: Int): Float? =
+        if (wordsAt < 0) null else search.sites[a].sizes[wordsAt][i].takeIf { it > 0 }?.toFloat()
 
     /**
      * Of a [pair], its sites' and works' places, its first first; null when either is not read, or the two are not

@@ -36,6 +36,12 @@ class DuplicateCandidate(
     val titleVector: Float? = null,
     val letters: Map<LetteredText, Float> = emptyMap(),
     val partlySameAuthor: Boolean = false,
+    /**
+     * The words of the first work and of the second, as its site states them or worked out of its characters, the
+     * search compared them by; none of one not known: what the pairs are sorted by their size by.
+     */
+    val words: Float? = null,
+    val otherWords: Float? = null,
 ) {
     val pair: Pair<ItemKey, ItemKey>
         get() = first to second
@@ -60,8 +66,18 @@ class DuplicateCandidate(
             )
 
     companion object {
-        /** The pair of [first] and [second] of the [layers], found for the works of [foundFor]. */
-        fun of(first: ItemKey, second: ItemKey, layers: PairLayers, foundFor: Int = 0) =
+        /**
+         * The pair of [first] and [second] of the [layers], found for the works of [foundFor], of the [words] of the
+         * first and the [otherWords] of the second.
+         */
+        fun of(
+            first: ItemKey,
+            second: ItemKey,
+            layers: PairLayers,
+            foundFor: Int = 0,
+            words: Float? = null,
+            otherWords: Float? = null,
+        ) =
             DuplicateCandidate(
                 first,
                 second,
@@ -77,6 +93,8 @@ class DuplicateCandidate(
                 layers.titleVector,
                 layers.letters,
                 layers.partlySameAuthor,
+                words,
+                otherWords,
             )
 
         /** Of [foundFor], the bit of the first work, and of the second. */
@@ -187,6 +205,8 @@ class DuplicateRepository(private val db: DSLContext) {
                     d.letters[LetteredText.FANDOMS],
                     d.letters[LetteredText.CHARACTERS],
                     d.partlySameAuthor,
+                    d.words,
+                    d.otherWords,
                 )
             }
             batch.execute()
@@ -316,6 +336,8 @@ class DuplicateRepository(private val db: DSLContext) {
                 DUPLICATE_CANDIDATE.FANDOM_LETTERS,
                 DUPLICATE_CANDIDATE.CHARACTER_LETTERS,
                 DUPLICATE_CANDIDATE.PARTLY_SAME_AUTHOR,
+                DUPLICATE_CANDIDATE.WORDS,
+                DUPLICATE_CANDIDATE.OTHER_WORDS,
             )
             .from(DUPLICATE_CANDIDATE)
             .where(condition)
@@ -339,6 +361,8 @@ class DuplicateRepository(private val db: DSLContext) {
                             r.value16(),
                             letters(r.value17(), r.value18(), r.value19()),
                             r.value20()!!,
+                            r.value21(),
+                            r.value22(),
                         )
                 }
             }
@@ -395,6 +419,8 @@ class DuplicateRepository(private val db: DSLContext) {
                 DUPLICATE_CANDIDATE.FANDOM_LETTERS,
                 DUPLICATE_CANDIDATE.CHARACTER_LETTERS,
                 DUPLICATE_CANDIDATE.PARTLY_SAME_AUTHOR,
+                DUPLICATE_CANDIDATE.WORDS,
+                DUPLICATE_CANDIDATE.OTHER_WORDS,
             )
     }
 }
