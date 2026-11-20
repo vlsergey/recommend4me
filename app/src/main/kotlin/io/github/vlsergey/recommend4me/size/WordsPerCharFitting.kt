@@ -43,8 +43,8 @@ class WordsPerCharFitting(private val stores: Stores, private val tasks: Tasks, 
         val sure = examples.own
         if (sure.isEmpty()) return
         log.info(
-            "{}: the words to a character to learn of {} items of their own numbers and {} of two sites, {} features, " +
-                "read in {} ms",
+            "{}: the words to a character to learn of {} items of their own numbers and {} of two sites, " +
+                "{} features, read in {} ms",
             type.id,
             sure.size,
             examples.across.size,
