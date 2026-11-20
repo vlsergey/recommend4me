@@ -51,25 +51,44 @@ internal class SizeVariances(private val rows: SizeRows, private val kinds: IntA
             )
         var at = from ?: Variances(spread, 0.0, DoubleArray(kindCount) { spread })
         var x: DoubleArray? = null
-        var held = Double.NaN
+        var held = Double.MAX_VALUE
         val choice = SizePenalties(rows, kinds, kindCount, ridge)
+        // In turns: the deviation's two parts of the penalties standing, then the penalties chosen of them — till a
+        // choice lowers the error held out by less than [CHANGE] of it, or moves nothing (2026-11-20: a choice of
+        // steps by factors flipped between two, and every one of 200 turns chose them anew, 3618 solutions)
         for (round in 1..MOST_ROUNDS) {
-            val weights = at.weights(rows.chars, null)
-            val chosen = choice.chosen(weights, at.tau, x)
+            val deviation = deviation(at, x)
+            at = deviation.first
+            x = deviation.second
+            val chosen = choice.chosen(at.weights(rows.chars, null), at.tau, x)
+            val better = chosen.error < held * (1 - CHANGE)
+            val moved = !chosen.tau.contentEquals(at.tau)
             held = chosen.error
-            val lambda = penalties(chosen.tau)
-            x = ridge.solve(weights, lambda, x)
-            val (noise, counting) = lengths(x, weights, rows.diagonal(weights), lambda, at)
-            val moved =
-                maxOf(
-                    changed(at.noise, noise),
-                    changed(at.counting, counting),
-                    at.tau.indices.maxOfOrNull { changed(at.tau[it], chosen.tau[it]) } ?: 0.0,
-                )
-            at = Variances(noise, counting, chosen.tau)
+            at = Variances(at.noise, at.counting, chosen.tau)
+            if (!better || !moved) break
+        }
+        x = ridge.solve(at.weights(rows.chars, null), penalties(at.tau), x)
+        return Fitted(x, penalties(at.tau), at, null, rows.chars, held)
+    }
+
+    /**
+     * The two parts of the deviation worked out of the residuals of the penalties of [at] standing, in turns till they
+     * move by less than [CHANGE]: one solution a turn, the steps begun at [from]; and the steps last solved.
+     */
+    private fun deviation(at: Variances, from: DoubleArray?): Pair<Variances, DoubleArray> {
+        val lambda = penalties(at.tau)
+        var now = at
+        var x = from
+        for (turn in 1..MOST_ROUNDS) {
+            val weights = now.weights(rows.chars, null)
+            val solved = ridge.solve(weights, lambda, x)
+            x = solved
+            val (noise, counting) = lengths(solved, weights, rows.diagonal(weights), lambda, now)
+            val moved = maxOf(changed(now.noise, noise), changed(now.counting, counting))
+            now = Variances(noise, counting, at.tau)
             if (moved < CHANGE) break
         }
-        return Fitted(x!!, penalties(at.tau), at, null, rows.chars, held)
+        return now to x!!
     }
 
     /** Of every feature, its kind's penalty: the inverse of the kind's variance; the mean held by none. */
