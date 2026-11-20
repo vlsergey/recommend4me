@@ -252,6 +252,30 @@ class AuthorRepository(
             }
             .also { regrouped() }
 
+    /**
+     * The account of the [source] a dump gave by its name ([named]), its works given the site's own key ([key]) of the
+     * same normalized author, gone: one account of the site, not two (owner, 2026-11-21: "consider it the same author
+     * on ficbook, with the same numeric id"); a mark of a merge naming it as its owner names the own key. Nothing of
+     * two not one normalized author — told apart, they stay two.
+     */
+    fun named(source: String, named: String, key: String) = db.transaction { c ->
+        val tx = DSL.using(c)
+        fun of(author: String) =
+            tx.select(SITE_AUTHOR.NORMALIZED)
+                .from(SITE_AUTHOR)
+                .where(SITE_AUTHOR.SOURCE.eq(source), SITE_AUTHOR.AUTHOR.eq(author))
+                .fetchOne()
+                ?.value1()
+        val normalized = of(named)
+        if (normalized != null && normalized == of(key)) {
+            tx.update(SITE_AUTHOR)
+                .set(SITE_AUTHOR.MERGED_BY_AUTHOR, key)
+                .where(SITE_AUTHOR.MERGED_BY_SOURCE.eq(source), SITE_AUTHOR.MERGED_BY_AUTHOR.eq(named))
+                .execute()
+            tx.deleteFrom(SITE_AUTHOR).where(SITE_AUTHOR.SOURCE.eq(source), SITE_AUTHOR.AUTHOR.eq(named)).execute()
+        }
+    }
+
     fun exists(id: Long): Boolean = db.fetchExists(NORMALIZED_AUTHOR, NORMALIZED_AUTHOR.ID.eq(id))
 
     companion object {

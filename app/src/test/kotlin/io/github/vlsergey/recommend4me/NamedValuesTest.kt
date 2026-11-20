@@ -35,6 +35,9 @@ class NamedValuesTest : TwoSitesTestBase() {
         assertEquals(listOf("nv-nova"), authorsOf("nv1"))
         assertEquals(listOf("nv-nova"), authorsOf("nv2"))
         assertEquals(listOf("name:Vera", "nv-nova"), authorsOf("nv3"))
+        // One account of the site: the one by the name, its works keyed, gone of the dictionary of the authors
+        val bound = stores.source("alpha")!!.authors.bindingsOf("alpha", listOf("name:Nova", "nv-nova"))
+        assertEquals(setOf("nv-nova"), bound.keys)
     }
 
     @Test

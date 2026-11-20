@@ -99,7 +99,10 @@ class NamedValues(private val stores: Stores, private val tasks: Tasks) {
     private fun keyed(s: SourceStore, facet: String, prefix: String, keys: Set<String>) {
         val moved =
             owners(s, facet, prefix, keys).entries.sumOf { (name, key) ->
-                s.items.rekey(facet, prefix + name, key).size
+                s.items.rekey(facet, prefix + name, key).size.also {
+                    // Its works the own key's, the account by the name is that account: gone, one account of the site
+                    s.authors.named(s.id, prefix + name, key)
+                }
             }
         if (moved > 0) log.info("{}: {} values of {} given by their names keyed so", s.id, moved, facet)
     }
