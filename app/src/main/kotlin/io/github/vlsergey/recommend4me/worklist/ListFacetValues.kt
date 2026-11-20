@@ -1,14 +1,10 @@
 package io.github.vlsergey.recommend4me.worklist
 
 import io.github.vlsergey.recommend4me.item.ItemKey
-import org.apache.lucene.index.LeafReader
 import org.apache.lucene.index.MultiTerms
-import org.apache.lucene.index.Term
-import org.apache.lucene.search.DocIdSetIterator
 import org.apache.lucene.search.IndexSearcher
 import org.apache.lucene.search.TermInSetQuery
 import org.apache.lucene.util.BytesRef
-import org.apache.lucene.util.NumericUtils
 
 /**
  * THE VALUES OF THE ITEMS AS THE LIST KEEPS THEM ([ListDocuments.of]): of every filter facet, the site's, the model's
@@ -62,86 +58,7 @@ object ListFacetValues {
         numberIds: Collection<String>,
         titles: Boolean = false,
     ): ItemRows = index.searching { s ->
-        val rows = ItemRows()
-        s.indexReader.leaves().forEach { leaf -> Leaf(leaf.reader(), rows, facetIds, numberIds, titles).read(source) }
-        rows
+        EveryItem(source, facetIds.toList(), numberIds.toList(), titles)
+            .read(s.indexReader.leaves().map { it.reader() })
     }
-
-    /** One segment of the index read into [rows]: its own numbers of the values given every item's numbers. */
-    private class Leaf(
-        private val r: LeafReader,
-        private val rows: ItemRows,
-        facetIds: Collection<String>,
-        numberIds: Collection<String>,
-        titles: Boolean,
-    ) {
-        private val keys = r.getSortedDocValues(ListDocuments.KEY)
-        private val titles = if (titles) r.getBinaryDocValues(ListDocuments.TITLE) else null
-        private val sets = facetIds.mapNotNull { id ->
-            r.getSortedSetDocValues(ListDocuments.valuesField(id))?.let { id to it }
-        }
-        private val numbers = numberIds.mapNotNull { id ->
-            r.getSortedNumericDocValues(ListDocuments.numberField(id))?.let { id to it }
-        }
-
-        // Of every facet, the number of every value of the segment's, given at its first meeting
-        private val numbered = sets.map { (_, dv) -> IntArray(dv.valueCount.toInt()) { -1 } }
-
-        fun read(source: String) {
-            val keys = keys ?: return
-            val live = r.liveDocs
-            val docs = r.postings(Term(ListDocuments.SOURCE, source)) ?: return
-            var doc = docs.nextDoc()
-            while (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                if ((live == null || live.get(doc)) && keys.advanceExact(doc)) {
-                    val id = ItemKey.parse(keys.lookupOrd(keys.ordValue()).utf8ToString()).id
-                    rows.values[id] = valuesOf(doc)
-                    titles?.let { t -> if (t.advanceExact(doc)) rows.titles[id] = t.binaryValue().utf8ToString() }
-                    numbers.forEach { (numberId, dv) ->
-                        if (dv.advanceExact(doc))
-                            rows.numbers.getOrPut(numberId) { HashMap() }[id] =
-                                NumericUtils.sortableLongToDouble(dv.nextValue())
-                    }
-                }
-                doc = docs.nextDoc()
-            }
-        }
-
-        private fun valuesOf(doc: Int): IntArray {
-            var out = IntArray(0)
-            sets.forEachIndexed { f, (facetId, dv) ->
-                if (!dv.advanceExact(doc)) return@forEachIndexed
-                val count = dv.docValueCount()
-                val at = out.size
-                out = out.copyOf(at + count)
-                for (k in 0 until count) {
-                    val ord = dv.nextOrd().toInt()
-                    var number = numbered[f][ord]
-                    if (number < 0) {
-                        number = rows.numberOf("$facetId:${dv.lookupOrd(ord.toLong()).utf8ToString()}")
-                        numbered[f][ord] = number
-                    }
-                    out[at + k] = number
-                }
-            }
-            return out
-        }
-    }
-}
-
-/**
- * EVERY ITEM OF A SOURCE AS THE INDEX OF THE LIST KEEPS IT ([ListFacetValues.everyItem]): its values by their numbers
- * ([values], by the item's id), their [names] by number — "<facet id>:<value>" —, and its numbers by their id, then the
- * item's ([numbers]).
- */
-class ItemRows {
-    val names = ArrayList<String>()
-
-    /** Of every item its title as the user corrected it, when asked for. */
-    val titles = HashMap<String, String>()
-    val values = HashMap<String, IntArray>()
-    val numbers = HashMap<String, HashMap<String, Double>>()
-    private val byName = HashMap<String, Int>()
-
-    internal fun numberOf(name: String): Int = byName.getOrPut(name) { names.size.also { names += name } }
 }

@@ -6,11 +6,11 @@ import io.github.vlsergey.recommend4me.model.FeatureNames
 import io.github.vlsergey.recommend4me.source.FacetDef
 import io.github.vlsergey.recommend4me.source.FacetRole
 import io.github.vlsergey.recommend4me.source.SourceStore
-import io.github.vlsergey.recommend4me.worklist.ItemRows
 import io.github.vlsergey.recommend4me.worklist.ListFacetValues
 import io.github.vlsergey.recommend4me.worklist.ListIndex
 import io.github.vlsergey.recommend4me.worklist.ListModelValues
 import io.github.vlsergey.recommend4me.worklist.ListRows
+import java.util.stream.IntStream
 import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger(ComparedValues::class.java)
@@ -49,24 +49,27 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
     /**
      * Every work of a title of the site the index holds, its ids ascending ([Compared.ids]) with their titles as the
      * user corrected them ([Compared.titles]), read in one pass of the index; their numbers of size of the [sizes]
-     * numbers.
+     * numbers. By the works' places throughout, no map by an id (owner, 2026-11-20: the reading of the 1.4 million
+     * works of ficbook took eleven seconds, most of them maps of strings and boxed numbers).
      */
     fun every(sizes: Collection<String>): Compared {
         val started = System.currentTimeMillis()
         val rows = ListFacetValues.everyItem(index, s.id, families.keys + listOfNotNull(authorId), sizes, titles = true)
-        val ids = rows.titles.filterValues { it.isNotEmpty() }.keys.sorted()
+        val kept = rows.ids.indices.filter { !rows.titles[it].isNullOrEmpty() }.toIntArray()
+        val values = Array(kept.size) { rows.values[kept[it]] }
         val indexed = System.currentTimeMillis()
         // The authors' keys of every work, of the same reading of the index: its values of the authors' id
-        val authorKeys = HashMap<String, List<String>>()
+        val authorKeys = arrayOfNulls<List<String>>(kept.size)
         authorId?.let { id ->
             val prefix = "$id:"
             val keyOf = arrayOfNulls<String>(rows.names.size)
             rows.names.forEachIndexed { n, name ->
                 if (name.startsWith(prefix)) keyOf[n] = name.substring(prefix.length)
             }
-            rows.values.forEach { (item, numbers) ->
-                val keys = numbers.asList().mapNotNull { keyOf[it] }
-                if (keys.isNotEmpty()) authorKeys[item] = keys
+            IntStream.range(0, kept.size).parallel().forEach { i ->
+                val keys = ArrayList<String>()
+                for (v in values[i]) keyOf[v]?.let { keys += it }
+                if (keys.isNotEmpty()) authorKeys[i] = keys
             }
         }
         val keyed = System.currentTimeMillis()
@@ -74,16 +77,18 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         val named = System.currentTimeMillis()
         val compared =
             Compared(
-                rows,
-                ids,
-                authorsOf(ids, authorKeys),
-                namesOf(ids, authorKeys, names),
-                ids.map { rows.titles.getValue(it) },
+                rows.names,
+                values,
+                List(kept.size) { rows.ids[kept[it]] },
+                authorsOf(authorKeys),
+                namesOf(authorKeys, names),
+                List(kept.size) { rows.titles[kept[it]]!! },
+                rows.numbers.mapValues { (_, all) -> DoubleArray(kept.size) { all[kept[it]] } },
             )
         log.info(
             "{}: the values of {} works read in {} ms: the index {}, the authors {}, their names {}, gathered {}",
             s.id,
-            ids.size,
+            kept.size,
             System.currentTimeMillis() - started,
             indexed - started,
             keyed - indexed,
@@ -95,53 +100,65 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
 
     /** The works [ids] alone, by their keys; their numbers of size of the [sizes] numbers. */
     fun of(ids: List<String>, sizes: Collection<String>): Compared {
-        val rows = ItemRows()
-        ListFacetValues.of(index, ids.map { ItemKey(s.id, it) }).forEach { (key, facets) ->
-            rows.values[key.id] =
-                facets
+        val names = ArrayList<String>()
+        val byName = HashMap<String, Int>()
+        val read = ListFacetValues.of(index, ids.map { ItemKey(s.id, it) })
+        val values =
+            Array(ids.size) { i ->
+                read[ItemKey(s.id, ids[i])]
+                    .orEmpty()
                     .filterKeys { it in families }
-                    .flatMap { (facetId, keys) -> keys.map { rows.numberOf("$facetId:$it") } }
+                    .flatMap { (facetId, keys) ->
+                        keys.map { k ->
+                            "$facetId:$k".let { n -> byName.getOrPut(n) { names.size.also { names += n } } }
+                        }
+                    }
                     .toIntArray()
-        }
+            }
         val numbers = s.items.numbersOf(ids)
-        s.schema.numbers.forEach { n ->
-            val id = FeatureNames.numberId(s.source, n)
-            if (id in sizes)
-                numbers.forEach { (item, of) -> of[n.key]?.let { rows.numbers.getOrPut(id) { HashMap() }[item] = it } }
-        }
-        val facets = authorFacet?.let { f -> s.items.facetsOf(ids).mapValues { it.value[f].orEmpty() } }.orEmpty()
-        val names = authorFacet?.let { f -> s.names(f, facets.values.flatten().distinct()) }.orEmpty()
-        return Compared(rows, ids, authorsOf(ids, facets), namesOf(ids, facets, names), emptyList())
+        val sized =
+            s.schema.numbers
+                .map { FeatureNames.numberId(s.source, it) to it.key }
+                .filter { (id, _) -> id in sizes }
+                .associate { (id, key) -> id to DoubleArray(ids.size) { numbers[ids[it]]?.get(key) ?: 0.0 } }
+        val facets = authorFacet?.let { f -> s.items.facetsOf(ids) }.orEmpty()
+        val authorKeys =
+            Array(ids.size) { i -> authorFacet?.let { f -> facets[ids[i]]?.get(f) }?.takeIf { it.isNotEmpty() } }
+        val authorNames = authorFacet?.let { f -> s.names(f, authorKeys.flatMap { it.orEmpty() }.distinct()) }.orEmpty()
+        return Compared(names, values, ids, authorsOf(authorKeys), namesOf(authorKeys, authorNames), emptyList(), sized)
     }
 
     /**
-     * The names of every work's authors of [ids] — as the site writes them, by their [names] — one after another: what
-     * the authors are compared by letter by letter ([Letters]); none of a work of no author.
+     * The names of every work's authors — of their keys [authorKeys] by their places, as the site writes them, by their
+     * [names] — one after another: what the authors are compared by letter by letter ([Letters]); none of a work of no
+     * author.
      */
-    private fun namesOf(
-        ids: List<String>,
-        authorKeys: Map<String, List<String>>,
-        names: Map<String, String>,
-    ): List<String?> = ids.map { id ->
-        authorKeys[id]?.takeIf { it.isNotEmpty() }?.joinToString(" ") { names[it] ?: it }
+    private fun namesOf(authorKeys: Array<List<String>?>, names: Map<String, String>): List<String?> {
+        val out = arrayOfNulls<String>(authorKeys.size)
+        IntStream.range(0, out.size).parallel().forEach { i ->
+            out[i] = authorKeys[i]?.joinToString(" ") { names[it] ?: it }
+        }
+        return out.asList()
     }
 
-    /** The normalized authors of every work of [ids], by their places, of the site's authors' keys [authorKeys]. */
-    private fun authorsOf(ids: List<String>, authorKeys: Map<String, List<String>>): Array<LongArray> {
-        if (authorKeys.isEmpty()) return Array(ids.size) { LongArray(0) }
+    /** The normalized authors of every work, by their places, of the site's authors' keys [authorKeys]. */
+    private fun authorsOf(authorKeys: Array<List<String>?>): Array<LongArray> {
+        if (authorKeys.all { it == null }) return Array(authorKeys.size) { LongArray(0) }
         val authors = s.authors.bindingsOf(s.id)
-        return Array(ids.size) { i ->
-            authorKeys[ids[i]].orEmpty().mapNotNull { authors[it] }.distinct().toLongArray()
+        return Array(authorKeys.size) { i ->
+            authorKeys[i]?.mapNotNull { authors[it] }?.distinct()?.toLongArray() ?: LongArray(0)
         }
     }
 
     /**
      * WHAT THE WORKS [ids] HAVE OF WHAT IS COMPARED: their values by the site's numbers ([numbered], ascending) of
-     * their [names] — "<the facet compared as>:<value>" —, the authors' too; their [authors]; their numbers by the id
-     * the index keeps them by, then the work ([numbers]).
+     * their [names] — "<the facet compared as>:<value>" —, the authors' too, of the index's [values] by their numbers
+     * of its names [read]; their [authors]; their numbers by the id the index keeps them by, by their places
+     * ([numbers]: nought of one not known).
      */
     inner class Compared(
-        rows: ItemRows,
+        read: List<String>,
+        values: Array<IntArray>,
         /** The works, by their places. */
         val ids: List<String>,
         val authors: Array<LongArray>,
@@ -149,9 +166,8 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         val authorNames: List<String?>,
         /** Every work's title as the user corrected it, of the index; none of the works read by their ids. */
         val titles: List<String>,
+        val numbers: Map<String, DoubleArray>,
     ) {
-        val numbers: Map<String, Map<String, Double>> = rows.numbers
-
         /** The name of every value by its number: of a value the user ignores, none. */
         val names: List<String?>
 
@@ -159,29 +175,44 @@ internal class ComparedValues(private val s: SourceStore, private val index: Lis
         val numbered: Array<IntArray>
 
         init {
-            val named = ArrayList<String?>(rows.names.size)
-            rows.names.forEach { n ->
+            val named = ArrayList<String?>(read.size)
+            read.forEach { n ->
                 // Of the authors' id none: the authors compared as the normalized authors, below
                 named +=
                     families[n.substringBefore(':')]
                         ?.let { family -> "$family:${n.substringAfter(':')}" }
-                        ?.takeIf {
-                            it !in ignored
-                        }
+                        ?.takeIf { it !in ignored }
             }
-            val byName = HashMap<String, Int>()
-            fun author(a: Long): Int =
-                byName.getOrPut("$AUTHOR_FAMILY:${AuthorRepository.key(a)}") {
-                    named.size.also { named += "$AUTHOR_FAMILY:${AuthorRepository.key(a)}" }
+            // Every normalized author a number once, by the author, not by a string a work
+            val authorNumber = HashMap<Long, Int>()
+            authors.forEach { own ->
+                own.forEach { a ->
+                    authorNumber.getOrPut(a) {
+                        named.size.also { named += "$AUTHOR_FAMILY:${AuthorRepository.key(a)}" }
+                    }
                 }
-            numbered =
-                Array(ids.size) { i ->
-                    val own = rows.values[ids[i]] ?: IntArray(0)
-                    (own.filter { named[it] != null } + authors[i].map(::author)).distinct().sorted().toIntArray()
-                }
+            }
+            val out = arrayOfNulls<IntArray>(ids.size)
+            IntStream.range(0, ids.size).parallel().forEach { i ->
+                val own = values[i]
+                val all = IntArray(own.size + authors[i].size)
+                var k = 0
+                for (v in own) if (named[v] != null) all[k++] = v
+                for (a in authors[i]) all[k++] = authorNumber.getValue(a)
+                out[i] = ascendingOnce(all, k)
+            }
+            numbered = Array(ids.size) { out[it]!! }
             names = named
         }
     }
+}
+
+/** The first [count] numbers of [a] ascending, each once. */
+private fun ascendingOnce(a: IntArray, count: Int): IntArray {
+    a.sort(0, count)
+    var k = 0
+    for (q in 0 until count) if (k == 0 || a[k - 1] != a[q]) a[k++] = a[q]
+    return a.copyOf(k)
 }
 
 /**

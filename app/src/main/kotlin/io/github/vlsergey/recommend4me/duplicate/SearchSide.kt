@@ -115,7 +115,7 @@ internal class SearchSide(
             val (descriptions, described) = descriptionsOf(s, encoder, ids)
             val texts = TextsCompared.read(s, encoder, ids)
             val vectors = System.currentTimeMillis()
-            val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.allOf(s.id))
+            val sizes = sizesOf(ids, ratios, numbers, { compared.numbers[it] }, s.works.allOf(s.id))
             log.info(
                 "{}: the search's side of {} works read in {} ms: the index {}, the letters {}, vectors {}, sizes {}",
                 s.id,
@@ -199,7 +199,7 @@ internal class SearchSide(
             val numbers = sizeNumbers(s)
             val compared = ComparedValues(s, index).of(own, numbers.keys)
             val (authorNames, authorLengths) = Letters.rows(compared.authorNames)
-            val sizes = sizesOf(own, ratios, numbers, { compared.numbers[it].orEmpty() }, s.works.ofItems(s.id, own))
+            val sizes = sizesOf(own, ratios, numbers, { compared.numbers[it] }, s.works.ofItems(s.id, own))
             val texts = TextsCompared.read(s, encoder, own)
             return ReadSide(compared.numbered, compared.names) { placed ->
                 SearchSide(
@@ -237,15 +237,12 @@ internal class SearchSide(
             ids: List<String>,
             ratios: Map<Long, Double>,
             numbers: Map<String, NumberDef>,
-            numberOf: (id: String) -> Map<String, Double>,
+            numberOf: (id: String) -> DoubleArray?,
             bound: Map<String, Long>,
         ): Map<String, DoubleArray> {
-            val at = ids.withIndex().associate { it.value to it.index }
             val out =
                 numbers.entries.associateTo(HashMap()) { (id, n) ->
-                    val values = DoubleArray(ids.size)
-                    numberOf(id).forEach { (item, v) -> at[item]?.let { values[it] = v } }
-                    n.standard!!.key to values
+                    n.standard!!.key to (numberOf(id)?.copyOf() ?: DoubleArray(ids.size))
                 }
             val words = out.getOrPut(StandardNumbers.WORDS.key) { DoubleArray(ids.size) }
             val chars = out.getOrPut(StandardNumbers.CHARS.key) { DoubleArray(ids.size) }

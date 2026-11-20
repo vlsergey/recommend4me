@@ -24,7 +24,7 @@ class ListFacetValuesTest {
     /** Every item's values of the index, as written last — a value of none, an item of none, one written again. */
     private fun every(index: ListIndex): Map<String, Set<String>> =
         ListFacetValues.everyItem(index, "site", listOf("tags", "kind"), listOf("words")).let { rows ->
-            rows.values.mapValues { (_, own) -> own.map { rows.names[it] }.toSet() }
+            rows.ids.indices.associate { i -> rows.ids[i] to rows.values[i].map { rows.names[it] }.toSet() }
         }
 
     @Test
@@ -46,15 +46,14 @@ class ListFacetValuesTest {
                 ),
                 every(index),
             )
+            // The numbers by the items' places, nought of one not known
+            val sized = ListFacetValues.everyItem(index, "site", emptyList(), listOf("words"))
+            assertEquals(listOf("a", "b", "c"), sized.ids)
+            assertEquals(listOf(0.0, 900.0, 0.0), sized.numbers.getValue("words").asList())
             // An item written again with a value more, in a segment of its own
             index.replace(listOf(row("b", mapOf("tags" to listOf("t3"), "kind" to listOf("k")))))
             index.commit()
             assertEquals(setOf("tags:t3", "kind:k"), every(index)["b"])
-            assertEquals(
-                900.0,
-                ListFacetValues.everyItem(index, "site", emptyList(), listOf("words")).numbers["words"]?.get("a")
-                    ?: 900.0,
-            )
         }
     }
 }
