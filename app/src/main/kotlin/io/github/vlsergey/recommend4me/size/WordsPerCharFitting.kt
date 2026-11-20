@@ -121,7 +121,9 @@ class WordsPerCharFitting(private val stores: Stores, private val tasks: Tasks, 
         if (!type.hasSizes()) return
         val work = Task(FITTING, type = type.id)
         if (keys.isNotEmpty()) tasks.keys.want(work, keys)
-        tasks.plan(work, Instant.now().plusSeconds(QUIET_SECONDS), reason) { fitWhenNew(type) }
+        // Due at once, no quiet: the items of the sites are written all the time, and a quiet put off by every write
+        // never came (2026-11-20, two hours planned); planned again while it waits its turn, it is that one
+        tasks.plan(work, Instant.now(), reason) { fitWhenNew(type) }
     }
 
     companion object {
@@ -129,8 +131,6 @@ class WordsPerCharFitting(private val stores: Stores, private val tasks: Tasks, 
 
         /** What waits asking the model fitted whatever the items: no item's key. */
         private const val EVERY = "*"
-
-        private const val QUIET_SECONDS = 60L
 
         /**
          * How many errors of the model the ratio two sites give may stand off it: nearer, they speak of one text;

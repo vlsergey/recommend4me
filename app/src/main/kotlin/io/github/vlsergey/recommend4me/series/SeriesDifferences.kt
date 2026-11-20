@@ -44,7 +44,9 @@ class SeriesDifferences(private val stores: Stores, private val tasks: Tasks) {
     }
 
     private fun plan(type: TypeStore, reason: String) {
-        tasks.plan(Task(WORK, type = type.id), Instant.now().plusSeconds(QUIET_SECONDS), reason) { erase(type) }
+        // Due at once, no quiet: a quiet put off by every write of the sites' items never comes; planned again while it
+        // waits its turn, it is that one
+        tasks.plan(Task(WORK, type = type.id), Instant.now(), reason) { erase(type) }
     }
 
     /** Of every two works the user said to be different, those of one series: the word taken back. */
@@ -75,9 +77,6 @@ class SeriesDifferences(private val stores: Stores, private val tasks: Tasks) {
     companion object {
         /** The work of the queue taking the words back. */
         val WORK = TaskKind.ERASE_DIFFERENT_IN_SERIES
-
-        /** The quiet after a change before the words are looked over. */
-        private const val QUIET_SECONDS = 60L
 
         /**
          * Of the [pairs] of items, those whose works are held in one series by the sites alone — whatever the user's

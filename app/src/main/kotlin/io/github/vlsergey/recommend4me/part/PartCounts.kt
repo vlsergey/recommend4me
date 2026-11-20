@@ -45,22 +45,42 @@ class PartCounts(private val db: DSLContext, private val store: PartStore) {
     }
 
     /** The words and the characters of the texts kept, every part counted summed, of every item that has any. */
-    fun counted(): Map<String, Pair<Double, Double>> = countedAmong(null)
+    fun counted(): Map<String, Pair<Double, Double>> {
+        // Streamed and summed here, no grouping asked of the database: H2's grouping of every counted part of ficbook
+        // took 83 s of a search of duplicates (2026-11-20)
+        val out = HashMap<String, DoubleArray>()
+        db.select(PART.ITEM_ID, PART.WORDS, PART.CHARS)
+            .from(PART)
+            .where(PART.CHARS.isNotNull)
+            .fetchSize(STREAMED)
+            .fetchLazy()
+            .use { cursor ->
+                cursor.forEach {
+                    val sum = out.getOrPut(it.value1()!!) { DoubleArray(2) }
+                    sum[0] += it.value2()?.toDouble() ?: 0.0
+                    sum[1] += it.value3()!!.toDouble()
+                }
+            }
+        return out.mapValues { (_, sum) -> sum[0] to sum[1] }
+    }
 
     /** The same of the items [ids] alone, a thousand at a time. */
     fun counted(ids: Collection<String>): Map<String, Pair<Double, Double>> =
         ids.distinct().chunked(BATCH).fold(HashMap()) { out, chunk -> out.also { it += countedAmong(chunk) } }
 
-    /** Of the items [chunk]; of every item when null. */
-    private fun countedAmong(chunk: List<String>?): Map<String, Pair<Double, Double>> =
+    /** Of the items [chunk]. */
+    private fun countedAmong(chunk: List<String>): Map<String, Pair<Double, Double>> =
         db.select(PART.ITEM_ID, DSL.sum(PART.WORDS), DSL.sum(PART.CHARS))
             .from(PART)
-            .where(PART.CHARS.isNotNull, chunk?.let { PART.ITEM_ID.`in`(it) } ?: DSL.noCondition())
+            .where(PART.CHARS.isNotNull, PART.ITEM_ID.`in`(chunk))
             .groupBy(PART.ITEM_ID)
             .fetch()
             .associate { it.value1()!! to (it.value2()!!.toDouble() to it.value3()!!.toDouble()) }
 
     private companion object {
         const val BATCH = 1000
+
+        /** The rows of the parts read at a time as they are streamed. */
+        const val STREAMED = 10_000
     }
 }

@@ -20,15 +20,17 @@ class KeptRatios(private val weights: Map<String, Double>) {
 
     /**
      * The ratio of every item [compared] of the [source] — by the places of [ComparedValues.Compared.ids] —, of the
-     * model, and of its own counted text ([texts]: the words and the characters of the items that have one) weighing
+     * model, and of its own counted text ([textsOf]: the words and the characters of the items that have one) weighing
      * over the model by how many characters it counts; of no model kept, none.
      */
     internal fun of(
         source: String,
         compared: ComparedValues.Compared,
-        texts: Map<String, Pair<Double, Double>>,
+        /** The words and the characters of the items that have a text counted, read only of a model kept. */
+        textsOf: () -> Map<String, Pair<Double, Double>>,
     ): DoubleArray? {
         if (!fitted) return null
+        val texts = textsOf()
         // A value's weight looked up once a value, not once an item
         val byValue = DoubleArray(compared.names.size) { weightOf(compared.names[it]) }
         val base = weightOf(WordsPerChar.MEAN) + weightOf(WordsPerChar.SOURCE + source)
